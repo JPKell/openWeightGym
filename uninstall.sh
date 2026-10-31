@@ -342,11 +342,13 @@ remove() {
     remove_path "$(receipt_get var_dir)"
   fi
   # The pointers that let owg and this uninstaller find the installation.
-  if [[ ! -e $DIR/data/install-receipt ]]; then
-    rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install"
-    rmdir "${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym" 2>/dev/null || true
-    [[ $MODE == system ]] && sudo -n rm -f /etc/openweightgym/install
-    [[ $MODE == system && -d /etc/openweightgym ]] && sudo -n rmdir /etc/openweightgym 2>/dev/null || true
+  local pointer
+  pointer=$(receipt_get pointer)
+  pointer=${pointer:-${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install}
+  if [[ ! -e $DIR/data/install-receipt && $(basename "$pointer") == install ]]; then
+    as_root rm -f -- "$pointer"
+    as_root rmdir -- "$(dirname "$pointer")" 2>/dev/null || true
+    if [[ $MODE == system && -n $(receipt_get etc_dir) ]]; then as_root rmdir -- "$(receipt_get etc_dir)" 2>/dev/null || true; fi
   fi
 }
 
