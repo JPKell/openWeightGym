@@ -235,7 +235,7 @@ and browser forwarding closed.
 
 The initial activation archive omitted Turnstile; live inventory checks caught the fallback and
 activation was corrected using the package registry and Git-verified file hashes. Use the
-[final release and recovery instructions](installation.md#module-audit-release-2026-10-30), not
+[final release and recovery instructions](operations.md#module-audit-release-2026-10-30), not
 the incomplete first archive. A final checkout documentation check is blocked by the owner's
 unrelated untracked root `makeBetter.md`; it was preserved. Historical qualification receipts
 are retained in the checkout, rather than copied into the code-only runtime release.

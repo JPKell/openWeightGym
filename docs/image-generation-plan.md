@@ -188,7 +188,7 @@ The canonical machine record is [delivery.json](../data/qualification/mirrorwall
 
 | Area | Result / evidence |
 |---|---|
-| Installation/deployment | Optional pinned CUDA runtime installed; front API/UI, artifact worker and main GPU worker activated through immutable source pins. Previous releases, private configuration preimages and source-only front recovery copy are preserved. See [source override recovery](installation.md#runtime-source-overrides). |
+| Installation/deployment | Optional pinned CUDA runtime installed; front API/UI, artifact worker and main GPU worker activated through immutable source pins. Previous releases, private configuration preimages and source-only front recovery copy are preserved. See [source override recovery](operations.md#runtime-source-overrides). |
 | Workflows | Live front-generated Dev 1024px/28-step and klein gallery outputs; maximum configured 1024px/two-reference/4× pipelines and six native previews passed for Dev, single-card klein and unequal layer-split klein with blueprint LoRA. [Cases](../data/qualification/mirrorwall-20261023/live-workflows-flux2-klein-split-q4.json). |
 | Resource admission | [Per-card envelopes](../data/qualification/mirrorwall-20261023/live-profiles.json) include preparation, loading/sampling and output upscaling; incomplete/failed observations revoke sharing, successful smaller runs retain a current qualified envelope, and unqualified profiles retry on whole cards. Dev uses 0.5MP references because two 1MP references exceeded this machine's native budget. |
 | Coexistence | Fixed 3:1 diffusion placement generated while Qwen 1.5B remained entirely resident on CUDA1 with its process ID preserved. [Evidence](../data/qualification/mirrorwall-20261023/live-coexistence.json). |

@@ -166,7 +166,7 @@ identity and sensitivity were checked. Missing/wrong keys, browser Origin, outsi
 reads, hidden tools and a revoked account were refused. A public Microsoft Learn read-only
 HTTP MCP server was separately initialized, discovered and called through an isolated
 ToolLocker/front helper. [Exact bounded evidence](../data/qualification/delivery-2026-10-16.json)
-and [host installation details](../docs/installation.md#remote-tool-hosts).
+and [host installation details](../docs/operations.md#remote-tool-hosts).
 
 Front relocation, fixed SSH stdio commands, preserved tool identities, recovery boundaries and
-verification are maintained in [the installation guide](../docs/installation.md#front-toollocker-relocation-milestone-128).
+verification are maintained in [the installation guide](../docs/operations.md#front-toollocker-relocation-milestone-128).
