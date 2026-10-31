@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openWeightGym"
+version = "0.1.0"
+description = "A self-hosted gym for open-weight models, chat, media, voice and benchmarks."
+readme = "docs/README.md"
+requires-python = ">=3.13"
+dependencies = ["starlette", "httpx", "uvicorn", "jinja2", "typer", "markdown-it-py", "Pillow", "jsonschema==4.26.0", "cryptography==50.0.2"]
+
+[project.optional-dependencies]
+knowledge = ["pypdf==6.20.1"]
+benchmarks = ["jsonschema==4.26.0", "absl-py==2.3.1", "langdetect==1.0.9", "nltk==3.10.3", "immutabledict==4.2.2"]
+postgresql = ["psycopg[binary]>=3.2,<4"]
+dev = ["pypdf==6.20.1", "pywebrtc-audio==0.2.0", "pytest", "numpy", "psycopg[binary]>=3.2,<4", "websockets>=15,<17", "audioop-lts; python_version >= '3.13'"]
+voice = ["sherpa-onnx==1.13.8", "numpy", "websockets>=15,<17"]
+voice-desktop = ["pywebrtc-audio==0.2.0", "sounddevice>=0.5,<0.6", "websockets>=15,<17", "audioop-lts; python_version >= '3.13'"]
+voice-gateway = ["pywebrtc-audio==0.2.0", "websockets>=15,<17", "audioop-lts; python_version >= '3.13'"]
+
+[project.scripts]
+suite-identity = "loadcoach.identity_bundle:main"
+loadcoach = "loadcoach.cli:main"
+toollocker = "toollocker.door:main"
+weightroom = "weightroom.app:main"
+# Compatibility commands for existing launchers.
+frontdesk = "weightroom.app:main"
+tooldoor = "toollocker.door:main"
+spotter = "spotter.app:main"
+turnstile = "turnstile.app:main"
+suite-adapter = "plugins._runtime:main"
+voice = "voice.service:main"
+voice-gateway = "voice.gateway:main"
+voice-desktop = "voice.desktop:main"
+
+[tool.setuptools]
+packages = ["engines", "engines.llama_cpp", "engines.strata", "mirrorwall", "soundroom", "db", "db.drivers", "loadcoach", "benchmarks", "benchmarks.suites", "benchmarks.suites.ifeval", "benchmarks.suites.ifeval.vendor", "toollocker", "toollocker.tools", "weightroom", "spotter", "turnstile", "voice", "plugins", "plugins.hermes"]
+
+[tool.setuptools.package-data]
+mirrorwall = ["patches/*.patch", "patches/*.json", "pages/*.html", "static/*"]
+soundroom = ["catalog.toml", "pages/*.html", "static/*"]
+"benchmarks.suites.ifeval" = ["*.json", "*.jsonl"]
+"benchmarks.suites.ifeval.vendor" = ["LICENSE", "nltk_data/tokenizers/punkt_tab/README", "nltk_data/tokenizers/punkt_tab/english/*"]
+loadcoach = ["test.html"]
+toollocker = ["test.html"]
+weightroom = ["pages/*.html", "pages/engines/llama_cpp/*.html", "pages/engines/strata/*.html", "static/*"]
+"engines.llama_cpp" = ["schema.json"]
+"engines.strata" = ["schema.json"]
+voice = ["static/*", "prompts/*", "models.json"]
+plugins = ["README.md"]
+"plugins.hermes" = ["manifest.json", "schema.json", "README.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

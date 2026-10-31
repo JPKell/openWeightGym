@@ -1,0 +1,218 @@
+# weightroom and turnstile's settings for this machine: where they listen and where things are.
+# Copy to settings/weightroom.toml and edit. That copy is not committed.
+# Named [databases] bindings apply to both programs. Turnstile shares weightroom.plugins.
+#
+# What can be changed from the site is not here. Its starting values are in
+# settings/defaults/weightroom.toml. A value from there may be set here too: it is then this
+# machine's own starting value.
+
+# Default mock rates, in USD per million tokens, for usage without a recorded or model rate.
+# They begin at 2 for input and 10 for output and can be changed under System > Settings.
+# mock_input_rate = 2.0
+# mock_output_rate = 10.0
+
+# Third-party services shown on Machine and in System Logs. Change these with the checkboxes
+# under System > Settings > WeightRoom. Supported names: ollama, docker, apache and nginx.
+# third_party_services = ["ollama", "docker"]
+
+# Verified recovery sets retained on each machine. Zero keeps every set.
+# backup_retention = 10
+
+# In-app GPU heat alerts; notification only. Changed live under System > Settings.
+# alert_gpu_temperature = 85
+
+# Observation alerts: enable rate/latency thresholds after measuring a baseline.
+# observation_error_percent = 0.0
+# observation_p95_seconds = 0.0
+# observation_min_samples = 100
+# observation_window_seconds = 300
+# observation_alert_hold_seconds = 60
+
+# Observation spans kept on front: days kept (1-30), the percent of all-successful traces kept
+# (0-100; spans that did not succeed are always kept, and every span still counts in the metrics),
+# and a cap on stored spans (0 is none). Polling makes most spans, so a low percent saves the most.
+# Applied when weightroom starts.
+# observation_keep_days = 7
+# observation_success_percent = 100
+# observation_max_spans = 0
+# Routine polls: a successful trace that starts at one of these routes is not kept (its failures
+# are, and it still counts in the metrics). A poll made inside other work, such as a routing lookup
+# during a chat request, does not count. [] keeps every poll. Turnstile records these exact paths
+# instead of its catch-all template only for the routes listed in loadcoach/observability.py POLLS.
+# observation_quiet_routes = ["/loadcoach/status", "/v1/models", "/loadcoach/facts", "/loadcoach/me", "/loadcoach/send-log",
+#                            "/loadcoach/plugins/mirror", "/loadcoach/observation-metrics", "/loadcoach/alert-evidence",
+#                            "/loadcoach/downloads", "/spotter/now", "/spotter/alert-evidence",
+#                            "/voice/ready", "/turnstile/ready"]
+
+# Address and port weightroom listens on. 0.0.0.0 means every address this machine has, which is
+# what lets it be reached on the home network and through Tailscale alike.
+host = "0.0.0.0"
+
+port = 8440
+
+# Optional web-chat model door. Defaults to local turnstile when [turnstile]
+# Optional front-owned ToolLocker upstream; requires front_settings = true. Never wakes compute.
+# toollocker_url = "http://127.0.0.1:9443" is configured,
+# otherwise compute. Authentication and request logs still come from compute.
+# chat_model_url = "http://127.0.0.1:8442"
+
+# Where LoadCoach is.
+compute = "http://10.77.10.84:8442"
+
+# The file that holds weightroom's own key at LoadCoach, and nothing else. Make the key on
+# compute, in the group "system", and give the account the two things weightroom needs:
+#
+#   loadcoach user add weightroom system
+#   loadcoach user adjust weightroom add=sign-in,mirror-users
+#
+# Put what it prints in this file, and make the file readable by you alone: chmod 600
+key_file = "../keys/weightroom.key"
+
+# The folder for the little that weightroom keeps: the last status it saw of compute, and a copy
+# of the password hashes of the few people who may act while compute is off.
+# Saved web-chat conversations and attachments live here in chat.db.
+# Benchmark definitions, queue and results live here too, in benchmarks.db.
+# Operational alert history and acknowledgement live in alerts.db.
+# Recurring schedule definitions and occurrence history live in schedules.db.
+data = "../data"
+
+# WeightRoom's chat, benchmark, plugin, alert and schedule repositories can be placed independently. Omitted
+# bindings retain chat.db, benchmarks.db, plugins.db, alerts.db and schedules.db in `data`. PostgreSQL targets require the
+# postgresql extra; verified recovery sets also require compatible pg_dump and pg_restore programs.
+#
+# [databases.stores.chat]
+# engine = "sqlite"
+# path = "../data/chat.db"
+# [databases.stores.accounts]
+# engine = "sqlite"
+# path = "../data/accounts.db"
+# [databases.stores.roles]
+# engine = "sqlite"
+# path = "../data/roles.db"
+# [databases.stores.benchmarks]
+# engine = "sqlite"
+# path = "../data/benchmarks.db"
+# [databases.stores.plugins]
+# engine = "sqlite"
+# path = "../data/plugins.db"
+# [databases.stores.alerts]
+# engine = "sqlite"
+# path = "../data/alerts.db"
+# [databases.stores.schedules]
+# engine = "sqlite"
+# path = "../data/schedules.db"
+# [databases.bindings]
+# "weightroom.accounts" = "accounts"
+# "weightroom.roles" = "roles"
+# "weightroom.chat" = "chat"
+# "weightroom.benchmarks" = "benchmarks"
+# "weightroom.plugins" = "plugins"
+# "weightroom.alerts" = "alerts"
+# "weightroom.schedules" = "schedules"
+
+# Root folder of discoverable external-service plugins. WeightRoom and turnstile share their
+# plugin-local settings.json files; pairing keys and authorization snapshots stay in keys/data.
+plugins_dir = "../plugins"
+
+# Where the primary compute machine's Spotter is. Its charts, service and power controls
+# continue at /machine. System > Telemetry uses signed Spotter URLs from [machines.NAME]
+# for other hosts, and front keeps its own sampled history by physical-host fingerprint.
+spotter = "http://10.77.10.84:8444"
+
+# Private voice-gateway listener for System → Voice status, recording and synthesis controls.
+# Do not use its public Twilio or desktop port. Operator sessions are checked by turnstile.
+voice_gateway = "http://127.0.0.1:8446"
+
+# The hardware address of compute's network card, for waking it: `ip link` on compute shows it
+# after "link/ether". With this set, those whose group has "front-wake" get a Wake button while
+# compute is not answering, and turnstile wakes compute for a request. Left out, nothing is woken.
+# The packet goes to everyone on the home network; name that network's own broadcast address
+# if this machine has more than one network and the default picks the wrong one.
+# wake_mac = "bc:fc:e7:3d:90:6c"
+# wake_address = "10.77.10.255"
+
+
+# SoundRoom audio pages (Chat → Music, Sounds and Speech). The chat model or role that writes
+# a style caption and lyrics on the Music page, and the model each page selects first; empty
+# selects the first audio model of that kind the person may use. Applied when weightroom starts.
+audio_lyrics_model = "chat"  # or a model name such as "qwen3-14b"
+audio_music_model = ""
+audio_sound_model = ""
+audio_speech_model = ""
+audio_transcription_model = ""
+
+# ToolLocker's base URL for the System > Tools console. Empty uses turnstile on this machine,
+# port 8443. Tool calls use the signed-in person's session key.
+toollocker = ""
+
+# turnstile: the way in to compute, on this machine. It keeps the accounts (in data/accounts.db,
+# unless [databases] says otherwise), checks every caller's key, and passes each request on to
+# the same port on compute with a statement of who is asking, signed with the machine key. It
+# wakes compute first if it is asleep, for any valid key. A harness is pointed here instead of at
+# compute and needs no other change. weightroom's own pages reach compute through it too.
+#   host              the address turnstile listens on. 0.0.0.0 for every address this machine has
+#   ports             the ports passed on: LoadCoach's first, then the ToolLocker's and spotter's
+#   machine_key_file  the key this machine shares with compute, counted from this file. The same
+#                     file as LoadCoach's machine_key_file on compute, copied here, readable by you alone
+#   keep_days         days the event log is kept here, which since milestone 91 is the suite's log. 0 keeps everything
+#   max_in_flight     requests turnstile carries to compute at once. One more is turned away at once with 503 and
+#                     Retry-After instead of being held here, outside LoadCoach's line and its priorities. Keep it
+#                     above what LoadCoach's own line should hold. A change needs turnstile restarted
+#   busy_retry_seconds  the Retry-After that 503 carries
+#   hosted_keys       the folder with the outside services' key files, NAME.key, one for each service registered
+#                     under System > Outside. Counted from this file; left out, the folder machine_key_file is in.
+#                     Hosted models are answered from this machine, so their keys live here and nowhere else
+[turnstile]
+host = "0.0.0.0"
+ports = [8442, 8443, 8444]
+# DB1 switches, disabled until the coordinated migration gates pass. Existing front
+# task IDs retain front ownership even when front_tasks is disabled for rollback.
+# front_tasks = false
+# front_settings = false
+# machine_key_file = "../keys/machine.key"
+# keep_days = 90
+# max_in_flight = 200
+# hosted_keys = "../keys"
+# busy_retry_seconds = 5
+# Seconds between turnstile's questions to each compute machine about itself (never waking one).
+# A machine counts as ready for three times this, then as not answering.
+# machines_poll_seconds = 10
+# LoadCoach on the front host that owns the model-file storage library and active cache. Empty prefers
+# front_cpu when configured, otherwise compute. Every distribution starts from this host.
+# artifact_machine = "front_cpu"
+
+# Further LoadCoach instances, inventoried on System > Telemetry and eligible for model
+# placement. The one named by `compute` above is "compute". Each instance has its own secret;
+# its LoadCoach machine_name must match the table name here. A Spotter URL lets front sample
+# CPU, RAM and GPU readings on that physical host. Several instances on one host share a
+# fingerprint and appear on one telemetry card. See docs/installation.md#multi-machine-telemetry.
+# [machines.rig]
+# compute = "http://10.77.10.84:9442"
+# machine_key_file = "../keys/rig.key"
+# spotter = "http://10.77.10.84:9444"
+# Optional wake settings for this node (otherwise only the default compute can wake).
+# wake_mac = "bc:fc:e7:3d:90:6c"
+# wake_address = "10.77.10.255"
+# With voice installed, include 8445 in ports above. Readiness probes never wake compute.
+# voice_port = 8445
+
+# The Deploy page (superusers only). Front keeps a git checkout of the suite and pulls it from
+# GitHub; Deploy copies that code to a machine over ssh, installs it and restarts its services in
+# order. Settings, keys and data there are never touched. "local" is front itself. Each machine
+# needs front's ssh key in its authorized_keys. See weightroom/deploy.py.
+# [deploy]
+# source = "~/openWeightGym-source"
+# branch = "main"
+# [deploy.nodes.front]
+# ssh = "local"
+# folder = "weightroom"
+# extras = "voice-gateway,benchmarks,postgresql,knowledge"
+# services = ["toollocker", "loadcoach-front-cpu", "spotter-front-cpu", "turnstile", "voice-gateway", "weightroom"]
+# [deploy.nodes.compute]
+# ssh = "10.77.10.84"
+# folder = "suite-deployed"
+# extras = "voice,postgresql"
+# services = ["loadcoach", "spotter", "voice"]
+
+# Set this once weightroom is served over HTTPS. The browser then sends its cookie only that way.
+# secure = true

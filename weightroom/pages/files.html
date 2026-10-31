@@ -1,0 +1,19 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box , confirm_two %}
+{% from "parts.html" import page_header, form_section, more %}
+{% block title %}Files · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header('Files', 'Manage model files in cache, storage and compute locations.') }}
+{{ said_box(said) }}
+{% call more('About these files') %}<p class="text-secondary">Front keeps a complete library of used and unused models, plus a smaller active cache. Downloads prefer the library; copy a model into the cache when front should use it, or distribute it through the node monitor to compute nodes. Storage below is live for every answering node.</p>{% endcall %}
+
+{% call more('Optional maintenance') %}<div class="row g-3">{% call form_section('Cache maintenance') %}<div class="col-12"><div class="d-flex flex-wrap gap-2 mb-3" aria-label="File maintenance">
+  <form method="post" action="/files" {{ confirm_two() }}><button  class="btn btn-outline-warning btn-sm" name="do" value="clear-cache" {{ confirm_two() }}>Clear cache</button></form>
+  <form method="post" action="/files"><button class="btn btn-outline-primary btn-sm" name="do" value="consolidate-cache">Consolidate cache</button></form>
+  <form method="post" action="/files" {{ confirm_two() }}><button  class="btn btn-outline-warning btn-sm" name="do" value="cleanup-nodes" {{ confirm_two() }}>Cleanup nodes</button></form>
+</div>
+<p class="small text-warning-emphasis">Consolidate cache copies every file a model uses on any node from Storage into the cache. Clear cache verifies every cached file byte-for-byte against Storage before removing anything. Large libraries can take an hour or more; cleanup continues in the background and this page updates when it finishes.</p>
+</div>{% endcall %}</div>{% endcall %}
+{% include "downloads.html" %}
+{% include "files_list.html" %}
+{% endblock %}

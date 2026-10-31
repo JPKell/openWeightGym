@@ -1,0 +1,37 @@
+// Lets spotter, which runs as an ordinary account, do what the Power card and the Services card
+// of weightroom ask of it: put this machine to sleep, restart it, switch it off, and start, stop
+// and restart the few services of root's that are named here. Nothing else.
+//
+// Change ACCOUNT to the account spotter runs as, and SERVICES to match [system_services] in
+// spotter.toml. Then install it, as root:
+//
+//   sudo install -m 644 spotter.rules /etc/polkit-1/rules.d/50-spotter.rules
+//
+// polkit reads it at once; nothing needs restarting. To take it away again, remove that file.
+//
+// What this gives: every program of that account may do these things without a password, not
+// only spotter. An account that can already use sudo gains nothing it could not do before.
+
+var ACCOUNT = "jpk";
+var SERVICES = ["docker.service"];
+
+polkit.addRule(function (action, subject) {
+    if (subject.user !== ACCOUNT) return;
+
+    // Sleep, restart, switch off. Each has three names: the plain one, the one used while
+    // someone else is signed in, and the one used when a program has asked the system to wait.
+    var power = ["suspend", "reboot", "power-off"];
+    for (var i = 0; i < power.length; i++) {
+        var name = "org.freedesktop.login1." + power[i];
+        if (action.id === name || action.id === name + "-multiple-sessions" || action.id === name + "-ignore-inhibit") {
+            return polkit.Result.YES;
+        }
+    }
+
+    // The named services, and only to start, stop or restart them.
+    if (action.id === "org.freedesktop.systemd1.manage-units" &&
+        SERVICES.indexOf(action.lookup("unit")) >= 0 &&
+        ["start", "stop", "restart"].indexOf(action.lookup("verb")) >= 0) {
+        return polkit.Result.YES;
+    }
+});

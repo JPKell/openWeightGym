@@ -1,0 +1,35 @@
+--- a/src/core/layer_split_partition.cpp
++++ b/src/core/layer_split_partition.cpp
+@@ -145,6 +145,32 @@
+         std::vector<int64_t> backend_capacities = graph_cut_layer_split_backend_capacities(split_backends,
+                                                                                            backend_vram_limits,
+                                                                                            primary_backend_vram_limit);
++        // Suite profiles can pin unequal weight ratios independently of free VRAM.
++        // Allocation failure must fail the requested profile, never silently reshard.
++        if (const char* ratios = std::getenv("SD_SUITE_SPLIT_WEIGHTS")) {
++            GGML_ASSERT(backend_capacities.size() == 2);
++            char* second = nullptr;
++            const double first = std::strtod(ratios, &second);
++            GGML_ASSERT(second != nullptr && *second == ',');
++            char* end = nullptr;
++            const double last = std::strtod(second + 1, &end);
++            GGML_ASSERT(end != nullptr && *end == '\0' && first > 0 && last > 0 && first <= 100 && last <= 100);
++            const int64_t largest = *std::max_element(segment_param_bytes.begin(), segment_param_bytes.end());
++            backend_capacities[0] = std::max((int64_t)((long double)total_param_bytes * first / (first + last)), largest);
++            backend_capacities[1] = total_param_bytes;
++            LOG_INFO("%s Suite fixed layer weights: %.3f,%.3f", desc, first, last);
++        } else if (backend_capacities.size() > 1) {
++            long double total_capacity = 0;
++            for (int64_t capacity : backend_capacities) total_capacity += capacity;
++            const int64_t largest = *std::max_element(segment_param_bytes.begin(), segment_param_bytes.end());
++            if (total_capacity > 0) {
++                for (size_t i = 0; i + 1 < backend_capacities.size(); i++) {
++                    const int64_t proportional = (int64_t)((long double)total_param_bytes * backend_capacities[i] / total_capacity);
++                    backend_capacities[i] = std::min(backend_capacities[i], std::max(proportional, largest));
++                }
++            }
++        }
++
+         // Existing placements may already occupy the reported free VRAM. Reuse
+         // them; execution checks missing weights and reclaims memory as needed.
+         const bool reuse_assignments = std::all_of(seen_params.begin(), seen_params.end(), [&](ggml_tensor* param) {

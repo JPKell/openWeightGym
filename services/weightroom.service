@@ -1,0 +1,13 @@
+[Unit]
+Description=WeightRoom, the openWeightGym web console
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/ai/openWeightGym
+ExecStart=%h/ai/openWeightGym/.venv/bin/weightroom --config %h/ai/openWeightGym/settings/weightroom.toml
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+Alias=frontdesk.service

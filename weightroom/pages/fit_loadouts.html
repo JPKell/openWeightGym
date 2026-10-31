@@ -1,0 +1,58 @@
+{% from "parts.html" import section_title , confirm_loss %}
+{% call card('Named load-outs', true, id='named-loadouts') %}
+<p class="small text-secondary">Save this selection, then preview the complete change. Applying settings starts no inference. Requesting a set applies its reviewed settings and waits for every member to be ready, with a ten-minute renewable hold. Active work and ordinary holds stay protected.</p>
+{% if loadouts.why %}<p class="text-warning">{{ loadouts.why }}</p>{% else %}
+<form method="post" action="/dry-fit" id="fit-save" class="row g-2 align-items-end mb-3">{% call form_section('Save selection', 'This node') %}
+  <input type="hidden" name="selection" id="fit-selection" value="[]"><input type="hidden" name="version" id="fit-version" value="">
+  <div class="col-sm-6"><label class="form-label" for="fit-name">Selection name</label><input id="fit-name" name="name" class="form-control" maxlength="80" required></div>
+  <div class="col-sm-6"><div class="form-check mb-2"><input id="fit-replace" class="form-check-input" type="checkbox"><label for="fit-replace" class="form-check-label">Replace this saved name</label></div><button class="btn btn-outline-primary" name="do" value="save">Save current selection</button></div>
+  <p id="fit-selection-message" class="small text-secondary mb-0" role="status">Choose models and context using the controls above.</p>
+{% endcall %}</form>
+<div class="table-responsive"><table class="table table-sm align-middle" id="fit-saved" aria-label="Saved load-outs">
+<thead><tr><th>Name</th><th>Models / fixed context / cards</th><th>Actions</th></tr></thead><tbody>
+{% for saved in loadouts.loadouts %}<tr data-loadout-name="{{ saved.name }}" data-version="{{ saved.version }}">
+<th class="wrap">{{ saved.name }} <small class="text-secondary d-block">version {{ saved.version }}</small></th>
+<td>{% for member in saved.models %}<div>{{ member.name or (member.label ~ ' · removed') }} · {{ member.context }} · {{ member.cards|join(', ') or 'CPU' }}</div>{% endfor %}</td>
+<td><form method="post" action="/dry-fit" class="d-flex flex-wrap gap-2"><input type="hidden" name="name" value="{{ saved.name }}"><input type="hidden" name="version" value="{{ saved.version }}">
+  <button type="button" class="btn btn-sm btn-outline-secondary" data-loadout-edit="{{ {'name': saved.name, 'version': saved.version, 'models': saved.models}|tojson|forceescape }}">Select</button>
+  <button name="do" value="preview" class="btn btn-sm btn-outline-primary">Preview</button>
+  {% if saved.undo %}<button name="do" value="preview-undo" class="btn btn-sm btn-outline-secondary">Preview undo</button>{% endif %}
+  <button  name="do" value="delete" class="btn btn-sm btn-outline-danger" {{ confirm_loss() }}>Delete saved set</button>
+</form></td></tr>
+{% else %}<tr><td colspan="3" class="text-secondary">No saved load-outs.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if loadouts.leases %}{{ section_title("Your set holds") }}<div class="table-responsive"><table class="table table-sm align-middle" aria-label="Your load-out holds"><thead><tr><th>Set</th><th>State</th><th>Seconds left</th><th>Actions</th></tr></thead><tbody>
+{% for lease in loadouts.leases %}<tr><th>{{ lease.name }}<small class="d-block text-secondary">version {{ lease.version }} · {{ lease.models|select|join(', ') }}</small></th><td>{{ lease.state }}</td><td>{{ lease.seconds_left }}</td><td><form method="post" action="/dry-fit" class="d-flex flex-wrap gap-2"><input type="hidden" name="lease" value="{{ lease.id }}">{% if lease.state == 'ready' %}<button class="btn btn-sm btn-outline-primary" name="do" value="renew">Renew 10 minutes</button>{% endif %}<button class="btn btn-sm btn-outline-secondary" name="do" value="release">Release set hold</button></form></td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+<p class="small text-secondary mb-0">Deleting a saved selection leaves applied settings and existing holds in force. Set hold release preserves independent voice/manual holds. Saved definitions and guarded undo survive restart; runtime holds do not restart models.</p>
+{% endif %}
+{% endcall %}
+
+{% if review %}
+{% call card('Load-out configuration preview', true, id='loadout-review') %}
+{% set _section_title2 %}{{ review.name }} · version {{ review.version }}{{ ' · Undo' if review.undo }}{% endset %}
+{{ section_title(_section_title2) }}
+<p class="small text-secondary">Static checks and a scheduler snapshot. Real-model load, image and workload qualification remain pending. Review every change before applying.</p>
+{% if review.errors %}<div class="alert alert-danger"><ul class="mb-0">{% for error in review.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
+{% for error in review.joint.errors %}<p class="text-warning">{{ error }}</p>{% endfor %}
+<p><strong>Joint placement:</strong> {{ 'fits in this snapshot' if review.joint.fits else 'not ready to load as a set' }}. {{ review.joint.note }}{% if review.joint.leaves %} Idle models that would leave: {{ review.joint.leaves|join(', ') }}.{% endif %}</p>
+{% for member in review.models %}
+{% set _section_title3 %}<a href="{{ address(member.name) }}">{{ member.name }}</a>{% endset %}
+{{ section_title(_section_title3, level=3) }}
+{% for warning in member.warnings %}<p class="small text-warning">{{ warning }}</p>{% endfor %}
+<div class="table-responsive"><table class="table table-sm" style="table-layout: fixed; min-width: 26rem" aria-label="{{ member.name }} load-out changes"><thead><tr><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>
+{% for change in member.changes %}<tr><th class="wrap">{{ change.field }}</th><td class="wrap"><code>{{ change.before|tojson }}</code></td><td class="wrap"><code>{{ change.after|tojson }}</code></td></tr>{% else %}<tr><td colspan="3">Configuration already matches.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if member.effective %}<details class="mb-3"><summary class="small">Files, effective flags and placement</summary><p class="small">{{ member.placement.state }} · {{ member.placement.cards|join(', ') or ('CPU' if member.effective.gpus == 0 else 'no devices admitted') }} · {{ member.placement.context }} tokens</p><pre class="small wrap" style="white-space: pre-wrap; overflow-wrap: anywhere">{{ member.effective|tojson(indent=2) }}</pre>{% for item in member.artifacts %}<p class="small wrap">{{ item.role }}: {{ item.path }} · {{ item.compatibility }}</p>{% endfor %}</details>{% endif %}
+{% endfor %}
+{% if review.can_apply %}<form method="post" action="/dry-fit" class="d-flex flex-wrap align-items-center gap-3">
+  <input type="hidden" name="name" value="{{ review.name }}"><input type="hidden" name="token" value="{{ review.token }}"><input type="hidden" name="undo" value="{{ '1' if review.undo else '0' }}">
+  <div class="form-check"><input id="loadout-acknowledge" name="acknowledge" class="form-check-input" type="checkbox" required><label class="form-check-label" for="loadout-acknowledge">I reviewed these changes, warnings and pending qualification.</label></div>
+  <button class="btn btn-outline-primary" name="do" value="apply">{{ 'Restore settings' if review.undo else 'Apply settings' }}</button>
+  {% if review.can_request %}<button class="btn btn-primary" name="do" value="request">Apply, load and hold 10 minutes</button>{% endif %}
+</form>{% endif %}
+<p class="small text-secondary mt-2 mb-0">A rejected joint fit changes no settings. A native load failure leaves the complete applied configuration with guarded Undo, releases this attempt's set holds, and may leave successfully loaded models idle for ordinary use.</p>
+{% endcall %}
+{% endif %}
+
+<p class="small text-secondary">Saved load-outs remain limited to language models on primary compute; image/audio selections are read-only memory previews.</p>

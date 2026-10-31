@@ -1,0 +1,14 @@
+{% if observation_report %}
+{% if observation_report.error %}<p class="text-warning">{{ observation_report.error }}</p>{% endif %}
+<p class="small text-secondary">Measured within each service. Parallel stages overlap; host timestamps may differ. Response handoff does not prove receipt by the calling application.</p>
+<div class="table-responsive"><table class="table table-sm align-middle" id="observation-spans">
+<thead><tr><th>Operation</th><th>Service / machine</th><th>Outcome</th><th>Seconds</th><th>Request</th><th>Span / parent</th></tr></thead>
+<tbody>{% for span in observation_report.spans %}<tr>
+<td><span class="text-secondary">{{ '↳ ' * ([span.depth|default(0), 8]|min) }}</span>{{ span.operation }}{% if span.job_trace_id %} · <a href="/requests?trace_id={{ span.job_trace_id|query }}">Job trace</a>{% endif %}{% if span.tool_executed %} · tool response confirmed{% elif span.operation == 'tool_execution' %} · execution unconfirmed{% endif %}{% if span.truncated %} · truncated{% endif %}</td>
+<td>{{ span.service }} / {{ span.machine }}</td><td>{{ span.outcome }}{% if span.error_code %} · {{ span.error_code }}{% endif %}{% if span.uncertainty %}<br><small>{{ span.uncertainty }}</small>{% endif %}</td>
+<td>{% if span.finished %}{{ '%.4f'|format(span.seconds) }}{% else %}Unavailable{% endif %}</td>
+<td>{% if span.request_number %}<a href="/requests/{{ span.request_number }}">{{ span.request_number }}</a>{% endif %}</td>
+<td><code>{{ span.id }}</code><br><small class="text-secondary">{{ span.parent_id or 'Ingress' }}{% if span.parent_unavailable %} · external or unavailable{% endif %}</small></td>
+</tr>{% else %}<tr><td colspan="6" class="text-secondary">No retained observation metadata in this scope and window.</td></tr>{% endfor %}</tbody></table></div>
+{% if observation_report.truncated %}<p class="small text-warning">Results are truncated. Narrow the window or use paginated API export.</p>{% endif %}
+{% endif %}

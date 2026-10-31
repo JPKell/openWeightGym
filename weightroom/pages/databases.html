@@ -1,0 +1,88 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, page_header %}
+{% block title %}DB · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header("Database storage", "Live inventory, restorable SQL exports and engine migration readiness.") }}
+
+{% if compute_error %}<div class="alert alert-warning py-2">{{ compute_error }}</div>{% endif %}
+{{ said_box(said) }}
+<div class="alert alert-info py-2">SQL exports can contain password verifiers, authenticator secrets, API-key hashes, retained prompts and responses. Keep downloaded dumps private and owner-readable.</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">{% call card("", class_="h-100") %}<div class="text-secondary small">Databases</div><div class="fs-4 fw-semibold">{{ database_count }}</div>{% endcall %}</div>
+  <div class="col-md-4">{% call card("", class_="h-100") %}<div class="text-secondary small">Tables</div><div class="fs-4 fw-semibold">{{ table_count }}</div>{% endcall %}</div>
+  <div class="col-md-4">{% call card("", class_="h-100") %}<div class="text-secondary small">On disk now</div><div class="fs-4 fw-semibold">{{ disk_size|disk_size }}</div>{% endcall %}</div>
+</div>
+
+{% include "store_health.html" %}
+
+{% call card("Engine and migration readiness", true) %}
+<div class="table-responsive mb-3"><table class="table table-sm align-middle mb-0">
+  <thead><tr><th>Engine</th><th>Runtime</th><th>Migration</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td>SQLite</td><td><span class="badge text-bg-success">supported</span></td><td>SQL exports available</td><td>Default for one-machine installations; named stores can select either engine.</td></tr>
+    <tr><td>PostgreSQL</td><td><span class="badge text-bg-success">supported</span></td><td>Offline migration available</td><td>Verified recovery, logical copy, content validation, coordinated cutover and automatic rollback.</td></tr>
+  </tbody>
+</table></div>
+<p class="mb-2">SQLite and PostgreSQL now share the storage contract, versioned schemas, recovery manifests and restorable SQL exports. Recovery sets refuse to complete when a configured store is missing or unreachable.</p>
+<p class="mb-0 text-secondary">Choose an operator-configured migration profile below to review its target and bindings before starting maintenance.</p>
+{% endcall %}
+
+{% call card("Offline migration", true) %}
+{% for profile in migration_profiles %}
+<form method="post" action="/databases/migrations/{{ profile }}/preview" class="d-flex gap-2 align-items-center mb-2"><strong>{{ profile }}</strong><button type="submit" class="btn btn-outline-primary btn-sm">Check and preview</button></form>
+{% else %}<p class="mb-0 text-secondary">No migration profiles are configured. An operator first creates an owner-only profile under <code>settings/migrations/</code>, provisions the empty target and acceptance checks, and installs matching openWeightGym code on every host. See the database storage guide.</p>{% endfor %}
+{% for report in migration_reports %}
+<details class="mt-3"><summary><code>{{ report.id }}</code> · {{ report.state }}</summary>
+{% if report.failure %}<p class="text-danger">{{ report.failure }}</p>{% endif %}
+{% if report.operator_action %}<p class="text-danger">{{ report.operator_action }}</p>{% endif %}
+<p>Recovery hosts: {{ report.recovery.keys()|join(", ") or "none yet" }}</p>
+{% if report.acceptance %}<p>Acceptance: {% for name, state in report.acceptance.items() %}{{ name }} {{ state }}{{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
+<ol>{% for step in report.steps %}<li>{{ step.state }} · {{ step.at|timestamp }}</li>{% endfor %}</ol>
+</details>
+{% endfor %}
+{% endcall %}
+
+{% call card("Dump tools", false) %}
+<div class="table-responsive"><table class="table table-sm align-middle mb-0">
+  <thead><tr><th>Machine</th><th>sqlite3</th><th>pg_dump</th><th>pg_restore</th><th>psql</th><th>pgloader</th></tr></thead>
+  <tbody>
+  {% for machine, tools in [("Front", front_tools), ("Compute", compute_tools)] %}
+    <tr><td>{{ machine }}</td>{% for tool in ["sqlite3", "pg_dump", "pg_restore", "psql", "pgloader"] %}<td>{% if tools.get(tool, {}).get("available") %}<span class="badge text-bg-success">available</span>{% else %}<span class="text-secondary">not installed</span>{% endif %}</td>{% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<div class="small text-secondary mt-2">Complete SQLite exports prefer <code>sqlite3</code>; exact table exports can use Python's SQLite library. PostgreSQL exports use <code>pg_dump</code>. Verified recovery also requires <code>pg_restore</code> with a client version compatible with the server.</div>
+{% endcall %}
+
+{% for database in databases %}
+{% call card(database.machine|capitalize ~ " · " ~ database.name, true) %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+  <div>
+    <span class="badge text-bg-secondary">{{ database.engine }}</span>
+    {% if not database.expected %}<span class="badge text-bg-warning">discovered</span>{% endif %}
+    <span class="ms-2">{{ database.owner }}</span>
+    <div class="small text-secondary mt-1"><code>{{ database.path }}</code></div>
+  </div>
+  {% if not database.error %}<a class="btn btn-outline-primary btn-sm" href="/databases/{{ database.machine }}/{{ database.id }}/dump">Dump complete database</a>{% endif %}
+</div>
+{% if database.error %}<div class="alert alert-danger py-2 mb-0">{{ database.error }}</div>{% else %}
+<div class="row g-2 small mb-2">
+  <div class="col-md-3"><span class="text-secondary">On disk</span><br><strong>{{ database.size|disk_size }}</strong></div>
+  <div class="col-md-3"><span class="text-secondary">Main file</span><br><strong>{{ database.main_size|disk_size }}</strong></div>
+  <div class="col-md-3"><span class="text-secondary">{{ "Server version" if database.engine == "PostgreSQL" else "Reusable pages" }}</span><br><strong>{{ database.server_version if database.engine == "PostgreSQL" else database.free|disk_size }}</strong></div>
+  <div class="col-md-3"><span class="text-secondary">Dump method</span><br><strong>{{ database.dump_method }}</strong></div>
+</div>
+<div class="table-responsive"><table id="database-tables-{{ loop.index0 }}" class="table table-sm align-middle sortable mb-0">
+  <thead><tr><th scope="col" data-sort="text">Table</th><th scope="col" class="text-end" data-sort="value">Records</th><th scope="col" class="text-end" data-sort="value">Table + indexes</th><th scope="col" class="text-end" data-sort="value">Indexes</th><th scope="col"></th></tr></thead>
+  <tbody>
+  {% for table in database.tables %}
+    <tr><td><code>{{ table.name }}</code></td><td class="text-end" data-value="{{ table.records }}">{{ "{:,}".format(table.records) }}</td><td class="text-end" data-value="{{ table.size if table.size is not none else '' }}">{{ table.size|disk_size }}</td><td class="text-end" data-value="{{ table.indexes }}">{{ table.indexes }}</td><td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/databases/{{ database.machine }}/{{ database.id }}/dump?table={{ table.name|query }}">Dump SQL</a></td></tr>
+  {% else %}<tr><td colspan="5" class="text-secondary">No user tables.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+<div class="small text-secondary mt-2">Table size includes its allocated table and index storage.{% if database.engine == "SQLite" %} Database size also includes active WAL and shared-memory sidecars.{% else %} Database size is reported by <code>pg_database_size</code>.{% endif %}</div>
+{% endif %}
+{% endcall %}
+{% else %}<div class="alert alert-secondary">No database files were found.</div>{% endfor %}
+{% endblock %}

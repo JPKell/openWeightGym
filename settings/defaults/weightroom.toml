@@ -1,0 +1,214 @@
+# What weightroom, and turnstile beside it, starts from: everything that can be changed on the site's
+# Settings page, and the first groups.
+#
+# This file is part of the suite. It is read at every start, with settings/weightroom.toml laid
+# over it. A value changed on the site is kept in LoadCoach's database and lies over the value
+# here, until the change is taken away: on the page, or with
+#   loadcoach settings reset weightroom NAME
+# What belongs to the machine, such as addresses, ports and paths, is not here. That is in
+# settings/weightroom.toml, and settings/examples/weightroom.toml explains it.
+
+# The zone that times are shown in. Left out, it is this machine's own, which may not be yours.
+timezone = "America/Vancouver"
+
+# USD per million input tokens used to estimate cost when a request has no recorded cost and
+# its model has no known rate. This is the starting value in the Usage and Home pages.
+mock_input_rate = 2.0
+
+# USD per million output tokens used for that same estimate.
+mock_output_rate = 10.0
+
+# Optional system services shown on Machine and offered as sources in System Logs. The settings
+# page presents the supported names as checkboxes. Ollama and Docker preserve the existing view;
+# Apache and Nginx can be enabled when this machine runs them.
+third_party_services = ["ollama", "docker"]
+
+# Number of verified recovery sets kept on each machine. Zero keeps every set. Change this on
+# System > Backups; rotation happens after the next successful manual backup.
+backup_retention = 10
+
+# GPU temperature alert threshold in degrees Celsius, from 50 through 110. This is a
+# notification threshold, not a thermal shutdown control. Changed live in System > Settings.
+alert_gpu_temperature = 85
+
+# Observation alerts: enable rate/latency thresholds after measuring a baseline.
+observation_error_percent = 0.0
+observation_p95_seconds = 0.0
+observation_min_samples = 100
+observation_window_seconds = 300
+observation_alert_hold_seconds = 60
+
+# Observation spans kept on front: days kept (1-30), the percent of all-successful traces kept
+# (0-100; spans that did not succeed are always kept, and every span still counts in the metrics),
+# and a cap on stored spans (0 is none). Polling makes most spans, so a low percent saves the most.
+# Applied when weightroom starts.
+observation_keep_days = 7
+observation_success_percent = 100
+observation_max_spans = 0
+
+# SoundRoom audio pages (Chat → Music, Sounds and Speech). The chat model or role that writes
+# a style caption and lyrics on the Music page, and the model each page selects first; empty
+# selects the first audio model of that kind the person may use. Applied when weightroom starts.
+audio_lyrics_model = "chat"
+audio_music_model = ""
+audio_sound_model = ""
+audio_speech_model = ""
+audio_transcription_model = ""
+# Routine polls: a successful trace that starts at one of these routes is not kept (its failures
+# are, and it still counts in the metrics). A poll made inside other work, such as a routing lookup
+# during a chat request, does not count. [] keeps every poll. Turnstile records these exact paths
+# instead of its catch-all template only for the routes listed in loadcoach/observability.py POLLS.
+observation_quiet_routes = ["/loadcoach/status", "/v1/models", "/loadcoach/facts", "/loadcoach/me", "/loadcoach/send-log",
+                            "/loadcoach/plugins/mirror", "/loadcoach/observation-metrics", "/loadcoach/alert-evidence",
+                            "/loadcoach/downloads", "/spotter/now", "/spotter/alert-evidence",
+                            "/voice/ready", "/turnstile/ready"]
+
+# Groups: what the members of each group may do. The groups here are only the first set: they are
+# taken into the accounts store on this machine the first time turnstile or the weightroom command
+# opens it. From then on they are looked after on the site, or with `weightroom group`, and
+# changing them here changes nothing. The users themselves are in no file.
+#
+# Until the first user is added, anyone on this machine may do anything through turnstile and no
+# key is needed. Add the first one from a terminal, then the rest on the site:
+#
+#   weightroom user add jordan superuser
+#
+# A group may set:
+#
+#   can           what its members may do, from the list below
+#   models        which models they may use: "*" (the default) or a list of names
+#   priority      the priority of their requests: "high", "normal" (the default) or "low"
+#   max_lock      the longest lock they may take, in seconds; 0 (the default) is no limit
+#   max_requests  how many requests one of them may have in line or running; 0 is no limit
+#   max_sensitivity  the most sensitive work they may ask for: "normal" (the default),
+#                 "sensitive" or "restricted". A request says its level in the header
+#                 X-LoadCoach-Sensitivity, and its piece of work in X-LoadCoach-Trace.
+#   max_hosted_spend  the most one of them may spend on hosted answers in any 24 hours, in
+#                 dollars; 0 (the default) is no limit
+#   session_hours how long a sign-in with a password lasts; 12 unless said. API keys do not end.
+#   second_step   true if signing in also needs a code from an authenticator app; false unless said
+#
+# Abilities:
+#
+#   load          cause a model to be loaded, which may replace an idle one
+#   hosted        use a hosted model, which sends the request off this machine
+#   unlogged      send a request that leaves nothing behind: no entry in the log, no number, no kept
+#                 text. It does nothing unless `unlogged = true` is set above.
+#   lock          take the lock
+#   break-lock    end a lock someone else holds
+#   unload        unload every model
+#   high          ask for high priority
+#   see-all       see every caller in the status, not only oneself
+#   clear-line    turn away every request waiting in line
+#   stop          stop one request of someone else's, in line or being answered
+#   see-log       read everyone's entries in the event log, not only one's own
+#   rate-answers  rate anyone's answered request good or bad, with an explanation, kept as the
+#                 model's quality score (for an app that judges answers)
+#   see-capture   read the text kept of requests, and look at what someone else's is being answered
+#   manage-users  add, change and remove users, within what one may do oneself
+#   manage-groups add, change and remove groups, within what one may do oneself
+#   manage-models add, change and remove models, and see, move and delete their files
+#   restart-services  start, stop and restart the services on compute, and read what they print
+#   manage-settings  see every program's settings, and change those that can be changed from the site
+#   power         restart compute, put it to sleep and switch it off
+#   drain         stop new requests being taken so that the line empties, and let them in again
+#   sign-in       have someone else's sign-in checked here, for a session that can do all that
+#                 person may (for the front machine's own key)
+#   app-sign-in   the same, for a session that can do no more than this account (for an app's own key)
+#   mirror-users  read the list of models for front's plugins, and the evidence for alerts (for the front machine's own key)
+#   follow-settings  read what was changed in a program's settings and say what it runs with (for a
+#                 program's own key: the front machine's, the voice service's, the voice gateway's)
+#   front-...     anything starting with front- is the front machine's to interpret
+#   superuser     everything a person can be allowed to do, here and on the front machine, also what
+#                 is added later: every ability above except sign-in, app-sign-in and
+#                 mirror-users, which are for a program's own key. It also lifts max_sensitivity
+#                 to the highest, unless the group sets one.
+
+# Whoever owns the machine. The first account should be in this group:
+#   weightroom user add NAME superuser
+[groups.superuser]
+can = ["superuser"]
+session_hours = 12
+# second_step = true      # turn on when you are ready to use an authenticator app
+
+# People who look after compute for others. They can make users and groups up to their own
+# level, never above it.
+[groups.admin]
+can = ["load", "benchmark", "lock", "break-lock", "unload", "high", "see-all", "clear-line", "stop", "see-log", "see-capture", "manage-users", "manage-groups", "manage-models", "hosted", "restart-services", "drain"]
+max_sensitivity = "restricted"
+session_hours = 12
+
+# People and tools that use models.
+[groups.user]
+can = ["load", "lock"]
+max_lock = 3600
+max_requests = 4
+session_hours = 168      # a week
+
+# Programs outside this suite, each with an account and a key of its own. One app can be given
+# less or more than the rest:
+#   weightroom user adjust chat-app remove=lock models=small max_requests=2
+# An app that signs people in with their name and password also needs app-sign-in. A session it
+# makes can do no more than the app's own account can:
+#   weightroom user adjust chat-app add=app-sign-in
+# An app that judges answers and rates them for the quality score:
+#   weightroom user adjust judge-app add=rate-answers
+# One whose requests should go ahead of the others in line, such as a telephone caller's:
+#   weightroom user adjust voice-phone priority=high
+[groups.app]
+can = ["load", "lock", "hosted"]
+max_requests = 4
+
+# Unattended scripts: behind everyone else.
+[groups.batch]
+can = ["load"]
+priority = "low"
+max_requests = 2
+
+# The suite's own programs that reach compute with a key, through turnstile: weightroom, the voice service, the
+# voice gateway. The group gives only what all of them need. What one of them needs beyond that
+# is given to its own account, so that a key that leaks can do no more than its one program:
+#
+#   weightroom user add weightroom system
+#   weightroom user adjust weightroom add=sign-in,mirror-users
+#
+#   weightroom user add voice-service system
+#   weightroom user adjust voice-service add=hold,load,see-all max_requests=4
+#
+#   weightroom user add voice-gateway system
+#   weightroom user adjust voice-gateway add=app-sign-in,load,front-voice max_requests=4
+#
+# Programs from outside the suite, and the account a telephone caller is, belong in "app".
+[groups.system]
+can = ["follow-settings"]
+
+# turnstile's own part. Seconds it waits for compute to wake before it gives up on a request.
+[turnstile]
+wait = 180
+# LoadCoach on the front host that owns the model-file storage library and active cache. Empty prefers
+# front_cpu when configured, otherwise compute. Changing it requires restarting turnstile.
+artifact_machine = ""
+# Allow each user to opt in to adult Civitai previews. Off hides the user control and
+# enforces safe previews for every account. Changes apply immediately.
+image_adult_previews = false
+# Days the event log is kept on this machine: compute's requests and what was done here to the
+# accounts and roles. Older entries are removed once a day. 0 keeps everything.
+keep_days = 90
+
+# The Deploy page (superusers only). Front keeps a git checkout of the suite and pulls it from
+# GitHub; Deploy copies that code to a machine over ssh, installs it and restarts its services in
+# order. Settings, keys and data there are never touched. "local" is front itself. Each machine
+# needs front's ssh key in its authorized_keys. See weightroom/deploy.py.
+# [deploy]
+# source = "~/openWeightGym-source"
+# branch = "main"
+# [deploy.nodes.front]
+# ssh = "local"
+# folder = "weightroom"
+# extras = "voice-gateway,benchmarks,postgresql,knowledge"
+# services = ["toollocker", "loadcoach-front-cpu", "spotter-front-cpu", "turnstile", "voice-gateway", "weightroom"]
+# [deploy.nodes.compute]
+# ssh = "10.77.10.84"
+# folder = "suite-deployed"
+# extras = "voice,postgresql"
+# services = ["loadcoach", "spotter", "voice"]

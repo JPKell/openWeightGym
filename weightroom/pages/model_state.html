@@ -1,0 +1,9 @@
+{# The right of the top row of a model's page: when it was last used, and its file. It asks for itself again every 5 seconds.
+   Side by side on a wide screen, one under the other on a phone. #}
+<div id="state" class="col-md small" hx-get="{{ address(model.name) }}{{ '&' if '?' in address(model.name) else '?' }}part=state" hx-trigger="every 5s" hx-swap="outerHTML">
+  <div class="d-flex flex-column flex-md-row justify-content-md-end gap-md-3">
+  <span>{% include "model_now.html" %}</span><span><span class="text-secondary">Last used</span> {{ model.last_used|timestamp if model.last_used else "never" }}</span>
+  <span class="wrap">{% if model.size is none %}{{ model.flags.model }} <b class="text-danger">its file is missing</b>{% else %}<a href="{{ file_address(model.flags.model) }}">{{ model.flags.model }}</a> <span class="text-secondary">{{ model.size|size }}</span>{% endif %}</span>
+  </div>
+  {% include "model_reasoning.html" %}
+</div>

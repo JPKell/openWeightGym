@@ -1,0 +1,30 @@
+{
+  "sign-in": [{
+    "method": "POST", "url": "http://10.77.10.84:8442/loadcoach/sign-in", "status": 201,
+    "headers_file": "/home/jpk/weightroom/keys/migration-sign-in-headers.json",
+    "body_file": "/home/jpk/weightroom/keys/migration-sign-in-body.json",
+    "assert": {"name": "REPLACE_WITH_EXISTING_ACCEPTANCE_ACCOUNT"}, "extract": {"session": "key"}
+  }],
+  "models": [{
+    "url": "http://10.77.10.84:8442/v1/models", "headers": {"authorization": "Bearer ${session}"},
+    "assert": {"object": "list", "data.0.id": "REPLACE_WITH_FIRST_VISIBLE_MODEL"}
+  }],
+  "request": [{
+    "method": "POST", "url": "http://10.77.10.84:8442/v1/chat/completions", "headers": {"authorization": "Bearer ${session}"},
+    "json": {"model": "REPLACE_WITH_LOCAL_ACCEPTANCE_MODEL", "messages": [{"role": "user", "content": "Say ready."}], "max_tokens": 8, "stream": false, "chat_template_kwargs": {"enable_thinking": false}},
+    "assert": {"choices.0.message.role": "assistant"}
+  }],
+  "chat": [{
+    "url": "http://10.77.10.42:8440/loadcoach/conversations/REPLACE_WITH_EXISTING_CHAT_ID", "headers": {"authorization": "Bearer ${session}"},
+    "assert": {"title": "REPLACE_WITH_EXISTING_CHAT_TITLE"}
+  }],
+  "benchmark": [{
+    "url": "http://10.77.10.42:8440/benchmarks/run/REPLACE_WITH_COMPLETED_RUN_ID", "headers": {"cookie": "weightroom=${session}"},
+    "contains": ["REPLACE_WITH_SAVED_SAMPLE_EVIDENCE"]
+  }],
+  "tool": [{
+    "method": "POST", "url": "http://10.77.10.84:8443/mcp", "headers": {"authorization": "Bearer ${session}"},
+    "json": {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "REPLACE_WITH_READ_ONLY_TOOL", "arguments": {}}},
+    "assert": {"jsonrpc": "2.0", "result.isError": false}
+  }]
+}

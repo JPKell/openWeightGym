@@ -1,0 +1,27 @@
+# What spotter starts from, for everything changed per node under System > Compute nodes.
+#
+# This file is part of the suite. It is read at every start, with settings/spotter.toml laid
+# over it. A value changed on the site is kept in LoadCoach's database and lies over the value
+# here, until the change is taken away: on the page, or with
+#   loadcoach settings reset spotter NAME
+# What belongs to the machine, such as addresses, ports and paths, is not here. That is in
+# settings/spotter.toml, and settings/examples/spotter.toml explains it.
+
+# Seconds between the readings that are kept, and the days they are kept for. A reading is about
+# 400 bytes: every 30 seconds for 28 days is 37 MB.
+sample_every = 30
+keep_days = 28
+
+# Minutes with nothing using the machine before spotter puts it to sleep. 0, or left out, means
+# never. "Using" is any of: a request or tool call at LoadCoach, a key or the mouse touched at
+# the machine's own screen, a GPU at `busy_gpu` percent or more, the processor at
+# `busy_processor` percent or more. Someone signed in over SSH and doing nothing does not count.
+# A job that must not be put to sleep under can say so itself:
+#
+#   systemd-inhibit --what=sleep --why="a long job" COMMAND
+#
+# Before turning this on, make sure the machine can be woken again: see wake_mac in
+# settings/examples/weightroom.toml. A machine that sleeps and cannot be woken has to be walked to.
+sleep_after = 0
+busy_gpu = 10
+busy_processor = 25

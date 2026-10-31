@@ -1,0 +1,36 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, swaps, page_header %}
+{% block title %}System logs · openWeightGym{% endblock %}
+{% block main_class %}container-fluid console-page py-3{% endblock %}
+{% block main %}
+{{ page_header("System logs", lead="Inspect program output and system diagnostics.") }}
+{{ said_box(said, true) }}
+
+{# Show puts the page in again without loading it: the form, the lines, and what may be asked about them. #}
+<form method="get" action="/output" class="row g-2 align-items-end mb-3" {{ swaps("page-content", true) }} data-auto-submit>
+<div class="col-sm-6 col-lg-3"><label for="source" class="form-label">Source</label><select id="source" name="source" class="form-select form-select-sm">{% for name in sources %}<option {{ 'selected' if name == source }}>{{ name }}</option>{% endfor %}</select></div>
+<div class="col-sm-6 col-lg-3"><label for="at" class="form-label">Around this moment</label><input id="at" name="at" type="datetime-local" data-input-zone="{{ server_timezone }}" data-instant="{{ input_utc(at, server_timezone) }}" step="1" class="form-control form-control-sm" value="{{ at }}"></div>
+<div class="col-sm-6 col-lg-3"><label for="before" class="form-label">Seconds before / after</label><div class="input-group input-group-sm"><input id="before" name="before" type="number" min="0" step="any" class="form-control" value="{{ '%g'|format(before) }}" aria-label="Seconds before"><span class="input-group-text">/</span><input id="after" name="after" type="number" min="0" step="any" class="form-control" value="{{ '%g'|format(after) }}" aria-label="Seconds after"></div></div>
+<div class="col-sm-6 col-lg-3"><label for="lines" class="form-label">Last lines</label><select id="lines" name="lines" class="form-select form-select-sm">{% for n in [100, 200, 500, 1000, 2000, 5000] %}<option value="{{ n }}" {{ 'selected' if n|string == most|string }}>{{ n }}</option>{% endfor %}{% if most|int not in [100, 200, 500, 1000, 2000, 5000] %}<option value="{{ most }}" selected>{{ most }}</option>{% endif %}</select></div>
+<noscript><div class="col-12"><button class="btn btn-primary btn-sm">Show</button></div></noscript>
+</form>
+
+
+{# static/sort.js does the finding. One row for each line, so that a line can be found by any word in it. #}
+<div class="d-flex align-items-center gap-3 mb-2">
+  <input type="search" class="form-control" data-filter="printed" placeholder="Find a line: any words in it" aria-label="Find a line" autocapitalize="none" spellcheck="false">
+  <small class="text-secondary text-nowrap" data-count="printed">{{ lines|length }} line{{ "" if lines|length == 1 else "s" }}</small>
+</div>
+<div class="kept frame">
+<table id="printed" class="printed">
+  <tbody>
+  {% for line in lines %}<tr><td>{{ line|log_line }}</td></tr>
+  {% else %}<tr><td class="text-secondary">Nothing was printed{{ " then" if at }}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if output_command %}<div class="mt-2 mb-3 small"><span class="text-secondary">Command on compute</span><pre class="mb-0 mt-1"><code>{{ output_command }}</code></pre></div>{% endif %}
+{% if lines %}{% with log_text = lines|join("\n") %}{% include "ask.html" %}{% endwith %}{% endif %}
+{% endblock %}

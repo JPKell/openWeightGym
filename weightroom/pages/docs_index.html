@@ -1,0 +1,104 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, card, section_title %}
+{% block title %}System docs · openWeightGym{% endblock %}
+{% block main %}
+<div class="docs-page">
+  {{ page_header("System docs", lead="Select a component in the system map or its page below.") }}
+
+  {% call card("System map", attrs={"aria-labelledby": "system-map-title"}, header_id="system-map-title") %}
+      <p class="small text-secondary mb-2 d-md-none">Swipe across the map to see the full system.</p>
+      <div class="docs-map-scroll">
+      {% macro node(x, y, width, title, subtitle, slug) -%}
+      <a href="/docs/{{ slug }}" aria-label="{{ title }} documentation" class="docs-map-node">
+        <rect x="{{ x }}" y="{{ y }}" width="{{ width }}" height="64" rx="5"/>
+        <text class="docs-node-title" x="{{ x + width / 2 }}" y="{{ y + 26 }}" text-anchor="middle">{{ title }}</text>
+        <text class="docs-node-detail" x="{{ x + width / 2 }}" y="{{ y + 45 }}" text-anchor="middle">{{ subtitle }}</text>
+      </a>
+      {%- endmacro %}
+      {% macro endpoint(x, y, width, title) -%}
+      <g class="docs-map-endpoint"><rect x="{{ x }}" y="{{ y }}" width="{{ width }}" height="46" rx="4"/><text x="{{ x + width / 2 }}" y="{{ y + 28 }}" text-anchor="middle">{{ title }}</text></g>
+      {%- endmacro %}
+      {% macro wire_label(x, y, width, label) -%}
+      <g class="docs-map-label"><rect x="{{ x }}" y="{{ y }}" width="{{ width }}" height="23" rx="4"/><text x="{{ x + width / 2 }}" y="{{ y + 16 }}" text-anchor="middle">{{ label }}</text></g>
+      {%- endmacro %}
+      <svg class="docs-map" viewBox="0 0 1200 990" aria-labelledby="map-title map-desc" xmlns="http://www.w3.org/2000/svg">
+        <title id="map-title">openWeightGym component map</title>
+        <desc id="map-desc">Voice clients enter the voice gateway on front through an app, a telephone proxy or private web streaming. The web console and API clients reach openWeightGym and Turnstile. ToolLocker runs on front. Compute owns LoadCoach, Spotter and voice services. Permitted hosted providers are external; stores exist on front and compute. Click a component for its code reference.</desc>
+        <defs><marker id="docs-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" class="docs-arrow-head"/></marker></defs>
+
+        <rect class="docs-map-zone" x="70" y="270" width="1060" height="345" rx="5"/>
+        <text class="docs-zone-title" x="600" y="292" text-anchor="middle">Front server</text>
+        <rect class="docs-map-zone" x="70" y="685" width="750" height="285" rx="5"/>
+        <text class="docs-zone-title" x="445" y="707" text-anchor="middle">Compute machine</text>
+
+        <g class="docs-map-wires" marker-end="url(#docs-arrow)">
+          <path d="M115 79 C115 190 210 190 210 320"/>
+          <path d="M320 80 V150"/><path d="M320 196 C320 250 300 265 300 320"/>
+          <path d="M545 80 V150"/><path d="M545 196 C545 255 390 260 390 320"/>
+          <path d="M860 80 C860 185 600 195 600 320"/>
+          <path d="M1080 80 C1080 210 620 225 620 500"/>
+          <path d="M370 384 C370 440 505 445 540 500"/>
+          <path d="M600 384 V500"/>
+          <path d="M850 384 C850 445 690 445 660 500"/>
+          <path d="M710 532 H825"/>
+          <path d="M490 532 H390"/>
+          <path d="M210 384 C90 440 90 655 195 740"/>
+          <path d="M540 384 C430 430 430 625 440 740"/>
+          <path d="M600 564 C600 650 690 665 690 740"/>
+          <path d="M660 564 C710 650 925 655 925 740"/>
+          <path d="M690 804 V865"/>
+          <path d="M790 772 C870 810 925 810 925 865"/>
+          <path d="M195 804 C195 840 525 845 590 775"/>
+        </g>
+
+        {{ endpoint(30, 34, 170, 'Voice desktop app') }}
+        {{ endpoint(240, 34, 160, 'Twilio telephone') }}
+        {{ endpoint(445, 34, 200, 'Voice web stream') }}
+        {{ endpoint(780, 34, 160, 'Web console') }}
+        {{ endpoint(995, 34, 170, 'Apps / harnesses') }}
+        {{ endpoint(240, 150, 160, 'VPS proxy') }}
+        {{ endpoint(445, 150, 200, 'Private HTTPS') }}
+
+        {{ wire_label(75, 214, 125, 'API key · :8447') }}
+        {{ wire_label(260, 105, 120, 'HTTPS / WSS') }}
+        {{ wire_label(462, 105, 165, 'Private HTTPS :443') }}
+        {{ wire_label(264, 219, 130, 'Private route') }}
+        {{ wire_label(445, 220, 150, 'WebSocket') }}
+        {{ wire_label(790, 214, 120, 'HTTP :8440') }}
+        {{ wire_label(975, 216, 190, 'Model API / MCP') }}
+        {{ wire_label(390, 425, 130, 'Model requests') }}
+        {{ wire_label(545, 425, 110, 'Console API') }}
+        {{ wire_label(390, 541, 105, 'Event log') }}
+        {{ wire_label(670, 642, 185, 'Signed model request') }}
+        {{ wire_label(725, 505, 95, 'MCP tools') }}
+        {{ wire_label(875, 642, 155, 'Permitted offload') }}
+        {{ wire_label(83, 638, 95, 'Audio') }}
+        {{ wire_label(346, 639, 100, 'Telemetry') }}
+        {{ wire_label(347, 814, 130, 'Speech models') }}
+
+        {{ node(170, 320, 220, 'Voice gateway', 'Clients / audio / auth', 'voice') }}
+        {{ node(490, 320, 220, 'openWeightGym', 'Web console / benchmarks', 'weightroom') }}
+        {{ node(825, 320, 220, 'Plugins', 'Adapters / integrations', 'plugins') }}
+        {{ node(170, 500, 220, 'Logs', 'Requests / reliability', 'logs') }}
+        {{ node(490, 500, 220, 'Turnstile', 'Routing / placement / auth', 'turnstile') }}
+        {{ node(825, 500, 220, 'ToolLocker', 'MCP tools', 'toollocker') }}
+        {{ node(95, 740, 200, 'Voice services', 'Recognition / synthesis', 'voice') }}
+        {{ node(340, 740, 200, 'Spotter', 'Telemetry / service health', 'spotter') }}
+        {{ node(590, 740, 200, 'LoadCoach', 'Models / queue / inference', 'loadcoach') }}
+        {{ node(830, 740, 200, 'Hosted providers', 'Permitted offload', 'hosted-providers') }}
+        {{ node(590, 865, 200, 'Models', 'Local model processes', 'models') }}
+        {{ node(830, 865, 200, 'Data and backups', 'Front / compute stores', 'data') }}
+      </svg>
+      </div>
+    {% endcall %}
+
+  <section aria-labelledby="docs-pages-title">
+    {{ section_title("Component pages", id="docs-pages-title") }}
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-2">
+      {% for slug, title, headings in topics %}
+      <div class="col">{% call card("", tag="a", class_="docs-directory-link h-100 text-decoration-none", attrs={"href": "/docs/" ~ (slug)}) %}{{ title }} <span aria-hidden="true">→</span>{% endcall %}</div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

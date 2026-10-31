@@ -1,0 +1,24 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, page_header, card %}
+{% block title %}Reliability · openWeightGym{% endblock %}
+{% block main_class %}container-fluid console-page py-3{% endblock %}
+{% block scripts %}<script src="/static/echarts.min.js" defer></script><script src="/static/reliability.js?v=1" defer></script>{% endblock %}
+{% block main %}
+{{ page_header("Reliability", lead="Review answer quality, failures and model health.") }}
+{{ said_box(said, failed) }}
+{% if reliability.compute_unavailable %}<p class="alert alert-warning" role="status">Compute is not answering. Showing saved reliability evidence; live model state and recovery controls are unavailable.</p>{% endif %}
+{% include "reliability_report.html" %}
+{% call card("Answer quality", attrs={"aria-labelledby": "quality-heading"}, header_id="quality-heading") %}
+    <p class="small text-secondary">Every good or bad rating ever given, kept beyond the seven-day reliability window, per model fingerprint across all roles. Score is the share rated good.</p>
+    <div class="table-responsive">
+      <table id="quality-table" class="table table-sm align-middle">
+        <thead><tr><th scope="col">Model / fingerprint</th><th scope="col">Good</th><th scope="col">Bad</th><th scope="col">Score</th><th scope="col">Latest explanations</th></tr></thead>
+        <tbody>{% for row in quality %}
+          <tr><th scope="row">{{ row.model }}<small class="d-block text-secondary" title="{{ row.fingerprint }}">{{ row.fingerprint[:12] }} · {{ 'current' if row.current else 'historical' }}</small></th>
+            <td>{{ row.good }}</td><td>{{ row.bad }}</td><td>{{ row.score }}%</td>
+            <td>{% for one in row.explanations or [] %}<small class="d-block"><a href="/requests/{{ one.request }}">#{{ one.request }}</a> {{ 'good' if one.value > 0 else 'bad' }} · {{ one.rater }}: {{ one.explanation }}</small>{% else %}<small class="text-secondary">{{ 'No explanations' if row.explanations is defined else 'Reading explanations needs the ability to read everyone\'s log.' }}</small>{% endfor %}</td></tr>
+        {% else %}<tr><td colspan="5" class="text-secondary">No answers rated yet.</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  {% endcall %}
+{% endblock %}

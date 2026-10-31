@@ -1,0 +1,30 @@
+{% from "parts.html" import card %}
+{% call card("Reliability report", attrs={"aria-labelledby": "reliability-heading"}, header_id="reliability-heading") %}
+    <p class="small text-secondary">Last seven days · {{ reliability.scope }} · up to 50 scored outcomes per model fingerprint and role. Counts and feedback follow your log permissions; preference and recovery state are shared routing state. Cancelled, interrupted benchmark, restart, admission refusal and unrecognized answers do not reduce preference. Historical fingerprints are shown separately. <a href="/log?kind=reliability">View reliability events</a></p>
+    <details class="small text-secondary mb-3"><summary>How scoring and recovery work</summary><p class="mt-2">Role preference is multiplied by 0.5–1.1 using recent faults and optional feedback. Three consecutive faults exclude a candidate from that role. After five minutes, Run recovery sends one short request (up to 16 output tokens, 60 seconds) as you, at low priority; it may load the model or incur hosted cost. Success restores eligibility. Reset starts a fresh scoring window and retains history.</p></details>
+    <form method="get" action="/reliability" class="row g-2 align-items-end mb-3">
+      <div class="col-sm-4"><label class="form-label" for="reliability-model">Model</label><select id="reliability-model" name="model" class="form-select form-select-sm"><option value="">All models</option>{% for name in choices.model %}<option {{ 'selected' if request.query_params.get('model') == name }}>{{ name }}</option>{% endfor %}</select></div>
+      <div class="col-sm-4"><label class="form-label" for="reliability-role">Role</label><input id="reliability-role" name="role" class="form-control form-control-sm" value="{{ request.query_params.get('role', '') }}" placeholder="All roles, including direct requests"></div>
+      <div class="col-sm-2"><div class="form-check"><input id="reliability-issues" name="issues" value="1" type="checkbox" class="form-check-input" {{ 'checked' if request.query_params.get('issues') == '1' }}><label class="form-check-label" for="reliability-issues">Issues only</label></div></div>
+      <div class="col-sm-2"><button class="btn btn-primary btn-sm">Apply report filters</button></div>
+    </form>
+    {% if reliability.rows %}
+    <div id="reliability-chart" style="height: 320px; width: 100%" role="img" aria-label="Recent successful answers and model faults by model and role; exact values in the table below"></div>
+    <script id="reliability-data" type="application/json">{{ reliability.rows|tojson }}</script>
+    {% endif %}
+    <div class="table-responsive">
+      <table id="reliability-table" class="table table-sm align-middle" style="min-width: 1050px">
+        <thead><tr><th scope="col">Model / fingerprint</th><th scope="col">Role</th><th scope="col">Successful</th><th scope="col">Errors</th><th scope="col">Timeouts</th><th scope="col">Empty</th><th scope="col">Success rate</th><th scope="col">Feedback + / −</th><th scope="col">Preference / state</th><th scope="col">Inspect / manage</th></tr></thead>
+        <tbody>{% for row in reliability.rows %}
+          <tr><th scope="row">{{ row.model }}<small class="d-block text-secondary" title="{{ row.fingerprint }}">{{ row.fingerprint[:12] }} · {{ 'current' if row.current else 'historical' }}</small></th><td>{{ row.role or 'Direct model request' }}</td>
+            <td>{{ row.counts.success }}</td><td>{{ row.counts.error }}</td><td>{{ row.counts.timeout }}</td><td>{{ row.counts.empty }}</td><td>{{ (row.success_rate|round(1)) ~ '%' if row.success_rate is not none else 'No scored answers' }}</td><td>{{ row.positive }} / {{ row.negative }}</td>
+            <td style="min-width: 240px">×{{ row.factor|round(3) }} · {{ row.state }}{% if row.regression %}<strong class="d-block text-warning">Regression warning: fault rate rose at least 20 percentage points versus the preceding sample.</strong>{% endif %}<small class="d-block text-secondary">{{ row.reason }}</small>{% if row.ignored %}<small class="d-block">Ignored: {% for kind, count in row.ignored.items() %}{{ kind }} {{ count }}{{ ', ' if not loop.last }}{% endfor %}</small>{% endif %}</td>
+            <td>{% if row.last_request %}<a href="/requests/{{ row.last_request }}">Latest request</a>{% else %}<small class="text-secondary">No recent request in scope</small>{% endif %}{% if row.may_manage %}<form method="post" action="/reliability" class="d-flex gap-1 mt-1 flex-wrap">
+              <input type="hidden" name="model" value="{{ row.model }}"><input type="hidden" name="fingerprint" value="{{ row.fingerprint }}"><input type="hidden" name="role" value="{{ row.role }}">
+              <input type="hidden" name="filter_model" value="{{ request.query_params.get('model', '') }}"><input type="hidden" name="filter_role" value="{{ request.query_params.get('role', '') }}"><input type="hidden" name="filter_issues" value="{{ request.query_params.get('issues', '') }}">
+              <button class="btn btn-outline-secondary btn-sm" name="action" value="reset">Reset reliability</button>{% if row.state == 'recovery required' %}<button class="btn btn-outline-primary btn-sm" name="action" value="recover">Run recovery</button>{% endif %}
+            </form>{% endif %}</td></tr>
+        {% else %}<tr><td colspan="10" class="text-secondary">No reliability outcomes recorded in this window. New logged requests will appear here.</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  {% endcall %}

@@ -1,0 +1,42 @@
+{# What a model file says about itself. Shown on the file's own page and on the page of a model that uses it.
+   On a model's page the list ends with what the model measured, which is known even of a file that cannot be read. #}
+{% if not told %}
+<p class="text-danger">{{ unread or "The file could not be read." }}</p>
+{% endif %}
+<dl class="row facts">
+  {% if told %}
+  <dt class="col-5 col-md-2">Name</dt><dd class="col-7 col-md-4">{{ told.facts.name or "not said" }}</dd>
+  <dt class="col-5 col-md-2">Size</dt><dd class="col-7 col-md-4">{{ told.facts.size_label or "not said" }}</dd>
+  <dt class="col-5 col-md-2">Built as</dt><dd class="col-7 col-md-4">{{ told.facts.architecture or "not said" }}</dd>
+  <dt class="col-5 col-md-2">Layers</dt><dd class="col-7 col-md-4">{{ told.facts.layers or "not said" }}</dd>
+  <dt class="col-5 col-md-2">Trained context</dt><dd class="col-7 col-md-4">{{ "{:,}".format(told.facts.trained_context) if told.facts.trained_context else "not said" }}</dd>
+  <dt class="col-5 col-md-2">Licence</dt><dd class="col-7 col-md-4">{{ told.facts.license or "not said" }}</dd>
+  <dt class="col-5 col-md-2">Chat template</dt><dd class="col-7 col-md-4">{{ "yes" if told.facts.chat_template else "none" }}</dd>
+  <dt class="col-5 col-md-2">Tool calls</dt><dd class="col-7 col-md-4">{{ "its template handles them" if told.facts.takes_tools else "its template does not mention them" }}</dd>
+  <dt class="col-5 col-md-2">Thinking</dt><dd class="col-7 col-md-4">{{ "has a switch (enable_thinking)" if told.facts.thinking_switch else "no switch in its template" }}</dd>
+  {% endif %}
+  {# The memory seen on each card at the model's minimum and its maximum context. The file's own page has no model.
+     The two begin a row of their own, so that they stand side by side. #}
+  {% if model %}
+  <div class="w-100"></div>
+  {% for which, context in [("min", model.min_context|default(model.flags["ctx-size"])), ("max", model.flags["ctx-size"])] %}
+  {% set point = model.measurements|default([])|selectattr("context", "equalto", context)|first %}
+  <dt class="col-5 col-md-2">Memory at {{ which }}</dt><dd class="col-7 col-md-4">{% if point and point.mib %}{{ point.mib|map("mib")|join(" + ") }} <small class="text-secondary">at {{ "{:,}".format(context) if context is number else context }} tokens</small>{% elif point %}<span class="text-danger">load failed: {{ point.error }}</span>{% else %}<span class="text-secondary">not measured yet</span>{% endif %}</dd>
+  {% endfor %}
+  {% endif %}
+</dl>
+{% if told %}
+<details id="file-metadata">
+  <summary class="mb-2">Everything it says, {{ told.metadata|length }} entries</summary>
+  <div class="table-responsive">
+  <table id="metadata" class="table table-sm sortable mb-0">
+    <thead><tr><th data-sort="text">Name</th><th data-sort="text">Value</th></tr></thead>
+    <tbody>
+    {% for name, value in told.metadata.items() %}
+    <tr><td><code>{{ name }}</code></td><td class="wrap">{{ (value|shown)|truncate(400, true) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+{% endif %}

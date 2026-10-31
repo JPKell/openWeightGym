@@ -1,0 +1,10 @@
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#11191e;color:#e8f0ef}*{box-sizing:border-box}body{margin:0}main{max-width:680px;margin:auto;padding:32px 24px}header{margin-bottom:28px}h1{font-size:42px;letter-spacing:-1px;margin:4px 0}.eyebrow{font-size:12px;letter-spacing:3px;color:#7fd1c4}p,footer{color:#a8bcbf;line-height:1.5}form{display:grid;grid-template-columns:1fr 1fr;gap:16px}label{display:grid;gap:7px;font-size:14px}input,select,textarea,button{font:inherit;border-radius:8px;padding:12px;border:1px solid #3b515b;background:#1d2a31;color:inherit;min-width:0}button{cursor:pointer;font-weight:600}button:hover{border-color:#7fd1c4}button:disabled{opacity:.45;cursor:default}#connect{grid-column:1/-1;background:#78c9bb;color:#112323}#status{margin-top:26px;font-size:22px;font-weight:600}.controls{display:flex;flex-wrap:wrap;gap:8px}#transcript{margin-top:24px}.line{border-left:2px solid #4a7f7a;padding:8px 14px;margin:12px 0;white-space:pre-wrap}.line small{display:block;color:#8caaa9;margin-bottom:4px}footer{font-size:12px;margin-top:28px}@media(max-width:480px){main{padding:20px 16px}form{grid-template-columns:1fr}h1{font-size:34px}}
+
+label.checkbox{display:flex;align-items:center;gap:10px}input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:#78c9bb}
+
+/* The standalone client has no Tabler grid; keep its call controls local. */
+.voice-call-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
+.voice-call-settings label { display: grid; align-content: start; gap: .35rem; min-width: 0; margin: 0; }
+.voice-call-settings input, .voice-call-settings select, .voice-call-settings textarea { width: 100%; min-width: 0; }
+.voice-call-settings label:has(#call-instructions) { grid-column: 1 / -1; }
+@media (max-width: 480px) { .voice-call-settings { grid-template-columns: minmax(0, 1fr); } }

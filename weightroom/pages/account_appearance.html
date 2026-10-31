@@ -1,0 +1,41 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, card, page_header, section_title %}
+{% block title %}Appearance · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header("Appearance", lead="Choose the colours and information shown in your console.") }}
+{{ said_box(said, failed) }}
+{{ section_title("What I am shown") }}
+<form method="post" action="/account/display" class="mb-4" data-auto-submit>
+    <div>
+      <div class="form-check">
+        <input id="show_telemetry" name="show_telemetry" type="checkbox" class="form-check-input" {{ "checked" if me.choices.show_telemetry }}>
+        <label for="show_telemetry" class="form-check-label">Machine meters in the top navigation</label>
+      </div>
+    </div>
+    <noscript><button class="btn btn-primary mt-2">Keep</button></noscript>
+  </form>
+{{ section_title("Themes") }}
+<p class="text-secondary">Choose a palette and preview it across the site. Save your choice for this account in this browser; other browsers have their own preferences.</p>
+<p class="small text-secondary">All 17 palettes support light, dark or following your device. The grid is ordered by color; the Carbon palettes use black/grey backgrounds in dark mode with colored text and highlights.</p>
+  <noscript><p class="text-secondary">Enable JavaScript in your browser to preview and save a theme.</p></noscript>
+  <form data-theme-form hidden>
+    <div class="mb-3" style="max-width: 20rem">
+      <label for="theme-mode" class="form-label">Light or dark</label>
+      <select id="theme-mode" name="mode" class="form-select">
+        <option value="system">Follow my device</option>
+        <option value="light">Always light</option>
+        <option value="dark">Always dark</option>
+      </select>
+    </div>
+    <fieldset>
+      <legend class="section-title">Color theme</legend>
+      <div class="theme-options" data-theme-options></div>
+    </fieldset>
+    <div class="theme-actions">
+      <button type="submit" class="btn btn-primary">Save theme</button>
+      <button type="button" class="btn btn-outline-secondary" data-theme-cancel>Reset preview</button>
+      <button type="button" class="btn btn-outline-secondary" data-theme-default>Use default</button>
+    </div>
+    <p id="theme-status" class="small text-secondary mt-2 mb-0" role="status" aria-live="polite"></p>
+  </form>
+{% endblock %}

@@ -1,0 +1,14 @@
+[Unit]
+Description=ToolLocker (signed MCP gateway)
+After=network-online.target
+
+[Service]
+ExecStart=%h/ai/openWeightGym/.venv/bin/toollocker --config %h/ai/openWeightGym/settings/toollocker.toml
+Restart=on-failure
+RestartSec=3
+# The tool servers run inside this unit, so this caps what all of them together may take.
+MemoryMax=2G
+
+[Install]
+WantedBy=default.target
+Alias=tooldoor.service

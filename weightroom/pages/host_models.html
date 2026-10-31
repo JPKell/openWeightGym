@@ -1,0 +1,7 @@
+<div class="host-models small d-flex flex-wrap align-items-center gap-1" aria-label="Models on {{ host.hostname }}">
+  <strong class="me-1">Models</strong>
+  {% for one in host.loaded %}
+  <span class="badge text-bg-secondary">{{ one.model }}{% if host.machines|length > 1 %} · {{ one.machine }}{% endif %}{% if one.state != "ready" %} · {{ one.state }}{% endif %}</span>
+  {% else %}{% if host.models_unknown %}<span class="text-secondary">Unavailable</span>{% else %}<span class="text-secondary">Empty</span>{% endif %}{% endfor %}
+  {% if host.loaded and host.models_unknown %}<span class="text-secondary">Other compute state unavailable</span>{% endif %}
+</div>

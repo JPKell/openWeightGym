@@ -1,0 +1,113 @@
+{# Pieces that several pages use. #}
+
+{# Fixed and native collapsible cards share one header/body rhythm. attrs preserves fragment and form contracts. #}
+{% macro card(title='', open=None, key='', id='', actions='', hint='', class_='', attrs={}, header_id='', body=true, body_class='', body_attrs={}, tag='section', footer='') %}
+{% set element = 'details' if open is not none else tag %}
+<{{ element }} class="card mb-3{{ ' ' ~ class_ if class_ }}"{% if key %} data-card-key="{{ key }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}{{ attrs|xmlattr }}{% if open %} open{% endif %}>
+  {% if title %}
+  <{{ 'summary' if open is not none else 'div' }} class="card-header">
+    <div class="min-w-0">{% if open is not none %}<span class="card-heading"{% if header_id %} id="{{ header_id }}"{% endif %}>{{ title }}</span>{% else %}<h2 class="card-heading"{% if header_id %} id="{{ header_id }}"{% endif %}>{{ title }}</h2>{% endif %}{% if hint %}<div class="card-hint text-secondary small fw-normal mt-1">{{ hint }}</div>{% endif %}</div>
+    {% if actions %}<div class="card-actions d-flex flex-wrap align-items-center gap-2 ms-auto">{{ actions }}</div>{% endif %}
+  </{{ 'summary' if open is not none else 'div' }}>
+  {% endif %}
+  {% if body %}<div class="card-body{{ ' ' ~ body_class if body_class }}"{{ body_attrs|xmlattr }}>{% endif %}
+    {{ caller() }}
+  {% if body %}</div>{% endif %}
+  {% if footer %}<div class="card-footer">{{ footer }}</div>{% endif %}
+</{{ element }}>
+{% endmacro %}
+
+{# What a form or a link carries to change one piece of the page and not all of it. htmx sends it as the browser would,
+   takes the piece with this id out of the page that comes back, and puts it in the place of the one here, without moving the view.
+   With no id the piece is everything under the bar at the top. `push` puts the address asked for in the address bar: right for
+   a form that shows something, wrong for one that changes something. static/pieces.js decides what to do with what comes back. #}
+{% macro swaps(id="page-content", push=false) %}hx-boost="true" hx-target="#{{ id }}" hx-select="#{{ id }}" hx-swap="outerHTML show:none"{% if not push %} hx-push-url="false"{% endif %}{% endmacro %}
+
+{# What the last action said. It stays under the top bar and is removed after 7 seconds by static/pieces.js. #}
+{% macro said_box(said, failed=false, warning=false) %}
+{% if said %}<div class="alert alert-{{ 'danger' if failed else 'warning' if warning else 'success' }} said said-box" role="{{ 'alert' if failed or warning else 'status' }}">{{ said }}</div>{% endif %}
+{% endmacro %}
+
+{# A consistent title, purpose and optional actions for console pages. #}
+{% macro page_header(title, lead='', actions='', pretitle=None, back=None, id='', help=None) %}
+<header class="page-header mb-4"{% if id %} id="{{ id }}"{% endif %}>
+{% if back %}<a class="d-inline-block mb-2" href="{{ back[0] }}">← {{ back[1] }}</a>{% endif %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+  <div class="min-w-0">{% if pretitle %}<div class="eyebrow mb-1">{{ pretitle }}</div>{% endif %}<h1 class="page-title wrap">{{ title }}</h1>{% if lead %}<p class="text-secondary mb-0 mt-1">{{ lead }}{% if help %} <a href="{{ help }}">User guide</a>{% endif %}</p>{% elif help %}<a class="small" href="{{ help }}">User guide</a>{% endif %}</div>
+  {% if actions or caller is defined %}<div class="page-actions d-flex flex-wrap gap-2">{{ actions }}{% if caller is defined %}{{ caller() }}{% endif %}</div>{% endif %}
+</div></header>
+{% endmacro %}
+
+{% macro section_title(title, scope=None, id='', level=2, class_='', attrs={}, wrapper_class='') %}
+<div class="section-heading d-flex flex-wrap align-items-center gap-2 mb-3{{ ' ' ~ wrapper_class if wrapper_class }}">
+  <h{{ level }} class="section-title mb-0{{ ' ' ~ class_ if class_ }}"{% if id %} id="{{ id }}"{% endif %}{{ attrs|xmlattr }}>{{ title }}</h{{ level }}>
+  {% if scope %}<span class="scope-badge badge bg-{{ 'orange' if 'restart' in scope|lower else 'azure' }}-lt">{{ scope }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro form_section(title, scope=None, hint=None) %}
+<section class="form-section col-12" aria-label="{{ title }}">
+  {{ section_title(title, scope) }}
+  {% if hint %}<p class="form-hint mb-3">{{ hint }}</p>{% endif %}
+  <div class="row g-3">{{ caller() }}</div>
+</section>
+{% endmacro %}
+
+{% macro more(title='Why?') %}<details class="more"><summary>{{ title }}</summary><div class="small text-secondary mt-2">{{ caller() }}</div></details>{% endmacro %}
+
+{# One placement vocabulary; legacy fields retain the existing POST/API contracts. #}
+{% macro hardware(prefix, gpus=1, cards=(), alone=false, allow_split=false, legacy='llm') %}
+{% set pinned = gpus if gpus is defined and gpus is sequence and gpus is not string else [] %}
+{% set mode = 'cpu' if gpus == 0 else 'pin' if pinned else 'auto' %}
+<div class="col-12" data-hardware data-hardware-prefix="{{ prefix }}" data-hardware-legacy="{{ legacy }}">
+  <div class="form-selectgroup mb-3" role="radiogroup" aria-label="Hardware placement" data-hardware-choice hidden>
+    {% for value, label in [('auto', 'Automatic GPU'), ('pin', 'Pin to GPUs'), ('cpu', 'CPU only')] %}
+    <label class="form-selectgroup-item"><input type="radio" name="{{ prefix }}-mode" value="{{ value }}" class="form-selectgroup-input" data-hardware-mode{{ ' checked' if mode == value }}><span class="form-selectgroup-label">{{ label }}</span></label>
+    {% endfor %}
+  </div>
+  {% if legacy == 'llm' %}
+  <input type="hidden" name="placement_controls" value="yes">
+  <div data-hardware-fallback>
+    <div class="form-check"><input id="placement-cpu" name="cpu" value="yes" type="checkbox" class="form-check-input" data-placement-device="cpu"{{ ' checked' if mode == 'cpu' }}><label for="placement-cpu" class="form-check-label">CPU</label></div>
+    <div class="form-check"><input id="placement-gpu" name="gpu" value="yes" type="checkbox" class="form-check-input" data-placement-device="gpu" aria-controls="gpu-placement"{{ ' checked' if mode != 'cpu' }}><label for="placement-gpu" class="form-check-label">GPU</label></div>
+    {% if gpus is number and gpus > 0 %}<div class="form-check"><input id="keep-gpu-count" name="keep_gpu_count" value="{{ gpus }}" type="checkbox" class="form-check-input" data-gpu-compat checked><label for="keep-gpu-count" class="form-check-label">Keep the current {{ gpus }} GPU count</label></div>{% endif %}
+    {% if gpus is undefined %}<input type="checkbox" name="keep_default_gpus" value="yes" data-gpu-compat checked aria-label="Keep all enabled GPUs">{% endif %}
+  </div>
+  {% endif %}
+  <fieldset id="{{ 'gpu-placement' if legacy == 'llm' else prefix ~ '-placement' }}" data-hardware-pins>
+    <legend class="form-label">GPUs</legend><div data-hardware-cards class="d-flex flex-wrap gap-3">
+    {% for gpu in (cards|list + pinned)|unique %}<label class="form-check"><input name="{{ 'gpu_card' if legacy == 'llm' else prefix ~ '-gpu' }}" value="{{ gpu }}" type="checkbox" class="form-check-input" data-gpu-card{{ ' checked' if gpu in pinned }}><span class="form-check-label">{{ gpu }}</span></label>{% endfor %}
+    </div><p class="form-hint" data-hardware-empty{% if cards or pinned %} hidden{% endif %}>No enabled GPUs reported for this node.</p>
+  </fieldset>
+  {% if legacy == 'llm' %}<div class="form-check form-switch mt-2" data-hardware-split><input id="allow-split" name="allow_split" value="yes" type="checkbox" class="form-check-input" data-split-switch{{ ' checked' if allow_split }}><label for="allow-split" class="form-check-label">Allow split across GPUs</label></div>{% endif %}
+  <div class="form-check form-switch mt-3"><input id="{{ 'alone' if legacy == 'llm' else prefix ~ '-alone' }}" name="alone" value="yes" type="checkbox" class="form-check-input"{{ ' checked' if alone }}><label for="{{ 'alone' if legacy == 'llm' else prefix ~ '-alone' }}" class="form-check-label">Keep GPUs to itself</label></div>
+</div>
+{% endmacro %}
+
+
+{# Reversible actions ask twice; data or credential loss uses the shared checkbox dialog. #}
+{% macro confirm_two() %}data-confirm-two{% endmacro %}
+{% macro confirm_loss() %}data-confirm-loss{% endmacro %}
+{% macro confirm_check(label, id, name='', value='yes') %}
+{% call card('', class_='border-danger', body_class='py-2') %}
+<div class="form-check mb-0"><input id="{{ id }}" type="checkbox" class="form-check-input" required data-loss-confirm{% if name %} name="{{ name }}" value="{{ value }}"{% endif %}><label for="{{ id }}" class="form-check-label">{{ label }}</label></div>
+{% endcall %}
+{% endmacro %}
+{% macro danger_confirmation() %}
+<dialog id="danger-confirmation" aria-labelledby="danger-confirmation-title">
+{% call card('Confirm action', class_='border-danger mb-0', header_id='danger-confirmation-title') %}
+<form method="dialog" data-confirm-dialog>
+<p data-confirm-description></p>
+{{ confirm_check('Yes, continue with this action.', 'danger-confirmation-check') }}
+<div class="d-flex flex-wrap gap-2"><button class="btn btn-danger" value="confirm">Continue</button><button class="btn btn-outline-secondary" value="cancel" formnovalidate>Cancel</button></div>
+</form>
+{% endcall %}
+</dialog>
+{% endmacro %}
+
+
+{% macro empty_row(columns, message='No items to show.') %}
+<tr data-empty-row><td colspan="{{ columns }}" class="text-secondary">{{ message }}</td></tr>
+{% endmacro %}
+
+{% macro node_state(state) %}{{ {'ready':'available', 'unknown':'status not reported', 'offline':'not reachable', 'unavailable':'not reachable', 'sleeping':'asleep'}.get(state, state|replace('_', ' ')) }}{% endmacro %}

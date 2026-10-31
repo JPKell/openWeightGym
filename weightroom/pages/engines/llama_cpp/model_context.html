@@ -1,0 +1,42 @@
+{% call form_section('Context and requests', 'This node') %}
+    <div class="col-md-6">
+      <label for="min-context" class="form-label">Context{% if told and told.facts.trained_context %} <small class="text-secondary">trained for {{ "{:,}".format(told.facts.trained_context) }}</small>{% endif %}</label>
+      <div class="input-group input-group-flat">
+        <span class="input-group-text">min</span>
+        <input id="min-context" name="min_context" type="number" min="1" step="1" class="form-control" value="{{ showing.min_context|default('') }}" aria-label="minimum context" inputmode="numeric">
+        <span class="input-group-text">max</span>
+        <input id="ctx" name="ctx" class="form-control" value="{{ showing.flags["ctx-size"]|shown }}" type="number" min="1" step="1" aria-label="maximum context" inputmode="numeric" required>
+        <span class="input-group-text">tokens</span>
+      </div>
+    </div>
+    <div class="col-12">
+      <input type="hidden" name="parallel_controls" value="yes">
+      <div class="form-check form-switch">
+        <input id="parallel-enabled" name="parallel_enabled" value="yes" type="checkbox" class="form-check-input" data-parallel-switch {{ "checked" if parallel.enabled }} aria-controls="parallel-fields">
+        <label for="parallel-enabled" class="form-check-label">Enable parallel requests</label>
+        <div class="form-hint">Answer more than one request at a time.</div>
+      </div>
+      <fieldset id="parallel-fields" class="row g-3 mt-0" {{ "disabled" if not parallel.enabled }}>
+        <legend class="visually-hidden">Parallel request settings</legend>
+        <div class="col-md-6">
+          <label for="parallel-count" class="form-label">Requests at once</label>
+          <input id="parallel-count" name="parallel_count" type="number" min="1" step="1" class="form-control" value="{{ parallel.count }}" required aria-describedby="parallel-count-help">
+          <div id="parallel-count-help" class="form-hint">How many requests this model can answer at once.</div>
+        </div>
+        <div class="col-md-6">
+          <label for="parallel-context" class="form-label">Context limit per request</label>
+          <input id="parallel-context" name="parallel_context" type="number" min="1" step="1" class="form-control" value="{{ parallel.context }}" required aria-describedby="parallel-context-help">
+          {% if parallel.exceeds_total %}<p class="form-text text-warning-emphasis">This limit exceeds the total context; the total pool remains the upper limit.</p>{% endif %}
+          <div id="parallel-context-help" class="form-hint">Prompt, history, tools, reasoning and output share this limit.</div>
+        </div>
+        <div class="col-12 form-check form-switch ms-2">
+          <input id="parallel-shared" name="parallel_shared" value="yes" type="checkbox" class="form-check-input" {{ "checked" if parallel.shared }} aria-describedby="parallel-shared-help">
+          <label for="parallel-shared" class="form-check-label">Share the context pool</label>
+          <div id="parallel-shared-help" class="form-hint">Requests draw from one pool as they need it.</div>
+          {% call more() %}Sharing allocates context dynamically up to each request's limit. Without sharing, each request gets a fixed slot, even while it is idle.{% endcall %}
+        </div>
+      </fieldset>
+    </div>
+
+<div class="col-12"><p class="form-hint mb-0" data-context-summary aria-live="polite"></p></div>
+{% endcall %}

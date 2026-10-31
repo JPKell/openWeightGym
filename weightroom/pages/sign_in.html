@@ -1,0 +1,60 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, page_header, card %}
+{% block title %}Sign in · openWeightGym{% endblock %}
+{% block main %}
+{% call card("", class_="mx-auto mt-4 entry") %}
+    {{ page_header("Sign in", lead="Sign in to your openWeightGym account.") }}
+    {% if back %}<p class="text-secondary">Compute is back. Sign in again to carry on.</p>{% endif %}
+    {% if compute.up is false %}
+    <p class="text-secondary">Compute is off since {{ compute.since|timestamp }}. Only people who can do something while it is off can sign in.</p>
+    {% endif %}
+    {% if why %}<p class="alert alert-danger" role="alert">{{ why }}</p>{% endif %}
+
+    <form method="post" action="/sign-in" class="row g-3">
+      <input type="hidden" name="next" value="{{ next or '/' }}">
+      <div class="col-md-6">
+        <label for="name" class="form-label">Name</label>
+        <input id="name" name="name" class="form-control" value="{{ name or '' }}" autocomplete="username" autocapitalize="none" required {{ 'readonly' if wants else 'autofocus' }}>
+      </div>
+
+      {% if wants %}
+      {# A second question about the same sign-in. What was typed before travels along, unseen. #}
+      <input type="hidden" name="password" value="{{ password }}">
+      {% else %}
+      <div class="col-md-6">
+        <label for="password" class="form-label">Password</label>
+        <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
+      </div>
+      {% endif %}
+
+      {% if wants == "password" %}
+      <div class="col-md-6">
+        <label for="new_password" class="form-label">A password of your own <small class="text-secondary">at least 8 characters</small></label>
+        <input id="new_password" name="new_password" type="password" class="form-control" autocomplete="new-password" minlength="8" required autofocus>
+      </div>
+      <div class="col-md-6">
+        <label for="new_again" class="form-label">The same again</label>
+        <input id="new_again" name="new_again" type="password" class="form-control" autocomplete="new-password" minlength="8" required>
+      </div>
+      {% endif %}
+
+      {% if wants == "code" %}
+      {% if secret %}
+      <div class="col-12">
+        <p class="mb-1">Add this secret to an authenticator app. It is shown until the first code made from it is accepted.</p>
+        <pre class="secret">{{ secret }}</pre>
+      </div>
+      {% endif %}
+      <div class="col-md-6">
+        <label for="code" class="form-label">Code from your authenticator app</label>
+        <input id="code" name="code" class="form-control" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus>
+      </div>
+      {% endif %}
+
+      <div class="col-12 d-flex align-items-center gap-3">
+        <button class="btn btn-primary main">{{ "Carry on" if wants else "Sign in" }}</button>
+        {% if wants %}<a href="/sign-in">Start again</a>{% endif %}
+      </div>
+    </form>
+  {% endcall %}
+{% endblock %}

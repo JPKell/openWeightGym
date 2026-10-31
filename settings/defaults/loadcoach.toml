@@ -1,0 +1,166 @@
+# What LoadCoach starts from, for everything that is kept in its database: the settings that can
+# be changed per node under System > Compute nodes, and the first models.
+#
+# This file is part of the suite. It is read at every start, with settings/loadcoach.toml laid
+# over it. A setting changed on the site is kept in the database and lies over the value here,
+# until the change is taken away: on the page, or with
+#   loadcoach settings reset loadcoach NAME
+# The models are taken into the database the first time LoadCoach runs. From then on they are
+# looked after on the site, or with `loadcoach models`, and changing them here changes nothing.
+# The groups and the users are kept on the front machine: see settings/defaults/weightroom.toml.
+#
+# What belongs to the machine, such as addresses, ports and paths, is not here. That is in
+# settings/loadcoach.toml, and settings/examples/loadcoach.toml explains it. Cards are detected
+# automatically unless an older installation retains an explicit list.
+
+# Optional common model root. When set, LoadCoach uses its `llm`, `adapters`, `projectors`, `image`
+# `audio` and `encoders` subfolders instead of [places]. It can be changed in Settings and takes effect after restart.
+models_folder = ""
+
+# Optional complete model library, separate from the active cache above. Downloads prefer its
+# `llm`, `adapters`, `projectors`, `image`, `audio` and `encoders` folders. Empty keeps a new installation's storage disabled.
+models_storage_folder = ""
+
+# Seconds to wait for a model to load before giving up.
+load_timeout = 300
+
+# Seconds a request may wait in line, loading included, before it is told to try again.
+max_wait = 600
+
+# Optional estimated-wait admission limit in seconds. 0 disables it. When enabled, unknown
+# or longer estimates are refused immediately; max_wait remains the actual queue timeout.
+# Rates come from measured use; prompt sizes and maximum output budgets are inferred work.
+max_estimated_wait = 0
+
+# MiB of each card that are kept free, on top of what the models on it were measured to use.
+# A model grows a little while it answers, and this is the room for that. Smaller lets more
+# models share a card, and makes it likelier that a load runs out of memory and is tried again.
+card_margin = 1024
+
+# Optional minutes an idle model is protected from replacement after its last request.
+# 0 keeps models resident while room is available, but lets a new request replace them
+# immediately when it needs their memory. This is not an automatic unload timer.
+# Active requests, holds and model locks always stay protected. Positive values add a wait.
+model_idle_minutes = 0
+
+# MiB of host RAM reserved from CPU model admission, within existing service memory limits.
+host_ram_headroom_mib = 512
+
+# Optional MiB budget for CPU model processes on this node. 0 uses the smaller of
+# host availability and the service's systemd/cgroup memory ceiling.
+host_ram_limit_mib = 0
+
+# Keep GPU models in VRAM and fail admission/loading instead of allowing CUDA unified-memory
+# spill into host RAM. Changing this requires a LoadCoach restart.
+disable_ram_offload = true
+
+# Unload CPU models after this many idle minutes; 0 disables automatic CPU eviction.
+# Active requests, holds, locks and GPU models stay protected.
+cpu_idle_minutes = 15
+
+# Days that event log entries are kept. 0 keeps them for ever.
+keep_days = 90
+
+# Days after a batch has ended that its files are kept: the requests that were handed in, and
+# the answers. After that both are removed, and the batch stays listed with its counts.
+# 0 keeps them for ever.
+batch_keep_days = 7
+
+# How many of the latest requests are kept in full: what was sent and what came back, whatever
+# their level. It is for finding out what went wrong. The owner of a request can read its text,
+# and so can those who may "see-capture". 0 keeps none.
+keep_text = 50
+
+# Whether a request may be sent that leaves nothing behind: no entry in the event log, no
+# request number, no kept text. false, as here, refuses every such request. With true, an
+# account that has the ability "unlogged" may send one, by adding this header to it:
+#   X-LoadCoach-Log: off
+# Such a request is not counted in anyone's usage, cannot be marked sensitive or given a piece
+# of work, and cannot go to a hosted model. Asking for one without the ability is refused, and
+# that refusal is put on record.
+unlogged = false
+
+# Hosted models are not answered from here. Since milestone 114 the outside services, their keys and
+# what may leave are the front machine's: register a service under System > Outside on the site, and
+# put its key in a file NAME.key in the front machine's keys folder (`hosted_keys` in [turnstile]
+# of settings/weightroom.toml there, or beside machine.key). A caller asks for a hosted model by name
+# through turnstile and it appears in /v1/models; X-LoadCoach-Offload is decided there too. This
+# machine only answers inference, voice and telemetry. A [hosted] section or `keys` left in this
+# file is ignored, with a note in the log.
+
+# Flags that every model gets, unless its own section sets a different value for the same flag.
+#
+# These three shrink the memory a model's context takes to about half, measured here at 53 %,
+# by keeping it at 8 bits a number, not 16. The effect on answers is usually too small to
+# notice. A model that should keep full precision sets cache-type-k and cache-type-v to "f16".
+# "q4_0" halves it again, to 28 %, at a cost that can be noticed.
+[model_defaults]
+cache-type-k = "q8_0"
+cache-type-v = "q8_0"
+flash-attn = "on"
+
+# MODELS ARE NOT KEPT IN THIS FILE ANY MORE. They live in loadcoach.db and are looked after with
+# `loadcoach models ...`, with no restart. The sections below are read exactly once: the first
+# time LoadCoach finds no models in its database, it takes these over. After that they are
+# ignored. They are left here as a starting point for a fresh install, and to show what a
+# model's settings are.
+#
+# One section per model. The name in quotes is what callers send as "model".
+#
+# [models."NAME"] holds what LoadCoach itself reads:
+#
+#   engine = "llama_cpp"      optional; omitted means llama.cpp, preserving existing identities
+#   gpus = "any"             one enabled card, or two if allow_split = true and one cannot fit
+#   allow_split = true       permit automatic splitting when gpus = "any"
+#   gpus = 1                 any one enabled card, whichever is free
+#   gpus = 2                 any two cards
+#   gpus = ["CUDA1"]         exactly these cards
+#   gpus = 0                 no card; the model runs on the CPU
+#   (left out)               every enabled card
+#
+# Models whose cards do not overlap stay loaded side by side.
+#
+# [models."NAME".flags] holds llama-server's own flags, written without the leading dashes. Run
+# `llama-server --help` for the full list. `true` gives a bare flag, a list is joined with
+# commas. `model` and `ctx-size` are required. `host`, `port` and `device` are set by LoadCoach.
+#
+# `parallel` is the one flag LoadCoach reads too: that many requests for the model run at once,
+# the rest wait in line. Without it, one at a time.
+#
+# The ctx-size values below are starting points, not measured. Raise them only while the model
+# still fits on its cards.
+
+# Examples only: a fresh install starts with no models; add yours with `loadcoach models ...`.
+# Small and quick. Fits beside anything that leaves one card free.
+# [models."qwen-1.5b"]
+# gpus = 1
+
+# [models."qwen-1.5b".flags]
+# model = "/home/jpk/ai/models/llm/Qwen2.5-1.5B-Instruct.Q8_0.gguf"
+# ctx-size = 8192
+# gpu-layers = "all"
+
+# One card, whichever is free.
+# [models."qwen-coder-14b"]
+# gpus = 1
+
+# [models."qwen-coder-14b".flags]
+# model = "/home/jpk/ai/models/llm/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf"
+# ctx-size = 16384
+# gpu-layers = "all"
+
+# Split across both cards. Nothing else on a card can be loaded while it is.
+# [models."gemma-31b"]
+# gpus = 2
+
+# [models."gemma-31b".flags]
+# model = "/home/jpk/ai/models/llm/gemma-4-31B-it-Q5_K_M.gguf"
+# ctx-size = 8192
+# split-mode = "layer"
+# tensor-split = [1, 1]
+# gpu-layers = "all"
+
+# Per-node inference-engine overrides, edited under System > Compute nodes. Empty preserves
+# llama.cpp enabled with the legacy llama_server path. Executable/enablement changes require
+# a node restart; saving never installs programs or interrupts loaded models.
+[engines]

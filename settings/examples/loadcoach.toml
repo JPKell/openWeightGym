@@ -1,0 +1,108 @@
+# LoadCoach's settings for this machine: where it listens and where things are.
+# Copy to settings/loadcoach.toml and edit. That copy is not committed.
+#
+# What can be changed under System > Compute nodes is not here. Its starting values are in
+# settings/defaults/loadcoach.toml. A value from there may be set here too: it is then this
+# machine's own starting value.
+
+# Address and port LoadCoach listens on. Loopback means this machine only.
+host = "127.0.0.1"
+port = 8442
+
+# The folder LoadCoach keeps its database and the token for the `loadcoach` command in, counted
+# from this file. Left out, they are kept beside this file.
+data = "../data"
+
+# The key this machine shares with the front machine, counted from this file. Turnstile signs
+# what it sends on with it, and LoadCoach, the ToolLocker, spotter and voice believe nothing else
+# about who is asking. Readable by you alone, and the same on both machines:
+#   python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > ../keys/machine.key && chmod 600 ../keys/machine.key
+# Left out, nobody but this machine itself may ask, as anyone: only for a host of 127.0.0.1.
+machine_key_file = "../keys/machine.key"
+
+# This instance's stable name in front's [machines.NAME] registry. The primary is "compute";
+# a second instance might be "rig". Give every instance its own key, data folder and port.
+machine_name = "compute"
+
+# Turnstile's address on the front machine. Compute asks it for the accounts, for work done later
+# in someone's name: a batch, a benchmark task, a recurring schedule, and for the reports.
+front = "http://10.77.10.42:8442"
+
+# DB1 cutover only: native probes still run here, but task/batch storage is front's.
+# After ToolLocker relocates, set front_toollocker = true to refuse stale settings/tool reports here.
+# Enable after terminal legacy history is verified on front and rollback is ready.
+# This does not delete old tables; leaving it false preserves legacy task routing.
+# front_tasks = false
+
+# Compatibility path for llama.cpp. A service does not always have your shell's PATH.
+# Prefer [engines.llama_cpp] below for new configuration; if both paths exist they must match.
+llama_server = "/home/jpk/.local/bin/llama-server"
+
+# The program that says what each card holds and what each process uses of it. LoadCoach asks
+# it after a model has loaded, and that figure is what lets models share a card. Left out, as
+# here, it is found through the PATH. Where it cannot be run, every model keeps its cards to itself.
+# nvidia_smi = "/usr/bin/nvidia-smi"
+
+# The file that holds the models, the event log and the rest of what LoadCoach keeps. The users
+# are not here: they are on the front machine. Left out, as here, it is in the data folder
+# with this file's name: loadcoach.toml gives loadcoach.db. Give a full path to keep it elsewhere.
+# database = "/home/jpk/ai/openWeightGym/data/loadcoach.db"
+
+# Named stores replace the single path when this service needs an explicit binding. Paths and
+# DSN files are counted from this settings folder. PostgreSQL stores require openWeightGym's postgresql
+# extra plus compatible pg_dump and pg_restore programs for verified recovery sets.
+#
+# [databases.stores.core]
+# engine = "sqlite"
+# path = "../data/loadcoach.db"
+#
+# [databases.bindings]
+# "loadcoach.core" = "core"
+#
+# A PostgreSQL store keeps its complete DSN in an owner-only file, never in this TOML:
+# [databases.stores.core]
+# engine = "postgresql"
+# dsn_file = "../keys/loadcoach-postgres.dsn"
+# display_name = "Compute PostgreSQL"
+
+# Recommended: one root per LoadCoach node. LoadCoach creates and uses exactly the `llm`,
+# `adapters`, `projectors`, `image` and `audio` subfolders. This can also be changed from System > Settings;
+# restart LoadCoach to apply it.
+# models_folder = "/home/jpk/models"
+#
+# Optional complete library. Keep used and unused files here; copy a file to the active cache
+# when this node should use it. Leave empty on a new installation until storage is chosen.
+# models_storage_folder = "/mnt/usb/ai/models"
+#
+# Compatibility: independently named places may be used when models_folder is empty. A file can be moved from
+# one place to another from the Files page, and a file just downloaded into one is found there.
+# One level of folders below each is looked through too. A folder that does not exist is made.
+# Left out, as here, the places are the folders that the models already added are in.
+#
+# [places]
+# fast = "/home/jpk/ai/models/llm"
+# slow = "/mnt/ssd/models/llm"
+# adapters = "/home/jpk/ai/models/adapters/llm"   # adapters are files too. The Files page sorts every file by what it says it is
+# projectors = "/home/jpk/ai/models/projectors/llm"   # and so are projectors. A folder of their own keeps them out from among the models
+
+# The file that holds the token of your account at Hugging Face, and nothing else. Counted from
+# this file. It is needed only for repositories that are not open to everyone: without it, the
+# others are still found and brought down. Make the token at huggingface.co, under Settings,
+# Access Tokens, of the kind that can only read. Then, in the folder above this one:
+#   install -m 600 /dev/null keys/huggingface.token
+# and paste the token into that file. It is read each time it is needed, so no restart.
+# This line goes above [places], or it would be read as a place.
+# hub_token_file = "../keys/huggingface.token"
+
+# Cards are detected automatically with `llama-server --list-devices`; no setting is needed.
+# Disable individual cards under System → Compute nodes. An explicit `gpus` list remains
+# accepted only for compatibility with installations that cannot use discovery.
+
+# C09 engine namespace (source-prepared; qualify before deployment). This belongs to this
+# node, not a global preset. Leave the legacy path above out, or keep matching values.
+# [engines.llama_cpp]
+# enabled = true
+# executable = "/home/jpk/.local/bin/llama-server"
+#
+# Only llama_cpp is implemented in Phase A. Strata must pass the later gate before use.
+

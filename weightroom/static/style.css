@@ -1,0 +1,521 @@
+/* Shared console values. Change these to adjust every page and component together. */
+:root {
+  --suite-page-title-size: 1.5rem;
+  --suite-card-title-size: .875rem;
+  --suite-section-title-size: .9rem;
+  --suite-heading-weight: 600;
+  --suite-card-header-padding: 1rem 1.25rem;
+  --suite-card-body-padding: 1rem 1.25rem;
+  --suite-frame-radius: .5rem;
+  --suite-control-height: 2.5rem;
+  --suite-control-compact-height: 2rem;
+  --suite-accent: #795917;
+  --suite-accent-bg: #f1e9d6;
+  --sidebar-width: 12rem;
+  --drawer-handle-width: 2.5rem;
+}
+.card-header {
+  font-size: var(--suite-card-title-size);
+  font-weight: var(--suite-heading-weight);
+  padding: var(--suite-card-header-padding);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .65rem;
+}
+.card-header :is(h2, h3, h4, h5, h6, .card-title) { font-size: inherit; font-weight: inherit; margin: 0; }
+.card-body { padding: var(--suite-card-body-padding); }
+.card-footer { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.section-title { font-size: var(--suite-section-title-size); font-weight: var(--suite-heading-weight); }
+.btn, input.form-control, select.form-select, .input-group-text {
+  --suite-field-height: var(--suite-control-height);
+  min-height: var(--suite-field-height);
+  --suite-field-padding: calc((var(--suite-field-height) - 1lh - 2 * var(--tblr-border-width)) / 2);
+  padding-block: var(--suite-field-padding);
+}
+input.form-control, select.form-select:not([multiple]):not([size]) { height: var(--suite-field-height); }
+.btn-sm, .btn-group-sm > .btn, input.form-control-sm, select.form-select-sm, .input-group-sm > .input-group-text,
+.input-group-sm > .form-control, .input-group-sm > .form-select, .input-group-sm > .btn { --suite-field-height: var(--suite-control-compact-height); padding-block: var(--suite-field-padding); }
+
+/* Console additions to vendored Tabler. */
+
+/* The cards on the sign-in page and its like: one narrow column in the middle. */
+.entry { max-width: 44rem; }
+
+/* A key or a secret, shown once: set apart, easy to select whole, and never running off the page. */
+pre.secret { padding: .7rem; border: 1px dashed var(--bs-border-color); border-radius: var(--bs-border-radius); overflow-wrap: anywhere; white-space: pre-wrap; user-select: all; }
+
+/* A list of facts: the name of each a little quieter than its value. */
+dl.facts dt { font-weight: 400; color: var(--bs-secondary-color); }
+dl.facts dd { min-width: 0; overflow-wrap: anywhere; }
+.wrap, code { overflow-wrap: anywhere; }
+/* Diagnostic tables scroll on narrow screens without crushing long details into tall rows. */
+.diagnostic-activity { min-width: 48rem; }
+.diagnostic-distribution { min-width: 42rem; }
+/* What was last seen of compute, shown while it is off: dimmed, so it is not taken for now. */
+.old { opacity: .55; }
+
+/* A card that opens and closes. The heading is the thing to click. */
+details.card > summary { cursor: pointer; list-style: none; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary::before { content: "▸"; flex: none; }
+details.card[open] > summary::before { content: "▾"; }
+.card-header .card-heading { line-height: 1.4; }
+.card-actions { max-width: 100%; }
+details.card:not([open]) > summary { border-bottom: 0; }
+
+/* A flag of a model: its name takes two parts of the row, its value three. */
+.flag input[name="flag"] { flex: 2; }
+.flag input[name="value"] { flex: 3; }
+
+/* A column that can be sorted by: its heading can be clicked, and shows how it is sorted. */
+th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+th[data-sort]:hover { text-decoration: underline; }
+th[data-mark]:not([data-mark=""])::after { content: " " attr(data-mark); color: var(--bs-primary); }
+
+/* An amount or a time in a table stays on one line. A table too wide for a phone scrolls inside its own box. */
+td[data-value], td.when, td code { white-space: nowrap; }
+
+/* What a request has been answered so far: as it was written, wrapped to the page, never wider than it. */
+.stream { padding: .7rem; max-height: 24rem; overflow-y: auto;
+          /* Laid out from the bottom up, so the box rests at its end, where the newest words are, with no script. */
+          display: flex; flex-direction: column-reverse; margin-bottom: 1rem; }
+/* The text keeps its full height, so that it is the box that scrolls and not the text inside it. */
+.stream pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; overflow: visible; flex-shrink: 0; }
+
+/* Text that is kept and complete, such as what a request sent: the same frame, read from its beginning. */
+.kept, .growing { padding: .7rem; margin-bottom: 1rem; }
+.kept { max-height: 24rem; overflow-y: auto; }
+.kept pre, .growing pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; overflow: visible; }
+/* `growing` is the same frame for text that is still being written: as tall as the text, with nothing to scroll inside. */
+
+/* Lines a program printed, one to a row so that they can be found by a word: small, in the type they were printed in, wrapped. */
+table.printed { width: 100%; font-family: var(--bs-font-monospace); font-size: .8rem; }
+table.printed td { padding: 0 0 .1rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+/* A line that would be sent to a model, marked while the box that says how much is sent is in use. */
+table.printed tr.sent td { background: var(--bs-warning-bg-subtle); }
+
+/* One compact, horizontally scrollable telemetry row directly below the navigation. */
+#strip { overflow-x: auto; font-size: .72rem; }
+.telemetry-band { min-height: 1.4rem; padding-block: .25rem; }
+.strip { display: flex; flex-wrap: nowrap; align-items: center; gap: .85rem; width: max-content; }
+.host-meter { display: grid; grid-template-columns: auto auto; grid-template-rows: repeat(2, min-content); column-gap: .4rem; row-gap: 0; align-items: center; padding: 0 .25rem; border-radius: .2rem; color: var(--bs-body-color); text-decoration: none; white-space: nowrap; }
+.host-meter:hover { background: var(--bs-secondary-bg); }
+.host-meter-name { grid-row: 1 / 3; overflow: hidden; text-overflow: ellipsis; max-width: 10rem; line-height: 1; }
+.host-state-ready { color: var(--bs-success); }
+.host-state-sleeping { color: var(--bs-primary); }
+.host-state-not-answering, .host-state-unknown { color: var(--bs-danger); }
+.host-meter-line { display: flex; align-items: center; gap: .2rem; height: .62rem; line-height: 1; }
+.host-meter-line > span:first-child { width: 2rem; font-size: .62rem; }
+.host-meter-line .progress { width: 4.6rem; height: .5rem; }
+.telemetry-table th { white-space: nowrap; }
+.telemetry-bar-cell { width: 45%; min-width: 7rem; }
+.telemetry-bar-cell .progress { height: .6rem; }
+.said-box { position: fixed; top: calc(var(--top, 6rem) + .75rem); left: 50%; z-index: 1050; width: min(42rem, calc(100vw - 1.5rem)); margin: 0; transform: translateX(-50%); box-shadow: var(--bs-box-shadow); }
+.said-box-leaving { opacity: 0; transition: opacity .25s ease; }
+@media (prefers-reduced-motion: reduce) { .said-box-leaving { transition: none; } }
+
+/* Categories stay across the top. Their pages live in a rail which can be put away. */
+
+[data-bs-theme="dark"] { --suite-accent: #dfba73; --suite-accent-bg: #373023; }
+.suite-top { flex-wrap: nowrap; }
+.category-links { flex-direction: row; gap: .25rem; }
+.category-links .nav-link { padding: .35rem .8rem; border-radius: .4rem; font-weight: 500; white-space: nowrap; }
+.category-links .active, .category-links .nav-link:hover { color: var(--suite-accent); background: var(--suite-accent-bg); }
+.site-layout { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); min-height: calc(100dvh - var(--top, 6rem)); }
+.site-layout > main { min-width: 0; width: 100%; }
+.suite-page { width: 100%; max-width: 100rem; margin-inline: auto; padding-inline: clamp(.75rem, 2vw, 1.75rem); }
+.site-sidebar { position: sticky; top: var(--top, 6rem); align-self: start; height: calc(100dvh - var(--top, 6rem)); overflow-y: auto; padding: 1.1rem .7rem; border-right: 1px solid var(--bs-border-color); background: var(--bs-tertiary-bg); }
+.section-label, .eyebrow { color: var(--bs-secondary-color); font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; }
+.section-label { padding: 0 .65rem .7rem; }
+.section-link { display: block; padding: .5rem .65rem; margin-bottom: .2rem; color: var(--bs-body-color); text-decoration: none; border-radius: .35rem; border-left: 2px solid transparent; }
+.section-link:hover { background: var(--bs-secondary-bg); }
+.section-link.active { color: var(--suite-accent); background: var(--suite-accent-bg); border-left-color: var(--suite-accent); font-weight: 600; }
+html[data-sidebar="closed"] .site-layout { grid-template-columns: minmax(0, 1fr); }
+html[data-sidebar="closed"] .site-layout > main { padding-left: var(--drawer-handle-width); }
+html[data-sidebar="closed"] .site-sidebar, .site-sidebar[hidden], .sidebar-shade[hidden] { display: none; }
+.sidebar-shade { display: none; }
+.skip-content:focus { position: fixed; top: .5rem; left: .5rem; z-index: 1100; padding: .6rem; background: var(--bs-body-bg); }
+@media (max-width: 767.98px) {
+  .suite-top { flex-wrap: wrap; }
+  .suite-top .navbar-brand { font-size: 1.1rem; }
+  .category-links { order: 5; width: 100%; justify-content: space-between; }
+  .category-links { min-width: 0; overflow-x: auto; }
+  .category-links .nav-link { padding: .3rem .6rem; font-size: .9rem; }
+  .site-layout { display: block; }
+  .site-sidebar { position: fixed; left: 0; width: min(17rem, 85vw); z-index: 1040; box-shadow: .5rem 0 2rem #0003; }
+  .sidebar-shade:not([hidden]) { display: block; position: fixed; inset: var(--top, 6rem) 0 0; border: 0; background: #0006; z-index: 1030; }
+}
+/* The menu under a person's name. Bootstrap styles such a menu and leaves placing it to a script, which is not used here. */
+.user-menu { position: relative; }
+.user-menu > summary { list-style: none; }
+.user-menu > summary::-webkit-details-marker { display: none; }
+.user-menu > .dropdown-menu { right: 0; top: 100%; margin-top: .25rem; }
+/* The bar at the top stays in view. A link to a place further down the page must not end up under it. */
+html { scroll-padding-top: var(--top, 6rem); }
+.meter { display: flex; flex: none; align-items: center; gap: .45rem; white-space: nowrap; }
+/* A bar's length goes by the width of the window: 4.5rem on a wide one, shorter as it narrows, never less than a stub. */
+.meter .progress { width: clamp(.75rem, 4.5vw, 4.5rem); height: .5rem; }
+/* The numbers beside a bar. On a screen that is not wide the bars are shown alone. */
+@media (max-width: 991.98px) { .meter .reading { display: none; } }
+/* On a phone everything in the band stands a little closer, so that it stays one line there too. */
+@media (max-width: 575.98px) { .meter { gap: .25rem; } }
+/* The mark for compute: a dot as tall as the bars, and the word in the meters' size. */
+.pulse { font-size: .8rem; flex: none; }
+.dot { width: .5rem; height: .5rem; border-radius: 50%; flex: none; }
+
+/* A chart on the Machine page: a frame, a label, and the place static/charts.js draws the line in. */
+.chart { padding: .5rem .7rem; }
+.chart figcaption { font-size: .85rem; }
+.plot { height: 9rem; margin: .3rem 0; }
+
+/* The list of every llama-server flag: small, and no taller than most of a screen, so that the Save button is never far. */
+.flags { font-size: .85rem; }
+.table-responsive:has(> .flags) { max-height: 70vh; overflow-y: auto; }
+.flags td:first-child code { white-space: nowrap; }
+/* What a flag takes can be one long word, such as a list of every choice. It is let break, or it would push what the flag does off the page. */
+.flags td:nth-child(2) { max-width: 13rem; overflow-wrap: anywhere; }
+.flags td:nth-child(3) { min-width: 16rem; }
+
+/* Conversations share Chat's section rail; the list owns 40% of its available height. */
+.chat-sidebar { height: calc((100dvh - var(--top, 6rem) - 2.2rem) * .4); min-height: 10rem; display: flex; flex-direction: column; margin: .4rem 0 .7rem; }
+.chat-conversations-scroll { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+.chat-sidebar-row { display: flex; align-items: center; min-width: 0; }
+.chat-sidebar-row form { flex: 0 0 auto; }
+.chat-link { display: block; flex: 1; min-width: 0; padding: .3rem .4rem; border-radius: var(--bs-border-radius); color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: none; }
+.chat-link:hover, .chat-link.active { background: var(--bs-secondary-bg); }
+[data-chat-rename][hidden] { display: none !important; }
+.chat-sidebar table { table-layout: fixed; }
+.chat-models { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); }
+.chat-models select.form-select { width: 100%; min-width: 0; }
+.chat-model-picker { position: relative; width: 100%; min-width: 0; }
+.chat-model-picker-toggle { width: 100%; min-width: 0; }
+.chat-model-menu { position: fixed; z-index: 1080; overflow-y: auto; padding: .2rem 0; background: var(--bs-body-bg); box-shadow: var(--bs-box-shadow); }
+.chat-model-option { display: block; width: 100%; padding: .25rem .5rem; border: 0; background: transparent; color: inherit; text-align: left; overflow-wrap: anywhere; }
+.chat-model-option:hover, .chat-model-option:focus, .chat-model-option.selected { background: var(--bs-primary-bg-subtle); color: var(--bs-body-color); }
+@media (max-width: 600px) { .chat-models { grid-template-columns: auto minmax(0, 1fr); } }
+.chat-main { width: 100%; max-width: 50rem; margin: 0 auto; display: flex; flex-direction: column; min-height: calc(100vh - var(--top, 6rem) - 2rem); }
+.chat-new { margin: auto 0; }
+#messages { flex: 1; }
+.composer { position: sticky; bottom: 0; background: var(--bs-body-bg); padding: .75rem 0 1rem; }
+.composer.composer-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.composer-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: start; }
+.option-fields { max-height: 45vh; overflow-y: auto; padding: 0 .25rem .25rem 0; }
+.option-fields select { max-width: 100%; }
+[data-prompt], #chat-main { scroll-margin-top: 1rem; } /* html already reserves the sticky header */
+.composer-box { --suite-frame-radius: 1.25rem; padding: .6rem .8rem; background: var(--bs-body-bg); }
+.composer-box textarea { resize: none; }
+.turn { margin-bottom: 1.5rem; }
+.turn-user { display: flex; flex-direction: column; align-items: flex-end; }
+.said-user { max-width: 85%; background: var(--bs-secondary-bg); border-radius: 1.25rem; padding: .6rem 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.turn-more { width: 100%; text-align: right; }
+.turn-more > summary { list-style: none; }
+.turn-more form { text-align: left; }
+.turn-facts { display: flex; flex-wrap: wrap; gap: .2rem 1rem; align-items: center; font-size: .8rem; color: var(--bs-secondary-color); }
+.thinking { margin-bottom: .75rem; }
+.thinking > summary { cursor: pointer; }
+/* An answer is Markdown made into HTML, which carries none of Bootstrap's class names. These give its code and its tables their look. */
+.answer { overflow-wrap: anywhere; }
+.answer > :last-child { margin-bottom: .5rem; }
+.answer pre { position: relative; padding: .75rem; background: var(--bs-tertiary-bg); overflow-x: auto; }
+.answer pre code { overflow-wrap: normal; }
+.answer table { margin-bottom: 1rem; }
+.answer th, .answer td { border: 1px solid var(--bs-border-color); padding: .3rem .6rem; }
+.answer blockquote { border-left: .25rem solid var(--bs-border-color); padding-left: 1rem; color: var(--bs-secondary-color); }
+.copy-code { position: absolute; top: .4rem; right: .4rem; }
+
+/* A setting that is only shown: as it stands in its file, wrapped, never wider than its column. */
+.setting-value { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .875em; color: var(--bs-code-color); max-height: 12rem; overflow-y: auto; }
+
+.chat-attachment { max-width: 100%; }
+.chat-attachment img { max-width: 100%; max-height: 24rem; object-fit: contain; }
+.chat-attachment pre { max-height: 20rem; overflow: auto; }
+.chat-main.compare { max-width: 95rem; }
+.chat-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.comparison-answer { min-width: 0; padding: .75rem; }
+@media (max-width: 767px) { .chat-comparison { grid-template-columns: minmax(0, 1fr); } }
+
+/* Wide benchmark tables scroll inside the shared cards. */
+.benchmark-page .table { font-size: .8rem; }
+.benchmark-page .table th { font-weight: 500; }
+.benchmark-page .table thead th { color: var(--bs-secondary-color); font-size: .78rem; }
+.benchmark-page .table th small { display: block; font-weight: 400; color: var(--bs-secondary-color); font-size: .7rem; }
+.benchmark-page .table td, .benchmark-page .table th { padding: .25rem .4rem; }
+.benchmark-page .table td:not(:first-child) { font-variant-numeric: tabular-nums; }
+.benchmark-heatmap-scroll { overflow-x: auto; }
+.benchmark-heatmap { min-width: 650px; }
+#benchmark-score-table > summary { color: var(--bs-secondary-color); font-size: .8rem; margin-top: .6rem; }
+.score-map { table-layout: fixed; min-width: 50rem; }
+.score-map th:first-child { width: 12rem; overflow-wrap: anywhere; font-size: .75rem; }
+.score-map th:not(:first-child) { text-align: center; }
+.score-map thead a { color: inherit; text-decoration: none; }
+.score-map thead a:hover { text-decoration: underline; }
+.score-map td { border-bottom: 0; }
+.score-cell { display: block; padding: .35rem .15rem; text-align: center; border-radius: .35rem; font-weight: 600; text-decoration: none; }
+.score-missing { color: var(--bs-secondary-color); background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color); }
+.score-cell:hover, .score-cell:focus-visible { outline: 2px solid var(--suite-accent); outline-offset: 2px; }
+.heat-legend { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; color: var(--bs-secondary-color); font-size: .72rem; margin-top: .9rem; }
+.heat-gradient { display: inline-block; width: 6rem; height: .45rem; border-radius: 1rem; background: linear-gradient(90deg, #df8639, #299879); }
+.rerun-mark { color: var(--suite-accent); font-weight: 700; }
+.empty-state { text-align: center; padding: 1.6rem 1rem !important; color: var(--bs-secondary-color) !important; margin: 0; font-size: .85rem; }
+[data-result-link] { cursor: pointer; }
+[data-result-link] a { color: inherit; text-decoration: none; }
+[data-result-link] a:hover { text-decoration: underline; }
+.benchmark-facts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin: 0; }
+.benchmark-facts dt { color: var(--bs-secondary-color); font-size: .75rem; font-weight: 400; }
+.benchmark-facts dd { margin-top: .3rem; margin-bottom: 0; font-size: .85rem; overflow-wrap: anywhere; }
+.benchmark-picker { display: flex; gap: .6rem; align-items: center; justify-content: start; margin-bottom: .65rem; flex-wrap: wrap; }
+.check-column { width: 2rem; }
+.benchmark-live { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+.benchmark-log { height: 16rem; overflow: auto; overscroll-behavior: contain; margin: 0; background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); padding: .8rem; font-size: .8rem; white-space: pre-wrap; }
+.comparison-models { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: .65rem; max-height: 22rem; overflow-y: auto; }
+.comparison-model { display: flex; align-items: start; gap: .6rem; padding: .4rem .5rem; cursor: pointer; min-width: 0; }
+.comparison-model:has(:checked) { border-color: var(--suite-accent); background: var(--suite-accent-bg); }
+.comparison-model strong { display: block; font-size: .85rem; overflow-wrap: anywhere; }
+.comparison-model small { display: block; font-size: .7rem; color: var(--bs-secondary-color); overflow-wrap: anywhere; }
+.comparison-table { min-width: 30rem; }
+.comparison-table td { min-width: 7rem; }
+.comparison-section > th { color: var(--suite-accent); background: var(--suite-accent-bg); }
+.benchmark-definition { border-top: 1px solid var(--bs-border-color); }
+.benchmark-definition > summary { cursor: pointer; padding: .9rem 0; }
+.benchmark-definition summary strong { margin-right: .4rem; }
+.recommendation { color: var(--suite-accent); background: var(--suite-accent-bg); font-size: .65rem; margin-left: .4rem; }
+.freshness-rules { display: grid; grid-template-columns: minmax(10rem, 1fr) 3fr; gap: .6rem 1rem; font-size: .8rem; margin: .8rem 0 0; }
+.freshness-rules dt { font-weight: 500; }
+.freshness-rules dd { margin: 0; color: var(--bs-secondary-color); }
+@media (max-width: 767.98px) {
+  .benchmark-live, .benchmark-facts, .freshness-rules { grid-template-columns: minmax(0, 1fr); }
+  .score-map { min-width: 27rem; }
+  .heat-legend > .ms-auto { margin-left: 0 !important; width: 100%; }
+}
+
+/* Token usage reports share the site palette and remain readable without charts. */
+.usage-chart { width: 100%; height: 340px; }
+.usage-daily-table { max-height: 28rem; overflow-y: auto; }
+.usage-page th { white-space: nowrap; }
+
+.benchmark-table-scroll { max-height: 29rem; overflow: auto; overscroll-behavior: contain; }
+.benchmark-table-scroll thead { position: sticky; top: 0; z-index: 1; background: var(--bs-body-bg); }
+.benchmark-progress { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: .5rem; font-size: .8rem; align-items: center; }
+.benchmark-progress span, .benchmark-progress strong { display: block; }
+.benchmark-progress progress { accent-color: var(--bs-primary); }
+@media (max-width: 700px) { .benchmark-progress { grid-template-columns: 1fr; gap: .5rem; } }
+/* The dry fit page: a card as a bar, a model as a piece of it in the colour of its row, and a line where the card ends when too much is ticked. */
+.fit-bar { position: relative; height: 1.75rem; }
+.fit-limit { position: absolute; top: 0; bottom: 0; border-left: 3px solid var(--bs-danger); }
+.fit-swatch { display: inline-block; width: .8rem; height: .8rem; border-radius: .2rem; background: hsl(var(--hue) 60% 42%); }
+/* A ticked model under the bars: its name, its slider taking the room there is, its context and what it takes. On a phone the name has a line to itself. */
+.fit-pick { display: grid; grid-template-columns: minmax(8rem, 16rem) 1fr 8rem 9rem; gap: .25rem 1rem; align-items: center; padding: .15rem 0; }
+.fit-pick[hidden] { display: none; }
+.fit-below { grid-column: 1 / -1; }
+@media (max-width: 575.98px) { .fit-pick { grid-template-columns: 1fr auto auto; } .fit-pick > :first-child { grid-column: 1 / -1; } }
+
+/* Benchmark evidence stays dense while controls retain keyboard focus and touch targets. */
+
+.benchmark-picker select { width: min(100%, 20rem); }
+.benchmark-icon { padding: .12rem .35rem; min-width: 1.8rem; }
+.benchmark-unit, .comparison-table td.benchmark-unit { width: 1%; min-width: 0; white-space: nowrap; font-size: .7rem; color: var(--bs-secondary-color); }
+
+[data-select-row] { cursor: pointer; }
+/* A row that a click anywhere on it acts on is marked under the pointer, in every table, as Bootstrap's table-hover does. */
+tr[data-result-link]:hover > *, tr[data-select-row]:hover > * { --bs-table-color-state: var(--bs-table-hover-color); --tblr-table-color-state: var(--bs-table-hover-color); --bs-table-bg-state: var(--bs-table-hover-bg); --tblr-table-bg-state: var(--bs-table-hover-bg); }
+
+.benchmark-progress-fill { background: linear-gradient(to right, var(--suite-accent-bg) var(--progress), var(--bs-tertiary-bg) var(--progress)); padding: .55rem; }
+.benchmark-flag { font-weight: 700; margin-left: .2rem; }
+.flag-settings { color: var(--bs-warning-text-emphasis); }
+.flag-version { color: var(--bs-danger-text-emphasis); }
+.flag-environment { color: var(--bs-info-text-emphasis); }
+.score-cell .benchmark-flag { color: inherit; }
+.benchmark-sample { border-left: 3px solid var(--suite-accent); }
+.sample-section { border-bottom: 1px solid var(--bs-border-color); padding: .45rem 0; }
+.sample-section > summary { font-size: .85rem; color: var(--bs-secondary-color); }
+.benchmark-page [id] { scroll-margin-top: calc(var(--top, 6rem) + .75rem); }
+.score-keyboard-grid:not(:focus-within) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+.nav-link:has(input:focus-visible) { outline: 2px solid var(--suite-accent); outline-offset: 2px; }
+
+/* WeightRoom's outline icon set follows the selected theme. */
+.suite-icon { width: 1.1em; height: 1.1em; flex: none; vertical-align: -.18em; margin-right: .35em; }
+.navbar-brand { display: inline-flex; align-items: center; gap: .35rem; }
+.navbar-brand .suite-icon { width: 1.6rem; height: 1.6rem; margin: 0; color: var(--suite-accent); }
+/* The handle that opens and closes the section pages: on the left edge of the page, half way down, and on the drawer's edge while it is open. */
+.drawer-handle { position: fixed; top: auto; bottom: 1rem; left: 0; transform: none; z-index: 1045; width: var(--drawer-handle-width); padding: 1.1rem .45rem; border: 1px solid var(--bs-border-color); border-left: 0; border-radius: 0 .5rem .5rem 0; background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); font-size: 1.3rem; line-height: 1; }
+.drawer-handle:hover, .drawer-handle:focus-visible { color: var(--bs-body-color); background: var(--bs-secondary-bg); }
+html[data-sidebar="open"] .drawer-handle { left: calc(var(--sidebar-width) - var(--drawer-handle-width)); border-color: transparent; border-radius: 0; background: transparent; }
+html[data-sidebar="open"] .drawer-handle span { display: inline-block; transform: scaleX(-1); }
+@media (max-width: 767.98px) { html[data-sidebar="open"] .drawer-handle { left: calc(min(17rem, 85vw) - var(--drawer-handle-width)); } }
+.benchmark-icon .suite-icon { width: .85rem; height: .85rem; margin: 0; }
+@media (max-width: 767.98px) {
+  .category-links { gap: 0; }
+  .category-links .nav-link { padding: .3rem .3rem; font-size: .85rem; }
+  .category-links .suite-icon { width: 1em; height: 1em; margin-right: .2em; }
+}
+/* Dense operator tables and shared searchable account controls. */
+.console-page .log-more { font-size: .78rem; line-height: 1.35; }
+.compact-batches > :not(caption) > * > * { padding-block: .25rem; }
+.compact-batches .progress { min-width: 4rem; height: .6rem; }
+.status-controls { overflow-x: auto; }
+.status-controls form { margin: 0; flex-wrap: nowrap; width: min(100%, 48rem); min-width: 34rem; }
+.status-controls button { white-space: nowrap; }
+.status-controls .status-node-select { flex: 0 0 auto; width: auto; max-width: 9rem; }
+.status-controls .status-drain-group { flex: 1 1 auto; min-width: 13rem; }
+.status-controls .status-drain-group .form-control { min-width: 0; }
+.settings-page .settings-row small { line-height: 1.2; }
+.settings-page .table > :not(caption) > * > * { padding: .2rem .35rem; }
+.settings-page .setting-value { line-height: 1.2; white-space: pre-wrap; overflow-wrap: anywhere; }
+.settings-file > summary { cursor: pointer; padding: .4rem .55rem; }
+.settings-file-body { padding: .4rem .55rem; }
+.user-picker { flex: 1 1 0; min-width: 0; position: relative; }
+.user-picker-panel { position: absolute; top: 100%; right: 0; z-index: 1050; width: max(100%, 15rem); padding: .5rem; }
+.user-picker-results { max-height: 16rem; overflow-y: auto; }
+.user-picker-results .dropdown-item { white-space: normal; }
+/* Keep every store's probe and recovery state visible on a narrow screen. */
+.schedule-table th:last-child { width: 9rem; }
+.schedule-actions form { margin: 0; }
+.schedule-actions .btn { white-space: nowrap; }
+.store-health-table code { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+.table-stack td { overflow-wrap: anywhere; }
+@media (max-width: 767.98px) {
+  .table-stack, .table-stack tbody, .table-stack tr, .table-stack td { display: block; width: 100%; }
+  .table-stack thead { display: none; }
+  .table-stack tr { margin-bottom: .75rem; border-bottom: 2px solid var(--bs-border-color); }
+  .table-stack td { border: 0; padding: .3rem .25rem; }
+  .table-stack td[data-label]::before {
+    content: attr(data-label); display: block; font-weight: 600; font-size: .8rem;
+    color: var(--bs-secondary-color); margin-bottom: .15rem;
+  }
+}
+.chat-sidebar-row[hidden] { display: none !important; }
+.chat-models.single { grid-template-columns: auto minmax(0, 1fr); }
+.composer-actions > .composer-options { grid-column: 1 / -1; grid-row: 1; min-width: 0; }
+.composer-actions > .composer-options > summary { min-height: 2.4rem; padding-right: 5rem; }
+.composer-actions > button { grid-column: 2; grid-row: 1; }
+.attachment-help { font-size: .75rem; min-width: 0; }
+.retry-options { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; width: 100%; min-width: 0; }
+.retry-options > button { grid-row: 1; justify-self: start; }
+.retry-options > .composer-options { display: contents; }
+.retry-options > .composer-options > summary { grid-row: 1; grid-column: 2; justify-self: start; }
+.retry-options > .composer-options > .option-fields { grid-row: 3; grid-column: 1 / -1; min-width: 0; }
+
+/* Admin documentation map: SVG links remain keyboard-accessible and scroll on narrow screens. */
+.docs-page { max-width: 90rem; }
+.docs-modules { max-height: 75vh; overflow-y: auto; }
+@media (min-width: 992px) { .docs-modules { position: sticky; top: 1rem; } }
+.docs-folder + .docs-folder { border-top: 1px solid var(--bs-border-color); }
+.docs-folder > summary { cursor: pointer; }
+.docs-module { color: inherit; border-left: 3px solid transparent; }
+.docs-module:hover { background: var(--bs-tertiary-bg); }
+.docs-module.active { background: var(--bs-tertiary-bg); border-left-color: var(--bs-primary); }
+.docs-definition > summary { cursor: pointer; }
+.docs-map-scroll { overflow-x: auto; }
+.docs-map { display: block; min-width: 1080px; width: 100%; height: auto; }
+.docs-map-zone { fill: var(--bs-tertiary-bg); stroke: var(--bs-border-color); stroke-width: 1.5; }
+.docs-zone-title { fill: var(--bs-secondary-color); font-size: 16px; font-weight: 700; letter-spacing: .04em; }
+.docs-map-wires path { fill: none; stroke: #2986ad; stroke-width: 1.7; }
+.docs-arrow-head { fill: #2986ad; }
+.docs-map-endpoint rect { fill: var(--bs-body-bg); stroke: #2986ad; stroke-width: 1.3; }
+.docs-map-endpoint text { fill: var(--bs-body-color); font-size: 14px; }
+.docs-map-label rect { fill: var(--bs-body-bg); opacity: .96; }
+.docs-map-label text { fill: var(--bs-secondary-color); font-size: 12px; }
+.docs-map-node { text-decoration: none; }
+.docs-map-node rect { fill: var(--bs-body-bg); stroke: #2986ad; stroke-width: 1.8; }
+.docs-map-node text { fill: var(--bs-body-color); text-decoration: none; }
+.docs-node-title { font-size: 16px; font-weight: 700; }
+.docs-node-detail { font-size: 12px; }
+.docs-map-node:hover rect, .docs-map-node:focus-visible rect { fill: var(--bs-secondary-bg); stroke-width: 3; }
+.docs-map-node:focus-visible { outline: none; }
+.docs-flow-detail { fill: var(--bs-secondary-color); font-size: 12px; }
+.docs-flow-part rect { stroke: var(--bs-border-color); }
+.docs-models th[scope=row] { min-width: 9rem; }
+.docs-models td { min-width: 10rem; }
+.docs-directory-link { color: var(--bs-body-color); }
+.docs-directory-link:hover, .docs-directory-link:focus-visible { border-color: var(--suite-accent); color: var(--bs-body-color); }
+
+/* Shared console form rhythm. Native details retain their independent state. */
+.page-header { margin-top: 0; min-height: 0; }
+.page-title { font-size: var(--suite-page-title-size); font-weight: var(--suite-heading-weight); line-height: 1.25; }
+.page-actions { align-items: center; }
+.min-w-0 { min-width: 0; }
+.form-section { padding-top: 1.25rem; margin-top: .5rem; border-top: 1px solid var(--bs-border-color); }
+.form-section:first-of-type { padding-top: 0; border-top: 0; }
+.form-section > .form-hint { margin-top: -.5rem; }
+.form-hint { margin-top: .4rem; line-height: 1.4; }
+.form-control:disabled, .form-select:disabled { opacity: .65; }
+.scope-badge { font-size: .7rem; font-weight: 500; }
+.sticky-actions { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: 1rem; background: var(--bs-body-bg); border-top: 1px solid var(--bs-border-color); border-radius: 0 0 .5rem .5rem; }
+details.more { margin-top: .5rem; }
+details.more > summary { color: var(--bs-secondary-color); font-size: .8rem; cursor: pointer; }
+.form-selectgroup { flex-wrap: wrap; }
+.form-selectgroup-item { min-width: 0; }
+.form-selectgroup-label { white-space: normal; }
+
+@media (max-width: 575.98px) { .sticky-actions .btn-primary { width: 100%; } .page-actions { width: 100%; } }
+
+/* Tabler nav links must keep their full width inside the phone scroll rail. */
+.suite-top .category-links .nav-link { flex: 0 0 auto; display: inline-flex; align-items: center; min-height: 2.3rem; }
+
+.table thead th { text-transform: none; }
+
+/* Paired min/max filters start beside the single-choice filters. */
+.request-column-filters td { vertical-align: top; }
+
+/* A reusable frame also styles Markdown code blocks, which have no template classes. */
+.frame, .answer pre { border: 1px solid var(--bs-border-color); border-radius: var(--suite-frame-radius); }
+
+/* Image and audio studios share their layout and supporting components. */
+.studio { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.studio-settings, .studio-results { min-width: 0; }
+.studio-settings summary:not(.card-header) { font-weight: 500; cursor: pointer; }
+.studio-empty { display: flex; flex-direction: column; gap: .6rem; align-items: center; text-align: center; padding: 2rem; }
+.studio-job { padding: .75rem 1rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.studio-dialog { padding: 1.5rem; background: var(--bs-body-bg); color: var(--bs-body-color); width: 40rem; max-width: calc(100vw - 2rem); max-height: 85vh; overflow: auto; }
+.studio-dialog::backdrop { background: #0008; }
+@media (max-width: 1000px) { .studio { grid-template-columns: minmax(260px, 310px) minmax(0, 1fr); } }
+@media (max-width: 900px) { .studio { grid-template-columns: minmax(0, 1fr); } }
+
+/* Tab/pill buttons retain toolbar height instead of inheriting navigation padding. */
+.nav .btn.nav-link { height: var(--suite-control-compact-height); padding-block: 0; white-space: nowrap; }
+
+/* One bounded, keyboard-accessible confirmation for data and credential loss. */
+#danger-confirmation { width: min(32rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); padding: 0; border: 0; border-radius: var(--bs-border-radius); color: var(--bs-body-color); background: var(--bs-body-bg); }
+#danger-confirmation::backdrop { background: #0008; }
+
+/* htmx and native actions communicate progress without moving adjacent controls. */
+.htmx-request { cursor: progress; }
+.htmx-indicator { opacity: 0; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
+
+#danger-confirmation > .card { margin-bottom: 0 !important; }
+
+/* The desktop rail closes from its foot; phones use the header's complete menu. */
+.site-sidebar { padding-bottom: 4rem; }
+.chat-sidebar { margin-top: 1rem; }
+.mobile-navigation { inset: 0 auto 0 0; width: min(24rem, 100vw); height: 100dvh; max-height: 100dvh; margin: 0; padding: 1rem; border: 0; color: var(--bs-body-color); background: var(--bs-body-bg); overscroll-behavior: contain; }
+.mobile-navigation::backdrop { background: #0008; }
+.mobile-category { border-bottom: 1px solid var(--bs-border-color); }
+.mobile-category > summary { cursor: pointer; }
+.mobile-navigation .chat-sidebar { height: auto; max-height: 50dvh; }
+@media (max-width: 767.98px) {
+  #sidebar-toggle, .site-sidebar { display: none !important; }
+  html[data-sidebar="closed"] .site-layout > main { padding-left: clamp(.75rem, 2vw, 1.75rem); }
+  .suite-top { flex-wrap: nowrap; }
+}
+
+/* The answering model and Send stay visible; advanced controls occupy the next row. */
+.chat-primary-model { min-width: 0; }
+.composer-actions > .chat-primary-model { grid-column: 1; grid-row: 1; }
+.composer-actions > .composer-options { grid-row: 2; }
+.composer-actions > .composer-options > summary { min-height: var(--suite-control-compact-height); padding-right: .75rem; }
+.retry-options > button[value="continue"] { grid-row: 4; grid-column: 1; }
+.retry-options > .chat-primary-model { grid-column: 1 / -1; grid-row: 2; min-width: 0; max-width: 100%; }
+@media (max-width: 767.98px) { .user-menu > summary { max-width: 8rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } }
+
+@media (max-width: 767.98px) {
+  .status-controls form { min-width: 0; width: 100%; flex-wrap: wrap; }
+  .status-controls .status-drain-group { min-width: 0; flex-basis: 100%; }
+}
+
+.home-available-models { max-height: 22rem; overflow-y: auto; }
+
+.connection-status { margin: 0; border-radius: 0; padding: .35rem 1rem; font-size: .875rem; }

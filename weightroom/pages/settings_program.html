@@ -1,0 +1,19 @@
+{% from 'parts.html' import form_section, more, card %}
+{% macro settings_form() %}
+<form method="post" action="/settings/{{ program.program }}" class="row g-3 mb-3"{% if fragment|default(false) %} data-settings-fragment{% endif %} {{ swaps() }}>
+{% if voice_admin %}<input type="hidden" name="return_to" value="voice">{% endif %}
+{% if selected_machine|default('') and program.program in ('loadcoach','spotter') %}<input type="hidden" name="machine" value="{{ selected_machine }}">{% endif %}
+{% if fragment|default(false) %}
+{% for setting in program.settings if setting.when != 'file' %}{% include 'setting_row.html' %}{% endfor %}
+{% else %}
+{% for group in settings_sections([program]) %}
+{% call form_section(group.title, 'Needs restart' if group.programs[0].settings|selectattr('when', 'equalto', 'restart')|list else 'This node') %}
+{% for setting in group.programs[0].settings %}{% include 'setting_row.html' %}{% endfor %}
+{% endcall %}{% endfor %}
+{% endif %}
+<div class="col-12"{% if fragment|default(false) %} data-settings-fallback{% endif %}><button class="btn btn-primary ">Save {{ program.program }}</button></div>
+</form>
+{% endmacro %}
+{% if fragment|default(false) %}{{ settings_form() }}{% else %}
+{% call card(program.program, attrs={'aria-label': program.program ~ ' settings'}) %}{{ settings_form() }}{% endcall %}
+{% endif %}

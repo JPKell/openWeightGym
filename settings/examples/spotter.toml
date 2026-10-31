@@ -1,0 +1,52 @@
+# spotter's settings for this machine: where it listens and where things are.
+# Copy to settings/spotter.toml and edit. That copy is not committed.
+#
+# What can be changed per node under System > Compute nodes is not here. Its starting values are in
+# settings/defaults/spotter.toml. A value from there may be set here too: it is then this
+# machine's own starting value.
+
+# Address and port spotter listens on. It is asked by the front machine, so give compute's own address.
+host = "127.0.0.1"
+port = 8444
+
+# The folder spotter keeps its readings in, counted from this file: spotter.toml gives
+# spotter.db there. Left out, beside this file.
+data = "../data"
+
+# Identity/event data and telemetry history have separate bindings. Identity normally resolves
+# to LoadCoach's authoritative store; local history defaults to spotter.db in `data`. Front
+# also samples this Spotter into its event-log store by physical-host fingerprint when its
+# machine has a Spotter URL configured in front's [machines.NAME] table.
+# [databases.stores.telemetry]
+# engine = "sqlite"
+# path = "../data/spotter.db"
+# [databases.bindings]
+# "spotter.history" = "telemetry"
+
+# LoadCoach's own settings file. spotter takes the groups from it, and the place of the file
+# that holds the users. Left out, as here, it is loadcoach.toml beside this file.
+# loadcoach = "/home/jpk/ai/openWeightGym/settings/loadcoach.toml"
+
+# Folders whose drives are watched for room.
+disks = ["/", "/mnt/ssd"]
+
+# Tell turnstile immediately before a power action, signed with the machine key that LoadCoach's
+# file names. This is a notice, never a heartbeat or permission to change power.
+# turnstile_notice = "http://10.77.10.42:8442/turnstile/power"
+
+# The services spotter may start, stop and restart: a name of your choosing = the unit it is.
+# Units of this account, the ones `systemctl --user` shows. Nothing that is not listed here or
+# below can be touched, whatever is asked.
+[services]
+loadcoach = "loadcoach.service"
+toollocker = "toollocker.service"
+# voice = "voice.service"
+
+# The same for root's units. Listing one here is not enough: this account must also be allowed
+# to act on it, by the polkit rule in services/spotter.rules, which names the same units and which root
+# installs. Without the rule, the buttons are there and systemd refuses.
+[system_services]
+ollama = "ollama.service"
+docker = "docker.service"
+apache = "apache2.service"
+nginx = "nginx.service"

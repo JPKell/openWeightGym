@@ -1,0 +1,106 @@
+{% from "icons.html" import icon %}
+{% from "parts.html" import danger_confirmation, empty_row %}
+<!doctype html>
+<html lang="en" data-theme-user="{{ person.me.get('identity', person.name) if person else '' }}">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="manifest" href="/static/site.webmanifest">
+<title>{% block title %}openWeightGym{% endblock %}</title>
+{# Light or dark, as the device is set. Done before anything is drawn, so the page never flashes the wrong one. #}
+<script>document.documentElement.dataset.bsTheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";</script>
+<script src="/static/themes.js?v=6"></script>
+<script>
+// Remember the desktop rail without briefly drawing it at the wrong width. Phones start closed.
+try { document.documentElement.dataset.sidebar = matchMedia("(max-width: 767.98px)").matches ? "closed" : (localStorage.getItem("weightroom-sidebar") || localStorage.getItem("frontdesk-sidebar") || "open"); }
+catch { document.documentElement.dataset.sidebar = "closed"; }
+</script>
+<link rel="stylesheet" href="/static/tabler.min.css">
+<link rel="stylesheet" href="/static/style.css?v=33">
+<link rel="stylesheet" href="/static/themes.css?v=5">
+{# htmx keeps no copy of a page for the Back button: going back loads the page again, so nothing that was shown is kept in the browser. #}
+<meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
+<script src="/static/htmx.min.js" defer></script>
+<script src="/static/pieces.js?v=10" defer></script>
+<script src="/static/telemetry.js?v=4" defer></script>
+<script src="/static/sort.js?v=5" defer></script>
+<script src="/static/navigation.js?v=4" defer></script>
+<script src="/static/console.js?v=8" defer></script>
+<script src="/static/user-picker.js?v=1" defer></script>
+{% if person and nav.active == '/chat' %}<script src="/static/chat_sidebar.js?v=2" defer></script>{% endif %}
+{% block scripts %}{% endblock %}
+
+{# The navigation and the telemetry row beneath it stay in view while the page scrolls. #}
+<header class="sticky-top bg-body">
+<nav class="navbar suite-top border-bottom px-3 py-2 gap-2" aria-label="Categories">
+  <a class="navbar-brand fw-bold me-2" href="/" aria-label="openWeightGym home">{{ icon("barbell") }}<span>openWeightGym</span></a>
+  {% if person %}
+  <button id="mobile-menu-toggle" type="button" class="btn btn-outline-secondary btn-sm d-md-none" aria-controls="mobile-navigation" aria-haspopup="dialog" aria-expanded="false">Menu</button>
+  <div class="navbar-nav category-links d-none d-md-flex">
+    {% for category in nav.groups %}
+    <a class="nav-link{{ ' active' if nav.section == category.name }}" href="{{ category.links[0][1] }}"{% if nav.section == category.name %} aria-current="true"{% endif %}>{{ icon({"Home":"home", "Chat":"chat", "Models":"models", "Benchmark":"benchmark", "Logs":"logs", "System":"system", "Docs":"docs"}.get(category.name, "barbell")) }}{{ category.name }}</a>
+    {% endfor %}
+  </div>
+  {# The name opens a small menu. The browser opens and closes it; static/sort.js closes it when something else is clicked. #}
+  <details class="user-menu ms-auto">
+    <summary class="btn {{ 'btn-primary' if nav.section == 'My account' else 'btn-outline-secondary' }} btn-sm"{% if nav.section == 'My account' %} aria-current="page"{% endif %}>{{ icon("user") }}{{ person.name }}</summary>
+    <div class="dropdown-menu show">
+      <a class="dropdown-item" href="/account">My account</a>
+      <form method="post" action="/sign-out" class="m-0"><button class="dropdown-item">Sign out</button></form>
+    </div>
+  </details>
+  {% endif %}
+</nav>
+{% if person and strip %}<div id="strip" class="telemetry-band border-bottom px-3" data-telemetry-stream="/strip/stream" aria-live="off" aria-label="Machine telemetry"></div>{% endif %}
+<div id="connection-status" class="alert alert-warning connection-status" role="status" aria-live="polite" hidden>Connection lost — retrying</div>
+</header>
+
+{% if person %}
+<a class="visually-hidden-focusable skip-content" href="#page-content">Skip to content</a>
+<div class="site-layout{{ ' d-block' if not nav.links }}">
+{% if nav.links %}
+{# The desktop handle stays at the bottom edge of the section rail. #}
+<button id="sidebar-toggle" type="button" class="drawer-handle" aria-controls="site-sidebar" aria-expanded="false" aria-label="Toggle section pages"><span aria-hidden="true">&raquo;</span></button>
+<aside id="site-sidebar" class="site-sidebar" aria-label="Section pages">
+  <div class="section-label">{{ nav.section }}</div>
+  <nav aria-label="{{ nav.section }} pages">
+    {% for label, url in nav.links %}
+    <a class="section-link{{ ' active' if url == nav.active }}" href="{{ url }}"{% if url == nav.active %} aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+    {% if nav.section == 'My account' %}
+    <form method="post" action="/sign-out" class="m-0"><button type="submit" class="section-link btn w-100 text-start">Logout</button></form>
+    {% endif %}
+  </nav>
+  {% if nav.active == '/chat' %}<div data-desktop-conversations>{% include 'chat_sidebar.html' %}</div>{% endif %}
+</aside>
+<button type="button" class="sidebar-shade" tabindex="-1" aria-label="Close section pages" hidden></button>
+{% endif %}
+{% endif %}
+<main id="page-content" class="suite-page{{ ' px-3' if person and not nav.links }} {% block main_class %}container-fluid py-3{% endblock %}" {% block main_attributes %}{% endblock %}>
+{% if person and person.me.get('unavailable_machines') %}
+<div class="alert alert-warning py-1 small" role="status" id="node-availability" data-offline-nodes='{{ person.me.unavailable_machines|tojson }}'>Node unavailable: {{ person.me.unavailable_machines|join(', ') }}. Live node controls are disabled. Selecting a deployed model will request wake and wait for a response.</div>
+{% if wake_button and 'front-wake' in person.can and 'compute' in person.me.unavailable_machines %}<form method="post" action="/wake" class="mb-2"><button class="btn btn-sm btn-outline-primary">Wake compute</button></form>{% endif %}
+<script src="/static/node-availability.js" defer></script>
+{% endif %}
+{% block main %}{% endblock %}
+</main>
+{% if person %}</div>{% endif %}
+{% if person %}
+<dialog id="mobile-navigation" class="mobile-navigation" aria-labelledby="mobile-navigation-title">
+  <div class="d-flex align-items-center justify-content-between gap-2 mb-3"><strong id="mobile-navigation-title">Navigation</strong><button type="button" class="btn btn-outline-secondary btn-sm" data-close-navigation>Close menu</button></div>
+  <nav aria-label="All pages">
+  {% for category in nav.groups %}
+    <details class="mobile-category mb-2"{{ ' open' if nav.section == category.name }}><summary class="fw-semibold py-2">{{ category.name }}</summary>
+    {% for label, url in category.links %}<a class="section-link{{ ' active' if url == nav.active }}" href="{{ url }}"{% if url == nav.active %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+    </details>
+  {% endfor %}
+  <a class="section-link" href="/account">My account</a>
+  </nav>
+  <div data-mobile-conversations></div>
+</dialog>
+{% endif %}
+<template id="empty-row-template">{{ empty_row(1) }}</template>
+{{ danger_confirmation() }}
+</html>

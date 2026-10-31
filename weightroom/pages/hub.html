@@ -1,0 +1,71 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, swaps, section_title %}
+{% from "parts.html" import page_header, form_section, more %}
+{% block title %}HuggingFace · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header('HuggingFace', 'Find model files and download them into the storage library.') }}
+{{ said_box(said, failed) }}
+{% call more('About these files') %}<p class="text-secondary">Hugging Face is searched for repositories that hold .gguf files. A file downloads once into front's storage library by default. Once complete it appears on <a href="/files">Files</a>, where it can be copied to the active cache, distributed to compute nodes, or added as a model.</p>{% endcall %}
+
+{% include "downloads.html" %}
+
+{# Search, and the name of a repository that was found, change this piece alone: what was found. #}
+<form method="get" action="/hub" class="row g-2 mb-4" {{ swaps("hub-found", true) }}>
+{% call form_section('Find files') %}
+  <div class="col"><input name="q" class="form-control" value="{{ words }}" aria-label="what to look for" placeholder="words, such as qwen 14b, or a repository as OWNER/NAME" required autofocus></div>
+  <div class="col-auto"><button class="btn btn-primary">Search</button></div>
+{% endcall %}
+</form>
+
+<div id="hub-found">
+{% if found.files is defined %}
+{% set _section_title1 %}{{ found.repository }} <small><a href="https://huggingface.co/{{ found.repository }}" rel="noreferrer">its page at Hugging Face</a></small>{% endset %}
+{{ section_title(_section_title1, class_="wrap") }}
+<form method="post" action="/hub">
+  <input type="hidden" name="repository" value="{{ found.repository }}">
+  <div class="table-responsive">
+  <table id="hub-files" class="table table-hover align-middle sortable">
+    <thead><tr><th></th><th data-sort="text">File</th><th data-sort="value">Size</th><th></th></tr></thead>
+    <tbody>
+    {% for row in found.files %}
+    <tr>
+      <td><input id="file-{{ loop.index }}" name="file" value="{{ row.file }}" type="checkbox" class="form-check-input" {{ "disabled" if row.here }}></td>
+      <td class="wrap"><label for="file-{{ loop.index }}">{{ row.file }}</label>{% if row.parts > 1 %} <small class="text-secondary">and the other {{ row.parts - 1 }} of its {{ row.parts }} parts</small>{% endif %}</td>
+      <td data-value="{{ row.size }}">{{ row.size|size }}</td>
+      <td>{% if row.here %}<span class="badge text-bg-secondary">in {{ row.here }}</span>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="text-secondary">This repository holds no .gguf file.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="row g-3 align-items-end">
+    <div class="col-md-6">
+      <label for="place" class="form-label">Into</label>
+      <select id="place" name="place" class="form-select">
+        {% for place in found.places %}<option value="{{ place.name }}">{{ place.name }}, {{ place.free|size }} free</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6"><button class="btn btn-primary">Bring the ticked files down</button></div>
+  </div>
+</form>
+{% elif words %}
+<div class="table-responsive">
+<table id="hub-found" class="table table-hover align-middle sortable">
+  <thead><tr><th data-sort="text">Repository</th><th data-sort="value">Downloads</th><th data-sort="value">Likes</th><th data-sort="text">Made</th></tr></thead>
+  <tbody>
+  {% for one in found.found %}
+  <tr>
+    <td class="wrap"><a {{ swaps("hub-found", true) }} href="/hub?repository={{ one.repository|urlencode }}">{{ one.repository }}</a></td>
+    <td data-value="{{ one.downloads }}">{{ one.downloads }}</td><td data-value="{{ one.likes }}">{{ one.likes }}</td><td>{{ one.made }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="text-secondary">Nothing found for those words.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% for group in settings_sections(programs) %}
+{% call card(group.title, loop.first or opened in group.programs|map(attribute='program')|list, 'settings:' ~ group.title) %}
+<div data-settings-section>
+{% if group.programs|map(attribute='settings')|sum(start=[])|selectattr('when', 'equalto', 'restart')|list %}<p><span class="badge bg-orange-lt">Needs restart</span></p>{% endif %}
+{% for program in group.programs %}{% with fragment=true %}{% include 'settings_program.html' %}{% endwith %}{% endfor %}
+<div class="d-flex align-items-center flex-wrap gap-3"><button type="button" class="btn btn-primary" data-save-settings hidden>Save {{ group.title|lower }}</button><span class="small" role="status" data-settings-status></span></div>
+</div>
+{% endcall %}
+{% else %}<div class="empty"><p class="empty-title">No settings reported yet</p><p class="empty-subtitle">Settings appear after the services report their configuration.</p></div>{% endfor %}
+{% include 'settings_machine_values.html' %}

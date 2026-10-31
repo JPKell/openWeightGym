@@ -1,0 +1,76 @@
+{% from "parts.html" import section_title %}
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    {{ section_title("Compute capacity", class_="text-secondary") }}
+    <div class="list-group">
+      {% for node in nodes %}
+      <section class="list-group-item" aria-label="{{ node.name }} capacity">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
+          <div><strong>{{ node.name }}</strong>{% if node.hostname and node.hostname != node.name %}<small class="text-secondary ms-2">{{ node.hostname }}</small>{% endif %}</div>
+          <span class="badge text-bg-{{ 'success' if node.state == 'ready' and node.status_live else 'secondary' }}">{{ 'ready' if node.state == 'ready' and node.status_live else 'unavailable' }}</span>
+        </div>
+        {% if node.state == 'ready' and node.status_live %}
+          {% for card in node.cards %}
+          {% set here = [] %}{% for model in node.loaded if card.card in model.cards %}{% set _ = here.append(model) %}{% endfor %}
+          <div class="mb-2">
+            <div class="d-flex justify-content-between gap-2"><b>{{ card.card }}</b>
+              <span>{% if card.free is not none and card.total %}{{ card.free|memory_mib }} free for a model, of {{ card.total|memory_mib }} VRAM{% else %}VRAM unavailable{% endif %}</span></div>
+            {% if card.total %}
+            {% set outside = ([0, [card.total, card.others or 0]|min]|max) %}
+            {% set parts = namespace(remaining=card.total - outside) %}
+            <div class="progress my-1" role="progressbar" aria-label="{{ node.name }} {{ card.card }} VRAM used" aria-valuenow="{{ ([0, [100, 100 - 100 * card.free / card.total]|min]|max)|round|int if card.free is not none else 0 }}" aria-valuemin="0" aria-valuemax="100">
+              {% for model in here %}
+                {% set claim = model.mib[model.cards.index(card.card)] if model.mib else parts.remaining %}
+                {% set segment = [parts.remaining, [0, claim]|max]|min %}
+                <div class="progress-bar border-end border-light" title="{{ model.model }}: {{ segment|memory_mib }}" style="width: {{ (100 * segment / card.total)|round(1) }}%"></div>
+                {% set parts.remaining = parts.remaining - segment %}
+              {% endfor %}
+              {% if outside %}<div class="progress-bar bg-secondary" title="Other programs: {{ outside|memory_mib }}" style="width: {{ (100 * outside / card.total)|round(1) }}%"></div>{% endif %}
+            </div>
+            {% endif %}
+            <div class="small">{% for model in here %}<span class="badge text-bg-secondary me-1">{{ model.model }}</span>{% else %}<span class="text-secondary">empty</span>{% endfor %}{% if card.others %}<span class="text-secondary">other programs {{ card.others|memory_mib }}</span>{% endif %}</div>
+          </div>
+          {% endfor %}
+          {% set cpu_models = [] %}{% for model in node.loaded if not model.cards %}{% set _ = cpu_models.append(model) %}{% endfor %}
+          {% if not node.cards or cpu_models %}
+          {% set recent = node.telemetry_age is not none and node.telemetry_age <= poll_seconds * 3 %}
+          {% set ram = (node.telemetry or {}).get('memory') if recent else none %}
+          <div class="mb-1">
+            <div class="d-flex justify-content-between gap-2"><b>CPU</b><span>{% if ram and ram.total %}{{ (ram.total - ram.used)|memory_size }} available / {{ ram.total|memory_size }} RAM{% else %}RAM unavailable{% endif %}</span></div>
+            {% if ram and ram.total %}<div class="progress my-1" role="progressbar" aria-label="{{ node.name }} system RAM used, including openWeightGym" aria-valuenow="{{ (100 * ram.used / ram.total)|round|int }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-secondary" title="System RAM used, including openWeightGym: {{ ram.used|memory_size }}" style="width: {{ (100 * ram.used / ram.total)|round(1) }}%"></div></div>{% endif %}
+            {% if node.cpu %}<div class="small text-secondary">{{ node.cpu.logical }} logical CPUs · {{ node.cpu.concurrency }} model slots · {{ node.running or 0 }} running · {{ node.waiting or 0 }} waiting</div>{% endif %}
+            {% if node.system_memory %}<div class="small text-secondary">Admission {{ node.system_memory.free|memory_mib }} free · {{ node.system_memory.headroom|memory_mib }} host reserve{% if node.system_memory.service_limit is not none %} · {{ node.system_memory.service_limit|memory_mib }} service ceiling{% endif %}</div>{% endif %}
+            <div class="small">{% for model in cpu_models %}<span class="badge text-bg-secondary me-1">{{ model.model }}</span>{% else %}<span class="text-secondary">empty</span>{% endfor %}</div>
+          </div>
+          {% endif %}
+        {% else %}<span class="text-secondary small">Capacity and loaded models are unavailable while this compute node is not answering.</span>{% endif %}
+      </section>
+      {% else %}<div class="list-group-item text-secondary">No compute nodes have reported to front yet.</div>{% endfor %}
+    </div>
+  </div>
+  <div class="col-md-6 status-lock-column">
+    {{ section_title("Loaded models", class_="text-secondary") }}
+    <div class="list-group">
+      <div class="list-group-item py-1 table-responsive">
+        <table class="table table-sm align-middle mb-0" style="--bs-table-bg: transparent">
+          <thead><tr><th scope="col">Model</th><th scope="col">Device</th><th scope="col">Size</th><th scope="col" class="text-end">Lock</th></tr></thead>
+          {% for node in nodes %}
+          <tbody>
+            <tr><th colspan="4" scope="rowgroup" class="pt-2 pb-1 border-top fw-semibold">{{ node.name }}{% if node.hostname and node.hostname != node.name %} <small class="text-secondary fw-normal">{{ node.hostname }}</small>{% endif %}</th></tr>
+            {% if node.state == 'ready' and node.status_live %}
+              {% for model in node.loaded %}
+              <tr><td>{% if node.name == 'compute' and now and 'manage-models' in person.can %}<a href="{{ address(model.model) }}">{{ model.model }}</a>{% else %}{{ model.model }}{% endif %}{% if model.state != 'ready' %} <small class="text-secondary">{{ model.state }}</small>{% endif %}</td>
+                <td>{{ model.cards|join(' + ') or 'CPU' }}</td>
+                <td>{% if model.mib %}{{ model.mib|sum|memory_mib }} VRAM{% elif model.cards %}the whole card{{ 's' if model.cards|length > 1 }}{% endif %}{% if model.rss_mib is defined and model.rss_mib is not none %}{% if model.cards %}<br>{% endif %}{{ model.rss_mib|memory_mib }} RSS{% elif not model.cards %}RSS unavailable{% endif %}</td>
+                <td class="text-end">{% if 'unload' in person.can %}<form method="post" action="/control" class="m-0"><input type="hidden" name="model" value="{{ model.model }}"><input type="hidden" name="machine" value="{{ node.name }}"><button class="btn btn-link btn-sm p-0" name="do" value="{{ 'unlock-model' if model.locked else 'lock-model' }}" aria-label="{{ 'Unlock' if model.locked else 'Lock' }} {{ model.model }} on {{ node.name }}">{{ 'Unlock' if model.locked else 'Lock' }}</button></form>{% else %}{{ 'Locked' if model.locked else 'Unlocked' }}{% endif %}</td></tr>
+              {% else %}<tr><td colspan="4" class="text-secondary">No models are loaded.</td></tr>{% endfor %}
+            {% else %}<tr><td colspan="4" class="text-secondary">Loaded models unavailable.</td></tr>{% endif %}
+          </tbody>
+          {% else %}<tbody><tr><td colspan="4" class="text-secondary">No compute nodes have reported to front yet.</td></tr></tbody>{% endfor %}
+        </table>
+      </div>
+      {% if seen %}<div class="list-group-item small">{% if seen.lock %}Primary compute GPUs are held by <b>{{ seen.lock.user }}</b> from {{ seen.lock.caller }}, {{ seen.lock.seconds_left|round|int }} s left{{ ", turning others away" if seen.lock.refuse }}.{% else %}<span class="text-secondary">No GPUs are reserved exclusively on the primary compute node.</span>{% endif %}</div>{% endif %}
+      {% if seen %}{% set others = (seen.others_running or 0) + (seen.others_waiting or 0) + (seen.others_hosted or 0) %}{% if others %}<div class="list-group-item">{{ others }} request{{ "" if others == 1 else "s" }} of other people on primary compute, which you may not see.</div>{% endif %}{% endif %}
+    </div>
+  </div>
+</div>

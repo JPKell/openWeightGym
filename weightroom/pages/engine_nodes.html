@@ -1,0 +1,26 @@
+{% from "parts.html" import card, section_title %}
+<section class="mb-3" id="inference-engines">
+{{ section_title("Inference engines") }}
+{% if engine_error %}<p class="text-secondary">{{ engine_error }}</p>{% endif %}
+{% for engine in engine_choices %}
+<form method="post" action="/compute-nodes/engines">
+<input type="hidden" name="machine" value="{{ selected_machine }}"><input type="hidden" name="engine" value="{{ engine.id }}">
+{% set engine_actions %}<span class="badge bg-{{ 'green' if engine.available and engine.enabled else 'secondary' }}-lt">{{ 'Available' if engine.available and engine.enabled else 'Unavailable' }}</span>
+<label class="form-check form-switch mb-0"><input name="enabled" type="checkbox" class="form-check-input"{{ ' checked' if engine.configured.enabled }}><span class="form-check-label">Enabled</span></label>{% endset %}
+{% set engine_footer %}<button class="btn btn-primary" name="do" value="save">Save</button><button class="btn btn-link" name="do" value="reset" formnovalidate>Revert to file</button><span class="small text-secondary">Applies after the compute service restarts.</span>{% endset %}
+{% call card(engine.label, actions=engine_actions, footer=engine_footer, attrs={'aria-label': engine.label ~ ' engine settings'}) %}
+<div class="row g-3">
+{% if engine.pending %}<div class="col-12"><span class="badge bg-orange-lt">Changes pending restart</span></div>{% endif %}
+{% if engine.why %}<div class="col-12 form-hint">{{ engine.why }}</div>{% endif %}
+{% for title, types in [('Executables', ['string']), ('Limits', ['integer','boolean'])] %}
+{% set fields = engine.schema.node|selectattr('type', 'in', types)|rejectattr('name', 'equalto', 'enabled')|list %}
+{% if fields %}{% call form_section(title, 'This node') %}
+{% for field in fields %}{% set id = 'engine-' ~ engine.id ~ '-' ~ field.name %}
+<div class="col-md-6">{% if field.type == 'boolean' %}<label class="form-check form-switch"><input id="{{ id }}" name="{{ field.name }}" type="checkbox" class="form-check-input"{{ ' checked' if engine.configured[field.name] }}><span class="form-check-label">{{ field.label }}</span></label>
+{% else %}<label class="form-label" for="{{ id }}">{{ field.label }} on {{ selected_machine }}</label><div class="input-group input-group-flat"><input id="{{ id }}" name="{{ field.name }}" type="{{ 'number' if field.type == 'integer' else 'text' }}" class="form-control" value="{{ engine.configured[field.name] }}"{% if field.minimum is defined %} min="{{ field.minimum }}" max="{{ field.maximum }}"{% endif %} autocapitalize="none" spellcheck="false">{% if field.name.endswith('_mib') %}<span class="input-group-text">MiB</span>{% endif %}</div>{% endif %}</div>
+{% endfor %}{% endcall %}{% endif %}{% endfor %}
+</div>{% endcall %}
+</form>
+{% endfor %}
+<p class="form-hint">Saving runtime paths does not install an engine or stop loaded models.</p>
+</section>

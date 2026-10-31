@@ -1,0 +1,44 @@
+# What the voice service starts from, for everything that can be changed on the site's Settings page.
+#
+# This file is part of the suite. It is read at every start, with settings/voice.toml laid
+# over it. A value changed on the site is kept in LoadCoach's database and lies over the value
+# here, until the change is taken away: on the page, or with
+#   loadcoach settings reset voice NAME
+# What belongs to the machine, such as addresses, ports and paths, is not here. That is in
+# settings/voice.toml, and settings/examples/voice.toml explains it.
+
+max_active_sessions = 1 # raise only after the two-source measurement passes
+
+max_starting_sessions = 4
+
+max_session_minutes = 30
+
+idle_seconds = 120
+
+hold_seconds = 30
+
+hold_every = 10
+
+hold_after_last_call = 120
+
+model_parallel = 1
+
+speech_threshold = 600
+
+[profiles.default]
+model = "qwen-1.5b"
+modes = ["direct"]
+system_prompt = "You are speaking with someone by voice. Answer briefly, in one or two short sentences. Do not use markdown."
+max_output_tokens = 128
+max_context_tokens = 8192
+speaker = 3 # v1.0 speaker 3: af_heart; never reuse an ID across bundles without checking
+
+
+# Short prerecorded phrases; changes regenerate the complete set and refresh front.
+[greetings]
+connecting = "Hello. I'm connecting you now."
+preparing = "Hello. I'm getting the voice system ready. I'll let you know when you can begin."
+waiting = "I'm still getting things ready. Thanks for waiting."
+ready = "I'm ready. What can I help you with?"
+busy = "The voice system is busy right now. Please try again shortly."
+unavailable = "I couldn't start the voice system. Please try again later."

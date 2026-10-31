@@ -1,0 +1,61 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, section_title %}
+{% block title %}Fingerprints · openWeightGym{% endblock %}
+{% block main %}
+<nav class="mb-2"><a href="/models">Models</a></nav>
+{{ page_header("Fingerprints", lead="A fingerprint says exactly which model gave an answer: its file, by what the file holds, and every one of its settings. Change either and the fingerprint is another.\n  Each one is written down here the first time it is seen, with what the model was then, and is never removed. So a fingerprint in the log, or kept with a benchmark's result, can be read back after the model and its file are gone.") }}
+
+{# What is found changes as the box is typed in, a third of a second after the last key, and the box itself is left alone.
+   The address follows, so that what is shown can be kept as a link. #}
+<form method="get" action="/fingerprints" class="row g-2 mb-4" hx-get="/fingerprints" hx-trigger="submit, input delay:300ms" hx-target="#found" hx-select="#found" hx-swap="outerHTML show:none" hx-replace-url="true">
+  <div class="col"><input name="start" class="form-control" value="{{ start }}" aria-label="how the fingerprint begins" placeholder="how the fingerprint begins" autocapitalize="none" spellcheck="false"></div>
+  <div class="col-auto"><button class="btn btn-primary">Find</button></div>
+</form>
+
+<div id="found">
+{% if found|length == 1 %}
+{# One fingerprint: everything that was written down of it. #}
+{% set one = found[0] %}
+<dl class="row facts mb-4">
+  <dt class="col-4 col-md-2">Fingerprint</dt><dd class="col-8 col-md-10 wrap"><code>{{ one.fingerprint }}</code></dd>
+  <dt class="col-4 col-md-2">First seen</dt><dd class="col-8 col-md-4">{{ one.first|timestamp }}</dd>
+  <dt class="col-4 col-md-2">Model, then</dt><dd class="col-8 col-md-4">{{ one.model or "not named" }}</dd>
+  {% if "see-log" in person.can %}<dt class="col-4 col-md-2">Answers</dt><dd class="col-8 col-md-10"><a href="/log?model={{ one.model|urlencode }}">What is on record for {{ one.model }}</a>. Each entry says which fingerprint answered.</dd>{% endif %}
+</dl>
+{% for flag, file in one.files.items() %}
+{{ section_title("Its file" if flag == "model" else "Its projector") }}
+<dl class="row facts mb-4">
+  {# A row is twelve wide. The two long values take a row each; the short ones go two to a row after them, so that every name stays left of its value. #}
+  <dt class="col-4 col-md-2">Was at</dt><dd class="col-8 col-md-10 wrap">{{ file.path }}</dd>
+  <dt class="col-4 col-md-2">SHA-256</dt><dd class="col-8 col-md-10 wrap"><code>{{ file.sha256 }}</code></dd>
+  <dt class="col-4 col-md-2">Size</dt><dd class="col-8 col-md-4">{{ file.size|size }}</dd>
+  {% for name, value in (file.says or {}).items() if value is not none %}<dt class="col-4 col-md-2">{{ name|replace("_", " ") }}</dt><dd class="col-8 col-md-4">{{ value|shown }}</dd>{% endfor %}
+</dl>
+{% endfor %}
+{{ section_title("Its settings, as they were used") }}
+<dl class="row facts">
+  {% for name, value in one.settings.items() if name != "flags" %}<dt class="col-4 col-md-2">{{ name }}</dt><dd class="col-8 col-md-10">{{ value|shown }}</dd>{% endfor %}
+  {% for flag, value in one.settings.flags.items() if flag not in one.files %}<dt class="col-4 col-md-2">{{ flag }}</dt><dd class="col-8 col-md-10 wrap">{{ value|shown }}</dd>{% endfor %}
+</dl>
+{% else %}
+<div class="table-responsive">
+<table id="fingerprints-table" class="table table-hover align-middle sortable">
+  <thead><tr><th data-sort="text">Fingerprint</th><th data-sort="value">First seen</th><th data-sort="text">Model, then</th><th data-sort="text">File</th><th data-sort="value">Context</th></tr></thead>
+  <tbody>
+  {% for one in found %}
+  <tr>
+    <td><a href="/fingerprints?start={{ one.fingerprint }}"><code>{{ one.fingerprint[:12] }}</code></a></td>
+    <td class="when" data-value="{{ one.first }}">{{ one.first|timestamp }}</td>
+    <td>{{ one.model }}</td>
+    <td class="wrap">{{ one.files.model.path.rsplit("/", 1)[-1] }} <small class="text-secondary">{{ one.files.model.size|size }}</small></td>
+    <td data-value="{{ one.settings.flags["ctx-size"] }}">{{ one.settings.flags["ctx-size"] }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="text-secondary">{{ "No fingerprint begins so." if start else "No fingerprint yet. One is made once a model's file has been read through." }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+</div>
+{% endblock %}

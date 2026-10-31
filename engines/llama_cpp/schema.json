@@ -1,0 +1,15 @@
+{
+  "id": "llama_cpp",
+  "label": "llama.cpp",
+  "schema_version": 1,
+  "node": [
+    {"name": "enabled", "type": "boolean", "label": "Enabled", "default": true},
+    {"name": "executable", "type": "string", "label": "Executable", "default": "llama-server"}
+  ],
+  "model_template": "engines/llama_cpp/model_fields.html",
+  "options_template": "engines/llama_cpp/model_options.html",
+  "create_template": "engines/llama_cpp/create_fields.html",
+  "flags_endpoint": "/loadcoach/flags?engine=llama_cpp",
+  "artifact_format": "gguf",
+  "capability_version": 1
+}

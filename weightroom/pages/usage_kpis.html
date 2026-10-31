@@ -1,0 +1,16 @@
+{% from "parts.html" import card %}
+{% from "benchmark_parts.html" import number %}
+{% from "usage_parts.html" import money %}
+<div class="row g-2 mb-3">
+  {% for key, label in [('input_tokens', 'Input tokens'), ('output_tokens', 'Output tokens'), ('total_tokens', 'Total tokens'), ('requests', 'Requests')] %}
+  <div class="col-6 col-lg-3">{% call card("", class_="h-100") %}<div class="small text-secondary">{{ label }}</div><strong class="fs-3" title="{{ '{:,}'.format(report.totals[key]) }}" data-usage-total="{{ key }}">{{ report.totals[key]|count }}</strong>{% endcall %}</div>
+  {% endfor %}
+</div>
+{% if not home_summary|default(false) %}
+<div class="row g-2 mb-3">
+  {% for key, label in [('effective_cost', 'Total cost / estimate'), ('recorded_cost', 'Recorded cost'), ('model_cost', 'Model-rate estimate'), ('fallback_cost', 'Mock fallback')] %}
+  <div class="col-6 col-xl-3">{% call card("", class_="h-100") %}<div class="small text-secondary">{{ label }} · USD</div><strong class="fs-4" data-usage-total="{{ key }}">{{ money(report.totals[key]) }}</strong>{% endcall %}</div>
+  {% endfor %}
+</div>
+
+{% endif %}

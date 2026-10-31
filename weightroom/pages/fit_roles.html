@@ -1,0 +1,22 @@
+{% from "parts.html" import section_title %}
+{# What each role would pick with the ticked models loaded and no others: the inside of the piece at the foot of the dry fit page, which asks for it again at every tick. #}
+{% if roles %}
+{{ section_title("Roles") }}
+<p class="text-secondary">What each role would pick with the ticked models loaded and no others. A pick that is not ticked would be loaded then, with idle models pushed off its cards if it needs their room. Tick it to see whether it fits.</p>
+<div class="table-responsive">
+<table class="table table-sm align-middle">
+  <thead><tr><th>Asked for as</th><th>Picks</th><th>In this fit</th><th>Because</th></tr></thead>
+  <tbody>
+  {% for role in roles %}
+  <tr class="table-active"><td colspan="4"><a href="/roles"><b>{{ role.name }}</b></a> <small class="text-secondary">in order:
+    {% for name in role.order %}{{ name }}{{ " ✓" if name in on }}{{ ", " if not loop.last }}{% else %}no model with a weight above 0{% endfor %}</small></td></tr>
+  {% for asked, picked in role.picks.items() %}
+  <tr><td><code>{{ asked }}</code></td>
+    {% if picked %}<td><a href="{{ address(picked[0]) }}">{{ picked[0] }}</a></td><td>{% if picked[0] in on %}loaded{% else %}<span class="text-warning-emphasis">has to be loaded</span>{% endif %}</td><td>{{ picked[1] }}</td>
+    {% else %}<td colspan="3" class="text-danger">nothing: none of its models can answer you</td>{% endif %}</tr>
+  {% endfor %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}

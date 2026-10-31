@@ -1,0 +1,64 @@
+{% from "parts.html" import card, section_title , confirm_two %}
+{# The list of models. It asks for itself again every 5 seconds, so what is loaded and in use stays true. #}
+{% set node_query = '&node=' ~ (request.query_params.get('node')|urlencode) if request.query_params.get('node') else '' %}
+{% set node_query = node_query ~ ('&kind=' ~ kind if kind|default('llm') != 'llm' else '') ~ ('&install=' ~ (request.query_params.get('install')|urlencode) if request.query_params.get('install') else '') %}
+<div id="models" class="table-responsive" hx-get="/models?part=list{{ node_query }}" hx-trigger="every 5s" hx-swap="outerHTML">
+{% if installation %}<div class="alert alert-{{ 'danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info' }}" role="status"><strong>{{ installation.name }}</strong> on {{ installation.machine }}: {{ installation.state }}{% if installation.why %} · {{ installation.why }}{% endif %}{% if installation.of %} · {{ installation.done|size }} / {{ installation.of|size }}{% endif %}{% if installation.state == 'complete' %} · <a href="/models/{{ installation.name|urlencode }}?node={{ installation.machine|urlencode }}">Open model</a>{% endif %}</div>{% endif %}
+{# Measuring every model that has no measure: the button, or how far a run has got, or how the last one ended. #}
+{% set run = known.measuring %}
+{% if run and not run.ended %}
+<form method="post" action="/measure-models{{ node_query|replace('&', '?', 1) }}" class="alert alert-primary d-flex flex-wrap align-items-center gap-2">
+  <span class="flex-grow-1"><b>Measuring the models</b>, asked by {{ run.by }}: {{ run.now or "between two" }} now, {{ run.done|length }} done, {{ run.left|length }} left{% if run.failed %}, {{ run.failed|length }} would not load{% endif %}.
+    It gives way as soon as anyone asks for a model.</span>
+  <button  class="btn btn-outline-danger btn-sm" name="do" value="stop" {{ confirm_two() }}>Stop</button>
+</form>
+{% else %}
+{% if run %}
+<div class="alert alert-secondary">
+  The last measuring, asked by {{ run.by }} at {{ run.since|timestamp }}: {{ run.done|length }} measured, {{ run.left|length }} left. {{ run.ended }}
+  {% for name, why in run.failed.items() %}<br><b>{{ name }}</b> would not load: {{ why }}{% endfor %}
+</div>
+
+{% endif %}
+{% if known.to_measure and kind|default('llm') == 'llm' %}
+<form method="post" action="/measure-models{{ node_query|replace('&', '?', 1) }}" class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <button class="btn btn-outline-primary btn-sm" name="do" value="start">Measure the {{ known.to_measure|length }} model{{ "" if known.to_measure|length == 1 else "s" }} needing measurements</button>
+  <small class="text-secondary">Measures each model in turn, unloading idle models as needed. A live request pauses measurement. Select Measure again to resume.</small>
+</form>
+{% endif %}
+{% endif %}
+<table id="models-table" class="table table-hover align-middle sortable">
+  <thead><tr><th data-sort="value" title="The sort order set on the model's page. The lowest comes first in every list of models">Order</th><th data-sort="text">Model</th><th data-sort="value">Locations</th>{% if kind|default('llm') == 'llm' %}<th data-sort="value">Min context</th><th data-sort="value">Max context</th>{% else %}<th data-sort="text">Family</th>{% if kind == 'audio' %}<th data-sort="text">Kind</th>{% endif %}{% endif %}{% if kind|default('llm') == 'llm' %}<th data-sort="value">Memory at min</th><th data-sort="value">Memory at max</th>{% else %}<th data-sort="value">Measured memory</th>{% endif %}<th data-sort="text">Fingerprint</th><th data-sort="text">Now</th><th data-sort="value">Last used</th></tr></thead>
+  <tbody>
+  {% for model in known.models %}
+  <tr>
+    <td data-value="{{ model.order }}">{{ model.order }}</td>
+    <td><a href="{{ address(model.name) }}">{{ model.name }}</a>{% if model.alone %} <small class="text-secondary">alone</small>{% endif %}{% if model.adapters %} <small class="text-secondary">with {{ model.adapters|join(", ") }}</small>{% endif %}{% if model.flags.mmproj %} <small class="text-secondary">vision</small>{% endif %}</td>
+    <td data-value="{{ model.locations|default([])|length or 1 }}">{% if model.locations|default([])|length > 1 %}<details><summary>{{ model.locations|length }} nodes</summary><ul class="list-unstyled small mb-0">{% for location in model.locations %}<li><strong>{{ location.machine }}</strong>{% if location.name != model.name %} · {{ location.name }}{% endif %}</li>{% endfor %}</ul></details>{% elif model.locations|default([]) %}{{ model.locations[0].machine }}{% else %}{{ request.query_params.get('node', 'compute') }}{% endif %}</td>
+    {% set minimum = model.min_context|default(model.flags["ctx-size"]) or 'N/A' %}
+    {% if kind|default('llm') == 'llm' %}
+    <td data-value="{{ minimum }}">{{ "{:,}".format(minimum) if minimum is number else minimum }}</td>
+    <td data-value="{{ model.flags['ctx-size'] }}">{{ "{:,}".format(model.flags['ctx-size']) if model.flags['ctx-size'] else 'N/A' }}</td>
+    {% else %}<td>{{ model.get(model.engine, {}).get('family', 'Unknown') }}</td>{% if kind == 'audio' %}<td>{{ model.get('audiocpp', {}).get('kind', '')|capitalize }}</td>{% endif %}{% endif %}
+    {% if kind|default('llm') == 'llm' %}
+    {% for context in [minimum, model.flags["ctx-size"]] %}
+    {% set point = model.measurements|default([])|selectattr("context", "equalto", context)|first %}
+    <td data-value="{{ point.mib|sum if point and point.mib else 0 }}">{% if point and point.mib %}{{ point.mib|map("mib")|join(" + ") }}{% elif point and point.error %}<span class="text-danger">load failed</span>{% else %}<span class="text-secondary">Not measured</span>{% endif %}</td>
+    {% endfor %}
+    {% else %}{% set point = model.measured or model.measurements|default([])|selectattr('context', 'equalto', 0)|first %}<td data-value="{{ point.mib|sum if point and point.mib else 0 }}">{% if point and point.mib %}{{ point.mib|map('mib')|join(' + ') }}{% else %}<span class="text-secondary">Not measured</span>{% endif %}</td>{% endif %}
+    {# The start of it, which is enough to tell two apart. It leads to all of it, and what was written down then. #}
+    <td>{% if model.fingerprint %}<a href="/fingerprints?start={{ model.fingerprint }}"><code>{{ model.fingerprint[:12] }}</code></a>{% else %}<span class="text-secondary">{{ "no file" if model.size is none else "Reading file metadata" }}</span>{% endif %}</td>
+    <td>{% include "model_now.html" %}</td>
+    <td data-value="{{ model.last_used or "" }}">{{ model.last_used|timestamp if model.last_used else "never" }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="{{ 10 if kind|default('llm') == 'llm' else 9 if kind == 'audio' else 8 }}"><div class="empty py-4"><p class="empty-title mb-1">No models yet.</p><p class="empty-subtitle mb-0">Add a model to see its availability here.</p></div></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if adaptor_models %}
+{% call card("", class_="mt-3") %}{{ section_title("Adaptor models") }}<div class="table-responsive"><table class="sortable table mb-0"><thead><tr><th>Model</th><th>Type</th><th>Plugin</th><th>Instance / profile</th><th>State</th></tr></thead><tbody>
+{% for model in adaptor_models %}<tr><td><code>{{ model.id }}</code></td><td><span class="badge text-bg-secondary">Adaptor</span></td><td>{{ model.adaptor.plugin }}</td><td>{% if "front-manage-plugins" in person.can %}<a href="/plugins/{{ model.adaptor.plugin }}/instances/{{ model.adaptor.instance }}">{{ model.adaptor.instance }}</a>{% else %}{{ model.adaptor.instance }}{% endif %} / {{ model.adaptor.profile }}</td><td>{{ "Available" if model.available else "Settings pending or service unavailable" }}</td></tr>{% endfor %}
+</tbody></table></div>{% endcall %}
+{% endif %}
+</div>

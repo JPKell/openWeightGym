@@ -1,0 +1,7 @@
+<select id="file" name="artifact" class="form-select" required data-model-file data-node="{{ selected_node }}">
+  <option value="">Choose a model file</option>
+  {% set selection = namespace(chosen=false) %}
+  {% for file in file_choices %}{% set chosen = file.path == form.file and not selection.chosen %}<option value="{{ {'path':file.path,'machine':file.machine}|tojson|forceescape }}"{{ ' selected' if chosen }} data-trained="{{ file.facts.trained_context|default(file.facts.context|default('')) }}">{{ file.path }} · {{ file.machine }} · {{ file.tier }} · {{ file.size|size }}</option>{% if chosen %}{% set selection.chosen = true %}{% endif %}{% endfor %}
+  {% if form.file and not selection.chosen %}<option value="{{ {'path':form.file,'machine':form.source_machine|default(selected_node)}|tojson|forceescape }}" selected disabled>{{ form.file }} · unavailable on this node</option>{% endif %}
+</select>
+{% if not file_choices %}<div class="form-text">No available model files were found. Download a model under <a href="/hub">Hugging Face</a> or check <a href="/files">Files</a>.</div>{% endif %}

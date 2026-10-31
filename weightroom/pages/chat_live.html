@@ -1,0 +1,13 @@
+{% from "parts.html" import section_title %}
+{% if answer.answers is defined %}
+<div class="chat-comparison">
+  {% for one in answer.answers %}
+  <div class="turn comparison-answer frame">
+    {% set _section_title1 %}{{ one.model }}{% if one.done %} <span class="text-secondary small">Finished</span>{% endif %}{% endset %}
+{{ section_title(_section_title1) }}
+    {% with answer=one, live=not one.done %}{% include "chat_answer.html" %}{% endwith %}
+    {% if one.error %}<div class="alert alert-danger said">{{ one.error }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}{% include "chat_answer.html" %}{% endif %}

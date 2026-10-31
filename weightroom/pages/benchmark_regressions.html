@@ -1,0 +1,19 @@
+{% from "parts.html" import card %}
+{% if detail.plan %}
+{% call card("Case regressions", open=true, id="benchmark-regressions") %}
+  <form method="get" action="/benchmarks/run/{{ detail.id }}" class="row g-2 align-items-end mb-3">
+    <div class="col-md-9"><label for="case-baseline" class="form-label">Baseline run</label><select id="case-baseline" name="baseline" class="form-select" required><option value="">Choose a completed run</option>
+    {% for run in runs if run.id != detail.id and run.benchmark == detail.benchmark and run.state == 'completed' %}<option value="{{ run.id }}" {{ 'selected' if regression and regression.baseline == run.id }}>{{ run.model }} · {{ run.created|clock }} · version {{ run.version }} · {{ run.id }}</option>{% endfor %}
+    </select></div><div class="col-md-3"><button class="btn btn-outline-primary" type="submit">Compare cases</button></div>
+  </form>
+  <p class="small text-secondary">Compare matching frozen cases under the same dataset, protocol and grader. Missing, unsupported and unavailable cases are reported separately. A changed model fingerprint is allowed so you can compare model or settings changes.</p>
+  {% if regression_error %}<p role="alert" class="text-danger">{{ regression_error }}</p>{% endif %}
+  {% if regression %}
+    {% for warning in regression.warnings %}<p class="text-warning-emphasis">{{ warning }}</p>{% endfor %}
+    <p>{% for status, count in regression.counts.items() %}<span class="badge {{ 'text-bg-danger' if status == 'new failure' else 'text-bg-success' if status == 'improved' else 'text-bg-secondary' }} me-2">{{ status }}: {{ count }}</span>{% endfor %}</p>
+    <div class="table-responsive"><table class="table table-sm align-top" aria-label="Case regression comparison"><thead><tr><th>Case</th><th>Baseline</th><th>This run</th><th>Change</th><th>Newly failing checks / reason</th></tr></thead><tbody>
+    {% for row in regression.rows %}<tr><th class="wrap">{{ row.case }}</th><td>{{ row.baseline }}</td><td>{{ row.current }}</td><td>{{ row.status }}</td><td class="wrap">{{ row.newly_failing_checks|join(', ') }}{{ row.reason }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  {% endif %}
+{% endcall %}
+{% endif %}

@@ -1,0 +1,446 @@
+#!/usr/bin/env python3
+"""Compatibility checks and database configuration for install-suite.sh.
+
+This helper deliberately never accepts a DSN value.  PostgreSQL credentials stay in
+owner-only files and only their paths are written to normal openWeightGym settings.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sqlite3
+import sys
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+# Running a script by path puts scripts/, rather than the repository root, on sys.path.
+REPOSITORY = Path(__file__).resolve().parent.parent
+if str(REPOSITORY) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY))
+
+
+SERVICE_CONFIG = {
+    "loadcoach": "loadcoach.toml",
+    "toollocker": "toollocker.toml",
+    "spotter": "spotter.toml",
+    "voice": "voice.toml",
+    "weightroom": "weightroom.toml",
+    "turnstile": "weightroom.toml",
+    "voice-gateway": "voice-gateway.toml",
+}
+
+SCHEMAS = {
+    "loadcoach.retirement": "COMPUTE_RETIREMENT",
+    "loadcoach.settings": "SETTINGS",
+    "loadcoach.groups": "GROUPS",
+    "loadcoach.outside": "OUTSIDE_SERVICES",
+    "loadcoach.users": "USERS",
+    "loadcoach.log": "LOG",
+    "loadcoach.models": "MODELS",
+    "loadcoach.roles": "ROLES",
+    "loadcoach.reliability": "RELIABILITY",
+    "loadcoach.role_evidence": "ROLE_EVIDENCE",
+    "loadcoach.batches": "BATCHES",
+    "loadcoach.tasks": "TASKS",
+    "turnstile.tasks": "FRONT_TASKS",
+    "mirrorwall.front": "MIRRORWALL",
+    "soundroom.front": "SOUNDROOM",
+    "weightroom.chat": "CHAT",
+    "weightroom.benchmarks": "BENCHMARKS",
+    "weightroom.plugins": "PLUGINS",
+    "weightroom.alerts": "ALERTS",
+    "weightroom.schedules": "SCHEDULES",
+    "loadcoach.schedules": "SCHEDULE_GRANTS",
+    "plugins.runtime": "PLUGIN_RUNTIME",
+    "spotter.history": "SPOTTER",
+    "toollocker.tools": "TOOL_SCHEMAS",
+}
+
+
+@dataclass
+class Finding:
+    """One installation compatibility finding and its operator-facing explanation."""
+    level: str
+    subject: str
+    detail: str
+
+
+def known_migrations() -> dict[str, dict[int, str]]:
+    """List schema migrations understood by the installed source tree."""
+    from db import schemas
+
+    result: dict[str, dict[int, str]] = {}
+    for stream, constant in SCHEMAS.items():
+        if stream=='mirrorwall.front':
+            from mirrorwall import schema as owner
+        elif stream == 'soundroom.front':
+            from soundroom import schema as owner
+        else:
+            owner=schemas
+        result[stream] = {
+            migration.version: migration.name for migration in getattr(owner, constant)
+        }
+    return result
+
+
+def migration_findings(connection, subject: str) -> list[Finding]:
+    """Compare retained schema versions with the supported migration streams."""
+    try:
+        rows = connection.execute(
+            "SELECT stream, version, name FROM suite_schema_migrations ORDER BY stream, version"
+        ).fetchall()
+    except Exception as problem:
+        if "no such table" in str(problem).lower() or "does not exist" in str(problem).lower():
+            return []
+        return [Finding("ERROR", subject, f"cannot inspect schema migrations: {problem}")]
+    known = known_migrations()
+    findings: list[Finding] = []
+    for stream, version, name in rows:
+        versions = known.get(str(stream))
+        if versions is None:
+            findings.append(Finding("WARN", subject, f"unknown migration stream {stream!r}"))
+        elif int(version) not in versions:
+            findings.append(Finding(
+                "ERROR", subject,
+                f"schema {stream} is at version {version}, newer than this version of openWeightGym supports",
+            ))
+        elif versions[int(version)] != name:
+            findings.append(Finding(
+                "ERROR", subject,
+                f"schema {stream} migration {version} is {name!r}; expected {versions[int(version)]!r}",
+            ))
+    return findings
+
+
+def sqlite_findings(path: Path) -> list[Finding]:
+    """Inspect configured SQLite stores for compatibility and recovery issues."""
+    subject = str(path)
+    if not path.exists():
+        return [Finding("OK", subject, "new SQLite database")]
+    if not path.is_file() or path.is_symlink():
+        return [Finding("ERROR", subject, "SQLite target must be a regular file, not a symlink")]
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            row = connection.execute("PRAGMA quick_check").fetchone()
+            findings = [] if row and row[0] == "ok" else [Finding("ERROR", subject, f"quick_check returned {row!r}")]
+            findings.extend(migration_findings(connection, subject))
+            if not findings:
+                findings.append(Finding("OK", subject, f"SQLite database is readable ({path.stat().st_size} bytes)"))
+            return findings
+        finally:
+            connection.close()
+    except Exception as problem:
+        return [Finding("ERROR", subject, f"cannot open SQLite database: {problem}")]
+
+
+def path_from(base: Path, value: str) -> Path:
+    """Resolve a configured path relative to the installation directory."""
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else (base / path).resolve()
+
+
+def configured_targets(config: Path, service: str) -> list[tuple[str, str, Path]]:
+    """Return (name, engine, local path or DSN file) without reading DSN contents."""
+    told = tomllib.loads(config.read_text())
+    section = told.get("databases")
+    if section is not None:
+        if not isinstance(section, dict) or set(section) - {"stores", "bindings"}:
+            raise ValueError("[databases] may contain stores and bindings only")
+        stores, bindings = section.get("stores", {}), section.get("bindings", {})
+        if not isinstance(stores, dict) or not isinstance(bindings, dict):
+            raise ValueError("database stores and bindings must be tables")
+        targets = []
+        for name, values in stores.items():
+            if not isinstance(values, dict):
+                raise ValueError(f"database store {name!r} must be a table")
+            engine = str(values.get("engine", "")).lower()
+            field = "path" if engine == "sqlite" else "dsn_file"
+            if engine not in {"sqlite", "postgresql"} or not values.get(field):
+                raise ValueError(f"database store {name!r} has an invalid engine or target")
+            targets.append((str(name), engine, path_from(config.parent, str(values[field]))))
+        if service == 'weightroom':
+            # Omitted bindings still own default stores, including roles and alerts on an
+            # existing installation with only the older three repositories bound.
+            from db import DatabaseRegistry
+            data = path_from(config.parent, str(told.get('data', '../data')))
+            registry = DatabaseRegistry.from_config(section, config.parent,
+                {'weightroom.' + name: data / (name + '.db') for name in ('accounts', 'roles', 'chat', 'benchmarks', 'plugins', 'alerts', 'schedules')})
+            targets = [(bound.name, bound.database.engine,
+                        Path(bound.database.store.dsn_file) if bound.database.engine == 'postgresql' else bound.database.path)
+                       for bound in registry.bound_stores() if bound.bindings or bound.name in stores]
+        return targets
+
+    data = path_from(config.parent, str(told.get("data", "../data")))
+    if service == "loadcoach":
+        legacy = told.get("database")
+        return [("core", "sqlite", path_from(config.parent, legacy) if legacy else data / "loadcoach.db")]
+    if service in {"spotter", "toollocker"}:
+        if service == "toollocker" and told.get("front"):
+            from toollocker.door import shared_store
+            store = shared_store(config, told)[1]
+            return [("identity", store.engine, Path(store.store.dsn_file) if store.engine == "postgresql" else store.path)]
+        loadcoach = path_from(config.parent, str(told.get("loadcoach", "loadcoach.toml")))
+        main = tomllib.loads(loadcoach.read_text()) if loadcoach.exists() else {}
+        main_data = path_from(loadcoach.parent, str(main.get("data", "../data")))
+        identity = path_from(loadcoach.parent, str(main["database"])) if main.get("database") else main_data / "loadcoach.db"
+        targets = [("identity", "sqlite", identity)]
+        if service == "spotter":
+            targets.append(("telemetry", "sqlite", data / "spotter.db"))
+        return targets
+    if service in {"weightroom", "turnstile"}:
+        names = ('accounts', 'roles', 'chat', 'benchmarks', 'plugins', 'alerts', 'schedules') if service == 'weightroom' else ('accounts', 'roles', 'chat', 'benchmarks', 'plugins')
+        return [(name, "sqlite", data / f"{name}.db") for name in names]
+    return []
+
+
+def postgresql_findings(name: str, dsn_file: Path, require_tools: bool = False) -> list[Finding]:
+    """Inspect configured PostgreSQL stores for compatibility and tool availability."""
+    subject = f"{name} ({dsn_file})"
+    if not dsn_file.exists():
+        return [Finding("ERROR", subject, "PostgreSQL DSN file does not exist")]
+    try:
+        mode = dsn_file.stat().st_mode
+        if mode & 0o077:
+            return [Finding("ERROR", subject, "PostgreSQL DSN file must have mode 600")]
+        from db import Database
+        database = Database.postgresql(dsn_file, name=name)
+        with database.connection(connect_timeout=5) as connection:
+            server = connection.execute("SHOW server_version").fetchone()[0]
+            server_number = int(connection.execute("SHOW server_version_num").fetchone()[0])
+            findings = migration_findings(connection, subject)
+        from db.postgresql_tools import tool_version
+        for tool in ("pg_dump", "pg_restore"):
+            try:
+                version_text = tool_version(tool)
+                findings.append(Finding("OK", subject, version_text))
+                digits = next((part for part in version_text.split() if part[0:1].isdigit()), "0")
+                client_major = int(digits.split(".", 1)[0])
+                if client_major < server_number // 10000:
+                    findings.append(Finding(
+                        "ERROR" if require_tools else "WARN", subject,
+                        f"{tool} major {client_major} is older than PostgreSQL server major {server_number // 10000}",
+                    ))
+            except Exception as problem:
+                findings.append(Finding("ERROR" if require_tools else "WARN", subject, str(problem)))
+        if not findings:
+            findings.append(Finding("OK", subject, f"PostgreSQL {server} is reachable"))
+        else:
+            findings.insert(0, Finding("OK", subject, f"PostgreSQL {server} is reachable"))
+        return findings
+    except Exception as problem:
+        try:
+            from db.postgresql_tools import redacted_error
+            problem = redacted_error(Database.postgresql(dsn_file, name=name), problem)
+        except Exception:
+            problem = type(problem).__name__
+        return [Finding("ERROR", subject, f"cannot use PostgreSQL: {problem}")]
+
+
+def audit(root: Path, services: list[str], require_pg_tools: bool = False) -> int:
+    """Collect installation compatibility findings without changing live bindings."""
+    findings: list[Finding] = []
+    if sys.version_info < (3, 13):
+        findings.append(Finding("ERROR", "Python", f"{sys.version.split()[0]} is installed; openWeightGym requires 3.13 or newer"))
+    else:
+        findings.append(Finding("OK", "Python", sys.version.split()[0]))
+    seen_configs: set[Path] = set()
+    seen_targets: set[tuple[str, Path]] = set()
+    for service in services:
+        filename = SERVICE_CONFIG[service]
+        config = root / "settings" / filename
+        if config in seen_configs:
+            continue
+        seen_configs.add(config)
+        if not config.exists():
+            findings.append(Finding("WARN", filename, "configuration is absent; the installer will copy its example"))
+            continue
+        try:
+            tomllib.loads(config.read_text())
+            findings.append(Finding("OK", filename, "valid TOML"))
+            target_service = "weightroom" if service == "turnstile" else service
+            for name, engine, target in configured_targets(config, target_service):
+                identity = (engine, target)
+                if identity in seen_targets:
+                    continue
+                seen_targets.add(identity)
+                findings.extend(
+                    sqlite_findings(target)
+                    if engine == "sqlite"
+                    else postgresql_findings(name, target, require_pg_tools)
+                )
+        except (OSError, tomllib.TOMLDecodeError, ValueError) as problem:
+            findings.append(Finding("ERROR", filename, str(problem)))
+    for finding in findings:
+        print(f"{finding.level:<5} {finding.subject}: {finding.detail}")
+    errors = sum(item.level == "ERROR" for item in findings)
+    warnings = sum(item.level == "WARN" for item in findings)
+    print(f"Compatibility: {errors} error(s), {warnings} warning(s)")
+    return 2 if errors else 0
+
+
+def database_state(root: Path, services: list[str]) -> tuple[str, bool]:
+    """Return the configured engine summary and whether any selected store has schema/data."""
+    engines: set[str] = set()
+    populated = False
+    seen_configs: set[Path] = set()
+    seen_targets: set[tuple[str, Path]] = set()
+    for service in services:
+        config = root / "settings" / SERVICE_CONFIG[service]
+        if config in seen_configs or not config.exists():
+            continue
+        seen_configs.add(config)
+        target_service = "weightroom" if service == "turnstile" else service
+        for name, engine, target in configured_targets(config, target_service):
+            identity = (engine, target)
+            if identity in seen_targets:
+                continue
+            seen_targets.add(identity)
+            engines.add(engine)
+            if engine == "sqlite" and target.is_file():
+                connection = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+                try:
+                    populated = populated or connection.execute(
+                        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' "
+                        "AND name NOT LIKE 'sqlite_%')"
+                    ).fetchone()[0] == 1
+                finally:
+                    connection.close()
+            elif engine == "postgresql":
+                from db import Database
+                database = Database.postgresql(target, name=name)
+                with database.connection(connect_timeout=5) as connection:
+                    populated = populated or bool(database.tables(connection))
+    engine = next(iter(engines)) if len(engines) == 1 else ("mixed" if engines else "sqlite")
+    return engine, populated
+
+
+def database_block(service: str, engine: str, config: Path, dsns: dict[str, Path]) -> str:
+    """Render the selected database stores and service bindings as TOML."""
+    if service == "loadcoach":
+        stores = {"core": ("loadcoach.core", "../data/loadcoach.db")}
+    elif service == "spotter":
+        stores = {
+            "identity": ("spotter.identity", "../data/loadcoach.db"),
+            "telemetry": ("spotter.history", "../data/spotter.db"),
+        }
+    elif service == "toollocker":
+        front = config.exists() and tomllib.loads(config.read_text()).get("front")
+        if front:
+            # Front's store binding is authoritative; never create a second accounts store.
+            raise ValueError("Front ToolLocker inherits WeightRoom's database; configure weightroom's store instead")
+        stores = {"identity": ("toollocker.identity", "../data/loadcoach.db")}
+    elif service == "weightroom":
+        stores = {
+            "accounts": ("weightroom.accounts", "../data/accounts.db"),
+            "roles": ("weightroom.roles", "../data/roles.db"),
+            "chat": ("weightroom.chat", "../data/chat.db"),
+            "benchmarks": ("weightroom.benchmarks", "../data/benchmarks.db"),
+            "plugins": ("weightroom.plugins", "../data/plugins.db"),
+            "alerts": ("weightroom.alerts", "../data/alerts.db"),
+            "schedules": ("weightroom.schedules", "../data/schedules.db"),
+        }
+    else:
+        return ""
+    lines = ["# BEGIN SUITE INSTALLER DATABASES"]
+    for name, (_binding, path) in stores.items():
+        lines += [f"[databases.stores.{name}]", f'engine = "{engine}"']
+        if engine == "sqlite":
+            lines.append(f'path = "{path}"')
+        else:
+            key = "core" if name == "identity" else name
+            target = dsns.get(key)
+            if target is None:
+                raise ValueError(f"no PostgreSQL DSN file was provided for {key}")
+            relative = os.path.relpath(target, config.parent)
+            lines.append(f'dsn_file = "{relative}"')
+        lines.append("")
+    lines.append("[databases.bindings]")
+    for name, (binding, _path) in stores.items():
+        lines.append(f'"{binding}" = "{name}"')
+    lines.append("# END SUITE INSTALLER DATABASES")
+    return "\n".join(lines) + "\n"
+
+
+def replace_databases(text: str, block: str) -> str:
+    """Replace all [databases...] tables while preserving unrelated TOML and comments."""
+    lines = text.splitlines(keepends=True)
+    output: list[str] = []
+    skipping = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "# BEGIN SUITE INSTALLER DATABASES":
+            skipping = True
+            continue
+        if skipping and stripped == "# END SUITE INSTALLER DATABASES":
+            skipping = False
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            table = stripped.lstrip("[").rstrip("]").strip()
+            if table == "databases" or table.startswith("databases."):
+                skipping = True
+                continue
+            if skipping:
+                skipping = False
+        if not skipping:
+            output.append(line)
+    result = "".join(output).rstrip() + "\n\n" + block
+    tomllib.loads(result)
+    return result
+
+
+def configure(config: Path, service: str, engine: str, dsn_values: list[str]) -> int:
+    """Validate installer choices and produce the reviewed installation configuration."""
+    dsns: dict[str, Path] = {}
+    for value in dsn_values:
+        if "=" not in value:
+            raise SystemExit("--dsn must be NAME=PATH")
+        name, raw = value.split("=", 1)
+        dsns[name] = Path(raw).expanduser().resolve()
+    if service == "toollocker" and config.exists() and tomllib.loads(config.read_text()).get("front"):
+        from toollocker.door import shared_store
+        if shared_store(config, tomllib.loads(config.read_text()))[1].engine != engine:
+            raise ValueError("Configure WeightRoom's owning database before its front ToolLocker")
+        return 0
+    block = database_block(service, engine, config, dsns)
+    if not block:
+        return 0
+    original = config.read_text()
+    config.write_text(replace_databases(original, block))
+    return 0
+
+
+def main() -> int:
+    """Run installation discovery, compatibility audit or configuration planning."""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    checking = subparsers.add_parser("audit")
+    checking.add_argument("--root", type=Path, required=True)
+    checking.add_argument("--services", required=True)
+    checking.add_argument("--require-pg-tools", action="store_true")
+    changing = subparsers.add_parser("configure")
+    changing.add_argument("--config", type=Path, required=True)
+    changing.add_argument("--service", choices=("loadcoach", "spotter", "toollocker", "weightroom"), required=True)
+    changing.add_argument("--engine", choices=("sqlite", "postgresql"), required=True)
+    changing.add_argument("--dsn", action="append", default=[])
+    state = subparsers.add_parser("state")
+    state.add_argument("--root", type=Path, required=True)
+    state.add_argument("--services", required=True)
+    args = parser.parse_args()
+    if args.command in {"audit", "state"}:
+        services = [item for item in args.services.split(",") if item]
+        unknown = set(services) - SERVICE_CONFIG.keys()
+        if unknown:
+            parser.error(f"unknown services: {', '.join(sorted(unknown))}")
+        if args.command == "audit":
+            return audit(args.root.resolve(), services, args.require_pg_tools)
+        engine, populated = database_state(args.root.resolve(), services)
+        print(f"{engine} {'populated' if populated else 'empty'}")
+        return 0
+    return configure(args.config.resolve(), args.service, args.engine, args.dsn)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

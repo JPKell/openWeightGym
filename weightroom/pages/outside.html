@@ -1,0 +1,130 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, swaps, section_title , confirm_check, confirm_loss %}
+{% from "parts.html" import page_header, form_section, more %}
+{% block title %}Cloud APIs · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header('Cloud APIs', 'Connect external model services and manage their access.') }}
+{{ said_box(said, failed) }}
+
+{% for service in services %}
+{% set left = (service.ceiling - service.spent) if service.ceiling else none %}
+{% set _card_title1 %}{{ service.name }} <small class="text-secondary fw-normal">{{ service.models|length }} model{{ "" if service.models|length == 1 else "s" }} · ${{ "%.2f"|format(service.spent) }} in the last 24 hours{% if service.ceiling %} of ${{ "%.2f"|format(service.ceiling) }}{% endif %}</small>{% endset %}
+{% call card(_card_title1, open=true) %}
+    {% if service.key %}
+    <p class="text-success" role="status">API key installed.</p>
+    {% else %}
+    <p class="text-warning" role="status">No API key installed. Install a key to use this API's models.</p>
+    {% endif %}
+    <form method="post" action="/cloud-apis" class="row g-3 align-items-end mb-4" {{ swaps() }}>
+      <input type="hidden" name="name" value="{{ service.name }}">
+      <input type="hidden" name="do" value="key">
+      <div class="col-md-9">
+        <label class="form-label" for="key-{{ loop.index }}">{{ "Replace API key" if service.key else "API key" }}</label>
+        <input id="key-{{ loop.index }}" name="api_key" type="password" class="form-control" autocomplete="new-password" autocapitalize="none" spellcheck="false" maxlength="8192" required>
+        <div class="form-text">The saved key is never displayed. A replacement applies to new requests immediately.</div>
+      </div>
+      <div class="col-md-3"><button class="btn btn-primary" type="submit">{{ "Update API key" if service.key else "Install API key" }}</button></div>
+    </form>
+    {% if service.ceiling and left <= 0 %}<div class="alert alert-danger">It has cost what it may in a day. Its models are refused until that falls again.</div>{% endif %}
+
+    <form method="post" action="/cloud-apis" class="row g-3 align-items-end mb-4" {{ swaps() }}>
+      <input type="hidden" name="name" value="{{ service.name }}">
+      <div class="col-md-6">
+        <label class="form-label" for="url-{{ loop.index }}">Address <small class="text-secondary">as far as and including /v1</small></label>
+        <input id="url-{{ loop.index }}" name="url" class="form-control" value="{{ service.url }}" autocapitalize="none" spellcheck="false" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="ceiling-{{ loop.index }}">Most in a day <small class="text-secondary">dollars; empty for none</small></label>
+        <input id="ceiling-{{ loop.index }}" name="ceiling" class="form-control" value="{{ service.ceiling if service.ceiling is not none and service.ceiling is defined else "" }}" inputmode="decimal">
+      </div>
+      <div class="col-md-3"><button class="btn btn-primary" name="do" value="save">Save</button></div>
+    </form>
+
+    {{ section_title("Its models here") }}
+    <p class="text-secondary">Our name is what people choose and callers send. A price is in dollars for a million tokens, and is used where the service does not say what an answer cost. Empty a name to take a model away.</p>
+    <form method="post" action="/cloud-apis" {{ swaps() }}>
+      <input type="hidden" name="name" value="{{ service.name }}">
+      <div class="table-responsive">
+      <table class="sortable table table-sm align-middle">
+        <thead><tr><th>Our name</th><th>The service's name for it</th><th>Price in</th><th>Price out</th></tr></thead>
+        <tbody>
+        {% for ours, model in service.models.items() %}
+        <tr>
+          <td><input name="ours" class="form-control " value="{{ ours }}" aria-label="our name" autocapitalize="none" spellcheck="false"></td>
+          <td><input name="theirs" class="form-control " value="{{ model.theirs }}" aria-label="the service's name" autocapitalize="none" spellcheck="false"></td>
+          <td><input name="in" class="form-control " value="{{ model["in"] if model["in"] is defined else "" }}" aria-label="price in" inputmode="decimal"></td>
+          <td><input name="out" class="form-control " value="{{ model.out if model.out is defined else "" }}" aria-label="price out" inputmode="decimal"></td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <td><input name="ours" class="form-control " placeholder="another, such as gpt-big" aria-label="another model's name here" autocapitalize="none" spellcheck="false"></td>
+          <td><input name="theirs" class="form-control " placeholder="its name at the service" aria-label="its name at the service" autocapitalize="none" spellcheck="false"></td>
+          <td><input name="in" class="form-control " aria-label="its price in" inputmode="decimal"></td>
+          <td><input name="out" class="form-control " aria-label="its price out" inputmode="decimal"></td>
+        </tr>
+        </tbody>
+      </table>
+      </div>
+      <button class="btn btn-primary" name="do" value="models">Save its models</button>
+      <a class="btn btn-outline-primary ms-2" href="/cloud-apis?offers={{ service.name|urlencode }}#offers">Ask the service what it has</a>
+    </form>
+
+    {% if asked == service.name %}
+    <div id="offers" class="mt-4">
+      {% if why %}<div class="alert alert-danger">{{ why }}</div>{% else %}
+      {% set _section_title2 %}What {{ service.name }} says it has{% endset %}
+{{ section_title(_section_title2) }}
+      <p class="text-secondary">Tick the ones to offer here. Each is added under the service's own name for it, which can be changed above afterwards.</p>
+      <input type="search" class="form-control mb-2" data-filter="offers-table" placeholder="Find one of its {{ offers|length }} models" aria-label="Find a model" autocapitalize="none" spellcheck="false">
+      <form method="post" action="/cloud-apis" {{ swaps() }}>
+        <input type="hidden" name="name" value="{{ service.name }}">
+        <div class="table-responsive mb-3" style="max-height: 20rem; overflow: auto">
+        <table id="offers-table" class="sortable table table-sm align-middle mb-0">
+          <tbody>
+          {% set have = service.models.values()|map(attribute="theirs")|list %}
+          {% for theirs in offers %}
+          <tr><td><div class="form-check mb-0">
+            <input id="offer-{{ loop.index }}" name="offer" value="{{ theirs }}" type="checkbox" class="form-check-input" {{ "checked disabled" if theirs in have }}>
+            <label for="offer-{{ loop.index }}" class="form-check-label wrap">{{ theirs }}</label>
+          </div></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        <button class="btn btn-primary" name="do" value="offer">Offer the ticked ones here</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/cloud-apis" class="row g-3 align-items-center mt-3" {{ swaps() }}>
+      <input type="hidden" name="name" value="{{ service.name }}">
+      <div class="col-md-6">{% set confirmation_label %}Yes, remove {{ service.name }} and its models from here{% endset %}{{ confirm_check(confirmation_label, "sure-{{ loop.index }}") }}</div>
+      <div class="col-md-6"><button  class="btn btn-outline-danger" name="do" value="remove" {{ confirm_loss() }}>Remove the service</button></div>
+    </form>
+  {% endcall %}
+{% else %}
+<p class="text-secondary">No cloud API is configured.</p>
+{% endfor %}
+
+{% call card("Add a cloud API", not services) %}
+  <p class="text-secondary">Choose a name and address. Once the API is added, install its key in the form above.</p>
+  <form method="post" action="/cloud-apis" class="row g-3 align-items-end" {{ swaps() }}>
+{% call form_section('Connection') %}
+    <div class="col-md-6">
+      <label class="form-label" for="new-name">Name <small class="text-secondary">lowercase, such as openrouter</small></label>
+      <input id="new-name" name="name" class="form-control" autocapitalize="none" spellcheck="false" required>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label" for="new-url">Address <small class="text-secondary">as far as and including /v1</small></label>
+      <input id="new-url" name="url" class="form-control" placeholder="https://openrouter.ai/api/v1" autocapitalize="none" spellcheck="false" required>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label" for="new-ceiling">Most in a day</label>
+      <input id="new-ceiling" name="ceiling" class="form-control" placeholder="dollars" inputmode="decimal">
+    </div>
+    <div class="col-md-6"><button class="btn btn-primary" name="do" value="add">Add</button></div>
+  {% endcall %}
+</form>
+{% endcall %}
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, card %}
+{% block title %}Telemetry · openWeightGym{% endblock %}
+{% macro reading(label, value, maximum, unit="load", free=false) %}
+{% set percent = ([0, [100, (100 * value / maximum)|round|int]|min]|max) if value is not none and maximum else none %}
+<tr><th scope="row">{{ label }}</th><td class="telemetry-bar-cell">
+  {% if percent is not none %}<span class="progress" role="progressbar" aria-label="{{ label }}" aria-valuenow="{{ percent }}" aria-valuemin="0" aria-valuemax="100"><span class="progress-bar" style="width: {{ percent }}%; background-color: hsl({{ (120 - 0.9 * percent)|round|int }} 60% 42%)"></span></span>{% else %}<span class="text-secondary">—</span>{% endif %}
+</td><td class="text-nowrap">{% if value is not none %}{{ value|worded(unit) }}{% if maximum and unit == "memory" %} / {{ maximum|worded(unit) }}{% endif %}{% else %}—{% endif %}</td></tr>
+{% endmacro %}
+{% block main %}
+{{ page_header("Telemetry", lead="Inspect resources and availability for each physical host.") }}
+{% if request and request.query_params.get('said') %}<p class="alert alert-{{ 'danger' if request.query_params.get('failed') else 'info' }} py-1" role="status">{{ request.query_params.get('said') }}</p>{% endif %}
+<p class="small text-secondary">One card per physical host. Front samples available node monitors and keeps 28 days of readings under the host fingerprint. A missing reading stays unknown rather than becoming zero.</p>
+<div class="row g-3">
+{% for host in hosts %}
+<div class="col-12 col-xl-6">{% set _card_title1 %}{% if host.fingerprint %}<a class="stretched-link text-decoration-none" href="/telemetry/{{ host.fingerprint }}">{{ host.hostname }}</a>{% else %}{{ host.hostname }}{% endif %}{% endset %}
+{% set _card_actions1 %}<span class="badge text-bg-{{ 'success' if host.state == 'ready' else 'warning' if host.state == 'not answering' else 'secondary' }}">{{ host.state }}</span>{% endset %}
+{% set _card_hint1 %}{{ host.machines|join(", ") }}{% if host.fingerprint %} · <code>{{ host.fingerprint[:12] }}</code>{% endif %}{% endset %}
+{% call card(_card_title1, tag="article", class_="h-100 position-relative telemetry-card", actions=_card_actions1, hint=_card_hint1) %}
+  {% include "host_wake.html" %}
+{% include "host_models.html" %}
+  {% if host.telemetry %}
+  {% set now = host.telemetry %}
+  <div class="table-responsive position-relative" style="z-index:2" tabindex="0" role="region" aria-label="{{ host.hostname }} current readings"><table class="table table-sm align-middle mb-0 mt-2 telemetry-table" aria-label="Current readings for {{ host.hostname }}"><thead><tr><th>Label</th><th>Current reading</th><th>Values</th></tr></thead><tbody>
+  {% for card in now.cards %}
+    {{ reading("GPU " ~ card.card ~ " VRAM", card.memory_used, card.memory_total, "memory") }}
+    {{ reading("GPU " ~ card.card ~ " load", card.load, 100) }}
+  {% endfor %}
+  {{ reading("RAM", now.memory.used, now.memory.total, "memory") }}
+  {{ reading("CPU load", now.processor.load, 100) }}
+  {% for disk in now.disks %}{{ reading("Used on " ~ disk.path, disk.total - disk.free, disk.total, "memory") }}{% endfor %}
+  </tbody></table></div>
+  <small class="text-secondary">Reading {{ host.age|round|int if host.age is not none else "?" }} seconds ago</small>
+  {% else %}<p class="text-secondary mb-0">No telemetry is available from this host yet.</p>{% endif %}
+  {% endcall %}</div>
+{% else %}<p>No machines have reported to front yet.</p>{% endfor %}
+</div>
+{% endblock %}

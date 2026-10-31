@@ -1,0 +1,18 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, page_header, card, section_title %}
+{% block title %}{{ manifest.name }}{% endblock %}
+{% block main %}
+<p><a href="/plugins">Plugins</a> / {{ manifest.name }}</p>
+{% call page_header(manifest.name, lead="Configure this plugin and manage its instances.") %}<a href="/plugins/{{ manifest.id }}/instances/new" class="btn btn-primary">Add instance</a>{% endcall %}
+{{ said_box(said, failed) }}
+{% call card("", tag="form", attrs={"method": "post"}) %}<div class="d-flex flex-wrap gap-3 align-items-center"><label class="form-check"><input class="form-check-input" type="checkbox" name="enabled"{% if state.enabled %} checked{% endif %}> Enable this plugin</label><button class="btn btn-outline-primary btn-sm">Save</button></div>{% endcall %}
+{% for name, config in state.instances.items() %}
+{% call card("") %}
+{% set _section_title1 %}<a href="/plugins/{{ manifest.id }}/instances/{{ name }}">{{ name }}</a> <small class="text-secondary">{{ "Enabled" if config.enabled else "Disabled" }}</small>{% endset %}
+{{ section_title(_section_title1) }}
+<p class="mb-1"><code>{{ config.url }}</code></p>
+<p class="small mb-0">Settings: desired {{ config.revision }}, applied {{ config.applied_revision }} · {{ "Pending" if config.revision != config.applied_revision else "Synchronized" }}{% if config.restart_required %} · Adapter restart required{% endif %}</p>
+{% if config.error %}<p class="text-danger small mb-0">{{ config.error }}</p>{% endif %}
+{% endcall %}
+{% else %}<p class="text-secondary">Add a local or remote adapter installation to begin.</p>{% endfor %}
+{% endblock %}

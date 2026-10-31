@@ -1,0 +1,51 @@
+{% extends "frame.html" %}
+{% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
+{% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
+{% block scripts %}{% if section in ('results','node-measurements','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}<script src="/static/benchmarks.js?v=5" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
+{% block main_class %}container-fluid benchmark-page py-3{% endblock %}
+{% from "parts.html" import card, said_box, page_header %}
+{% block main %}
+{% call page_header('Run details · ' + detail.model if section == 'detail' else section_label, pretitle='Benchmark', id='benchmark-top', lead='Run benchmarks and inspect retained measurements and scores.') %}{% if section == 'detail' %}<a href="/benchmarks/runs" class="btn btn-outline-secondary btn-sm">Runs</a>{% endif %}{% endcall %}
+{{ said_box(said, failed, partial) }}
+{% if catalogue_warning %}<p class="alert alert-warning" role="status">{{ catalogue_warning }}</p>{% endif %}
+{% if section in ('results', 'node-measurements') %}
+<nav class="nav nav-pills gap-1 mb-3" aria-label="Model type">
+{% set model_types = [('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')] if section == 'node-measurements' else [('llm','LLM'),('image','Image'),('audio','Audio')] %}
+{% for value, label in model_types %}<a class="nav-link{{ ' active' if kind == value }}" href="/benchmarks/{{ section }}?kind={{ value }}{% if section == 'node-measurements' %}&amp;benchmark={{ type_benchmarks[value] }}{% endif %}"{{ ' aria-current=page' if kind == value }}>{{ label }}</a>{% endfor %}
+</nav>
+{% if kind in ('image', 'audio') %}<p class="small text-secondary">Image and audio models have load-time measurements. Token context, token throughput and language quality scores are unavailable.</p>{% endif %}
+{% endif %}
+{% if section == 'results' %}
+{% if kind == 'llm' and score_benchmarks %}
+{% include "benchmark_scores.html" %}
+{% endif %}
+{% include "benchmark_measurements.html" %}
+{% elif section == 'node-measurements' %}
+{% include "benchmark_resources.html" %}
+{% elif section == 'detail' %}
+{% include "benchmark_regressions.html" %}
+{% include "benchmark_detail.html" %}
+{% elif section == 'embedders' %}
+<p class="text-secondary">Single-input embedding capacity, fresh-process loading and input throughput. Uses the shared benchmark queue and idle GPUs.</p>
+<div hx-get="/benchmarks/embedders?part=live" hx-trigger="every 2s" hx-swap="none" data-refresh-companions="#benchmark-embedder-active"></div>
+<div id="benchmark-embedder-active">{% if live %}{% include "benchmark_running_card.html" %}{% endif %}</div>
+{% include "benchmark_start.html" %}
+{% include "benchmark_resources.html" %}
+<a href="/benchmarks/compare?family=embedding">Compare embedders</a>
+{% elif section == 'runs' %}
+<div hx-get="/benchmarks/runs?part=live&amp;per_page={{ pagination.size }}&amp;page={{ pagination.page }}" hx-trigger="every 2s" hx-swap="none" data-refresh-companions="#benchmark-active, #benchmark-queue, #benchmark-history"></div>
+{% include "benchmark_running_card.html" %}
+{% include "benchmark_start.html" %}
+{% include "benchmark_queue_card.html" %}
+{% include "benchmark_history.html" %}
+{% elif section == 'compare' %}
+{% include "benchmark_compare.html" %}
+{% elif section == 'manage' %}
+{% include "benchmark_import.html" %}
+{% include "benchmark_manage.html" %}
+{% call card("Keeping results useful", attrs={"aria-labelledby": "freshness-heading"}, header_id="freshness-heading", body=false) %}
+
+  <dl class="freshness-rules"><dt>Model settings or context changed †</dt><dd>Prefer a completed run for the current settings. Otherwise show the latest saved result with its recorded configuration and a settings-changed label. Results are retained; Queue outstanding benchmarks can submit the replacement run.</dd><dt>Engine or machine changed <span class="rerun-mark">*</span></dt><dd>Keep the result visible with a rerun recommendation. Queue outstanding benchmarks includes it.</dd><dt>Benchmark version, implementation or server mode changed <span class="rerun-mark">*</span></dt><dd>Older evidence is retained but queued again on request. Saved answers are still regraded without inference when only the grader changed.</dd><dt>Score formula changed</dt><dd>Recalculate scores from saved measurements and model metadata. No new benchmark run.</dd></dl>
+{% endcall %}
+{% endif %}
+{% endblock %}

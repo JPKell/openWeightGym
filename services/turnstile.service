@@ -1,0 +1,12 @@
+[Unit]
+Description=turnstile, the way in to compute on the front machine
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/ai/openWeightGym
+ExecStart=%h/ai/openWeightGym/.venv/bin/turnstile --config %h/ai/openWeightGym/settings/weightroom.toml
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

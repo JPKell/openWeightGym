@@ -1,0 +1,4 @@
+{% from "parts.html" import card %}
+{% set _card_title1 %}Running · {% if live %}{{ live.benchmark }} · {{ live.model }}{% else %}Idle{% endif %}{% endset %}
+{% set _card_actions1 %}{% if live %}<span class="badge text-bg-secondary">{{ live.state }}</span>{% endif %}{% endset %}
+{% call card(_card_title1, open=true, id="benchmark-active", key="benchmark-running", attrs={"hx-swap-oob": 'outerHTML' if oob else none}, actions=_card_actions1) %}{% include "benchmark_active.html" %}{% endcall %}

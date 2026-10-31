@@ -1,0 +1,47 @@
+{% from "parts.html" import card , confirm_two %}
+{% set seen = now or compute.status %}
+<div id="current-requests"{% if current_oob %} hx-swap-oob="outerHTML"{% endif %}>
+{% if seen %}
+{% set jobs = seen.active_batches or [] %}
+{% set batch_requests = [] %}{% for job in jobs %}{% for number in job.request_ids or [] %}{% set _ = batch_requests.append(number) %}{% endfor %}{% endfor %}
+{% set visible_requests = [] %}
+{% for requests in (seen.running, seen.waiting, seen.hosted or []) %}{% for item in requests if not item.batch_id and item.id not in batch_requests %}{% set _ = visible_requests.append(item) %}{% endfor %}{% endfor %}
+{% set count = (visible_requests|length) + (jobs|length) %}
+{% call card("Current requests (" ~ count ~ ")", true, 'current-requests') %}
+<div class="table-responsive">
+<table id="requests" class="table table-hover align-middle sortable">
+  <thead><tr><th data-sort="value">Request</th><th data-sort="text">Now</th><th data-sort="text">Model</th><th data-sort="text">User</th><th data-sort="text">From</th><th data-sort="value">For</th><th></th></tr></thead>
+  <tbody>
+  {% for job in jobs %}
+  <tr>
+    <td data-value="{{ job.id }}"><a href="{{ job.href }}">{{ job.id }}</a> <small class="text-secondary">Batch</small></td>
+    <td>{{ job.description }}</td>
+    <td>{{ job.model }}</td>
+    <td>{{ job.user }}</td>
+    <td>{{ job.caller }}</td>
+    <td data-value="{{ job.seconds }}">{{ job.seconds|round|int }} s</td>
+    <td></td>
+  </tr>
+  {% endfor %}
+  {% for what, requests in (("being answered", seen.running), ("waiting", seen.waiting), ("answered off this machine", seen.hosted or [])) %}
+  {% for request in requests if not request.batch_id and request.id not in batch_requests %}
+  <tr>
+    <td data-value="{{ request.id or 0 }}">{% if request.id and now %}<a href="/requests/{{ request.id }}">{{ request.id }}</a>{% else %}{{ request.id or ("Unlogged" if request.unlogged else "") }}{% endif %}</td>
+    <td>{{ what }}{% if request.priority not in ("normal", "-") %} <small class="text-secondary">{{ request.priority }}</small>{% endif %}</td>
+    <td>{{ request.model or ("the lock" if request.priority == "lock" else "unload") }}</td>
+    <td>{{ request.user }}</td>
+    <td>{{ request.caller }}</td>
+    <td data-value="{{ request.seconds }}">{{ request.seconds|round|int }} s</td>
+    <td class="text-end">{% if now and request.id and (request.user == person.name or "stop" in person.can) %}
+      <form method="post" action="/requests/{{ request.id }}/stop" class="m-0"><input type="hidden" name="back" value="status"><button  class="btn btn-outline-danger btn-sm" {{ confirm_two() }}>Stop</button></form>
+      {% elif now and request.stop_handle and request.may_stop %}<form method="post" action="/requests/unlogged/stop" class="m-0"><input type="hidden" name="handle" value="{{ request.stop_handle }}"><button  class="btn btn-outline-danger btn-sm" {{ confirm_two() }}>Stop</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  {% endfor %}
+  {% if not count %}<tr><td colspan="7" class="text-secondary">No requests right now.</td></tr>{% endif %}
+  </tbody>
+</table>
+</div>
+{% endcall %}
+{% endif %}
+</div>

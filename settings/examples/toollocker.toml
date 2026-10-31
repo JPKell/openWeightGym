@@ -1,0 +1,118 @@
+# The ToolLocker's settings for this machine: where it listens and where things are.
+# Copy to settings/toollocker.toml and edit. That copy is not committed.
+#
+# What can be changed from the site is not here. Its starting values are in
+# settings/defaults/toollocker.toml. A value from there may be set here too: it is then this
+# machine's own starting value.
+
+# Address and port the ToolLocker listens on. Loopback means this machine only.
+host = "127.0.0.1"
+
+port = 8443
+
+# LoadCoach's own settings file. The ToolLocker takes its machine key and identity/event store
+# from it. Front sends the caller and current group rules in a signed statement. Left out, as
+# here, the file is loadcoach.toml beside this file.
+# loadcoach = "/home/jpk/ai/openWeightGym/settings/loadcoach.toml"
+
+# A front-owned gateway instead sets front = "weightroom.toml" (omit loadcoach).
+# It inherits WeightRoom's accounts/event store and Turnstile's machine-key path,
+# without needing a local LoadCoach. Listen on 127.0.0.1:9443 and set
+# [turnstile].toollocker_url = "http://127.0.0.1:9443" in weightroom.toml.
+# File tools still run on their owning host; a fixed SSH stdio command can reach
+# compute without moving files or changing the server/tool names.
+
+# ToolLocker can name its identity/event store explicitly. Keep this binding on the same
+# authoritative store as its owner: WeightRoom on front, LoadCoach for legacy compute gateways.
+# [databases.stores.identity]
+# engine = "sqlite"
+# path = "../data/loadcoach.db"
+# [databases.bindings]
+# "toollocker.identity" = "identity"
+
+# One section per MCP server. The door starts each one and offers its tools to harnesses.
+#
+#   command   the program and its arguments, as a list. Give full paths: a service does not
+#             always have your shell's PATH.
+#   url       instead of command: the address of an MCP server on another machine, which the
+#             door reaches over HTTP ("Streamable HTTP" in MCP's words).
+#   key_file  with url: a file holding the key the door shows that server. Make it readable by
+#             its owner only. A path not starting with / is found beside this file.
+#   public    true only for an intentionally unauthenticated HTTPS server; use instead of
+#             key_file. No Authorization header is sent.
+#   description  what the server is, such as "the NAS: family files". It is put in front of
+#             each of its tools' descriptions, so a model can tell the same tool on two
+#             machines apart.
+#   level     how sensitive its tools are: "normal" (the default), "sensitive" or "restricted".
+#             A caller sees a tool only if their group's max_sensitivity allows it.
+#             From "sensitive" up, each call's arguments and result are kept.
+#
+# A tool is offered under the server's name, two underscores, and its own name: code__search.
+#
+# The two below are written in this repository, in toollocker/tools/. Any MCP server that is
+# run as a command works the same way.
+
+# Listing and reading files under the folders given as arguments. Nothing is written.
+# Hidden files and files only their owner may read are never shown.
+# Do not name a folder that holds secrets in ordinary files.
+#
+# To allow several folders, add each as one more entry at the end of the list. A list may run
+# over several lines. Everything below a folder is included, so name a folder once, not its
+# sub-folders as well.
+[servers.files]
+command = [
+    "/home/jpk/ai/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.files",
+    "/home/jpk/notes",
+    "/home/jpk/projects/site/docs",
+]
+
+# Status, history, changes and search in git repositories.
+#
+# Each entry is either a repository, meaning the folder that holds `.git`, or a folder that
+# holds repositories. For the second kind, every repository directly inside it is included,
+# and folders in it that are not repositories are left out. It does not look deeper than that.
+#
+# A model picks a repository by its folder's name, here `suite`, or by its full path. The tool
+# `code__repositories` lists them. When a model names none, the first is used, so put the one
+# you work in most first. Two repositories whose folders have the same name can only be told
+# apart by full path.
+[servers.code]
+command = [
+    "/home/jpk/ai/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.code",
+    "/home/jpk/ai/openWeightGym",
+    "/home/jpk/repos",
+]
+
+# A tool folder: every tool in every file of a folder, set up from a TOML file with a section
+# for each file that needs one. How to write a tool: toollocker/README.md.
+# [servers.mine]
+# command = ["/home/jpk/ai/openWeightGym/.venv/bin/python", "-m", "toollocker.tools", "/home/jpk/tools", "--settings", "/home/jpk/tools/tools.toml"]
+# description = "my own tools"
+
+# The same file tools a second time, on other folders, for those cleared to see them.
+# [servers.private]
+# command = ["/home/jpk/ai/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.files", "/home/jpk/private"]
+# level = "restricted"
+
+# A server on another machine, such as the one the files are on. Set that machine up with
+#   scripts/install-tool-host.sh --name nas --description "the NAS: family files" --files /srv/shared
+# run there from a copy of the suite. It serves every tool in that machine's tool folder as one
+# service and prints the key and the section to put here. Put the key in a file here, readable
+# by its owner only, and let only compute reach the port. A server that is down when the door
+# starts joins when its tools are next listed, at most every 30 seconds.
+# [servers.nas]
+# url = "http://nas:9100/mcp"
+# key_file = "../keys/nas.key"
+# description = "the NAS: family files"
+# level = "sensitive"
+
+# A public third-party documentation server. Review its discovered tools and restrict access
+# before enabling it for accounts.
+# [servers.learn]
+# url = "https://learn.microsoft.com/api/mcp"
+# public = true
+# level = "sensitive"
+
+# One tool may have a different level from its server.
+# [tool_levels]
+# "nas__list_folder" = "normal"

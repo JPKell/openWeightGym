@@ -1,0 +1,26 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, swaps, page_header, form_section, more , confirm_loss %}
+{% block title %}Compute nodes · openWeightGym{% endblock %}
+{% block main %}
+<div class="settings-page">
+{{ page_header('Compute nodes', 'Manage hardware policy and runtime settings for the selected node.') }}
+{% if machine_choices|length > 1 %}<form method="get" action="/compute-nodes" class="d-flex flex-wrap align-items-center gap-2 mb-3"><label for="settings-machine">Compute node</label><select id="settings-machine" name="machine" class="form-select form-select-sm w-auto">{% for host in machine_choices %}<option value="{{ host.name }}"{% if host.name == selected_machine %} selected{% endif %}>{{ host.name }} · {{ host.state }}</option>{% endfor %}</select><button class="btn btn-outline-secondary btn-sm">Show node</button></form>{% endif %}
+{{ said_box(said, failed) }}
+{% if machine_key %}{% call card("Machine key", id="machine-key") %}
+<p class="mb-2">Last rotated {{ machine_key.changed|timestamp }}.</p>
+<p class="text-secondary small mb-3">The gateway sends the replacement key to {{ selected_machine }} first, sealed with the current key. The old key remains valid for ten minutes. If the two sides fall out of step, run <code>loadcoach --replace-key</code> on that node.</p>
+{% if machine_key.last_error %}<div class="alert alert-warning">Scheduled rotation: {{ machine_key.last_error }}</div>{% endif %}
+<form method="post" action="/compute-nodes/machine-key/schedule" class="row g-3 align-items-end mb-3">
+<input type="hidden" name="machine" value="{{ selected_machine }}">
+<div class="col-sm-6 col-lg-4"><label class="form-label" for="rotation-days">Rotate every</label><div class="input-group"><input id="rotation-days" name="rotation_days" type="number" min="0" max="3650" value="{{ machine_key.rotation_days }}" class="form-control" required><span class="input-group-text">days</span></div></div>
+<div class="col-sm-auto"><button class="btn btn-primary">Save schedule</button></div>
+<div class="col-12 form-hint">Zero disables scheduled rotation.{% if machine_key.next_rotation %} Next: {{ machine_key.next_rotation|timestamp }}.{% endif %}</div>
+</form>
+<form method="post" action="/compute-nodes/machine-key" {{ swaps() }}><input type="hidden" name="machine" value="{{ selected_machine }}"><button  class="btn btn-outline-danger" {{ confirm_loss() }}>Rotate now</button></form>
+{% endcall %}{% endif %}
+{% include "cards.html" %}
+{% include "engine_nodes.html" %}
+{% set fixed=true %}{% for program in programs %}{% include "settings_program.html" %}{% else %}<p class="text-secondary">This node has not reported the compute service or the node monitor settings.</p>{% endfor %}
+{% include 'settings_machine_values.html' %}
+</div>
+{% endblock %}

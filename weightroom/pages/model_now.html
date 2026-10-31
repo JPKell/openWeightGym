@@ -1,0 +1,13 @@
+{# One model's state in a few words. Used in the list and at the top of the model's own page. #}
+{%- if model.unavailable %}<span class="badge bg-secondary-lt">node unavailable</span>
+{%- elif model.size is none %}<span class="badge bg-red-lt">its file is missing</span>
+{%- elif model.loaded == "ready" %}<span class="badge bg-green-lt">loaded</span> on {{ model.cards|join(" + ") or "the CPU" }}
+{%- elif model.loaded == "probing" %}running isolated probe on {{ model.cards|join(" + ") or "the CPU" }}
+{%- elif model.loaded %}loading onto {{ model.cards|join(" + ") or "the CPU" }}
+{%- else %}<span class="badge bg-secondary-lt">not loaded</span>
+{%- endif %}
+{%- if model.stale %} · <span class="text-danger">old settings</span>{% endif %}
+{%- if model.running %} · {{ model.running }} answering{% endif %}
+{%- if model.waiting %} · {{ model.waiting }} waiting{% endif %}
+
+{%- if model.context_loaded %} · {{ "{:,}".format(model.context_loaded) }} context{% endif %}

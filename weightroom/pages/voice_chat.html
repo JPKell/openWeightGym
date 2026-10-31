@@ -1,0 +1,23 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, card %}
+{% block title %}Voice · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header("Voice", lead="Speak with your local model and interrupt spoken replies.", help="/guide#voice") }}
+<p>A spoken conversation with your local model, as you. Speak, and the answer is spoken back; you can interrupt it.</p>
+{% call card("", attrs={"style": "max-width:40rem"}) %}
+<form id="login" class="row g-3">
+<div class="col-sm-6"><label class="form-label" for="mode">Conversation</label><select id="mode" class="form-select"><option value="direct">Direct model</option><option value="hermes" disabled>Hermes agent</option></select></div>
+<div class="col-sm-6" id="voice-choice" hidden><label class="form-label" for="voice">Voice</label><select id="voice" class="form-select"><option value="">Default voice</option></select></div>
+<div class="col-12"><div id="call-settings" class="row g-3"></div></div>
+<div class="col-12"><div class="form-check" id="record-choice" hidden><input id="record" class="form-check-input" type="checkbox"><label class="form-check-label" for="record">Record this call, for testing (kept in the audio library)</label></div>
+<div class="form-check"><input id="echo" class="form-check-input" type="checkbox" checked><label class="form-check-label" for="echo">Echo cancellation</label></div></div>
+<div class="col-12"><button id="connect" class="btn btn-primary">Start conversation</button></div>
+</form>
+<section aria-live="polite" class="mt-3"><div id="status" class="section-title">Disconnected</div><p id="notice" class="text-secondary mb-1">Echo cancellation keeps your microphone live while replies play. Speak to interrupt.</p><p id="audio-status" class="small text-secondary"></p></section>
+<div class="d-flex flex-wrap gap-2"><button id="mute" class="btn btn-outline-secondary" disabled>Mute</button><button id="finish" class="btn btn-outline-secondary" disabled>Finish speaking</button><button id="interrupt" class="btn btn-outline-secondary" disabled>Interrupt</button><button id="hangup" class="btn btn-outline-danger" disabled>Hang up</button></div>
+{% endcall %}
+<section id="transcript" aria-label="Conversation" style="max-width:40rem"></section>
+<p class="small text-secondary">Calls use the suite’s normal request log. Audio is retained in the audio library only when Record this call is selected. Prefer an app? <a href="/voice/desktop">Get the Voice desktop app</a>.</p>
+<style>#transcript .line{border-left:2px solid var(--bs-border-color);padding:.5rem .9rem;margin:.75rem 0;white-space:pre-wrap}#transcript .line small{display:block;color:var(--bs-secondary-color);margin-bottom:.25rem}</style>
+<script src="/voice/static/echo.js?v=2"></script><script src="/voice/static/voice.js?v=6" data-base="/voice"></script>
+{% endblock %}

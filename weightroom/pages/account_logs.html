@@ -1,0 +1,15 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, card, page_header %}
+{% block title %}Account logs · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header("Logs", lead="Review your requests and account activity.") }}
+{% call card("Asked for", true, "account-usage") %}
+{% with here = "/account/logs" %}{% include "usage.html" %}{% endwith %}
+  {% if "hosted" in me.can %}
+  <dl class="row facts mt-3 mb-0">
+    <dt class="col-5 col-md-2">Hosted answers</dt><dd class="col-7 col-md-4">${{ "%.2f"|format(me.hosted_spent) }}{% if me.max_hosted_spend %} of ${{ "%.2f"|format(me.max_hosted_spend) }}{% endif %} <small class="text-secondary">in the last 24 hours</small></dd>
+  </dl>
+  {% endif %}
+{% endcall %}
+{% call card("Latest", true, "account-latest") %}{% include "account_logs_list.html" %}{% endcall %}
+{% endblock %}

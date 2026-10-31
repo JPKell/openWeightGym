@@ -1,0 +1,49 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, swaps %}
+{% from "parts.html" import page_header, form_section, more %}
+{% block title %}Groups · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header('Groups', 'Define shared permissions and limits for accounts.') }}
+{{ said_box(said, failed) }}
+
+{% call card("Add a group", form) %}
+  <p class="text-secondary">A new group allows nothing. What its members may do is set on its own page, which comes next.</p>
+  <form method="post" action="/groups" class="row g-3 align-items-end">
+    <div class="col-md-6">
+      <label for="name" class="form-label">Name <small class="text-secondary">lowercase letters, digits, dot, dash or underscore</small></label>
+      <input id="name" name="name" class="form-control" value="{{ form.name or '' }}" autocapitalize="none" spellcheck="false" autocomplete="off" required>
+    </div>
+    <div class="col-md-6"><button class="btn btn-primary">Add</button></div>
+  </form>
+{% endcall %}
+
+{% call card("Groups", true, "groups-list") %}
+<div id="groups-list">
+<form method="get" action="/groups" class="d-flex align-items-center gap-2 mb-2" {{ swaps('groups-list', true) }} data-auto-submit>
+  <label for="groups-limit" class="form-label mb-0">Groups per page</label>
+  <select id="groups-limit" name="limit" class="form-select form-select-sm w-auto">{% for n in paging.sizes %}<option value="{{ n }}" {{ 'selected' if n == paging.limit }}>{{ n }}</option>{% endfor %}</select>
+  <noscript><button class="btn btn-primary btn-sm">Show</button></noscript>
+</form>
+<div class="table-responsive">
+<table id="groups-table" class="table table-hover align-middle sortable">
+  <thead><tr><th data-sort="text">Group</th><th data-sort="value">Members</th><th data-sort="value">Abilities</th><th data-sort="text">Models</th><th data-sort="text">Priority</th><th data-sort="value">Requests at once</th><th data-sort="text">Highest level</th></tr></thead>
+  <tbody>
+  {% for group in known.groups %}
+  <tr>
+    <td><a href="/groups/{{ group.name }}">{{ group.name }}</a></td>
+    <td data-value="{{ group.members|length }}">{{ group.members|length or "" }}</td>
+    {# "superuser" sorts above any count of abilities. #}
+    <td data-value="{{ 999 if "superuser" in group.can else group.can|length }}">{{ "everything" if "superuser" in group.can else group.can|length }}</td>
+    <td>{{ "every model" if group.models == "*" else group.models|join(", ") or "none" }}</td>
+    <td>{{ group.priority }}</td>
+    <td data-value="{{ group.max_requests }}">{{ group.max_requests or "no limit" }}</td>
+    <td>{{ group.max_sensitivity }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% with target='groups-list' %}{% include 'pagination.html' %}{% endwith %}
+</div>
+{% endcall %}
+{% endblock %}

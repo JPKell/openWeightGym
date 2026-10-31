@@ -1,0 +1,132 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, page_header, section_title , confirm_loss %}
+{% set name = file.path.rsplit("/", 1)[-1] %}
+{% block title %}{{ name }} · openWeightGym{% endblock %}
+{% block main %}
+<nav class="mb-2"><a href="/files">Files</a></nav>
+{{ page_header(name, lead="Inspect this file and the models that use it.") }}
+{{ said_box(said, failed) }}
+
+<dl class="row facts mb-4">
+  <dt class="col-4 col-md-2">Place</dt><dd class="col-8 col-md-4">{{ file.place }}{% if file.tier %} · {{ file.tier }}{% endif %}{% if file.moving %} <span class="badge text-bg-primary">{{ "copying" if file.moving.copy else "moving" }} to {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}</dd>
+  <dt class="col-4 col-md-2">Size</dt><dd class="col-8 col-md-4">{{ file.size|size }}</dd>
+  <dt class="col-4 col-md-2">Used by</dt><dd class="col-8 col-md-4">{% for model in file.used_by %}<a href="{{ address(model) }}">{{ model }}</a>{{ ", " if not loop.last }}{% else %}no model. <a href="/models?file={{ file.path|urlencode }}&trained={{ file.facts.trained_context or '' if file.facts else '' }}">Add it</a>{% endfor %}</dd>
+  <dt class="col-4 col-md-2">Last used</dt><dd class="col-8 col-md-4">{{ file.last_used|timestamp if file.last_used else "never" }}</dd>
+  <dt class="col-4 col-md-2">Path</dt><dd class="col-8 col-md-10 wrap">{{ file.path }}</dd>
+  <dt class="col-4 col-md-2">Changed</dt><dd class="col-8 col-md-4">{{ file.modified|timestamp }}</dd>
+</dl>
+
+{# Nothing on this page is in a card: each part is a heading and what belongs under it. #}
+{{ section_title("Metadata") }}
+<div class="mb-4">
+  {% include "file_says.html" %}
+</div>
+
+{# One list for both kinds of part: the models its file says it was made for come first, the others are marked. #}
+{% macro model_choice() %}
+      <select id="model" name="model" class="form-select">
+        {% for one in models %}<option value="{{ one }}">{{ one }}{{ "" if one in fits else " · not what this file says it is for" }}</option>{% endfor %}
+      </select>
+      {% if not fits %}<small class="text-warning">This file says it was made for {{ file.facts.made_for or "a model it does not name" }}. No model here is set up with such a file, so it may not load on any of these.</small>{% endif %}
+{% endmacro %}
+{% if file.facts and file.facts.what == "adapter" %}
+{{ section_title("Make a model with this adapter") }}
+  <p class="text-secondary">An adapter changes how one model behaves, and only works on the model it was made for. Choose that model: a copy of it is made, with all its settings and this adapter attached, under a name of its own.
+    The model you choose stays as it is. The two share one loaded copy on compute, so the new one costs no room.</p>
+  <form method="post" action="/file" class="row g-3 align-items-end mb-4">
+    <input type="hidden" name="path" value="{{ file.path }}">
+    <div class="col-md-6">
+      <label for="model" class="form-label">The model it is for</label>
+      {{ model_choice() }}
+    </div>
+    <div class="col-md-6">
+      <label for="short" class="form-label">A word for the adapter <small class="text-secondary">shown beside the model, such as terse</small></label>
+      <input id="short" name="short" class="form-control" value="{{ (file.facts.name or name.rsplit(".", 1)[0])|lower|replace(" ", "-") }}" autocapitalize="none" spellcheck="false" required>
+    </div>
+    <div class="col-md-6">
+      <label for="new" class="form-label">Name of the new model <small class="text-secondary">what people choose, and what callers send as "model"</small></label>
+      <input id="new" name="name" class="form-control" autocapitalize="none" spellcheck="false" placeholder="such as qwen-1.5b-terse" required>
+    </div>
+    <div class="col-md-6"><button class="btn btn-primary" name="do" value="adapt">Make the model</button></div>
+  </form>
+{% endif %}
+{% if file.facts and file.facts.what == "projector" %}
+{{ section_title("Make a model that sees, with this projector") }}
+  <p class="text-secondary">A projector lets one model see pictures, and only works on the model it was made for. Choose that model: a copy of it is made, with all its settings and this projector, under a name of its own.
+    The model you choose stays as it is, and cannot be sent pictures. The two share one loaded copy on compute, so the new one costs little room: only what the projector takes.</p>
+  <form method="post" action="/file" class="row g-3 align-items-end mb-4">
+    <input type="hidden" name="path" value="{{ file.path }}">
+    <div class="col-md-6">
+      <label for="model" class="form-label">The model it is for</label>
+      {{ model_choice() }}
+    </div>
+    <div class="col-md-6">
+      <label for="new" class="form-label">Name of the new model <small class="text-secondary">what people choose, and what callers send as "model"</small></label>
+      <input id="new" name="name" class="form-control" autocapitalize="none" spellcheck="false" placeholder="such as gemma-12b-vision" required>
+    </div>
+    <div class="col-md-6"><button class="btn btn-primary" name="do" value="project">Make the model</button></div>
+  </form>
+{% endif %}
+
+{{ section_title("Distribute to nodes") }}
+<p class="text-secondary">A cached file is distributed immediately. A stored file is first copied into the matching active cache and SHA-256 verified; the node monitor then distributes that cache copy and verifies it again before the compute service can see it.</p>
+{% set destinations = nodes|rejectattr("name", "equalto", artifact_machine)|selectattr("places")|list %}
+<form method="post" action="/file" class="mb-4">
+  <input type="hidden" name="path" value="{{ file.path }}">
+  <div class="d-flex flex-wrap gap-3 mb-2">
+    {% for node in destinations %}
+    <div class="form-check">
+      <input id="node-{{ loop.index }}" class="form-check-input" type="checkbox" name="machine" value="{{ node.name }}" checked>
+      <label class="form-check-label" for="node-{{ loop.index }}">{{ node.name }}</label>
+    </div>
+    {% else %}<span class="text-secondary">No other node with model storage is answering.</span>{% endfor %}
+  </div>
+  {% if destinations %}<button class="btn btn-primary" name="do" value="distribute">Distribute</button>{% endif %}
+</form>
+
+{{ section_title("Move") }}
+{% if file.moving %}
+<p>It is being moved to {{ file.moving.to }} now.</p>
+{% else %}
+{# One row of buttons, a place on each. Which button was pressed says where to: it is sent as `to`. #}
+<form method="post" action="/file" class="d-flex flex-wrap gap-2 mb-2">
+  <input type="hidden" name="path" value="{{ file.path }}">
+  <input type="hidden" name="do" value="move">
+  {% for place in places if place.name != file.place %}
+  <button class="btn btn-primary" name="to" value="{{ place.name }}" title="{{ place.free|size }} free there">{{ place.name }}</button>
+  {% else %}
+  <span class="text-secondary">There is only one place. A second is named under [places] in loadcoach.toml.</span>
+  {% endfor %}
+</form>
+{% endif %}
+<p class="text-secondary mb-4">The file is copied to the other place and checked, the models that use it are pointed at the copy, and then the original is taken away. A model that is loaded keeps answering from the original and loads from the new place the next time it is idle. Nobody is cut off.</p>
+
+{{ section_title("Copy") }}
+{% if file.moving %}
+<p>It is already being copied or moved.</p>
+{% else %}
+<form method="post" action="/file" class="d-flex flex-wrap gap-2 mb-2">
+  <input type="hidden" name="path" value="{{ file.path }}">
+  <input type="hidden" name="do" value="copy">
+  {% for place in places if place.name != file.place %}
+  <button class="btn btn-outline-primary" name="to" value="{{ place.name }}" title="{{ place.free|size }} free there">{{ place.name }}</button>
+  {% else %}<span class="text-secondary">There is no other configured place.</span>{% endfor %}
+</form>
+{% endif %}
+<p class="text-secondary mb-4">Copy keeps the original in the library. Use it to promote a stored model into the active cache without removing the storage copy.</p>
+
+{{ section_title("Delete") }}
+{% if file.used_by %}
+<p>It is used by {% for model in file.used_by %}<a href="{{ address(model) }}">{{ model }}</a>{{ ", " if not loop.last }}{% endfor %}. Remove {{ "that model" if file.used_by|length == 1 else "those models" }} first, and then the file can be deleted.</p>
+{% else %}
+<p class="text-secondary">Deleting permanently removes this file: {{ file.size|size }} is freed, and the file can only come back by downloading it again. To show it is meant, type the file's name.</p>
+<form method="post" action="/file" class="row g-3 align-items-end">
+  <input type="hidden" name="path" value="{{ file.path }}">
+  <div class="col-md-6">
+    <label for="name" class="form-label">The file's name <small class="text-secondary">{{ name }}</small></label>
+    <input id="name" name="name" class="form-control" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+  </div>
+  <div class="col-md-6"><button  class="btn btn-danger" name="do" value="delete" {{ confirm_loss() }}>Delete this file</button></div>
+</form>
+{% endif %}
+{% endblock %}

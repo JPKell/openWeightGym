@@ -1,0 +1,8 @@
+{
+  "connecting": "Hello. I'm connecting you now.",
+  "preparing": "Hello. I'm getting the voice system ready. I'll let you know when you can begin.",
+  "waiting": "I'm still getting things ready. Thanks for waiting.",
+  "ready": "I'm ready. What can I help you with?",
+  "busy": "The voice system is busy right now. Please try again shortly.",
+  "unavailable": "I couldn't start the voice system. Please try again later."
+}

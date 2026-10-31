@@ -1,0 +1,38 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, page_header, section_title %}
+{% block title %}Restore preview · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header("Restore preview", lead="Review the selected backup before restoring data.", back=("/backups", "Backups")) }}
+<p><code>{{ backup_id }}</code></p>
+{% if compute_error %}<div class="alert alert-warning py-2">{{ compute_error }}</div>{% endif %}
+
+{% for label, part in [("Front machine", front), ("Compute machine", compute_part)] %}
+{% call card(label, true) %}
+{% if part %}
+<div class="row g-2 mb-2">
+  <div class="col-md-4"><span class="text-secondary">Verification</span><br>{{ part.get("verification", {}).get("verified_at", part.get("verification", {}).get("state", "unknown"))|timestamp }}</div>
+  <div class="col-md-8"><span class="text-secondary">Services that must be stopped</span><br>{% for service in part.get("services_to_stop", []) %}<code class="me-2">{{ service }}</code>{% else %}<span class="text-secondary">Unavailable from this manifest.</span>{% endfor %}</div>
+</div>
+<p class="small text-secondary mb-1">A restore would replace these files with the exact versions in the archive:</p>
+<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr><th>Destination</th><th>Contents</th><th>Size</th><th>SHA-256</th></tr></thead><tbody>
+{% for file in part.get("files", []) %}<tr><td><code>{{ file.source }}</code></td><td>{{ file.kind }}{% if file.contains_protected_identity %}<div class="small text-warning-emphasis">Contains protected account recovery data</div>{% endif %}</td><td>{{ file.size|size }}</td><td><code>{{ file.sha256[:12] }}…</code></td></tr>{% else %}<tr><td colspan="4" class="text-secondary">The file list is unavailable.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if part.get("verification", {}).get("counts") %}<div class="small"><span class="text-secondary">Isolated restore check:</span> {% for name, count in part.verification.counts.items() %}<span class="me-2">{{ name|replace("_", " ") }} <strong>{{ count }}</strong></span>{% endfor %}</div>{% endif %}
+{% if part.get("stores") %}
+{{ section_title("Verified database stores") }}
+<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Store</th><th>Engine</th><th>Owners</th><th>Server</th><th>Schema streams</th><th>Method</th></tr></thead><tbody>
+{% for store in part.stores %}<tr><td><code>{{ store.name }}</code></td><td>{{ store.engine }}</td><td>{{ store.owning_services|join(", ") }}</td><td>{{ store.server_version }}</td><td>{{ store.schema_versions|length }}</td><td>{{ store.method }}<div class="small text-secondary">{% for tool, version in store.tools.items() %}{{ version }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div></td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if part.get("models") %}
+{{ section_title("Model weights to recover separately") }}
+<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Model</th><th>Stable ID</th><th>Path</th><th>Source</th><th>Present</th></tr></thead><tbody>
+{% for model in part.models %}<tr><td>{{ model.name }}</td><td><code>{{ model.model_id }}</code></td><td><code>{{ model.path }}</code></td><td>{{ model.recovery_source or "not recorded" }}</td><td>{{ "yes" if model.present else "no" }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% else %}<p class="text-secondary mb-0">This half of the recovery set is missing.</p>{% endif %}
+{% endcall %}
+{% endfor %}
+
+<div class="alert alert-info">This page is a preview. Restore the archives during a maintenance window after stopping every service listed above. Raw keys must be recovered separately, then the restored services should be started and sign-in, model inventory, conversations and benchmark evidence checked.</div>
+{% endblock %}

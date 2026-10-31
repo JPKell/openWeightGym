@@ -1,0 +1,74 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, section_title %}
+{% from "parts.html" import page_header, form_section, more %}
+{% block title %}Tools · openWeightGym{% endblock %}
+{% block scripts %}<script src="/static/tools.js" defer></script>{% endblock %}
+{% block main %}
+{{ page_header('Tools', 'Manage available tools, access levels and connection checks.') }}
+{{ said_box(said, failed) }}
+{% call card("Tool service", true) %}
+{% if tool_info.program %}
+<p class="text-secondary small">Configuration reported {{ tool_info.program.seen|timestamp }} · Call timeout {{ tool_config.get('call_timeout', 120) }} s</p>
+{% else %}<p class="text-secondary">The tool service has not reported its configuration yet.</p>{% endif %}
+{{ section_title("Servers") }}
+<div class="table-responsive"><table class="sortable table table-sm"><thead><tr><th>Name</th><th>Description</th><th>Command or address</th><th>Sensitivity</th></tr></thead><tbody>
+{% for name, server in tool_config.get('servers', {}).items() %}<tr><td>{{ name }}</td><td>{{ server.description or '' }}</td><td><code>{{ server.url if server.url else server.command|join(' ') }}</code></td><td>{{ server.get('level', 'normal') }}</td></tr>{% else %}<tr><td colspan="4" class="text-secondary">No reported servers.</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="text-secondary small mb-0">Servers and their descriptions are set in <code>settings/toollocker.toml</code> on compute, and change when the tool service restarts.</p>
+<a class="btn btn-outline-secondary btn-sm mt-3" href="/settings?open=toollocker">Tool service settings</a>
+{% endcall %}
+{% set servers = tool_config.get('servers', {}) %}
+{% set levels = tool_config.get('tool_levels', {}) %}
+{% call card("Tool levels", true) %}
+<p class="text-secondary">A tool's level is its server's unless one is chosen here, higher or lower. A caller sees a tool only if their group's highest level of work is at least the tool's, and from <code>sensitive</code> up each call is kept in full.</p>
+<form method="post" action="/tools">
+<div class="table-responsive"><table class="sortable table table-sm"><thead><tr><th>Tool</th><th>Level</th></tr></thead><tbody>
+{% for tool in tool_info.tools %}{% set server_level = servers.get(tool.name.split('__')[0], {}).get('level', 'normal') %}
+<tr><td><label for="level-{{ loop.index }}"><code>{{ tool.name }}</code></label></td><td><select id="level-{{ loop.index }}" name="level:{{ tool.name }}" class="form-select ">
+<option value="">as its server ({{ server_level }})</option>
+{% for level in ('normal', 'sensitive', 'restricted') %}<option {{ "selected" if levels.get(tool.name) == level }}>{{ level }}</option>{% endfor %}
+</select></td></tr>
+{% else %}<tr><td colspan="2" class="text-secondary">No tool descriptions on record yet.</td></tr>{% endfor %}
+</tbody></table></div>
+<button class="btn btn-primary" name="do" value="levels">Save levels</button>
+</form>
+{% endcall %}
+{% call card("Tool sets", true) %}
+<p class="text-secondary">A tool set offers only the tools it lists, one to a line; <code>*</code> stands for anything, as in <code>files__*</code>.
+  A harness uses one at <code>/mcp/NAME</code>, or chooses several on any address with the header <code>X-ToolLocker-Sets: code,email</code>.
+  A set only narrows: it never shows a tool the caller's group and account are not shown. Which tools a group is shown is set on its group page.</p>
+<form method="post" action="/tools">
+<div class="row g-3">
+{% for name, toolset in tool_config.get('toolsets', {}).items() %}
+<div class="col-md-6"><label for="set-{{ loop.index }}" class="form-label"><code>{{ name }}</code> <small class="text-secondary">/mcp/{{ name }}</small></label>
+<textarea id="set-{{ loop.index }}" name="set:{{ name }}" rows="3" class="form-control font-monospace">{{ toolset.tools|join('\n') }}</textarea>
+<div class="form-check mt-1"><input id="drop-{{ loop.index }}" name="drop:{{ name }}" type="checkbox" class="form-check-input"><label for="drop-{{ loop.index }}" class="form-check-label">Remove {{ name }}</label></div></div>
+{% endfor %}
+<div class="col-md-6"><label for="new_set" class="form-label">New tool set</label>
+<input id="new_set" name="new_set" class="form-control mb-2" placeholder="code" pattern="[a-z0-9][a-z0-9-]*">
+<label for="new_tools" class="form-label visually-hidden">Its tools</label>
+<textarea id="new_tools" name="new_tools" rows="3" class="form-control font-monospace" placeholder="code__*&#10;files__read_file"></textarea></div>
+</div>
+<button class="btn btn-primary mt-3" name="do" value="toolsets">Save tool sets</button>
+</form>
+{% endcall %}
+{% call card("Try a tool", true) %}
+<div id="tools-console">
+<div class="row g-2 align-items-end mb-3">
+<div class="col-md-4"><label for="tools-set" class="form-label">Tool set</label><select id="tools-set" class="form-select"><option value="">All allowed tools</option>{% for name in tool_config.get('toolsets', {}) %}<option>{{ name }}</option>{% endfor %}</select></div>
+<div class="col-md-3"><label for="tools-level" class="form-label">Sensitivity</label><select id="tools-level" class="form-select"><option>normal</option><option>sensitive</option><option>restricted</option></select></div>
+<div class="col-md-3"><label for="tools-trace" class="form-label">Trace</label><input id="tools-trace" class="form-control" maxlength="100"></div>
+<div class="col-md-2"><button id="tools-connect" type="button" class="btn btn-primary">Connect</button></div>
+</div>
+<p id="tools-state" class="text-secondary small" role="status">Connect to list the tools your account may use.</p>
+<label for="tools-tool" class="form-label">Tool</label><select id="tools-tool" class="form-select mb-2"></select>
+<p id="tools-description" class="text-secondary"></p><div id="tools-arguments" class="row g-2 mb-3"></div>
+<button id="tools-call" type="button" class="btn btn-primary" disabled>Call</button>
+<span id="tools-status" class="ms-2" role="status"></span>
+{{ section_title("Result") }}<pre id="tools-answer" class="kept frame p-2"></pre>
+</div>
+{% endcall %}
+{% call card("Recorded tool descriptions", false) %}
+{% for tool in tool_info.tools %}<details class="mb-2"><summary><code>{{ tool.name }}</code></summary><pre class="kept frame p-2">{{ tool.schema|tojson(indent=2) }}</pre></details>{% else %}<p class="text-secondary mb-0">No tool descriptions on record yet.</p>{% endfor %}
+{% endcall %}
+{% endblock %}

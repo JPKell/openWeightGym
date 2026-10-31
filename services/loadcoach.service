@@ -1,0 +1,18 @@
+[Unit]
+Description=LoadCoach gateway
+After=network-online.target
+
+[Service]
+ExecStart=%h/ai/openWeightGym/.venv/bin/loadcoach --config %h/ai/openWeightGym/settings/loadcoach.toml
+# Where the hosted service's key is kept, as NAME=value. The dash means: carry on if there is no such file.
+EnvironmentFile=-%h/ai/openWeightGym/.env
+Restart=on-failure
+RestartSec=3
+# llama-server runs inside this unit, so these also cap the host memory a model may take.
+# A model that outgrows them is stopped instead of dragging the whole machine into swap.
+MemoryHigh=22G
+MemoryMax=24G
+MemorySwapMax=0
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,14 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import said_box, page_header, form_section, card %}
+{% block title %}Image settings · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header('Image settings', 'Manage preview policy for everyone using the console.') }}
+{{ said_box(said, false) }}
+{% call card("Preview policy") %}
+<form method="post" action="/settings/image">
+<div class="form-check form-switch mb-2"><input id="adult-previews" name="adult_previews" value="yes" type="checkbox" class="form-check-input" role="switch"{% if preferences.adult_previews_allowed %} checked{% endif %}><label for="adult-previews" class="form-check-label">Allow personal adult-preview opt-in</label></div>
+<p class="text-secondary small">Applies immediately to Civitai previews. Each user must also enable their own preference on <a href="/civitai">Civitai</a>; both controls default off.</p>
+<button class="btn btn-primary">Save image settings</button>
+</form>{% endcall %}
+<p class="text-secondary">Generation defaults, reference preparation, LoRAs and output limits belong to <a href="/models/images/workflows">Image workflows</a> and <a href="/models/images">Image models</a>. GPU placement and loading belong to each model's compute location.</p>
+{% endblock %}

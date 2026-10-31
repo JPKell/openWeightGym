@@ -1,0 +1,34 @@
+{# One model's figures on one benchmark, under a pill for every benchmark. A pill asks for this piece again with its
+   benchmark chosen, and the answer takes this one's place: the page is not loaded again. #}
+{% from "benchmark_parts.html" import number, settings_note %}
+<div id="benchmark" hx-target="this" hx-swap="outerHTML">
+  {% if unscored %}
+  <p class="text-secondary mb-0">The results could not be had. {{ unscored }}</p>
+  {% else %}
+  <nav class="nav nav-pills mb-3">
+    {% for bench in benchmarks %}
+    <a class="nav-link py-1{{ " active" if bench.id == chosen else " text-secondary" if bench.id not in results }}" href="{{ address(model.name) }}{{ '&' if '?' in address(model.name) else '?' }}benchmark={{ bench.id }}#benchmark" hx-get="{{ address(model.name) }}{{ '&' if '?' in address(model.name) else '?' }}part=benchmark&amp;benchmark={{ bench.id }}">{{ bench.name }}</a>
+    {% endfor %}
+  </nav>
+  {% set bench = benchmarks|selectattr("id", "equalto", chosen)|first %}
+  {% set result = results.get(chosen) %}
+  {% if not result %}
+  <p class="text-secondary mb-0">No completed saved run. <a href="/benchmarks/runs?benchmark={{ chosen }}">Set up a run</a></p>
+  {% else %}
+  {{ settings_note(result) }}
+  {# Two figures to a row: a label and its value, twice. #}
+  <div class="table-responsive"><table class="table table-sm mb-2">
+    <tbody>
+    {# The score comes first, and has no key among the measurements. #}
+    {% for pair in ([["", "Score", bench.score_unit]] + bench.kpis)|batch(2) %}
+    <tr>{% for key, label, unit in pair %}
+      <th scope="row" class="w-25 fw-normal text-secondary">{{ label }} <small>{{ unit }}</small></th>
+      <td class="w-25">{{ number(result.metrics.get(key) if key else result.score) }}{% if not key and result.rerun %}<span title="Rerun recommended: {{ result.rerun|join(', ') }}">*</span>{% endif %}</td>
+    {% endfor %}{% if pair|length == 1 %}<th class="w-25"></th><td class="w-25"></td>{% endif %}</tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <a class="small" href="/benchmarks/run/{{ result.id }}">Run of {{ result.ended|timestamp }}</a>
+  {% endif %}
+  {% endif %}
+</div>

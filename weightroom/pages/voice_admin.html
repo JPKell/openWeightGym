@@ -1,0 +1,28 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, swaps, page_header, form_section, more , empty_row %}
+{% block title %}Voice settings · openWeightGym{% endblock %}
+{% block scripts %}<script src="/static/settings.js?v=1" defer></script><script src="/static/voice_admin.js?v=1" defer></script>{% endblock %}
+{% block main %}
+<div class="settings-page">
+{% call page_header('Voice settings', 'Configure Direct conversations, the Hermes agent and shared speech.') %}<a class="btn btn-outline-secondary btn-sm" href="/system/voice/status">Voice status</a>{% endcall %}
+{{ said_box(said, failed) }}
+{% if voice_problem %}<div class="alert alert-warning" role="status">{{ voice_problem }}</div>{% endif %}
+{% include 'settings_sections.html' %}
+{% call card("Preview a voice") %}
+<form method="post" action="/system/voice/preview" data-voice-preview>
+<div class="row g-2"><div class="col-md-4"><label class="form-label" for="preview-speaker">Voice</label><select class="form-select" id="preview-speaker" name="speaker" required>{% for value, label in speakers %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+<div class="col-md-8"><label class="form-label" for="preview-text">Preview text</label><input class="form-control" id="preview-text" name="text" value="Hello. What can I help you with?" maxlength="300" required></div></div>
+<button class="btn btn-primary mt-2"{% if not speakers %} disabled{% endif %}>Generate preview</button>
+<p class="small text-secondary mt-2 mb-0">Uses CPU speech synthesis on compute without changing the selected voice or starting a conversation. Speaker names are shown only for a recognized installed bundle.</p>
+<p class="text-danger mt-2 mb-0" role="status" data-preview-error></p><audio controls preload="none" class="mt-2 mw-100" data-preview-audio hidden></audio>
+</form>{% endcall %}
+{% call card("Recorded greetings") %}
+{% if voice_status.recordings|default({}) %}<p class="small">{{ voice_status.recordings.source }}{% if voice_status.recordings.speaker is defined %} · Speaker {{ voice_status.recordings.speaker }}{% endif %}</p>{% endif %}
+<p class="text-secondary small">These previews play the recordings currently used on front, including while compute is off. Edit greeting text and the selected speaker below. Save changes, wait for Voice to report them, then regenerate to replace the complete front cache.</p>
+<form method="post" action="/system/voice/regenerate" class="mb-3"><button class="btn btn-outline-primary btn-sm">Regenerate all greetings</button></form>
+<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Greeting</th><th>Recorded text</th><th>Preview</th></tr></thead><tbody>
+{% for name in greeting_names %}<tr><th scope="row">{{ name }}</th><td class="wrap">{{ voice_status.recordings.texts[name] if voice_status.recordings|default({}) else 'Recording text unavailable' }}</td><td><audio controls preload="none" class="mw-100" aria-label="{{ name }} greeting" src="/system/voice/recordings?name={{ name }}"></audio></td></tr>{% else %}{{ empty_row(3, "No recorded greetings. Regenerate greetings after saving a voice.") }}{% endfor %}
+</tbody></table></div>
+{% endcall %}
+</div>
+{% endblock %}

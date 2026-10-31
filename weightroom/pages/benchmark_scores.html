@@ -1,0 +1,11 @@
+{% from "parts.html" import card %}
+{% from "benchmark_parts.html" import number, flags %}
+{% call card("Scores", open=true, key="benchmark-scores") %}
+<div id="benchmark-heatmap-scroll" class="benchmark-heatmap-scroll" hidden><div id="benchmark-heatmap" class="benchmark-heatmap" role="img" aria-label="Benchmark scores by model. Keyboard links are available in the score grid."></div></div>
+<div id="benchmark-score-table" class="table-responsive"><table class="table score-map align-middle mb-0"><thead><tr><th scope="col">Model</th>{% for bench in score_benchmarks %}<th scope="col" data-green="{{ bench.green }}" data-label="{{ bench.name }}" data-unit="{{ bench.score_unit }}"><a href="/benchmarks/results?benchmark={{ bench.id }}#measurements">{{ bench.name }}</a><small>{{ bench.score_unit }}</small></th>{% endfor %}</tr></thead><tbody>
+{% for model in score_models %}<tr><th scope="row">{{ model.id }}</th>{% for bench in score_benchmarks %}{% set result = latest.get(model.id, {}).get(bench.id) %}<td><a data-score="{{ result.score if result and result.score is not none else '' }}" class="score-cell{{ ' score-missing' if not result or result.score is none }}" {% if result and result.score is not none %}style="background: {{ colours[(model.id, bench.id)] }}; color: #101a13"{% endif %} href="{{ '/benchmarks/run/' + result.id if result else '/benchmarks/runs?benchmark=' + bench.id }}" aria-label="{{ model.id }}, {{ bench.name }}: {{ number(result.score if result else none) }}">{{ number(result.score if result else none) }}{{ flags(result) }}</a></td>{% endfor %}</tr>
+{% else %}<tr><td colspan="{{ score_benchmarks|length + 1 }}" class="empty-state">No local models are available to your account.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="heat-legend"><span>Orange</span><span class="heat-gradient" aria-hidden="true"></span><span>Green</span><span class="ms-auto">Scaled per benchmark · — not measured · <span class="flag-settings">† settings changed</span> · <span class="flag-version">* benchmark changed</span> · <span class="flag-environment">* environment changed</span></span></div>
+<p class="small text-secondary mt-2 mb-0">Current measurements when available · otherwise latest saved result. Green follows the high or low direction configured for each benchmark.</p>
+{% endcall %}

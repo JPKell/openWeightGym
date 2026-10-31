@@ -1,0 +1,59 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, page_header, card, section_title , confirm_two %}
+{% block title %}{{ manifest.name }} · {{ instance or "New instance" }}{% endblock %}
+{% block main %}
+<p><a href="/plugins">Plugins</a> / <a href="/plugins/{{ manifest.id }}">{{ manifest.name }}</a> / {{ instance or "New instance" }}</p>
+{% call page_header(instance or "New instance", lead="Configure an adapter instance and its model access.") %}{% if instance %}<a href="/plugins/{{ manifest.id }}/instances/{{ instance }}/installer" class="btn btn-outline-primary">Download Linux installer</a>{% endif %}{% endcall %}
+{{ said_box(said, failed) }}
+{% if instance %}<p>Settings: <strong>desired {{ config.revision }}</strong>, applied {{ config.applied_revision }} · {{ "Pending" if config.revision != config.applied_revision else "Synchronized" }}{% if config.restart_required %} · <span class="text-warning-emphasis">Restart the adapter service on its machine to apply its listening address/port.</span>{% endif %}</p>{% endif %}
+{% if config.error %}<div class="alert alert-warning">{{ config.error }}</div>{% endif %}
+{% call card("", tag="form", attrs={"method": "post"}) %}
+<input type="hidden" name="do" value="save">
+{{ section_title("Connection and settings") }}
+{% if not instance %}<label class="form-label d-block">Instance name<input class="form-control" name="instance" required pattern="[a-z][a-z0-9_-]{0,47}" placeholder="local"></label>{% endif %}
+<label class="form-label d-block">Adapter HTTP URL<input class="form-control" type="url" name="url" required value="{{ config.url }}"><small class="text-secondary">The address turnstile reaches, locally or remotely. Use the listening port configured below.</small></label>
+<label class="form-check mb-3"><input class="form-check-input" type="checkbox" name="enabled"{% if config.enabled %} checked{% endif %}> Enable this instance</label>
+<label class="form-label d-block">Maximum request sensitivity<select class="form-select" name="sensitivity">{% for level in levels %}<option{% if config.max_sensitivity == level %} selected{% endif %}>{{ level }}</option>{% endfor %}</select></label>
+{% for field in fields %}
+{% set prop = field.schema %}
+<div class="mb-3">
+{% if prop.type == "boolean" %}
+<label class="form-check"><input class="form-check-input" type="checkbox" name="setting-{{ field.key }}"{% if field.value %} checked{% endif %}> {{ field.key|replace("_", " ") }}</label>
+{% else %}
+<label class="form-label d-block">{{ field.key|replace("_", " ") }}
+{% if prop.enum %}<select class="form-select" name="setting-{{ field.key }}">{% for value in prop.enum %}<option value="{{ value }}"{% if value == field.value %} selected{% endif %}>{{ value or "Profile default" }}</option>{% endfor %}</select>
+{% elif prop.type in ["object", "array"] %}<textarea class="form-control font-monospace" name="setting-{{ field.key }}" rows="5">{{ field.value|tojson(indent=2) }}</textarea>
+{% else %}<input class="form-control{% if field.key in ["cli", "venv", "repository", "workspace", "hermes_home"] %} font-monospace{% endif %}" name="setting-{{ field.key }}" value="{{ field.value }}"{% if prop.type in ["integer", "number"] %} type="number" min="{{ prop.minimum|default(0) }}"{% if prop.maximum %} max="{{ prop.maximum }}"{% endif %}{% endif %}>
+{% endif %}</label>
+{% endif %}
+{% if prop.description %}<small class="text-secondary">{{ prop.description }}</small>{% endif %}
+</div>
+{% endfor %}
+{{ section_title("Health and recovery") }}
+<label class="form-label d-block">Polling interval (seconds)<input class="form-control" type="number" min="5" max="86400" name="health_interval" value="{{ config.health.interval|default(30) }}"></label>
+{% for key, label in [("enabled", "Enable optional health checks"), ("allow_start", "Allow service start"), ("allow_restart", "Allow service restart"), ("auto_start", "Automatically start a stopped service"), ("auto_restart", "Automatically restart an unhealthy service")] %}
+{% if key in ["enabled"] and "health" in manifest.capabilities or "start" in key and "start" in manifest.capabilities or "restart" in key and "restart" in manifest.capabilities %}
+<label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="health-{{ key }}"{% if config.health[key]|default(false) %} checked{% endif %}> {{ label }}</label>
+{% endif %}{% endfor %}
+<p class="small text-secondary">Health controls operate the external service. The adapter's installed OS service handles its own process recovery.</p>
+<button class="btn btn-primary">Save settings</button>
+{% endcall %}
+{% if instance %}
+{% call card("") %}{{ section_title("Operations") }}<form method="post" class="d-flex flex-wrap gap-2">
+<button class="btn btn-outline-primary btn-sm" name="do" value="sync">Synchronize settings</button>
+{% if "models" in manifest.capabilities %}<button class="btn btn-outline-primary btn-sm" name="do" value="discover">Discover profiles/models</button>{% endif %}
+{% if "health" in manifest.capabilities %}<button class="btn btn-outline-secondary btn-sm" name="do" value="health">Check health</button>{% endif %}
+{% if "start" in manifest.capabilities and config.health.allow_start %}<button class="btn btn-outline-secondary btn-sm" name="do" value="start">Start service</button>{% endif %}
+{% if "restart" in manifest.capabilities and config.health.allow_restart %}<button  class="btn btn-outline-secondary btn-sm" name="do" value="restart" {{ confirm_two() }}>Restart service</button>{% endif %}
+</form>{% if config.health_result %}<p class="mt-3 mb-0">External service: {{ config.health_result.external.state }} · {{ config.health_result.active_runs }} active runs · Checked {{ config.health_checked_at|timestamp }}{% if config.health_result.external.chat_available %} · CLI chat available{% endif %}</p>{% endif %}{% endcall %}
+{% call card("") %}{% set _section_title4 %}Public models <small class="text-secondary">Adaptor</small>{% endset %}
+{{ section_title(_section_title4) }}
+{% for profile, model in config.models.items() %}
+<form method="post" class="border-bottom pb-3 mb-3"><input type="hidden" name="do" value="model"><input type="hidden" name="profile" value="{{ profile }}">
+<div class="d-flex flex-wrap align-items-end gap-2"><label class="form-label flex-grow-1 mb-0">{{ model.label }} · <code>{{ profile }}</code>{% if not model.available %} <span class="text-warning-emphasis">Unavailable in latest discovery</span>{% endif %}<input class="form-control" name="alias" value="{{ model.alias }}" required></label><label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="enabled"{% if model.enabled %} checked{% endif %}> Enabled</label><button class="btn btn-outline-primary mb-1">Save model</button></div>
+</form>{% else %}<p class="text-secondary">Discover profiles/models, or add an explicit entry.</p>{% endfor %}
+<form method="post" class="d-flex flex-wrap gap-2"><input type="hidden" name="do" value="add-model"><label for="underlying-profile" class="form-label align-self-center mb-0">Underlying profile/model ID</label><input id="underlying-profile" class="form-control flex-grow-1" name="profile" required placeholder="Profile or model ID"><button class="btn btn-outline-secondary ">Add entry</button></form>
+<p class="small text-secondary mt-3 mb-0">Renaming a public name preserves its underlying profile. Update restricted model allowlists when changing a name.</p>
+{% endcall %}
+{% endif %}
+{% endblock %}

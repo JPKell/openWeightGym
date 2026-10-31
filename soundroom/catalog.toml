@@ -1,0 +1,129 @@
+# Audio families SoundRoom offers. Packages, files and request options come from the
+# pinned audio.cpp release's model_specs/; this file adds only what upstream specs lack.
+# kinds: music, sound, speech, clone, design, transcription, alignment, diarization.
+# commercial: yes, no or conditional, from audio.cpp docs/model_licenses.md at the pin.
+# caption/lyrics: where a family takes the style text and lyrics; modes: song plus any of
+# continue, cover, repaint; instrumental: the lyrics text that asks for no vocals; frames: semantic
+# frames per second, for a family whose length is its token count rather than a duration option;
+# speaker_label: put before each spoken line for a family that reads only speaker-labelled
+# text; note: what an administrator must know to set up a profile, shown on the Audio models page.
+
+[families.ace_step]
+kinds = ["music"]
+licence = "MIT"
+commercial = "yes"
+caption = "text"      # where the style caption goes: text, or an option name
+lyrics = "lyrics"
+modes = ["song", "continue", "cover", "repaint"]
+mode_option = "route"
+mode_values = {song = "text2music", continue = "complete", cover = "cover", repaint = "repaint"}
+repaint_start_option = "repainting_start"
+repaint_end_option = "repainting_end"
+instrumental = "[Instrumental]"
+help = "Songs, instrumentals and edits. Describe genre, mood, instruments and vocals; use tempo and key controls for specific musical direction."
+
+[families.stable_audio]
+kinds = ["music", "sound"]
+licence = "Stability AI Community License"
+commercial = "conditional"
+caption = "text"
+modes = ["song", "cover", "repaint"]
+mode_option = "audio_input_kind"
+mode_values = {cover = "init_audio", repaint = "inpaint_audio"}
+repaint_start_option = "inpaint_mask_start_sec"
+repaint_end_option = "inpaint_mask_end_sec"
+repaint_as_text = true
+help = "Describe the sound, instruments, rhythm and arrangement in the prompt. This profile does not accept a separate lyrics sheet."
+
+[families.heartmula]
+kinds = ["music"]
+licence = "Apache-2.0"
+commercial = "yes"
+caption = "tags"
+lyrics = "lyrics"
+lyrics_required = true
+help = "Lyrics-driven songs: enter tagged verses and a chorus, plus comma-separated style tags. Choose ACE-Step for an instrumental."
+
+[families.yue2]
+kinds = ["music"]
+licence = "CC-BY-NC-4.0"
+commercial = "no"
+caption = "style"
+lyrics = "lyrics"
+instrumental = "[instrumental]"
+frames = 25
+help = "Lyrics and style guide the song; match the number of lyric lines to the clip length. This family has a non-commercial licence."
+note = "Install a main and a VAE package; the profile's path is the main GGUF. In its session options name both files, such as {\"yue2.model_gguf\": \"yue2-3b-q8_0.gguf\", \"yue2.vae_gguf\": \"yue2-vae-f16.gguf\"}, and set default request option cot to off for faster takes."
+
+[families.midashenglm_gen]
+kinds = ["sound", "music"]
+licence = "Apache-2.0"
+commercial = "yes"
+caption = "text"
+help = "Prompt-driven clips: describe the instruments, rhythm, mood and production in one clear paragraph. No separate lyrics sheet."
+
+[families.qwen3_tts]
+kinds = ["speech", "clone", "design"]
+licence = "Apache-2.0"
+commercial = "yes"
+
+[families.chatterbox]
+kinds = ["speech", "clone"]
+licence = "MIT"
+commercial = "yes"
+
+[families.chatterbox_turbo]
+kinds = ["speech"]
+licence = "MIT"
+commercial = "yes"
+
+[families.vibevoice]
+kinds = ["speech"]
+licence = "MIT"
+commercial = "yes"
+speaker_label = "Speaker 1: "
+
+[families.voxcpm2]
+kinds = ["speech", "clone", "design"]
+licence = "Apache-2.0"
+commercial = "yes"
+
+[families.index_tts2]
+kinds = ["speech", "clone"]
+licence = "bilibili Model Use License"
+commercial = "conditional"
+
+[families.parakeet_tdt]
+kinds = ["transcription"]
+licence = "CC-BY-4.0"
+commercial = "yes"
+
+[families.qwen3_asr]
+kinds = ["transcription"]
+licence = "Apache-2.0"
+commercial = "yes"
+
+[families.qwen3_forced_aligner]
+kinds = ["alignment"]
+licence = "Apache-2.0"
+commercial = "yes"
+
+[families.canary_asr]
+kinds = ["transcription"]
+licence = "CC-BY-4.0"
+commercial = "yes"
+
+[families.nemotron_asr]
+kinds = ["transcription"]
+licence = "OpenMDW-1.1"
+commercial = "yes"
+
+[families.sortformer_diar]
+kinds = ["diarization"]
+licence = "CC-BY-NC-4.0"
+commercial = "no"
+
+[families.nemotron_3_diar]
+kinds = ["diarization"]
+licence = "OpenMDW-1.1"
+commercial = "yes"

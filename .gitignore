@@ -1,0 +1,29 @@
+.venv/
+__pycache__/
+*.egg-info/
+# Generated packaging output is rebuilt from canonical source, never committed.
+/build/
+/dist/
+# Written by the deployer on each installed machine.
+/DEPLOYED
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+# Local editor state and model weights do not belong in the source repository.
+/.obsidian/
+/.vscode/
+/*.gguf
+# Each machine's own settings. What is committed is settings/examples and settings/defaults.
+/settings/*.toml
+/settings/*.toml.before-*
+# What the programs keep: databases, the token, copies of what was changed on the site.
+/data/
+# Key files.
+/keys/
+# Front-owned plugin configuration; deployments preserve it beside each plugin's code.
+/plugins/*/settings.json
+/plugins/*/.settings.lock
+voice-test/
+weightroom/static/LoadCoach-Voice.zip
