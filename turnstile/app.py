@@ -110,6 +110,11 @@ class Settings:
     toollocker_url: str = ""  # optional front ToolLocker upstream; port 8443 never wakes compute
     artifact_machine: str = ""  # front-side LoadCoach that owns downloads; empty prefers front_cpu
     image_adult_previews: bool = False  # permit individual users to opt in to adult Civitai previews
+    compute_offset: int = 0  # how far compute's ports sit from `ports`, from the port in compute's URL. 0 unless both run on one machine
+
+    def upstream(self, port: int) -> str:
+        """The main compute machine's address for one of `ports`, moved by `compute_offset`."""
+        return f"http://{self.compute}:{port + self.compute_offset}"
 
 
 def load_settings(path: Path) -> Settings:
@@ -120,8 +125,13 @@ def load_settings(path: Path) -> Settings:
     changed = copy_of(data / "settings.json").get("turnstile", {})
     for mine in ([laid_over(file, changed, "turnstile")] if changed else []) + [file]:  # with the changes, and failing that as the file has it
         try:
+            ports = tuple(mine.get("ports", (8442, 8443, 8444)))
+            # A port in compute's URL other than LoadCoach's first one moves every port by the same amount:
+            # compute = "http://127.0.0.1:9442" lets turnstile keep 8442-8444 on a machine that also runs LoadCoach.
+            compute_port = urlsplit(told["compute"]).port
             settings = Settings(
                 compute=urlsplit(told["compute"]).hostname,
+                compute_offset=compute_port - ports[0] if compute_port else 0,
                 path=str(path),
                 databases=told.get("databases", {}),
                 groups={name: read_group(name, section) for name, section in told.get("groups", {}).items()},
@@ -132,7 +142,7 @@ def load_settings(path: Path) -> Settings:
                 data=str(data),
                 wake_mac=told.get("wake_mac", ""),
                 wake_address=told.get("wake_address", "255.255.255.255"),
-                **{**mine, "ports": tuple(mine.get("ports", (8442, 8443, 8444))),
+                **{**mine, "ports": ports,
                    # This live policy reads front's current saved override, including resets.
                    "image_adult_previews": file.get("image_adult_previews", False),
                    "plugins_dir": str((path.parent / mine.get("plugins_dir", told.get("plugins_dir", "../plugins"))).resolve()),
@@ -311,7 +321,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             where = image_work.discovery_path(user, where)
         port = port or settings.ports[0]
         other = settings.machines.get(machine, {})
-        base = (other.get("spotter") if len(settings.ports) > 2 and port == settings.ports[2] and other.get("spotter") else other["compute"]).rstrip("/") if other else f"http://{settings.compute}:{port}"
+        base = (other.get("spotter") if len(settings.ports) > 2 and port == settings.ports[2] and other.get("spotter") else other["compute"]).rstrip("/") if other else settings.upstream(port)
         headers, nonce = signed_headers(user, method, where, body, [("content-type", "application/json")] if body else [], key_file=other.get("machine_key_file", ""))
         try:
             answer = await internal.request(method, f"{base}{where}", headers=headers, content=body,
@@ -465,7 +475,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         port = port or settings.ports[0]
         other = settings.machines.get(machine, {}) if machine != "compute" else {}
         front_tools = not machine and port == 8443 and bool(settings.toollocker_url)
-        base = settings.toollocker_url.rstrip("/") if front_tools else other["compute"].rstrip("/") if other else f"http://{settings.compute}:{port}"
+        base = settings.toollocker_url.rstrip("/") if front_tools else other["compute"].rstrip("/") if other else settings.upstream(port)
         key_file = other.get("machine_key_file", "")
 
         async def reach() -> tuple[httpx.Response, str] | Response | None:
@@ -698,7 +708,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         body = json.dumps(payload).encode()
         key = statement.read_key(key_file)
         header, nonce = statement.make(key, "POST", path, body, statement.caller_of(user), purpose="front-probe")
-        base = other["compute"].rstrip("/") if other else f"http://{settings.compute}:{settings.ports[0]}"
+        base = other["compute"].rstrip("/") if other else settings.upstream(settings.ports[0])
         try:
             answer = await compute.post(base + path, content=body,
                 headers={statement.HEADER: header, "content-type": "application/json"}, timeout=httpx.Timeout(None, connect=2))
@@ -1269,7 +1279,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             raise ValueError(answer.json()["error"]["message"] if answer is not None else "The destination is not answering.")
         source = step["source"]
         other = settings.machines.get(source, {}) if source != "compute" else {}
-        base = other["compute"].rstrip("/") if other else f"http://{settings.compute}:{settings.ports[0]}"
+        base = other["compute"].rstrip("/") if other else settings.upstream(settings.ports[0])
         path = "/loadcoach/files/content?" + urlencode({"path": step["file"]["path"]})
         headers, nonce = signed_headers(user, "GET", path, b"", [], key_file=other.get("machine_key_file", ""))
         async with internal.stream("GET", base + path, headers=headers, timeout=None) as upstream:
@@ -1476,7 +1486,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     def spotter_base(name: str) -> str:
         """Resolve the configured Spotter endpoint for a compute node."""
         if name == "compute":
-            return f"http://{settings.compute}:{settings.ports[2]}"
+            return settings.upstream(settings.ports[2])
         return settings.machines[name].get("spotter", "").rstrip("/")
 
     async def distribute_one(user: User, source: Path, relative: str, digest: str, node: dict, job: dict) -> None:

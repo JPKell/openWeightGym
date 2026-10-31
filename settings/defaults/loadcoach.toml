@@ -136,7 +136,7 @@ flash-attn = "on"
 # gpus = 1
 
 # [models."qwen-1.5b".flags]
-# model = "/home/jpk/ai/models/llm/Qwen2.5-1.5B-Instruct.Q8_0.gguf"
+# model = "/home/you/openWeightGym/models/llm/Qwen2.5-1.5B-Instruct.Q8_0.gguf"
 # ctx-size = 8192
 # gpu-layers = "all"
 
@@ -145,7 +145,7 @@ flash-attn = "on"
 # gpus = 1
 
 # [models."qwen-coder-14b".flags]
-# model = "/home/jpk/ai/models/llm/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf"
+# model = "/home/you/openWeightGym/models/llm/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf"
 # ctx-size = 16384
 # gpu-layers = "all"
 
@@ -154,7 +154,7 @@ flash-attn = "on"
 # gpus = 2
 
 # [models."gemma-31b".flags]
-# model = "/home/jpk/ai/models/llm/gemma-4-31B-it-Q5_K_M.gguf"
+# model = "/home/you/openWeightGym/models/llm/gemma-4-31B-it-Q5_K_M.gguf"
 # ctx-size = 8192
 # split-mode = "layer"
 # tensor-split = [1, 1]

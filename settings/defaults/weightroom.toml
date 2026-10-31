@@ -208,7 +208,7 @@ keep_days = 90
 # extras = "voice-gateway,benchmarks,postgresql,knowledge"
 # services = ["toollocker", "loadcoach-front-cpu", "spotter-front-cpu", "turnstile", "voice-gateway", "weightroom"]
 # [deploy.nodes.compute]
-# ssh = "10.77.10.84"
+# ssh = "compute.lan"
 # folder = "suite-deployed"
 # extras = "voice,postgresql"
 # services = ["loadcoach", "spotter", "voice"]

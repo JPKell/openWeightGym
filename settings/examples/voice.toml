@@ -6,21 +6,21 @@
 # machine's own starting value.
 
 # Compute. Speech weights are downloaded by scripts/voice-models.py.
-host = "10.77.10.84"
+host = "compute.lan"
 
 port = 8445
 
 # Where the voice service asks LoadCoach for what it needs itself, with its own key: holds, the
 # status and its settings. That is turnstile, on the front machine, which checks the key.
-compute = "http://10.77.10.42:8442"
+compute = "http://front.lan:8442"
 
-key_file = "/home/jpk/ai/openWeightGym/keys/voice-service.key"
+key_file = "/home/you/openWeightGym/keys/voice-service.key"
 
 # The key turnstile signs with: who a caller is comes in its statement, never as a key.
-machine_key_file = "/home/jpk/ai/openWeightGym/keys/machine.key"
+machine_key_file = "/home/you/openWeightGym/keys/machine.key"
 
 # Optional voice spans share LoadCoach's existing core log/spool and signed forwarding.
-# observability_database = "/home/jpk/ai/openWeightGym/data/loadcoach.db"
+# observability_database = "/home/you/openWeightGym/data/loadcoach.db"
 # observability_dsn_file = "/path/to/existing/compute-core.dsn" # PostgreSQL alternative
 # observability_machine = "compute"
 
@@ -28,10 +28,10 @@ machine_key_file = "/home/jpk/ai/openWeightGym/keys/machine.key"
 data = "../data"
 
 [recognition]
-encoder = "/home/jpk/ai/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx"
-decoder = "/home/jpk/ai/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx"
-joiner = "/home/jpk/ai/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx"
-tokens = "/home/jpk/ai/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/tokens.txt"
+encoder = "/home/you/openWeightGym/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx"
+decoder = "/home/you/openWeightGym/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx"
+joiner = "/home/you/openWeightGym/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx"
+tokens = "/home/you/openWeightGym/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/tokens.txt"
 threads = 2
 # Keep alternate word hypotheses and allow natural pauses before ending a turn.
 decoding_method = "modified_beam_search"
@@ -40,11 +40,11 @@ trailing_silence_ms = 800
 max_utterance_seconds = 30
 
 [synthesis]
-model = "/home/jpk/ai/models/voice/kokoro-multi-lang-v1_0/model.onnx"
-voices = "/home/jpk/ai/models/voice/kokoro-multi-lang-v1_0/voices.bin"
-tokens = "/home/jpk/ai/models/voice/kokoro-multi-lang-v1_0/tokens.txt"
-data_dir = "/home/jpk/ai/models/voice/kokoro-multi-lang-v1_0/espeak-ng-data"
-lexicon = "/home/jpk/ai/models/voice/kokoro-multi-lang-v1_0/lexicon-us-en.txt"
+model = "/home/you/openWeightGym/models/voice/kokoro-multi-lang-v1_0/model.onnx"
+voices = "/home/you/openWeightGym/models/voice/kokoro-multi-lang-v1_0/voices.bin"
+tokens = "/home/you/openWeightGym/models/voice/kokoro-multi-lang-v1_0/tokens.txt"
+data_dir = "/home/you/openWeightGym/models/voice/kokoro-multi-lang-v1_0/espeak-ng-data"
+lexicon = "/home/you/openWeightGym/models/voice/kokoro-multi-lang-v1_0/lexicon-us-en.txt"
 speaker = 3
 threads = 4
 workers = 2

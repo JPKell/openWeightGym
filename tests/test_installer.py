@@ -226,3 +226,46 @@ def test_installer_refuses_to_switch_a_populated_store(tmp_path):
 
     assert answer.returncode == 2
     assert "will not switch engines without a verified migration" in answer.stdout
+
+
+def test_one_machine_settings_move_compute_ports_and_fill_in_folders(tmp_path):
+    import tomllib
+    root, home = tmp_path / "home" / "bob" / "openWeightGym", tmp_path / "home" / "bob"
+    made = {}
+    for name in ("loadcoach", "weightroom", "toollocker", "spotter"):
+        example = ROOT / "settings" / "examples" / f"{name}.toml"
+        values = support.topology_values(name, "all", root, "192.168.1.50", "", "", "/opt/llama/llama-server")
+        support.render(example, tmp_path / f"{name}.toml", root, home, values)
+        text = (tmp_path / f"{name}.toml").read_text()
+        assert "/home/you" not in text and "/home/jpk" not in text
+        made[name] = tomllib.loads(text)
+    # turnstile keeps 8442-8444 on this machine; compute's programs sit 1000 above, which weightroom's URL says.
+    assert (made["loadcoach"]["host"], made["loadcoach"]["port"], made["loadcoach"]["front"]) == ("127.0.0.1", 9442, "http://127.0.0.1:8442")
+    assert made["loadcoach"]["llama_server"] == "/opt/llama/llama-server" and made["loadcoach"]["models_folder"] == str(root / "models")
+    assert made["weightroom"]["compute"] == "http://127.0.0.1:9442" and made["weightroom"]["turnstile"]["ports"] == [8442, 8443, 8444]
+    assert (made["toollocker"]["port"], made["spotter"]["port"]) == (9443, 9444)
+    assert made["toollocker"]["servers"]["files"]["command"][-1] == str(root / "data" / "shared")
+
+
+def test_a_compute_node_listens_on_its_address_and_asks_front(tmp_path):
+    import tomllib
+    values = support.topology_values("loadcoach", "compute", tmp_path, "192.168.1.50", "http://192.168.1.10:8442/", "", "")
+    support.render(ROOT / "settings/examples/loadcoach.toml", tmp_path / "loadcoach.toml", tmp_path, tmp_path, values)
+    made = tomllib.loads((tmp_path / "loadcoach.toml").read_text())
+    assert (made["host"], made["port"], made["front"]) == ("192.168.1.50", 8442, "http://192.168.1.10:8442")
+    # A console with no compute node yet still starts; it shows compute as not answering.
+    assert support.topology_values("weightroom", "front", tmp_path, "192.168.1.10", "", "", "")["spotter"] == ""
+
+
+def test_setting_a_value_keeps_comments_and_adds_what_is_missing():
+    text = '# about the host\nhost = "x"  # here\n# port = 1\n\n[turnstile]\nports = [1]\n\n[other]\nhost = "y"\n'
+    text = support.set_toml_value(text, "host", "127.0.0.1")
+    text = support.set_toml_value(text, "port", 9442)
+    text = support.set_toml_value(text, "turnstile.host", "0.0.0.0")
+    text = support.set_toml_value(text, "data", "../data")
+    assert text.startswith('# about the host\nhost = "127.0.0.1"\nport = 9442\n')
+    assert 'ports = [1]\nhost = "0.0.0.0"\n' in text and '[other]\nhost = "y"' in text
+    assert text.index('data = "../data"') < text.index("[turnstile]")
+    import pytest
+    with pytest.raises(ValueError, match="several lines"):
+        support.set_toml_value('command = [\n  "a",\n]\n', "command", ["b"])

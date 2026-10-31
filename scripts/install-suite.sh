@@ -6,6 +6,8 @@ set -Eeuo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+# shellcheck source=lib/ui.sh
+source "$SCRIPT_DIR/lib/ui.sh"
 UNIT_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 SERVICES=(loadcoach toollocker spotter voice weightroom turnstile voice-gateway)
 COMPUTE=(loadcoach toollocker spotter voice)
@@ -28,6 +30,14 @@ SDCPP_EXPLICIT=0
 AUDIOCPP_ACTION=keep
 AUDIOCPP_BACKEND=cuda
 AUDIOCPP_EXPLICIT=0
+TOPOLOGY=keep
+ADDRESS=
+FRONT_URL=
+COMPUTE_URL=
+LLAMA_SERVER=
+START_NEW=0
+UV=
+EMBEDDED=0
 declare -A DSNS=()
 declare -A WAS_CONFIGURED=()
 declare -A CONFIG_BACKUPS=()
@@ -57,6 +67,17 @@ change both the service set and database engine before anything is installed.
   --audiocpp-backend cuda|vulkan|cpu
                              explicit native backend; default cuda, no CPU fallback
   --no-start                 install and enable units without starting them
+  --topology all|front|compute
+                             write new settings for this machine's part: everything on
+                             one machine, the console only, or a GPU node (default: keep
+                             the examples' placeholders for you to edit)
+  --address IP               this machine's address on its network (GPU node settings)
+  --front-url URL            the console's turnstile, such as http://192.168.1.10:8442
+  --compute-url URL          the GPU node's LoadCoach, such as http://192.168.1.20:8442
+  --llama-server PATH        the llama-server LoadCoach runs (see install-llamacpp.sh)
+  --start-new                also start services whose settings were just written
+  --uv PATH                  make the environment and install packages with uv
+  --embedded                 leave headings and the summary to the program calling this
   --non-interactive          require all choices on the command line
   --yes                      accept the final interactive summary
   --root PATH                install from a different openWeightGym source checkout
@@ -71,16 +92,42 @@ Examples:
 EOF
 }
 
-die() { printf 'install-suite: %s\n' "$*" >&2; exit 2; }
+die() { ui_die "install-suite: $*" "" 2; }
 note() { printf '%s\n' "$*"; }
 quote_command() { printf ' %q' "$@"; printf '\n'; }
 run() {
   if ((DRY_RUN)); then
-    printf 'DRY RUN:'
+    printf '  %sDRY RUN:%s' "$C_MUTED" "$C_RESET"
     quote_command "$@"
   else
     "$@"
   fi
+}
+# A longer piece of work, with a spinner and its output in the log.
+step() {
+  local label=$1
+  shift
+  if ((DRY_RUN)); then run "$@"; return 0; fi
+  ui_step "$label" -- "$@" || die "$label failed. Fix what the log says and run this again; nothing finished is undone."
+}
+section() { ((EMBEDDED)) || ui_section "$@"; }
+# The compatibility audit, its findings shown like the rest: audit PYTHON ARGUMENTS...
+audit() {
+  local python=$1 output rc=0 line level rest
+  shift
+  output=$("$python" "$ROOT/scripts/install-suite-support.py" audit "$@" 2>&1) || rc=$?
+  while IFS= read -r line; do
+    level=${line%% *} rest=${line#"$level"}
+    rest=${rest#"${rest%%[! ]*}"}
+    case "$level" in
+      OK) ui_ok "$rest" ;;
+      NEW) ui_info "$rest" ;;
+      WARN) ui_warn "$rest" ;;
+      ERROR) ui_fail "$rest" ;;
+      *) [[ -n $line ]] && ui_note "$line" ;;
+    esac
+  done <<<"$output"
+  return "$rc"
 }
 
 while (($#)); do
@@ -102,6 +149,14 @@ while (($#)); do
     --audiocpp) (($# >= 2)) || die '--audiocpp needs install, skip or keep'; AUDIOCPP_ACTION=$2; AUDIOCPP_EXPLICIT=1; shift 2 ;;
     --audiocpp-backend) (($# >= 2)) || die '--audiocpp-backend needs cuda, vulkan or cpu'; AUDIOCPP_BACKEND=$2; shift 2 ;;
     --no-start) START_SERVICES=0; shift ;;
+    --topology) (($# >= 2)) || die '--topology needs all, front or compute'; TOPOLOGY=$2; shift 2 ;;
+    --address) (($# >= 2)) || die '--address needs an IP address'; ADDRESS=$2; shift 2 ;;
+    --front-url) (($# >= 2)) || die '--front-url needs a URL'; FRONT_URL=$2; shift 2 ;;
+    --compute-url) (($# >= 2)) || die '--compute-url needs a URL'; COMPUTE_URL=$2; shift 2 ;;
+    --llama-server) (($# >= 2)) || die '--llama-server needs a path'; LLAMA_SERVER=$2; shift 2 ;;
+    --start-new) START_NEW=1; shift ;;
+    --uv) (($# >= 2)) || die '--uv needs a path'; UV=$2; shift 2 ;;
+    --embedded) EMBEDDED=1; shift ;;
     --non-interactive) NON_INTERACTIVE=1; shift ;;
     --yes) ASSUME_YES=1; shift ;;
     --root) (($# >= 2)) || die '--root needs a path'; ROOT=$(cd -- "$2" && pwd); shift 2 ;;
@@ -110,7 +165,21 @@ while (($#)); do
   esac
 done
 
+ui_init
+: "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/install-suite-$(date +%Y%m%d-%H%M%S).log}"
+mkdir -p "$(dirname "$OWG_LOG")" 2>/dev/null || OWG_LOG=/dev/null
+export OWG_LOG
+
 [[ -f $ROOT/pyproject.toml && -f $ROOT/scripts/install-suite-support.py ]] || die "$ROOT is not an openWeightGym checkout"
+[[ $TOPOLOGY =~ ^(keep|all|front|compute)$ ]] || die 'topology must be all, front, or compute'
+if [[ $TOPOLOGY == compute && -z $FRONT_URL ]]; then die "a GPU node needs --front-url, the console machine's turnstile address"; fi
+[[ -z $FRONT_URL || $FRONT_URL =~ ^https?://[^/[:space:]]+/?$ ]] || die '--front-url must look like http://192.168.1.10:8442'
+[[ -z $COMPUTE_URL || $COMPUTE_URL =~ ^https?://[^/[:space:]]+/?$ ]] || die '--compute-url must look like http://192.168.1.20:8442'
+[[ -z $UV || -x $UV ]] || die "--uv $UV is not a program"
+if [[ $TOPOLOGY != keep && -z $ADDRESS ]]; then
+  ADDRESS=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") {print $(i + 1); exit}}') || true
+  ADDRESS=${ADDRESS:-127.0.0.1}
+fi
 [[ $DATABASE =~ ^(auto|keep|sqlite|postgresql)$ ]] || die 'database must be keep, sqlite, or postgresql'
 [[ -z $PRESET || $PRESET =~ ^(compute|front|all)$ ]] || die 'preset must be compute, front, or all'
 [[ $SDCPP_ACTION =~ ^(install|skip|keep)$ ]] || die 'sdcpp must be install, skip, or keep'
@@ -168,11 +237,9 @@ for service in "${SERVICES[@]}"; do unit_is_installed "$service" && DETECTED+=("
 
 join_by_comma() { local IFS=,; printf '%s' "$*"; }
 ask_yes_no() {
-  local prompt=$1 default=${2:-n} answer
+  local prompt=$1 default=${2:-n}
   if ((NON_INTERACTIVE)); then [[ $default == y ]]; return; fi
-  if [[ $default == y ]]; then read -r -p "$prompt [Y/n] " answer; else read -r -p "$prompt [y/N] " answer; fi
-  answer=${answer:-$default}
-  [[ $answer =~ ^[Yy]$ ]]
+  ui_confirm "$prompt" "$default"
 }
 
 if [[ -n $SERVICE_ARGUMENT ]]; then
@@ -184,29 +251,40 @@ elif [[ -n $PRESET ]]; then
 elif ((NON_INTERACTIVE)); then
   die 'no installed openWeightGym services found; use --services or --preset'
 else
-  note 'No installed openWeightGym service units were found.'
-  read -r -p 'Fresh install preset: compute, front, or all [all]: ' PRESET
-  parse_services "${PRESET:-all}"
+  ui_info 'No installed openWeightGym service units were found.'
+  choice=0
+  ui_choose choice 'Which programs should run on this machine?' 0 \
+    'All of them|the console and a GPU node on this one machine' \
+    'The console|weightroom, turnstile and voice-gateway' \
+    'A GPU node|loadcoach, toollocker, spotter and voice'
+  PRESETS=(all front compute)
+  parse_services "${PRESETS[choice]}"
 fi
 
 ((${#SELECTED[@]})) || die 'select at least one service'
 
 if ((!NON_INTERACTIVE && ${#DETECTED[@]})); then
-  note "Detected and preselected: $(join_by_comma "${DETECTED[@]}")"
+  ui_info "Detected and preselected: $(join_by_comma "${DETECTED[@]}")"
 fi
 if ((!NON_INTERACTIVE)); then
-  note 'Services:'
+  declare -A ABOUT=(
+    [loadcoach]='runs the models (GPU node)' [toollocker]='tools for models over MCP (GPU node)'
+    [spotter]='watches the GPU node' [voice]='speech recognition and voices (GPU node)'
+    [weightroom]='the web console' [turnstile]='the way in: keys and routing (console)'
+    [voice-gateway]='browser and phone voice (console)')
+  rows=()
   for service in "${SERVICES[@]}"; do
-    if has_service "$service"; then printf '  [x] %s\n' "$service"; else printf '  [ ] %s\n' "$service"; fi
+    if has_service "$service"; then rows+=("$service|${ABOUT[$service]}|on"); else rows+=("$service|${ABOUT[$service]}|off"); fi
   done
-  read -r -p 'Press Enter to keep these, or enter a comma list (compute/front/all are accepted): ' override
-  [[ -z $override ]] || parse_services "$override"
+  ticked=''
+  ui_checklist ticked 'Which programs should be installed?' "${rows[@]}"
+  SELECTED=()
+  for index in $ticked; do SELECTED+=("${SERVICES[index]}"); done
   ((${#SELECTED[@]})) || die 'select at least one service'
 fi
 
 SELECTED_CSV=$(join_by_comma "${SELECTED[@]}")
-note
-note 'Installed service-unit check'
+section 'Warm-up' 'What is installed here'
 for service in "${SELECTED[@]}"; do
   unit=$UNIT_DIR/$service.service
   if [[ ! -e $unit && ! -L $unit ]]; then
@@ -216,7 +294,7 @@ for service in "${SELECTED[@]}"; do
     esac
   fi
   if [[ -L $unit && $(readlink "$unit") == /dev/null ]]; then
-    note "WARN  $service: existing unit is masked; the installer will replace and unmask it"
+    ui_warn "$service: existing unit is masked; the installer will replace and unmask it"
   elif [[ -e $unit || -L $unit ]]; then
     command_line=$(sed -n 's/^ExecStart=//p' "$unit" 2>/dev/null | head -1 || true)
     expanded_command=${command_line//\%h/$HOME}
@@ -232,40 +310,41 @@ for service in "${SELECTED[@]}"; do
       EXISTING_INSTALL_SERVICES[$existing_root]=${existing_list:+$existing_list,}$service
     fi
     if [[ -n $command_line && $expanded_command == "$ROOT"/* ]]; then
-      note "OK    $service: unit runs from $ROOT"
+      ui_ok "$service: unit runs from $ROOT"
     elif [[ -n $command_line ]]; then
-      note "WARN  $service: unit currently uses $command_line; it will be backed up and rendered for $ROOT"
+      ui_warn "$service: unit currently uses $command_line; it will be backed up and rendered for $ROOT"
     else
-      note "WARN  $service: existing unit has no ExecStart; it will be backed up and replaced"
+      ui_warn "$service: existing unit has no ExecStart; it will be backed up and replaced"
     fi
   else
-    note "OK    $service: new service unit"
+    ui_ok "$service: new service unit"
   fi
 done
 if [[ -x $ROOT/.venv/bin/python ]]; then
   if "$ROOT/.venv/bin/python" -c 'import sys; raise SystemExit(sys.version_info < (3, 13))'; then
-    note "OK    virtual environment: $($ROOT/.venv/bin/python --version 2>&1)"
+    ui_ok "virtual environment: $($ROOT/.venv/bin/python --version 2>&1)"
     CHECK_PYTHON=$ROOT/.venv/bin/python
   else
     die "$ROOT/.venv uses Python older than 3.13 and is not compatible"
   fi
 else
-  note 'OK    virtual environment: new environment will be created'
+  ui_ok 'virtual environment: new environment will be created'
   CHECK_PYTHON=python3
+  # With uv the system may have no Python of its own: use the one uv keeps.
+  if [[ -n $UV ]]; then CHECK_PYTHON=$("$UV" python find 3.13 2>/dev/null) || die 'uv has no Python 3.13; run: uv python install 3.13'; fi
 fi
-note
-note 'Existing-install compatibility check'
-initial_audit=(audit --root "$ROOT" --services "$SELECTED_CSV")
+PY=$CHECK_PYTHON
+ui_info 'Existing-install compatibility check'
+initial_audit=(--root "$ROOT" --services "$SELECTED_CSV")
 ((CHECK_ONLY)) && initial_audit+=(--require-pg-tools)
-if ! "$CHECK_PYTHON" "$ROOT/scripts/install-suite-support.py" "${initial_audit[@]}"; then
+if ! audit "$CHECK_PYTHON" "${initial_audit[@]}"; then
   die 'the existing installation is not compatible; no changes were made'
 fi
 for existing_root in "${!EXISTING_INSTALL_SERVICES[@]}"; do
   [[ $existing_root == "$ROOT" ]] && continue
   [[ -d $existing_root ]] || die "selected services point at missing installation $existing_root"
-  note
-  note "Compatibility check for existing installation at $existing_root"
-  if ! "$CHECK_PYTHON" "$ROOT/scripts/install-suite-support.py" audit \
+  ui_info "Compatibility check for existing installation at $existing_root"
+  if ! audit "$CHECK_PYTHON" \
       --root "$existing_root" --services "${EXISTING_INSTALL_SERVICES[$existing_root]}"; then
     die "the existing installation at $existing_root is not compatible; no changes were made"
   fi
@@ -273,11 +352,10 @@ for existing_root in "${!EXISTING_INSTALL_SERVICES[@]}"; do
 done
 
 if ((CHECK_ONLY)); then
-  note
-  note "Installed openWeightGym units: ${DETECTED[*]:-(none)}"
-  note "Selected openWeightGym units: ${SELECTED[*]}"
-  has_service loadcoach && python3 "$ROOT/scripts/install-sdcpp.py" --root "$ROOT" --check
-  has_service loadcoach && python3 "$ROOT/soundroom/install.py" --root "$ROOT" --check
+  ui_info "Installed openWeightGym units: ${DETECTED[*]:-(none)}"
+  ui_info "Selected openWeightGym units: ${SELECTED[*]}"
+  has_service loadcoach && "$PY" "$ROOT/scripts/install-sdcpp.py" --root "$ROOT" --check
+  has_service loadcoach && "$PY" "$ROOT/soundroom/install.py" --root "$ROOT" --check
   exit 0
 fi
 
@@ -301,12 +379,14 @@ fi
 read -r CURRENT_DATABASE DATABASE_CONTENT <<< "$("$CHECK_PYTHON" "$ROOT/scripts/install-suite-support.py" state --root "$ROOT" --services "$SELECTED_CSV")"
 if [[ $DATABASE == auto ]]; then
   if ((NON_INTERACTIVE)); then DATABASE=keep; else
-    read -r -p "Database: keep current ($CURRENT_DATABASE), sqlite, or postgresql [keep]: " DATABASE
-    DATABASE=${DATABASE:-keep}
+    ui_choose choice 'Where should openWeightGym keep its data?' 0 \
+      "Keep current|$CURRENT_DATABASE" 'SQLite|files in data/, nothing else to run' 'PostgreSQL|a database server, local or elsewhere'
+    DATABASES=(keep sqlite postgresql)
+    DATABASE=${DATABASES[choice]}
   fi
 fi
 [[ $DATABASE =~ ^(keep|sqlite|postgresql)$ ]] || die 'database must be keep, sqlite, or postgresql'
-if [[ $DATABASE != keep && $DATABASE != $CURRENT_DATABASE && $DATABASE_CONTENT == populated ]]; then
+if [[ $DATABASE != keep && $DATABASE != "$CURRENT_DATABASE" && $DATABASE_CONTENT == populated ]]; then
   die "selected stores contain data in $CURRENT_DATABASE; this installer will not switch engines without a verified migration"
 fi
 if [[ $DATABASE != postgresql && (${#DSNS[@]} -gt 0 || $PROVISION_POSTGRESQL == 1) ]]; then
@@ -407,13 +487,13 @@ provision_postgresql() {
     role="${role}_$suffix"
     prefix=$role
   fi
-  password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
+  password=$("$PY" -c 'import secrets; print(secrets.token_urlsafe(32))')
   printf 'CREATE ROLE "%s" LOGIN PASSWORD '\''%s'\'';\n' "$role" "$password" |
     sudo -u postgres psql -v ON_ERROR_STOP=1 -q postgres
   for key in "${REQUIRED_DSNS[@]}"; do
     database="${prefix}_${key}"; database=${database:0:60}
     sudo -u postgres createdb --owner "$role" "$database"
-    printf 'postgresql://%s:%s@127.0.0.1:5432/%s\n' "$role" "$password" > "$dsn_dir/$key.dsn"
+    printf 'postgresql://%s:%s@127.0.0.1:5432/%s\n' "$role" "$password" "$database" > "$dsn_dir/$key.dsn"
     chmod 600 "$dsn_dir/$key.dsn"
     DSNS[$key]=$dsn_dir/$key.dsn
   done
@@ -444,17 +524,20 @@ collect_dsns() {
   done
 }
 
-note
-note 'Installation choices'
-note "  Source:     $ROOT"
-note "  Services:   ${SELECTED[*]}"
-note "  Database:   $DATABASE"
-has_service loadcoach && note "  Images:     sdcpp $SDCPP_ACTION (backend: $SDCPP_BACKEND; weights downloaded separately)"
-has_service loadcoach && note "  Audio:      audio.cpp $AUDIOCPP_ACTION (backend: $AUDIOCPP_BACKEND; weights downloaded separately)"
-((INSTALL_POSTGRESQL)) && note '  Packages:   PostgreSQL server/client'
-((INSTALL_PGVECTOR)) && note '  Optional:   pgvector'
-((START_SERVICES)) && note '  Activation: enable units and start configured existing services' || note '  Activation: enable units without starting'
+if ((!EMBEDDED)); then
+  ui_section 'Game plan' 'Installation choices'
+  ui_kv Source "$ROOT"
+  ui_kv Services "${SELECTED[*]}"
+  ui_kv Database "$DATABASE"
+  [[ $TOPOLOGY != keep ]] && ui_kv 'This machine' "$TOPOLOGY ($ADDRESS)"
+  has_service loadcoach && ui_kv Images "sdcpp $SDCPP_ACTION (backend: $SDCPP_BACKEND; weights downloaded separately)"
+  has_service loadcoach && ui_kv Audio "audio.cpp $AUDIOCPP_ACTION (backend: $AUDIOCPP_BACKEND; weights downloaded separately)"
+  ((INSTALL_POSTGRESQL)) && ui_kv Packages 'PostgreSQL server/client'
+  ((INSTALL_PGVECTOR)) && ui_kv Optional 'pgvector'
+  if ((START_SERVICES)); then ui_kv Activation 'enable units and start configured existing services'; else ui_kv Activation 'enable units without starting'; fi
+fi
 if ((!ASSUME_YES && !NON_INTERACTIVE)); then ask_yes_no 'Continue with this installation?' y || exit 0; fi
+section 'Setting up' 'Python, settings and services'
 
 install_postgresql_packages
 install_pgvector_package
@@ -465,10 +548,18 @@ if [[ -x $ROOT/.venv/bin/python ]]; then
   if ! "$ROOT/.venv/bin/python" -c 'import sys; raise SystemExit(sys.version_info < (3, 13))'; then
     die "$ROOT/.venv uses Python older than 3.13; replace that environment before installing"
   fi
+elif [[ -n $UV ]]; then
+  step 'Making the Python environment' "$UV" venv --seed --python 3.13 "$ROOT/.venv"
 else
-  run python3 -m venv "$ROOT/.venv"
+  step 'Making the Python environment' python3 -m venv "$ROOT/.venv"
 fi
-run "$ROOT/.venv/bin/python" -m pip install --upgrade 'pip>=26.2.1'
+((DRY_RUN)) || PY=$ROOT/.venv/bin/python
+if [[ -n $UV ]]; then
+  pip_install() { "$UV" pip install --python "$ROOT/.venv/bin/python" "$@"; }
+else
+  pip_install() { "$ROOT/.venv/bin/python" -m pip install "$@"; }
+fi
+step 'Bringing pip up to date' pip_install --upgrade 'pip>=26.2.1'
 
 extras=()
 ((USES_POSTGRESQL)) && extras+=(postgresql)
@@ -478,15 +569,17 @@ has_service voice && extras+=(voice)
 has_service voice-gateway && extras+=(voice-gateway)
 extra_csv=$(join_by_comma "${extras[@]}")
 if [[ -n $extra_csv ]]; then
-  run "$ROOT/.venv/bin/python" -m pip install -e "$ROOT[$extra_csv]"
+  step "Installing Python packages ($extra_csv)" pip_install -e "${ROOT}[$extra_csv]"
 else
-  run "$ROOT/.venv/bin/python" -m pip install -e "$ROOT"
+  step 'Installing Python packages' pip_install -e "$ROOT"
 fi
-run "$ROOT/.venv/bin/python" -m compileall -q "$ROOT/engines" "$ROOT/mirrorwall" "$ROOT/soundroom" "$ROOT/db" "$ROOT/loadcoach" "$ROOT/toollocker" "$ROOT/spotter" "$ROOT/weightroom" "$ROOT/turnstile" "$ROOT/voice"
+step 'Compiling' "$ROOT/.venv/bin/python" -m compileall -q "$ROOT/engines" "$ROOT/mirrorwall" "$ROOT/soundroom" "$ROOT/db" "$ROOT/loadcoach" "$ROOT/toollocker" "$ROOT/spotter" "$ROOT/weightroom" "$ROOT/turnstile" "$ROOT/voice"
 
-mkdir_if_real() { ((DRY_RUN)) && note "DRY RUN: mkdir -p $*" || mkdir -p "$@"; }
+mkdir_if_real() { if ((DRY_RUN)); then ui_note "DRY RUN: mkdir -p $*"; else mkdir -p "$@"; fi; }
 mkdir_if_real "$ROOT/settings/defaults" "$ROOT/settings/examples" "$ROOT/data" "$ROOT/keys" "$UNIT_DIR"
 ((DRY_RUN)) || chmod 700 "$ROOT/keys"
+# The folder the files tool reads, and the models folder LoadCoach is given, for new settings.
+if [[ $TOPOLOGY != keep ]]; then mkdir_if_real "$ROOT/data/shared" "$ROOT/models"; fi
 
 config_for() {
   case "$1" in turnstile) printf 'weightroom';; *) printf '%s' "$1";; esac
@@ -500,17 +593,13 @@ install_example_config() {
   if [[ ! -f $target_config ]]; then
     [[ -v WAS_CONFIGURED[$config_name] ]] || WAS_CONFIGURED[$config_name]=0
     if ((DRY_RUN)); then
-      note "DRY RUN: render $source_config to $target_config for $ROOT and $HOME"
+      ui_note "DRY RUN: render $source_config to $target_config for $ROOT and $HOME ($TOPOLOGY)"
     else
-      python3 - "$source_config" "$target_config" "$ROOT" "$HOME" <<'PY'
-from pathlib import Path
-import sys
-source, target, root, home = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4]
-text = source.read_text()
-text = text.replace('/home/jpk/ai/openWeightGym', root).replace('/home/jpk/ai/suite', root).replace('/home/jpk/weightroom', root)
-text = text.replace('/home/jpk', home)
-target.write_text(text)
-PY
+      "$PY" "$ROOT/scripts/install-suite-support.py" render --example "$source_config" --target "$target_config" \
+        --root "$ROOT" --home "$HOME" --topology "$TOPOLOGY" --address "${ADDRESS:-127.0.0.1}" \
+        --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" ||
+        die "could not write $target_config"
+      ui_ok "Wrote settings/$config_name.toml"
     fi
   else
     [[ -v WAS_CONFIGURED[$config_name] ]] || WAS_CONFIGURED[$config_name]=1
@@ -523,7 +612,7 @@ for service in "${SELECTED[@]}"; do
   install_example_config "$config_name"
 done
 if (has_service spotter || has_service toollocker) && [[ ! -f $ROOT/settings/loadcoach.toml ]]; then
-  note 'Installing LoadCoach settings as the shared identity configuration for Spotter/ToolLocker.'
+  ui_info 'Installing LoadCoach settings as the shared identity configuration for Spotter/ToolLocker.'
   install_example_config loadcoach
 fi
 
@@ -544,7 +633,7 @@ if [[ $DATABASE != keep ]]; then
     config=$ROOT/settings/$service.toml
     [[ -f $config ]] || continue
     if ((DRY_RUN)); then
-      note "DRY RUN: back up and configure $config for $DATABASE"
+      ui_note "DRY RUN: back up and configure $config for $DATABASE"
       continue
     fi
     backup=$config.before-install-$timestamp
@@ -554,12 +643,12 @@ if [[ $DATABASE != keep ]]; then
     if [[ $DATABASE == postgresql ]]; then
       for key in "${!DSNS[@]}"; do arguments+=(--dsn "$key=${DSNS[$key]}"); done
     fi
-    python3 "$ROOT/scripts/install-suite-support.py" "${arguments[@]}"
+    "$PY" "$ROOT/scripts/install-suite-support.py" "${arguments[@]}"
   done
 fi
 
 if ((!DRY_RUN)); then
-  if ! "$ROOT/.venv/bin/python" "$ROOT/scripts/install-suite-support.py" audit --root "$ROOT" --services "$SELECTED_CSV" --require-pg-tools; then
+  if ! audit "$ROOT/.venv/bin/python" --root "$ROOT" --services "$SELECTED_CSV" --require-pg-tools; then
     restore_configs
     die 'new database settings failed compatibility checks; original settings were restored'
   fi
@@ -568,25 +657,32 @@ fi
 # The secrets a fresh installation needs and no example can hold. Each is made only when absent,
 # so a reinstall or an imported keys/ folder is kept as it is.
 make_secret() {  # FILE: a random machine key, readable by its owner only
-  if ((DRY_RUN)); then note "DRY RUN: create $1"; return; fi
-  (umask 077 && python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$1")
+  if ((DRY_RUN)); then ui_note "DRY RUN: create $1"; return; fi
+  (umask 077 && "$PY" -c 'import secrets; print(secrets.token_urlsafe(32))' > "$1")
 }
 if [[ ! -f $ROOT/keys/machine.key ]] && (has_service turnstile || has_service loadcoach || has_service spotter || has_service toollocker || has_service voice); then
   make_secret "$ROOT/keys/machine.key"
-  note "Made keys/machine.key. Front and compute must hold the same one: copy this file to the other machine's keys/ (replacing the one its installer made), readable by its owner only."
+  if [[ $TOPOLOGY == all ]]; then
+    ui_ok 'Made keys/machine.key, the key the console and the GPU node sign with'
+  else
+    ui_ok 'Made keys/machine.key'
+    ui_note "Front and compute must hold the same one: copy this file to the other machine's keys/ (replacing the one its installer made), readable by its owner only."
+  fi
 fi
 if [[ ! -f $ROOT/keys/weightroom.key ]] && (has_service weightroom || has_service turnstile); then
   if ((DRY_RUN)); then
-    note "DRY RUN: add the weightroom account and write keys/weightroom.key"
+    ui_note "DRY RUN: add the weightroom account and write keys/weightroom.key"
   else
     weightroom_cli=("$ROOT/.venv/bin/weightroom" --config "$ROOT/settings/weightroom.toml")
     added=$("${weightroom_cli[@]}" user add weightroom system)
     (umask 077 && printf '%s\n' "$added" | grep -oE 'lc_[A-Za-z0-9_-]+' | tail -1 > "$ROOT/keys/weightroom.key")
     [[ -s $ROOT/keys/weightroom.key ]] || die 'could not read the weightroom account key'
     "${weightroom_cli[@]}" user adjust weightroom add=sign-in,mirror-users >/dev/null
-    note "Made the weightroom account and keys/weightroom.key. Add yourself with:"
-    note "  .venv/bin/weightroom user add NAME superuser && .venv/bin/weightroom user password NAME"
-    note "or bring existing accounts with scripts/import-accounts.sh."
+    ui_ok 'Made the weightroom account and keys/weightroom.key'
+    if ((!EMBEDDED)); then
+      ui_note "Add yourself with: .venv/bin/weightroom user add NAME superuser && .venv/bin/weightroom user password NAME"
+      ui_note "or bring existing accounts with scripts/import-accounts.sh."
+    fi
   fi
 fi
 
@@ -602,7 +698,8 @@ if has_service loadcoach && [[ $AUDIOCPP_ACTION == install ]]; then
 fi
 
 render_unit() {
-  local service=$1 source=$ROOT/services/$service.service target=$UNIT_DIR/$service.service backup
+  local service=$1
+  local source=$ROOT/services/$service.service target=$UNIT_DIR/$service.service backup
   [[ -f $source ]] || die "missing service unit: $source"
   if [[ -L $target ]]; then
     if [[ $(readlink "$target") != /dev/null ]]; then
@@ -616,9 +713,9 @@ render_unit() {
     run cp -p "$target" "$backup"
   fi
   if ((DRY_RUN)); then
-    note "DRY RUN: render $source to $target with install root $ROOT"
+    ui_note "DRY RUN: render $source to $target with install root $ROOT"
   else
-    python3 - "$source" "$target" "$ROOT" <<'PY'
+    "$PY" - "$source" "$target" "$ROOT" <<'PY'
 from pathlib import Path
 import sys
 source, target, root = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
@@ -629,27 +726,30 @@ PY
 }
 
 for service in "${SELECTED[@]}"; do render_unit "$service"; done
-if command -v systemctl >/dev/null; then
+ui_ok "Service units in $UNIT_DIR"
+if command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1; then
   run systemctl --user daemon-reload
   for service in "${SELECTED[@]}"; do
-    run systemctl --user unmask "$service.service"
-    run systemctl --user enable "$service.service"
+    run systemctl --user unmask -q "$service.service"
+    run systemctl --user enable -q "$service.service"
     ((START_SERVICES)) || continue
     config_name=$(config_for "$service")
-    if [[ ${WAS_CONFIGURED[$config_name]:-1} == 0 ]]; then
-      note "$service installed but not started: review the new settings/$config_name.toml first."
+    if [[ ${WAS_CONFIGURED[$config_name]:-1} == 0 ]] && ((!START_NEW)); then
+      ui_warn "$service installed but not started: review the new settings/$config_name.toml first."
     else
-      run systemctl --user restart "$service.service"
+      step "Starting $service" systemctl --user restart "$service.service"
     fi
   done
 else
-  note 'systemctl is unavailable; units were installed but not enabled.'
+  ui_warn 'systemd is not running for this account; units were installed but not enabled.'
 fi
 
-note
-note 'Installation complete.'
-note "Run '$ROOT/scripts/install-suite.sh --check --services $SELECTED_CSV' to repeat the compatibility audit."
-if [[ $DATABASE == postgresql ]]; then
-  note 'PostgreSQL credentials are referenced only through owner-only DSN files.'
-  ((INSTALL_PGVECTOR)) && note 'pgvector is installed; CREATE EXTENSION vector is intentionally deferred until an openWeightGym schema uses it.'
+if ((!EMBEDDED)); then
+  ui_section 'Done' 'Installation complete.'
+  ui_note "Run '$ROOT/scripts/install-suite.sh --check --services $SELECTED_CSV' to repeat the compatibility audit."
 fi
+if [[ $DATABASE == postgresql ]]; then
+  ui_note 'PostgreSQL credentials are referenced only through owner-only DSN files.'
+  ((INSTALL_PGVECTOR)) && ui_note 'pgvector is installed; CREATE EXTENSION vector is intentionally deferred until an openWeightGym schema uses it.'
+fi
+exit 0

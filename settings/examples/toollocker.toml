@@ -13,7 +13,7 @@ port = 8443
 # LoadCoach's own settings file. The ToolLocker takes its machine key and identity/event store
 # from it. Front sends the caller and current group rules in a signed statement. Left out, as
 # here, the file is loadcoach.toml beside this file.
-# loadcoach = "/home/jpk/ai/openWeightGym/settings/loadcoach.toml"
+# loadcoach = "/home/you/openWeightGym/settings/loadcoach.toml"
 
 # A front-owned gateway instead sets front = "weightroom.toml" (omit loadcoach).
 # It inherits WeightRoom's accounts/event store and Turnstile's machine-key path,
@@ -61,9 +61,8 @@ port = 8443
 # sub-folders as well.
 [servers.files]
 command = [
-    "/home/jpk/ai/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.files",
-    "/home/jpk/notes",
-    "/home/jpk/projects/site/docs",
+    "/home/you/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.files",
+    "/home/you/openWeightGym/data/shared",
 ]
 
 # Status, history, changes and search in git repositories.
@@ -78,20 +77,19 @@ command = [
 # apart by full path.
 [servers.code]
 command = [
-    "/home/jpk/ai/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.code",
-    "/home/jpk/ai/openWeightGym",
-    "/home/jpk/repos",
+    "/home/you/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.code",
+    "/home/you/openWeightGym",
 ]
 
 # A tool folder: every tool in every file of a folder, set up from a TOML file with a section
 # for each file that needs one. How to write a tool: toollocker/README.md.
 # [servers.mine]
-# command = ["/home/jpk/ai/openWeightGym/.venv/bin/python", "-m", "toollocker.tools", "/home/jpk/tools", "--settings", "/home/jpk/tools/tools.toml"]
+# command = ["/home/you/openWeightGym/.venv/bin/python", "-m", "toollocker.tools", "/home/you/tools", "--settings", "/home/you/tools/tools.toml"]
 # description = "my own tools"
 
 # The same file tools a second time, on other folders, for those cleared to see them.
 # [servers.private]
-# command = ["/home/jpk/ai/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.files", "/home/jpk/private"]
+# command = ["/home/you/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.files", "/home/you/private"]
 # level = "restricted"
 
 # A server on another machine, such as the one the files are on. Set that machine up with

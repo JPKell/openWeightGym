@@ -62,7 +62,7 @@ def table(rows: list[list[str]]) -> None:
 # ---- users: straight in the file ------------------------------------------------------------
 
 
-def user_command(users: Users, action: str, arguments: list[str], log: Log | None = None) -> None:
+def user_command(users: Users, action: str, arguments: list[str], log: Log | None = None, password: str | None = None) -> None:
     """Carry out one `weightroom user ...` command. Raises ValueError with a message on a mistake.
 
     These changes do not pass through the web side, so each one is written to the event log here.
@@ -137,9 +137,12 @@ def user_command(users: Users, action: str, arguments: list[str], log: Log | Non
         note("key-removed", name=name, key=arguments[1])
         print(f"Removed that key of {name}.")
     elif action == "password":
-        password = getpass.getpass(f"New password for {name}: ")
-        if len(password) < 8 or password != getpass.getpass("Again: "):
-            raise ValueError("Not changed: the password must be at least 8 characters, typed the same twice.")
+        if password is None:
+            password = getpass.getpass(f"New password for {name}: ")
+            if len(password) < 8 or password != getpass.getpass("Again: "):
+                raise ValueError("Not changed: the password must be at least 8 characters, typed the same twice.")
+        elif len(password) < 8:  # given by a script, which has checked it was typed the same twice
+            raise ValueError("Not changed: the password must be at least 8 characters.")
         users.change(name, password=password)
         users.end_sessions(name)
         note("changed", name=name, password=True)
@@ -697,9 +700,13 @@ def user_unkey(ctx: typer.Context, name: Name, key: Annotated[str, typer.Argumen
 
 
 @users_cli.command("password")
-def user_password(ctx: typer.Context, name: Name) -> None:
+def user_password(
+    ctx: typer.Context, name: Name,
+    stdin: Annotated[bool, typer.Option("--stdin", help="Read it from the first line of standard input instead, for an installer.")] = False,
+) -> None:
     """Set a user's password, typed here twice. It ends their sign-ins."""
-    for_user(ctx, "password", name)
+    _, users, log = opened(ctx)
+    user_command(users, "password", [name], log, password=sys.stdin.readline().rstrip("\n") if stdin else None)
 
 
 @users_cli.command("temporary")

@@ -26,7 +26,7 @@ machine_name = "compute"
 
 # Turnstile's address on the front machine. Compute asks it for the accounts, for work done later
 # in someone's name: a batch, a benchmark task, a recurring schedule, and for the reports.
-front = "http://10.77.10.42:8442"
+front = "http://front.lan:8442"
 
 # DB1 cutover only: native probes still run here, but task/batch storage is front's.
 # After ToolLocker relocates, set front_toollocker = true to refuse stale settings/tool reports here.
@@ -36,7 +36,7 @@ front = "http://10.77.10.42:8442"
 
 # Compatibility path for llama.cpp. A service does not always have your shell's PATH.
 # Prefer [engines.llama_cpp] below for new configuration; if both paths exist they must match.
-llama_server = "/home/jpk/.local/bin/llama-server"
+llama_server = "/home/you/.local/bin/llama-server"
 
 # The program that says what each card holds and what each process uses of it. LoadCoach asks
 # it after a model has loaded, and that figure is what lets models share a card. Left out, as
@@ -46,7 +46,7 @@ llama_server = "/home/jpk/.local/bin/llama-server"
 # The file that holds the models, the event log and the rest of what LoadCoach keeps. The users
 # are not here: they are on the front machine. Left out, as here, it is in the data folder
 # with this file's name: loadcoach.toml gives loadcoach.db. Give a full path to keep it elsewhere.
-# database = "/home/jpk/ai/openWeightGym/data/loadcoach.db"
+# database = "/home/you/openWeightGym/data/loadcoach.db"
 
 # Named stores replace the single path when this service needs an explicit binding. Paths and
 # DSN files are counted from this settings folder. PostgreSQL stores require openWeightGym's postgresql
@@ -68,7 +68,7 @@ llama_server = "/home/jpk/.local/bin/llama-server"
 # Recommended: one root per LoadCoach node. LoadCoach creates and uses exactly the `llm`,
 # `adapters`, `projectors`, `image` and `audio` subfolders. This can also be changed from System > Settings;
 # restart LoadCoach to apply it.
-# models_folder = "/home/jpk/models"
+# models_folder = "/home/you/openWeightGym/models"
 #
 # Optional complete library. Keep used and unused files here; copy a file to the active cache
 # when this node should use it. Leave empty on a new installation until storage is chosen.
@@ -80,10 +80,10 @@ llama_server = "/home/jpk/.local/bin/llama-server"
 # Left out, as here, the places are the folders that the models already added are in.
 #
 # [places]
-# fast = "/home/jpk/ai/models/llm"
+# fast = "/home/you/openWeightGym/models/llm"
 # slow = "/mnt/ssd/models/llm"
-# adapters = "/home/jpk/ai/models/adapters/llm"   # adapters are files too. The Files page sorts every file by what it says it is
-# projectors = "/home/jpk/ai/models/projectors/llm"   # and so are projectors. A folder of their own keeps them out from among the models
+# adapters = "/home/you/openWeightGym/models/adapters/llm"   # adapters are files too. The Files page sorts every file by what it says it is
+# projectors = "/home/you/openWeightGym/models/projectors/llm"   # and so are projectors. A folder of their own keeps them out from among the models
 
 # The file that holds the token of your account at Hugging Face, and nothing else. Counted from
 # this file. It is needed only for repositories that are not open to everyone: without it, the
@@ -102,7 +102,7 @@ llama_server = "/home/jpk/.local/bin/llama-server"
 # node, not a global preset. Leave the legacy path above out, or keep matching values.
 # [engines.llama_cpp]
 # enabled = true
-# executable = "/home/jpk/.local/bin/llama-server"
+# executable = "/home/you/.local/bin/llama-server"
 #
 # Only llama_cpp is implemented in Phase A. Strata must pass the later gate before use.
 

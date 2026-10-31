@@ -8,12 +8,15 @@ owner-only files and only their paths are written to normal openWeightGym settin
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import re
 import sqlite3
 import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 # Running a script by path puts scripts/, rather than the repository root, on sys.path.
 REPOSITORY = Path(__file__).resolve().parent.parent
@@ -255,7 +258,7 @@ def audit(root: Path, services: list[str], require_pg_tools: bool = False) -> in
             continue
         seen_configs.add(config)
         if not config.exists():
-            findings.append(Finding("WARN", filename, "configuration is absent; the installer will copy its example"))
+            findings.append(Finding("NEW", filename, "no settings yet; the installer will write them from the example"))
             continue
         try:
             tomllib.loads(config.read_text())
@@ -412,6 +415,130 @@ def configure(config: Path, service: str, engine: str, dsn_values: list[str]) ->
     return 0
 
 
+# The examples are written for an account called `you` with the checkout in its home folder.
+# Older examples named the original author's folders; they are still understood.
+TEMPLATE_PATHS = re.compile(r"/home/you/openWeightGym|/home/jpk/ai/openWeightGym|/home/jpk/ai/suite|/home/jpk/weightroom|/home/you|/home/jpk")
+
+# When everything runs on one machine, turnstile keeps the usual 8442-8445 and each compute program
+# moves up by 1000. Weightroom's `compute` URL carries that port, which turnstile follows.
+SHARED_HOST_PORTS = {"loadcoach": 9442, "toollocker": 9443, "spotter": 9444, "voice": 9445}
+
+
+def topology_values(config_name: str, topology: str, root: Path, address: str, front: str, compute: str,
+                    llama_server: str) -> dict[str, object]:
+    """The settings a machine's part decides, by dotted TOML key: one machine (all), front or compute."""
+    alone = topology == "all"
+    here = "127.0.0.1" if alone else address
+    front = "http://127.0.0.1:8442" if alone else front.rstrip("/")
+    compute_host = urlsplit(compute).hostname if compute else ""
+
+    def port(program: str, usual: int) -> int:
+        return SHARED_HOST_PORTS[program] if alone else usual
+
+    if config_name == "loadcoach":
+        values: dict[str, object] = {"host": here, "port": port("loadcoach", 8442), "models_folder": str(root / "models")}
+        if front:
+            values["front"] = front
+        if llama_server:
+            values["llama_server"] = llama_server
+        return values
+    if config_name in ("toollocker", "spotter"):
+        return {"host": here, "port": port(config_name, 8443 if config_name == "toollocker" else 8444)}
+    if config_name == "voice":
+        return {"host": here, "port": port("voice", 8445), **({"compute": front} if front else {})}
+    if config_name == "weightroom":
+        if alone:
+            return {"compute": "http://127.0.0.1:9442", "spotter": "http://127.0.0.1:9444"}
+        if compute:
+            return {"compute": compute.rstrip("/"), "spotter": f"http://{compute_host}:8444"}
+        # No compute node yet: the console runs and shows compute as not answering until one is added.
+        return {"compute": "http://127.0.0.1:9442", "spotter": ""}
+    if config_name == "voice-gateway":
+        voice = f"http://{compute_host}:8445" if compute_host and not alone else "http://127.0.0.1:9445"
+        return {"voice": voice, "origins": ["http://localhost:8446", "http://127.0.0.1:8446"]}
+    return {}
+
+
+def toml_value(value: object) -> str:
+    """One value written as TOML."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(toml_value(item) for item in value) + "]"
+    raise TypeError(f"cannot write {value!r} as TOML")
+
+
+def set_toml_value(text: str, dotted: str, value: object) -> str:
+    """Set one key of one table, keeping every other line and comment as it was.
+
+    The key's own line is replaced; failing that, a commented-out example of it; failing that, it
+    is added at the end of its table. Only single-line values are replaced.
+    """
+    table, _, key = dotted.rpartition(".")
+    lines = text.splitlines(keepends=True)
+    current, start, end, found, commented = "", 0, None, None, None
+    for number, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("[") and not stripped.startswith("[["):
+            if current == table and end is None and number:
+                end = number
+            current = stripped.strip("[]").strip()
+            if current == table:
+                start, end = number + 1, None
+            continue
+        if current != table:
+            continue
+        if re.match(rf"{re.escape(key)}\s*=", stripped) and found is None:
+            found = number
+        elif re.match(rf"#\s*{re.escape(key)}\s*=", stripped) and commented is None:
+            commented = number
+    if current == table and end is None:
+        end = len(lines)
+    if not table:
+        end = next((number for number, line in enumerate(lines) if line.strip().startswith("[")), len(lines))
+    written = f"{key} = {toml_value(value)}\n"
+    if found is not None:
+        old = lines[found].split("=", 1)[1].strip()
+        if old.count("[") != old.count("]"):
+            raise ValueError(f"{dotted} spans several lines; set it by hand")
+        lines[found] = written
+    elif commented is not None and (not table or start <= commented < (end or len(lines))):
+        lines[commented] = written
+    elif end is not None:
+        while end > start and not lines[end - 1].strip():  # after the table's last line, not its trailing blank ones
+            end -= 1
+        if end and not lines[end - 1].endswith("\n"):
+            lines[end - 1] += "\n"
+        lines.insert(end, written)
+    else:
+        lines.append(f"\n[{table}]\n{written}")
+    return "".join(lines)
+
+
+def render(example: Path, target: Path, root: Path, home: Path, values: dict[str, object]) -> int:
+    """Write a machine's settings from an example: its folders, then the values its part decides."""
+    def folder(match: re.Match) -> str:
+        return str(root) if match.group(0) != "/home/you" and match.group(0) != "/home/jpk" else str(home)
+
+    text = TEMPLATE_PATHS.sub(folder, example.read_text())
+    for dotted, value in values.items():
+        text = set_toml_value(text, dotted, value)
+    made = tomllib.loads(text)
+    for dotted, value in values.items():
+        here = made
+        for part in dotted.split("."):
+            here = here[part]
+        if here != value:
+            raise ValueError(f"{target.name}: {dotted} came out as {here!r}, not {value!r}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text)
+    return 0
+
+
 def main() -> int:
     """Run installation discovery, compatibility audit or configuration planning."""
     parser = argparse.ArgumentParser()
@@ -428,7 +555,22 @@ def main() -> int:
     state = subparsers.add_parser("state")
     state.add_argument("--root", type=Path, required=True)
     state.add_argument("--services", required=True)
+    rendering = subparsers.add_parser("render")
+    rendering.add_argument("--example", type=Path, required=True)
+    rendering.add_argument("--target", type=Path, required=True)
+    rendering.add_argument("--root", type=Path, required=True)
+    rendering.add_argument("--home", type=Path, required=True)
+    rendering.add_argument("--topology", choices=("all", "front", "compute", "keep"), default="keep")
+    rendering.add_argument("--address", default="127.0.0.1")
+    rendering.add_argument("--front", default="")
+    rendering.add_argument("--compute", default="")
+    rendering.add_argument("--llama-server", default="")
     args = parser.parse_args()
+    if args.command == "render":
+        root = args.root.resolve()
+        values = {} if args.topology == "keep" else topology_values(
+            args.example.stem, args.topology, root, args.address, args.front, args.compute, args.llama_server)
+        return render(args.example, args.target, root, args.home, values)
     if args.command in {"audit", "state"}:
         services = [item for item in args.services.split(",") if item]
         unknown = set(services) - SERVICE_CONFIG.keys()

@@ -1150,6 +1150,11 @@ def test_looking_after_users_from_the_command_line(tmp_path, monkeypatch, capsys
         with pytest.raises(ValueError) as mistake:
             run(*command)
         mistakes.append(str(mistake.value))
+    # An installer hands the password over once, having had it typed twice itself.
+    user_command(users, "password", ["pat"], password="from the installer")
+    assert users.listing()[0]["password"]
+    with pytest.raises(ValueError, match="at least 8"):
+        user_command(users, "password", ["pat"], password="short")
     run("remove", "pat")
 
     assert first_key.startswith("lc_") and second_key.startswith("lc_")

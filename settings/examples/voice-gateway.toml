@@ -16,44 +16,44 @@ voice_turnstile = "http://127.0.0.1:8445"
 
 # Compute's voice service, for the sound socket alone. It is opened with the session's own
 # token, never a caller's key; everything else goes through turnstile.
-voice = "http://10.77.10.84:8445"
+voice = "http://compute.lan:8445"
 
-key_file = "/home/jpk/weightroom/keys/voice-gateway.key"
+key_file = "/home/you/openWeightGym/keys/voice-gateway.key"
 
 # Optional observation metadata uses the existing front accounts store and private front key.
 # Use the same database/DSN as weightroom.accounts, never a new independent history store.
-# observability_database = "/home/jpk/weightroom/data/accounts.db"
+# observability_database = "/home/you/openWeightGym/data/accounts.db"
 # observability_dsn_file = "/path/to/existing/front-accounts.dsn" # PostgreSQL alternative
 # observability_machine = "front"
-# context_key_file = "/home/jpk/weightroom/keys/weightroom.key"
+# context_key_file = "/home/you/openWeightGym/keys/weightroom.key"
 
 
 # The page asks for no name and no password. Everyone who opens it is this one account, as every
 # telephone caller is the account in [twilio] key_file. What the account may do is what a caller
 # may do: it needs `front-voice` and access to the voice and Hermes models.
 # Turnstile checks it like any key, and wakes compute for it.
-browser_key_file = "/home/jpk/weightroom/keys/voice-browser.key"
+browser_key_file = "/home/you/openWeightGym/keys/voice-browser.key"
 # WeightRoom on this machine. A call in a SoundRoom voice keeps its exchanges there as a
 # conversation of the browser account (see soundroom_profile).
 # conversations_url = "http://127.0.0.1:8440"
 # The folder the copy of what was changed on the site is kept in, counted from this file.
 data = "../data"
 
-origins = ["https://k-srv.tailaf60c6.ts.net", "http://localhost:8446", "http://127.0.0.1:8446"]
+origins = ["https://front.your-tailnet.ts.net", "http://localhost:8446", "http://127.0.0.1:8446"]
 
 # Optional native API-key client on the trusted LAN. Never forward this port from the VPS.
-# desktop_host = "10.77.10.42"
+# desktop_host = "front.lan"
 # desktop_port = 8447
 
 # Enable only once the existing voice listener has been replaced.
 # public_port = 8081
 # public_host = "0.0.0.0"
 # [twilio]
-# webhook_url = "https://kellrondgames.com/voice/inbound"
-# stream_url = "wss://kellrondgames.com/voice/stream"
+# webhook_url = "https://voice.example.com/voice/inbound"
+# stream_url = "wss://voice.example.com/voice/stream"
 # account_sid = "AC..."
-# token_file = "/home/jpk/weightroom/keys/voice-twilio.key"
-# key_file = "/home/jpk/weightroom/keys/voice-phone.key"
+# token_file = "/home/you/openWeightGym/keys/voice-twilio.key"
+# key_file = "/home/you/openWeightGym/keys/voice-phone.key"
 # mode = "direct"
 # voice = "voice_..."  # a SoundRoom voice of the phone account, spoken in direct calls when soundroom_profile is set
 
@@ -62,10 +62,10 @@ origins = ["https://k-srv.tailaf60c6.ts.net", "http://localhost:8446", "http://1
 # Model and agent choices are editable under Settings -> voice-gateway. A blank
 # hermes_model uses the machine's model below. Paths, credentials and toolsets stay here.
 # [hermes]
-# python = "/home/jpk/.hermes/hermes-agent/venv/bin/python"
-# repository = "/home/jpk/.hermes/hermes-agent"
+# python = "/home/you/.hermes/hermes-agent/venv/bin/python"
+# repository = "/home/you/.hermes/hermes-agent"
 # provider_url = "http://127.0.0.1:8442/v1"
-# provider_key_file = "/home/jpk/weightroom/keys/voice-hermes.key"
+# provider_key_file = "/home/you/openWeightGym/keys/voice-hermes.key"
 # model = "qwen-1.5b"
 # toolsets = ["search"]
 # search_url = "http://127.0.0.1:8888"
