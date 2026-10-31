@@ -1,0 +1,19 @@
+{# A tick box for every ability there is, in two columns. `ticks` has a row for each: see tick_list in app.py.
+   A greyed box is not sent with the form. That loses nothing: it is only greyed for someone who may not
+   change what holds that ability in the first place. #}
+<div class="row g-2">
+  {% for row in ticks %}
+  <div class="col-md-6">
+    <div class="form-check">
+      <input id="can-{{ row.name }}" name="can" value="{{ row.name }}" type="checkbox" class="form-check-input" {{ "checked" if row.ticked }} {{ "disabled" if row.greyed }}>
+      <label for="can-{{ row.name }}" class="form-check-label"><code>{{ row.name }}</code>
+        {%- if row.group %} <span class="badge text-bg-secondary">group</span>{% endif %}
+        {#- `marks` is set on an account's page, where a tick that differs from its group's is worth pointing at. #}
+        {%- if marks and row.group and not row.ticked %} <span class="badge text-bg-danger">taken away</span>{% endif %}
+        {%- if marks and row.ticked and not row.group %} <span class="badge text-bg-success">given</span>{% endif %}
+        {%- if row.own_key %} <span class="badge text-bg-warning">a program's own key</span>{% endif %}
+        <br><small class="text-secondary">{{ row.words }}</small></label>
+    </div>
+  </div>
+  {% endfor %}
+</div>

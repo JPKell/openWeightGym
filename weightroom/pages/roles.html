@@ -1,0 +1,164 @@
+{% extends "frame.html" %}
+{% from "parts.html" import said_box, swaps, card, section_title , confirm_check, confirm_loss %}
+{% from "parts.html" import page_header, form_section, more %}
+{% block title %}Roles · openWeightGym{% endblock %}
+{% block scripts %}<script src="/static/role-preferences.js?v=1" defer></script>{% endblock %}
+{% block main %}
+{{ page_header('Roles', 'Choose which models handle each kind of work.') }}
+{{ said_box(said, failed) }}
+<details class="small mb-3">
+<summary>Details</summary>
+<p class="text-secondary mt-2">A role is a kind of work, such as <code>chat</code> or <code>code</code>. People and programs name the role where a model's name would go, and compute picks the model. Naming a model itself always works too.
+  A role's models are ranked by your weights and any selected benchmarks. Equal scores keep the order in which the models were listed; 0 leaves a model out. These are preference weights, rather than percentages of requests. The name can say how much the pick matters:</p>
+<div class="table-responsive mb-2">
+<table class="sortable table table-sm align-middle">
+  <tbody>
+    <tr><td><code>ROLE</code></td><td>The highest preference after adding the role's loaded-model bonus to ready local residents. The default 25% bonus lets a loaded candidate with at least 80% of the strongest eligible score win.</td></tr>
+    <tr><td><code>ROLE:best</code></td><td>The top of the list. It is waited for, and idle models are pushed off the cards to load it. For work that matters.</td></tr>
+    <tr><td><code>ROLE:available</code></td><td>The highest in the list that is warm: loaded and ready. Nothing is loaded or pushed off unless nothing is warm.</td></tr>
+    <tr><td><code>ROLE:fast</code></td><td>Prefer speed using queue/load estimates and the request's inferred prompt and maximum output budgets, divided by the role's fast reuse multiplier for ready local residents (×2 by default). This preview uses 400 output tokens. Unknown timing stays unavailable.</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="small text-secondary">The <code>:fast</code> estimate uses 60 seconds to load and 10 output tokens/s when measurements are missing. A resident or warm model has no estimated load cost. Its reuse weighting is a preference, not a reduction in measured seconds. Prompt processing and queue wait are not included, so this is a comparison estimate, not a response-time guarantee. The previews below use your permissions and current model state; an actual request also checks its context, images, tools and sensitivity requirements.</p>
+</details>
+{% if publication_warning %}<p class="alert alert-warning">{{ publication_warning }}</p>{% endif %}
+
+<form method="post" action="/roles" class="row g-2 align-items-end mb-3" {{ swaps() }}>
+{% call form_section('Add a role') %}
+  <div class="col-md-6">
+    <label class="form-label" for="new-role">New role</label>
+    <input id="new-role" name="name" class="form-control" autocapitalize="none" spellcheck="false" placeholder="such as chat" required>
+  </div>
+  <div class="col-md-6">
+    <label class="form-label" for="first-model">Its first model</label>
+    <select id="first-model" name="model" class="form-select">{% for model in models %}<option>{{ model }}</option>{% endfor %}</select>
+    <input type="hidden" name="weight" value="1">
+  </div>
+  <div class="col-12"><button class="btn btn-primary" name="do" value="add">Add role</button></div>
+{% endcall %}
+</form>
+
+{% if names %}<nav class="nav nav-pills gap-1 mb-3" aria-label="Roles">
+  {% for name in names %}<a class="nav-link {{ 'active' if name == role.name }}" {{ 'aria-current=page' if name == role.name }} href="/roles?role={{ name|urlencode }}" {{ swaps(push=true) }}>{{ name }}</a>{% endfor %}
+</nav>{% endif %}
+
+{% if role %}
+{% set _card_title1 %}{{ role.name }} <small class="text-secondary fw-normal">{{ role.order|length }} model{{ "" if role.order|length == 1 else "s" }}</small>{% endset %}
+{% call card(_card_title1, attrs={"aria-labelledby": "role-heading"}, header_id="role-heading") %}
+    {{ section_title("What it would pick right now, for you") }}
+    <div class="table-responsive mb-3">
+    <table class="sortable table table-sm align-middle">
+      <thead><tr><th>Asked for as</th><th>Picks</th><th>Because</th></tr></thead>
+      <tbody>
+      {% for asked, pick in picks.items() %}
+      <tr><td><code>{{ asked }}</code></td><td>{% if pick.picked %}<a href="{{ address(pick.picked) }}">{{ pick.picked }}</a>{% else %}<span class="text-danger">nothing</span>{% endif %}</td><td>{{ pick.because }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    {{ section_title("Its models") }}
+    <form method="post" action="/roles" {{ swaps() }}>
+      <input type="hidden" name="name" value="{{ role.name }}">
+      <div class="table-responsive">
+      <table class="sortable table table-sm align-middle">
+        <thead><tr><th>Model</th><th>Weight</th><th>Score and evidence</th><th>Now / fit</th><th>Answers at</th><th>Loads in</th><th>Decision</th></tr></thead>
+        <tbody>
+        {# In the order they are preferred. What is known of each is from compute's own record of real answers. #}
+        {% for model in picks[role.name].models %}
+        <tr>
+          <td>{{ model.name }}<input type="hidden" name="model" value="{{ model.name }}"></td>
+          <td style="max-width: 6rem"><input name="weight" class="form-control " type="number" min="0" step="any" value="{{ model.weight }}" aria-label="weight of {{ model.name }}" inputmode="decimal"></td>
+          <td>{{ model.score|round(3) }}{% if model.quality is not none %}<small class="d-block">Quality {{ (model.quality * 100)|round(1) }}%</small>{% endif %}
+            <small class="d-block">Reliability ×{{ model.reliability.factor|round(3) }} · {{ model.reliability.state }} · <a href="/reliability?model={{ model.name|urlencode }}&amp;role={{ role.name|urlencode }}">report</a></small>
+            {% if model.loaded_factor is defined %}<small class="d-block">Loaded ×{{ model.loaded_factor|round(3) }} · ordinary-role score {{ model.routing_score|round(3) }}</small>
+            <small class="d-block">Fast reuse ×{{ model.fast_loaded_factor|round(3) }} · weighted speed comparison {{ model.fast_preference_seconds|round(1) }}</small>{% else %}<small class="d-block text-warning">Loaded-model weights need the matching compute update.</small>{% endif %}
+            <small class="d-block text-secondary">{{ model.reliability.reason }}</small>{% if model.reliability.regression %}<small class="d-block text-warning">Recent reliability regression; inspect the report.</small>{% endif %}
+            {% if model.fallback %}<small class="d-block text-secondary">{{ model.fallback }}</small>{% endif %}
+            {% for evidence in model.evidence %}<small class="d-block">{{ evidence.benchmark }}: {% if evidence.normalized is not none %}{{ evidence.raw|round(3) }} → {{ (evidence.normalized * 100)|round(1) }}% (weight {{ evidence.weight }}){% else %}{{ evidence.reason }}{% endif %}
+              <span class="d-block">{{ (evidence.share * 100)|round(1) }}% of quality weight{% if evidence.contribution is not none %} · adds {{ (evidence.contribution * 100)|round(1) }} quality points{% else %} · quality contribution unavailable{% endif %}</span>
+              {% if evidence.run %}<a href="/benchmarks/run/{{ evidence.run }}">run</a>{% endif %}
+              {% for warning in evidence.warnings %}<span class="d-block text-warning">{{ warning }}</span>{% endfor %}</small>{% endfor %}</td>
+          <td>{{ "warm" if model.warm else "loaded, busy" if model.resident else "not loaded" }}<small class="d-block">{{ model.fit }}{% if model.context %} · {{ model.context }} context tokens{% endif %}</small>
+            {% if model.evictions %}<small class="d-block">Would evict: {{ model.evictions|join(', ') }}</small>{% endif %}</td>
+          <td>{% if model.speed %}{{ model.speed|round|int }} tokens a second{% else %}<span class="text-secondary">not known yet</span>{% endif %}</td>
+          <td>{% if model.load is not none %}{{ model.load|round|int }} s{% else %}<span class="text-secondary">not known yet</span>{% endif %}</td>
+          <td>{{ model.decision }}<small class="d-block">{% if model.estimated_seconds is not none %}Estimated {{ model.estimated_seconds|round(1) }} s for this preview{% else %}Timing estimate unavailable{% endif %}</small>{% if model.estimate is defined %}<small class="d-block text-secondary">Measured rates; inferred work. Queue/load {{ model.estimate.wait_seconds if model.estimate.wait_seconds is not none else 'unknown' }} s; processing budget {{ model.estimate.work_seconds if model.estimate.work_seconds is not none else 'unknown' }} s.</small>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% for model, weight in role.models.items() if weight == 0 %}
+        <tr class="text-secondary">
+          <td>{{ model }}<input type="hidden" name="model" value="{{ model }}"></td>
+          <td style="max-width: 6rem"><input name="weight" class="form-control " type="number" min="0" step="any" value="0" aria-label="weight of {{ model }}" inputmode="decimal"></td>
+          <td colspan="5">left out: its weight is 0</td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <td><select name="model" class="form-select " aria-label="another model">
+            <option value="">another model…</option>
+            {% for model in models if model not in role.models %}<option>{{ model }}</option>{% endfor %}
+          </select></td>
+          <td style="max-width: 6rem"><input name="weight" class="form-control " type="number" min="0" step="any" value="1" aria-label="its weight" inputmode="decimal"></td>
+          <td colspan="5" class="text-secondary">To take a model out of the role for good, empty its weight.</td>
+        </tr>
+        </tbody>
+      </table>
+      </div>
+      <input type="hidden" name="evidence-settings" value="1">
+      <div class="mb-3">
+        <label class="form-label" for="loaded-{{ role.name }}">Loaded-model bonus (%)</label>
+        <input id="loaded-{{ role.name }}" name="loaded_bonus" type="number" min="0" max="100" step="any" class="form-control" style="max-width: 12rem" value="{{ role.get('loaded_bonus', 25) }}">
+        <small class="text-secondary">For ordinary role requests only: weighted quality and reliability × (1 + bonus / 100) for a ready local resident. Default 25%; 0 disables the bonus. Capability and access requirements still apply. :best keeps quality order; :available and :fast keep their own rules.</small>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="fast-loaded-{{ role.name }}">Fast loaded-model bonus (%)</label>
+        <input id="fast-loaded-{{ role.name }}" name="fast_loaded_bonus" type="number" min="0" max="500" step="any" class="form-control" style="max-width: 12rem" value="{{ role.get('fast_loaded_bonus', 100) }}">
+        <small class="text-secondary">For :fast only: default 100% gives a loaded local model ×2 preference, in addition to avoiding its reload time. 0 disables the extra reuse preference. It does not reduce measured latency or bypass role requirements.</small>
+      </div>
+      {{ section_title("Required for this role") }}
+      <div class="row g-3 mb-3">
+        <div class="col-md-4"><label class="form-label" for="context-{{ role.name }}">Minimum context tokens</label><input id="context-{{ role.name }}" name="requires-tokens" type="number" min="0" max="100000000" step="1" class="form-control" value="{{ role.get('requires', {}).get('tokens', 0) }}"></div>
+        {% for key, label in [('pictures', 'Images'), ('tools', 'Tool calls'), ('stays', 'Keep requests local')] %}<div class="col-md-2 align-self-end"><label class="form-check-label"><input type="checkbox" class="form-check-input" name="requires-{{ key }}" {{ 'checked' if role.get('requires', {}).get(key) }}> {{ label }}</label></div>{% endfor %}
+      </div>
+      {% set _section_title4 %}Benchmark preferences for {{ role.name }}{% endset %}
+{{ section_title(_section_title4) }}
+      <p class="small text-secondary">These weights apply only to <strong>{{ role.name }}</strong>. Use 0 to ignore a benchmark; 3 gives it three times the influence of 1. For example, code at 3 and instructions at 1 make up 75% and 25% of the quality score. Multiplying all weights by the same factor keeps the same balance. Model weights above are a separate preference.</p>
+      <div class="d-flex flex-wrap gap-2 mb-2">
+        <button type="button" class="btn btn-outline-secondary " data-benchmark-preset="{{ benchmark_presets.coding|tojson|forceescape }}">Use coding weights</button>
+        <button type="button" class="btn btn-outline-secondary " data-benchmark-preset="{{ benchmark_presets.chat|tojson|forceescape }}">Use chat weights</button>
+        <button type="button" class="btn btn-outline-secondary " data-benchmark-preset="{}">Ignore all benchmarks</button>
+      </div>
+      <p class="small text-secondary">Editable starting points: Coding emphasizes code reading, structured answers and instruction following; Chat emphasizes instructions, recall and generation speed. They set other benchmark weights to 0 in this role. Code reading does not measure code generation or tool use. Use <strong>Save</strong> to apply changes.</p>
+      <p class="small text-secondary" data-benchmark-status aria-live="polite"></p>
+      <div class="row g-3 mb-3" data-benchmark-weights>
+        {% for benchmark in benchmark_definitions %}<div class="col-md-4">
+          <input type="hidden" name="benchmark" value="{{ benchmark.id }}">
+          <label class="form-label" for="bench-{{ role.name }}-{{ benchmark.id }}">{{ benchmark.name }} <small class="text-secondary">{{ 'higher' if benchmark.direction == 'high' else 'lower' }} is better</small></label>
+          <input id="bench-{{ role.name }}-{{ benchmark.id }}" name="benchmark-weight" type="number" min="0" max="1e100" step="any" class="form-control" value="{{ role.get('benchmarks', {}).get(benchmark.id, 0) }}" data-benchmark-id="{{ benchmark.id }}">
+          <small class="d-block text-secondary">{{ 'Answer from a passage and mark unsupported answers as missing.' if benchmark.id == 'abstention' else benchmark.summary }}</small>
+          <output class="small d-block" data-benchmark-share="{{ benchmark.id }}" aria-label="quality share of {{ benchmark.name }} for {{ role.name }}">{{ (role.benchmark_shares.get(benchmark.id, 0) * 100)|round(1) }}% share</output>
+        </div>{% endfor %}
+        {% for key, weight in role.get('benchmarks', {}).items() if key not in benchmark_definitions|map(attribute='id')|list %}
+          <div class="col-md-4"><input type="hidden" name="benchmark" value="{{ key }}"><label class="form-label">{{ key }} (definition unavailable)<input name="benchmark-weight" class="form-control" type="number" min="0" max="1e100" step="any" value="{{ weight }}" data-benchmark-id="{{ key }}"></label><output class="small d-block" data-benchmark-share="{{ key }}">{{ (role.benchmark_shares.get(key, 0) * 100)|round(1) }}% share</output></div>
+        {% endfor %}
+        <div class="col-md-4"><label class="form-label" for="missing-{{ role.name }}">Missing or incompatible evidence</label>
+          <select id="missing-{{ role.name }}" name="missing" class="form-select"><option value="manual" {{ 'selected' if role.get('missing', 'manual') == 'manual' }}>Use manual weight</option><option value="exclude" {{ 'selected' if role.get('missing') == 'exclude' }}>Exclude the model</option></select></div>
+        <div class="col-md-4"><label class="form-label" for="stale-{{ role.name }}">Engine, machine or age warning</label>
+          <select id="stale-{{ role.name }}" name="stale" class="form-select"><option value="warn" {{ 'selected' if role.get('stale', 'warn') == 'warn' }}>Use evidence with a warning</option><option value="exclude" {{ 'selected' if role.get('stale') == 'exclude' }}>Treat as missing evidence</option></select></div>
+        <div class="col-md-4"><label class="form-label" for="age-{{ role.name }}">Maximum evidence age (days)</label><input id="age-{{ role.name }}" type="number" min="0" max="36500" step="any" class="form-control" name="max_age_days" value="{{ role.get('max_age_days', 0) }}"><small class="text-secondary">0 disables the age limit.</small></div>
+      </div>
+      <p class="small text-secondary">The model preview reflects saved weights. Scores normalize to 0–100% among your permitted candidates, respecting high/low direction; equal results receive 50%. Each normalized score contributes its displayed share to quality; the final score is model weight × (1 + quality), a multiplier from 1 to 2. If any selected measurement is unusable, the missing-evidence policy applies to the whole quality score. Edit benchmark formulas and directions on <a href="/benchmarks/manage">Benchmarks</a>. Routing uses the saved result snapshot on compute.</p>
+      <button class="btn btn-primary" name="do" value="save">Save</button>
+    </form>
+
+    <form method="post" action="/roles" class="row g-3 align-items-center mt-3" {{ swaps() }}>
+      <input type="hidden" name="name" value="{{ role.name }}">
+      <div class="col-md-6">{% set confirmation_label %}Yes, remove the role {{ role.name }}. Its models stay{% endset %}{{ confirm_check(confirmation_label, "sure-role") }}</div>
+      <div class="col-md-6"><button  class="btn btn-outline-danger" name="do" value="remove" {{ confirm_loss() }}>Remove the role</button></div>
+    </form>
+  {% endcall %}
+{% else %}
+<p class="text-secondary">No roles yet. Until there is one, a model is asked for by its own name.</p>
+{% endif %}
+{% endblock %}

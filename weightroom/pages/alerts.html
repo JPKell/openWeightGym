@@ -1,0 +1,37 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, page_header, section_title %}
+{% block title %}Alerts · openWeightGym{% endblock %}
+{% block main %}
+{% set _page_lead1 %}Checked every 30 seconds while openWeightGym runs. Acknowledgement records that someone has seen an episode; the condition stays open until recovery. Memory-kill incidents require a separate review. GPU threshold: {{ threshold }}°C; change it in <a href="/settings?open=weightroom">Settings</a>.{% endset %}
+{% call page_header("Operational alerts", lead=_page_lead1) %}<a href="/alerts" class="btn btn-outline-secondary btn-sm">Refresh</a>{% endcall %}
+{% call card("Sources", true) %}
+<div class="d-flex flex-wrap gap-3">{% for source in sources %}<div><b>{{ source.source }}</b><div class="small {{ 'text-secondary' if source.available else 'text-body fw-semibold' }}">{{ 'Available' if source.available else 'Unavailable; recovery unknown' }} · checked {{ source.checked_at|timestamp }}</div></div>{% else %}<div class="text-secondary">No readings yet.</div>{% endfor %}</div>
+<p class="small text-secondary mt-2 mb-0">Missing readings can mean compute is asleep, stopped or disconnected. They do not establish a service failure or recovery. Spending alerts use recorded 24-hour costs; in-flight and unknown costs are excluded.</p>
+{% endcall %}
+{% call card("Active alerts", true) %}
+{% for alert in active %}
+<article class="border-bottom py-3">
+  <div class="d-flex flex-wrap gap-2 align-items-center">{{ section_title(alert.title) }}<span class="badge {{ 'text-bg-danger' if alert.state == 'active' else 'text-bg-warning' }}">{{ 'Review required' if alert.manual else alert.state }}</span></div>
+  <p class="my-2 text-break">{{ alert.explanation }}</p>
+  <div class="small text-secondary text-break">Source: {{ alert.source }} · first {{ alert.first_at|timestamp }} · last observed {{ alert.last_at|timestamp }} · checked {{ alert.checked_at|timestamp }}</div>
+  {% if alert.state == 'unknown' %}<div class="small fw-semibold">Current condition unavailable. Last observed alert remains open.</div>{% endif %}
+  {% if alert.acknowledged_at %}<div class="small mt-2">Acknowledged by {{ alert.acknowledged_by }} at {{ alert.acknowledged_at|timestamp }}.</div>{% endif %}
+  <form method="post" action="/alerts/{{ alert.id }}" class="d-flex flex-wrap gap-2 mt-2">
+    {% if not alert.acknowledged_at %}<button name="do" value="acknowledge" class="btn btn-outline-primary btn-sm">Acknowledge</button>{% endif %}
+    {% if alert.manual %}<button name="do" value="review" class="btn btn-outline-secondary btn-sm">Mark incident reviewed</button>{% endif %}
+  </form>
+</article>
+{% else %}<p class="text-secondary mb-0">No open alerts. Check source availability above before assuming everything is healthy.</p>{% endfor %}
+{% endcall %}
+{% call card("History", true) %}
+{% for alert in history %}<article class="border-bottom py-2">
+{% set _section_title2 %}{{ alert.title }} <span class="badge text-bg-secondary">{{ alert.state }}</span>{% endset %}
+{{ section_title(_section_title2) }}
+<div class="small text-break">{{ alert.explanation }}</div>
+<div class="small text-secondary">{{ alert.source }} · first {{ alert.first_at|timestamp }} · last observed {{ alert.last_at|timestamp }} · closed {{ alert.resolved_at|timestamp }}</div>
+<div class="small text-break">{{ alert.recovery }}</div>
+{% if alert.acknowledged_at %}<div class="small">Acknowledged by {{ alert.acknowledged_by }} at {{ alert.acknowledged_at|timestamp }}.</div>{% endif %}
+</article>{% else %}<p class="text-secondary mb-0">No closed episodes.</p>{% endfor %}
+<nav class="d-flex gap-3 mt-2" aria-label="Alert history pages">{% if history_page > 1 %}<a href="/alerts?page={{ history_page-1 }}">Previous</a>{% endif %}<span class="small text-secondary">Page {{ history_page }}</span>{% if more_history %}<a href="/alerts?page={{ history_page+1 }}">Next</a>{% endif %}</nav>
+{% endcall %}
+{% endblock %}

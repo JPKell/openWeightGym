@@ -1,0 +1,11 @@
+{
+  "protocol": 1,
+  "id": "hermes",
+  "name": "Hermes Agent",
+  "version": "1.0.0",
+  "capabilities": ["send", "receive", "models", "health", "start", "restart"],
+  "schema": "schema.json",
+  "driver": "adapter.py",
+  "class": "Hermes",
+  "files": ["reasoning.py"]
+}

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ToolLocker test page</title>
+<style>
+  :root { color-scheme: light dark; --line: color-mix(in srgb, currentColor 25%, transparent); }
+  body { font: 15px/1.45 system-ui, sans-serif; max-width: 62rem; margin: 1.5rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 .2rem; }
+  p.note { margin: 0 0 1rem; opacity: .7; }
+  label { display: block; font-weight: 600; margin: .9rem 0 .25rem; }
+  label small { font-weight: 400; opacity: .7; }
+  input, select, button { font: inherit; }
+  input, select { box-sizing: border-box; width: 100%; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
+  /* A list that drops down is drawn by the browser, not the page. Without colours of its own it
+     takes the page's text colour but not its background, which in a dark theme is white on white. */
+  select, option { background-color: Canvas; color: CanvasText; }
+  pre { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .row { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .row > div { flex: 1 1 14rem; }
+  .row > div.narrow { flex: 0 0 9rem; }
+  .actions { display: flex; gap: .6rem; align-items: center; margin: 1rem 0; flex-wrap: wrap; }
+  button { padding: .45rem 1.1rem; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { font-weight: 600; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: .3rem 0 1rem; padding: .7rem; border: 1px solid var(--line); border-radius: 6px; min-height: 1.45em; }
+  summary { cursor: pointer; font-weight: 600; }
+</style>
+
+<h1>ToolLocker test page</h1>
+<p class="note">Lists the tools this key may use and calls one, exactly as a harness would. Ctrl+Enter calls.
+  Models are tested on the <a id="other">LoadCoach test page</a>.</p>
+<div class="actions">
+  <button id="connect">Connect</button>
+  <span id="state" class="note" style="margin: 0"></span>
+</div>
+
+<div class="row">
+  <div><label for="key">API key <small>a LoadCoach key; the ToolLocker always needs one</small></label>
+    <input id="key" type="password" autocomplete="off"></div>
+  <div class="narrow"><label for="toolset">Tool set</label>
+    <input id="toolset" placeholder="every tool" title="The name of a tool set from toollocker.toml. Empty asks at /mcp, which offers every tool this key's level allows."></div>
+  <div class="narrow"><label for="level">Sensitivity</label>
+    <select id="level"><option>normal</option><option>sensitive</option><option>restricted</option></select></div>
+  <div class="narrow"><label for="trace">Trace</label>
+    <input id="trace" placeholder="this connection" title="A name for the piece of work a call belongs to. Use the same one on the LoadCoach test page to link the two."></div>
+</div>
+
+<label for="tool">Tool <small>from tools/list</small></label>
+<select id="tool"></select>
+<pre id="description"></pre>
+
+<div id="arguments" class="row"></div>
+
+<div class="actions">
+  <button id="call" disabled>Call</button>
+  <span id="status"></span>
+</div>
+
+<label>Result</label>
+<pre id="answer"></pre>
+
+<details><summary>Message sent</summary><pre id="sent"></pre></details>
+<details open><summary>Response</summary><pre id="raw"></pre></details>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// LoadCoach's own test page, on the same machine. 8442 is its port unless you changed it.
+$("other").href = location.protocol + "//" + location.hostname + ":8442/";
+
+// Remember what was typed, in this browser only. The key is stored in plain text there.
+const remembered = ["key", "toolset", "level", "trace"];
+for (const id of remembered) {
+  const value = localStorage.getItem("toollocker." + id);
+  if (value !== null) $(id).value = value;
+}
+document.addEventListener("change", () => { for (const id of remembered) localStorage.setItem("toollocker." + id, $(id).value); });
+
+let tools = [];      // as tools/list returned them
+let session = null;  // what the door named this connection; sent back with every message
+let number = 0;      // each message carries a number, and its answer the same one
+
+const pretty = text => { try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; } };
+const address = () => "/mcp" + ($("toolset").value ? "/" + encodeURIComponent($("toolset").value) : "");
+
+// Send one MCP message and return its result. Shows what went out and what came back.
+async function ask(method, params = {}, more = {}) {
+  const headers = { "Content-Type": "application/json", Authorization: "Bearer " + $("key").value, ...more };
+  if (session) headers["Mcp-Session-Id"] = session;
+  const message = JSON.stringify({ jsonrpc: "2.0", id: ++number, method, params });
+  $("sent").textContent = "POST " + address() + "\n\n" + pretty(message);
+  const response = await fetch(address(), { method: "POST", headers, body: message });
+  const text = await response.text();
+  $("raw").textContent = pretty(text);
+  let answer; try { answer = JSON.parse(text); } catch { throw new Error(response.status + " " + response.statusText); }
+  // The door's own refusals carry a plain sentence. MCP's errors carry a code and a message.
+  if (answer.error) throw new Error(typeof answer.error === "string" ? answer.error : answer.error.message);
+  if (method === "initialize") session = response.headers.get("mcp-session-id");
+  return answer.result;
+}
+
+// Greet the door as a harness does, then ask what tools there are.
+async function connect() {
+  session = null;
+  try {
+    await ask("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "ToolLocker test page", version: "1" } });
+    tools = (await ask("tools/list")).tools;
+    $("state").textContent = tools.length + " tools at " + address() + " · this connection is " + session;
+  } catch (problem) {
+    tools = [];
+    $("state").textContent = "Not connected: " + problem.message;
+    $("answer").textContent = $("status").textContent = "";  // what an earlier connection showed
+  }
+  const chosen = $("tool").value;
+  $("tool").replaceChildren(...tools.map(tool => new Option(tool.name)));
+  if (tools.some(tool => tool.name === chosen)) $("tool").value = chosen;
+  // Connecting again keeps what was typed for a tool that is still the chosen one.
+  if ($("tool").value !== chosen || !tools.length) showTool();
+}
+
+// One box for each parameter the chosen tool takes, built from its own description of itself.
+function showTool() {
+  const tool = tools.find(tool => tool.name === $("tool").value);
+  $("call").disabled = !tool;
+  $("description").textContent = tool?.description ?? "";
+  const schema = tool?.inputSchema ?? {}, required = schema.required ?? [];
+  $("arguments").replaceChildren(...Object.entries(schema.properties ?? {}).map(([name, property]) => {
+    const box = document.createElement("div"), label = document.createElement("label"), input = document.createElement("input");
+    label.textContent = name + " ";
+    label.append(Object.assign(document.createElement("small"), { textContent: (property.type ?? "anything") + (required.includes(name) ? ", required" : "") }));
+    Object.assign(input.dataset, { name, type: property.type ?? "" });
+    input.spellcheck = false;
+    box.append(label, input);
+    return box;
+  }));
+}
+
+async function call() {
+  // A box left empty is left out. Text goes as typed; a number, true, false, a list or an object is read as JSON.
+  const given = {};
+  for (const input of $("arguments").querySelectorAll("input")) {
+    if (input.value === "") continue;
+    try { given[input.dataset.name] = input.dataset.type === "string" ? input.value : JSON.parse(input.value); }
+    catch { $("status").textContent = input.dataset.name + " must be " + (input.dataset.type || "JSON") + "."; return; }
+  }
+  const more = {};
+  if ($("level").value !== "normal") more["X-LoadCoach-Sensitivity"] = $("level").value;
+  if ($("trace").value) more["X-LoadCoach-Trace"] = $("trace").value;
+
+  $("answer").textContent = "";
+  $("call").disabled = true; $("status").textContent = "Waiting…";
+  const started = performance.now();
+  const seconds = () => " · " + ((performance.now() - started) / 1000).toFixed(2) + " s";
+  try {
+    const result = await ask("tools/call", { name: $("tool").value, arguments: given }, more);
+    $("answer").textContent = (result.content ?? []).map(piece => piece.text ?? JSON.stringify(piece)).join("\n");
+    $("status").textContent = (result.isError ? "The tool failed or refused" : "Returned") + seconds();
+  } catch (problem) {
+    $("status").textContent = "Not run: " + problem.message + seconds();
+  } finally {
+    $("call").disabled = false;
+  }
+}
+
+$("connect").onclick = connect;
+$("key").onchange = $("toolset").onchange = connect;
+$("tool").onchange = showTool;
+$("call").onclick = call;
+document.onkeydown = event => { if (event.ctrlKey && event.key === "Enter" && !$("call").disabled) call(); };
+if ($("key").value) connect(); else $("state").textContent = "Enter an API key to see the tools.";
+</script>
+</html>

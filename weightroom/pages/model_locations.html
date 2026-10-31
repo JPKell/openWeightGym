@@ -1,0 +1,29 @@
+{% from "parts.html" import confirm_two %}
+{% call card("Compute locations", true) %}
+  <p class="text-secondary">The gateway may place this model on any enabled node. Disabling a location keeps its model configuration and file in place.</p>
+  <div class="table-responsive"><table class="table align-middle mb-0">
+    <thead><tr><th>Node</th><th>Local model</th><th>Model file</th><th>Device / context / parallel</th><th>Placement</th></tr></thead>
+    <tbody>{% for location in model.locations|default([]) %}
+      <tr>
+        <td><strong>{{ location.machine }}</strong></td>
+        <td><a href="/models/{{ location.name|urlencode }}?node={{ location.machine|urlencode }}"><code>{{ location.name }}</code></a></td>
+        <td class="wrap"><code>{{ location.flags.model }}</code></td>
+        <td>{{ 'CPU' if location.gpus == 0 else location.gpus|default('default') }} · {{ location.flags['ctx-size'] or 'N/A' }} · {{ location.flags.get('parallel', 1) }}</td>
+        <td><form method="post" action="{{ address(model.name) }}" class="d-flex align-items-center gap-2">
+          <input type="hidden" name="machine" value="{{ location.machine }}">
+          <input type="hidden" name="model_id" value="{{ location.model_id }}">
+          <span class="badge text-bg-{{ 'success' if location.enabled|default(true) else 'secondary' }}">{{ 'Enabled' if location.enabled|default(true) else 'Disabled' }}</span>
+          <button  class="btn btn-outline-{{ 'danger' if location.enabled|default(true) else 'success' }} btn-sm" name="do" value="{{ 'location-disable' if location.enabled|default(true) else 'location-enable' }}" {{ confirm_two() }}>{{ 'Disable' if location.enabled|default(true) else 'Enable' }}</button>
+        </form></td>
+      </tr>
+    {% else %}
+      <tr><td>{{ selected_node }}</td><td><code>{{ model.name }}</code></td><td class="wrap"><code>{{ model.flags.model }}</code></td><td>{{ 'CPU' if model.gpus == 0 else model.gpus|default('default') }} · {{ model.flags['ctx-size'] or 'N/A' }} · {{ model.flags.get('parallel', 1) }}</td><td><span class="badge text-bg-success">Enabled</span></td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  <form method="post" action="{{ address(model.name) }}" class="d-flex flex-wrap align-items-end gap-2 mt-3">
+    <div><label for="add-node" class="form-label">Add model to node</label><select id="add-node" name="machine" class="form-select" required>{% for node in node_choices if node.name not in model.locations|default([])|map(attribute='machine') and node.name != selected_node %}<option value="{{ node.name }}">{{ node.name }} · {{ node.state }}</option>{% endfor %}</select></div>
+    <div><label for="add-device" class="form-label">Device on destination</label><select id="add-device" name="device" class="form-select"><option value="gpu">GPU · automatic</option>{% if model.engine|default('llama_cpp') != 'strata' %}<option value="cpu">CPU</option>{% endif %}</select></div>
+    <button class="btn btn-outline-primary" name="do" value="location-add">Add to node</button>
+  </form>
+  <p class="form-text mb-0">Copies the complete model bundle after cache space and hashes are checked. Configure context, parallel requests and loading flags separately on each node.</p>
+{% endcall %}

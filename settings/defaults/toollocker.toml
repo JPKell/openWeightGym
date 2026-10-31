@@ -1,0 +1,27 @@
+# What the ToolLocker starts from, for everything that can be changed on the site's Settings page.
+#
+# This file is part of the suite. It is read at every start, with settings/toollocker.toml laid
+# over it. A site change is kept in the gateway owner's store (front after relocation), above
+# here, until the change is taken away: on the page, or with
+#   loadcoach settings reset toollocker NAME  # legacy compute gateway only; use Settings on front after relocation
+# What belongs to the machine, such as addresses, ports and paths, is not here. That is in
+# settings/toollocker.toml, and settings/examples/toollocker.toml explains it.
+
+# Seconds one tool call may take. After that the call fails and its server is started afresh.
+call_timeout = 120
+
+# Tool sets. Every caller may use /mcp, which offers every tool they may use. A tool set is a
+# second address, /mcp/NAME, that offers only the tools it lists. A harness can also choose
+# sets on any address with the header `X-ToolLocker-Sets: code,email`, and is then offered the
+# tools of any set it names. A set only narrows: it never shows a tool the caller's group and
+# account are not shown. `*` stands for anything: "files__*". Changed on System -> Tools, it
+# holds within seconds. None to begin with. One would be written like this:
+#
+# [toolsets.reading]
+# tools = ["files__*", "code__search"]
+
+# A level for one tool, by the name a harness sees, in place of its server's level: "normal",
+# "sensitive" or "restricted". It may be higher or lower than the server's. A caller sees a
+# tool only if their group's max_sensitivity is at least its level, and from "sensitive" up
+# each call is kept in full. Changed on System -> Tools, it holds within seconds.
+tool_levels = {}

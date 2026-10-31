@@ -1,0 +1,13 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, card %}
+{% set heading = 'Page not found' if error_status == 404 else 'Access denied' if error_status == 403 else 'Something went wrong' if error_status >= 500 else 'Request could not be completed' %}
+{% block title %}{{ heading }} · openWeightGym{% endblock %}
+{% block main %}
+{% call card("", class_="mx-auto mt-4 entry") %}
+  {{ page_header(heading) }}
+  <p class="wrap" role="alert">{{ why }}</p>
+  {% if error_status == 403 %}<p class="text-secondary">Ask your administrator if you need access.</p>{% endif %}
+  {% if error_request_id %}<p class="text-secondary">If you contact your administrator, include request ID <code class="wrap">{{ error_request_id }}</code>.</p>{% endif %}
+  <a class="btn btn-primary" href="/">Go to Home</a>
+{% endcall %}
+{% endblock %}

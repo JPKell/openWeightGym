@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "owner": "compute",
+  "binding": "loadcoach.core",
+  "hosts": {
+    "front": {"root": "/home/owgadmin/weightroom"},
+    "compute": {"root": "/home/owgadmin/ai/openWeightGym", "ssh": "192.168.1.20"}
+  },
+  "target": {
+    "engine": "postgresql",
+    "dsn_file": "/home/owgadmin/ai/openWeightGym/keys/postgresql/core.dsn",
+    "display_name": "Compute PostgreSQL core"
+  },
+  "target_space": {"host": "compute", "path": "/var/lib/postgresql"},
+  "smoke_file": "/home/owgadmin/weightroom/keys/migration-smoke.json",
+  "drain_seconds": 600,
+  "artifacts": []
+}

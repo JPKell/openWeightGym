@@ -1,0 +1,6 @@
+{# Links still work without JavaScript; script adds smooth scrolling and keyboard focus. #}
+<nav class="d-inline-flex flex-wrap gap-1" aria-label="Conversation navigation">
+  {% if prompt_index > 0 %}<a class="btn btn-outline-secondary btn-sm" href="#prompt-{{ prompt_index - 1 }}" data-chat-jump>Previous prompt</a>{% else %}<span class="btn btn-outline-secondary btn-sm disabled" aria-disabled="true">Previous prompt</span>{% endif %}
+  {% if prompt_index + 1 < prompt_count %}<a class="btn btn-outline-secondary btn-sm" href="#prompt-{{ prompt_index + 1 }}" data-chat-jump>Next prompt</a>{% else %}<span class="btn btn-outline-secondary btn-sm disabled" aria-disabled="true">Next prompt</span>{% endif %}
+  <a class="btn btn-outline-secondary btn-sm" href="#chat-main" data-chat-jump>Back to top</a>
+</nav>

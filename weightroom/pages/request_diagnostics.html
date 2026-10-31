@@ -1,0 +1,64 @@
+{% from "parts.html" import card %}
+{% set diagnostic = facts.diagnostics or {} %}
+{% call card("Diagnostics", true, "request-diagnostics", id="request-diagnostics") %}
+<p class="small text-secondary">Wall-clock stages are measured on compute, starting at admission. Front authentication, waking compute and delivery to your app are outside this measurement. Native timings overlap these stages.</p>
+{% if not diagnostic.available %}<p class="text-secondary">Detailed timing was not recorded for this request. Legacy measurements and inferred totals are labelled below.</p>{% endif %}
+{% if diagnostic.truncated %}<p class="text-warning">The stage history reached its limit; some later stage boundaries are unavailable.</p>{% endif %}
+{% if ended.admission_estimate is defined %}{% set estimate = ended.admission_estimate %}
+<p class="small"><strong>Wait estimated at admission:</strong> {% if estimate.seconds is not none %}{{ estimate.seconds }} s{% else %}Unavailable{% endif %}.
+{{ estimate.basis }}. This is a prediction, separate from the measured stages below.
+{% if estimate.unknown %}<span class="text-secondary">{{ estimate.unknown|join(' ') }}</span>{% endif %}</p>
+{% endif %}
+<div class="table-responsive">
+<table class="table table-sm align-middle" id="request-timeline">
+  <thead><tr><th>Stage</th><th>Duration</th><th>Evidence</th></tr></thead>
+  <tbody>{% for phase in diagnostic.phases or [] %}
+  <tr><td>{{ phase.label }}</td><td class="text-nowrap">{{ '%.3f'|format(phase.seconds) }} s</td><td>{{ phase.basis }}</td></tr>
+  {% else %}<tr><td colspan="3" class="text-secondary">Stage durations unavailable.</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+<div class="table-responsive">
+<table class="table table-sm" id="request-measurements">
+  <thead><tr><th>Measurement</th><th>Duration</th><th>Evidence</th></tr></thead>
+  <tbody>{% for metric in diagnostic.metrics or [] %}
+  <tr><td>{{ metric.label }}</td><td class="text-nowrap">{% if metric.seconds is not none %}{{ '%.3f'|format(metric.seconds) }} s{% else %}Unavailable{% endif %}</td><td class="small text-secondary">{% if metric.seconds is not none %}{{ metric.basis }}{% else %}Not recorded or not observed separately{% endif %}</td></tr>
+  {% endfor %}</tbody>
+</table>
+</div>
+{% if asked.role %}<p><strong>Requested role:</strong> {{ asked.role }} · <strong>Selected:</strong> {{ asked.picked or asked.model }}<br><span class="text-secondary">{{ asked.because }}</span></p>{% endif %}
+{% set context = diagnostic.context or {} %}
+{% if context %}
+<dl class="row facts mb-2">
+  <dt class="col-5 col-md-2">Route</dt><dd class="col-7 col-md-4">{{ context.source }}</dd>
+  <dt class="col-5 col-md-2">Images sent</dt><dd class="col-7 col-md-4">{{ 'Yes' if context.images else 'No' }}</dd>
+  <dt class="col-5 col-md-2">Tools offered</dt><dd class="col-7 col-md-4">{{ context.tools_offered }}</dd>
+  {% if context.vision_configured is defined %}<dt class="col-5 col-md-2">Projector</dt><dd class="col-7 col-md-4 wrap">{{ context.projector or 'Not configured' }}</dd>{% endif %}
+  {% if context.context_tokens %}<dt class="col-5 col-md-2">Context</dt><dd class="col-7 col-md-4">{{ '{:,}'.format(context.context_tokens) }} tokens</dd>{% endif %}
+  {% if context.cards is defined %}<dt class="col-5 col-md-2">Placement</dt><dd class="col-7 col-md-4">{{ context.cards|join(', ') or 'CPU' }}</dd>{% endif %}
+</dl>
+{% if context.images and context.source == 'local' and not context.vision_configured %}<p class="text-warning">Images were sent with no projector configured. An image-capable GGUF needs its matching projector to read them.</p>{% endif %}
+{% endif %}
+{% for tool in diagnostic.tools or [] %}<p class="small"><strong>Model requested tool:</strong> <code>{{ tool.tool }}</code> · observed {{ '%.3f'|format(tool.offset) }} s after admission. Execution is only confirmed by a separate tool record.</p>{% endfor %}
+{% if ended.why %}<p class="wrap"><strong>Failure detail:</strong> {{ ended.why }}</p>{% endif %}
+<p class="d-flex gap-2 flex-wrap mb-0">
+  {% if asked.trace %}<a class="btn btn-sm btn-outline-secondary" href="/log?trace={{ asked.trace|urlencode }}">Trace {{ asked.trace }}</a>{% endif %}
+  {% if "restart-services" in person.can and machine_page %}
+  <a class="btn btn-sm btn-outline-secondary" href="/output?source=loadcoach&amp;at={{ (ended.at or asked.at)|urlencode }}">LoadCoach output around this request</a>
+  <a class="btn btn-sm btn-outline-secondary" href="/output?source=kernel&amp;at={{ (ended.at or asked.at)|urlencode }}&amp;before=300&amp;after=60">GPU / memory journal</a>
+  {% endif %}
+</p>
+{% endcall %}
+
+{% set related = facts.related or {} %}
+{% call card("Related activity", true, "request-related", id="request-related") %}
+<p class="small text-secondary">Trace entries share a correlation ID; they are not necessarily child operations of this request. Model events match the selected model and request time window. Tool durations are shown only when ToolLocker recorded them.</p>
+<div class="table-responsive"><table class="table table-sm diagnostic-activity" id="request-activity">
+<thead><tr><th>When</th><th>Source</th><th>Activity</th><th>Duration</th><th>Detail</th></tr></thead>
+<tbody>{% for event in related.events or [] %}
+<tr><td class="text-nowrap">{{ event.at|timestamp }}</td><td>{{ event.kind }}</td>
+<td><a href="{% if event.kind == 'request' %}/requests/{{ event.of or event.source or event.id }}{% else %}/log/{{ event.id }}{% endif %}">{{ event.what }}</a></td>
+<td class="text-nowrap">{% if event.took is defined %}{{ event.took }} s{% else %}Unavailable{% endif %}</td><td class="wrap">{{ event.tool or event.model or '' }}{% if event.why %} · {{ event.why }}{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="text-secondary">No correlated activity is available in your log scope.</td></tr>{% endfor %}</tbody>
+</table></div>
+{% if related.truncated %}<p class="small text-secondary">Recent activity is capped at 200 trace entries and 50 model events. Open the trace log for more.</p>{% endif %}
+{% endcall %}

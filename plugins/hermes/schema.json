@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hermes instance settings",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "listen_host": {
+      "type": "string",
+      "default": "127.0.0.1",
+      "description": "HTTP listening address. Changes require adapter service restart."
+    },
+    "listen_port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 8450
+    },
+    "cli": {
+      "type": "string",
+      "default": "hermes",
+      "description": "Hermes executable; venv takes precedence when configured."
+    },
+    "venv": {
+      "type": "string",
+      "default": "",
+      "description": "Existing Hermes venv directory, not the adapter environment."
+    },
+    "repository": {
+      "type": "string",
+      "default": "",
+      "description": "Hermes source directory used for the CLI invocation."
+    },
+    "hermes_home": {
+      "type": "string",
+      "default": "",
+      "description": "Optional HERMES_HOME override; never changes the sticky profile."
+    },
+    "health_profile": {
+      "type": "string",
+      "default": "default",
+      "description": "Profile for Hermes gateway status/start/restart."
+    },
+    "max_concurrent": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 32,
+      "default": 4
+    },
+    "workspace": {
+      "type": "string",
+      "default": "",
+      "description": "Session workspace passed with --in; blank preserves Hermes configuration."
+    },
+    "model": {
+      "type": "string",
+      "default": "",
+      "description": "Optional underlying model override."
+    },
+    "provider": {
+      "type": "string",
+      "default": "",
+      "description": "Optional Hermes provider override."
+    },
+    "reasoning": {
+      "type": "string",
+      "enum": ["", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"],
+      "default": ""
+    },
+    "skills": {
+      "type": "string",
+      "default": "",
+      "description": "Comma-separated skills to preload."
+    },
+    "toolsets": {
+      "type": "string",
+      "default": "",
+      "description": "Comma-separated toolsets; blank preserves the profile."
+    },
+    "max_turns": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5000,
+      "default": 0,
+      "description": "0 preserves the profile iteration limit."
+    },
+    "run_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400,
+      "default": 300,
+      "description": "Wall-clock budget in seconds."
+    },
+    "approval": {
+      "type": "string",
+      "enum": [
+        "profile",
+        "yolo"
+      ],
+      "default": "profile",
+      "description": "profile preserves native approval rules with closed input; yolo explicitly bypasses command approvals."
+    },
+    "accept_hooks": {
+      "type": "boolean",
+      "default": false,
+      "description": "Explicitly auto-approve shell hooks."
+    },
+    "worktree": {
+      "type": "boolean",
+      "default": false,
+      "description": ""
+    },
+    "pass_session_id": {
+      "type": "boolean",
+      "default": false,
+      "description": ""
+    },
+    "ignore_rules": {
+      "type": "boolean",
+      "default": false,
+      "description": ""
+    },
+    "ignore_user_config": {
+      "type": "boolean",
+      "default": false,
+      "description": ""
+    },
+    "safe_mode": {
+      "type": "boolean",
+      "default": false,
+      "description": ""
+    },
+    "profiles": {
+      "type": "object",
+      "default": {},
+      "description": "Per-profile overrides, including approval and toolsets.",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/profile"
+      }
+    }
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workspace": {
+          "type": "string",
+          "default": "",
+          "description": "Session workspace passed with --in; blank preserves Hermes configuration."
+        },
+        "model": {
+          "type": "string",
+          "default": "",
+          "description": "Optional underlying model override."
+        },
+        "provider": {
+          "type": "string",
+          "default": "",
+          "description": "Optional Hermes provider override."
+        },
+        "reasoning": {
+          "$ref": "#/properties/reasoning"
+        },
+        "skills": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated skills to preload."
+        },
+        "toolsets": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated toolsets; blank preserves the profile."
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000,
+          "default": 0,
+          "description": "0 preserves the profile iteration limit."
+        },
+        "run_budget": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 300,
+          "description": "Wall-clock budget in seconds."
+        },
+        "approval": {
+          "type": "string",
+          "enum": [
+            "profile",
+            "yolo"
+          ],
+          "default": "profile",
+          "description": "profile preserves native approval rules with closed input; yolo explicitly bypasses command approvals."
+        },
+        "accept_hooks": {
+          "type": "boolean",
+          "default": false,
+          "description": "Explicitly auto-approve shell hooks."
+        },
+        "worktree": {
+          "type": "boolean",
+          "default": false,
+          "description": ""
+        },
+        "pass_session_id": {
+          "type": "boolean",
+          "default": false,
+          "description": ""
+        },
+        "ignore_rules": {
+          "type": "boolean",
+          "default": false,
+          "description": ""
+        },
+        "ignore_user_config": {
+          "type": "boolean",
+          "default": false,
+          "description": ""
+        },
+        "safe_mode": {
+          "type": "boolean",
+          "default": false,
+          "description": ""
+        }
+      }
+    }
+  }
+}

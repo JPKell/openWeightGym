@@ -1,0 +1,15 @@
+{% macro users_groups(prefix, groups, user_groups, selected_user='', selected_group='', show_user=true) %}
+<label class="form-label" for="{{ prefix }}-group">Users and Groups</label>
+<div class="input-group input-group-sm" data-users-groups>
+  <select id="{{ prefix }}-group" name="group" class="form-select form-select-sm" data-group-select aria-label="Group">
+    <option value="">All groups</option>{% for group in groups %}<option value="{{ group }}" {{ 'selected' if group == selected_group }}>{{ group }}</option>{% endfor %}
+  </select>
+  {% if show_user %}
+  <div class="user-picker">
+    <select id="{{ prefix }}-user" name="user" class="form-select form-select-sm" data-user-select aria-label="User">
+      <option value="">All users</option>{% for name, memberships in user_groups|dictsort %}<option value="{{ name }}" data-groups="{{ ([memberships] if memberships is string else memberships)|tojson|forceescape }}" {{ 'selected' if name == selected_user }}>{{ name }}</option>{% endfor %}
+    </select>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}

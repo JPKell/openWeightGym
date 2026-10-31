@@ -1,0 +1,26 @@
+{# The table of log entries, newest first. Showing the latest, it asks for itself again every 5 seconds.
+   Gone back to older ones, it stays as it is, so that what is being read does not move. #}
+{% from "parts.html" import swaps %}
+<div id="log" {% if not going_back %}hx-get="/log?part=list{{ "&" ~ narrowed if narrowed }}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
+<div class="table-responsive">
+<table id="log-table" class="table table-sm table-hover align-middle sortable">
+  <thead><tr><th data-sort="value">When</th><th data-sort="text">Kind</th><th data-sort="text">What</th><th data-sort="text">User</th><th data-sort="text">Model</th><th>More</th></tr></thead>
+  <tbody>
+  {% for event in events %}
+  <tr>
+    <td class="when" data-value="{{ event.id }}">{{ event.at|timestamp }}</td>
+    <td>{{ event.kind }}</td>
+    {# A request has a page of its own. An entry about a request, such as how it ended, leads to the same page. Any other entry has a page with all of it. #}
+    <td><a href="{% if event.kind == "request" %}/requests/{{ event.of or event.source or event.id }}{% else %}/log/{{ event.id }}{% endif %}">{{ event.what }}</a></td>
+    <td>{{ event.user }}</td>
+    <td>{{ event.model or "" }}</td>
+    <td class="wrap log-more">{% for name, value in (event|rest).items() %}<span class="text-secondary">{{ name }}</span> {{ value|shown }}{{ " · " if not loop.last }}{% endfor %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="text-secondary">Nothing on record{{ " that fits" if narrowed }}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if events|length == limit %}<a class="btn btn-outline-secondary btn-sm" {{ swaps("log-view", true) }} href="/log?{{ narrowed ~ "&" if narrowed }}before={{ events[-1].id }}">Older</a>{% endif %}
+</div>

@@ -1,0 +1,13 @@
+[Unit]
+Description=spotter, the helper that watches compute
+After=network-online.target
+
+[Service]
+ExecStart=%h/ai/openWeightGym/.venv/bin/spotter --config %h/ai/openWeightGym/settings/spotter.toml
+Restart=always
+RestartSec=3
+# It is small, and it must not be what runs the machine out of memory.
+MemoryMax=256M
+
+[Install]
+WantedBy=default.target

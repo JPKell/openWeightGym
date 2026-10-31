@@ -1,0 +1,28 @@
+{% from "parts.html" import card %}
+{% call card("Store health and backup age", true) %}
+{% if store_health_error %}<div class="alert alert-warning py-2">{{ store_health_error }}</div>{% endif %}
+<div class="table-responsive"><table class="table table-sm align-middle mb-0 store-health-table table-stack">
+  <thead><tr><th>Machine / named store</th><th>Engine / services</th><th>Store probe</th><th>Last verified local backup</th></tr></thead>
+  <tbody>
+  {% for store in store_health %}
+  <tr>
+    <td data-label="Machine / named store">{{ store.machine|capitalize }} · <code>{{ store.name }}</code><div class="small text-secondary">{{ store.display_name }}</div></td>
+    <td data-label="Engine / services">{{ store.engine }}<div class="small">{{ store.services|join(", ") or "unbound" }}</div><div class="small text-secondary">{{ store.bindings|join(", ") }}</div></td>
+    <td data-label="Store probe"><span class="badge {{ 'text-bg-success' if store.state == 'reachable' else 'text-bg-warning' if store.state == 'warning' else 'text-bg-danger' }}">{{ store.state }}</span>
+      {% if store.error %}<div class="small text-danger">{{ store.error }}</div>{% else %}
+      <div class="small text-secondary">{{ store.latency_ms }} ms · {{ store.facts.server_version }}</div>
+      {% if store.engine == "postgresql" %}<div class="small">Database backends {{ store.facts.connections }} / {{ store.facts.connection_limit }} client slots ({{ store.facts.reserved_connections }} reserved; backends include database workers)<br>TLS {{ "on" if store.facts.tls else "off on this connection" }} · autovacuum {{ "on" if store.facts.autovacuum else "off" }}</div>{% endif %}
+      {% endif %}
+      {% for warning in store.warnings %}<div class="small text-warning-emphasis">{{ warning }}</div>{% endfor %}
+    </td>
+    <td data-label="Last verified local backup"><span class="badge {{ 'text-bg-success' if store.backup.state == 'fresh' else 'text-bg-warning' }}">{{ store.backup.state }}</span>
+      {% if store.backup.age_seconds is not none %}<div class="small">{{ (store.backup.age_seconds / 3600)|round(1) }} hours old · {{ store.backup.created_timestamp|timestamp }}</div><code class="small">{{ store.backup.id }}</code>
+      {% elif store.backup.state == "unknown" %}<div class="small text-secondary">Store identity could not be checked.</div>
+      {% else %}<div class="small text-secondary">No matching verified archive is recorded.</div>{% endif %}
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="4" class="text-secondary">No store status is available.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+<p class="small text-secondary mt-2 mb-0">Probes check reachability and read access, not write access or a full integrity check. Backup age uses the last recorded verified local archive matching the current store; more than 24 hours is stale. This does not reverify an archive or establish a complete paired recovery set. <a href="/backups">Review recovery sets</a>.</p>
+{% endcall %}

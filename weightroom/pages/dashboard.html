@@ -1,0 +1,60 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, card, empty_row %}
+{% block title %}Home · openWeightGym{% endblock %}
+{% block scripts %}
+<script src="/static/echarts.min.js" defer></script>
+<script src="/static/dashboard.js?v=3" defer></script>
+{% endblock %}
+{% block main %}
+{% call page_header("Home", lead="Start a conversation, choose a model and review your recent activity.", help="/guide") %}<a class="btn btn-primary" href="/chat">Start a conversation</a>{% endcall %}
+{% call card('Your available models') %}
+<div class="table-responsive home-available-models"><table class="table table-sm align-middle mb-0" id="available-models"><thead><tr><th>Model</th><th>Use</th><th>State</th></tr></thead><tbody>
+{% for model in available_models %}<tr><td class="wrap"><a href="{{ model.href }}">{{ model.name }}</a></td><td>{{ model.kind }}</td><td><span class="badge bg-{{ 'green' if model.state == 'Ready' else 'secondary' }}-lt">{{ model.state }}</span></td></tr>{% else %}{{ empty_row(3, 'No models are available to your account. Ask your administrator to grant model access.') }}{% endfor %}
+</tbody></table></div>
+<p class="form-hint mb-0">Models that are not loaded may take a moment to start. An unavailable node may need to wake before it can answer.</p>
+{% endcall %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+  <nav class="nav nav-pills gap-1" aria-label="Usage period">
+    {% for value, label in [('1', '1 day'), ('7', '7 days'), ('30', '30 days'), ('all', 'All time')] %}
+    <a class="nav-link{{ ' active' if period == value }}" href="/?period={{ value }}&amp;limit={{ paging.limit }}&amp;{{ summary_query|urlencode }}"{% if period == value %} aria-current="true"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+{% if 'see-summaries' in person.can %}
+<nav class="nav nav-pills justify-content-end gap-1 ms-auto" aria-label="Summary scope">
+  {% for value, label in [('mine', 'Mine'), ('total', 'Total')] %}
+  <a class="nav-link{{ ' active' if summary == value }}" href="/?{{ {'summary': value, 'period': period, 'limit': paging.limit}|urlencode }}"{% if summary == value %} aria-current="true"{% endif %}>{{ label }}</a>
+  {% endfor %}
+  {% for group in report.summary_groups %}
+  <a class="nav-link{{ ' active' if summary == 'group' and summary_group == group }}" href="/?{{ {'summary': 'group', 'group': group, 'period': period, 'limit': paging.limit}|urlencode }}"{% if summary == 'group' and summary_group == group %} aria-current="true"{% endif %}>Group: {{ group[:1]|upper }}{{ group[1:] }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+</div>
+<p class="small text-secondary mb-3">{{ report.start }} – {{ report.end }} · {{ report.timezone }}</p>
+{% with home_summary=true %}{% include "usage_kpis.html" %}{% endwith %}
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    {% set _card_title1 %}{{ summary_label }} usage over time{% endset %}
+{% call card(_card_title1, class_="h-100", attrs={"aria-labelledby": "home-chart-heading"}, header_id="home-chart-heading") %}
+        <div id="home-usage-chart" class="usage-chart frame" role="img" aria-label="{{ summary_label }} {{ 'hourly' if period == '1' else 'daily' }} input and output tokens for the selected period"></div>
+        {% if not report.totals.requests %}<p class="text-secondary mb-0">No usage recorded in this period.</p>{% endif %}
+        <noscript><p class="text-secondary mb-0">Enable JavaScript to view the chart. Your token totals and top models are shown on this page.</p></noscript>
+      {% endcall %}
+  </div>
+  <div class="col-lg-6">
+    {% call card("Top models by tokens", class_="h-100", attrs={"aria-labelledby": "home-models-heading"}, header_id="home-models-heading", body=false) %}
+
+      <div class="table-responsive">
+        <table id="home-models" class="table table-sm align-middle mb-0">
+          <thead><tr><th>Model</th><th class="text-end">Input</th><th class="text-end">Output</th><th class="text-end">Total tokens</th></tr></thead>
+          <tbody>{% for row in report.breakdowns.model[:10] %}<tr><td class="wrap">{{ row.name }}</td><td class="text-end">{{ '{:,}'.format(row.input_tokens) }}</td><td class="text-end">{{ '{:,}'.format(row.output_tokens) }}</td><td class="text-end">{{ '{:,}'.format(row.total_tokens) }}</td></tr>{% else %}<tr><td colspan="4" class="text-secondary">No models used in this period.</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    {% endcall %}
+  </div>
+</div>
+{% set _card_title3 %}{{ summary_label }} recent requests{% endset %}
+{% call card(_card_title3, attrs={"aria-labelledby": "home-requests-heading"}, header_id="home-requests-heading") %}{% include "requests_list.html" %}{% endcall %}
+<p class="small text-secondary mb-0">Usage covers calendar days in {{ report.timezone }}. All time includes retained request history. See <a href="/usage">Usage</a> for recorded costs and estimates.</p>
+<script type="application/json" id="home-usage-data">{{ report|tojson }}</script>
+{% endblock %}

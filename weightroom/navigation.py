@@ -1,0 +1,81 @@
+"""Site categories and their pages, limited to the signed-in person's abilities."""
+
+from weightroom.system_docs import LINKS as DOC_LINKS
+
+
+def navigation(path: str, can: list[str], machine: bool) -> dict:
+    """Choose the category and page for the current route.
+
+    Detail pages keep their parent highlighted. Voice chat, its desktop app download and administration are local pages.
+    """
+    groups = [
+        {"name": "Chat", "links": [("Conversations", "/chat"), ("Collections", "/collections"), ("Workflows", "/workflows"), ("Image generation", "/chat/images"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Speech", "/chat/speech")]},
+        {"name": "Models", "links": []},
+        {"name": "Benchmark", "links": [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements"), ("Embedders", "/benchmarks/embedders"), ("Compare", "/benchmarks/compare")]},
+        {"name": "Logs", "links": [("Usage", "/usage"), ("Requests", "/requests"), ("Batches", "/batches"), ("AI Logs", "/log"), ("Reliability", "/reliability")]},
+        {"name": "System", "links": [("Status", "/status")]},
+        {"name": "Settings", "links": []},
+    ]
+    if "front-voice" in can or "superuser" in can:
+        groups[0]["links"].append(("Voice", '/voice'))
+        groups[0]["links"].append(("Voice desktop app", '/voice/desktop'))
+    if "manage-models" in can:
+        groups[1]["links"] = [("Models", "/models"), ("Images", "/models/images"), ("Image workflows", "/models/images/workflows"), ("Audio models", "/models/audio"), ("Dry fit", "/dry-fit"), ("Roles", "/roles"), ("Files", "/files"),
+                              ("HuggingFace", "/hub"), ("Civitai", "/civitai"), ("Fingerprints", "/fingerprints")]
+    if "manage-hosted" in can:  # the services elsewhere whose models are offered here
+        groups[1]["links"].append(("Cloud APIs", "/cloud-apis"))
+    if set(can) & {"front-plugins", "front-manage-plugins", "see-log"}:
+        groups[3]["links"].append(("Plugin logs", "/plugins/activity"))
+    if "manage-settings" in can:
+        groups[5]["links"].extend([("Voice", "/system/voice"), ("Audio", "/system/audio"), ("Image", "/settings/image")])
+        groups[2]["links"].append(("Manage", "/benchmarks/manage"))
+    groups.append({"name": "Docs", "links": [("User guide", "/guide"), *([("System reference", "/docs"), *DOC_LINKS] if "manage-settings" in can else [])]})
+    if "restart-services" in can:
+        groups[3]["links"].append(("System logs", "/output"))
+    groups[4]["links"].append(("Telemetry", "/telemetry"))
+    if "manage-settings" in can:
+        groups[4]["links"].append(("Voice", "/system/voice/status"))
+        groups[4]["links"].append(("Alerts", "/alerts"))
+        groups[4]["links"].append(("Schedules", "/schedules"))
+        groups[5]["links"].insert(0, ("Compute nodes", "/compute-nodes"))
+    for ability, label, url in [("manage-users", "Users", "/users"), ("manage-groups", "Groups", "/groups"), ("manage-settings", "Tools", "/tools"), ("front-manage-plugins", "Plugins", "/plugins"), ("manage-settings", "Backups", "/backups"), ("manage-settings", "DB", "/databases"), ("manage-settings", "General", "/settings"), ("superuser", "Deploy", "/deploy")]:
+        if ability in can:
+            groups[4 if url in ('/backups', '/databases', '/deploy') else 5]["links"].append((label, url))
+    settings_order = ['Compute nodes', 'Users', 'Groups', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
+    groups[5]['links'].sort(key=lambda link: settings_order.index(link[0]))
+    groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups', 'Deploy'].index(link[0]))
+    root = "/" + path.strip("/").split("/")[0]
+    active = {"/file": "/files", "/downloads": "/hub", "/measure-models": "/models", "/outside": "/cloud-apis",
+              "/control": "/status", "/ask": "/log", "/machine": "/telemetry", "/machines": "/telemetry"}.get(root, root)
+    if path.rstrip("/") in ("/plugins/activity", "/voice/desktop"):
+        active = path.rstrip("/")
+    if root == "/benchmarks":
+        active = path.rstrip("/")
+        if active == "/benchmarks":
+            active = "/benchmarks/runs"
+        if active.startswith('/benchmarks/run/'):
+            active = '/benchmarks/runs'
+    if path.startswith("/models/images"):
+        active = "/models/images/workflows" if path.startswith("/models/images/workflows") else "/models/images"
+    elif path.startswith(("/chat/images", "/chat/music", "/chat/sounds", "/chat/speech", "/models/audio")):
+        active = "/" + "/".join(path.strip("/").split("/")[:2])
+    selected = next((group for group in groups if any(url == active for _, url in group["links"])), None)
+    if root == "/plugins" and active != "/plugins/activity":
+        selected = groups[5]
+    if root == '/system' and path.startswith(('/system/voice', '/system/audio')):
+        selected, active = groups[5], '/' + '/'.join(path.strip('/').split('/')[:2])
+    if path == '/system/voice/status':
+        selected, active = groups[4], path
+    if path.startswith('/settings/image'):
+        selected, active = groups[5], '/settings/image'
+    if root in ('/docs', '/guide'):
+        selected = next((group for group in groups if group['name'] == 'Docs'), None)
+        active = path.rstrip('/') or '/docs'
+    groups.insert(0, {"name": "Home", "links": [("Home", "/")]})
+    if root == "/":
+        selected = groups[0]
+    if root == "/account":
+        links = [("Account", "/account"), ("Appearance", "/account/appearance"), ("Audio", "/account/audio"), ("Logs", "/account/logs")]
+        active = next((url for _, url in links[1:] if path.rstrip('/') == url), '/account')
+        return {"groups": [group for group in groups if group['links']], "section": "My account", "links": links, "active": active}
+    return {"groups": [group for group in groups if group["links"]], "section": selected["name"] if selected else "", "links": selected["links"] if selected else [], "active": active if selected else ""}

@@ -1,0 +1,15 @@
+{% from "parts.html" import section_title %}
+{# What is in the Running card on Benchmark, Runs: the run being done now, its log and what it has measured so far. #}
+{% from "benchmark_parts.html" import number, duration %}
+{% if live %}
+{% set progress = live.progress %}
+<div class="benchmark-progress mb-3">
+  <div class="benchmark-progress-fill frame" style="--progress: {{ progress.percent or 0 }}%" role="progressbar" aria-label="Benchmark progress" aria-valuemin="0" aria-valuemax="100"{% if progress.percent is not none %} aria-valuenow="{{ progress.percent }}"{% endif %}><strong>{{ progress.completed }}{% if progress.total is not none %} / {{ progress.total }} samples · {{ '%.0f'|format(progress.percent) }}%{% else %} probes completed{% if progress.adaptive %} · adaptive search{% endif %}{% endif %}</strong></div>
+  <div><span class="small text-secondary" title="Wall-clock time since the first start, including pauses and waits">Time elapsed</span><strong>{{ duration(progress.elapsed_seconds) }}</strong></div>
+  <div><span class="small text-secondary">Estimated time remaining</span><strong>{% if progress.eta_overdue %}Taking longer than estimated{% elif progress.eta_seconds is not none %}~ {{ duration(progress.eta_seconds) }}{% else %}Estimating…{% endif %}</strong></div>
+</div>
+<div class="benchmark-live"><div>{{ section_title("Log", level=3) }}<pre class="benchmark-log frame" tabindex="0" aria-label="Latest benchmark log">{% for message in live.messages %}{{ message.at|timestamp }} {{ message.text }}
+{% endfor %}</pre></div><div>{{ section_title("Live measurements", level=3) }}<div class="table-responsive"><table class="table table-sm"><tbody>{% for key,value in live.metrics.items() %}<tr><th scope="row">{{ key }}</th><td>{{ number(value) }}</td></tr>{% else %}<tr><td class="text-secondary">Measurements appear after each completed sample.</td></tr>{% endfor %}</tbody></table></div></div></div>
+{% else %}
+<p class="small text-secondary mb-0">No benchmark is running.</p>
+{% endif %}

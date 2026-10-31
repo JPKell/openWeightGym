@@ -1,0 +1,50 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, form_section, more, hardware, card, section_title , empty_row %}
+{% from "model_form.html" import number %}
+{% block title %}Audio models · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/static/model-settings.js?v=2" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/soundroom-static/models.js?v=4" defer></script>{% endblock %}
+{% block main %}
+<div id="soundroom-models">
+<p><a href="/models?kind=audio">Audio models</a></p>
+  {{ page_header('Audio model settings', 'Choose model files, hardware and output defaults for the selected node.') }}
+<form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3"><div><label for="am-node" class="form-label">Compute node</label><select id="am-node" name="node" class="form-select form-select-sm"><option value="compute">compute</option></select></div><button class="btn-sm btn btn-outline-secondary">Browse node files</button></form>
+  <div id="am-message" class="alert alert-danger" role="alert" hidden></div>
+  <p id="am-runtime" class="text-secondary"></p>
+  {% call card("Add a model", header_id="am-heading") %}
+    <form id="am-form" class="row g-3">
+{% call form_section("Model and files", "All nodes") %}
+      <div class="col-12"><label class="form-label" for="am-file">File in cache/storage</label><select id="am-file" class="form-select" required><option value="">Choose an audio model file</option></select><div class="form-text">Only files already in cache/storage are listed. Stored files are promoted and copied after space checks.</div></div>
+      <div class="col-md-6"><label class="form-label" for="am-family">Model family</label><select id="am-family" class="form-select" required></select><div id="am-family-note" class="form-text"></div></div>
+      <div class="col-md-6"><label class="form-label" for="am-name">Name</label><input id="am-name" class="form-control" required pattern="[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}"></div>
+      <div class="col-md-6"><label class="form-label" for="am-kind">Kind</label><select id="am-kind" class="form-select"></select></div>
+      <div class="col-12"><label class="form-label" for="am-root">Package folder</label><input id="am-root" class="form-control font-monospace" required><div class="form-text">Companion files keep their paths relative to this folder. A standalone audio.cpp GGUF usually needs no companions.</div></div>
+      <div class="col-12"><label class="form-label" for="am-companions">Companion files (optional)</label><select id="am-companions" class="form-select font-monospace" multiple size="4"></select></div>
+{% endcall %}
+{% call form_section('Hardware', 'This node') %}
+{{ hardware('am', alone=true, legacy='audio') }}
+{{ number('am-ram','Host RAM budget','MiB',1024,131072,8192,required=true) }}
+<div class="col-12 form-hint" id="am-exclusive-hint">Music and sound models require exclusive GPUs.</div>
+{% endcall %}
+{% call form_section('Output limits', 'All nodes') %}
+{{ number('am-seconds','Longest output','s',1,3600,600) }}
+{{ number('am-takes','Takes per request','',1,16,8) }}
+{{ number('am-text','Input text limit','characters',1,200000,20000) }}
+{{ number('am-audio','Input audio limit','MiB',1,64,32) }}
+{% endcall %}
+{% call form_section('Defaults', 'All nodes', 'Only options declared by this runtime family are offered.') %}<div class="col-12"><div id="am-default-fields" class="row g-3"></div><p class="form-hint" id="am-defaults-empty">Choose a model family to see its options.</p></div>{% endcall %}
+<div class="col-12">{% call card('Advanced (JSON)', false) %}<div class="row g-3">
+<div class="col-md-6"><label for="am-defaults" class="form-label">Additional generation defaults</label><textarea id="am-defaults" class="form-control font-monospace" rows="3">{}</textarea></div>
+<div class="col-md-6"><label for="am-session" class="form-label">Session options</label><textarea id="am-session" class="form-control font-monospace" rows="3">{}</textarea></div>
+</div>{% endcall %}</div>
+<div class="col-12 sticky-actions"><button class="btn btn-primary" type="submit">Add model</button><span id="am-saved" class="small text-success" role="status"></span></div>
+    </form>
+  {% endcall %}
+  <section class="mb-4">
+    {{ section_title("Models") }}
+
+    <div class="table-responsive"><table class="sortable table table-sm align-middle" data-empty-message="No audio models. Add a model using the form above."><thead><tr><th>Name</th><th>Family</th><th>Kind</th><th>Device</th><th>State</th><th>Peak seen</th><th></th></tr></thead><tbody id="am-profiles">{{ empty_row(7, "No audio models. Add a model using the form above.") }}</tbody></table></div>
+    {% call card("", id="am-test", attrs={"hidden": ""}) %}{{ section_title("", id="am-test-title", level=3) }}<audio id="am-test-audio" controls class="w-100 mb-2"></audio><pre id="am-test-result" class="small mb-0"></pre>{% endcall %}
+  </section>
+  <p class="small text-secondary">To add another model, <a href="/hub">find files on Hugging Face</a> or add them to a configured cache/storage folder under <a href="/files">Files</a>. The model architecture and file layout must be supported by the selected audio.cpp runtime. A model does not need to appear in a download catalogue.</p>
+</div>
+{% endblock %}

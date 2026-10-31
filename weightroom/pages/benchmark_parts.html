@@ -1,0 +1,33 @@
+{% macro number(value) -%}
+{%- if value is number -%}
+  {%- set compact = namespace(value=value, suffix='') -%}
+  {%- for suffix in ('K', 'M', 'B', 'T') -%}
+    {%- if compact.value|abs >= 999.95 -%}
+      {%- set compact.value = compact.value / 1000 -%}
+      {%- set compact.suffix = suffix -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {{- '%.1f'|format(compact.value) -}}{{- compact.suffix -}}
+{%- else -%}—{%- endif -%}
+{%- endmacro %}
+{% macro token_count(value) -%}
+{%- if value is number -%}{{ '{:,}'.format(value|int) }}{%- else -%}—{%- endif -%}
+{%- endmacro %}
+{% macro run_link(run, benchmark) -%}
+{% if run %}<a href="/benchmarks/run/{{ run.id }}">{{ number(run.score) }}{{ settings_note(run, true) }}{% if run.rerun %}<span class="benchmark-flag {{ 'flag-version' if run.version != run.latest_version else 'flag-environment' }}" title="Rerun recommended: {{ run.rerun|join(', ') }}" role="img" aria-label="Rerun recommended: {{ run.rerun|join(', ') }}">*</span>{% endif %}</a>{% else %}—{% endif %}
+{%- endmacro %}
+{% macro settings_note(run, compact=false) -%}
+{%- if run and run.current_fingerprint is sameas false -%}
+{%- if compact -%}<span class="benchmark-flag flag-settings" role="img" aria-label="Settings changed; saved result uses recorded configuration" title="Settings changed. Saved result uses its recorded configuration{% if run.context_size %}; configured context {{ run.context_size }}{% endif %}. No automatic rerun.">†</span>
+{%- else -%}<p class="small text-secondary"><strong>Settings changed.</strong> This saved result remains available for its recorded configuration{% if run.context_size %} (configured context: {{ run.context_size }} tokens){% endif %}. It has not been rerun.</p>{% endif %}
+{%- endif -%}
+{%- endmacro %}
+{% macro duration(seconds) -%}
+{%- if seconds is number -%}
+  {%- set value = seconds|int -%}{{ '%02d:%02d:%02d'|format(value // 3600, value // 60 % 60, value % 60) }}
+{%- else -%}Estimating…{%- endif -%}
+{%- endmacro %}
+
+{% macro flags(run) -%}
+{{ settings_note(run, true) }}{% if run and run.rerun %}<span class="benchmark-flag {{ 'flag-version' if run.version != run.latest_version else 'flag-environment' }}" title="Rerun recommended: {{ run.rerun|join(', ') }}" aria-label="Rerun recommended: {{ run.rerun|join(', ') }}">*</span>{% endif %}
+{%- endmacro %}

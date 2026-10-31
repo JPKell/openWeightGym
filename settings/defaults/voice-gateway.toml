@@ -1,0 +1,39 @@
+# What the voice gateway starts from, for everything that can be changed on the site's Settings page.
+#
+# This file is part of the suite. It is read at every start, with settings/voice-gateway.toml laid
+# over it. A value changed on the site is kept in LoadCoach's database and lies over the value
+# here, until the change is taken away: on the page, or with
+#   loadcoach settings reset voice-gateway NAME
+# What belongs to the machine, such as addresses, ports and paths, is not here. That is in
+# settings/voice-gateway.toml, and settings/examples/voice-gateway.toml explains it.
+
+modes = ["direct"]
+
+profile = "default"
+
+# The voice service profile for calls in a SoundRoom voice, whose speech is audio.cpp on the
+# GPU (see settings/examples/voice.toml). Empty offers no voice choice: every call uses
+# `profile`. When set, the browser page lists the browser account's SoundRoom voices.
+soundroom_profile = ""
+
+startup_seconds = 60
+
+max_active_sessions = 1
+
+# Hermes model. Empty uses the model in this gateway's [hermes] configuration.
+hermes_model = ""
+
+# Instructions for Hermes voice replies. Applies to new calls.
+hermes_system_prompt = "This is a voice call. Answer in one or two short sentences of plain prose, with no lists, Markdown or URLs."
+
+# Maximum agent steps in a Hermes turn. Applies to new calls.
+hermes_max_turns = 8
+
+# Conversation context for the isolated Hermes agent. Applies to new calls.
+hermes_context_tokens = 8192
+
+# Maximum tokens per Hermes model response, including tool steps. Zero uses Hermes's default.
+hermes_max_output_tokens = 0
+
+# Reasoning effort for Hermes calls. Applies to new calls.
+hermes_reasoning_effort = "none"

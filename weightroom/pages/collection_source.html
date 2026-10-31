@@ -1,0 +1,11 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, card %}
+{% block title %}{{ source.name }} · Sources · openWeightGym{% endblock %}
+{% block main %}
+<p><a href="/collections/{{ collection.id }}">{{ collection.title }}</a></p>
+{{ page_header(source.name, lead="Read the source excerpt retained for this collection.") }}
+<p>{{ 'Page '+source.page|string if source.page else 'Line '+source.line|string }} · chunk {{ source.ordinal+1 }} · {{ collection.level }}</p>
+{% call card("") %}<div class=" text-break" style="white-space:pre-wrap">{{ source.text }}</div>{% endcall %}
+<p><a class="btn btn-outline-secondary" href="/collections/{{ collection.id }}/documents/{{ source.document }}/download" download="{{ source.name }}">Download original</a></p>
+<details><summary>Source identity</summary><p class="small text-break">SHA-256: {{ source.digest }}<br>Indexed generation: {{ source.generation }}<br>Chunk: {{ source.id }}</p></details>
+{% endblock %}

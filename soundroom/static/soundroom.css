@@ -1,0 +1,44 @@
+#soundroom {
+  --sr-wave: var(--bs-secondary-color);
+  --sr-cursor: var(--bs-danger);
+  --sr-region: rgba(var(--bs-primary-rgb),.2);
+}
+.sr-wave {
+  display: block;
+  width: 100%;
+  height: 120px;
+  background: var(--bs-tertiary-bg);
+  border-radius: .5rem;
+  cursor: crosshair;
+  touch-action: none;
+}
+.sr-list {
+  max-height: min(50vh,640px);
+  overflow: auto;
+}
+.sr-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .15rem;
+}
+.sr-item[aria-selected=true] {
+  border-left: 3px solid var(--bs-primary);
+}
+.sr-item-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#sr-details {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+}
+.sr-transcript {
+  max-height: min(50vh,560px);
+  overflow: auto;
+  white-space: pre-wrap;
+}

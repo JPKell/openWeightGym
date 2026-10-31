@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoadCoach test page</title>
+<style>
+  :root { color-scheme: light dark; --line: color-mix(in srgb, currentColor 25%, transparent); }
+  body { font: 15px/1.45 system-ui, sans-serif; max-width: 62rem; margin: 1.5rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 .2rem; }
+  p.note { margin: 0 0 1rem; opacity: .7; }
+  label { display: block; font-weight: 600; margin: .9rem 0 .25rem; }
+  label small { font-weight: 400; opacity: .7; }
+  input, select, textarea, button { font: inherit; }
+  input, select, textarea { box-sizing: border-box; width: 100%; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
+  /* A list that drops down is drawn by the browser, not the page. Without colours of its own it
+     takes the page's text colour but not its background, which in a dark theme is white on white. */
+  select, option { background-color: Canvas; color: CanvasText; }
+  textarea, pre { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .row { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .row > div { flex: 1 1 14rem; }
+  .row > div.narrow { flex: 0 0 7rem; }
+  .actions { display: flex; gap: .6rem; align-items: center; margin: 1rem 0; flex-wrap: wrap; }
+  button { padding: .45rem 1.1rem; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { font-weight: 600; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: .3rem 0 1rem; padding: .7rem; border: 1px solid var(--line); border-radius: 6px; min-height: 1.45em; }
+  summary { cursor: pointer; font-weight: 600; }
+</style>
+
+<h1>LoadCoach test page</h1>
+<p class="note">Sends one request to this LoadCoach and shows exactly what came back. Ctrl+Enter sends.
+  Tools are tested on the <a id="other">ToolLocker test page</a>.</p>
+<div class="actions">
+  <button id="refresh">Refresh</button>
+  <button id="unload">Unload model</button>
+  <button id="lock">Lock</button>
+  <button id="unlock">Unlock</button>
+  <input id="lockBody" style="width: 17rem" value='{"seconds": 300}' title='Body of the lock request. May also set "unload": true and "refuse": true.' spellcheck="false">
+</div>
+<p id="state" class="note"></p>
+
+<div class="row">
+  <div class="narrow"><label for="name">Name</label>
+    <input id="name" autocomplete="username"></div>
+  <div class="narrow"><label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" title="Checked by LoadCoach, from this machine only. From another machine, sign in at the front machine."></div>
+  <div class="narrow"><label>&nbsp;</label>
+    <button id="signin" title="Signs in with the name and password and fills in the key with the session key that comes back.">Sign in</button>
+    <button id="signout">Out</button></div>
+  <div><label for="key">API key <small>or sign in; empty until the first user has been added</small></label>
+    <input id="key" type="password" autocomplete="off"></div>
+  <div><label for="model">Model <small>from /v1/models</small></label>
+    <select id="model" title="Choosing one puts it in the fields below."></select></div>
+  <div class="narrow"><label for="method">Method</label>
+    <select id="method"><option>POST</option><option>GET</option></select></div>
+  <div class="narrow"><label for="priority">Priority</label>
+    <select id="priority"><option>normal</option><option>high</option><option>low</option></select></div>
+  <div class="narrow"><label for="level">Sensitivity</label>
+    <select id="level"><option>normal</option><option>sensitive</option><option>restricted</option></select></div>
+  <div class="narrow"><label for="trace">Trace</label>
+    <input id="trace" placeholder="none" title="A name for the piece of work this request belongs to. Optional."></div>
+  <div class="narrow"><label for="offload">Offload</label>
+    <input id="offload" placeholder="never" title="A hosted model that may answer in place of a local one that would have to wait. Empty keeps the request here."></div>
+  <div><label for="path">Path</label>
+    <input id="path" list="paths" value="/v1/chat/completions">
+    <datalist id="paths">
+      <option value="/v1/chat/completions"><option value="/v1/models">
+      <option value="/v1/completions"><option value="/v1/embeddings">
+      <option value="/loadcoach/status"><option value="/loadcoach/events"><option value="/loadcoach/me">
+    </datalist></div>
+</div>
+
+<label for="message">Message <small>becomes the user message</small></label>
+<textarea id="message" rows="4">Say hello in five words.</textarea>
+
+<label for="fields">Other fields, as JSON <small>everything else in the request body. "model" is a name from your configuration; GET /v1/models lists them. Add "messages" here to replace the box above.</small></label>
+<textarea id="fields" rows="7" spellcheck="false">{
+  "model": "qwen-1.5b",
+  "stream": true,
+  "max_tokens": 256,
+  "temperature": 0.7
+}</textarea>
+
+<div class="actions">
+  <button id="send">Send</button>
+  <button id="stop" disabled>Stop</button>
+  <span id="status"></span>
+</div>
+
+<label>Answer</label>
+<pre id="answer"></pre>
+
+<details><summary>Request sent</summary><pre id="sent"></pre></details>
+<details open><summary>Response</summary><pre id="raw"></pre></details>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// The ToolLocker's own test page, on the same machine. 8443 is its port unless you changed it.
+$("other").href = location.protocol + "//" + location.hostname + ":8443/";
+
+// Remember what was typed, in this browser only. The key is stored in plain text there.
+const remembered = ["name", "key", "method", "path", "priority", "level", "trace", "offload", "message", "fields", "lockBody"];
+for (const id of remembered) {
+  const value = localStorage.getItem("loadcoach." + id);
+  if (value !== null) $(id).value = value;
+}
+// Saved as soon as anything is changed, not only when a request is sent, so a key typed once
+// is still there after a reload.
+const remember = () => { for (const id of remembered) localStorage.setItem("loadcoach." + id, $(id).value); };
+document.addEventListener("change", remember);
+
+let controller = null;
+
+// While this page holds the lock, its token goes out with every request so they are let through.
+let lockToken = sessionStorage.getItem("loadcoach.lockToken");
+
+function ourHeaders() {
+  const headers = {};
+  if ($("key").value) headers.Authorization = "Bearer " + $("key").value;
+  if (lockToken) headers["X-LoadCoach-Lock"] = lockToken;
+  return headers;
+}
+
+function holdToken(token) {
+  lockToken = token;
+  if (token) sessionStorage.setItem("loadcoach.lockToken", token); else sessionStorage.removeItem("loadcoach.lockToken");
+}
+
+async function takeLock() {
+  $("state").textContent = "Waiting for the lock…";
+  const response = await fetch("/loadcoach/lock", { method: "POST", headers: ourHeaders(), body: $("lockBody").value });
+  const answer = await response.json().catch(() => ({}));
+  if (response.ok) holdToken(answer.token);
+  await showState();
+  if (!response.ok) $("state").textContent += " · Lock: " + response.status + " " + (answer.error?.message || "");
+}
+
+async function letGo() {
+  await fetch("/loadcoach/unlock", { method: "POST", headers: ourHeaders() });
+  holdToken(null);  // whether it was still ours or had already run out
+  showState();
+}
+
+// One line saying what is loaded and who is in line. Refreshed on demand and while a request
+// from this page is under way, not constantly, so the server log stays readable.
+async function showState(method = "GET", path = "/loadcoach/status") {
+  try {
+    const response = await fetch(path, { method, headers: ourHeaders() });
+    if (!response.ok) { $("state").textContent = "Status: " + response.status + (response.status === 401 ? " (enter the API key)" : ""); return; }
+    const status = await response.json();
+    const what = t => t.priority === "lock" ? "lock request" : (t.model ?? "unload") + (t.priority === "normal" ? "" : " (" + t.priority + ")");
+    const line = tickets => tickets.map(t => (t.id ? "#" + t.id + " " : "") + what(t) + " for " + t.user + ", " + t.seconds + " s").join("; ") || "none";
+    const loaded = status.loaded.map(m => m.model + " on " + (m.gpus.join("+") || "CPU") + (m.state === "ready" ? "" : m.state === "probing" ? " (isolated probe)" : " (loading…)")).join(", ") || "nothing";
+    const lock = !status.lock ? "none" : "held by " + status.lock.user + (lockToken ? " (this page)" : "") + ", " + status.lock.seconds_left + " s left" + (status.lock.refuse ? ", refusing others" : "");
+    const me = await fetch("/loadcoach/me", { headers: ourHeaders() }).then(r => r.json()).catch(() => ({}));
+    const others = n => n ? " (+" + n + " of others)" : "";
+    $("state").textContent = "You: " + (me.name || "?") + (me.group ? " (" + me.group + ")" : "") + " · Loaded: " + loaded + " · Lock: " + lock
+      + " · Running: " + line(status.running) + others(status.others_running) + " · Waiting: " + line(status.waiting) + others(status.others_waiting)
+      + (status.hosted.length || status.others_hosted ? " · Hosted: " + line(status.hosted) + others(status.others_hosted) : "");
+  } catch { $("state").textContent = "Status: LoadCoach is not answering"; }
+}
+
+const pretty = text => { try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; } };
+
+function buildBody() {
+  const fields = JSON.parse($("fields").value || "{}");
+  const text = $("message").value;
+  if (text && !("messages" in fields)) fields.messages = [{ role: "user", content: text }];
+  return fields;
+}
+
+// What a human wants to read out of a finished chat answer, an error, or anything else.
+function readable(message) {
+  const parts = [];
+  if (message.reasoning_content) parts.push("[thinking]\n" + message.reasoning_content + "\n[/thinking]");
+  if (message.content) parts.push(message.content);
+  for (const call of message.tool_calls || [])
+    parts.push("tool call: " + call.function.name + "(" + call.function.arguments + ")");
+  return parts.join("\n\n");
+}
+
+function showWhole(text) {
+  $("raw").textContent = pretty(text);
+  let data; try { data = JSON.parse(text); } catch { return; }
+  if (data.error) $("answer").textContent = "Error: " + (data.error.message || JSON.stringify(data.error));
+  else if (data.choices?.[0]?.message) $("answer").textContent = readable(data.choices[0].message);
+  else if (data.choices?.[0]?.text !== undefined) $("answer").textContent = data.choices[0].text;
+}
+
+// A streamed answer arrives as lines of `data: {json}`. Show each line, and build the text up.
+async function showStream(response) {
+  const reader = response.body.getReader(), decoder = new TextDecoder();
+  const message = { content: "", reasoning_content: "", tool_calls: [] };
+  let pending = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    pending += decoder.decode(value, { stream: true });
+    const lines = pending.split("\n");
+    pending = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      $("raw").textContent += payload + "\n";
+      if (payload === "[DONE]") continue;
+      let delta; try { delta = JSON.parse(payload).choices?.[0]?.delta; } catch { continue; }
+      if (!delta) continue;
+      message.content += delta.content || "";
+      message.reasoning_content += delta.reasoning_content || "";
+      for (const piece of delta.tool_calls || []) {
+        const call = message.tool_calls[piece.index] ||= { function: { name: "", arguments: "" } };
+        call.function.name += piece.function?.name || "";
+        call.function.arguments += piece.function?.arguments || "";
+      }
+      $("answer").textContent = readable(message);
+    }
+  }
+}
+
+async function send() {
+  remember();
+  $("answer").textContent = $("raw").textContent = $("sent").textContent = "";
+
+  const method = $("method").value, path = $("path").value, headers = ourHeaders();
+  if ($("priority").value !== "normal") headers["X-LoadCoach-Priority"] = $("priority").value;
+  if ($("level").value !== "normal") headers["X-LoadCoach-Sensitivity"] = $("level").value;
+  if ($("trace").value) headers["X-LoadCoach-Trace"] = $("trace").value;
+  if ($("offload").value) headers["X-LoadCoach-Offload"] = $("offload").value;
+  let body;
+  if (method === "POST") {
+    try { body = JSON.stringify(buildBody()); }
+    catch (problem) { $("status").textContent = "Other fields is not valid JSON: " + problem.message; return; }
+    headers["Content-Type"] = "application/json";
+  }
+  $("sent").textContent = method + " " + path + (body ? "\n\n" + pretty(body) : "");
+
+  controller = new AbortController();
+  $("send").disabled = true; $("stop").disabled = false; $("status").textContent = "Waiting…";
+  const started = performance.now();
+  const watching = setInterval(showState, 1000);
+  const seconds = () => " · " + ((performance.now() - started) / 1000).toFixed(1) + " s";
+  try {
+    const response = await fetch(path, { method, headers, body, signal: controller.signal });
+    const type = response.headers.get("content-type") || "";
+    const entry = response.headers.get("x-loadcoach-request-id");
+    const hosted = response.headers.get("x-loadcoach-hosted");
+    $("status").textContent = response.status + " " + response.statusText + " · " + type + (entry ? " · log entry " + entry : "") + (hosted ? " · answered off this machine by " + hosted : "");
+    if (type.includes("text/event-stream")) await showStream(response);
+    else showWhole(await response.text());
+    $("status").textContent += seconds();
+  } catch (problem) {
+    $("status").textContent = (problem.name === "AbortError" ? "Stopped" : "Failed: " + problem.message) + seconds();
+  } finally {
+    $("send").disabled = false; $("stop").disabled = true;
+    clearInterval(watching); showState();
+  }
+}
+
+// Sign in with a name and password. What comes back is a session key: an API key that ends after
+// some hours. It goes into the key box, and everything else on the page works as before.
+async function signIn() {
+  const asked = { name: $("name").value, password: $("password").value };
+  for (;;) {
+    const response = await fetch("/loadcoach/sign-in", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(asked) });
+    const answer = await response.json().catch(() => ({}));
+    if (response.ok) {
+      $("key").value = answer.key; $("password").value = "";
+      remember(); await showState(); showModels();
+      $("state").textContent += " · signed in until " + answer.ends.replace("T", " ");
+      return;
+    }
+    // Two refusals are really questions: choose your own password, or give the code from your app.
+    const why = answer.error || {};
+    if (why.code === "password_change") {
+      const chosen = prompt(why.message);
+      if (!chosen) return;
+      asked.new_password = chosen;
+    } else if (why.code === "code_required" || why.code === "second_step_setup") {
+      const code = prompt(why.message + (why.secret ? "\n\nSecret: " + why.secret : ""));
+      if (!code) return;
+      asked.code = code.trim();
+    } else {
+      $("state").textContent = "Sign in: " + (why.message || response.status);
+      return;
+    }
+  }
+}
+
+async function signOut() {
+  await fetch("/loadcoach/sign-out", { method: "POST", headers: ourHeaders() });
+  $("key").value = ""; remember(); showState(); showModels();
+}
+
+$("signin").onclick = signIn;
+$("signout").onclick = signOut;
+$("password").onkeydown = event => { if (event.key === "Enter") signIn(); };
+$("send").onclick = send;
+$("stop").onclick = () => controller?.abort();
+// The models this key may use, as GET /v1/models gives them. Choosing one writes it into the
+// "model" field below, and each also becomes a path to try: GET /v1/models/NAME.
+async function showModels() {
+  let models = [];
+  try {
+    const response = await fetch("/v1/models", { headers: ourHeaders() });
+    if (response.ok) models = (await response.json()).data;
+  } catch { /* LoadCoach is not answering; the status line already says so */ }
+  let chosen; try { chosen = JSON.parse($("fields").value).model; } catch { /* fields are mid-edit */ }
+  $("model").replaceChildren(...models.map(model => new Option(model.id + "  ·  " + (model.owned_by === "hosted" ? "hosted" : new Date(model.created * 1000).toISOString().slice(0, 10)), model.id)));
+  if (models.some(model => model.id === chosen)) $("model").value = chosen; else $("model").selectedIndex = -1;
+  for (const old of document.querySelectorAll("#paths option.one-model")) old.remove();
+  for (const model of models) $("paths").append(Object.assign(new Option("", "/v1/models/" + model.id), { className: "one-model" }));
+}
+
+$("model").onchange = () => {
+  try { $("fields").value = JSON.stringify({ ...JSON.parse($("fields").value || "{}"), model: $("model").value }, null, 2); }
+  catch { $("status").textContent = "Other fields is not valid JSON, so the model was not written into it."; }
+};
+$("key").onchange = () => { showState(); showModels(); };
+$("refresh").onclick = () => { showState(); showModels(); };
+$("unload").onclick = () => showState("POST", "/loadcoach/unload");
+$("lock").onclick = takeLock;
+$("unlock").onclick = letGo;
+$("path").onchange = () => {
+  const path = $("path").value;
+  if (path.startsWith("/v1/models") || ["/loadcoach/status", "/loadcoach/events", "/loadcoach/me"].includes(path.split("?")[0])) $("method").value = "GET";
+};
+showState();
+showModels();
+document.onkeydown = event => { if (event.ctrlKey && event.key === "Enter" && !$("send").disabled) send(); };
+</script>
+</html>

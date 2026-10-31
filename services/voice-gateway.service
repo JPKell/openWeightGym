@@ -1,0 +1,14 @@
+[Unit]
+Description=Voice browser and telephone gateway
+After=network-online.target turnstile.service
+
+[Service]
+WorkingDirectory=%h/ai/openWeightGym
+ExecStart=%h/ai/openWeightGym/.venv/bin/voice-gateway --config %h/ai/openWeightGym/settings/voice-gateway.toml
+Restart=always
+RestartSec=3
+MemoryMax=2G
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

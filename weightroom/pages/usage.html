@@ -1,0 +1,23 @@
+{# How much one account has asked for: in the last day, the last week, and a number of days that can be changed.
+   Needs `usage` and `keep_days` as the compute service gives them, and `here`, the address of the page it is on.
+   Show changes this piece alone. #}
+{% from "parts.html" import swaps %}
+<div id="usage">
+<div class="table-responsive">
+<table class="table table-sm align-middle">
+  <thead><tr><th>In the last</th><th class="text-end">Requests</th><th class="text-end">Tokens in</th><th class="text-end">Tokens out</th></tr></thead>
+  <tbody>
+  {% for row in usage %}
+  <tr><td>{{ "24 hours" if row.days == 1 else row.days ~ " days" }}</td><td class="text-end">{{ "{:,}".format(row.requests) }}</td><td class="text-end">{{ "{:,}".format(row.prompt_tokens) }}</td><td class="text-end">{{ "{:,}".format(row.answer_tokens) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<form method="get" action="{{ here }}" class="row g-3 align-items-end" {{ swaps("usage", true) }}>
+  <div class="col-md-6">
+    <label for="days" class="form-label">Days in the last row <small class="text-secondary">{{ "the log is kept for " ~ "%g"|format(keep_days) ~ " days" if keep_days else "the log is kept for ever" }}</small></label>
+    <input id="days" name="days" type="number" min="1" {% if keep_days %}max="{{ keep_days|int }}"{% endif %} class="form-control" value="{{ usage[-1].days if usage else 28 }}" required>
+  </div>
+  <div class="col-md-6"><button class="btn btn-outline-primary">Show</button></div>
+</form>
+</div>

@@ -1,0 +1,15 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, form_section, more, section_title, card %}
+{% block title %}Civitai · openWeightGym{% endblock %}
+{% block scripts %}<script src="/mirrorwall-static/discovery.js?v=3" defer></script>{% endblock %}
+{% block main %}
+{{ page_header('Civitai', 'Find image models, LoRAs and upscalers for your workflows.') }}{% call more('About these files') %}<p class="text-secondary">Find image models, LoRAs and upscalers. Compatibility, base model and license terms belong to each source version; downloading a file does not qualify it for a workflow.</p>{% endcall %}
+
+{% if 'manage-settings' in person.can %}<p class="small"><a href="/settings/image">Image preview settings</a></p>{% endif %}
+<div id="mw-message" class="alert alert-danger" role="alert" hidden></div><div id="mw-success" class="alert alert-success" role="status" hidden></div>
+<form id="mw-search" class="d-flex flex-wrap gap-2 align-items-center mb-3"><label for="mw-q" class="visually-hidden">Search Civitai</label><input id="mw-q" class="form-control" style="max-width:32rem" placeholder="Search models, styles or a creator" required maxlength="200"><button class="btn btn-primary">Search</button>{% if adult_previews_allowed %}<label id="mw-adult-control" class="form-check-label ms-2"><input id="mw-adult" type="checkbox" class="form-check-input me-2"{% if adult_previews %} checked{% endif %}>Enable adult previews</label>{% endif %}</form>
+<div class="row g-3 mb-3">{% call form_section('Filter models') %}<div class="col-md-6"><label for="mw-type" class="form-label">Model type</label><select id="mw-type" class="form-select"><option value="">All types</option></select></div><div class="col-md-6"><label for="mw-base" class="form-label">Base model</label><select id="mw-base" class="form-select"><option value="">All base models</option></select></div><div class="col-md-6"><label for="mw-format" class="form-label">File format</label><select id="mw-format" class="form-select"><option value="">All supported formats</option><option value=".gguf">GGUF</option><option value=".safetensors">Safetensors</option><option value=".pth">PTH upscaler</option></select></div>{% endcall %}</div>
+<template id="mw-discovery-card">{% call card('Model', tag='article', class_='h-100', body_attrs={'data-discovery-body': ''}) %}{% endcall %}</template>
+<p id="mw-status" class="text-secondary" role="status"></p><div id="mw-found" class="row g-3"></div>
+<section class="mt-4">{{ section_title("Downloads") }}<div hx-get="/downloads" hx-trigger="load, every 3s" hx-swap="innerHTML"></div></section>
+{% endblock %}

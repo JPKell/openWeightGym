@@ -1,0 +1,26 @@
+{
+  "id": "strata",
+  "label": "Strata",
+  "schema_version": 1,
+  "selectable": true,
+  "model_template": "engines/strata/model_fields.html",
+  "options_template": "engines/strata/model_options.html",
+  "create_template": "engines/strata/create_fields.html",
+  "node": [
+    {"name": "enabled", "type": "boolean", "label": "Enabled", "default": false},
+    {"name": "source", "type": "string", "label": "Pinned Strata source directory", "default": ""},
+    {"name": "python", "type": "string", "label": "Private Python interpreter", "default": ""},
+    {"name": "executable", "type": "string", "label": "Strata native executable", "default": ""},
+    {"name": "allow_host_ram", "type": "boolean", "label": "Allow Strata hybrid host RAM use", "default": false},
+    {"name": "host_ram_mib", "type": "integer", "label": "Host RAM budget (MiB)", "default": 0, "minimum": 0, "maximum": 2147483648}
+  ],
+  "model": [
+    {"name": "flags.model", "type": "string", "label": "Prepared GGUF weights", "required": true},
+    {"name": "strata.tokenizer", "type": "string", "label": "Prepared tokenizer directory", "required": true},
+    {"name": "flags.ctx-size", "type": "integer", "label": "Context tokens", "minimum": 256, "maximum": 8192, "default": 512},
+    {"name": "gpus", "type": "single_gpu", "label": "GPU", "default": "any"}
+  ],
+  "artifact_format": "gguf-and-explicit-tokenizer",
+  "capability_version": 1,
+  "capabilities": {"chat": true, "streaming": true, "embeddings": false, "tokenize": false, "raw_completion": false, "prompt_rendering": false, "images": false, "adapters": false, "native_probes": false, "tools": false, "reasoning": false, "parallel": 1, "gpu_split": false}
+}

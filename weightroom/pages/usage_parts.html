@@ -1,0 +1,1 @@
+{% macro money(value) %}<span title="{{ '$%.6f'|format(value) }} USD">${{ '{:,.4f}'.format(value) }}</span>{% endmacro %}

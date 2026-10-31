@@ -1,0 +1,38 @@
+{% from "parts.html" import card, section_title %}
+    <section class="sr-results studio-results" aria-label="Generated audio">
+      {% call card("", tag="div", class_="sr-player") %}
+        <div id="sr-empty" class="sr-empty studio-empty"><span id="sr-empty-title" class="section-title">Your {{ {'music': 'takes', 'sound': 'sounds'}.get(mode, 'recordings') }} appear here</span><span id="sr-empty-help" class="text-secondary">Choose a model and describe what you want to hear.</span></div>
+        <div id="sr-selected" hidden>
+          <div class="d-flex flex-wrap gap-2 align-items-baseline mb-2"><strong id="sr-title"></strong><span id="sr-info" class="text-secondary small"></span><span id="sr-nc" class="badge text-bg-warning" hidden>Non-commercial licence</span></div>
+          <canvas id="sr-wave" class="sr-wave" height="120" aria-label="Waveform; drag to select a region"></canvas>
+          <audio id="sr-audio" controls preload="metadata" class="w-100 mt-2"></audio>
+          <div class="d-flex flex-wrap align-items-end gap-2 mt-2">
+            <label class="form-label small mb-0">Region start (s)<input id="sr-region-start" class="form-control form-control-sm" type="number" min="0" step="0.01" value="0" style="width:8rem"></label>
+            <label class="form-label small mb-0">Region end (s)<input id="sr-region-end" class="form-control form-control-sm" type="number" min="0" step="0.01" value="0" style="width:8rem"></label>
+            <button id="sr-clear-region" class="btn btn-outline-secondary btn-sm" type="button">Clear region</button>
+            <span class="form-text small">Drag the waveform or enter times. With no region, Loop repeats the whole recording.</span>
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+            <div class="form-check form-check-inline m-0"><input id="sr-loop-region" class="form-check-input" type="checkbox"><label for="sr-loop-region" class="form-check-label">Loop region</label></div>
+            <span id="sr-region" class="text-secondary small me-auto"></span>
+            {% if mode == 'music' %}<button id="sr-edit-range" class="btn btn-outline-secondary btn-sm" type="button" disabled>Edit this range</button>{% endif %}
+            <button id="sr-reuse" class="btn btn-outline-secondary btn-sm" type="button">Reuse settings</button>
+            <button id="sr-variation" class="btn btn-outline-secondary btn-sm" type="button">New variation</button>
+            <button id="sr-favourite" class="btn btn-outline-secondary btn-sm" type="button" aria-pressed="false">☆ Favourite</button>
+            <div class="input-group input-group-sm w-auto"><select id="sr-format" class="form-select" aria-label="Download format"><option value="wav">WAV</option><option value="flac">FLAC</option><option value="mp3">MP3</option><option value="opus">Opus</option></select><button id="sr-download" class="btn btn-outline-secondary" type="button">Download</button></div>
+            <button id="sr-share" class="btn btn-outline-secondary btn-sm" type="button">Share</button>
+            <button id="sr-delete" class="btn btn-outline-danger btn-sm" type="button">Delete</button>
+          </div>
+          <div class="d-flex gap-2 mt-2"><input id="sr-tags" class="form-control form-control-sm" placeholder="Tags, separated by commas" aria-label="Tags"><button id="sr-save-tags" class="btn btn-outline-secondary btn-sm" type="button">Save tags</button></div>
+          <details class="mt-2"><summary class="small">Settings used</summary><pre id="sr-details" class="small mb-0 mt-2"></pre></details>
+        </div>
+      {% endcall %}
+      <div class="d-flex flex-wrap gap-2 align-items-center my-3">
+        {{ section_title({'music': 'Takes', 'sound': 'Library'}.get(mode, 'Recordings'), class_="me-auto") }}
+        <input id="sr-filter" class="form-control form-control-sm w-auto" placeholder="Filter by tag" aria-label="Filter by tag">
+        <div class="form-check form-check-inline m-0"><input id="sr-favourites" class="form-check-input" type="checkbox"><label for="sr-favourites" class="form-check-label small">Favourites</label></div>
+      </div>
+      <div id="sr-list" class="list-group sr-list" aria-label="Audio list"></div>
+      <button id="sr-older" class="btn btn-outline-secondary btn-sm mt-2" type="button" hidden>Load older audio</button>
+      <section class="mt-4">{{ section_title("Jobs") }}<div id="sr-jobs" class="d-grid gap-2"></div></section>
+    </section>

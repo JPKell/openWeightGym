@@ -1,0 +1,45 @@
+{% from "parts.html" import section_title %}
+{# Questions are shared. Answers always occupy their model's column, regardless of completion order. #}
+{% for exchange in talk.exchanges %}
+<div class="turn turn-user" id="prompt-{{ loop.index0 }}" data-prompt tabindex="-1">
+  <div class="said-user">{{ exchange.question.content }}</div>
+  {% for file in exchange.question.attachments %}
+  <details class="chat-attachment mt-2"><summary class="small">{{ file.name }} · {{ file.size }} bytes</summary>
+    {% if file.mime == 'text/plain' %}<pre class="wrap">{{ file.text }}</pre>{% else %}<img src="data:{{ file.mime }};base64,{{ file.data }}" alt="{{ file.name }}" loading="lazy">{% endif %}
+  </details>
+  {% endfor %}
+  {% if loop.last and not talk.pending %}
+  <details class="turn-more"><summary class="btn btn-link btn-sm text-secondary">Edit</summary>
+    <form method="post" action="/chat/{{ talk.id }}" class="composer-box frame mt-1">
+      <textarea aria-label="Message" name="content" rows="3" class="form-control" required>{{ exchange.question.content }}</textarea>
+      <button class="btn btn-primary mt-2" name="do" value="edit">Ask both instead</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% if not (loop.last and talk.pending) %}
+<div class="chat-comparison">
+  {% for message in exchange.answers %}
+  <div class="turn comparison-answer frame">
+    {{ section_title(talk.compare[loop.index0]) }}
+    {% if message %}
+      {% if message.summarized %}<p class="text-warning small">Used a summary of {{ message.summarized }} older messages.</p>{% endif %}
+      {% with answer=message, live=false %}{% include "chat_answer.html" %}{% endwith %}
+      {% if message.error %}<div class="alert alert-danger said">{{ message.error }}</div>{% endif %}
+      {% if not message.error and message.content and message.finish != 'stop' %}<p class="text-secondary small">This answer ended before it was finished.</p>{% endif %}
+      <div class="turn-facts">
+        {% if message.prompt_tokens %}<span>{{ message.prompt_tokens }} tokens in</span>{% endif %}
+        {% if message.answer_tokens %}<span>{{ message.answer_tokens }} out</span>{% endif %}
+        {% if message.request %}<a href="/requests/{{ message.request }}">request {{ message.request }}</a>{% endif %}
+        {% if message.content %}<button type="button" class="btn btn-link btn-sm p-0" data-copy="answer">Copy</button>{% endif %}
+      </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  {% if loop.last %}<form method="post" action="/chat/{{ talk.id }}" data-chat-form class="retry-options d-flex flex-wrap gap-2 align-items-start m-0"><button class="btn btn-outline-secondary btn-sm" name="do" value="again">Ask both again</button>{{ answering_model(true) }}{{ options('again', true) }}</form>{% endif %}
+  {% with prompt_index=loop.index0, prompt_count=talk.exchanges|length %}{% include "chat_navigation.html" %}{% endwith %}
+</div>
+{% endif %}
+{% endfor %}

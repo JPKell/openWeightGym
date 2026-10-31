@@ -1,0 +1,8 @@
+{% from "parts.html" import swaps %}
+<nav class="d-flex align-items-center justify-content-between gap-2 mt-2" aria-label="Results pages">
+  <span class="small text-secondary">{{ paging.total }} results · Page {{ paging.page }} of {{ paging.pages }}</span>
+  <div class="d-flex gap-2">
+    {% if paging.previous %}<a class="btn btn-outline-secondary btn-sm" href="{{ paging.previous }}" {{ swaps(target, true) }}>Previous</a>{% endif %}
+    {% if paging.next %}<a class="btn btn-outline-secondary btn-sm" href="{{ paging.next }}" {{ swaps(target, true) }}>Next</a>{% endif %}
+  </div>
+</nav>

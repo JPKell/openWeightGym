@@ -1,0 +1,23 @@
+{# A card that sends a log and a few words to a model, and shows its answer below once it is whole.
+   Needs `log_text`, what is sent, and `models`, the ones on compute that this person may ask.
+   The page it is on shows the same lines in a table with the id "printed", one row for each line. #}
+{% from "parts.html" import card %}
+{% call card("Ask a model about this", true) %}
+  {% if not models %}
+  <p class="text-secondary mb-0">There is no model on compute that you may ask.</p>
+  {% else %}
+  {# htmx sends it and puts the answer in the box below. Without a script the form still works, and the answer is a page by itself. #}
+  <form method="post" action="/ask" hx-post="/ask" hx-target="#answer" hx-swap="innerHTML" hx-indicator="#asking" hx-disabled-elt="find button" class="row g-3">
+    <textarea name="log" hidden>{{ log_text }}</textarea>
+    <textarea name="selection" hidden data-log-selection></textarea>
+    <div class="col-12"><label for="words" class="form-label">What to ask</label><textarea id="words" name="words" class="form-control" rows="3" placeholder="What went wrong here, and what should I try?"></textarea></div>
+    <div class="col-12 d-flex align-items-end gap-2">
+      <div class="flex-grow-1"><select id="ask-model" name="model" class="form-select" aria-label="Model" data-diagnostic-model>{% for model in models %}<option>{{ model }}</option>{% endfor %}</select></div>
+      <button class="btn btn-primary">Ask</button>
+    </div>
+    <div class="col-12"><p class="small text-secondary mb-0">Select a section of the log to send it to the AI. Otherwise the whole log is sent.</p><span class="small text-secondary" data-log-selection-note></span><button type="button" class="btn btn-link " data-whole-log hidden>Use whole log</button></div>
+    <div class="col-12"><span id="asking" class="htmx-indicator text-secondary">Asking. The answer shows here when it is whole, which can take a minute or more.</span></div>
+  </form>
+  <div id="answer" class="mt-3"></div>
+  {% endif %}
+{% endcall %}

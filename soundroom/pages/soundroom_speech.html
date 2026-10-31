@@ -1,0 +1,103 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, card, section_title %}
+{% block title %}Speech · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=7" defer></script><script src="/soundroom-static/speech.js?v=3" defer></script>{% endblock %}
+{% block main %}
+<div id="soundroom" data-mode="speech" data-defaults="{{ audio | tojson | forceescape }}">
+  {{ page_header("Speech", lead="Generate speech, transcribe audio and manage speaker voices.") }}
+  <div id="sr-message" class="alert alert-danger" role="alert" hidden></div>
+  <ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link active" data-tab="studio" type="button" role="tab" aria-selected="true">Studio</button></li>
+    <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link" data-tab="transcribe" type="button" role="tab" aria-selected="false">Transcribe</button></li>
+    <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link" data-tab="chat" type="button" role="tab" aria-selected="false">Spoken chat</button></li>
+    <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link" data-tab="voices" type="button" role="tab" aria-selected="false">Voices</button></li>
+  </ul>
+
+  <section data-panel="studio" class="sr-studio studio">
+    {% call card("", tag="form", id="sr-form", class_="sr-settings studio-settings") %}
+      <label class="form-label" for="sr-model">Speech model</label>
+      <select id="sr-model" name="model" class="form-select mb-1" required></select>
+      <p id="sr-licence" class="form-text mb-3"></p>
+      <div id="sr-voice-wrap" class="mb-3">
+        <label class="form-label" for="sr-voice">Voice</label>
+        <select id="sr-voice" class="form-select"></select>
+        <div class="form-text" id="sr-voice-help"></div>
+      </div>
+      <div id="sr-preset-wrap" class="mb-3" hidden><label class="form-label" for="sr-preset">Built-in voice name <span class="text-secondary">optional</span></label><input id="sr-preset" class="form-control" maxlength="80"></div>
+      <div id="sr-design-wrap" class="mb-3" hidden><label class="form-label" for="sr-design">Describe the voice</label><textarea id="sr-design" class="form-control" rows="2" maxlength="1000" placeholder="A warm, calm older narrator with a low voice"></textarea></div>
+      <label class="form-label" for="sr-prompt">Text or script</label>
+      <textarea id="sr-prompt" name="prompt" class="form-control mb-1" rows="9" required maxlength="20000" placeholder="Speaker 1: Welcome back to the show.&#10;Speaker 2: Thanks, it's good to be here."></textarea>
+      <div class="form-text mb-2">Plain text is read by one voice. Lines that start with a name and a colon, such as <code>Speaker 1:</code>, are read by the voice chosen for that name.</div>
+      <div id="sr-speakers" class="d-grid gap-2 mb-3"></div>
+      <div class="row g-2 mb-3 align-items-end">
+        <div class="col-6"><label for="sr-gap" class="form-label">Pause between lines (s)</label><input id="sr-gap" type="number" min="0" max="5" step="0.05" value="0.3" class="form-control"></div>
+        <div class="col-6"><label for="sr-seed" class="form-label">Seed</label><input id="sr-seed" name="seed" type="number" min="-1" max="4294967295" value="-1" class="form-control"></div>
+      </div>
+      <details class="mb-3"><summary>Advanced settings</summary><div id="sr-advanced" class="pt-3"></div></details>
+      <div id="sr-temporary-wrap" class="form-check mb-3" hidden><input id="sr-temporary" class="form-check-input" type="checkbox"><label for="sr-temporary" class="form-check-label">Temporary · no retained history</label></div>
+      <button id="sr-generate" class="btn btn-primary w-100" type="submit">Speak</button>
+      <p id="sr-availability" class="form-text mb-0"></p>
+    {% endcall %}
+    {% include "soundroom_player.html" %}
+  </section>
+
+  <section data-panel="transcribe" hidden>
+    <div class="row g-3">
+      <div class="col-lg-5">{% call card("") %}
+        <label class="form-label" for="tr-model">Transcription model</label><select id="tr-model" class="form-select mb-3"></select>
+        <label class="form-label" for="tr-diarize">Who spoke when <span class="text-secondary">optional</span></label><select id="tr-diarize" class="form-select mb-3"></select>
+        <label class="form-label" for="tr-language">Language <span class="text-secondary">optional, such as en</span></label><input id="tr-language" class="form-control mb-3" maxlength="16">
+        <label class="form-label" for="tr-file">Audio</label><input id="tr-file" type="file" accept="audio/*" class="form-control mb-2">
+        <div class="d-flex gap-2 mb-3"><button id="tr-record" type="button" class="btn btn-outline-secondary">● Record</button><span id="tr-recording" class="text-secondary small align-self-center"></span></div>
+        <button id="tr-go" type="button" class="btn btn-primary w-100" disabled>Transcribe</button>
+      {% endcall %}</div>
+      <div class="col-lg-7">
+        {% call card("") %}
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-2"><strong class="me-auto">Transcript</strong>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-copy>Copy</button>
+            {% for format in ['txt','srt','vtt','json'] %}<button class="btn btn-outline-secondary btn-sm" type="button" data-save="{{format}}">{{format}}</button>{% endfor %}</div>
+          <audio id="tr-audio" controls class="w-100 mb-2" hidden></audio>
+          <div id="tr-result" class="sr-transcript text-secondary">Choose a recording and a model.</div>
+        {% endcall %}
+        {{ section_title("Recordings") }}<div id="tr-list" class="list-group sr-list"></div>
+        <button id="tr-older" class="btn btn-outline-secondary btn-sm mt-2" type="button" hidden>Load older recordings</button>
+      </div>
+    </div>
+  </section>
+
+  <section data-panel="chat" hidden>
+    {% call card("", attrs={"style": "max-width:40rem"}) %}
+      {{ section_title("Talk with a model in one of your voices") }}
+      <p class="small">A hands-free conversation: speak, and the answer is spoken back in the voice you choose. You can interrupt it. Each exchange is kept as a conversation under Chat → Conversations.</p>
+      <label class="form-label" for="sc-voice">Voice</label><select id="sc-voice" class="form-select mb-2"></select>
+      <div class="form-check mb-3"><input id="sc-record" class="form-check-input" type="checkbox"><label for="sc-record" class="form-check-label">Record the call, for testing</label></div>
+      <a id="sc-open" class="btn btn-primary" href="/voice" data-base="/voice">Open spoken chat</a>
+      <p class="form-text mb-0">It opens on the Voice page, where you talk as yourself: you can speak in your own voices and those shared with your groups.</p>
+    {% endcall %}
+  </section>
+
+  <section data-panel="voices" hidden>
+    <div class="row g-3">
+      <div class="col-lg-5">{% call card("") %}
+        {{ section_title("New voice from a recording") }}
+        <label class="form-label" for="vo-name">Name</label><input id="vo-name" class="form-control mb-2" maxlength="80">
+        <label class="form-label" for="vo-file">Recording <span class="text-secondary">5–30 seconds of one person speaking</span></label><input id="vo-file" type="file" accept="audio/*" class="form-control mb-2">
+        <div class="d-flex gap-2 mb-2"><button id="vo-record" type="button" class="btn btn-outline-secondary">● Record</button><span id="vo-recording" class="text-secondary small align-self-center"></span></div>
+        <label class="form-label" for="vo-transcript">What the recording says</label><textarea id="vo-transcript" class="form-control mb-1" rows="2" maxlength="4000"></textarea>
+        <div class="d-flex gap-2 mb-2"><select id="vo-asr" class="form-select form-select-sm" aria-label="Transcription model"></select><button id="vo-fill" type="button" class="btn btn-outline-secondary btn-sm text-nowrap">Fill from recording</button></div>
+        <div class="form-check mb-3"><input id="vo-consent" class="form-check-input" type="checkbox"><label for="vo-consent" class="form-check-label">I have the speaker's permission to clone this voice</label></div>
+        <button id="vo-save" type="button" class="btn btn-primary">Save voice</button>
+        <hr>
+        {{ section_title("Design a voice") }}
+        <label class="form-label" for="vo-design-model">Voice-design model</label><select id="vo-design-model" class="form-select mb-2"></select>
+        <label class="form-label" for="vo-description">Description</label><textarea id="vo-description" class="form-control mb-2" rows="2" maxlength="1000" placeholder="A bright, friendly young voice with a slight smile"></textarea>
+        <label class="form-label" for="vo-sample">Sample sentence</label><input id="vo-sample" class="form-control mb-2" maxlength="400" value="Hello! This is how I sound when I read aloud for you.">
+        <label class="form-label" for="vo-design-name">Name</label><input id="vo-design-name" class="form-control mb-3" maxlength="80">
+        <button id="vo-design" type="button" class="btn btn-outline-primary">Design and save</button>
+      {% endcall %}</div>
+      <div class="col-lg-7">{{ section_title("Your voices and voices shared with you") }}<div id="vo-list" class="list-group"></div></div>
+    </div>
+  </section>
+  <dialog id="sr-dialog" class="sr-dialog studio-dialog frame"><form method="dialog"><button class="btn-close float-end" aria-label="Close"></button></form>{{ section_title("", id="sr-dialog-title") }}<div id="sr-dialog-content" class="mt-3"></div></dialog>
+</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{# Two vertically stacked bars per physical host, linked to its graphs. #}
+<span class="strip">
+{% for host in hosts %}
+{% set now = host.telemetry %}
+{% set gpu = now.cards[0] if now and now.cards else none %}
+{% set memory = gpu.memory_used if gpu else now.memory.used if now else none %}
+{% set total = gpu.memory_total if gpu else now.memory.total if now else none %}
+{% set processor = gpu.load if gpu else now.processor.load if now else none %}
+{% set memory_percent = (100 * memory / total)|round|int if memory is not none and total else none %}
+<a class="host-meter" href="{{ '/telemetry/' ~ host.fingerprint if host.fingerprint else '/telemetry' }}" title="{{ host.hostname }} · {{ host.state }}">
+  <b class="host-meter-name host-state-{{ host.state|replace(' ', '-') }}">{{ host.hostname }}</b>
+  <span class="host-meter-line"><span>{{ "VRAM" if gpu else "RAM" }}</span><span class="progress" role="progressbar" aria-label="{{ host.hostname }} {{ 'VRAM' if gpu else 'RAM' }}" aria-valuenow="{{ memory_percent if memory_percent is not none else 0 }}" aria-valuemin="0" aria-valuemax="100"><span class="progress-bar" style="width: {{ memory_percent if memory_percent is not none else 0 }}%; background-color: hsl({{ (120 - 0.9 * (memory_percent if memory_percent is not none else 0))|round|int }} 60% 42%)"></span></span></span>
+  <span class="host-meter-line"><span>{{ "GPU" if gpu else "CPU" }}</span><span class="progress" role="progressbar" aria-label="{{ host.hostname }} {{ 'GPU' if gpu else 'CPU' }} load" aria-valuenow="{{ processor if processor is not none else 0 }}" aria-valuemin="0" aria-valuemax="100"><span class="progress-bar" style="width: {{ processor if processor is not none else 0 }}%; background-color: hsl({{ (120 - 0.9 * (processor if processor is not none else 0))|round|int }} 60% 42%)"></span></span></span>
+</a>
+{% else %}<span class="text-secondary small">Telemetry unavailable</span>{% endfor %}
+</span>

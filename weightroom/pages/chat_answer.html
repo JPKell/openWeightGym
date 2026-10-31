@@ -1,0 +1,26 @@
+{# One answer of a model: its thinking, folded away once the answer itself has begun, and the answer, formatted.
+   `live` is true while it is being written. Then `answer.state` says how far it has got. #}
+{% if answer.reasoning %}
+<details class="thinking" {{ "open" if live and not answer.content }}>
+  <summary class="text-secondary">{{ "Thinking" if live and not answer.content else "Thought first" }} <small>{{ "{:,}".format(answer.reasoning|length) }} characters</small></summary>
+  {# While it is being written it is shown whole, with nothing to scroll inside: each step replaces it, and a box that scrolls would jump back to its top.
+     Once kept, it is folded away, and opened it is no taller than the others and scrolls. #}
+  <div class="{{ "growing" if live else "kept" }}"><pre>{{ answer.reasoning }}</pre></div>
+</details>
+{% endif %}
+{% if answer.plugin_events %}
+<details class="thinking"{% if live %} open{% endif %}>
+  <summary class="text-secondary">Agent activity <small>{{ answer.plugin_events|length }} events</small></summary>
+  <div class="frame {{ 'growing' if live else 'kept' }}">
+  {% for event in answer.plugin_events %}
+    {% if event.type == "preview" %}<pre>{{ event.text }}</pre>
+    {% elif event.type == "tool_use" %}<div class="small fw-semibold">Tool: {{ event.name }}</div>{% if event.input %}<pre>{{ event.input|tojson(indent=2) }}</pre>{% endif %}
+    {% elif event.type == "tool_result" %}<div class="small fw-semibold">Result: {{ event.name }}{% if event.is_error %} · error{% endif %}</div><pre>{{ event.output }}</pre>
+    {% else %}<div class="small text-secondary">{{ event.subtype or event.name or event.type }}</div>{% endif %}
+  {% endfor %}
+  </div>
+</details>
+{% endif %}
+{% if answer.content %}<div class="answer">{{ answer.content|markdown }}</div>
+{% elif live and not answer.reasoning %}<p class="text-secondary">{{ {"starting": "Starting", "in line": "Waiting in line", "sent, nothing back yet": "The model is reading", "being answered": "Being answered"}.get(answer.state, answer.state) }}…</p>
+{% endif %}

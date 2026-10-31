@@ -1,0 +1,43 @@
+{# The downloads from Hugging Face: coming, being checked, failed, or stopped and left half done. This asks for itself again every 2 seconds, and a button here gets this same piece back. #}
+{% from "parts.html" import said_box , confirm_two %}
+<div id="downloads" hx-get="/downloads" hx-trigger="every 2s" hx-swap="outerHTML">
+{{ said_box(told, true) }}
+{% if downloads %}
+<div class="table-responsive mb-4">
+<table class="table table-sm align-middle">
+  <thead><tr><th>Coming down</th><th>To</th><th>So far</th><th></th><th></th></tr></thead>
+  <tbody>
+  {% for one in downloads %}
+  <tr>
+    <td class="wrap">{{ one.file }}<br><small class="text-secondary">{{ one.repository }}</small></td>
+    <td>{{ one.place }}</td>
+    <td style="min-width: 10rem">
+      {% if one.of %}
+      <div class="progress" role="progressbar" aria-label="how much of {{ one.file }} has come" aria-valuenow="{{ (100 * one.done / one.of)|int }}" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar {{ 'bg-secondary' if one.state != 'coming' }}" style="width: {{ (100 * one.done / one.of)|round(1) }}%"></div>
+      </div>
+      {% endif %}
+      <small class="text-secondary">{{ one.done|size }}{% if one.of %} of {{ one.of|size }}{% endif %}</small>
+    </td>
+    <td>
+      {% if one.state == "coming" %}{{ one.speed|size }} a second{% if one.speed %}, {{ ((one.of - one.done) / one.speed / 60)|round(0, "ceil")|int }} min left{% endif %}
+      {% elif one.state == "checking" %}being checked
+      {% elif one.state == "failed" %}<span class="text-danger">{{ one.why }}</span>
+      {% else %}stopped{% endif %}
+    </td>
+    <td class="text-end text-nowrap">
+      <form hx-post="/downloads" hx-target="#downloads" hx-swap="outerHTML" class="m-0">
+        <input type="hidden" name="path" value="{{ one.path }}"><input type="hidden" name="repository" value="{{ one.repository }}">
+        <input type="hidden" name="file" value="{{ one.file }}"><input type="hidden" name="place" value="{{ one.place }}">
+        {% if one.state == "coming" %}<button  class="btn btn-outline-danger btn-sm" name="do" value="stop" {{ confirm_two() }}>Stop</button>
+        {% elif one.state != "checking" %}<button class="btn btn-primary btn-sm" name="do" value="continue">Continue</button>
+        <button class="btn btn-outline-danger btn-sm" name="do" value="discard">Discard</button>{% endif %}
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+</div>

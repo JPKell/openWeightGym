@@ -1,0 +1,46 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, section_title %}
+{% block title %}Log entry {{ entry.id }} · openWeightGym{% endblock %}
+{% block main %}
+<nav class="mb-2"><a href="/log">Log</a></nav>
+{{ page_header(entry.kind ~ " " ~ entry.what, lead="Inspect the recorded event and its diagnostic details.") }}
+
+<dl class="row facts mb-2">
+  <dt class="col-4 col-md-2">When</dt><dd class="col-8 col-md-4">{{ entry.at|timestamp }}</dd>
+  <dt class="col-4 col-md-2">Entry</dt><dd class="col-8 col-md-4">{{ entry.id }}</dd>
+  {% if entry.user %}<dt class="col-4 col-md-2">User</dt><dd class="col-8 col-md-4">{{ entry.user }}</dd>{% endif %}
+  {% if entry.caller %}<dt class="col-4 col-md-2">From</dt><dd class="col-8 col-md-4">{{ entry.caller }}</dd>{% endif %}
+  {% if entry.model %}<dt class="col-4 col-md-2">Model</dt><dd class="col-8 col-md-4">{% if "manage-models" in person.can %}<a href="/models/{{ entry.model|urlencode }}">{{ entry.model }}</a>{% else %}{{ entry.model }}{% endif %}</dd>{% endif %}
+</dl>
+{# Whatever else this kind of entry holds, as it is kept. Each on a line of its own, since some are long. #}
+<dl class="row facts mb-4">
+  {% for name, value in (entry|rest).items() %}<dt class="col-4 col-md-2">{{ name }}</dt><dd class="col-8 col-md-10 wrap">{{ value|shown }}</dd>{% endfor %}
+</dl>
+
+{# Where to look next: what was printed around that moment, and how the machine was doing. #}
+<p class="mb-4">
+  {% if "restart-services" in person.can and machine_page and entry.machine in (none, "compute") %}<a class="btn btn-outline-secondary btn-sm" href="/output?at={{ entry.at|urlencode }}">What LoadCoach printed around then</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/output?source=kernel&amp;at={{ entry.at|urlencode }}&amp;before=300&amp;after=60">What the kernel said about the cards and memory</a>{% endif %}
+  {% if entry.machine_fingerprint %}<a class="btn btn-outline-secondary btn-sm" href="/telemetry/{{ entry.machine_fingerprint }}?until={{ entry.at|urlencode }}&amp;hours=0.5">The machine in the half hour before</a>
+  {% elif machine_page %}<a class="btn btn-outline-secondary btn-sm" href="/machine?until={{ entry.at|urlencode }}&amp;hours=0.5">The machine in the half hour before</a>{% endif %}
+</p>
+
+{% if entry.text and entry.text.output %}
+{{ section_title("What llama-server printed last") }}
+<p class="text-secondary">The last of its output before it stopped, kept with this entry. The cause is usually the first line marked <code> E </code>.</p>
+{# One row for each line, as on the Output page, so that the lines that would be sent to a model can be marked. #}
+{% set lines = entry.text.output.splitlines() %}
+<div class="kept frame">
+<table id="printed" class="printed">
+  <tbody>{% for line in lines %}<tr><td>{{ line }}</td></tr>
+  {% endfor %}</tbody>
+</table>
+</div>
+{% with log_text = lines|join("\n") %}{% include "ask.html" %}{% endwith %}
+{% endif %}
+
+{% if after %}
+{{ section_title("Entries that point at this one") }}
+<ul>{% for later in after %}<li><a href="/log/{{ later.id }}">{{ later.at|timestamp }} {{ later.kind }} {{ later.what }}</a></li>{% endfor %}</ul>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, page_header, form_section %}
+{% block title %}{{ model.name }} · Models{% endblock %}
+{% macro values(items) %}<dl class="row mb-0">{% for key, value in items|dictsort %}<dt class="col-md-6 text-secondary fw-normal">{{ key|replace('_', ' ')|capitalize }}</dt><dd class="col-md-6 wrap">{% if value is mapping %}{{ values(value) }}{% elif value is boolean %}{{ 'On' if value else 'Off' }}{% elif value is sequence and value is not string %}{{ value|join(', ') or '—' }}{% else %}{{ value|display }}{% endif %}</dd>{% else %}<dd class="text-secondary">Runtime defaults</dd>{% endfor %}</dl>{% endmacro %}
+{% block main %}
+<nav class="mb-2"><a href="/models?kind={{ 'image' if model.engine == 'sdcpp' else 'audio' }}">Models</a></nav>
+{% call page_header(model.name, 'Review this model and its settings on ' ~ selected_node ~ '.') %}<a class="btn btn-primary" href="{{ '/models/images' if model.engine == 'sdcpp' else '/models/audio' }}?node={{ selected_node|urlencode }}&model={{ model.name|urlencode }}">Edit settings</a>{% endcall %}
+{{ said_box(said, failed) }}
+{% call card('Settings', true) %}
+<nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Configure node"><span class="text-secondary">Viewing {{ selected_node }}</span>{% for location in model.locations|default([]) %}<a class="btn btn-sm btn-outline-secondary" href="/models/{{ location.name|urlencode }}?node={{ location.machine|urlencode }}">{{ location.machine }}</a>{% endfor %}</nav>
+{% set profile = model[model.engine] %}
+<div class="row g-3">
+{% call form_section('Model', 'All nodes') %}<div class="col-md-6"><span class="form-label">Family</span><p>{{ profile.family }}</p>{% if profile.kind %}<span class="form-label">Kind</span><p>{{ profile.kind|capitalize }}</p>{% endif %}</div><div class="col-md-6 wrap"><span class="form-label">File</span><p>{{ model.flags.model }}</p></div>
+{% if profile.components %}<div class="col-12">{{ values(profile.components) }}</div>{% endif %}
+{% if profile.files %}<div class="col-12"><span class="form-label">Companion files</span><ul class="small wrap">{% for file in profile.files %}<li>{{ file }}</li>{% endfor %}</ul></div>{% endif %}
+{% endcall %}
+{% call form_section('Hardware', 'This node') %}<div class="col-md-6" data-gpus="{{ model.gpus|tojson|forceescape }}"><span class="form-label">Placement</span><p>{{ 'CPU only' if model.gpus == 0 else model.gpus|join(', ') if model.gpus is sequence and model.gpus is not string else 'Automatic GPU' }}</p><span class="form-label">Keep GPUs to itself</span><p>{{ 'On' if model.alone else 'Off' }}</p></div><div class="col-md-6"><span class="form-label">Host RAM budget</span><p>{{ profile.host_ram_mib }} MiB</p>{% if profile.split_mode %}<span class="form-label">Split mode</span><p>{{ profile.split_mode|capitalize }}</p>{% endif %}</div>{% endcall %}
+{% call form_section('Generation defaults', 'All nodes') %}<div class="col-12">{{ values(global_options) }}</div>{% endcall %}
+</div>{% endcall %}
+{% include 'model_locations.html' %}
+{% call card('Benchmark results', false) %}<p class="form-hint">Load-time measurements only.</p>{% include 'model_benchmark.html' %}{% endcall %}
+{% endblock %}

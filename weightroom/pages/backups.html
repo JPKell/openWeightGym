@@ -1,0 +1,75 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, page_header, section_title %}
+{% block title %}Backups · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header("Backup and restore", lead="Create backups and preview recovery before restoring data.") }}
+{{ said_box(said, failed) }}
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-4">
+    {% call card("", class_="h-100") %}
+      <div class="text-secondary small">Last verified recovery point</div>
+      <div class="fs-5 fw-semibold">{{ last_verified.created_at|timestamp if last_verified else "No verified backup yet" }}</div>
+      {% if last_verified %}<a href="/backups/{{ last_verified.id }}">{{ last_verified.id }}</a>{% else %}<div class="small text-secondary">A recovery point needs a verified archive from both machines.</div>{% endif %}
+    {% endcall %}
+  </div>
+  <div class="col-lg-4">
+    {% call card("", class_="h-100") %}
+      <form method="post" action="/backups/create">
+        <div class="text-secondary small mb-1">Manual backup</div>
+        <button class="btn btn-primary btn-sm">Back up both machines</button>
+      </form>
+    {% endcall %}
+  </div>
+  <div class="col-lg-4">
+    {% call card("", class_="h-100") %}
+      <form method="post" action="/backups/retention" class="row g-2 align-items-end">
+        <div class="col"><label for="retention" class="form-label small mb-1">Recovery sets to keep on each machine</label><input id="retention" name="retention" type="number" min="0" max="100" step="1" value="{{ retention }}" class="form-control "></div>
+        <div class="col-auto"><button class="btn btn-outline-primary ">Save</button></div>
+      </form>
+      <div class="small text-secondary mt-1">Zero keeps every set. Rotation follows a successful backup.</div>
+    {% endcall %}
+  </div>
+</div>
+
+{% call card("Recovery sets", true) %}
+<div class="table-responsive"><table class="table table-sm align-middle mb-0">
+  <thead><tr><th>Created</th><th>State</th><th>Front</th><th>Compute</th><th>Archive / data</th><th></th></tr></thead>
+  <tbody>
+  {% for backup in sets %}
+  <tr>
+    <td><code>{{ backup.id }}</code><div class="small text-secondary">{{ backup.created_at|timestamp }}</div></td>
+    <td><span class="badge {{ 'text-bg-success' if backup.state == 'verified' else 'text-bg-warning' if backup.state == 'partial' else 'text-bg-danger' }}">{{ backup.state }}</span></td>
+    <td>{{ backup.front.verification.state if backup.front else "missing" }}</td>
+    <td>{{ backup.compute.verification.state if backup.compute else "missing" }}</td>
+    <td>{{ backup.archive_size|size }} <span class="text-secondary">archive</span><div class="small text-secondary">{{ backup.payload_size|size }} data before compression</div></td>
+    <td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/backups/{{ backup.id }}">Restore preview</a></td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="text-secondary">No backups have been made.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{% endcall %}
+
+{% call card("Recovery inventory", false) %}
+{% if compute_error %}<div class="alert alert-warning py-2">{{ compute_error }}</div>{% endif %}
+{% for machine, rows, root in [("Front", front_inventory, front_root), ("Compute", compute_inventory, compute_root)] %}
+{{ section_title(machine) }}
+{% if root %}<div class="small text-secondary mb-1">Archives: <code>{{ root }}</code></div>{% endif %}
+<div class="table-responsive"><table class="table table-sm align-middle mb-2">
+  <thead><tr><th>Data</th><th>Source</th><th>Status</th><th>Size</th></tr></thead>
+  <tbody>{% for row in rows %}<tr><td>{{ row.kind }}{% if row.engine %}<div class="small text-secondary">{{ row.engine }}{% if row.bindings %} · {{ row.bindings|join(", ") }}{% endif %}</div>{% endif %}</td><td><code>{{ row.source }}</code></td><td>{{ row.status }}{% if row.reason or row.error %}<div class="small text-secondary">{{ row.reason or row.error }}</div>{% endif %}</td><td>{{ row.size|size if row.status == "included" else "—" }}</td></tr>{% else %}<tr><td colspan="4" class="text-secondary">Inventory unavailable.</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endfor %}
+{% endcall %}
+
+{% call card("Keep identities through a clean reinstall", false) %}
+<p class="mb-2">Use <code>suite-identity</code> in a terminal on each host to export a passphrase-encrypted bundle of accounts, permissions, service credentials and configuration. Request and conversation histories are excluded.</p>
+<p class="mb-0">Stop participating services before exporting or applying an import. Imports preview changes first and refuse different existing accounts. <a href="/docs/accounts?module=loadcoach/identity_bundle.py">Identity export/import reference</a></p>
+{% endcall %}
+
+{% call card("Key and archive protection", false) %}
+<p class="mb-2">Archives remain on the machine that created them and are readable only by its service account. They are not offered as browser downloads.</p>
+<p class="mb-2">The accounts database contains password verifiers and authenticator secrets required to recover accounts. Raw API keys, provider keys, key folders, environment files, runtime CLI tokens and openWeightGym's cookie-signing secret are excluded.</p>
+<p class="mb-0">Recover raw keys separately from their private source. Model weights are excluded; the compute manifest records each model's stable identity, path, size, known SHA-256 and inferred Hugging Face source.</p>
+{% endcall %}
+{% endblock %}

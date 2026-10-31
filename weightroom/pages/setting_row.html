@@ -1,0 +1,29 @@
+{% set meta = setting_label(setting) %}
+{% set holds = setting.changed.value if setting.changed else setting.value %}
+{% set typed = typed_in['value-' ~ setting.name] if opened == program.program and typed_in['value-' ~ setting.name] is defined else (holds if setting.editor|default('') == 'text' else holds|written) %}
+{% set choices = setting.choices|default(meta.choices|default([])) %}
+{% set id = 'setting-' ~ program.program ~ '-' ~ setting.name %}
+<div class="col-md-6 settings-row">
+  <label class="form-label" for="{{ id }}">{{ meta.label }} <small class="text-secondary"><code>{{ setting.name }}</code></small>{% if setting.when == 'restart' %} <span class="badge bg-orange-lt">Needs restart · {{ program.program }}</span>{% endif %}</label>
+  {% if meta.control == 'services' %}
+  <input type="hidden" name="third-party-services-present" value="1"><div class="d-flex flex-wrap gap-3">
+  {% for name, label in third_party_services %}<label class="form-check form-switch"><input id="third-party-{{ name }}" name="third-party-{{ name }}" type="checkbox" class="form-check-input"{{ ' checked' if name in holds }}><span class="form-check-label">{{ label }}</span></label>{% endfor %}</div>
+  {% elif choices or setting.select|default(false) %}
+  <select id="{{ id }}" name="value-{{ setting.name }}" class="form-select" aria-label="{{ setting.label|default(meta.label) }}">
+  {% set choice_values = choices|map(attribute=0)|map('string')|list %}
+  {% if typed not in choice_values %}<option value="{{ typed }}" selected>{{ typed }} · current, unavailable</option>{% endif %}
+  {% for value, label in choices %}<option value="{{ value }}"{{ ' selected' if value|string == typed }}>{{ label }}</option>{% endfor %}
+  </select>
+  {% elif meta.control == 'switch' or holds is boolean %}
+  <input type="hidden" name="value-{{ setting.name }}" value="false"><div class="form-check form-switch"><input id="{{ id }}" name="value-{{ setting.name }}" value="true" type="checkbox" class="form-check-input"{{ ' checked' if typed == 'true' }} aria-label="{{ meta.label }}"></div>
+  {% elif holds is mapping or (holds is sequence and holds is not string) %}
+  <details class="more"><summary>Advanced · {{ meta.label }}</summary><textarea id="{{ id }}" name="value-{{ setting.name }}" class="form-control font-monospace mt-2" rows="4" aria-label="{{ setting.name }}" spellcheck="false">{{ typed }}</textarea></details>
+  {% elif setting.multiline|default(false) %}
+  <textarea id="{{ id }}" name="value-{{ setting.name }}" class="form-control" rows="3" aria-label="{{ setting.label|default(meta.label) }}">{{ typed }}</textarea>
+  {% else %}
+  <div class="input-group input-group-flat"><input id="{{ id }}" name="value-{{ setting.name }}" class="form-control font-monospace" value="{{ typed }}" type="{{ 'number' if meta.control == 'number' else 'text' }}"{% if meta.control == 'number' %} min="0" step="{{ '1' if holds is integer else 'any' }}"{% endif %} aria-label="{{ setting.label|default(meta.label) }}" autocapitalize="none" spellcheck="false">{% if meta.unit %}<span class="input-group-text">{{ meta.unit }}</span>{% endif %}</div>
+  {% endif %}
+  {% if setting.says %}{% call more() %}{{ setting.says }}{% endcall %}{% endif %}
+  {% if setting.changed %}<small class="text-secondary d-block mt-1">Changed here by {{ setting.changed.by or 'someone at the node' }}, {{ setting.changed.at|timestamp }}.</small><button class="btn btn-link p-0" name="reset" value="{{ setting.name }}">Revert to file</button>{% endif %}
+  {% if setting.refused %}<small class="text-danger d-block">{{ setting.refused }}</small>{% endif %}
+</div>

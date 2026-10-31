@@ -1,0 +1,77 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, swaps %}
+{% from "parts.html" import page_header, form_section, more %}
+{% block title %}Users · openWeightGym{% endblock %}
+{% block main %}
+{{ page_header('Users', 'Manage accounts and the access each account receives.') }}
+{{ said_box(said, failed) }}
+
+{% call card("Add an account", form) %}
+  <p class="text-secondary">For a person, or for a program that is to have a key of its own. What it may do comes from its group, and can be changed on its own page afterwards.</p>
+  <form method="post" action="/users" class="row g-3">
+    <div class="col-md-6">
+      <label for="name" class="form-label">Name <small class="text-secondary">lowercase letters, digits, dot, dash or underscore</small></label>
+      <input id="name" name="name" class="form-control" value="{{ form.name or '' }}" autocapitalize="none" spellcheck="false" autocomplete="off" required>
+    </div>
+    <div class="col-md-6">
+      <label for="group" class="form-label">Group</label>
+      <select id="group" name="group" class="form-select" required>
+        {# No group is chosen to begin with, so that none is given by leaving the box alone. #}
+        <option value="" disabled {{ "selected" if not form.group }}>choose a group</option>
+        {% for group in known.groups %}<option {{ "selected" if group == form.group }}>{{ group }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6">
+      <div class="form-check">
+        <input id="password" name="password" type="checkbox" class="form-check-input" {{ "checked" if form.password is defined }}>
+        <label for="password" class="form-check-label">A temporary password <small class="text-secondary">for a person: it only serves to choose their own, the first time they sign in</small></label>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="form-check">
+        <input id="key" name="key" type="checkbox" class="form-check-input" {{ "checked" if form.key is defined }}>
+        <label for="key" class="form-check-label">An API key <small class="text-secondary">for a program</small></label>
+      </div>
+      <input name="label" class="form-control mt-2" maxlength="60" value="{{ form.label or '' }}" placeholder="a label for the key: what it is for" aria-label="A label for the key">
+    </div>
+    <div class="col-12">
+      <button class="btn btn-primary">Add</button>
+      <span class="text-secondary ms-2">Each is shown once, on the next page.</span>
+    </div>
+  </form>
+{% endcall %}
+
+{% call card("Users", true, "users-list") %}
+<div id="users-list">
+{# static/sort.js does the finding. An app is an account like any other: type its group to see only those. #}
+<div class="d-flex flex-nowrap align-items-center gap-3 mb-2">
+  <input type="search" class="form-control flex-grow-1" style="min-width: 0" data-filter="users-table" placeholder="Find an account: a name, a group, or a word from its row" aria-label="Find an account" autocapitalize="none" spellcheck="false">
+  <small class="text-secondary text-nowrap" data-count="users-table"></small>
+  <form method="get" action="/users" class="d-flex flex-shrink-0 align-items-center gap-2" {{ swaps('users-list', true) }} data-auto-submit>
+    <label for="users-limit" class="form-label mb-0 text-nowrap">Users per page</label>
+    <select id="users-limit" name="limit" class="form-select form-select-sm w-auto">{% for n in paging.sizes %}<option value="{{ n }}" {{ 'selected' if n == paging.limit }}>{{ n }}</option>{% endfor %}</select>
+    <noscript><button class="btn btn-primary btn-sm">Show</button></noscript>
+  </form>
+</div>
+<div class="table-responsive">
+<table id="users-table" class="table table-hover align-middle sortable">
+  <thead><tr><th data-sort="text">Name</th><th data-sort="text">Group</th><th data-sort="text">Password</th><th data-sort="text">Code</th><th data-sort="value">Signed in</th><th data-sort="value">Keys</th><th data-sort="text">Of its own</th></tr></thead>
+  <tbody>
+  {% for user in known.users %}
+  <tr>
+    <td><a href="/users/{{ user.name }}">{{ user.name }}</a>{% if not user.enabled %} <span class="badge text-bg-secondary">disabled</span>{% endif %}</td>
+    <td>{{ user.group }}</td>
+    <td>{{ "temporary" if user.password == "temporary" else "set" if user.password else "none" }}</td>
+    <td>{{ "set up" if user.second_step else "" }}</td>
+    <td data-value="{{ user.sessions }}">{{ user.sessions or "" }}</td>
+    <td data-value="{{ user["keys"]|length }}">{{ user["keys"]|length or "" }}</td>
+    <td>{{ "differs from its group" if user.own }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% with target='users-list' %}{% include 'pagination.html' %}{% endwith %}
+</div>
+{% endcall %}
+{% endblock %}

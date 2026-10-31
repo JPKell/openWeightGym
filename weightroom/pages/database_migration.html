@@ -1,0 +1,31 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, page_header %}
+{% block title %}Migrate database · openWeightGym{% endblock %}
+{% block main %}
+{% set _page_title1 %}Migrate database · {{ profile }}{% endset %}
+{{ page_header(_page_title1, lead="Preview and prepare a database engine migration.") }}
+{{ said_box(why, true) }}
+{% if preview %}
+<p>Move the store bound to <strong>{{ preview.source.binding }}</strong> from {{ preview.preflight.source_engine }} to {{ preview.preflight.target_engine }}. Every service using this store switches together. Other store bindings retain their selections.</p>
+{% call card("Preflight and recovery", true) %}
+<p>Source version: {{ preview.preflight.source_version }}. Target version: {{ preview.preflight.target_version }}. Local free space: {{ preview.preflight.free_bytes|disk_size }}; required reserve: {{ preview.preflight.required_bytes|disk_size }}.</p>
+{% if preview.preflight.server_space %}<p>PostgreSQL server filesystem <code>{{ preview.preflight.server_space.path }}</code>: {{ preview.preflight.server_space.free_bytes|disk_size }} available.</p>{% endif %}
+<p>{{ preview.preflight.counts|length }} tables, {{ preview.preflight.chain.checked }} verified event-chain links and {{ preview.preflight.artifacts|length }} required artifacts. The oldest retained event is the trusted chain anchor.</p>
+<p class="mb-0">The worker closes traffic, drains active requests and stops openWeightGym services on all selected hosts. It creates a verified recovery set on every host, copies and validates the store, applies the preview, restarts services behind the maintenance barrier, and checks sign-in, models, requests, chat, benchmarks and tools. A failed check restores the original bindings. The source and recovery archives are retained.</p>
+{% endcall %}
+{% for host, view in preview.views.items() %}
+{% call card(host|capitalize ~ " · configuration changes", true) %}
+{% for config in view.configurations %}<p><code>{{ config.path }}</code> · {{ config.bindings|join(", ") }}</p><pre class="mb-3"><code>{{ config.toml }}</code></pre>{% endfor %}
+{% endcall %}
+{% endfor %}
+{% call card("Maintenance window", true) %}
+{% for host, info in preview.hosts.items() %}<p>{{ host|capitalize }}: {{ info.active|join(", ") or "no active services" }}</p>{% endfor %}
+<p>The console will be unavailable during cutover. Reopen System → DB when it returns to inspect the durable report. If rollback cannot complete, traffic stays closed for operator recovery.</p>
+<form method="post" action="/databases/migrations/{{ profile }}/start">
+<input type="hidden" name="approval" value="{{ preview.approval }}">
+<button class="btn btn-warning" type="submit">Start reviewed migration</button>
+</form>
+{% endcall %}
+{% endif %}
+<a class="btn btn-outline-secondary" href="/databases">Back to databases</a>
+{% endblock %}

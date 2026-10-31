@@ -1,0 +1,14 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, form_section, card, section_title %}
+{% block title %}Plugins{% endblock %}
+{% block main %}
+{% call page_header('Plugins', 'Manage external agents and services offered through the model API.') %}<a href="/plugins/activity" class="btn btn-outline-secondary btn-sm">Adaptor activity</a>{% endcall %}
+<p class="small text-secondary">Authorization last synchronized: {{ auth_status.synchronized_at|timestamp if auth_status.synchronized_at else "Not synchronized yet" }}.</p>
+{% for plugin in plugins %}
+{% call card("") %}
+  <div class="d-flex flex-wrap justify-content-between gap-2">{% set _section_title1 %}{% if plugin.valid %}<a href="/plugins/{{ plugin.id }}">{{ plugin.name }}</a>{% else %}{{ plugin.name }}{% endif %}{% endset %}
+{{ section_title(_section_title1) }}<span>{{ "Enabled" if plugin.enabled else "Disabled" }}{% if not plugin.valid %} · Invalid{% endif %}</span></div>
+  {% if plugin.valid %}<p class="mb-0 small text-secondary">Version {{ plugin.version }} · {{ plugin.instances|length }} instance{{ "" if plugin.instances|length == 1 else "s" }} · {{ plugin.capabilities|join(", ") }}</p>{% else %}<p class="text-danger mb-0">{{ plugin.error }}</p>{% endif %}
+{% endcall %}
+{% else %}<p class="text-secondary">No plugin manifests found in the plugin folder.</p>{% endfor %}
+{% endblock %}

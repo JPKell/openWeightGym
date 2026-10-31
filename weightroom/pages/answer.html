@@ -1,0 +1,12 @@
+{% from "parts.html" import section_title %}
+{# What a model answered when asked about a log, or why it could not be asked. The piece that goes into the box under the Ask button. #}
+{% if why %}
+<div class="alert alert-danger said">{{ why }}</div>
+{% else %}
+{% set _section_title1 %}{{ model }} answered{% if number %} <small>as <a href="/requests/{{ number }}">request {{ number }}</a></small>{% endif %}{% endset %}
+{{ section_title(_section_title1, class_="text-secondary") }}
+<div class="kept frame"><pre>{{ content or "It gave no answer." }}</pre></div>
+{% if reasoning %}
+<details class="mb-2"><summary class="text-secondary">Its thinking</summary><div class="kept frame mt-2"><pre>{{ reasoning }}</pre></div></details>
+{% endif %}
+{% endif %}

@@ -1,0 +1,15 @@
+[Unit]
+Description=Voice speech service on compute
+After=network-online.target loadcoach.service
+
+[Service]
+WorkingDirectory=%h/ai/openWeightGym
+ExecStart=%h/ai/openWeightGym/.venv/bin/voice --config %h/ai/openWeightGym/settings/voice.toml
+Restart=always
+RestartSec=3
+MemoryMax=4G
+TimeoutStopSec=30
+Environment=OMP_NUM_THREADS=2
+
+[Install]
+WantedBy=default.target

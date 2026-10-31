@@ -1,0 +1,29 @@
+{% from "parts.html" import confirm_two %}
+{# Every configured the compute service is shown, including an unavailable one. #}
+{% set seen = now %}
+<div id="status" class="{{ '' if now or nodes else 'old' }}" {% if now or nodes %}hx-get="/status?part=status" hx-trigger="every 2s" hx-swap="outerHTML" data-refresh-companions="#current-requests"{% endif %}>
+{% for node in nodes if node.state == 'ready' and node.status_live and (node.draining or (node.name == 'compute' and seen and seen.draining)) %}
+<form method="post" action="/control" class="alert alert-warning d-flex flex-wrap align-items-center gap-2">
+  <input type="hidden" name="machine" value="{{ node.name }}">
+  <span class="flex-grow-1"><b>No new requests are taken by {{ node.name }}.</b>
+    {% if node.name == 'compute' and seen and seen.draining %}Since {{ seen.draining.since|timestamp }}, asked by {{ seen.draining.by }}: {{ seen.draining.why }}. {{ seen.busy }} still here.{% endif %}</span>
+  {% if "drain" in person.can %}<button class="btn btn-outline-secondary btn-sm" name="do" value="open">Take requests again</button>{% endif %}
+</form>
+{% endfor %}
+{% if nodes and ('drain' in person.can or 'clear-line' in person.can or 'unload' in person.can) %}
+<div id="status-controls" class="mb-3 status-controls" hx-preserve>
+  <form method="post" action="/control" {{ confirm_two() }} class="d-flex align-items-center gap-2">
+    <label for="status-control-machine" class="visually-hidden">the compute service</label>
+    <select id="status-control-machine" name="machine" class="form-select form-select-sm status-node-select" aria-label="the compute service for status control" required>
+      {% for node in nodes %}<option value="{{ node.name }}">{{ node.name }}{% if node.state != 'ready' or not node.status_live %} (unavailable){% endif %}</option>{% endfor %}
+    </select>
+    {% if 'drain' in person.can %}<div class="input-group input-group-sm status-drain-group"><input name="why" class="form-control" maxlength="200" placeholder="Reason" aria-label="Reason to take no requests"><button class="btn btn-outline-danger" name="do" value="drain">Take no requests</button></div>{% endif %}
+    {% if 'clear-line' in person.can %}<button class="btn btn-outline-danger btn-sm" name="do" value="clear">Clear requests</button>{% endif %}
+    {% if 'unload' in person.can %}<button  class="btn btn-outline-danger btn-sm" name="do" value="unload" {{ confirm_two() }}>Unload model</button>{% endif %}
+  </form>
+</div>
+{% endif %}
+{% include 'status_nodes.html' %}
+{% if 'manage-settings' in person.can %}<details class="small mt-3"><summary>Sign-in service troubleshooting</summary><p>If nobody can sign in, an administrator can check the gateway on front with <code>systemctl --user status turnstile</code> and start it with <code>systemctl --user start turnstile</code>.</p></details>{% endif %}
+</div>
+{% if request.query_params.get('part') == 'status' %}{% with current_oob=true %}{% include 'current_requests.html' %}{% endwith %}{% endif %}

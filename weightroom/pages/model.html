@@ -1,0 +1,64 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, swaps, page_header, form_section, more, hardware, section_title , confirm_check, confirm_loss %}
+{% block title %}{{ model.name }} · openWeightGym{% endblock %}
+{% block main_attributes %}data-card-scope="model"{% endblock %}
+{% block scripts %}<script src="/static/model-settings.js?v=2" defer></script>{% endblock %}
+{% block main %}
+<nav class="mb-2"><a href="/models">Models</a></nav>
+{% call page_header(model.name, 'Configure this model and review its availability across nodes.') %}{% include "model_state.html" %}{% endcall %}
+{{ said_box(said, failed) }}
+
+{# A list to choose an adapter or a projector from: those whose file says it was made for this model first, the others marked.
+   What is chosen now is kept in the list even if its file is in none of the places. #}
+{% macro part_choice(field, what, chosen, label, id="") %}
+      <select name="{{ field }}" class="form-select" aria-label="{{ label }}" {% if id %}id="{{ id }}"{% endif %}>
+        <option value="">none</option>
+        {% for part in parts if part.what == what and part.fits %}<option value="{{ part.path }}" {{ "selected" if part.path == chosen }}>{{ part.path }} · metadata names agree</option>{% endfor %}
+        {% for part in parts if part.what == what and not part.fits %}<option value="{{ part.path }}" {{ "selected" if part.path == chosen }}>{{ part.path }} · says it is for {{ part.made_for or "no model it names" }}</option>{% endfor %}
+        {% if chosen and chosen not in parts|map(attribute="path") %}<option value="{{ chosen }}" selected>{{ chosen }} · in none of the places</option>{% endif %}
+      </select>
+{% endmacro %}
+
+{# The box for a new name sits among the settings and belongs to this form of its own, so that Rename sends the name alone. #}
+<form id="rename" method="post" action="{{ address(model.name) }}"></form>
+{% call card("Settings", true) %}
+  <nav class="d-flex flex-wrap align-items-center gap-2 mb-4" aria-label="Configure node"><span class="text-secondary">Configuring <strong class="text-body">{{ selected_node }}</strong></span>{% for location in model.locations|default([]) %}<a class="btn btn-sm {{ 'btn-primary' if location.machine == selected_node else 'btn-outline-secondary' }}" href="/models/{{ location.name|urlencode }}?node={{ location.machine|urlencode }}"{% if location.machine == selected_node %} aria-current="true"{% endif %}>{{ location.machine }}</a>{% endfor %}</nav>
+  <form method="post" action="{{ address(model.name) }}#configuration-preview" class="row g-3" data-model-settings>
+    <input type="hidden" name="engine" value="{{ engine_schema.id }}">
+    {% call form_section('Model', 'All nodes') %}
+    <div class="col-md-6"><span class="form-label d-block">Engine</span><span class="badge bg-secondary-lt">{{ engine_schema.label }}</span></div>
+    <div class="col-md-6"><label for="order" class="form-label">List position</label><input id="order" name="order" type="number" step="1" class="form-control" value="{{ '' if showing.order is undefined or showing.order is none else showing.order }}"><div class="form-hint">Lower numbers appear first; matching positions sort by name.</div></div>
+    {% include engine_schema.model_template %}
+    {% endcall %}
+    {% if engine_schema.id == 'llama_cpp' %}
+    {% include 'engines/llama_cpp/model_context.html' %}
+    {% call form_section('Hardware', 'This node') %}{{ hardware('model', showing.gpus, known.cards, showing.alone, showing.allow_split) }}{% endcall %}
+    {% else %}<div class="col-md-6 form-check form-switch"><input id="alone" name="alone" value="yes" type="checkbox" class="form-check-input"{{ ' checked' if showing.alone }}><label for="alone" class="form-check-label">Keep GPUs to itself</label></div>{% endif %}
+    {% include engine_schema.options_template %}
+    <div class="col-12 sticky-actions"><button class="btn btn-primary" name="do" value="setup-preview">Preview and save</button><span class="small text-secondary">Changes apply to {{ selected_node }} on next load.</span></div>
+  </form>
+{% endcall %}
+
+{% include "model_locations.html" %}
+{% include "model_setup.html" %}
+{% call card("Benchmark results", false) %}{% include "model_benchmark.html" %}{% endcall %}
+{% call card("File facts", false) %}{% include "file_says.html" %}
+<dl class="row facts small mb-0">
+  <dt class="col-md-3">Fingerprint</dt><dd class="col-md-9 wrap">{% if model.fingerprint %}<a href="/fingerprints?start={{ model.fingerprint }}"><code>{{ model.fingerprint }}</code></a>{% else %}Not available{% endif %}</dd>
+  {% if model.sha256 %}<dt class="col-md-3">File SHA-256</dt><dd class="col-md-9 wrap"><code>{{ model.sha256 }}</code></dd>{% endif %}
+  {% if build %}<dt class="col-md-3">llama-server</dt><dd class="col-md-9">{{ build }}</dd>{% endif %}
+</dl>
+{% endcall %}
+
+{% call card("Danger zone") %}
+    {% if model.measurements %}<form method="post" action="{{ address(model.name) }}" class="mb-3" {{ swaps() }}><button  class="btn btn-outline-danger btn-sm" name="do" value="forget-measure" {{ confirm_loss() }}>Forget measurements</button></form>{% endif %}
+    <p class="text-secondary small">It stops being offered at once. Requests already being answered or waiting for it are completed, and then it is unloaded. Its file is left where it is.</p>
+    <form method="post" action="{{ address(model.name) }}" class="row g-3 align-items-center">
+      <div class="col-md-6">
+        {% set confirmation_label %}Yes, remove {{ model.name }}{% endset %}{{ confirm_check(confirmation_label, "sure") }}
+      </div>
+      <div class="col-md-6"><button  class="btn btn-danger" name="do" value="remove" {{ confirm_loss() }}>Remove</button></div>
+    </form>
+  {% endcall %}
+
+{% endblock %}

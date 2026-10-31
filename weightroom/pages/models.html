@@ -1,0 +1,36 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, section_title %}
+{% from "parts.html" import page_header, form_section, more, node_state %}
+{% block title %}Models · openWeightGym{% endblock %}
+{% block scripts %}<script src="/static/model-files.js?v=2" defer></script>{% endblock %}
+{% block main %}
+{% call page_header('Models', 'Choose a model type to manage its files, settings and availability.') %}<a class="btn btn-primary" href="{{ '/models?new=1&node=' ~ (selected_node|urlencode) ~ '#add-model' if kind == 'llm' else '/models/images?new=1' if kind == 'image' else '/models/audio?new=1' }}">Add a model</a>{% endcall %}
+{{ said_box(said, failed) }}
+
+<nav class="nav nav-pills gap-2 mb-3" aria-label="Model type">
+{% for value, label in [('llm','LLM'),('image','Image'),('audio','Audio')] %}<a class="nav-link{{ ' active' if kind == value }}" href="/models?kind={{ value }}"{{ ' aria-current=page' if kind == value }}>{{ label }}</a>{% endfor %}
+</nav>
+{% include 'models_list.html' %}
+{% if kind == 'llm' %}
+
+{% call card("Add a model", open=(true if failed or request.query_params.get("new") is not none or form.file or form.name else false), id="add-model", attrs={"data-add-model-card": ""}) %}
+  <form id="model-node-form" method="get" action="/models">{% if form.file %}<input type="hidden" name="file" value="{{ form.file }}">{% endif %}</form>
+  <form method="post" action="/models?node={{ selected_node|urlencode }}" class="row g-2 align-items-end" data-create-model>
+    <input type="hidden" name="node" value="{{ selected_node }}">
+    <input type="hidden" name="prepare_files" value="yes">
+    <div class="col-md-4"><label for="model-node" class="form-label">Compute node</label><div class="d-flex gap-2"><select id="model-node" name="node" form="model-node-form" class="form-select">{% for node in node_choices %}<option value="{{ node.name }}"{{ ' selected' if node.name == selected_node }}>{{ node.name }} · {{ node_state(node.state) }}</option>{% else %}<option value="compute">compute</option>{% endfor %}</select><button form="model-node-form" class="btn btn-outline-secondary text-nowrap">Browse node files</button></div></div>
+    <div class="col-md-4"><label for="file" class="form-label">File</label>{% include 'model_file_picker.html' %}</div>
+    <div class="col-md-4"><label for="model-engine" class="form-label">Engine</label><select id="model-engine" name="engine" class="form-select" data-engine-picker>{% for engine in engine_choices if engine.enabled %}<option value="{{ engine.id }}"{{ ' selected' if engine.id == selected_engine }}>{{ engine.label }}</option>{% endfor %}</select></div>
+    <div class="col-md-4"><label for="name" class="form-label">Name</label><input id="name" name="name" class="form-control" value="{{ form.name or '' }}" autocapitalize="none" spellcheck="false" required></div>
+    {% if engine_schema %}{% include engine_schema.create_template %}{% else %}<p class="text-danger">No enabled engine is available on this node.</p>{% endif %}
+    <div class="col-12"><div class="form-text" data-trained-note>{% if form.trained %}this file was trained for {{ "{:,}".format(form.trained|int) }} tokens{% endif %}</div></div>
+  </form>
+{% endcall %}
+
+<p class="small text-secondary">Storage files are promoted to cache and copied to the selected node after space is checked. Storage originals are retained.</p>
+<script type="application/json" id="model-file-inventory">{{ file_nodes|tojson }}</script>
+{% else %}
+{% call card("") %}{{ section_title("Add a model") }}<p class="small text-secondary">Choose cached or stored files and configure the model on a compute node.</p><a class="btn btn-primary align-self-start" href="{{ '/models/images' if kind == 'image' else '/models/audio' }}?new=1">Add {{ kind }} model</a>{% endcall %}
+{% endif %}
+<p><a href="/fingerprints">View model fingerprints</a>{% if kind == 'llm' and known.build %} <span class="text-secondary">· llama-server on compute is {{ known.build }}</span>{% endif %}</p>
+{% endblock %}

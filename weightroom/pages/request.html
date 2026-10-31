@@ -1,0 +1,58 @@
+{% extends "frame.html" %}
+{% from "parts.html" import card, said_box, page_header, section_title %}
+{% block title %}Request {{ facts.id }} · openWeightGym{% endblock %}
+{% block main %}
+{% set _page_title1 %}Request {{ facts.id }}{% endset %}
+{{ page_header(_page_title1) }}
+{{ said_box(said, "failed" in request.query_params) }}
+{% if facts.asked.request_id %}
+{% call card("Distributed timeline", true, 'request-observation') %}
+<p>Ingress ID: <a href="/requests?request_id={{ facts.asked.request_id|query }}&amp;since=0"><code>{{ facts.asked.request_id }}</code></a></p>
+{% with observation_report=facts.observation %}{% include "observation_trace.html" %}{% endwith %}
+{% endcall %}
+{% endif %}
+
+{% if facts.text %}
+{% set sent = facts.text.asked %}
+{% call card("Request", false) %}
+  {% if sent.too_big %}
+  <p class="text-secondary mb-0">It was {{ sent.too_big|size }}, too large to keep in full.</p>
+  {% else %}
+  {# Everything but the conversation and the tools: the settings the caller chose for this one request. #}
+  <p class="text-secondary">{% for name, value in sent.items() if name not in ("messages", "tools") %}{{ name }} <code>{{ value|shown }}</code>{{ " · " if not loop.last }}{% endfor %}
+    {%- if sent.tools %} · {{ sent.tools|length }} tool{{ "" if sent.tools|length == 1 else "s" }} offered: {% for tool in sent.tools %}<code>{{ (tool.function or tool).name }}</code>{{ ", " if not loop.last }}{% endfor %}{% endif %}</p>
+  {% for message in sent.messages or [] %}
+  {% set _section_title1 %}{{ message.role }}{% if message.name %} {{ message.name }}{% endif %}{% endset %}
+{{ section_title(_section_title1, class_="text-secondary") }}
+  <div class="kept frame"><pre>{{ message.content|spoken }}{% for call in message.tool_calls or [] %}
+[asks for the tool {{ (call.function or call).name }}: {{ (call.function or call).arguments }}]{% endfor %}</pre></div>
+  {% endfor %}
+  {% endif %}
+{% endcall %}
+{% endif %}
+
+{% include "request_live.html" %}
+
+{% if facts.distribution %}
+{% call card("Recent latency and errors", true, "request-distributions") %}
+<p class="small text-secondary">{{ facts.distribution.scope }} · latest {{ facts.distribution.examined }} retained request endings, capped at {{ facts.distribution.limit }}. Benchmarks are excluded. Percentiles use only measured compute totals; errors are server failures, timeouts and restarts. Refusals and cancellations remain in the request count.</p>
+<div class="table-responsive"><table class="table table-sm diagnostic-distribution" id="request-distribution-table">
+<thead><tr><th>Group</th><th>Value</th><th>Requests</th><th>Errors</th><th>Measured</th><th>p50</th><th>p95</th></tr></thead>
+<tbody>{% for group in facts.distribution.groups %}<tr><td>{{ group.dimension }}</td><td class="wrap">{{ group.value }}</td><td>{{ group.requests }}</td><td>{{ group.errors }} ({{ group.error_percent }}%)</td><td>{{ group.measured }}</td><td>{% if group.p50 is not none %}{{ '%.3f'|format(group.p50) }} s{% else %}Unavailable{% endif %}</td><td>{% if group.p95 is not none %}{{ '%.3f'|format(group.p95) }} s{% else %}Unavailable{% endif %}</td></tr>
+{% else %}<tr><td colspan="7" class="text-secondary">No matching completed requests in this recent window.</td></tr>{% endfor %}</tbody>
+</table></div>
+<p class="small text-secondary mb-0">This summary is a snapshot from when the page opened. Reload to update it.</p>
+{% endcall %}
+{% endif %}
+
+{% if facts.tools %}
+{% call card("Tool calls", false) %}
+  <div class="table-responsive">
+  <table id="tools" class="table table-sm sortable mb-0">
+    <thead><tr><th data-sort="value">When</th><th data-sort="text">What</th><th data-sort="text">Tool</th></tr></thead>
+    <tbody>{% for tool in facts.tools %}<tr><td class="when">{{ tool.at|timestamp }}</td><td>{{ tool.what }}</td><td>{{ tool.tool or "" }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+{% endcall %}
+{% endif %}
+{% endblock %}

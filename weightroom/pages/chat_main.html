@@ -1,0 +1,179 @@
+{# Shared prompt controls are used by the composer and Ask again. #}
+{% from "parts.html" import said_box, page_header , confirm_two %}
+{% set last_model = ((talk.messages|selectattr('model', 'defined')|list|last or {}).model if talk else '') %}
+{% macro model_choice(chosen, compact=false) %}
+<select name="model" class="form-select{{ ' form-select-sm' if compact }}" aria-label="Model" data-chat-setting data-chat-model-picker{{ ' disabled' if not models }}>
+  {% for model in models %}<option value="{{ model }}" data-plugin-model="{{ 'true' if model in adaptor_names else 'false' }}"{{ ' selected' if model == chosen }}>{{ model }}{{ ' · Plugin' if model in adaptor_names }}</option>{% endfor %}
+</select>
+{% endmacro %}
+
+{% macro answering_model(compact=false) %}
+<div class="chat-primary-model">
+{% if talk and talk.compare %}
+<span class="small text-secondary">Models: {{ talk.compare|join(' · ') }}</span><input type="hidden" name="model" value="{{ talk.compare[0] }}">
+{% else %}
+{{ model_choice(typed_in.model or request.query_params.get("model") or last_model, compact) }}
+{% endif %}
+</div>
+{% endmacro %}
+{% if not models %}<div class="alert alert-info" role="status" id="chat-no-models">No models are available to your account. Ask your administrator to grant model access.</div>{% endif %}
+
+{% macro options(prefix, retry=false) %}
+{% set edited = typed_in.tuning %}
+{% if edited or not talk %}
+{% set system = typed_in.system or '' %}
+{% set thinking = (typed_in.thinking is defined) if typed_in else true %}
+{% set sampling = typed_in %}
+{% set session_mode = typed_in.session_mode or 'fresh' %}
+{% else %}
+{% set system = talk.system %}{% set thinking = talk.thinking %}{% set sampling = talk.sampling %}{% set session_mode = talk.session_mode %}
+{% endif %}
+{% set chosen_model = typed_in.model or last_model or (models|first) %}
+<details id="{{ prefix }}-options" class="composer-options" data-composer-options{{ ' open' if said }}>
+  <summary class="text-secondary small btn btn-outline-secondary btn-sm">Options</summary>
+  <div class="option-fields mt-2">
+    <input type="hidden" name="tuning" value="1">
+    {% if not talk %}<label for="{{ prefix }}-compare" class="form-label small">Comparison model</label>
+    <select id="{{ prefix }}-compare" name="compare_model" class="form-select form-select-sm mb-2" aria-label="Comparison model" data-chat-setting data-chat-model-picker>
+      <option value="">One model</option>{% for model in models %}<option value="{{ model }}"{{ ' selected' if typed_in.compare_model == model }}>{{ model }}{{ ' · Plugin' if model in adaptor_names }}</option>{% endfor %}
+    </select>{% endif %}
+    <div class="row g-2 align-items-start mb-2">
+      {% if not retry %}
+      <div class="col-12 col-sm-8" data-uploads>
+        <div class="d-flex align-items-baseline gap-2"><strong class="flex-shrink-0">Attach</strong><small class="text-secondary attachment-help">Images or text · up to 4, 5 MiB each, 10 MiB total; text up to 200 KiB</small></div>
+        <input id="{{ prefix }}-files" type="file" multiple class="visually-hidden" data-files aria-label="Attach images or text files" accept="image/png,image/jpeg,image/webp,text/*,.md,.py,.js,.ts,.json,.csv,.toml,.yaml,.yml,.log,.sh,.html,.css" disabled>
+        <button type="button" class="btn btn-outline-secondary btn-sm mt-1" data-choose-files disabled>Choose</button> <span class="small" data-file-count></span>
+        <input type="hidden" name="attachments" value="{{ typed_in.attachments or '[]' }}">
+        <div data-file-list class="small mt-1"></div><div data-file-error class="text-danger small" role="alert"></div>
+        <noscript>Enable JavaScript to attach files.</noscript>
+      </div>
+      {% endif %}
+      <div class="{{ 'col-12 col-sm-4' if not retry else 'col-12' }}">
+        {% if 'unlogged' in person.can %}<div class="form-check"><input id="{{ prefix }}-temporary" name="temporary" type="checkbox" class="form-check-input"{{ ' checked' if (talk.temporary if talk else typed_in.temporary is defined) }}{{ ' disabled' if talk }}><label for="{{ prefix }}-temporary" class="form-check-label">Temporary</label></div>{% endif %}
+        <div class="form-check"><input id="{{ prefix }}-thinking" name="thinking" type="checkbox" class="form-check-input" data-chat-setting{{ ' checked' if thinking }}><label for="{{ prefix }}-thinking" class="form-check-label">Reasoning</label></div>
+      </div>
+    </div>
+    <label for="{{ prefix }}-system" class="form-label small fw-semibold mb-1">System prompt</label>
+    <textarea id="{{ prefix }}-system" name="system" rows="3" class="form-control" aria-label="System prompt" placeholder="How the model should respond" data-chat-setting>{{ system }}</textarea>
+    <div class="row g-2 mt-1">
+    {% for name, least, most in [('temperature', 0, 2), ('top_k', 0, 1000), ('top_p', 0, 1), ('min_p', 0, 1)] %}
+      <div class="col-6 col-md-3"><label for="{{ prefix }}-{{ name }}" class="form-label small mb-0">{{ name }} <small class="text-secondary">{{ least }}–{{ most }}</small></label>
+      <input id="{{ prefix }}-{{ name }}" name="{{ name }}" type="number" min="{{ least }}" max="{{ most }}" step="{{ 1 if name == 'top_k' else 'any' }}" class="form-control form-control-sm" inputmode="decimal" value="{{ sampling[name] if sampling[name] is defined else '' }}" placeholder="the model's own" data-chat-setting></div>
+    {% endfor %}
+    </div>
+    {% if adaptor_names %}<label class="form-label small mt-2 {{ 'd-block' if chosen_model in adaptor_names else 'd-none' }}" data-plugin-conversation data-plugin-active="{{ 'true' if chosen_model in adaptor_names else 'false' }}"{{ ' hidden' if chosen_model not in adaptor_names }}>Plugin conversation<select class="form-select form-select-sm" name="session_mode" data-chat-setting{{ ' disabled' if chosen_model not in adaptor_names }}><option value="fresh"{{ ' selected' if session_mode == 'fresh' }}>Fresh run with supplied history</option><option value="persistent"{{ ' selected' if session_mode == 'persistent' }}>Persistent agent session</option></select></label>{% endif %}
+    <small class="text-secondary d-block mt-1" role="status" data-options-status></small>
+  </div>
+</details>
+{% endmacro %}
+
+{% if not talk %}
+<div class="chat-new">
+  {{ page_header("New conversation", lead="Talk with your permitted models and keep your conversations.", help="/guide#chat") }}
+  {{ said_box(said, true) }}
+  <form method="post" action="/chat" data-chat-form class="composer-box frame">
+    <textarea aria-label="Message" name="content" rows="3" class="form-control border-0 shadow-none" placeholder="Ask something" data-enter required autofocus>{{ typed_in.content or "" }}</textarea>
+    <div class="composer-actions mt-2">
+      {{ answering_model() }}
+      {{ options('new') }}
+      <button class="btn btn-primary"{{ ' disabled aria-describedby=chat-no-models' if not models }}>Send</button>
+    </div>
+  </form>
+</div>
+
+{% else %}
+{% set _page_title2 %}<span data-conversation-heading>{{ talk.title }}</span>{% if talk.temporary %} <span class="badge text-bg-secondary">temporary</span>{% endif %}{% endset %}
+{{ page_header(_page_title2, lead="Talk with your permitted models and keep your conversations.", help="/guide#chat") }}
+{{ said_box(said, true) }}
+
+{% if talk.memory and not talk.compare %}
+<details class="mb-3 small"><summary class="text-warning">Older context summarized · {{ talk.memory.covered }} messages</summary><p class="text-secondary">Original messages remain below. The model receives this summary and recent messages.</p><pre class="wrap">{{ talk.memory.text }}</pre></details>
+{% elif talk.compare %}
+{% for branch, memory in talk.memory.items() if memory %}
+<details class="mb-3 small"><summary class="text-warning">{{ talk.compare[branch|int] }} · {{ memory.covered }} older messages summarized</summary><pre class="wrap">{{ memory.text }}</pre></details>
+{% endfor %}
+{% endif %}
+
+<div id="messages">
+{% if talk.compare %}
+{% include "chat_compare.html" %}
+{% else %}
+{% set prompt = namespace(index=-1) %}
+{% set prompt_count = talk.messages|selectattr("role", "equalto", "user")|list|length %}
+{% for message in talk.messages %}
+  {% set is_last = loop.last and not talk.pending %}
+  {% if message.role == "user" %}
+  {% set prompt.index = prompt.index + 1 %}
+  <div class="turn turn-user" id="prompt-{{ prompt.index }}" data-prompt tabindex="-1">
+    <div class="said-user">{{ message.content }}</div>
+    {% for file in message.attachments %}
+    <details class="chat-attachment mt-2"><summary class="small">{{ file.name }} · {{ file.size }} bytes</summary>
+      {% if file.mime == "text/plain" %}<pre class="wrap">{{ file.text }}</pre>
+      {% else %}<img src="data:{{ file.mime }};base64,{{ file.data }}" alt="{{ file.name }}" loading="lazy">{% endif %}
+    </details>
+    {% endfor %}
+    {% if not talk.pending and (loop.last or (loop.revindex == 2 and talk.messages[-1].role == "assistant")) %}
+    {# The last thing said can be changed. The answer it had is then replaced. #}
+    <details class="turn-more">
+      <summary class="btn btn-link btn-sm text-secondary">Edit</summary>
+      <form method="post" action="/chat/{{ talk.id }}" data-chat-form class="composer-box frame mt-1">
+        <textarea aria-label="Message" name="content" rows="3" class="form-control border-0 shadow-none" required>{{ message.content }}</textarea>
+        <div class="d-flex gap-2 align-items-center mt-2">{{ model_choice(last_model) }}<span class="flex-grow-1"></span><button class="btn btn-primary " name="do" value="edit">Ask this instead</button></div>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="turn">
+    {% if message.left_out %}<p class="text-secondary small">{{ message.left_out }} earlier messages were left out of what the model was sent, so that it fitted. The first two exchanges and the latest are always sent.</p>{% endif %}
+    {% with answer = message, live = false %}{% include "chat_answer.html" %}{% endwith %}
+    {% if message.summarized %}<p class="text-warning small">Used a summary of {{ message.summarized }} older messages.</p>{% endif %}
+    {% if message.error %}<div class="alert alert-danger said">{{ message.error }}{% if "context size" in message.error %} Try a shorter message or a model with a larger context.{% endif %}</div>{% endif %}
+    {% if not message.error and message.content and message.finish != "stop" %}<p class="text-secondary small">This answer ended before it was finished.</p>{% endif %}
+    <div class="turn-facts">
+      {# Asked for under a role, the answer says which model was picked. Why is told when the pointer rests on it. #}
+      <span {% if message.because %}title="Picked for {{ message.asked_as }}: {{ message.because }}"{% endif %}>{{ message.model }}{% if message.asked_as %} <small class="text-secondary">picked for {{ message.asked_as }}</small>{% endif %}</span>
+      {% if message.prompt_tokens %}<span>{{ "{:,}".format(message.prompt_tokens) }} tokens in</span>{% endif %}
+      {% if message.answer_tokens %}<span>{{ "{:,}".format(message.answer_tokens) }} out</span>{% endif %}
+      {% if message.tokens_per_second %}<span>{{ message.tokens_per_second }} a second</span>{% endif %}
+      {% if message.waited %}<span>waited {{ message.waited }} s</span>{% endif %}
+      {% if message.request %}<a href="/requests/{{ message.request }}">request {{ message.request }}</a>{% endif %}
+      {% if message.content %}<button type="button" class="btn btn-link btn-sm p-0" data-copy="answer">Copy</button>{% endif %}
+      {% if is_last %}
+      <form method="post" action="/chat/{{ talk.id }}" data-chat-form class="retry-options d-flex flex-wrap gap-2 align-items-start m-0">
+        <button class="btn btn-outline-secondary btn-sm" name="do" value="again">Ask again</button>
+        {{ answering_model(true) }}
+        {{ options('again', true) }}
+        {% if not message.error and message.content and message.finish != "stop" %}<button class="btn btn-outline-secondary btn-sm" name="do" value="continue">Continue</button>{% endif %}
+      </form>
+      {% endif %}
+      {% with prompt_index=prompt.index %}{% include "chat_navigation.html" %}{% endwith %}
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+{% endif %}
+{% if talk.pending %}
+  {# The answer on its way. static/chat.js follows it at the address named here and puts each step in this box. #}
+  <div class="turn">
+    <div id="live" data-stream="/chat/{{ talk.id }}/stream">{% with answer = {"state": talk.pending.state}, live = true %}{% include "chat_answer.html" %}{% endwith %}</div>
+    <noscript><p class="text-secondary small">It is being answered. Load the page again to see it.</p></noscript>
+  </div>
+{% endif %}
+</div>
+
+<div class="composer">
+  {% if talk.pending %}
+  <form method="post" action="/chat/{{ talk.id }}" class="text-center m-0"><button  class="btn btn-outline-danger" name="do" value="stop" {{ confirm_two() }}>{{ 'Stop both' if talk.compare else 'Stop' }}</button></form>
+  {% else %}
+  <form method="post" action="/chat/{{ talk.id }}" data-chat-form class="composer-box frame m-0">
+    <textarea aria-label="Message" name="content" rows="2" class="form-control border-0 shadow-none" placeholder="Say more" data-enter required autofocus>{{ typed_in.content or "" if typed_in.do in (none, "say") else "" }}</textarea>
+    <div class="composer-actions mt-2">
+      {{ answering_model() }}
+      {{ options('main') }}
+      <button class="btn btn-primary" name="do" value="say"{{ ' disabled aria-describedby=chat-no-models' if not models }}>Send</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endif %}

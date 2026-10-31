@@ -1,0 +1,30 @@
+{% from "parts.html" import swaps %}
+{% set filters = request_filters|default({}) %}
+{% set choices = request_choices|default({}) %}
+<div id="recent-requests"{% if completed and paging.page == 1 %} hx-get="{{ request_poll_url|default('/requests?part=list&completed=1&limit=' ~ paging.limit ~ ('&embedded=1' if embedded else '')) }}" hx-trigger="every 5s [!document.activeElement.closest('#recent-requests form')]" hx-swap="outerHTML" hx-sync="this:replace"{% endif %}>
+{% if request_filter_error %}<div class="alert alert-danger" role="alert">{{ request_filter_error }}</div>{% endif %}
+<form id="request-filters" method="get" action="{{ request_path|default('/' if embedded else '/requests') }}" {{ swaps('recent-requests', true) }} hx-sync="#recent-requests:replace" data-auto-submit>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+  {% if request_period %}<input type="hidden" name="period" value="{{ request_period }}">{% endif %}
+  {% if summary %}<input type="hidden" name="summary" value="{{ summary }}">{% endif %}
+  {% if summary == 'group' %}<input type="hidden" name="group" value="{{ summary_group }}">{% endif %}
+  {% if completed %}<input type="hidden" name="completed" value="1">{% endif %}
+  <label for="request-limit" class="form-label mb-0">{{ 'Past completed requests' if completed else 'Results per page' }}</label>
+  <select id="request-limit" name="limit" class="form-select form-select-sm w-auto">{% for n in paging.sizes %}<option value="{{ n }}" {{ 'selected' if n == paging.limit }}>{{ n }}</option>{% endfor %}</select>
+  {% if request_choices is defined %}<button class="btn btn-primary btn-sm">Apply filters</button><a class="btn btn-outline-secondary btn-sm" href="/requests?limit={{ paging.limit }}{{ '&amp;completed=1'|safe if completed }}" {{ swaps('recent-requests', true) }}>Clear filters</a>{% else %}<noscript><button class="btn btn-primary btn-sm">Show</button></noscript>{% endif %}
+</div>
+<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0">
+<thead><tr><th>Request</th><th>Time requested</th><th>Duration</th><th>Model</th><th>User</th><th>IP</th>{% if not completed %}<th>Status</th>{% endif %}</tr>
+{% if request_choices is defined %}<tr class="request-column-filters">
+{% for key, kind, label, step, width in [('request', 'number', 'request number', '1', '8rem'), ('date', 'datetime-local', 'date', '1', '12rem'), ('duration', 'number', 'duration in seconds', 'any', '7rem')] %}
+<td style="min-width:{{ width }}">{% for edge, caption in [('min','Minimum'),('max','Maximum')] %}<input class="form-control form-control-sm mb-0" type="{{ kind }}"{% if kind == 'datetime-local' %} data-input-zone="{{ server_timezone }}" data-instant="{{ input_utc(filters.get(key ~ '_' ~ edge, ''), server_timezone) }}"{% endif %} name="{{ key }}_{{ edge }}" aria-label="{{ caption }} {{ label }}" title="{{ request_timezone if key == 'date' else label }}" placeholder="{{ caption }}" value="{{ filters.get(key ~ '_' ~ edge, '') }}" step="{{ step }}"{% if kind == 'number' %} min="0"{% endif %}>{% endfor %}</td>
+{% endfor %}
+{% for key, label in [('model','model'),('user','user'),('ip','IP'),('status','status')] %}{% if key != 'status' or not completed %}
+<td style="min-width:{{ '11rem' if key in ('model','status') else '8rem' }}"><select name="{{ key }}" class="form-select form-select-sm" aria-label="Filter {{ label }}"><option value="">All {{ label ~ ('s' if key != 'status' else 'es') }}</option>{% for value in choices.get(key, []) %}<option value="{{ value }}" {{ 'selected' if filters.get(key) == value }}>{{ 'Under way / no ending' if value == 'unfinished' and key == 'status' else value }}</option>{% endfor %}{% if filters.get(key) and filters[key] not in choices.get(key, []) %}<option value="{{ filters[key] }}" selected>{{ filters[key] }} (unavailable)</option>{% endif %}</select></td>
+{% endif %}{% endfor %}
+</tr>{% endif %}</thead>
+<tbody>{% for row in recent %}<tr><td>{% if row.can_open|default(true) %}<a href="/requests/{{ row.id }}">{{ row.id }}</a>{% else %}{{ row.id }}{% endif %}</td><td class="when">{{ row.at|timestamp }}</td><td>{{ ('%.2f'|format(row.duration) ~ ' s') if row.duration is not none else '—' }}</td><td>{{ row.model or '' }}</td><td>{{ row.user }}</td><td>{{ row.caller }}</td>{% if not completed %}<td>{{ row.state }}</td>{% endif %}</tr>{% else %}<tr><td colspan="{{ 6 if completed else 7 }}" class="text-secondary">No requests on record.</td></tr>{% endfor %}</tbody>
+</table></div>
+</form>
+{% if not embedded %}{% with target='recent-requests' %}{% include 'pagination.html' %}{% endwith %}{% endif %}
+</div>
