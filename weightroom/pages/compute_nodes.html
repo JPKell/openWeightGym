@@ -6,6 +6,16 @@
 {{ page_header('Compute nodes', 'Manage hardware policy and runtime settings for the selected node.') }}
 {% if machine_choices|length > 1 %}<form method="get" action="/compute-nodes" class="d-flex flex-wrap align-items-center gap-2 mb-3"><label for="settings-machine">Compute node</label><select id="settings-machine" name="machine" class="form-select form-select-sm w-auto">{% for host in machine_choices %}<option value="{{ host.name }}"{% if host.name == selected_machine %} selected{% endif %}>{{ host.name }} · {{ host.state }}</option>{% endfor %}</select><button class="btn btn-outline-secondary btn-sm">Show node</button></form>{% endif %}
 {{ said_box(said, failed) }}
+{% if may_pair %}{% call card("Add a GPU node", id="add-node") %}
+{% if pairing_code %}
+<p class="mb-2">On the GPU machine, run:</p>
+<div class="d-flex align-items-start gap-2 mb-2"><pre class="mb-0 flex-grow-1 text-wrap"><code id="pairing-command">{{ pairing_code.command }}</code></pre><button type="button" class="btn btn-outline-secondary btn-sm" data-copy-target="pairing-command">Copy</button></div>
+<p class="text-secondary small mb-0">The code <strong>{{ pairing_code.code }}</strong> works once, until {{ pairing_code.expires|timestamp }}. When the installer there reaches this console, the node is added here and the gateway restarts to use it.</p>
+{% else %}
+<p class="text-secondary small mb-3">Install openWeightGym on another machine and let it join with a one-time code: no keys to copy by hand.</p>
+<form method="post" action="/compute-nodes/pair"><button class="btn btn-primary">Make a pairing code</button></form>
+{% endif %}
+{% endcall %}{% endif %}
 {% if machine_key %}{% call card("Machine key", id="machine-key") %}
 <p class="mb-2">Last rotated {{ machine_key.changed|timestamp }}.</p>
 <p class="text-secondary small mb-3">The gateway sends the replacement key to {{ selected_machine }} first, sealed with the current key. The old key remains valid for ten minutes. If the two sides fall out of step, run <code>loadcoach --replace-key</code> on that node.</p>

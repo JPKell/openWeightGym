@@ -35,6 +35,7 @@ ADDRESS=
 FRONT_URL=
 COMPUTE_URL=
 LLAMA_SERVER=
+MACHINE_NAME=
 START_NEW=0
 UV=
 EMBEDDED=0
@@ -75,6 +76,7 @@ change both the service set and database engine before anything is installed.
   --front-url URL            the console's turnstile, such as http://192.168.1.10:8442
   --compute-url URL          the GPU node's LoadCoach, such as http://192.168.1.20:8442
   --llama-server PATH        the llama-server LoadCoach runs (see install-llamacpp.sh)
+  --machine-name NAME        the name the console knows this GPU node by (default: compute)
   --start-new                also start services whose settings were just written
   --uv PATH                  make the environment and install packages with uv
   --embedded                 leave headings and the summary to the program calling this
@@ -158,6 +160,7 @@ while (($#)); do
     --front-url) (($# >= 2)) || die '--front-url needs a URL'; FRONT_URL=$2; shift 2 ;;
     --compute-url) (($# >= 2)) || die '--compute-url needs a URL'; COMPUTE_URL=$2; shift 2 ;;
     --llama-server) (($# >= 2)) || die '--llama-server needs a path'; LLAMA_SERVER=$2; shift 2 ;;
+    --machine-name) (($# >= 2)) || die '--machine-name needs a name'; MACHINE_NAME=$2; shift 2 ;;
     --start-new) START_NEW=1; shift ;;
     --uv) (($# >= 2)) || die '--uv needs a path'; UV=$2; shift 2 ;;
     --embedded) EMBEDDED=1; shift ;;
@@ -180,6 +183,8 @@ if [[ $TOPOLOGY == compute && -z $FRONT_URL ]]; then die "a GPU node needs --fro
 [[ -z $FRONT_URL || $FRONT_URL =~ ^https?://[^/[:space:]]+/?$ ]] || die '--front-url must look like http://192.168.1.10:8442'
 [[ -z $COMPUTE_URL || $COMPUTE_URL =~ ^https?://[^/[:space:]]+/?$ ]] || die '--compute-url must look like http://192.168.1.20:8442'
 [[ -z $UV || -x $UV ]] || die "--uv $UV is not a program"
+[[ -z $MACHINE_NAME || $MACHINE_NAME =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || die '--machine-name is lowercase letters, digits and dashes'
+
 if [[ $TOPOLOGY != keep && -z $ADDRESS ]]; then
   ADDRESS=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") {print $(i + 1); exit}}') || true
   ADDRESS=${ADDRESS:-127.0.0.1}
@@ -601,7 +606,7 @@ install_example_config() {
     else
       "$PY" "$ROOT/scripts/install-suite-support.py" render --example "$source_config" --target "$target_config" \
         --root "$ROOT" --home "$HOME" --topology "$TOPOLOGY" --address "${ADDRESS:-127.0.0.1}" \
-        --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" ||
+        --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" --machine-name "$MACHINE_NAME" ||
         die "could not write $target_config"
       ui_ok "Wrote settings/$config_name.toml"
     fi

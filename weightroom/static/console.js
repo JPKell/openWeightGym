@@ -266,3 +266,22 @@
   });
   document.addEventListener('suite:connection', event => status(event.detail.source, event.detail.okay, event.detail.retrying));
 })();
+
+// Copy buttons: data-copy-target names the element whose text is copied. A page served over plain
+// HTTP has no clipboard API, so there the text is selected in a box and copied the older way.
+(() => {
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-copy-target]');
+    if (!button) return;
+    const text = document.getElementById(button.dataset.copyTarget)?.innerText ?? '';
+    /** Say it was copied, then put the label back. */
+    const said = () => { const was = button.textContent; button.textContent = 'Copied'; setTimeout(() => { button.textContent = was; }, 1200); };
+    if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(said); return; }
+    const box = Object.assign(document.createElement('textarea'), {value: text});
+    document.body.append(box);
+    box.select();
+    document.execCommand('copy');
+    box.remove();
+    said();
+  });
+})();
