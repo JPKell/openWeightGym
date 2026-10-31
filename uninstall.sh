@@ -150,7 +150,7 @@ inventory() {
   ITEMS=() declare -gA LABEL=() ABOUT=() DEFAULT=()
 
   add_item services "Services" "stop and remove $count service$( ((count == 1)) || printf s)" on
-  if [[ -n $(receipt_get owg_link) && -L $(receipt_get owg_link) ]]; then add_item command "The owg command" "$(receipt_get owg_link)" on; fi
+  if [[ -n $(receipt_get owg_link) && -L $(receipt_get owg_link) ]]; then add_item command "The owg command" "$(receipt_get owg_link | sed "s#^$HOME#~#")" on; fi
   if [[ $(receipt_get created_dir) == 1 ]]; then
     add_item program "Program files" "the code and its Python, $(size_of_program)" on
   else
