@@ -27,3 +27,8 @@ __pycache__/
 /plugins/*/.settings.lock
 voice-test/
 weightroom/static/LoadCoach-Voice.zip
+# Made by install.sh inside an installation: uv and its Python, engine builds, and model files.
+/.tools/
+/.python/
+/runtimes/
+/models/
