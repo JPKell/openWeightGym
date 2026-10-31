@@ -160,6 +160,9 @@ def test_check_mode_preselects_an_installed_service(tmp_path):
     (install / "soundroom" / "install.py").write_text((ROOT / "soundroom/install.py").read_text())
     for source in (ROOT / "db").glob("*.py"):
         (install / "db" / source.name).write_text(source.read_text())
+    (install / "weightroom").mkdir()
+    for filename in ("__init__.py", "settings_file.py"):  # the installer's TOML editing
+        (install / "weightroom" / filename).write_text((ROOT / "weightroom" / filename).read_text())
     (install / "settings" / "loadcoach.toml").write_text(
         'host = "127.0.0.1"\nport = 8442\ndata = "../data"\ngpus = 0\n'
     )
@@ -195,6 +198,9 @@ def test_installer_refuses_to_switch_a_populated_store(tmp_path):
     (install / "scripts" / SUPPORT_PATH.name).write_text(SUPPORT_PATH.read_text())
     for source in (ROOT / "db").glob("*.py"):
         (install / "db" / source.name).write_text(source.read_text())
+    (install / "weightroom").mkdir()
+    for filename in ("__init__.py", "settings_file.py"):  # the installer's TOML editing
+        (install / "weightroom" / filename).write_text((ROOT / "weightroom" / filename).read_text())
     (install / "settings" / "loadcoach.toml").write_text(
         'host = "127.0.0.1"\nport = 8442\ndata = "../data"\ngpus = 0\n'
     )

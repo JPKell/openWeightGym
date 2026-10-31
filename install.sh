@@ -49,6 +49,8 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --front-url URL         GPU node: the console's turnstile, such as http://192.168.1.10:8442
   --machine-key-file F    GPU node: a copy of the console's keys/machine.key
   --compute-url URL       console: the GPU node's LoadCoach, such as http://192.168.1.20:8442
+  --join URL --code CODE  GPU node: join the console at URL (http://192.168.1.10:8440) with a
+                          one-time code made there by `owg pair` or Settings → Compute nodes
   --llama CHOICE          auto, cuda-13.4, cuda-12.8, rocm, vulkan, cpu, source, skip, or the
                           path of a llama-server you already have (default: auto)
   --database NAME         sqlite (default) or postgresql (installed and set up locally)
@@ -119,7 +121,7 @@ on_error() {
 parse_arguments() {
   DIR=${OWG_HOME:-} DIR_GIVEN=0 SYSTEM=0 TOPOLOGY='' ASSUME_YES=0 ADMIN='' FRONT_URL='' MACHINE_KEY_FILE=''
   COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 STARTER=1 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
-  ACTION='' PASSTHROUGH=()
+  ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
   [[ -n $DIR ]] && DIR_GIVEN=1
   while (($#)); do
     case "$1" in
@@ -131,6 +133,8 @@ parse_arguments() {
       --front-url) FRONT_URL=${2:?--front-url needs a URL}; shift 2 ;;
       --machine-key-file) MACHINE_KEY_FILE=${2:?--machine-key-file needs a file}; shift 2 ;;
       --compute-url) COMPUTE_URL=${2:?--compute-url needs a URL}; shift 2 ;;
+      --join) JOIN_URL=${2:?--join needs the console address}; TOPOLOGY=compute; shift 2 ;;
+      --code) PAIR_CODE=${2:?--code needs the pairing code}; shift 2 ;;
       --llama) LLAMA=${2:?--llama needs a choice}; shift 2 ;;
       --database) DATABASE=${2:?--database needs sqlite or postgresql}; shift 2 ;;
       --voice) VOICE=1; shift ;;
@@ -156,6 +160,15 @@ parse_arguments() {
   fi
   ((ASSUME_YES)) && export OWG_DEFAULTS=1
   return 0
+}
+
+# The console's address as typed, made into its URL: 192.168.1.10 becomes http://192.168.1.10:8440.
+console_url() {
+  local url=$1
+  [[ $url == http://* || $url == https://* ]] || url=http://$url
+  url=${url%/}
+  [[ ${url#*://} == *:* ]] || url=$url:8440
+  printf '%s' "$url"
 }
 
 # The look, the machine checks and the receipt come from the checkout beside this file or, under
@@ -306,12 +319,17 @@ installed_menu() {
   local -a actions=(update repair) labels=(
     "Update|fetch the latest openWeightGym and reinstall, keeping settings and data"
     "Repair|reinstall packages and services as they are")
+  if [[ ,$(receipt_get services), == *,weightroom,* ]]; then
+    actions+=(pair)
+    labels+=("Add a GPU node|make a one-time code another machine joins with")
+  fi
   actions+=(uninstall quit)
   labels+=("Uninstall|remove openWeightGym, choosing what to keep" "Quit|change nothing")
   ui_choose choice "What would you like to do?" 0 "${labels[@]}"
   case "${actions[choice]}" in
     update) update ;;
     repair) reinstall ;;
+    pair) as_owner "$DIR/.venv/bin/weightroom" --config "$DIR/settings/weightroom.toml" pair ;;
     uninstall) run_uninstaller ;;
     *) ui_info "Nothing changed." ;;
   esac
@@ -393,8 +411,52 @@ valid_host() {
   return 1
 }
 valid_host_or_empty() { [[ -z $1 ]] || valid_host "$1"; }
+valid_console() { local host=${1#*://}; host=${host%%[:/]*}; valid_host "$host"; }
+valid_code() {
+  local code=${1//[- ]/}
+  [[ ${code^^} =~ ^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$ ]] && return 0
+  ((UI_ASK)) && ui_warn "A pairing code is eight letters and digits, such as ABCD-EF23"
+  return 1
+}
+
+# Use the pairing code: the console answers with this node's name, the key the two sign with and
+# turnstile's address, and adds the node to its settings.
+redeem() {
+  local body answer status json name
+  name=$(uname -n | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')
+  body=$(printf '{"code": "%s", "name": "%s", "address": "%s"}' "${PAIR_CODE^^}" "$name" "$HOST_ADDRESS")
+  answer=$(curl -sS --max-time 30 -X POST -H 'content-type: application/json' -d "$body" -w '\n%{http_code}' "$JOIN_URL/pair" 2>>"$OWG_LOG") ||
+    ui_die "Could not reach the console at $JOIN_URL." "Check the address, and that this machine can reach it on the network."
+  status=${answer##*$'\n'} json=${answer%$'\n'*}
+  if [[ $status != 200 ]]; then
+    ui_die "The console did not accept the code: $(json_field message "$json")" "Make a new code on the console and run this again."
+  fi
+  MACHINE_KEY=$(json_field machine_key "$json") MACHINE_NAME=$(json_field name "$json") FRONT_URL=$(json_field front "$json")
+  [[ -n $MACHINE_KEY && -n $FRONT_URL ]] || ui_die "The console's answer was not understood." "$json"
+  PAIRED=1
+  ui_ok "Joined the console at ${JOIN_URL#*://}" "as $MACHINE_NAME"
+}
+
+# One string field of a flat JSON answer.
+json_field() { sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" <<<"$2" | head -1; }
 
 ask_console() {
+  if [[ -z $JOIN_URL && -z $FRONT_URL ]] && ((!ASSUME_YES)); then
+    local way=0 host=''
+    ui_choose way "How should this node join the console?" 0 \
+      "With a pairing code|made on the console by owg pair, or Settings → Compute nodes" \
+      "With the console's key|copied from its keys/machine.key by hand"
+    if ((way == 0)); then
+      ui_input host "The console's address (as in its web address, such as 192.168.1.10)" "" valid_console
+      JOIN_URL=$(console_url "$host")
+    fi
+  fi
+  if [[ -n $JOIN_URL ]]; then
+    JOIN_URL=$(console_url "$JOIN_URL")
+    [[ -n $PAIR_CODE ]] || ((ASSUME_YES)) || ui_input PAIR_CODE "The pairing code" "" valid_code
+    valid_code "$PAIR_CODE" || ui_die "A pairing code looks like ABCD-EF23." "Make one on the console: owg pair, or Settings → Compute nodes."
+    return 0
+  fi
   if [[ -z $FRONT_URL ]]; then
     local host=''
     ((ASSUME_YES)) && ui_die "A GPU node needs --front-url, the console's address."
@@ -458,7 +520,7 @@ show_plan() {
   case "$TOPOLOGY" in
     all) where="Everything on this machine" ;;
     front) where="Console only" ;;
-    compute) where="GPU node for ${FRONT_URL#http://}" ;;
+    compute) where="GPU node for ${JOIN_URL:-$FRONT_URL}"; where=${where/http:\/\//} ;;
   esac
   [[ $LLAMA == auto ]] && engine=$LLAMA_BACKEND || engine=$LLAMA
   lines+=("${C_MUTED}Setup        ${C_RESET}$where")
@@ -734,7 +796,8 @@ starter_model() {
 setting_up() {
   ui_section "Setting up" "Python, settings and services"
   services_for
-  if [[ $TOPOLOGY == compute && -n ${MACHINE_KEY:-} ]] && ! as_owner test -f "$DIR/keys/machine.key"; then
+  [[ -n $JOIN_URL ]] && redeem
+  if [[ $TOPOLOGY == compute && -n ${MACHINE_KEY:-} ]] && { ((PAIRED)) || ! as_owner test -f "$DIR/keys/machine.key"; }; then
     as_owner mkdir -p "$DIR/keys"
     as_owner chmod 700 "$DIR/keys"
     printf '%s\n' "$MACHINE_KEY" | as_owner bash -c 'umask 077 && cat >"$1"' _ "$DIR/keys/machine.key"
@@ -745,6 +808,7 @@ setting_up() {
   [[ -n $FRONT_URL ]] && options+=(--front-url "$FRONT_URL")
   [[ -n $COMPUTE_URL ]] && options+=(--compute-url "$COMPUTE_URL")
   [[ -n ${LLAMA_SERVER:-} ]] && options+=(--llama-server "$LLAMA_SERVER")
+  [[ -n $MACHINE_NAME ]] && options+=(--machine-name "$MACHINE_NAME")
   [[ $DATABASE == postgresql ]] && options+=(--install-postgresql --provision-postgresql)
   if [[ $DATABASE == postgresql ]]; then ui_sudo "installing and setting up PostgreSQL"; fi
   as_owner "$DIR/scripts/install-suite.sh" "${options[@]}" ||
@@ -956,15 +1020,19 @@ finale() {
       [[ -n $API_KEY ]] && lines+=("${C_MUTED}API key     ${C_RESET}$API_KEY  ${C_DIM}(shown once)${C_RESET}")
       ((STARTER)) && [[ $TOPOLOGY == all ]] && lines+=("${C_MUTED}Model       ${C_RESET}$STARTER_NAME")
       if [[ $TOPOLOGY == front ]]; then
-        lines+=("" "${C_BOLD}Add a GPU node${C_RESET}: run the installer there, choose GPU node, and give it")
-        lines+=("this address ($HOST_ADDRESS) and the key in ${DIR/#$HOME/\~}/keys/machine.key.")
+        lines+=("" "${C_BOLD}Add a GPU node${C_RESET}: run ${C_GOLD}owg pair${C_RESET} here, or open Settings → Compute nodes,")
+        lines+=("and run the command it gives on the GPU machine.")
       fi ;;
     compute)
-      lines+=("${C_MUTED}This node   ${C_RESET}http://$HOST_ADDRESS:8442")
-      lines+=("${C_MUTED}Console     ${C_RESET}$FRONT_URL")
-      lines+=("" "On the console machine, put this in settings/weightroom.toml:")
-      lines+=("  ${C_GOLD}compute = \"http://$HOST_ADDRESS:8442\"${C_RESET}")
-      lines+=("then: owg restart turnstile weightroom") ;;
+      lines+=("${C_MUTED}This node   ${C_RESET}http://$HOST_ADDRESS:8442${MACHINE_NAME:+  ${C_DIM}($MACHINE_NAME)${C_RESET}}")
+      lines+=("${C_MUTED}Console     ${C_RESET}${JOIN_URL:-$FRONT_URL}")
+      if ((PAIRED)); then
+        lines+=("" "The console has added this node: it is under Settings → Compute nodes.")
+      else
+        lines+=("" "On the console machine, put this in settings/weightroom.toml:")
+        lines+=("  ${C_GOLD}compute = \"http://$HOST_ADDRESS:8442\"${C_RESET}")
+        lines+=("then: owg restart turnstile weightroom")
+      fi ;;
   esac
   lines+=("" "${C_GOLD}owg${C_RESET} status · logs · update · doctor · uninstall")
   if ((SYSTEM)); then lines+=("${C_DIM}Installed in $DIR, run by the $SVC account · log: ${OWG_LOG/#$HOME/\~}${C_RESET}")

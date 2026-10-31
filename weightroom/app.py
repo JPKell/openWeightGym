@@ -78,6 +78,7 @@ from loadcoach.database_admin import catalogs as database_catalogs, configured_s
 from db.health import stores_health
 from weightroom.conversations import build_app as build_conversations
 from weightroom import deploy as deploying
+from weightroom import pairing
 from weightroom.plugin_pages import build_routes as plugin_routes
 from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, model_kind as benchmark_model_kind
 from benchmarks.identity import variant
@@ -2862,7 +2863,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return go("/settings?file_machine=" + quote(machine, safe="") + "&said=" + quote("Saved. Restart LoadCoach on that machine to apply the file paths."))
 
     async def compute_nodes_page(request: Request, person: Person, said: str = "", failed: bool = False,
-                                 typed_in: dict | None = None, opened: str = "", gpu_disabled: list | None = None) -> Response:
+                                 typed_in: dict | None = None, opened: str = "", gpu_disabled: list | None = None,
+                                 pairing_code: dict | None = None) -> Response:
         """Render configured compute nodes and their active engine availability."""
         form = typed_in or {}
         selected = form.get("machine") or request.query_params.get("machine", "compute")
@@ -2912,6 +2914,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     typed_in=form, opened=opened or asked.get("open", ""), selected_machine=selected,
                     machine_choices=choices, gpu_inventory=gpu_inventory, gpu_error=gpu_error,
                     gpu_disabled=gpu_disabled, machine_key=machine_key, resource_settings=resources,
+                    may_pair="superuser" in person.can, pairing_code=pairing_code,
                     engine_choices=engine_choices, engine_error="" if engine_answer.is_success else "Engine controls require a matching LoadCoach update.")  # fmt: skip
 
     async def change_node_engine(request: Request, person: Person) -> Response:
@@ -2957,6 +2960,46 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if not answer.is_success:
             return await compute_nodes_page(request, person, answer.json()["error"]["message"], True, typed_in=form)
         return go("/compute-nodes?machine=" + quote(machine, safe="") + "&said=" + quote("Saved. Engine settings apply after LoadCoach restarts.") + "#inference-engines")
+
+    async def make_pairing_code(request: Request, person: Person) -> Response:
+        """Make a one-time code that lets a GPU node join, and show the command to run there."""
+        if "superuser" not in person.can:
+            return page(request, "refused.html", person, status=403, why="Adding a GPU node requires the superuser ability.")
+        code, expires = pairing.make_code(Path(settings.data), person.name)
+        console = pairing.console_url(request.url.hostname or "", settings.port)
+        return await compute_nodes_page(request, person, opened="add-node", pairing_code={
+            "code": code, "expires": expires, "command": pairing.command(console, code)})
+
+    pairing_failures: dict[str, list[float]] = {}
+
+    async def pair_node(request: Request) -> Response:
+        """Let a GPU node join with a one-time code: it is given its name, its machine key and turnstile's address.
+
+        No sign-in: the code is the permission. Ten wrong codes from one address in ten minutes
+        and that address waits. The node is recorded at the address its request came from.
+        """
+        client = request.client.host if request.client else ""
+        now = time.time()
+        recent = [moment for moment in pairing_failures.get(client, []) if now - moment < 600]
+        if len(recent) >= 10:
+            return JSONResponse({"error": {"message": "Too many wrong codes from here. Wait ten minutes, then make a new code."}}, status_code=429)
+        try:
+            body = await request.json()
+            code, wanted, offered = str(body.get("code", "")), str(body.get("name", "")), str(body.get("address", ""))
+        except (ValueError, AttributeError):
+            return JSONResponse({"error": {"message": "Send JSON with the pairing code."}}, status_code=400)
+        if not pairing.take_code(Path(settings.data), code):
+            pairing_failures[client] = recent + [now]
+            return JSONResponse({"error": {"message": "That code is wrong, used or out of date. Make a new one on the console."}}, status_code=403)
+        # Seen from here is what turnstile can reach; the node's own word counts only from this machine itself.
+        address = offered if client in pairing.LOOPBACK and offered else client
+        if not pairing.valid_address(address):
+            return JSONResponse({"error": {"message": "The node's address could not be told."}}, status_code=400)
+        joined = pairing.join(Path(settings.path), address, wanted)
+        restarting = pairing.restart_later() if joined["changed"] else False
+        print(f"weightroom: GPU node {joined['name']} paired from {address}", file=sys.stderr)
+        return JSONResponse({"name": joined["name"], "machine_key": joined["machine_key"], "restarting": restarting,
+                             "front": f"http://{pairing.url_host(request.url.hostname or pairing.lan_address())}:8442"})
 
     async def new_machine_key(request: Request, person: Person) -> Response:
         """Have turnstile replace one selected node's key only after that node accepts it."""
@@ -4441,6 +4484,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             Route("/sign-in", sign_in, methods=["POST"]),
             Route("/sign-out", sign_out, methods=["POST"]),
             Route("/pulse", pulse),
+            Route("/pair", pair_node, methods=["POST"]),
             Route("/", for_people(home)),
             Route("/status", for_people(system_status)),
             route("/control", control, "POST"),
@@ -4487,6 +4531,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route("/compute-nodes/engines", change_node_engine, "POST"),
             route("/compute-nodes/gpus", change_cards, "POST"),
             route("/compute-nodes/machine-key", new_machine_key, "POST"),
+            route("/compute-nodes/pair", make_pairing_code, "POST"),
             route("/compute-nodes/machine-key/schedule", schedule_machine_key, "POST"),
             route("/settings/machine-key", new_machine_key, "POST"),
             route("/settings/model-files", change_file_locations, "POST"),
@@ -4642,6 +4687,21 @@ def root(ctx: typer.Context, config: Annotated[Path, typer.Option(metavar="FILE"
          "weightroom.accounts": config.parent / told.get("data", ".") / "accounts.db"})
     ctx.meta["keys"] = str((config.parent / told.get("turnstile", {}).get("hosted_keys", "") if told.get("turnstile", {}).get("hosted_keys")
                             else (config.parent / told.get("turnstile", {}).get("machine_key_file", "../keys/machine.key")).parent).resolve())
+
+
+@cli.command("pair")
+def pair(ctx: typer.Context, minutes: Annotated[int, typer.Option(help="How long the code works.")] = pairing.MINUTES) -> None:
+    """Make a one-time code that lets a GPU node join this console, and print what to run on it.
+
+    The code works once, for the minutes given. The node is recorded in this settings file when it
+    joins, and turnstile and weightroom restart to use it.
+    """
+    config = Path(ctx.find_root().params["config"])
+    told = read_settings(config)
+    code, expires = pairing.make_code(config.parent / told.get("data", "."), "command-line", minutes)
+    console = pairing.console_url("", told.get("port", 8440))
+    until = datetime.fromtimestamp(expires).strftime("%H:%M")
+    print(f"Pairing code {code}, good once until {until}. On the GPU machine, run:\n\n  {pairing.command(console, code)}\n")
 
 
 @cli.command("accounts-from")
