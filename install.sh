@@ -908,18 +908,21 @@ spotting() {
   can_start || { ui_info "systemd is not running here, so nothing was started"; return 0; }
   check_services
   local key
+  # Wait only for programs that started: one that did not is already reported above.
   case "$TOPOLOGY" in
     all|front)
-      ui_step "The console answers" -- wait_http http://127.0.0.1:8440/ 60 || true
-      if [[ $TOPOLOGY == all ]]; then
+      if running weightroom; then ui_step "The console answers" -- wait_http http://127.0.0.1:8440/ 60 || true; fi
+      if [[ $TOPOLOGY == all ]] && running turnstile; then
         key=$(as_owner cat "$DIR/keys/weightroom.key")
         ui_step "The API answers through the gateway" -- wait_http http://127.0.0.1:8442/v1/models 60 -H "Authorization: Bearer $key" || true
       fi ;;
     compute)
-      ui_step "LoadCoach answers on $HOST_ADDRESS" -- wait_http "http://$HOST_ADDRESS:8442/v1/models" 60 || true ;;
+      if running loadcoach; then ui_step "LoadCoach answers on $HOST_ADDRESS" -- wait_http "http://$HOST_ADDRESS:8442/v1/models" 60 || true; fi ;;
   esac
-  if [[ $TOPOLOGY == all ]] && ((STARTER)) && [[ -n $API_KEY ]]; then first_rep; fi
+  if [[ $TOPOLOGY == all ]] && ((STARTER)) && [[ -n $API_KEY ]] && running loadcoach; then first_rep; fi
 }
+
+running() { owg_systemctl is-active --quiet "$1.service" 2>/dev/null; }
 
 # The first request: load the starter model and ask it something.
 first_rep() {
