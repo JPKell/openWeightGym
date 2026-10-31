@@ -500,7 +500,7 @@ loading_plates() {
   install_tools
   fetch_code
   find_uv
-  ui_step "Python 3.13" -- "$UV" python install 3.13 ||
+  ui_step "Python 3.13" -- "$UV" python install --no-bin 3.13 ||
     ui_die "uv could not fetch Python 3.13." "Check the network; the log has uv's own words."
   [[ $TOPOLOGY == front ]] || engine
   if ((STARTER)); then
