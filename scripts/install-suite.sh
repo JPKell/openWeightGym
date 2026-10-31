@@ -640,9 +640,12 @@ if [[ $DATABASE != keep ]]; then
       ui_note "DRY RUN: back up and configure $config for $DATABASE"
       continue
     fi
-    backup=$config.before-install-$timestamp
-    cp -p "$config" "$backup"
-    CONFIG_BACKUPS[$config]=$backup
+    # Settings written by this run have nothing of yours to keep a copy of.
+    if [[ ${WAS_CONFIGURED[$service]:-1} == 1 ]]; then
+      backup=$config.before-install-$timestamp
+      cp -p "$config" "$backup"
+      CONFIG_BACKUPS[$config]=$backup
+    fi
     arguments=(configure --config "$config" --service "$service" --engine "$DATABASE")
     if [[ $DATABASE == postgresql ]]; then
       for key in "${!DSNS[@]}"; do arguments+=(--dsn "$key=${DSNS[$key]}"); done
@@ -712,7 +715,8 @@ render_unit() {
     fi
     run rm -f "$target"
   fi
-  if [[ -e $target && ! -L $target ]]; then
+  # A unit this installation rendered before is simply replaced; anyone else's is kept as a copy.
+  if [[ -e $target && ! -L $target ]] && ! grep -q "^ExecStart=$ROOT/" "$target"; then
     backup=$target.before-suite-install-$(date -u +%Y%m%dT%H%M%SZ)
     run cp -p "$target" "$backup"
   fi
