@@ -12,7 +12,7 @@
 // What this gives: every program of that account may do these things without a password, not
 // only spotter. An account that can already use sudo gains nothing it could not do before.
 
-var ACCOUNT = "jpk";
+var ACCOUNT = "you";
 var SERVICES = ["docker.service"];
 
 polkit.addRule(function (action, subject) {

@@ -111,15 +111,19 @@ step() {
   ui_step "$label" -- "$@" || die "$label failed. Fix what the log says and run this again; nothing finished is undone."
 }
 section() { ((EMBEDDED)) || ui_section "$@"; }
-# The compatibility audit, its findings shown like the rest: audit PYTHON ARGUMENTS...
+# The compatibility audit, its findings shown like the rest: audit [--quiet] PYTHON ARGUMENTS...
+# Quiet shows only what is wrong.
 audit() {
-  local python=$1 output rc=0 line level rest
+  local quiet=0 python output rc=0 line level rest
+  [[ $1 == --quiet ]] && { quiet=1; shift; }
+  python=$1
   shift
   output=$("$python" "$ROOT/scripts/install-suite-support.py" audit "$@" 2>&1) || rc=$?
   while IFS= read -r line; do
     level=${line%% *} rest=${line#"$level"}
     rest=${rest#"${rest%%[! ]*}"}
     case "$level" in
+      OK|NEW|Compatibility:) ((quiet)) && continue ;;&
       OK) ui_ok "$rest" ;;
       NEW) ui_info "$rest" ;;
       WARN) ui_warn "$rest" ;;
@@ -648,7 +652,7 @@ if [[ $DATABASE != keep ]]; then
 fi
 
 if ((!DRY_RUN)); then
-  if ! audit "$ROOT/.venv/bin/python" --root "$ROOT" --services "$SELECTED_CSV" --require-pg-tools; then
+  if ! audit --quiet "$ROOT/.venv/bin/python" --root "$ROOT" --services "$SELECTED_CSV" --require-pg-tools; then
     restore_configs
     die 'new database settings failed compatibility checks; original settings were restored'
   fi
