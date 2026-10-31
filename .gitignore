@@ -19,9 +19,9 @@ __pycache__/
 /settings/*.toml
 /settings/*.toml.before-*
 # What the programs keep: databases, the token, copies of what was changed on the site.
-/data/
+/data
 # Key files.
-/keys/
+/keys
 # Front-owned plugin configuration; deployments preserve it beside each plugin's code.
 /plugins/*/settings.json
 /plugins/*/.settings.lock
@@ -31,4 +31,4 @@ weightroom/static/LoadCoach-Voice.zip
 /.tools/
 /.python/
 /runtimes/
-/models/
+/models
