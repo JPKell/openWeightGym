@@ -402,7 +402,7 @@ finish() {
   done
   [[ -n $BACKUP_FILE ]] && lines+=("" "${C_MUTED}Backup   ${C_RESET}$BACKUP_FILE")
   if ((kept)) && [[ -e $DIR ]]; then
-    lines+=("" "What you kept is in $DIR. Installing again there picks it up.")
+    lines+=("" "What you kept is in ${DIR/#$HOME/\~}. Installing again there picks it up.")
   fi
   lines+=("" "${C_DIM}Log: ${OWG_LOG/#$HOME/\~}${C_RESET}")
   ((${#lines[@]} > 2)) || lines=("Everything is gone. Thanks for training with openWeightGym." "${lines[@]}")

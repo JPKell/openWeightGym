@@ -433,6 +433,7 @@ def topology_values(config_name: str, topology: str, root: Path, address: str, f
     compute_host = urlsplit(compute).hostname if compute else ""
 
     def port(program: str, usual: int) -> int:
+        """A program's port: its usual one, or 1000 above it when it shares the machine with turnstile."""
         return SHARED_HOST_PORTS[program] if alone else usual
 
     if config_name == "loadcoach":
@@ -522,6 +523,7 @@ def set_toml_value(text: str, dotted: str, value: object) -> str:
 def render(example: Path, target: Path, root: Path, home: Path, values: dict[str, object]) -> int:
     """Write a machine's settings from an example: its folders, then the values its part decides."""
     def folder(match: re.Match) -> str:
+        """The installation folder for a checkout path in the example, the home folder for a home path."""
         return str(root) if match.group(0) != "/home/you" and match.group(0) != "/home/jpk" else str(home)
 
     text = TEMPLATE_PATHS.sub(folder, example.read_text())

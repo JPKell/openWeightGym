@@ -10,6 +10,18 @@ openWeightGym provides a web console, an OpenAI-compatible model API, MCP tools 
 Start with the [app walkthrough](../app-walkthrough.md) to evaluate each section and record findings.
 The [agent walkthrough](agent-walkthrough.md) maps every page to automated checks, live-test boundaries and owner/device evaluation.
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JPKell/openWeightGym/main/install.sh | bash
+```
+
+[`install.sh`](../install.sh) checks the machine, asks where it fits (one machine, console only or a
+GPU node), fetches Python, a prebuilt [llama.cpp](../scripts/install-llamacpp.sh) and a starter
+model, and starts everything. Afterwards [`owg`](../scripts/owg) shows status, logs, updates and
+repairs; [`uninstall.sh`](../uninstall.sh) removes it, keeping what you choose. The full guide is
+[Installation](installation.md).
+
 ## Connect
 
 Current installation addresses, documented **2026-10-20**:

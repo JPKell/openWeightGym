@@ -254,7 +254,7 @@ ui_warn() { printf '  %s%s%s %s%s\n' "$C_WARN" "$S_WARN" "$C_RESET" "$1" "${2:+ 
 ui_fail() { printf '  %s%s%s %s%s\n' "$C_ERR" "$S_FAIL" "$C_RESET" "$1" "${2:+  $C_MUTED$2$C_RESET}" >&2; }
 ui_info() { printf '  %s%s%s %s%s\n' "$C_CYAN" "$S_INFO" "$C_RESET" "$1" "${2:+  $C_MUTED$2$C_RESET}"; }
 ui_note() { printf '    %s%s%s\n' "$C_MUTED" "$1" "$C_RESET"; }
-ui_kv()   { printf '    %s%-14s%s %s\n' "$C_MUTED" "$1" "$C_RESET" "$2"; }
+ui_kv()   { printf '    %s%-18s%s %s\n' "$C_MUTED" "$1" "$C_RESET" "$2"; }
 
 # Stop with a plain message and, when there is one, what to do about it.
 ui_die() {
