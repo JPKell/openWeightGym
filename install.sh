@@ -403,6 +403,8 @@ game_plan() {
       *) ui_info "Nothing was installed."; exit 0 ;;
     esac
   done
+  # The code is used once the plan is settled, and before anything is downloaded.
+  if [[ -n $JOIN_URL ]]; then redeem; fi
 }
 
 valid_host() {
@@ -796,7 +798,6 @@ starter_model() {
 setting_up() {
   ui_section "Setting up" "Python, settings and services"
   services_for
-  [[ -n $JOIN_URL ]] && redeem
   if [[ $TOPOLOGY == compute && -n ${MACHINE_KEY:-} ]] && { ((PAIRED)) || ! as_owner test -f "$DIR/keys/machine.key"; }; then
     as_owner mkdir -p "$DIR/keys"
     as_owner chmod 700 "$DIR/keys"
