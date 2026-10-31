@@ -595,7 +595,7 @@ finishing() {
       ui_ok "$STARTER_NAME is already set up"
     else
       local flags=("ctx-size=$STARTER_CONTEXT")
-      if [[ $GPU_KIND == none || ${LLAMA_BACKEND} == cpu && $LLAMA == auto ]]; then flags+=(gpus=0); else flags+=(gpus=1 gpu-layers=all); fi
+      if [[ $GPU_KIND == none || $LLAMA == cpu || $LLAMA_BACKEND == cpu && $LLAMA == auto ]]; then flags+=(gpus=0); else flags+=(gpus=1 gpu-layers=all); fi
       if "${loadcoach[@]}" models add "$STARTER_NAME" "$DIR/models/llm/$STARTER_FILE" "${flags[@]}" >>"$OWG_LOG" 2>&1; then
         ui_ok "Added $STARTER_NAME" "ask for it by that name"
       else
