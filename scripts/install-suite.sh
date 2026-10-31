@@ -651,6 +651,11 @@ if [[ $DATABASE != keep ]]; then
       for key in "${!DSNS[@]}"; do arguments+=(--dsn "$key=${DSNS[$key]}"); done
     fi
     "$PY" "$ROOT/scripts/install-suite-support.py" "${arguments[@]}"
+    # A copy of a file that came out the same is no copy worth keeping.
+    if [[ -n ${CONFIG_BACKUPS[$config]:-} ]] && cmp -s "$config" "${CONFIG_BACKUPS[$config]}"; then
+      rm -f -- "${CONFIG_BACKUPS[$config]}"
+      unset 'CONFIG_BACKUPS[$config]'
+    fi
   done
 fi
 

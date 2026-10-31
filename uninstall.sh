@@ -344,6 +344,7 @@ remove() {
   # The pointers that let owg and this uninstaller find the installation.
   if [[ ! -e $DIR/data/install-receipt ]]; then
     rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install"
+    rmdir "${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym" 2>/dev/null || true
     [[ $MODE == system ]] && sudo -n rm -f /etc/openweightgym/install
     [[ $MODE == system && -d /etc/openweightgym ]] && sudo -n rmdir /etc/openweightgym 2>/dev/null || true
   fi
