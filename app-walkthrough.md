@@ -8,7 +8,7 @@ Open **[openWeightGym](https://10.77.10.42/)**. Follow the current navigation:
 Related detail pages follow their parent page. Also review [Sign-in and recovery](#sign-in-and-recovery),
 [connected clients](#connected-clients), and [wrap-up](#wrap-up).
 For operation/setup, use the [openWeightGym guide](docs/README.md); runtime/recovery details remain in
-[Installation](docs/installation.md#usability-release-2026-10-30).
+[Installation](docs/operations.md#usability-release-2026-10-30).
 The [agent walkthrough](docs/agent-walkthrough.md) identifies automated checks and the live-work, maintenance and device boundaries for every page below.
 
 ## Automated live review
@@ -1110,7 +1110,7 @@ overlap states should remain understandable.
 
 - [ ] Open the clean-reinstall identity export/import reference; check that host coverage, exclusions and required service stops are understandable.
 - [ ] Distinguish encrypted identity/configuration bundles from history backups; this feature uses the terminal command `suite-identity`.
-- [ ] **Optional maintenance:** follow the [offline portability procedure](docs/installation.md#identity-and-credential-portability-milestone-152) for an isolated export/import-preview exercise; keep bundles and passphrases private.
+- [ ] **Optional maintenance:** follow the [offline portability procedure](docs/operations.md#identity-and-credential-portability-milestone-152) for an isolated export/import-preview exercise; keep bundles and passphrases private.
 
 An import that changes the current installation, or the planned clean reinstall, is a separate
 maintenance exercise. Neither is needed to complete the ordinary page walkthrough.

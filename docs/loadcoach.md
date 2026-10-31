@@ -2157,7 +2157,7 @@ It is the installer's record of the package. It is not source and git ignores it
 The ToolLocker is a second program in this repository. LoadCoach is the door to the models. The
 ToolLocker is the door to tools: reading files, looking at code, and whatever is added later. It has its own port, its own settings file and its own service, and it shares
 front's users, groups and event log. The gateway now runs on front; file/code tools remain on
-their owning hosts. [Current relocation contract](installation.md#front-toollocker-relocation-milestone-128).
+their owning hosts. [Current relocation contract](operations.md#front-toollocker-relocation-milestone-128).
 
 ```text
               ┌─ LoadCoach, port 8442 ──── llama-server ── GPUs
@@ -4770,7 +4770,7 @@ diagnostics, feedback and batch pins use those identities. Machine polling is co
 silent worker does not delay another's observation. For an unstarted request with no eligible
 machine, front returns 503 with `Retry-After`; a mid-stream failure ends the existing stream
 without replay. Batch pins use the weights hash and prefer the original model name when present.
-The [same-host rig procedure](installation.md#same-host-two-loadcoach-rig) retains setup and restoration safeguards.
+The [same-host rig procedure](operations.md#same-host-two-loadcoach-rig) retains setup and restoration safeguards.
 
 Performance benchmark runs freeze their selected Turnstile location in `benchmark_runs.location`
 beside the existing local model ID, fingerprint, engine hash and machine hash. Context, Speed,
@@ -4813,7 +4813,7 @@ The browser receives `/strip/stream` server-sent events rather than five-second 
 Updates wait while a native select is open; shutdown gives streams five seconds to drain before
 cancelling them. Chat's custom model listbox retains a form select and uses a fixed overlay to
 avoid clipping in the Options card. Host installation/checks are maintained in
-[the installation guide](installation.md#multi-machine-telemetry).
+[the installation guide](operations.md#multi-machine-telemetry).
 
 [`turnstile.service`](../services/turnstile.service) is a user unit beside `weightroom`'s. The deploy script
 copies and installs `turnstile` with `weightroom`, and starts it only if `settings/weightroom.toml` has a
@@ -10105,7 +10105,7 @@ their socket address; internal/background calls record their actual originating 
 
 `loadcoach/request_filters.py`, `loadcoach/client_origin.py`, `turnstile/accesses.py`,
 `Users.record_access()` and `Log.requests()` own these contracts and their source docstrings.
-Storage/delivery requirements are in [installation](installation.md#request-filters-and-client-access-milestone-150).
+Storage/delivery requirements are in [installation](operations.md#request-filters-and-client-access-milestone-150).
 
 Delivery checks on **2026-10-20** passed on all three computers: all 13 active services are
 healthy and 387 packaged source files match `requests-client-access-20261020T193241Z`.
@@ -11078,7 +11078,7 @@ and deployment permissions are maintained in the
 ### Imports and retirement
 
 `turnstile.tasks` migrations 1–2 support both fresh storage and the early deployed schema.
-The ownership switches are described in [installation](installation.md#db1-ownership-and-retirement-milestone-124).
+The ownership switches are described in [installation](operations.md#db1-ownership-and-retirement-milestone-124).
 After retirement, compute must use `front_tasks = true`; legacy startup is refused.
 Compute's API/CLI refuse front-owned settings while preserving its own settings and grants.
 
@@ -11093,7 +11093,7 @@ local telemetry and live log/text/trace/forwarding state remain. Transfer replay
 last, and deploy skips legacy import commands for a retired source. Rollback requires the
 verified pre-retirement compute copy and compatible code/settings, not an empty new store.
 
-See [the installation guide](installation.md#db1-ownership-and-retirement-milestone-124) for protected receipts and recovery.
+See [the installation guide](operations.md#db1-ownership-and-retirement-milestone-124) for protected receipts and recovery.
 
 ## CPU embedding probes and measured RAM (G18)
 
@@ -11110,4 +11110,4 @@ for the deployed RAM admission and timeout behavior, receipts and operating limi
 `inventory`, `export`, `inspect` and preview-first `import`. It preserves identities and
 credential/configuration files in encrypted per-host bundles without restoring history.
 System → Backups links to its source-derived reference; raw secrets have no web endpoint.
-[Coverage, commands, limits and recovery](installation.md#identity-and-credential-portability-milestone-152).
+[Coverage, commands, limits and recovery](operations.md#identity-and-credential-portability-milestone-152).

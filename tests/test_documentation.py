@@ -54,7 +54,7 @@ def test_agent_and_project_entry_points_link_to_documentation_contract():
     assert (ROOT / "docs/agent-status.md").resolve() in set(local_link_targets(ENTRY_POINTS[1]))
     assert "## Milestones" not in ENTRY_POINTS[0].read_text()
     assert "## Milestones" in (ROOT / "docs/agent-status.md").read_text()
-    assert {path.name for path in ROOT.glob("*.md")} == {"app-walkthrough.md", "makeBetter.md"}
+    assert {path.name for path in ROOT.glob("*.md")} == {"README.md", "app-walkthrough.md", "makeBetter.md"}
 
 
 def test_consolidated_document_links_and_package_readme_exist():

@@ -107,12 +107,14 @@ ownership/protocol sections and current code when they conflict.
 
 Update existing files in place. Add a plan/handoff/evidence document only when requested or required
 by an explicit acceptance/recovery contract. Preserve the owner's walkthrough findings. Keep root
-Markdown limited to `app-walkthrough.md` and the owner-provided `makeBetter.md`; its relative links start from the repository root.
+Markdown limited to `README.md` (the project's front page: what it is and the install command),
+`app-walkthrough.md` and the owner-provided `makeBetter.md`; their relative links start from the repository root.
 
 | Reference | Read/update for |
 |---|---|
 | [Implementation](loadcoach.md) | Runtime/API behavior and existing recovery contracts. |
-| [Installation](installation.md) | Host roles, dependencies, service units, settings, paths/ports, credentials and compatibility. |
+| [Installation](installation.md) | The installer and its choices, requirements, ports, system installations, pairing, `owg`, uninstalling and troubleshooting. |
+| [Operations and release log](operations.md) | This deployment, host roles, dependencies, service units, settings, credentials, compatibility and each release's delivery and recovery notes. |
 | [Database storage](database-storage.md) | Store ownership, schemas, exports, backup/restore, health and engine migration. |
 | [Benchmarks](../benchmarks/README.md) | openWeightGym protocols, scoring, retained evidence and worker operation. |
 | [CPU workers](cpu-embedding-hosts.md) | RAM admission, native embedding probes and multi-node limits. |
@@ -126,8 +128,11 @@ Markdown limited to `app-walkthrough.md` and the owner-provided `makeBetter.md`;
 
 Installation/deployment interfaces must change with their contracts:
 
-- [openWeightGym installer](../scripts/install-suite.sh), [support](../scripts/install-suite-support.py), [installer tests](../tests/test_installer.py).
-- Optional image runtime: [installer](../scripts/install-sdcpp.sh), [implementation](../scripts/install-sdcpp.py); operating instructions in [installation](installation.md#optional-image-generation-runtime).
+- [Guided installer](../install.sh), [uninstaller](../uninstall.sh), [`owg`](../scripts/owg) and their shared [terminal look](../scripts/lib/ui.sh), [machine checks](../scripts/lib/detect.sh) and [install receipt](../scripts/lib/receipt.sh); user-facing contract in [Installation](installation.md).
+- [openWeightGym installer](../scripts/install-suite.sh), [support](../scripts/install-suite-support.py), [settings editing](../weightroom/settings_file.py), [installer tests](../tests/test_installer.py).
+- [llama.cpp installer](../scripts/install-llamacpp.sh): pinned ggml-org builds by graphics card.
+- [Pairing](../weightroom/pairing.py) of GPU nodes with one-time codes, [tests](../tests/test_pairing.py).
+- Optional image runtime: [installer](../scripts/install-sdcpp.sh), [implementation](../scripts/install-sdcpp.py); operating instructions in the [operations log](operations.md#optional-image-generation-runtime).
 - Mirror Wall: [native installer implementation](../mirrorwall/install.py); image engine, workflows, storage and UI live in the root `mirrorwall/` package.
 - SoundRoom: [optional audio runtime installer](../scripts/install-audiocpp.sh), [implementation](../soundroom/install.py); audio engine, packages, storage and UI live in the root `soundroom/` package ([plan](soundroom-plan.md)).
 - [Remote tool installer](../scripts/install-tool-host.sh), [tests](../tests/test_tool_host_installer.py).

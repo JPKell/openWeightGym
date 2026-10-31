@@ -33,7 +33,7 @@ and operational alerts. It adds no monitoring daemon, external service or public
 - **Source documentation and delivery:** public helpers describe policy, side effects and
   limits; Admin Docs includes the shared tracing/reporting sources. Standalone adapters bundle
   their minimal shared dependencies. Voice store/context settings are described in
-  [installation](installation.md#observability-and-traceability-milestone-151).
+  [installation](operations.md#observability-and-traceability-milestone-151).
 
 ## Outcome and pre-implementation foundation
 

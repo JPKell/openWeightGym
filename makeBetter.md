@@ -115,7 +115,7 @@ Execute in order, V1 first. The owner approved continuing V2–V16 without miles
 
 All implementation milestones are complete and deployed at
 [Suite](https://10.77.10.42/). The reviewed runtime and rollback contract are recorded in
-[Installation](docs/installation.md#usability-release-2026-10-30); physical/subjective owner
+[Installation](docs/operations.md#usability-release-2026-10-30); physical/subjective owner
 acceptance is separate from these checks.
 
 | Item | State |

@@ -83,7 +83,7 @@ not a queue to execute again. Detailed interview narratives are recoverable from
 | 69 | Mock tool-use/recovery suites (P4) | completion confirmed by the owner 2026-10-14 |
 | 70 | Operational alerts (P5) | completed and accepted by the owner 2026-10-14 |
 | 71 | Recurring schedules (P6) | owner confirmed both installations updated, schedule editing working and acceptance passed |
-| 72 | Remote MCP servers | deployed and live-qualified 2026-10-16; [remote-host evidence](installation.md#remote-tool-hosts) |
+| 72 | Remote MCP servers | deployed and live-qualified 2026-10-16; [remote-host evidence](operations.md#remote-tool-hosts) |
 | 73 | Tool permissions and remote hosts | deployed and live-qualified 2026-10-16 |
 | 74 | Tool folders and host installer | deployed and live-qualified 2026-10-16 |
 | 75 | Relay renamed to Turnstile | deployed; live CLI/service/config confirmed 2026-10-16 |
@@ -135,7 +135,7 @@ not a queue to execute again. Detailed interview narratives are recoverable from
 | 121 | Turns-v5 | protocol 6 deployed; representative native qualification complete 2026-10-18; [results](benchmarks/qualification-2026-10-15.md#representative-results-and-limits--2026-10-17) |
 | 122 | Benchmark server reuse policy | deployed; live-qualified 2026-10-16; dead-probe reservation/reuse corrections deployed and endpoint-verified 2026-10-17 ([cleanup](loadcoach.md#general-conversation-evaluations-benchmark-part-4-milestone-101)) |
 | 123 | Physical-host telemetry | deployed and live verified on compute, front and VPS 2026-10-16; state colors and green-to-orange utilization fills deployed and live-render verified 2026-10-16 |
-| 124 | Front ownership/compute retirement (DB1) | completed and live-verified 2026-10-16; 17 stale tables retired; [ownership and recovery](installation.md#db1-ownership-and-retirement-milestone-124) |
+| 124 | Front ownership/compute retirement (DB1) | completed and live-verified 2026-10-16; 17 stale tables retired; [ownership and recovery](operations.md#db1-ownership-and-retirement-milestone-124) |
 | 125 | Measured CPU RAM admission | completed and live-qualified on three workers 2026-10-16; isolated two-hour remote trial passed 2026-10-17 ([CPU evidence](cpu-embedding-hosts.md)) |
 | 126 | Per-host settings/authorization | completed and live-qualified on all three hosts 2026-10-16; original sleep policies retained |
 | 127 | Automatic collection indexing status | deployed on front and live-verified 2026-10-16: indexing changed to ready automatically without a page refresh; focused browser/collection checks passed |
@@ -163,18 +163,18 @@ not a queue to execute again. Detailed interview narratives are recoverable from
 | 149 | Application sweep/source Docs | deployed and live-verified on all three computers 2026-10-20; [sectioned changes, checks and delivery](application-sweep-2026-10-20.md) |
 | 150 | Request filters and client access | deployed and live-verified on all three computers 2026-10-20; [request filters and access contract](loadcoach.md#request-filters-and-client-access-milestone-150) |
 | 151 | Observability and traceability | implemented, deployed and live-verified 2026-10-20; [changes and acceptance](observability-work-plan.md#implemented-changes-by-code-section) |
-| 152 | Encrypted identity portability | installed on all three computers and front guidance live-verified 2026-10-20; [coverage and commands](installation.md#identity-and-credential-portability-milestone-152) |
-| 153 | Model catalogue, verified node installation and per-node settings | deployed 2026-10-26; live file inventories/pickers verified on three nodes; [deployment and limits](installation.md#runtime-source-overrides) |
+| 152 | Encrypted identity portability | installed on all three computers and front guidance live-verified 2026-10-20; [coverage and commands](operations.md#identity-and-credential-portability-milestone-152) |
+| 153 | Model catalogue, verified node installation and per-node settings | deployed 2026-10-26; live file inventories/pickers verified on three nodes; [deployment and limits](operations.md#runtime-source-overrides) |
 | 154 | File-based audio models and Kokoro | deployed 2026-10-26; runtime family/file selection and CPU speech live-verified; [coverage](soundroom-plan.md#execution-status) |
 | 155 | Cloud API key management | deployed 2026-10-26; field/key-presence live-verified; private writes covered by API/browser fixtures; [contract](loadcoach.md#34-cloud-apis-registered-from-the-site) |
 | 156 | Benchmark pages, model-type node measurements including embedders, and language-only score/run lists | deployed and live Chromium-verified 2026-10-26; [page contract](../benchmarks/README.md#pages-scores-and-result-identity) |
-| 157 | API compatibility and request-header reference in Docs | deployed and live Chromium-verified 2026-10-26; [release and recovery](installation.md#runtime-source-overrides) |
+| 157 | API compatibility and request-header reference in Docs | deployed and live Chromium-verified 2026-10-26; [release and recovery](operations.md#runtime-source-overrides) |
 | 158 | Model/image forms, shared encoders, SDXL, Dry fit, Settings navigation and node-aware single-pair schedules | implemented, tested, deployed and live-verified 2026-10-27; [contracts and release receipts](model-image-settings-plan.md) |
 | 159 | Node wake controls, offline pages and retained inference catalogue | deployed 2026-10-30 to front and all nodes; [operation](README.md#where-things-run) |
 | 160 | Module readability/efficiency/adaptability audit and llama.cpp reasoning discovery | deployed 2026-10-30 to front/all nodes; [audit, validation and limits](application-sweep-2026-10-20.md#module-audit-and-reasoning-discovery-started-2026-10-29) |
-| 161 | Console model/settings polish (M0–M5) | deployed 2026-10-30 on front and all workers; [release, live checks and rollback](installation.md#console-polish-release-2026-10-30) |
+| 161 | Console model/settings polish (M0–M5) | deployed 2026-10-30 on front and all workers; [release, live checks and rollback](operations.md#console-polish-release-2026-10-30) |
 | 162 | llama.cpp runtime refresh | active and endpoint-verified on compute/front_cpu/remote_cpu 2026-10-30 at `344846b4f`; [installation and recovery](installation.md); no GPU inference qualification |
-| 163 | Shared console components and UI consistency (U0–U7) | deployed 2026-10-30 on front WeightRoom/Voice gateway; [release, live checks and rollback](installation.md#ui-consistency-release-2026-10-30) |
+| 163 | Shared console components and UI consistency (U0–U7) | deployed 2026-10-30 on front WeightRoom/Voice gateway; [release, live checks and rollback](operations.md#ui-consistency-release-2026-10-30) |
 | 164 | Console usability (V1–V16) | implemented and deployed; [qualification and walkthrough limits](../makeBetter.md#execution) |
 
 ## Voice acceptance

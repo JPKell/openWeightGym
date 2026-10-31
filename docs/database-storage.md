@@ -2,7 +2,7 @@
 
 DB1 moved task/settings ownership and missing history to front on SQLite, then retired
 17 stale compute tables. Models and live operational state remain on compute.
-[Ownership and recovery instructions](installation.md#db1-ownership-and-retirement-milestone-124).
+[Ownership and recovery instructions](operations.md#db1-ownership-and-retirement-milestone-124).
 Schema delivery status is recorded in the [agent ledger](agent-status.md#milestones).
 
 Mirror Wall uses the existing front `accounts.db`: `mirrorwall.front` owns private asset metadata,
@@ -135,7 +135,7 @@ The four independent CPU-worker stores passed the same isolated round-trip and n
 checks: receipts are in `data/qualification/g14-postgresql18/evidence/front-cpu/result.json` and
 `data/qualification/g14-postgresql18/evidence/remote-cpu-result.json`; the latter was copied from
 the remote host's protected qualification directory.
-Source snapshots stayed unchanged; live bindings remain SQLite. [Protected DB1 receipts and recovery](installation.md#db1-ownership-and-retirement-milestone-124).
+Source snapshots stayed unchanged; live bindings remain SQLite. [Protected DB1 receipts and recovery](operations.md#db1-ownership-and-retirement-milestone-124).
 
 ## Front ToolLocker and remaining telemetry (milestone 128)
 
@@ -159,7 +159,7 @@ Local histories remain live; normal front history retains its existing 28-day po
 
 Protected snapshots, SHA-256 receipts, exact imports, before/after schemas and live checks
 are under `~/.local/share/suite-db-audits/2026-10-16-db2/` on compute and front. The remote
-source snapshot is retained at that same path on the VPS. See [operating and rollback steps](installation.md#front-toollocker-relocation-milestone-128).
+source snapshot is retained at that same path on the VPS. See [operating and rollback steps](operations.md#front-toollocker-relocation-milestone-128).
 
 Live qualification covered signed tools, permission filtering, revocation, audit-chain and
 trace continuity, front Tools/Settings/Telemetry while primary LoadCoach was stopped, and
@@ -755,4 +755,4 @@ The offline `suite-identity` command projects only `groups`, `users`, `keys`,
 `spending_allowances`, `services` and `settings_changed` from the front SQLite account store.
 Import uses existing schema migrations and refuses different populated identity/configuration
 state; it does not copy the database file or its histories. Raw credential files are carried
-only in the separate encrypted host bundle. [Coverage, commands and interrupted-import recovery](installation.md#identity-and-credential-portability-milestone-152).
+only in the separate encrypted host bundle. [Coverage, commands and interrupted-import recovery](operations.md#identity-and-credential-portability-milestone-152).

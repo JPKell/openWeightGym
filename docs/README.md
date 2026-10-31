@@ -2,8 +2,6 @@
 
 openWeightGym is the project name. Its component packages, commands, API headers and stored identities retain their existing names for compatibility.
 
-This checkout starts a fresh Git history at `/home/jpk/ai/openWeightGym`. The original repository and its history remain at `/home/jpk/ai/suite`; historical commit IDs and local qualification receipts in these guides belong to that original installation. Existing deployed services have not been switched to this checkout.
-
 The console uses vendored Tabler 1.4 CSS with account Appearance palettes; no Node build or external font/icon service is required. Models use scoped settings and structured editors. General settings are grouped by purpose; Voice and Audio have dedicated settings pages, with voice diagnostics under System → Voice.
 
 openWeightGym provides a web console, an OpenAI-compatible model API, MCP tools and voice conversations.
@@ -20,19 +18,22 @@ curl -fsSL https://raw.githubusercontent.com/JPKell/openWeightGym/main/install.s
 GPU node), fetches Python, a prebuilt [llama.cpp](../scripts/install-llamacpp.sh) and a starter
 model, and starts everything. Afterwards [`owg`](../scripts/owg) shows status, logs, updates and
 repairs; [`uninstall.sh`](../uninstall.sh) removes it, keeping what you choose. The full guide is
-[Installation](installation.md).
+[Installation](installation.md); the [project README](../README.md) is the short version.
 
 ## Connect
 
-Current installation addresses, documented **2026-10-20**:
+Replace `CONSOLE` with the console machine's address (the installer prints it at the end, and
+`owg status` shows it again):
 
 | Use | Address |
 |---|---|
-| Web console | [openWeightGym](https://10.77.10.42/) · [in-app user guide](https://10.77.10.42/guide) |
-| Model API base | `http://10.77.10.42:8442/v1` |
-| MCP tools | `http://10.77.10.42:8443/mcp` or `/mcp/TOOLSET` |
-| Browser voice | [Private HTTPS voice app](https://k-srv.tailaf60c6.ts.net/) |
-| Desktop voice | Front server, port `8447`; [download](https://10.77.10.42/static/LoadCoach-Voice.zip) |
+| Web console | `http://CONSOLE:8440`, with the in-app user guide at `/guide` (HTTPS once [`scripts/front-https.sh`](../scripts/front-https.sh) is set up) |
+| Model API base | `http://CONSOLE:8442/v1` |
+| MCP tools | `http://CONSOLE:8443/mcp` or `/mcp/TOOLSET` |
+| Browser voice | the voice gateway's page, served over HTTPS |
+| Desktop voice | the console, port `8447`; download from `/static/LoadCoach-Voice.zip` |
+
+This project's own deployment addresses are in the [operations log](operations.md#this-deployment).
 
 API clients use a key from **My account → Account**. Browser voice needs HTTPS or localhost;
 desktop/LAN API access does not require Tailscale. The signed public telephone route is separate
@@ -102,7 +103,7 @@ on front until deleted. Downloads contain pixels without embedded prompts or ref
 Authorized temporary/no-log jobs retain assets only in bounded memory for up to one hour.
 
 Under **Models → Images**, configure diffusion weights, encoder, VAE, named LoRAs, upscaler,
-one/two-card placement, host RAM cap and workflow bounds. Install the [optional native runtime](installation.md#optional-image-generation-runtime)
+one/two-card placement, host RAM cap and workflow bounds. Install the [optional native runtime](operations.md#optional-image-generation-runtime)
 on compute first. Files tracks native GGUF, safetensors and PTH components under the `image` place;
 this does not execute Python checkpoint loaders. Civitai uses the existing download controls and
 verified hashes. **Settings → Image → Allow personal adult-preview opt-in** permits individual users to
@@ -161,8 +162,8 @@ Audio playback uses authenticated byte-range requests so seeking works through t
 | Spotter | Each host's telemetry and allowed service/power controls. |
 | Voice service | Compute-side CPU speech recognition and synthesis. |
 
-Front is **k-srv, `10.77.10.42`**, installed under `~/weightroom`; the main compute checkout is
-**`10.77.10.84`, `/home/jpk/ai/suite`**. Additional CPU workers appear in **Compute nodes**.
+The console machine (front) runs WeightRoom, Turnstile and the voice gateway; each GPU or CPU worker
+runs LoadCoach and Spotter. On one machine they run side by side. Workers appear in **Compute nodes**.
 Front owns accounts and retained application history. Workers own model files and local runtime
 state. Front-owned pages and saved records remain usable when inference workers are unavailable.
 **Telemetry** offers **Wake** on the overview and host detail for nodes with Wake-on-LAN configured
@@ -192,7 +193,8 @@ Usage distinguishes recorded costs from estimates; advisory allowances are not h
 
 ## Install, maintain or diagnose
 
-- [Installation](installation.md): setup, runtime source overrides, host/service selection, remote tools and identity portability. Editing the checkout alone may not update a running release.
+- [Installation](installation.md): the installer, one machine or several, system installations, pairing GPU nodes, `owg`, updating and uninstalling.
+- [Operations and release log](operations.md): runtime source overrides, host/service selection, remote tools, identity portability and every release's delivery notes. Editing the checkout alone may not update a running release.
 - [Database operations](database-storage.md): store inventory, backups, exports, restore and offline engine migration. Restore requires a maintenance window; raw credentials need separate recovery.
 - [Voice](../voice/README.md): clients, modes, addresses and supported capacity; [full specification](voice.md).
 - [Benchmarks](../benchmarks/README.md): protocols, scoring, evidence and resource limits.

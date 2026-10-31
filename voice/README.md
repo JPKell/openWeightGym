@@ -68,7 +68,7 @@ playback of the actual front cache. Existing Settings forms edit the same values
 and cached playback do not wake compute; explicit previews use CPU synthesis. Edited
 phrases and speaker selection regenerate a complete versioned set, retained on front for
 compute outages. Public Twilio and desktop ports cannot reach the private admin controls.
-See [installation](../docs/installation.md#voice-pages-and-home-summaries) for delivery.
+See [installation](../docs/operations.md#voice-pages-and-home-summaries) for delivery.
 
 ### Browser call settings
 
