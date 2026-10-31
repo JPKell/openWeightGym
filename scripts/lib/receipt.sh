@@ -38,7 +38,8 @@ owner_environment() {
   uid=$(id -u "$owner") home=$(getent passwd "$owner" | cut -d: -f6)
   OWNER_ENV=("HOME=$home" "USER=$owner" "XDG_RUNTIME_DIR=/run/user/$uid" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus"
              "PATH=/usr/local/bin:/usr/bin:/bin" "LANG=${LANG:-C.UTF-8}")
-  [[ -n ${OWG_LOG:-} ]] && OWNER_ENV+=("OWG_LOG=$OWG_LOG")
+  # The account's own log: it cannot write to the one in your home folder.
+  [[ -n ${OWG_OWNER_LOG:-} ]] && OWNER_ENV+=("OWG_LOG=$OWG_OWNER_LOG")
   [[ -n ${UV_PYTHON_INSTALL_DIR:-} ]] && OWNER_ENV+=("UV_PYTHON_INSTALL_DIR=$UV_PYTHON_INSTALL_DIR")
   return 0
 }

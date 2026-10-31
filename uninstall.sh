@@ -370,6 +370,8 @@ remove_program() {
     # Only examples and defaults left in settings/ means nothing of yours is there.
     if [[ -d $DIR/settings ]] && ! compgen -G "$DIR/settings/*.toml" >/dev/null; then as_root rm -rf -- "$DIR/settings"; fi
     as_root rmdir -- "$DIR" 2>/dev/null || true
+    # A system installation's settings are shown in /etc through a link to the program's folder.
+    if [[ $MODE == system && -L $(receipt_get etc_dir)/settings ]]; then as_root rm -f -- "$(receipt_get etc_dir)/settings"; fi
     ui_ok "Removed the program files"
   else
     remove_path "$DIR/.venv"
