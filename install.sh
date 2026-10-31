@@ -47,6 +47,9 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --no-browser            do not open the console in a browser at the end
   --ref BRANCH            which branch of openWeightGym to fetch (default: main)
   --plain                 no colour or animation
+  --update                update an installed openWeightGym (as owg update does)
+  --repair                reinstall packages and services as they are
+  --uninstall             remove openWeightGym (see uninstall.sh --help)
   -h, --help              show this help
 
 Environment: OWG_HOME (same as --dir), OWG_ADMIN_PASSWORD, NO_COLOR, OWG_QUIET=1 (no animation).
@@ -69,12 +72,18 @@ main() {
   trap 'ui_cleanup' EXIT
   trap 'ui_cleanup; printf "\n"; ui_fail "Stopped. Nothing finished is undone; run the installer again to carry on."; exit 130' INT
 
+  if [[ $ACTION == uninstall ]]; then run_uninstaller; fi
   ui_banner "$(installed_version)"
   warm_up
   if is_installed "$DIR"; then
-    installed_menu
+    case "$ACTION" in
+      update) update ;;
+      repair) reinstall ;;
+      *) installed_menu ;;
+    esac
     return 0
   fi
+  [[ -z $ACTION ]] || ui_die "openWeightGym is not installed in $DIR." "Install it first, or give its folder with --dir."
   game_plan
   account
   loading_plates
@@ -95,7 +104,7 @@ on_error() {
 
 parse_arguments() {
   DIR=${OWG_HOME:-} TOPOLOGY='' ASSUME_YES=0 ADMIN='' FRONT_URL='' MACHINE_KEY_FILE='' COMPUTE_URL=''
-  LLAMA=auto DATABASE=sqlite VOICE=0 STARTER=1 LINGER_WANTED=1 BROWSER=1
+  LLAMA=auto DATABASE=sqlite VOICE=0 STARTER=1 LINGER_WANTED=1 BROWSER=1 ACTION='' PASSTHROUGH=()
   while (($#)); do
     case "$1" in
       --dir) DIR=${2:?--dir needs a folder}; shift 2 ;;
@@ -112,7 +121,11 @@ parse_arguments() {
       --no-linger) LINGER_WANTED=0; shift ;;
       --no-browser) BROWSER=0; shift ;;
       --ref) OWG_REF=${2:?--ref needs a branch}; shift 2 ;;
-      --plain) export OWG_PLAIN=1; shift ;;
+      --plain) export OWG_PLAIN=1; PASSTHROUGH+=(--plain); shift ;;
+      --update) ACTION=update; shift ;;
+      --repair) ACTION=repair; shift ;;
+      --uninstall) ACTION=uninstall; shift ;;
+      --everything|--no-backup) PASSTHROUGH+=("$1"); shift ;;
       -h|--help) usage; exit 0 ;;
       *) echo "install.sh: unknown option $1 (see --help)" >&2; exit 2 ;;
     esac
@@ -232,26 +245,44 @@ warm_up() {
 # ---- an existing installation ---------------------------------------------------------------
 
 installed_menu() {
-  ui_section "Welcome back" "openWeightGym is installed in $DIR"
+  ui_section "Welcome back" "openWeightGym is installed in ${DIR/#$HOME/\~}"
   local choice=0
-  ui_choose choice "What would you like to do?" 0 \
-    "Update|fetch the latest openWeightGym and reinstall, keeping settings and data" \
-    "Repair|reinstall packages and services as they are" \
-    "Quit|change nothing"
-  case "$choice" in
-    0)
-      if [[ -d $DIR/.git ]]; then
-        if [[ -n $(git -C "$DIR" status --porcelain --untracked-files=no) ]]; then
-          ui_die "$DIR has changes of your own." "Commit or stash them, then update again."
-        fi
-        ui_step "Fetching the latest openWeightGym" -- git -C "$DIR" pull --ff-only
-      else
-        ui_warn "$DIR is not a git checkout" "reinstalling the code that is there"
-      fi
-      reinstall ;;
-    1) reinstall ;;
+  local -a actions=(update repair) labels=(
+    "Update|fetch the latest openWeightGym and reinstall, keeping settings and data"
+    "Repair|reinstall packages and services as they are")
+  actions+=(uninstall quit)
+  labels+=("Uninstall|remove openWeightGym, choosing what to keep" "Quit|change nothing")
+  ui_choose choice "What would you like to do?" 0 "${labels[@]}"
+  case "${actions[choice]}" in
+    update) update ;;
+    repair) reinstall ;;
+    uninstall) run_uninstaller ;;
     *) ui_info "Nothing changed." ;;
   esac
+}
+
+update() {
+  if [[ -d $DIR/.git ]]; then
+    if [[ -n $(git -C "$DIR" status --porcelain --untracked-files=no) ]]; then
+      ui_die "$DIR has changes of your own." "Commit or stash them, then update again."
+    fi
+    local before
+    before=$(git -C "$DIR" rev-parse --short HEAD)
+    ui_step "Fetching the latest openWeightGym" -- git -C "$DIR" pull --ff-only ||
+      ui_die "Could not fetch the latest openWeightGym." "The log says why: $OWG_LOG"
+    if [[ $(git -C "$DIR" rev-parse --short HEAD) == "$before" ]]; then ui_ok "Already up to date" "$before"
+    else ui_ok "Updated" "$before → $(git -C "$DIR" rev-parse --short HEAD)"; fi
+  else
+    ui_warn "$DIR is not a git checkout" "reinstalling the code that is there"
+  fi
+  reinstall
+}
+
+# The uninstaller beside this installer, or the one on GitHub under `curl | bash`.
+run_uninstaller() {
+  local script=${CHECKOUT:-$DIR}/uninstall.sh
+  if [[ -x $script ]]; then exec "$script" --dir "$DIR" "${PASSTHROUGH[@]}"; fi
+  exec bash -c 'curl -fsSL "$1" | bash -s -- "${@:2}"' _ "$OWG_RAW/$OWG_REF/uninstall.sh" --dir "$DIR" "${PASSTHROUGH[@]}"
 }
 
 reinstall() {
@@ -259,6 +290,7 @@ reinstall() {
   ui_section "Setting up" "Packages, settings and services"
   "$DIR/scripts/install-suite.sh" --root "$DIR" --embedded --non-interactive --yes --database keep --uv "$UV" ||
     ui_die "Reinstalling did not finish." "The log says why: $OWG_LOG"
+  link_owg
   ui_section "Spotting" "Checking it all works"
   check_services
   ui_finale "Back in shape"
@@ -496,7 +528,18 @@ fetch_code() {
     CREATED_DIR=0
     return 0
   fi
-  if [[ -e $DIR ]] && [[ -n $(ls -A "$DIR" 2>/dev/null) ]]; then
+  if [[ -e $DIR ]] && [[ -n $(ls -A "$DIR" 2>/dev/null) ]] && [[ ! -f $DIR/pyproject.toml && -f $DIR/data/install-receipt ]]; then
+    # What an earlier uninstall kept: settings, keys, data or models. Put the code back around them.
+    ui_info "Found what an earlier installation kept in ${DIR/#$HOME/\~}" "it is used as it is"
+    local clone=$DIR/.owg-clone
+    rm -rf "$clone"
+    ui_step "Fetching openWeightGym ($OWG_REF)" -- git clone --quiet --no-checkout --branch "$OWG_REF" "$OWG_REPO" "$clone" ||
+      ui_die "Could not fetch openWeightGym from $OWG_REPO."
+    mv "$clone/.git" "$DIR/.git"
+    rmdir "$clone"
+    git -C "$DIR" reset --quiet --hard
+    CREATED_DIR=1
+  elif [[ -e $DIR ]] && [[ -n $(ls -A "$DIR" 2>/dev/null) ]]; then
     [[ -f $DIR/pyproject.toml && -f $DIR/scripts/install-suite.sh ]] ||
       ui_die "$DIR exists and is not openWeightGym." "Choose another place with --dir, or empty that folder."
     ui_ok "openWeightGym is already in ${DIR/#$HOME/\~}"
@@ -611,7 +654,20 @@ finishing() {
       ui_warn "Could not keep the services running after logout" "run: sudo loginctl enable-linger ${USER:-\$USER}"
     fi
   fi
+  link_owg
   write_receipt
+}
+
+# The owg command, on this account's PATH, and a note of where the installation is.
+link_owg() {
+  OWG_LINK=$HOME/.local/bin/owg
+  mkdir -p "$(dirname "$OWG_LINK")" "${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym"
+  ln -sfn "$DIR/scripts/owg" "$OWG_LINK"
+  printf '%s\n' "$DIR" >"${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install"
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ui_ok "The owg command" "owg status, owg logs, owg update, owg uninstall" ;;
+    *) ui_ok "The owg command" "in ~/.local/bin, which is not on your PATH yet: open a new terminal, or run ~/.local/bin/owg" ;;
+  esac
 }
 
 # What this installer made, for the uninstaller: it removes only what is listed here.
@@ -634,6 +690,8 @@ write_receipt() {
     [[ -d $DIR/runtimes/llamacpp ]] && echo "runtime=$DIR/runtimes/llamacpp"
     [[ -d $DIR/models ]] && echo "models=$DIR/models"
     echo "linger_enabled=${LINGER_ENABLED:-0}"
+    echo "owg_link=$OWG_LINK"
+    echo "pointer=${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install"
     echo "database=$DATABASE"
     [[ -n ${ADMIN:-} ]] && echo "admin=$ADMIN"
   } >"$receipt.new"
@@ -739,7 +797,8 @@ finale() {
       lines+=("  ${C_GOLD}compute = \"http://$HOST_ADDRESS:8442\"${C_RESET}")
       lines+=("then: systemctl --user restart turnstile weightroom") ;;
   esac
-  lines+=("" "${C_DIM}Installed in ${DIR/#$HOME/\~} · log: ${OWG_LOG/#$HOME/\~}${C_RESET}")
+  lines+=("" "${C_GOLD}owg${C_RESET} status · logs · update · doctor · uninstall")
+  lines+=("${C_DIM}Installed in ${DIR/#$HOME/\~} · log: ${OWG_LOG/#$HOME/\~}${C_RESET}")
   ui_box "You're in" "${lines[@]}"
   if ((BROWSER && !ASSUME_YES)) && [[ $TOPOLOGY != compute ]]; then ui_open_browser "$console_local" || true; fi
   printf '\n'

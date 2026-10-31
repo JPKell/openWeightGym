@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+# owg: look after an openWeightGym installation from the terminal. install.sh links it into
+# ~/.local/bin (or /usr/local/bin for a system installation).
+#
+#   owg                    what is running, then a menu of what to do
+#   owg status             what is running and where to reach it
+#   owg start|stop|restart [PROGRAM...]
+#   owg logs [PROGRAM] [-f]
+#   owg update             fetch the latest openWeightGym and reinstall, keeping settings and data
+#   owg repair             reinstall packages and services as they are
+#   owg doctor             check the installation and say what to fix
+#   owg pair               let a GPU node join this console, with a one-time code
+#   owg uninstall          remove openWeightGym, choosing what to keep
+#   owg version
+
+set -Eeuo pipefail
+
+SELF=$(readlink -f -- "${BASH_SOURCE[0]}")
+ROOT=$(cd -- "$(dirname -- "$SELF")/.." && pwd)
+# shellcheck source=lib/ui.sh
+source "$ROOT/scripts/lib/ui.sh"
+# shellcheck source=lib/detect.sh
+source "$ROOT/scripts/lib/detect.sh"
+# shellcheck source=lib/receipt.sh
+source "$ROOT/scripts/lib/receipt.sh"
+
+ALL_PROGRAMS=(loadcoach toollocker spotter voice weightroom turnstile voice-gateway)
+
+usage() {
+  sed -n '2,15s/^# \{0,1\}//p' "$SELF"
+}
+
+main() {
+  ui_init
+  : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/owg-$(date +%Y%m%d-%H%M%S).log}"
+  mkdir -p "$(dirname "$OWG_LOG")" 2>/dev/null || OWG_LOG=/dev/null
+  export OWG_LOG
+  receipt_load "$ROOT"
+  local command=${1:-}
+  [[ $# -gt 0 ]] && shift
+  # A system installation's programs belong to its service account: ask for sudo once, in the open.
+  local owner
+  owner=$(receipt_get service_user)
+  if [[ -n $owner && $owner != "$(id -un)" ]] && ((EUID != 0)); then
+    case "$command" in ''|status|start|stop|restart|logs|log|doctor|pair) ui_sudo "looking after the $owner service account" ;; esac
+  fi
+  case "$command" in
+    '') menu ;;
+    status) status ;;
+    start|stop|restart) control "$command" "$@" ;;
+    logs|log) logs "$@" ;;
+    update) exec "$ROOT/install.sh" --update --dir "$ROOT" "$@" ;;
+    repair) exec "$ROOT/install.sh" --repair --dir "$ROOT" "$@" ;;
+    doctor) doctor ;;
+    pair) pair "$@" ;;
+    uninstall) exec "$ROOT/uninstall.sh" --dir "$ROOT" "$@" ;;
+    version|--version|-V) printf 'openWeightGym %s (%s)\n' "$(version)" "$(commit)" ;;
+    help|-h|--help) usage ;;
+    *) ui_fail "owg has no command '$command'."; usage; exit 2 ;;
+  esac
+}
+
+version() { sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/pyproject.toml" | head -1; }
+commit() { git -C "$ROOT" log -1 --format='%h %cs' 2>/dev/null || printf 'not a git checkout'; }
+
+# The programs installed here, in the order they are started.
+programs() {
+  local listed
+  listed=$(receipt_get services)
+  if [[ -n $listed ]]; then printf '%s\n' ${listed//,/ }; return; fi
+  local program
+  for program in "${ALL_PROGRAMS[@]}"; do
+    [[ -f $(receipt_unit_dir)/$program.service ]] && printf '%s\n' "$program"
+  done
+  return 0
+}
+
+# A setting from one of this machine's files: setting FILE KEY [TABLE]
+setting() {
+  "$ROOT/.venv/bin/python" - "$ROOT/settings/$1.toml" "$2" "${3:-}" 2>/dev/null <<'PY' || true
+import sys, tomllib
+try:
+    told = tomllib.load(open(sys.argv[1], "rb"))
+except OSError:
+    raise SystemExit
+for part in filter(None, sys.argv[3].split(".")):
+    told = told.get(part, {})
+value = told.get(sys.argv[2], "")
+print(value if not isinstance(value, list) else ",".join(map(str, value)))
+PY
+}
+
+status() {
+  detect_address
+  printf '\n  %s%s%s  %s%s · %s%s\n' "$C_BOLD" "$(ui_gradient openWeightGym)" "$C_RESET" "$C_MUTED" "$(version)" "$(commit)" "$C_RESET"
+  ui_note "$(receipt_mode_label) · ${ROOT/#$HOME/\~}"
+  ui_section "Programs"
+  local program state since any=0
+  while read -r program; do
+    [[ -n $program ]] || continue
+    any=1
+    state=$(owg_systemctl is-active "$program.service" 2>/dev/null || true)
+    if [[ $state == active ]]; then
+      since=$(owg_systemctl show -p ActiveEnterTimestamp --value "$program.service" 2>/dev/null || true)
+      ui_ok "$program" "running since ${since:-?}"
+    elif [[ $state == activating ]]; then
+      ui_warn "$program" "starting"
+    else
+      ui_fail "$program" "${state:-not running} · owg logs $program" 2>&1
+    fi
+  done < <(programs)
+  ((any)) || ui_warn "No programs found" "is this an openWeightGym installation?"
+
+  ui_section "Where to reach it"
+  local port host
+  if programs | grep -qx weightroom; then
+    port=$(setting weightroom port); port=${port:-8440}
+    ui_kv Console "http://localhost:$port  ·  http://$HOST_ADDRESS:$port"
+  fi
+  if programs | grep -qx turnstile; then
+    ui_kv API "http://$HOST_ADDRESS:8442/v1"
+    ui_kv Tools "http://$HOST_ADDRESS:8443/mcp"
+  fi
+  if programs | grep -qx loadcoach; then
+    host=$(setting loadcoach host); port=$(setting loadcoach port)
+    ui_kv 'Model runner' "http://${host:-127.0.0.1}:${port:-8442}"
+  fi
+  local llama
+  llama=$(setting loadcoach llama_server)
+  if [[ -n $llama ]]; then
+    if [[ -x $llama ]]; then ui_kv llama.cpp "$(basename "$(dirname "$(readlink -f "$llama")")")"
+    else ui_kv llama.cpp "${C_ERR}missing: $llama${C_RESET}"; fi
+  fi
+  if [[ -d $ROOT/models ]]; then ui_kv Models "$(du -sh "$ROOT/models/" 2>/dev/null | cut -f1) in ${ROOT/#$HOME/\~}/models"; fi
+  printf '\n'
+}
+
+control() {
+  local action=$1 program
+  shift
+  local -a chosen=("$@")
+  ((${#chosen[@]})) || mapfile -t chosen < <(programs)
+  # Stopping goes the other way round: the console first, the model runner last.
+  if [[ $action == stop ]]; then
+    local -a reversed=()
+    for ((i = ${#chosen[@]} - 1; i >= 0; i--)); do reversed+=("${chosen[i]}"); done
+    chosen=("${reversed[@]}")
+  fi
+  for program in "${chosen[@]}"; do
+    [[ $program =~ ^[a-z-]+$ ]] || ui_die "$program is not a program name."
+    ui_step "${action^} $program" -- owg_systemctl "$action" "$program.service" || true
+  done
+}
+
+logs() {
+  local follow=() program='' argument
+  for argument in "$@"; do
+    case "$argument" in -f|--follow) follow=(-f) ;; *) program=$argument ;; esac
+  done
+  local -a units=()
+  if [[ -n $program ]]; then units=(--user-unit "$program.service")
+  else while read -r argument; do units+=(--user-unit "$argument.service"); done < <(programs); fi
+  owg_journalctl "${units[@]}" -n 80 --no-pager "${follow[@]}"
+}
+
+pair() {
+  programs | grep -qx weightroom || ui_die "Pairing codes come from the console machine, and this is not one."
+  as_owner "$ROOT/.venv/bin/weightroom" --config "$ROOT/settings/weightroom.toml" pair "$@"
+}
+
+# ---- doctor ---------------------------------------------------------------------------------
+
+DOCTOR_PROBLEMS=0
+DOCTOR_WARNINGS=0
+problem() { ui_fail "$1" "${2:-}" 2>&1; DOCTOR_PROBLEMS=$((DOCTOR_PROBLEMS + 1)); }
+warning() { ui_warn "$1" "${2:-}"; DOCTOR_WARNINGS=$((DOCTOR_WARNINGS + 1)); }
+
+doctor() {
+  ui_section "Doctor" "Checking ${ROOT/#$HOME/\~}"
+  if receipt_present; then ui_ok "Install receipt" "$(receipt_get installed)"
+  else warning "No install receipt" "installed before install.sh; owg works, the uninstaller will not remove it"; fi
+
+  if "$ROOT/.venv/bin/python" -c 'import sys; raise SystemExit(sys.version_info < (3, 13))' 2>/dev/null; then
+    ui_ok "Python environment" "$("$ROOT/.venv/bin/python" --version 2>&1)"
+  else
+    problem "The Python environment is missing or broken" "run: owg repair"
+  fi
+
+  local program
+  while read -r program; do
+    [[ -n $program ]] || continue
+    if [[ $(owg_systemctl is-active "$program.service" 2>/dev/null) == active ]]; then
+      ui_ok "$program is running"
+    else
+      problem "$program is not running" "owg logs $program, then owg start $program"
+      owg_journalctl --user-unit "$program.service" -n 4 --no-pager -o cat 2>/dev/null | sed 's/^/      /' || true
+    fi
+  done < <(programs)
+
+  local file
+  for file in "$ROOT"/settings/*.toml; do
+    [[ -f $file ]] || continue
+    if "$ROOT/.venv/bin/python" -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$file" 2>/dev/null; then :
+    else problem "settings/$(basename "$file") is not valid TOML" "fix it, or restore a settings/*.before-* copy"; fi
+  done
+
+  local llama
+  llama=$(setting loadcoach llama_server)
+  if [[ -n $llama ]]; then
+    if [[ -x $llama ]] && "$llama" --version >/dev/null 2>&1; then ui_ok "llama-server answers" "$llama"
+    else problem "llama-server is missing or does not start" "run: $ROOT/scripts/install-llamacpp.sh"; fi
+  fi
+
+  local key mode
+  for key in "$ROOT"/keys/*.key; do
+    [[ -f $key ]] || continue
+    mode=$(stat -c %a "$key")
+    [[ $mode == 600 || $mode == 400 ]] || warning "keys/$(basename "$key") can be read by others (mode $mode)" "chmod 600 $key"
+  done
+
+  if [[ $(receipt_get mode) == system ]]; then
+    local owner
+    owner=$(receipt_get service_user)
+    [[ $(loginctl show-user "$owner" -p Linger --value 2>/dev/null) == yes ]] || problem "$owner does not start at boot" "sudo loginctl enable-linger $owner"
+  else
+    detect_systemd
+    ((LINGER)) || warning "The services stop when you log out" "sudo loginctl enable-linger ${USER:-\$USER}"
+  fi
+
+  if programs | grep -qx weightroom; then
+    local port code
+    port=$(setting weightroom port)
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:${port:-8440}/" 2>/dev/null) || code=000
+    [[ $code =~ ^[23] ]] && ui_ok "The console answers" "port ${port:-8440}" || problem "The console does not answer on port ${port:-8440}" "owg logs weightroom"
+  fi
+
+  detect_disk "$ROOT"
+  ((DISK_FREE_MB > 5000)) && ui_ok "$((DISK_FREE_MB / 1024)) GB free" || warning "Only $((DISK_FREE_MB / 1024)) GB free" "models need room"
+
+  if [[ -d $ROOT/.git && -n $(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null) ]]; then
+    warning "The code has changes of your own" "owg update will refuse until they are committed or stashed"
+  fi
+
+  printf '\n'
+  if ((DOCTOR_PROBLEMS)); then ui_fail "$DOCTOR_PROBLEMS problem(s), $DOCTOR_WARNINGS warning(s)" 2>&1; return 1; fi
+  if ((DOCTOR_WARNINGS)); then ui_warn "No problems, $DOCTOR_WARNINGS warning(s)"; return 0; fi
+  ui_ok "All good"
+}
+
+# ---- the menu -------------------------------------------------------------------------------
+
+menu() {
+  status
+  ((UI_ASK)) || { usage; return 0; }
+  local choice=0 console=0
+  programs | grep -qx weightroom && console=1
+  local -a actions=(update repair doctor logs) labels=(
+    "Update|fetch the latest openWeightGym and reinstall"
+    "Repair|reinstall packages and services as they are"
+    "Doctor|check everything and say what to fix"
+    "Logs|the latest from every program")
+  if ((console)); then actions+=(pair); labels+=("Add a GPU node|make a one-time code for another machine"); fi
+  actions+=(uninstall quit)
+  labels+=("Uninstall|remove openWeightGym, choosing what to keep" "Quit|do nothing")
+  ui_choose choice "What would you like to do?" 0 "${labels[@]}"
+  case "${actions[choice]}" in
+    quit) return 0 ;;
+    logs) logs ;;
+    doctor) doctor ;;
+    pair) pair ;;
+    *) main "${actions[choice]}" ;;
+  esac
+}
+
+main "$@"
