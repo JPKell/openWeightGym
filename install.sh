@@ -89,11 +89,16 @@ main() {
   locate_installation
   if [[ $ACTION == uninstall ]]; then run_uninstaller; fi
   ui_banner "$(installed_version)"
-  warm_up
+  RECOVERY_ACTION=continue
   if [[ $(receipt_get state) == pending ]]; then
+    interrupted_menu
+    [[ $RECOVERY_ACTION != quit ]] || return 0
+  fi
+  warm_up
+  if [[ $(receipt_get state) == pending && $RECOVERY_ACTION != restart ]]; then
     resume_settings
     ui_info "Resuming the confirmed installation plan" "settings and existing accounts are kept"
-  elif is_installed "$DIR"; then
+  elif [[ $RECOVERY_ACTION != restart ]] && is_installed "$DIR"; then
     ((SYSTEM)) && ui_sudo "looking after the system installation"
     case "$ACTION" in
       update) update ;;
@@ -355,6 +360,35 @@ warm_up() {
 
 # ---- an existing installation ---------------------------------------------------------------
 
+interrupted_menu() {
+  # Explicit repair/update and unattended runs continue the saved plan directly.
+  [[ -z $ACTION ]] && ((!ASSUME_YES)) || return 0
+  ui_section "Welcome back" "A previous installation in ${DIR/#$HOME/\~} did not finish"
+  local choice=0 rc=0
+  ui_choose choice "What would you like to do?" 0 \
+    "Continue previous install|use the saved choices and keep existing settings and data" \
+    "Uninstall components and start again|choose what to remove, then choose a new setup" \
+    "Quit|change nothing"
+  case "$choice" in
+    0) ;;
+    1)
+      uninstall_components --for-reinstall || rc=$?
+      case "$rc" in
+        0) ;;
+        3) RECOVERY_ACTION=quit; return 0 ;;
+        *) ui_die "Uninstalling did not finish." "The installation was not restarted. Check the log and try again." ;;
+      esac
+      receipt_load "$DIR"
+      CREATED_DIR=${RECEIPT[created_dir]:-0}
+      # The uninstaller may have removed the checkout this installer was running from.
+      [[ -f ${CHECKOUT:-$DIR}/pyproject.toml ]] || CHECKOUT=''
+      if ! pwd -P >/dev/null 2>&1; then cd "$HOME"; fi
+      RECOVERY_ACTION=restart
+      ;;
+    *) RECOVERY_ACTION=quit; ui_info "Nothing changed." ;;
+  esac
+}
+
 installed_menu() {
   ui_section "Welcome back" "openWeightGym is installed in ${DIR/#$HOME/\~}"
   local choice=0
@@ -394,13 +428,15 @@ update() {
   reinstall
 }
 
-# The uninstaller beside this installer, or the one on GitHub under `curl | bash`.
-run_uninstaller() {
+# Run the uninstaller as a child so recovery can start a new setup after it finishes.
+uninstall_components() {
   local script=${CHECKOUT:-$DIR}/uninstall.sh
   [[ -x $DIR/uninstall.sh ]] && script=$DIR/uninstall.sh
-  if [[ -x $script ]]; then exec "$script" --dir "$DIR" "${PASSTHROUGH[@]}"; fi
-  exec bash -c 'curl -fsSL "$1" | bash -s -- "${@:2}"' _ "$OWG_RAW/$OWG_REF/uninstall.sh" --dir "$DIR" "${PASSTHROUGH[@]}"
+  if [[ -x $script ]]; then "$script" --dir "$DIR" "$@" "${PASSTHROUGH[@]}"; return; fi
+  bash -o pipefail -c 'curl -fsSL "$1" | bash -s -- "${@:2}"' _ "$OWG_RAW/$OWG_REF/uninstall.sh" --dir "$DIR" "$@" "${PASSTHROUGH[@]}"
 }
+
+run_uninstaller() { uninstall_components; exit "$?"; }
 
 reinstall() {
   find_uv

@@ -237,11 +237,15 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 ## When something goes wrong
 
 Start with `owg doctor`, then `owg logs PROGRAM`. The installer's own log is named at the end of
-every run, and each failed step shows its last lines.
+every run. Package and database-configuration steps save their output there and show the last
+lines when they fail.
 
 An interrupted installation keeps its confirmed plan in `.install-receipt` with `state=pending`.
-Run the installer again with the same `--dir` to resume; existing settings, keys and passwords
-are kept, and missing account passwords are completed. The receipt becomes complete only after
+Run the installer again with the same `--dir` to choose **Continue previous install**, **Uninstall
+components and start again**, or **Quit**. Continuing keeps existing settings, keys and passwords
+and completes missing account passwords. Starting again opens the removal checklist and backup
+prompts, then returns to setup with whatever you kept. Cancelling removal stops the restart.
+`--yes` or `--repair` continues the saved plan directly. The receipt becomes complete only after
 the final service checks finish successfully. Passwords and consumed pairing codes are never stored in the receipt.
 
 | Seen | What to do |

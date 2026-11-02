@@ -50,13 +50,15 @@ main() {
 }
 
 parse_arguments() {
-  DIR=${OWG_HOME:-} ASSUME_YES=0 EVERYTHING=0 BACKUP_WANTED=''
+  DIR=${OWG_HOME:-} ASSUME_YES=0 EVERYTHING=0 BACKUP_WANTED='' FOR_REINSTALL=0
   while (($#)); do
     case "$1" in
       --dir) DIR=${2:?--dir needs a folder}; shift 2 ;;
       --yes) ASSUME_YES=1; shift ;;
       --everything|--purge) EVERYTHING=1; shift ;;
       --no-backup) BACKUP_WANTED=0; shift ;;
+      # Internal recovery handoff: distinguish cancellation from completed removal.
+      --for-reinstall) FOR_REINSTALL=1; shift ;;
       --plain) export OWG_PLAIN=1; shift ;;
       -h|--help) usage; exit 0 ;;
       *) echo "uninstall.sh: unknown option $1 (see --help)" >&2; exit 2 ;;
@@ -205,7 +207,7 @@ choose() {
   ui_checklist ticked "What should be removed? Unticked things are kept." "${rows[@]}"
   declare -gA REMOVE=()
   for index in $ticked; do REMOVE[${ITEMS[index]}]=1; done
-  if ((${#REMOVE[@]} == 0)); then ui_info "Nothing ticked, so nothing was removed."; exit 0; fi
+  if ((${#REMOVE[@]} == 0)); then cancel "Nothing ticked, so nothing was removed."; fi
   # A service account that still owns kept files stays, so a reinstall finds them as they were.
   if [[ -n ${REMOVE[account]:-} ]] && { [[ -z ${REMOVE[data]:-} && -e $DIR/data ]] || [[ -z ${REMOVE[settings]:-} ]] || [[ -z ${REMOVE[models]:-} && -e $DIR/models ]]; }; then
     unset 'REMOVE[account]'
@@ -215,6 +217,13 @@ choose() {
 }
 
 removing_data() { [[ -n ${REMOVE[settings]:-}${REMOVE[data]:-}${REMOVE[models]:-}${REMOVE[postgresql]:-} ]]; }
+
+cancel() {
+  ui_info "$1"
+  # A normal uninstall still exits successfully when the user changes their mind.
+  if ((${FOR_REINSTALL:-0})); then exit 3; fi
+  exit 0
+}
 
 # ---- the backup -----------------------------------------------------------------------------
 
@@ -266,9 +275,9 @@ confirm() {
     local typed=''
     ui_warn "Data will be deleted and there is no backup."
     ui_input typed "Type delete to go ahead" ""
-    [[ $typed == delete ]] || { ui_info "Nothing was removed."; exit 0; }
+    [[ $typed == delete ]] || cancel "Nothing was removed."
   else
-    ui_confirm "Go ahead?" n || { ui_info "Nothing was removed."; exit 0; }
+    ui_confirm "Go ahead?" n || cancel "Nothing was removed."
   fi
 }
 

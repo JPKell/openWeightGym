@@ -54,6 +54,7 @@ from loadcoach.groups import ABILITIES
 from loadcoach.statement import Statements, user_of
 from loadcoach.settings import Changes, changed_for, laid_over, said, taken
 from loadcoach.users import User
+from spotter.screen import at_the_screen
 
 ACTIONS = ("start", "stop", "restart")  # everything spotter can do to a service
 # Everything spotter can do to the machine: what it is asked for, systemd's word for it, and what
@@ -204,22 +205,6 @@ def memory() -> dict:
     lines = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
     total, free = (int(lines[name].split()[0]) * 1024 for name in ("MemTotal", "MemAvailable"))
     return {"used": total - free, "total": total}
-
-
-async def at_the_screen() -> float | None:
-    """Seconds since a key or the mouse was last touched at this machine's own screen. None if nobody is signed in there.
-
-    The desktop keeps this count itself, and is asked for it. It is this account's desktop that is
-    asked, so someone else's would not be seen.
-    """
-    asking = ("gdbus", "call", "--session", "--dest", "org.gnome.Mutter.IdleMonitor", "--object-path",
-              "/org/gnome/Mutter/IdleMonitor/Core", "--method", "org.gnome.Mutter.IdleMonitor.GetIdletime")  # fmt: skip
-    try:
-        asked = await asyncio.create_subprocess_exec(*asking, stdout=PIPE, stderr=DEVNULL)
-        printed, _ = await asyncio.wait_for(asked.communicate(), 5)
-        return int(re.search(rb"uint64 (\d+)", printed)[1]) / 1000  # it answers in thousandths of a second
-    except (OSError, TimeoutError, TypeError):
-        return None
 
 
 async def logged_in_users() -> int | None:
