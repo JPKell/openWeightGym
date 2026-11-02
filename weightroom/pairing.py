@@ -23,11 +23,10 @@ import subprocess
 import time
 import tomllib
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from weightroom.settings_file import set_toml_value
+from weightroom.settings_file import save_settings, set_toml_value
 
 ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"  # no 0 and O, no 1, I and L
 MINUTES = 10
@@ -107,7 +106,7 @@ def node_name(wanted: str, taken: set[str]) -> str:
     return name
 
 
-def join(settings_path: Path, address: str, wanted: str = "") -> dict:
+def join(settings_path: Path, address: str, wanted: str = "", voice: bool = False) -> dict:
     """Record the node at `address` and say which name and machine key it signs with.
 
     With no compute node yet (compute names this machine and no LoadCoach runs here) it becomes
@@ -123,8 +122,14 @@ def join(settings_path: Path, address: str, wanted: str = "") -> dict:
     compute = urlsplit(told.get("compute", "")).hostname or ""
     machines = told.get("machines", {})
     turnstile = told.get("turnstile", {})
+    if voice:
+        ports = list(turnstile.get("ports", [8442, 8443, 8444]))
+        voice_port = turnstile.get("voice_port", 8445)
+        if voice_port not in ports:
+            text = set_toml_value(text, "turnstile.ports", [*ports, voice_port])
     none_yet = compute in LOOPBACK and not (folder / "loadcoach.toml").exists()
-    if none_yet or compute == address:
+    primary = none_yet or compute == address
+    if primary:
         name = "compute"
         key_file = folder / turnstile.get("machine_key_file", "../keys/machine.key")
         text = set_toml_value(text, "compute", f"http://{host}:8442")
@@ -134,25 +139,30 @@ def join(settings_path: Path, address: str, wanted: str = "") -> dict:
                      if urlsplit(machine.get("compute", "")).hostname == address), "")
         if name:
             key_file = folder / machines[name].get("machine_key_file", "../keys/machine.key")
+            # Repair a legacy collision without copying an API key into a signing-key file.
+            reserved = {folder / turnstile.get("machine_key_file", "../keys/machine.key"),
+                        folder / told.get("key_file", "../keys/weightroom.key"),
+                        *(folder / f"../keys/{service}.key" for service in ("voice-service", "voice-gateway", "voice-browser"))}
+            if key_file.resolve() in {path.resolve() for path in reserved}:
+                key_file = folder / f"../keys/machines/{name}.key"
+                text = set_toml_value(text, f"machines.{name}.machine_key_file", f"../keys/machines/{name}.key")
         else:
             name = node_name(wanted, set(machines))
-            key_file = folder / f"../keys/{name}.key"
+            key_file = folder / f"../keys/machines/{name}.key"
             for key, value in (("compute", f"http://{host}:8442"), ("spotter", f"http://{host}:8444"),
-                               ("machine_key_file", f"../keys/{name}.key")):
+                               ("machine_key_file", f"../keys/machines/{name}.key")):
                 text = set_toml_value(text, f"machines.{name}.{key}", value)
     key_file = key_file.resolve()
     if not key_file.exists():
         key_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         key_file.touch(mode=0o600)
         key_file.write_text(secrets.token_urlsafe(32) + "\n")
-    tomllib.loads(text)
-    if text != original:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        copy = settings_path.with_name(settings_path.name + ".before-pairing-" + stamp)
-        copy.write_text(original)
-        copy.chmod(0o600)
-        settings_path.write_text(text)
-    return {"name": name, "machine_key": key_file.read_text().strip(), "changed": text != original}
+    changed = save_settings(settings_path, text, "pairing")
+    gateway = folder / "voice-gateway.toml"
+    if primary and gateway.is_file():
+        voice_text = set_toml_value(gateway.read_text(), "voice", f"http://{host}:8445")
+        changed = save_settings(gateway, voice_text, "pairing") or changed
+    return {"name": name, "machine_key": key_file.read_text().strip(), "changed": changed}
 
 
 def restart_later(units: tuple[str, ...] = ("turnstile.service", "weightroom.service"), seconds: int = 3) -> bool:

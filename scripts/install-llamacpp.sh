@@ -120,7 +120,7 @@ download_release() {
   ui_download "$RELEASES/$BUILD/$asset" "$work/llama.tar.gz" "llama.cpp $BUILD $backend" ||
     ui_die "Could not download $asset." "Check the network, or pick another --backend."
   if [[ $backend == cuda-* ]]; then
-    ui_download "$RELEASES/$BUILD/cudart-${asset#llama-}" "$work/cudart.tar.gz" "CUDA runtime ${backend#cuda-}" ||
+    ui_download "$RELEASES/$BUILD/cudart-$asset" "$work/cudart.tar.gz" "CUDA runtime ${backend#cuda-}" ||
       ui_die "Could not download the CUDA runtime for $asset."
   fi
   rm -rf "$target.partial"
@@ -160,7 +160,7 @@ build_from_source() {
 main() {
   ui_init
   : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/llamacpp-$(date +%Y%m%d-%H%M%S).log}"
-  mkdir -p "$(dirname "$OWG_LOG")"
+  ui_log_init || ui_die "Cannot create a private engine installer log at $OWG_LOG."
   export OWG_LOG
   detect_os
   detect_gpu

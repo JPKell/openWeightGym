@@ -2995,11 +2995,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         address = offered if client in pairing.LOOPBACK and offered else client
         if not pairing.valid_address(address):
             return JSONResponse({"error": {"message": "The node's address could not be told."}}, status_code=400)
-        joined = pairing.join(Path(settings.path), address, wanted)
-        restarting = pairing.restart_later() if joined["changed"] else False
+        joined = pairing.join(Path(settings.path), address, wanted, voice=body.get("voice") is True)
+        extra = {}
+        if body.get("voice") is True:
+            from weightroom.bootstrap import voice_service_identity
+            extra["voice_key"] = voice_service_identity(Path(settings.path), joined["name"])
+        if joined["changed"] and (Path(settings.path).parent / "voice-gateway.toml").is_file():
+            restarting = pairing.restart_later(("turnstile.service", "voice-gateway.service", "weightroom.service"))
+        else:
+            restarting = pairing.restart_later() if joined["changed"] else False
         print(f"weightroom: GPU node {joined['name']} paired from {address}", file=sys.stderr)
         return JSONResponse({"name": joined["name"], "machine_key": joined["machine_key"], "restarting": restarting,
-                             "front": f"http://{pairing.url_host(request.url.hostname or pairing.lan_address())}:8442"})
+                             "front": f"http://{pairing.url_host(request.url.hostname or pairing.lan_address())}:8442", **extra})
 
     async def new_machine_key(request: Request, person: Person) -> Response:
         """Have turnstile replace one selected node's key only after that node accepts it."""

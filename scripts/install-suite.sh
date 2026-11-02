@@ -36,6 +36,7 @@ FRONT_URL=
 COMPUTE_URL=
 LLAMA_SERVER=
 MACHINE_NAME=
+VOICE_MODEL=qwen3-1.7b
 START_NEW=0
 UV=
 EMBEDDED=0
@@ -77,6 +78,7 @@ change both the service set and database engine before anything is installed.
   --compute-url URL          the GPU node's LoadCoach, such as http://192.168.1.20:8442
   --llama-server PATH        the llama-server LoadCoach runs (see install-llamacpp.sh)
   --machine-name NAME        the name the console knows this GPU node by (default: compute)
+  --voice-model NAME         initial conversation model for newly written voice settings
   --start-new                also start services whose settings were just written
   --uv PATH                  make the environment and install packages with uv
   --embedded                 leave headings and the summary to the program calling this
@@ -161,6 +163,7 @@ while (($#)); do
     --compute-url) (($# >= 2)) || die '--compute-url needs a URL'; COMPUTE_URL=$2; shift 2 ;;
     --llama-server) (($# >= 2)) || die '--llama-server needs a path'; LLAMA_SERVER=$2; shift 2 ;;
     --machine-name) (($# >= 2)) || die '--machine-name needs a name'; MACHINE_NAME=$2; shift 2 ;;
+    --voice-model) (($# >= 2)) || die '--voice-model needs a model'; VOICE_MODEL=$2; shift 2 ;;
     --start-new) START_NEW=1; shift ;;
     --uv) (($# >= 2)) || die '--uv needs a path'; UV=$2; shift 2 ;;
     --embedded) EMBEDDED=1; shift ;;
@@ -174,7 +177,7 @@ done
 
 ui_init
 : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/install-suite-$(date +%Y%m%d-%H%M%S).log}"
-mkdir -p "$(dirname "$OWG_LOG")" 2>/dev/null || OWG_LOG=/dev/null
+ui_log_init 2>/dev/null || OWG_LOG=/dev/null
 export OWG_LOG
 
 [[ -f $ROOT/pyproject.toml && -f $ROOT/scripts/install-suite-support.py ]] || die "$ROOT is not an openWeightGym checkout"
@@ -604,9 +607,11 @@ install_example_config() {
     if ((DRY_RUN)); then
       ui_note "DRY RUN: render $source_config to $target_config for $ROOT and $HOME ($TOPOLOGY)"
     else
+      local voice_options=()
+      (has_service voice || has_service voice-gateway) && voice_options=(--voice --voice-model "$VOICE_MODEL")
       "$PY" "$ROOT/scripts/install-suite-support.py" render --example "$source_config" --target "$target_config" \
         --root "$ROOT" --home "$HOME" --topology "$TOPOLOGY" --address "${ADDRESS:-127.0.0.1}" \
-        --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" --machine-name "$MACHINE_NAME" ||
+        --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" --machine-name "$MACHINE_NAME" "${voice_options[@]}" ||
         die "could not write $target_config"
       ui_ok "Wrote settings/$config_name.toml"
     fi
@@ -703,6 +708,10 @@ if [[ ! -f $ROOT/keys/weightroom.key ]] && (has_service weightroom || has_servic
   fi
 fi
 
+if has_service voice || has_service voice-gateway; then
+  step 'Preparing voice accounts and speech models' "$PY" "$ROOT/scripts/install-suite-support.py" voice --root "$ROOT" --services "$SELECTED_CSV"
+fi
+
 if has_service loadcoach && [[ $SDCPP_ACTION == install ]]; then
   if ! run "$ROOT/scripts/install-sdcpp.sh" --root "$ROOT" --backend "$SDCPP_BACKEND"; then
     die 'openWeightGym packages/settings were installed, but optional sdcpp setup failed. Correct its requirements and rerun scripts/install-sdcpp.sh; existing working runtime releases were preserved.'
@@ -716,29 +725,37 @@ fi
 
 render_unit() {
   local service=$1
-  local source=$ROOT/services/$service.service target=$UNIT_DIR/$service.service backup
+  local source=$ROOT/services/$service.service target=$UNIT_DIR/$service.service
   [[ -f $source ]] || die "missing service unit: $source"
-  if [[ -L $target ]]; then
-    if [[ $(readlink "$target") != /dev/null ]]; then
-      backup=$target.before-suite-install-$(date -u +%Y%m%dT%H%M%SZ)
-      run cp -L -p "$target" "$backup"
-    fi
-    run rm -f "$target"
-  fi
-  # A unit this installation rendered before is simply replaced; anyone else's is kept as a copy.
-  if [[ -e $target && ! -L $target ]] && ! grep -q "^ExecStart=$ROOT/" "$target"; then
-    backup=$target.before-suite-install-$(date -u +%Y%m%dT%H%M%SZ)
-    run cp -p "$target" "$backup"
-  fi
   if ((DRY_RUN)); then
     ui_note "DRY RUN: render $source to $target with install root $ROOT"
   else
     "$PY" - "$source" "$target" "$ROOT" <<'PY'
 from pathlib import Path
+import os
+import stat
 import sys
+import tempfile
+import time
 source, target, root = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 text = source.read_text().replace('%h/ai/openWeightGym', root).replace('%h/ai/suite', root).replace('%h/weightroom', root)
-target.write_text(text)
+masked = target.is_symlink() and os.readlink(target) == '/dev/null'
+if target.exists() and not masked:
+    if not target.is_symlink() and target.read_text() == text:
+        raise SystemExit(0)
+    backup = str(target) + f'.before-suite-install-{time.time_ns()}'
+    with os.fdopen(os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as output:
+        output.write(target.read_bytes())
+mode = stat.S_IMODE(target.stat().st_mode) if target.exists() and not target.is_symlink() else 0o644
+with tempfile.NamedTemporaryFile(mode='w', dir=target.parent, prefix='.' + target.name, delete=False) as output:
+    pending = Path(output.name)
+    try:
+        output.write(text)
+        output.flush()
+        os.fchmod(output.fileno(), mode)
+        os.replace(pending, target)
+    finally:
+        pending.unlink(missing_ok=True)
 PY
   fi
 }

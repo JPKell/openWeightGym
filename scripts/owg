@@ -33,7 +33,7 @@ usage() {
 main() {
   ui_init
   : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/owg-$(date +%Y%m%d-%H%M%S).log}"
-  mkdir -p "$(dirname "$OWG_LOG")" 2>/dev/null || OWG_LOG=/dev/null
+  ui_log_init 2>/dev/null || OWG_LOG=/dev/null
   export OWG_LOG
   receipt_load "$ROOT"
   local command=${1:-}
@@ -136,7 +136,7 @@ status() {
 }
 
 control() {
-  local action=$1 program
+  local action=$1 program failed=0
   shift
   local -a chosen=("$@")
   ((${#chosen[@]})) || mapfile -t chosen < <(programs)
@@ -148,8 +148,9 @@ control() {
   fi
   for program in "${chosen[@]}"; do
     [[ $program =~ ^[a-z-]+$ ]] || ui_die "$program is not a program name."
-    ui_step "${action^} $program" -- owg_systemctl "$action" "$program.service" || true
+    ui_step "${action^} $program" -- owg_systemctl "$action" "$program.service" || failed=1
   done
+  return "$failed"
 }
 
 logs() {

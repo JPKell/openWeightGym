@@ -14,6 +14,8 @@ __pycache__/
 # Local editor state and model weights do not belong in the source repository.
 /.obsidian/
 /.vscode/
+/error.log
+/.install-receipt
 /*.gguf
 # Each machine's own settings. What is committed is settings/examples and settings/defaults.
 /settings/*.toml
@@ -32,3 +34,4 @@ weightroom/static/LoadCoach-Voice.zip
 /.python/
 /runtimes/
 /models
+''

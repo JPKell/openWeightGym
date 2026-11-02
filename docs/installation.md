@@ -46,7 +46,8 @@ start WSL again before installing.
    hello: the first real request.
 
 It ends with the console's address, your sign-in, the API address and an API key (shown once).
-Everything it did is in the log it names, under `~/.local/state/openweightgym/`.
+Step output is in the private log it names, under `~/.local/state/openweightgym/`; command
+arguments containing credentials are omitted. Logs are readable only by their owner.
 
 ## One machine or several
 
@@ -86,13 +87,20 @@ A GPU node joins a console with a one-time code; no keys are copied by hand.
 
 The console records the node at the address its request came from: as the main compute node when
 it has none yet, otherwise as a further node with a key of its own (`[machines.NAME]` in
-`settings/weightroom.toml`, with `keys/NAME.key`). It keeps a copy of its settings as they were
+`settings/weightroom.toml`, with `keys/machines/NAME.key`). It keeps a private copy of its settings as they were
 (`weightroom.toml.before-pairing-…`) and restarts the gateway and the console to use the node.
 A code works once, for ten minutes; ten wrong codes from one address in ten minutes are refused.
 
 Without a code, choose **GPU node** and **With the console's key**: give the console's address and
 paste its `keys/machine.key`. Then add `compute = "http://NODE:8442"` to the console's
 `settings/weightroom.toml` and run `owg restart turnstile weightroom` there.
+
+Add `--voice` to the node's install command to receive a separate voice-service credential and
+enable the console's voice API route. Install the console with `--voice` for the browser voice
+gateway. For manual pairing, also copy the console's `keys/voice-service.key` and pass
+`--voice-key-file FILE`; the machine signing key cannot substitute for it. Voice setup creates
+the service and browser accounts, verifies the speech bundles required by the settings and
+uses the starter conversation model in newly written voice settings.
 
 ## For you, or for the whole machine
 
@@ -134,7 +142,10 @@ added to the `video` and `render` groups for the graphics cards.
 | `owg uninstall` | removes openWeightGym, choosing what to keep |
 
 Updates refuse to run over changes of your own to the code; commit or stash them first. Settings
-files are never replaced: an update writes only settings that are missing.
+files are kept; enabling voice adds its missing gateway port and pairing updates node addresses,
+with private backups before those changes. Replaced service units are backed up beside their
+originals as `NAME.service.before-suite-install-TIME`, including local edits to generated units.
+Service control commands return a nonzero status if any requested service fails.
 
 ## The engine: llama.cpp
 
@@ -176,9 +187,13 @@ them up. Before anything you ticked of yours goes, it offers a backup:
 `~/openWeightGym-backup-DATE.tar.gz`, readable by you only, with settings, keys, data and PostgreSQL
 dumps (not models). Data deleted without a backup needs `delete` typed to go ahead.
 
-Only what the installer's receipt (`data/install-receipt`) lists is removed, and never anything
+Only what the installer's receipt (`.install-receipt` in the installation) lists is removed, and never anything
 outside the installation's own folders. An installation made before `install.sh` existed has no
 receipt: the uninstaller points it out and leaves it alone.
+The receipt holds public installation metadata, with no credentials; private data stays private.
+Older `data/install-receipt` files are read and migrated during repair. An explicit `--dir` with
+no receipt fails without selecting another installation. Metadata stays with files you keep so
+a later install can recover them.
 
 | Option | |
 |---|---|
@@ -213,6 +228,7 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 | `--llama auto\|cuda-13.4\|cuda-12.8\|rocm\|vulkan\|cpu\|source\|skip\|PATH` | the engine |
 | `--database sqlite\|postgresql` | PostgreSQL is installed and set up locally (installs for you only) |
 | `--voice` | also speech recognition and voices |
+| `--voice-key-file FILE` | front-owned voice service key for a GPU node joined by hand |
 | `--power-control` | let the console sleep, restart or switch off this machine (a polkit rule) |
 | `--no-model`, `--no-linger`, `--no-browser` | skip the starter model, linger, or opening the console |
 | `--ref BRANCH` | which branch to install |
@@ -222,6 +238,11 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 
 Start with `owg doctor`, then `owg logs PROGRAM`. The installer's own log is named at the end of
 every run, and each failed step shows its last lines.
+
+An interrupted installation keeps its confirmed plan in `.install-receipt` with `state=pending`.
+Run the installer again with the same `--dir` to resume; existing settings, keys and passwords
+are kept, and missing account passwords are completed. The receipt becomes complete only after
+the final service checks finish successfully. Passwords and consumed pairing codes are never stored in the receipt.
 
 | Seen | What to do |
 |---|---|

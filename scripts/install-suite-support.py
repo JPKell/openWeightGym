@@ -8,6 +8,7 @@ owner-only files and only their paths are written to normal openWeightGym settin
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -23,7 +24,7 @@ REPOSITORY = Path(__file__).resolve().parent.parent
 if str(REPOSITORY) not in sys.path:
     sys.path.insert(0, str(REPOSITORY))
 
-from weightroom.settings_file import set_toml_value, toml_value  # noqa: E402  (re-exported for the installer's tests)
+from weightroom.settings_file import save_settings, set_toml_value, toml_value  # noqa: E402  (re-exported for the installer's tests)
 
 
 SERVICE_CONFIG = {
@@ -427,7 +428,7 @@ SHARED_HOST_PORTS = {"loadcoach": 9442, "toollocker": 9443, "spotter": 9444, "vo
 
 
 def topology_values(config_name: str, topology: str, root: Path, address: str, front: str, compute: str,
-                    llama_server: str, machine_name: str = "") -> dict[str, object]:
+                    llama_server: str, machine_name: str = "", voice: bool = False, voice_model: str = "") -> dict[str, object]:
     """The settings a machine's part decides, by dotted TOML key: one machine (all), front or compute."""
     alone = topology == "all"
     here = "127.0.0.1" if alone else address
@@ -450,17 +451,24 @@ def topology_values(config_name: str, topology: str, root: Path, address: str, f
     if config_name in ("toollocker", "spotter"):
         return {"host": here, "port": port(config_name, 8443 if config_name == "toollocker" else 8444)}
     if config_name == "voice":
-        return {"host": here, "port": port("voice", 8445), **({"compute": front} if front else {})}
+        profiles = {}
+        if voice_model:
+            defaults = tomllib.loads((REPOSITORY / "settings/defaults/voice.toml").read_text())
+            profiles = {f"profiles.default.{key}": value for key, value in
+                        {**defaults["profiles"]["default"], "model": voice_model}.items()}
+        return {"host": here, "port": port("voice", 8445), **({"compute": front} if front else {}),
+                **profiles}
     if config_name == "weightroom":
+        extra = {"turnstile.ports": [8442, 8443, 8444, 8445], "turnstile.voice_port": 8445} if voice else {}
         if alone:
-            return {"compute": "http://127.0.0.1:9442", "spotter": "http://127.0.0.1:9444"}
+            return {"compute": "http://127.0.0.1:9442", "spotter": "http://127.0.0.1:9444", **extra}
         if compute:
-            return {"compute": compute.rstrip("/"), "spotter": f"http://{compute_host}:8444"}
+            return {"compute": compute.rstrip("/"), "spotter": f"http://{compute_host}:8444", **extra}
         # No compute node yet: the console runs and shows compute as not answering until one is added.
-        return {"compute": "http://127.0.0.1:9442", "spotter": ""}
+        return {"compute": "http://127.0.0.1:9442", "spotter": "", **extra}
     if config_name == "voice-gateway":
-        voice = f"http://{compute_host}:8445" if compute_host and not alone else "http://127.0.0.1:9445"
-        return {"voice": voice, "origins": ["http://localhost:8446", "http://127.0.0.1:8446"]}
+        voice_url = f"http://{compute_host}:8445" if compute_host and not alone else "http://127.0.0.1:9445"
+        return {"voice": voice_url, "origins": ["http://localhost:8446", "http://127.0.0.1:8446"]}
     return {}
 
 
@@ -482,6 +490,61 @@ def render(example: Path, target: Path, root: Path, home: Path, values: dict[str
             raise ValueError(f"{target.name}: {dotted} came out as {here!r}, not {value!r}")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text)
+    return 0
+
+
+def prepare_voice(root: Path, services: list[str], install_models=None) -> int:
+    """Provision local voice identities and the pinned speech bundles required by its settings."""
+    from weightroom.bootstrap import service_identity, voice_service_identity
+
+    config = root / "settings/weightroom.toml"
+    speech = root / "settings/voice.toml"
+    if "weightroom" in services or "turnstile" in services:
+        told = tomllib.loads(config.read_text())
+        door = told.get("turnstile", {})
+        voice_port = door.get("voice_port", 8445)
+        ports = list(door.get("ports", [8442, 8443, 8444]))
+        if voice_port not in ports:
+            ports.append(voice_port)
+            save_settings(config, set_toml_value(config.read_text(), "turnstile.ports", ports), "voice-install")
+        voice_key = path_from(speech.parent, tomllib.loads(speech.read_text())["key_file"]) if "voice" in services else None
+        voice_service_identity(config, key_file=voice_key)
+        if "voice-gateway" in services:
+            gateway = root / "settings/voice-gateway.toml"
+            gateway_settings = tomllib.loads(gateway.read_text())
+            service_identity(config, "voice-gateway", "system", path_from(gateway.parent, gateway_settings["key_file"]),
+                             ("app-sign-in", "load", "front-voice"))
+            service_identity(config, "voice-browser", "app", path_from(gateway.parent, gateway_settings["browser_key_file"]), ("front-voice",))
+    if "voice" not in services:
+        return 0
+    settings = tomllib.loads(speech.read_text())
+    key_file = Path(settings["key_file"])
+    if not key_file.is_absolute():
+        key_file = root / "settings" / key_file
+    if not key_file.is_file() or not key_file.read_text().strip():
+        raise ValueError("Voice needs its front-owned service key; join with a pairing code or pass --voice-key-file.")
+    key_file.chmod(0o600)
+    manifest = json.loads((root / "voice/models.json").read_text())
+    names = {bundle["name"] for bundle in manifest["bundles"]}
+    needed: dict[Path, set[str]] = {}
+    for section, keys in (("recognition", ("encoder", "decoder", "joiner", "tokens")),
+                          ("synthesis", ("model", "voices", "tokens", "data_dir"))):
+        for key in keys:
+            path = Path(settings[section][key])
+            if not path.is_absolute():
+                path = root / "settings" / path
+            bundle = next((parent for parent in path.parents if parent.name in names), None)
+            if bundle is not None:
+                needed.setdefault(bundle.parent, set()).add(bundle.name)
+            elif not path.exists():
+                raise ValueError(f"The configured speech asset is missing: {path}")
+    if install_models is None:
+        spec = importlib.util.spec_from_file_location("install_voice_models", root / "scripts/voice-models.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        install_models = module.install
+    for folder, bundles in needed.items():
+        install_models(folder, bundles=sorted(bundles))
     return 0
 
 
@@ -512,11 +575,19 @@ def main() -> int:
     rendering.add_argument("--compute", default="")
     rendering.add_argument("--llama-server", default="")
     rendering.add_argument("--machine-name", default="")
+    rendering.add_argument("--voice", action="store_true")
+    rendering.add_argument("--voice-model", default="")
+    voice = subparsers.add_parser("voice")
+    voice.add_argument("--root", type=Path, required=True)
+    voice.add_argument("--services", required=True)
     args = parser.parse_args()
+    if args.command == "voice":
+        return prepare_voice(args.root.resolve(), args.services.split(","))
     if args.command == "render":
         root = args.root.resolve()
         values = {} if args.topology == "keep" else topology_values(
-            args.example.stem, args.topology, root, args.address, args.front, args.compute, args.llama_server, args.machine_name)
+            args.example.stem, args.topology, root, args.address, args.front, args.compute, args.llama_server,
+            args.machine_name, args.voice, args.voice_model)
         return render(args.example, args.target, root, args.home, values)
     if args.command in {"audit", "state"}:
         services = [item for item in args.services.split(",") if item]

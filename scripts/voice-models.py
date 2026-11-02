@@ -14,11 +14,16 @@ import tempfile
 import urllib.request
 
 
-def install(root):
+def install(root, bundles=None):
     """Check an entire download before extracting, then verify every installed file."""
     manifest = json.loads((Path(__file__).resolve().parents[1] / "voice/models.json").read_text())
+    selected = set(bundles) if bundles is not None else {bundle["name"] for bundle in manifest["bundles"]}
+    if unknown := selected - {bundle["name"] for bundle in manifest["bundles"]}:
+        raise ValueError("Unknown speech bundles: " + ", ".join(sorted(unknown)))
     root.mkdir(parents=True, exist_ok=True)
     for bundle in manifest["bundles"]:
+        if bundle["name"] not in selected:
+            continue
         folder = root / bundle["name"]
         if not folder.exists():
             with tempfile.TemporaryDirectory(dir=root) as temporary:
