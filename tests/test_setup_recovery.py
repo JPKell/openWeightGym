@@ -86,6 +86,92 @@ ui_step 'A failure' -- bash -c 'exit 7'
     assert stat.S_IMODE(log.stat().st_mode) == 0o600
 
 
+def test_postgresql_retry_keeps_existing_connections_and_adds_only_missing_stores(tmp_path):
+    dsns = tmp_path / "install/keys/postgresql"
+    dsns.mkdir(parents=True)
+    original = {}
+    for name in ("accounts", "chat", "benchmarks", "plugins", "alerts", "schedules"):
+        path = dsns / f"{name}.dsn"
+        original[path] = f"postgresql://existing:keep_{name}@127.0.0.1/original_{name}\n"
+        path.write_text(original[path])
+        path.chmod(0o600)
+    answer = shell(tmp_path, '''set -euo pipefail
+ROOT=$INSTALL PY=$TEST_PYTHON USER=fixture PROVISION_POSTGRESQL=1 DRY_RUN=0
+declare -A DSNS=()
+REQUIRED_DSNS=(accounts roles chat benchmarks plugins alerts schedules)
+note() { printf '%s\\n' "$*"; }
+die() { printf '%s\\n' "$*" >&2; exit 1; }
+hostname() { printf fixture; }
+psql() { return 99; }
+createdb() { return 99; }
+sudo() {
+  [[ $1 == -u && $2 == postgres ]] || return 98
+  shift 2
+  case "$1" in
+    psql)
+      if [[ $2 == -Atqc ]]; then
+        if [[ $3 == *"rolname = 'suite_fixture_fixture'"* ]]; then printf '1\\n'; fi
+      else
+        cat >/dev/null
+        printf 'create role\\n' >>"$ATTEMPTS"
+      fi ;;
+    createdb) printf '%s\\n' "$*" >>"$ATTEMPTS" ;;
+    *) return 97 ;;
+  esac
+}
+''' + one_function("scripts/install-suite.sh", "provision_postgresql") + '''
+provision_postgresql
+provision_postgresql
+for key in "${REQUIRED_DSNS[@]}"; do
+  [[ ${DSNS[$key]} == "$ROOT/keys/postgresql/$key.dsn" ]]
+done
+''', env={"INSTALL": str(tmp_path / "install"), "TEST_PYTHON": sys.executable,
+          "ATTEMPTS": str(tmp_path / "attempts")})
+
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    assert (tmp_path / "attempts").read_text().splitlines() == [
+        "create role", "createdb --owner suite_fixture_fixture_2 suite_fixture_fixture_2_roles"]
+    for path, content in original.items():
+        assert path.read_text() == content
+    roles = dsns / "roles.dsn"
+    assert roles.read_text().startswith("postgresql://suite_fixture_fixture_2:")
+    assert stat.S_IMODE(roles.stat().st_mode) == 0o600
+    assert stat.S_IMODE(dsns.stat().st_mode) == 0o700
+
+
+def test_database_configuration_traceback_is_saved_in_the_installer_log(tmp_path):
+    install = tmp_path / "install"
+    (install / "scripts").mkdir(parents=True)
+    (install / "settings").mkdir()
+    shutil.copy2(ROOT / "scripts/install-suite-support.py", install / "scripts/install-suite-support.py")
+    config = install / "settings/weightroom.toml"
+    original = 'host = "127.0.0.1"\n'
+    config.write_text(original)
+    suite = (ROOT / "scripts/install-suite.sh").read_text()
+    start = suite.index('\nif [[ $DATABASE != keep ]]; then\n')
+    end = suite.index('\nif ((!DRY_RUN)); then\n', start)
+    answer = shell(tmp_path, '''set -euo pipefail
+source "$TEST_REPO/scripts/lib/ui.sh"
+ui_init
+ROOT=$INSTALL PY=$TEST_PYTHON DATABASE=postgresql DRY_RUN=0
+SELECTED=(weightroom)
+declare -A DSNS=([accounts]="$INSTALL/keys/accounts.dsn")
+declare -A WAS_CONFIGURED=([weightroom]=1)
+declare -A CONFIG_BACKUPS=()
+die() { ui_die "install-suite: $*" "" 2; }
+''' + one_function("scripts/install-suite.sh", "step") + "\n" +
+                   one_function("scripts/install-suite.sh", "has_service") + suite[start:end],
+                   env={"INSTALL": str(install), "TEST_PYTHON": sys.executable, "PYTHONPATH": str(ROOT)})
+
+    assert answer.returncode != 0
+    log = (tmp_path / "install.log").read_text()
+    assert "Configuring weightroom databases (postgresql)" in log
+    assert "Traceback (most recent call last)" in log
+    assert "no PostgreSQL DSN file was provided for roles" in log
+    assert "no PostgreSQL DSN file was provided for roles" in answer.stderr
+    assert config.read_text() == original
+
+
 def test_cuda_download_uses_the_published_runtime_asset_name(tmp_path):
     bundle = tmp_path / "bundle"
     bundle.mkdir()
@@ -269,6 +355,166 @@ printf '%s %s %s' "$DIR" "$SYSTEM" "$OWG_OWNER"
 ''', env={"INSTALL": str(install), "OTHER_CHECKOUT": str(tmp_path / "other")})
     assert answer.returncode == 0, answer.stderr
     assert answer.stdout == f"{install} 1 fixture-service"
+
+
+@pytest.mark.parametrize("action,choice,child_status,arguments", [
+    ("continue", 0, 0, ""),
+    ("restart", 1, 0, ""),
+    ("quit", 2, 0, ""),
+    ("cancel", 1, 3, ""),
+    ("failure", 1, 7, ""),
+    ("continue", 2, 0, "--yes"),
+    ("continue", 2, 0, "--repair"),
+])
+def test_interrupted_install_choices_control_whether_setup_runs(tmp_path, action, choice, child_status, arguments):
+    install = tmp_path / "install"
+    (install / "settings").mkdir(parents=True)
+    (install / "settings/weightroom.toml").write_text('data = "../data"\n')
+    (install / "pyproject.toml").touch()
+    receipt = install / ".install-receipt"
+    original = "state=pending\nmode=user\ncreated_dir=1\ntopology=front\nadmin=sam\ndatabase=postgresql\nvoice=1\n"
+    receipt.write_text(original)
+    answer = shell(tmp_path, script_functions("install.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/receipt.sh"
+load_ui() { CHECKOUT=$INSTALL; }
+ui_banner() { :; }
+ui_choose() {
+  printf '%s\\n' "$@" >>"$OPTIONS"
+  printf 'menu\\n' >>"$EVENTS"
+  printf -v "$1" '%s' "$MENU_CHOICE"
+}
+uninstall_components() {
+  [[ $1 == --for-reinstall ]]
+  printf 'uninstall\\n' >>"$EVENTS"
+  return "$CHILD_STATUS"
+}
+warm_up() { printf 'warm-up\\n' >>"$EVENTS"; }
+game_plan() {
+  [[ -z $TOPOLOGY && -z $ADMIN && $VOICE == 0 && $DATABASE == keep ]]
+  printf 'new-plan\\n' >>"$EVENTS"
+  TOPOLOGY=front ADMIN=alex
+}
+account() { printf 'account:%s:%s:%s:%s\\n' "$TOPOLOGY" "$ADMIN" "$DATABASE" "$VOICE" >>"$EVENTS"; }
+loading_plates() { services_for; write_receipt pending; }
+setting_up() { printf 'install\\n' >>"$EVENTS"; }
+finishing() { :; }
+spotting() { :; }
+finale() { printf 'complete\\n' >>"$EVENTS"; }
+main --dir "$INSTALL" "$@"
+'''.replace('main --dir "$INSTALL" "$@"', f'main --dir "$INSTALL" {arguments}'),
+                   env={"INSTALL": str(install), "EVENTS": str(tmp_path / "events"),
+                        "OPTIONS": str(tmp_path / "options"), "MENU_CHOICE": str(choice),
+                        "CHILD_STATUS": str(child_status)})
+
+    events = (tmp_path / "events").read_text().splitlines()
+    if arguments:
+        assert "menu" not in events
+    else:
+        options = (tmp_path / "options").read_text()
+        assert "Continue previous install|" in options
+        assert "Uninstall components and start again|" in options
+        assert "Quit|" in options
+        assert events[0] == "menu"
+    assert (answer.returncode != 0) == (action == "failure"), answer.stderr
+    if action in {"quit", "cancel", "failure"}:
+        assert events == (["menu"] if action == "quit" else ["menu", "uninstall"])
+        assert receipt.read_text() == original
+    else:
+        assert events[-2:] == ["install", "complete"]
+        assert "state=complete" in receipt.read_text()
+        if action == "continue":
+            assert "account:front:sam:postgresql:1" in events
+            assert "uninstall" not in events and "new-plan" not in events
+        else:
+            assert events[:4] == ["menu", "uninstall", "warm-up", "new-plan"]
+            assert "account:front:alex:keep:0" in events
+            assert "created_dir=1" in receipt.read_text()
+
+
+@pytest.mark.parametrize("for_reinstall", [False, True])
+@pytest.mark.parametrize("stage", ["empty-selection", "decline", "delete-not-typed"])
+def test_cancelled_uninstall_stops_recovery_without_changing_normal_exit_status(tmp_path, stage, for_reinstall):
+    answer = shell(tmp_path, script_functions("uninstall.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+parse_arguments "$@"
+ui_init
+ITEMS=("$ITEM")
+declare -A LABEL=([$ITEM]=Fixture) ABOUT=([$ITEM]=fixture) DEFAULT=([$ITEM]=off)
+declare -A REMOVE=([$ITEM]=1)
+BACKUP_FILE=''
+if [[ $STAGE == empty-selection ]]; then choose; else confirm; fi
+printf 'should not reach removal' >"$REMOVED"
+'''.replace('parse_arguments "$@"', 'parse_arguments --for-reinstall' if for_reinstall else 'parse_arguments'),
+                   env={"STAGE": stage, "ITEM": "program" if stage == "decline" else "settings",
+                        "REMOVED": str(tmp_path / "removed")})
+    assert answer.returncode == (3 if for_reinstall else 0), answer.stderr
+    assert not (tmp_path / "removed").exists()
+
+
+def test_restart_removes_selected_components_refetches_code_and_keeps_data(tmp_path):
+    install = tmp_path / "install"
+    for folder in ("settings", "keys", "data", "models", ".venv"):
+        (install / folder).mkdir(parents=True)
+    kept = {"settings/weightroom.toml": 'data = "../data"\n',
+            "keys/machine.key": "retained-key", "data/chat.db": "retained-data",
+            "models/model.gguf": "retained-model"}
+    for name, content in kept.items():
+        (install / name).write_text(content)
+    (install / "pyproject.toml").touch()
+    (install / "old-code").touch()
+    units = tmp_path / "config/systemd/user"
+    units.mkdir(parents=True)
+    unit = units / "weightroom.service"
+    unit.write_text(f"ExecStart={install}/.venv/bin/weightroom\n")
+    (install / ".install-receipt").write_text(f"state=pending\nmode=user\ncreated_dir=1\n"
+        f"topology=all\nadmin=sam\nservices=weightroom\nunit_dir={units}\n")
+    uninstaller = install / "uninstall.sh"
+    uninstaller.write_text(script_functions("uninstall.sh") + '''
+load_ui() {
+  source "$TEST_REPO/scripts/lib/ui.sh"
+  source "$TEST_REPO/scripts/lib/receipt.sh"
+  owg_systemctl() { return 1; }
+  ui_confirm() { return 0; }
+}
+main "$@"
+''')
+    uninstaller.chmod(0o755)
+    answer = shell(tmp_path, script_functions("install.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/receipt.sh"
+load_ui() { CHECKOUT=$INSTALL; }
+ui_choose() { printf -v "$1" '%s' 1; }
+warm_up() { :; }
+game_plan() {
+  [[ -z $CHECKOUT && -z $TOPOLOGY && -z $ADMIN && $DATABASE == keep ]]
+  [[ ! -e $INSTALL/old-code && ! -e $INSTALL/.venv && ! -e $UNIT ]]
+  TOPOLOGY=front ADMIN=alex
+}
+account() { :; }
+git() {
+  if [[ $1 == clone ]]; then mkdir -p "${!#}/.git"
+  else
+    [[ $* == *reset* ]]
+    printf '[project]\\nname = "fixture"\\n' >"$INSTALL/pyproject.toml"
+  fi
+}
+loading_plates() { fetch_code; services_for; write_receipt pending; }
+setting_up() { :; }
+finishing() { :; }
+spotting() { :; }
+finale() { printf RESTARTED; }
+main --dir "$INSTALL" --no-browser
+''', env={"INSTALL": str(install), "UNIT": str(unit)})
+
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    assert "RESTARTED" in answer.stdout
+    for name, content in kept.items():
+        assert (install / name).read_text() == content
+    assert not unit.exists() and not (install / "old-code").exists()
+    assert (install / ".git").is_dir() and (install / "pyproject.toml").exists()
+    receipt = (install / ".install-receipt").read_text()
+    assert "state=complete" in receipt and "topology=front" in receipt and "admin=alex" in receipt
 
 
 @pytest.mark.parametrize("topology,services", [

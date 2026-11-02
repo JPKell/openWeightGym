@@ -4384,7 +4384,7 @@ switching off, need a polkit rule that root installs. Both are described below.
 | Memory in use | `/proc/meminfo`: all of it less what is available |
 | Room on each watched drive | The system's own count for the folder |
 | How long the machine has been up | `/proc/uptime` |
-| How long since a key or the mouse was touched at its own screen | The desktop, asked with `gdbus`. Nothing if nobody is signed in there |
+| How long since a key or the mouse was touched at its own screen | The system's own count, asked for: spotter never reads the keyboard or the mouse itself. On Linux, this account's desktop: GNOME over D-Bus, Hyprland, Sway, KDE and the other Wayland desktops through the standard ext-idle-notify protocol, an X11 desktop through its screensaver extension. logind for the local sessions of other accounts. `GetLastInputInfo` on Windows, `HIDIdleTime` on macOS. Nothing if none of them says. See [`spotter/screen.py`](../spotter/screen.py) |
 
 **A reading that was not given is not a nought.** A card with no fan sensor reports `[N/A]`.
 That is kept as nothing at all, shown as a dash, and has no line in a chart. A machine that
@@ -4558,7 +4558,10 @@ what runs it out of memory.
 | Documented constraint |
 |---|
 | Sleep by itself is decided from a reading every `sample_every` seconds. A GPU busy for a moment between two readings is not seen |
-| Only this account's own desktop is asked about keyboard activity for automatic sleep. Someone else signed in at the screen is counted but their activity is not seen |
+| Only this account's own desktop is asked exactly when its screen was last used. Another account signed in at the screen is seen only if its desktop tells logind, as GNOME, KDE and text consoles do and Hyprland and Sway do not, and then only once that desktop's own wait for idleness is over, five minutes for GNOME |
+| A system installation runs spotter as its own account, which has no desktop, so only logind is asked there |
+| A Wayland desktop says only that its screen has gone ten seconds untouched, so there the count is good to ten seconds |
+| On Windows spotter must run in the session of whoever signs in at the screen: a Windows service is told nothing. Under WSL2 the Windows desktop is not asked at all |
 | A drain before sleep has no time limit. A request that never ends holds it until someone stops the request or forces the sleep |
 | After a restart or switching off is asked of systemd, the page shows it as on its way for up to two minutes, and it can no longer truly be called off |
 | Sleep has been done for real, three times, each with "do not wait" ticked. A sleep that waits for LoadCoach and unloads first, a restart, switching off, and sleep by itself have only been checked with a stand-in for systemd |
@@ -4572,7 +4575,7 @@ what runs it out of memory.
 
 ### Tests and what was checked
 
-[`tests/test_spotter.py`](../tests/test_spotter.py) holds seven checks. `nvidia-smi`, `systemctl`,
+[`tests/test_spotter.py`](../tests/test_spotter.py) holds eleven checks. `nvidia-smi`, `systemctl`,
 `journalctl` and `gdbus` are stood in for by small scripts put first on the `PATH`, so nothing
 real is read, restarted or put to sleep, and LoadCoach by a few lines that say how busy it is
 and note what they are asked. They cover: what is read, and that a missing reading is not a nought; that
@@ -4581,7 +4584,9 @@ and that what a caller sent was never run; readings kept and given back as steps
 the settings; one of root's services asked of the system and not of the account; sleep that
 waits for LoadCoach to empty, can be called off, unloads first, and does not wait when forced,
 with a refusal from systemd shown as it was said; and sleep by itself, held off by the
-keyboard, by a request and by a busy card, and then done.
+keyboard, by a request and by a busy card, and then done.; a made-up Wayland desktop asked once and heard
+saying its screen went unused and was used again, and going; logind believed only for sessions at
+the screen that have said; and macOS's count read as it prints it.
 
 By hand on 2026-10-08, a `spotter` on a loopback port reading this machine for real: both
 cards at 15.4 and 14.9 GB of 15.9, 58° and 60°, the processor at 77°, 19.9 of 30 GB of memory.

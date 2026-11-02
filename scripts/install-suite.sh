@@ -57,7 +57,7 @@ change both the service set and database engine before anything is installed.
   --services LIST            comma-separated names, or compute, front, all
   --preset compute|front|all fresh-install service preset
   --database keep|sqlite|postgresql
-  --dsn NAME=FILE            PostgreSQL DSN file (core, telemetry, accounts, chat,
+  --dsn NAME=FILE            PostgreSQL DSN file (core, telemetry, accounts, roles, chat,
                              benchmarks, plugins, alerts, or schedules); repeat as needed
   --install-postgresql       install PostgreSQL server and client packages
   --provision-postgresql     create local openWeightGym roles/databases and DSN files
@@ -199,7 +199,7 @@ fi
 [[ $AUDIOCPP_ACTION =~ ^(install|skip|keep)$ ]] || die 'audiocpp must be install, skip, or keep'
 [[ $AUDIOCPP_BACKEND =~ ^(cuda|vulkan|cpu)$ ]] || die 'audiocpp backend must be cuda, vulkan, or cpu'
 for name in "${!DSNS[@]}"; do
-  [[ $name =~ ^(core|telemetry|accounts|chat|benchmarks|plugins|alerts|schedules)$ ]] || die "unknown DSN name: $name"
+  [[ $name =~ ^(core|telemetry|accounts|roles|chat|benchmarks|plugins|alerts|schedules)$ ]] || die "unknown DSN name: $name"
 done
 
 has_service() {
@@ -425,7 +425,7 @@ fi
 REQUIRED_DSNS=()
 if has_service loadcoach || has_service spotter || has_service toollocker; then REQUIRED_DSNS+=(core); fi
 has_service spotter && REQUIRED_DSNS+=(telemetry)
-if has_service weightroom; then REQUIRED_DSNS+=(accounts chat benchmarks plugins alerts schedules); elif has_service turnstile; then REQUIRED_DSNS+=(accounts chat benchmarks plugins); fi
+if has_service weightroom || has_service turnstile; then REQUIRED_DSNS+=(accounts roles chat benchmarks plugins alerts schedules); fi
 
 install_postgresql_packages() {
   ((INSTALL_POSTGRESQL)) || return 0
@@ -503,6 +503,11 @@ provision_postgresql() {
   printf 'CREATE ROLE "%s" LOGIN PASSWORD '\''%s'\'';\n' "$role" "$password" |
     sudo -u postgres psql -v ON_ERROR_STOP=1 -q postgres
   for key in "${REQUIRED_DSNS[@]}"; do
+    # A retry or a newly required store must not redirect existing stores to empty databases.
+    if [[ -f $dsn_dir/$key.dsn ]]; then
+      DSNS[$key]=$dsn_dir/$key.dsn
+      continue
+    fi
     database="${prefix}_${key}"; database=${database:0:60}
     sudo -u postgres createdb --owner "$role" "$database"
     printf 'postgresql://%s:%s@127.0.0.1:5432/%s\n' "$role" "$password" "$database" > "$dsn_dir/$key.dsn"
@@ -660,7 +665,7 @@ if [[ $DATABASE != keep ]]; then
     if [[ $DATABASE == postgresql ]]; then
       for key in "${!DSNS[@]}"; do arguments+=(--dsn "$key=${DSNS[$key]}"); done
     fi
-    "$PY" "$ROOT/scripts/install-suite-support.py" "${arguments[@]}"
+    step "Configuring $service databases ($DATABASE)" "$PY" "$ROOT/scripts/install-suite-support.py" "${arguments[@]}"
     # A copy of a file that came out the same is no copy worth keeping.
     if [[ -n ${CONFIG_BACKUPS[$config]:-} ]] && cmp -s "$config" "${CONFIG_BACKUPS[$config]}"; then
       rm -f -- "${CONFIG_BACKUPS[$config]}"

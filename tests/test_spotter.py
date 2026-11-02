@@ -2,7 +2,9 @@
 by small scripts put first on the PATH, so that nothing real is read or restarted.
 """
 
+import asyncio
 import json
+import os
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -20,6 +22,7 @@ from loadcoach.settings import Changes
 from loadcoach.users import Users
 from front_helpers import OnCompute, front_of
 from spotter.app import Settings, build_app, gathered, load_settings, number, series
+from spotter import screen
 
 GROUPS = {
     "admin": Group(can=frozenset({"restart-services", "power", "load", "manage-models"})),
@@ -53,6 +56,7 @@ def made_up(tmp_path, monkeypatch, **more):
     stand_in("gdbus", f"cat {tmp_path / 'idle'}\n")
     stand_in("loginctl", 'printf "1000 jordan\n1001 pat\n1000 jordan\n"\n')
     monkeypatch.setenv("PATH", f"{stand_ins}:/usr/bin:/bin")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))  # so that a real desktop on the machine running the checks is never asked
 
     coach = {"busy": 0, "asked": []}
 
@@ -315,3 +319,79 @@ def test_the_settings_name_services_by_their_unit_and_nothing_else(tmp_path):
         with pytest.raises(SystemExit):
             load_settings(file)
     assert Path(__file__).parent.parent.joinpath("settings/examples/spotter.toml").exists()
+
+
+def test_a_wayland_desktop_is_asked_once_and_says_only_when_its_screen_goes_unused_or_is_used_again(tmp_path, monkeypatch):
+    monkeypatch.setattr("spotter.screen.IDLE", 1)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    (tmp_path / "wayland-0").touch()  # left behind by a desktop that has gone: nothing answers there
+    asked, desktops = [], []
+
+    async def desktop(reader, writer):
+        """A made-up desktop that offers a seat, the notifier, and a screen. A request has the same form as an event."""
+        desktops.append(writer)
+        while True:
+            try:
+                sender, kind, body = await screen.event(reader)
+            except asyncio.IncompleteReadError:
+                return
+            asked.append((sender, kind, body))
+            if (sender, kind) == (1, 1):
+                for name, offered, version in ((7, "wl_seat", 9), (8, "ext_idle_notifier_v1", 2), (9, "wl_output", 4)):
+                    writer.write(screen.message(2, 0, screen.number(name), screen.text(offered), screen.number(version)))
+            elif (sender, kind) == (1, 0):
+                writer.write(screen.message(3, 0, screen.number(0)))  # the list has all come
+
+    async def check():
+        server = await asyncio.start_unix_server(desktop, tmp_path / "wayland-1")
+        watch = screen.Wayland()
+        assert watch.seconds() is None  # it starts looking, and knows nothing yet
+        while not watch.answering:
+            await asyncio.sleep(0.01)
+        assert watch.seconds() is None  # asked too recently for its silence to mean anything
+        await asyncio.sleep(1)
+        assert watch.seconds() == 0  # a second of silence: something was touched within the second
+        desktops[0].write(screen.message(6, 0))  # nothing has been touched for a second
+        await asyncio.sleep(0.1)
+        assert 1 <= watch.seconds() < 1.5
+        desktops[0].write(screen.message(6, 1))  # and now something has
+        await asyncio.sleep(0.1)
+        assert watch.seconds() == 0
+        desktops[0].close()  # the desktop goes, as at signing out
+        await asyncio.wait_for(watch.listening, 1)
+        assert watch.seconds() is None
+        server.close()
+
+    asyncio.run(check())
+    # It took a seat and the notifier, and asked, as version 2 can, about the keys and the mouse of that seat alone, after a second.
+    assert [(sender, kind) for sender, kind, _ in asked] == [(1, 1), (1, 0), (2, 0), (2, 0), (5, 2)]
+    assert asked[2][2] == screen.number(7) + screen.text("wl_seat") + screen.number(1) + screen.number(4)
+    assert asked[3][2] == screen.number(8) + screen.text("ext_idle_notifier_v1") + screen.number(2) + screen.number(5)
+    assert asked[4][2] == screen.number(6) + screen.number(1000) + screen.number(4)
+
+
+def test_logind_is_believed_only_for_sessions_at_the_screen_that_have_said(tmp_path, monkeypatch):
+    stand_ins = tmp_path / "bin"
+    stand_ins.mkdir()
+    since = int((time.time() - 300) * 1e6)
+    # Ours, at the screen, unused for five minutes. Pat's, over SSH, in use. Sam's, at the screen, never said.
+    (stand_ins / "loginctl").write_text(f"""#!/bin/sh
+case "$1" in
+  list-sessions) printf "3 {os.getuid()} jordan seat0 1199 user tty1 no -\n4 1001 pat - 99 user pts/0 no -\n5 1002 sam seat0 7 user tty2 no -\n";;
+  show-session) printf "User={os.getuid()}\nSeat=seat0\nRemote=no\nIdleHint=yes\nIdleSinceHint={since}\n\nUser=1001\nSeat=\nRemote=yes\nIdleHint=no\nIdleSinceHint={since}\n\nUser=1002\nSeat=seat0\nRemote=no\nIdleHint=no\nIdleSinceHint=0\n";;
+esac
+""")
+    (stand_ins / "loginctl").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{stand_ins}:/usr/bin:/bin")
+    assert 299 < asyncio.run(screen.logind(others_only=False)) < 302
+    assert asyncio.run(screen.logind(others_only=True)) is None  # our own desktop was asked instead
+
+
+def test_macos_is_asked_for_its_own_count(tmp_path, monkeypatch):
+    stand_ins = tmp_path / "bin"
+    stand_ins.mkdir()
+    (stand_ins / "ioreg").write_text('#!/bin/sh\nprintf \'  | |   "HIDIdleKeyboardTime" = 9\\n  | |   "HIDIdleTime" = 42500000000\\n\'\n')
+    (stand_ins / "ioreg").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{stand_ins}:/usr/bin:/bin")
+    assert asyncio.run(screen.macos()) == 42.5

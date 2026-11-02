@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).parents[1]
@@ -49,6 +53,51 @@ def test_database_configuration_replaces_managed_tables_and_keeps_other_settings
     assert '[databases.stores.old]' not in first
     assert '[databases.stores.chat]' in first
     assert '"weightroom.plugins" = "plugins"' in first
+
+
+@pytest.mark.parametrize("services", ["weightroom", "turnstile", "front"])
+@pytest.mark.parametrize("provision", [False, True])
+def test_front_postgresql_plan_supplies_every_configured_store(tmp_path, services, provision):
+    install = tmp_path / "suite"
+    scripts = install / "scripts"
+    (scripts / "lib").mkdir(parents=True)
+    shutil.copy2(ROOT / "scripts/lib/ui.sh", scripts / "lib/ui.sh")
+    shutil.copy2(SUPPORT_PATH, scripts / SUPPORT_PATH.name)
+    (install / "pyproject.toml").write_text('[project]\nname = "fixture"\nversion = "0.1.0"\n')
+    # Run real argument validation and planning, stopping before package/service changes.
+    plan = (ROOT / "scripts/install-suite.sh").read_text().split("\ninstall_postgresql_packages\n", 1)[0]
+    runner = scripts / "plan.sh"
+    runner.write_text(plan + '''
+collect_dsns
+mkdir -p "$ROOT/settings"
+printf 'host = "127.0.0.1"\\n' > "$ROOT/settings/weightroom.toml"
+arguments=(configure --config "$ROOT/settings/weightroom.toml" --service weightroom --engine postgresql)
+for key in "${!DSNS[@]}"; do arguments+=(--dsn "$key=${DSNS[$key]}"); done
+"$PY" "$ROOT/scripts/install-suite-support.py" "${arguments[@]}"
+''')
+    names = {"accounts", "roles", "chat", "benchmarks", "plugins", "alerts", "schedules"}
+    arguments = ["bash", str(runner), "--services", services, "--database", "postgresql",
+                 "--dry-run", "--non-interactive", "--yes"]
+    dsn_dir = install / "keys/postgresql" if provision else tmp_path / "provided"
+    if provision:
+        arguments.append("--provision-postgresql")
+    else:
+        for name in sorted(names):
+            arguments += ["--dsn", f"{name}={dsn_dir / (name + '.dsn')}"]
+    environment = {**os.environ, "HOME": str(tmp_path / "home"), "OWG_NO_TTY": "1", "OWG_PLAIN": "1",
+                   "XDG_CONFIG_HOME": str(tmp_path / "config"), "XDG_STATE_HOME": str(tmp_path / "state"),
+                   "OWG_LOG": str(tmp_path / "install.log"), "PYTHONPATH": str(ROOT),
+                   "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}"}
+    answer = subprocess.run(arguments, env=environment, text=True, capture_output=True, timeout=30)
+
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    config = install / "settings/weightroom.toml"
+    databases = tomllib.loads(config.read_text())["databases"]
+    assert set(databases["stores"]) == names
+    for name, store in databases["stores"].items():
+        assert store["engine"] == "postgresql"
+        assert (config.parent / store["dsn_file"]).resolve() == dsn_dir / f"{name}.dsn"
+        assert databases["bindings"][f"weightroom.{name}"] == name
 
 
 def test_installer_audit_includes_front_roles_store_with_default_and_partial_bindings(tmp_path):
