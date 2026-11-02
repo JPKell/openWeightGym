@@ -55,6 +55,7 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
                           path of a llama-server you already have (default: auto)
   --database NAME         sqlite (default) or postgresql (installed and set up locally)
   --voice                 also install speech recognition and voices
+  --voice-key-file FILE   manual GPU-node setup: the console's voice-service.key (pairing supplies it)
   --power-control         let the console put this machine to sleep, restart or switch it off
   --no-model              skip the starter model
   --no-linger             let the services stop when you log out
@@ -79,8 +80,7 @@ main() {
   load_ui
   ui_init
   : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/install-$(date +%Y%m%d-%H%M%S).log}"
-  mkdir -p "$(dirname "$OWG_LOG")"
-  : >"$OWG_LOG"
+  ui_log_init || ui_die "Cannot create a private installer log at $OWG_LOG."
   export OWG_LOG
   trap 'ui_cleanup; on_error $LINENO' ERR
   trap 'ui_cleanup' EXIT
@@ -90,7 +90,10 @@ main() {
   if [[ $ACTION == uninstall ]]; then run_uninstaller; fi
   ui_banner "$(installed_version)"
   warm_up
-  if is_installed "$DIR"; then
+  if [[ $(receipt_get state) == pending ]]; then
+    resume_settings
+    ui_info "Resuming the confirmed installation plan" "settings and existing accounts are kept"
+  elif is_installed "$DIR"; then
     ((SYSTEM)) && ui_sudo "looking after the system installation"
     case "$ACTION" in
       update) update ;;
@@ -98,14 +101,19 @@ main() {
       *) installed_menu ;;
     esac
     return 0
+  else
+    if [[ $ACTION == repair && -x $DIR/.venv/bin/python ]]; then ACTION=''; fi
+    [[ -z $ACTION ]] || ui_die "openWeightGym is not installed in $DIR." "Install it first, or give its folder with --dir."
+    # An older interrupted run has no checkpoint. Preserve its database selection on retry.
+    if compgen -G "$DIR/settings/*.toml" >/dev/null && [[ -z ${PLAN_GIVEN[DATABASE]:-} ]]; then DATABASE=keep; fi
+    game_plan
   fi
-  [[ -z $ACTION ]] || ui_die "openWeightGym is not installed in $DIR." "Install it first, or give its folder with --dir."
-  game_plan
   account
   loading_plates
   setting_up
   finishing
   spotting
+  write_receipt complete
   finale
 }
 
@@ -122,25 +130,28 @@ parse_arguments() {
   DIR=${OWG_HOME:-} DIR_GIVEN=0 SYSTEM=0 TOPOLOGY='' ASSUME_YES=0 ADMIN='' FRONT_URL='' MACHINE_KEY_FILE=''
   COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 STARTER=1 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
   ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
+  VOICE_KEY_FILE='' VOICE_KEY=''
+  declare -gA PLAN_GIVEN=()
   [[ -n $DIR ]] && DIR_GIVEN=1
   while (($#)); do
     case "$1" in
       --dir) DIR=${2:?--dir needs a folder}; DIR_GIVEN=1; shift 2 ;;
       --system) SYSTEM=1; shift ;;
-      --topology) TOPOLOGY=${2:?--topology needs all, front or compute}; shift 2 ;;
+      --topology) TOPOLOGY=${2:?--topology needs all, front or compute}; PLAN_GIVEN[TOPOLOGY]=1; shift 2 ;;
       --yes|--express) ASSUME_YES=1; shift ;;
-      --admin) ADMIN=${2:?--admin needs a name}; shift 2 ;;
-      --front-url) FRONT_URL=${2:?--front-url needs a URL}; shift 2 ;;
+      --admin) ADMIN=${2:?--admin needs a name}; PLAN_GIVEN[ADMIN]=1; shift 2 ;;
+      --front-url) FRONT_URL=${2:?--front-url needs a URL}; PLAN_GIVEN[FRONT_URL]=1; shift 2 ;;
       --machine-key-file) MACHINE_KEY_FILE=${2:?--machine-key-file needs a file}; shift 2 ;;
-      --compute-url) COMPUTE_URL=${2:?--compute-url needs a URL}; shift 2 ;;
-      --join) JOIN_URL=${2:?--join needs the console address}; TOPOLOGY=compute; shift 2 ;;
+      --compute-url) COMPUTE_URL=${2:?--compute-url needs a URL}; PLAN_GIVEN[COMPUTE_URL]=1; shift 2 ;;
+      --join) JOIN_URL=${2:?--join needs the console address}; TOPOLOGY=compute; PLAN_GIVEN[JOIN_URL]=1; PLAN_GIVEN[TOPOLOGY]=1; shift 2 ;;
       --code) PAIR_CODE=${2:?--code needs the pairing code}; shift 2 ;;
-      --llama) LLAMA=${2:?--llama needs a choice}; shift 2 ;;
-      --database) DATABASE=${2:?--database needs sqlite or postgresql}; shift 2 ;;
-      --voice) VOICE=1; shift ;;
-      --power-control) POWER_RULE=1; shift ;;
-      --no-model) STARTER=0; shift ;;
-      --no-linger) LINGER_WANTED=0; shift ;;
+      --llama) LLAMA=${2:?--llama needs a choice}; PLAN_GIVEN[LLAMA]=1; shift 2 ;;
+      --database) DATABASE=${2:?--database needs sqlite or postgresql}; PLAN_GIVEN[DATABASE]=1; shift 2 ;;
+      --voice) VOICE=1; PLAN_GIVEN[VOICE]=1; shift ;;
+      --voice-key-file) VOICE_KEY_FILE=${2:?--voice-key-file needs a file}; shift 2 ;;
+      --power-control) POWER_RULE=1; PLAN_GIVEN[POWER_RULE]=1; shift ;;
+      --no-model) STARTER=0; PLAN_GIVEN[STARTER]=1; shift ;;
+      --no-linger) LINGER_WANTED=0; PLAN_GIVEN[LINGER_WANTED]=1; shift ;;
       --no-browser) BROWSER=0; shift ;;
       --ref) OWG_REF=${2:?--ref needs a branch}; shift 2 ;;
       --plain) export OWG_PLAIN=1; PASSTHROUGH+=(--plain); shift ;;
@@ -202,7 +213,7 @@ locate_installation() {
     if ((SYSTEM)); then DIR=$SYS_OPT
     else
       DIR=${CHECKOUT:-$HOME/openWeightGym}
-      if ! is_installed "$DIR" && is_installed "$SYS_OPT"; then DIR=$SYS_OPT; fi
+      if ! receipt_find "$DIR" >/dev/null && ! is_installed "$DIR" && receipt_find "$SYS_OPT" >/dev/null; then DIR=$SYS_OPT; fi
     fi
   fi
   DIR=$(realpath -m -- "$DIR")
@@ -210,6 +221,9 @@ locate_installation() {
   if [[ $(receipt_get mode) == system ]]; then
     SYSTEM=1
     SVC=$(receipt_get service_user)
+    SYS_OPT=$DIR
+    SYS_ETC=${RECEIPT[etc_dir]:-$SYS_ETC}
+    SYS_VAR=${RECEIPT[var_dir]:-$SYS_VAR}
   fi
   system_mode_settings
 }
@@ -231,7 +245,35 @@ installed_version() {
 }
 
 is_installed() {
-  [[ -x $1/.venv/bin/python ]] && compgen -G "$1/settings/*.toml" >/dev/null
+  [[ -x $1/.venv/bin/python ]] && compgen -G "$1/settings/*.toml" >/dev/null || return 1
+  [[ $(receipt_get state) != pending ]] || return 1
+  receipt_present && return 0
+  # Legacy deployments have no receipt. A virtualenv plus copied settings alone is incomplete.
+  local unit command unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
+  for unit in loadcoach weightroom turnstile toollocker spotter voice voice-gateway frontdesk tooldoor; do
+    [[ -f $unit_dir/$unit.service ]] || continue
+    command=$(sed -n 's/^ExecStart=//p' "$unit_dir/$unit.service" | head -1)
+    command=${command//%h/$HOME}
+    [[ $command == "$1"/.venv/bin/* ]] && return 0
+  done
+  return 1
+}
+
+# Restore a confirmed plan without saving passwords, API keys or the consumed pairing code.
+resume_settings() {
+  local pair variable key value
+  for pair in TOPOLOGY:topology ADMIN:admin DATABASE:database LLAMA:llama STARTER:starter VOICE:voice \
+    LINGER_WANTED:linger_wanted POWER_RULE:power_rule FRONT_URL:front_url COMPUTE_URL:compute_url \
+    MACHINE_NAME:machine_name JOIN_URL:join_url; do
+    variable=${pair%%:*} key=${pair#*:}
+    value=$(receipt_get "$key")
+    [[ -z $value || -n ${PLAN_GIVEN[$variable]:-} ]] || printf -v "$variable" '%s' "$value"
+  done
+  CREATED_DIR=${RECEIPT[created_dir]:-0}
+  LINGER_ENABLED=${RECEIPT[linger_enabled]:-0}
+  UV_DOWNLOADED=${RECEIPT[uv]:+1}
+  POLKIT_RULE=$(receipt_get polkit_rule)
+  if [[ -n $JOIN_URL ]]; then PAIRED=1; fi
 }
 
 # Something this run is allowed to start: the user's systemd, or the machine's for a system installation.
@@ -365,10 +407,32 @@ reinstall() {
   ui_section "Setting up" "Packages, settings and services"
   as_owner "$DIR/scripts/install-suite.sh" --root "$DIR" --embedded --non-interactive --yes --database keep --uv "$UV" ||
     ui_die "Reinstalling did not finish." "The log says why: ${OWG_OWNER_LOG:-$OWG_LOG}"
+  services_from_receipt
+  if ! receipt_present && [[ ,$SERVICES, == *,weightroom,* ]] && ! console_account_ready; then
+    if [[ ,$SERVICES, == *,loadcoach,* ]]; then TOPOLOGY=all; else TOPOLOGY=front; fi
+    STARTER=0 DATABASE=keep
+    account
+    finishing
+    spotting
+    write_receipt complete
+    finale
+    return 0
+  fi
   link_owg
+  receipt_publish "$DIR"
   ui_section "Spotting" "Checking it all works"
   check_services
   ui_finale "Back in shape"
+}
+
+# A legacy or interrupted front may have only the weightroom service identity, with no sign-in.
+console_account_ready() {
+  local listing name
+  listing=$(as_owner "$DIR/.venv/bin/weightroom" --config "$DIR/settings/weightroom.toml" user list) || return 1
+  while IFS= read -r name; do
+    if as_owner "$DIR/.venv/bin/weightroom" --config "$DIR/settings/weightroom.toml" user show "$name" | grep -qE '^So it may:.*superuser'; then return 0; fi
+  done < <(awk 'NR > 1 && $3 == "yes" && $4 != "-" {print $1}' <<<"$listing")
+  return 1
 }
 
 # ---- the game plan --------------------------------------------------------------------------
@@ -426,7 +490,7 @@ valid_code() {
 redeem() {
   local body answer status json name
   name=$(uname -n | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')
-  body=$(printf '{"code": "%s", "name": "%s", "address": "%s"}' "${PAIR_CODE^^}" "$name" "$HOST_ADDRESS")
+  body=$(printf '{"code": "%s", "name": "%s", "address": "%s", "voice": %s}' "${PAIR_CODE^^}" "$name" "$HOST_ADDRESS" "$( ((VOICE)) && printf true || printf false)")
   answer=$(curl -sS --max-time 30 -X POST -H 'content-type: application/json' -d "$body" -w '\n%{http_code}' "$JOIN_URL/pair" 2>>"$OWG_LOG") ||
     ui_die "Could not reach the console at $JOIN_URL." "Check the address, and that this machine can reach it on the network."
   status=${answer##*$'\n'} json=${answer%$'\n'*}
@@ -434,7 +498,9 @@ redeem() {
     ui_die "The console did not accept the code: $(json_field message "$json")" "Make a new code on the console and run this again."
   fi
   MACHINE_KEY=$(json_field machine_key "$json") MACHINE_NAME=$(json_field name "$json") FRONT_URL=$(json_field front "$json")
-  [[ -n $MACHINE_KEY && -n $FRONT_URL ]] || ui_die "The console's answer was not understood." "$json"
+  VOICE_KEY=$(json_field voice_key "$json")
+  [[ -n $MACHINE_KEY && -n $FRONT_URL ]] || ui_die "The console's answer was not understood." "Update the console and make a new pairing code."
+  if ((VOICE)) && [[ -z $VOICE_KEY ]]; then ui_die "The console did not provide a voice-service key." "Update the console and make a new pairing code."; fi
   PAIRED=1
   ui_ok "Joined the console at ${JOIN_URL#*://}" "as $MACHINE_NAME"
 }
@@ -443,6 +509,9 @@ redeem() {
 json_field() { sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" <<<"$2" | head -1; }
 
 ask_console() {
+  if ((VOICE)) && [[ -n $VOICE_KEY_FILE ]]; then
+    [[ -r $VOICE_KEY_FILE ]] || ui_die "Cannot read the voice-service key in $VOICE_KEY_FILE."
+  fi
   if [[ -z $JOIN_URL && -z $FRONT_URL ]] && ((!ASSUME_YES)); then
     local way=0 host=''
     ui_choose way "How should this node join the console?" 0 \
@@ -475,6 +544,9 @@ ask_console() {
     ui_note "The console and this node sign what they send each other with one shared key."
     ui_note "On the console, show it with:  cat ~/openWeightGym/keys/machine.key"
     ui_secret MACHINE_KEY "Paste the console's machine key" 20 once
+  fi
+  if ((VOICE)) && [[ -z $VOICE_KEY_FILE && ! -s $DIR/keys/voice-service.key ]]; then
+    ui_die "Voice needs its own service key from the console." "Join with a pairing code, or copy the console's keys/voice-service.key and pass --voice-key-file FILE."
   fi
 }
 
@@ -533,7 +605,7 @@ show_plan() {
     lines+=("${C_MUTED}Runs as      ${C_RESET}you, $( ((LINGER_WANTED)) && printf 'from every boot, signed in or not' || printf 'while you are signed in')")
   fi
   lines+=("${C_MUTED}Programs     ${C_RESET}$(plain_programs)")
-  lines+=("${C_MUTED}Data         ${C_RESET}$([[ $DATABASE == sqlite ]] && printf 'SQLite, on this machine' || printf 'PostgreSQL, on this machine')")
+  lines+=("${C_MUTED}Data         ${C_RESET}$([[ $DATABASE == keep ]] && printf 'keep existing stores' || { [[ $DATABASE == sqlite ]] && printf 'SQLite, on this machine' || printf 'PostgreSQL, on this machine'; })")
   if [[ $TOPOLOGY != front ]]; then
     lines+=("${C_MUTED}Engine       ${C_RESET}llama.cpp · $(backend_label "$engine")")
     if ((STARTER)); then lines+=("${C_MUTED}First model  ${C_RESET}$STARTER_TITLE, about 1.8 GB")
@@ -617,6 +689,7 @@ account() {
   if [[ -z $ADMIN ]]; then ui_input ADMIN "Your user name" "$default" valid_user_name; fi
   valid_user_name "$ADMIN" || ui_die "$ADMIN cannot be a user name."
   PASSWORD=${OWG_ADMIN_PASSWORD:-}
+  [[ -z $PASSWORD || ${#PASSWORD} -ge 8 ]] || ui_die "The administrator password must have at least 8 characters."
   if [[ -z $PASSWORD ]]; then
     if ! ui_secret PASSWORD "A password for $ADMIN (8 characters or more)" 8; then
       PASSWORD=''
@@ -639,6 +712,9 @@ loading_plates() {
   install_tools
   ((SYSTEM)) && prepare_system
   fetch_code
+  save_machine_key
+  services_for
+  write_receipt pending
   find_uv
   ui_step "Python 3.13" -- as_owner "$UV" python install --no-bin 3.13 ||
     ui_die "uv could not fetch Python 3.13." "Check the network; the log has uv's own words."
@@ -679,7 +755,7 @@ prepare_system() {
   sudo -n install -d -o "$SVC" -g "$SVC" -m 750 "$SYS_VAR/data" "$SYS_VAR/logs"
   sudo -n install -d -o root -g root -m 755 "$SYS_ETC"
   sudo -n install -d -o "$SVC" -g "$SVC" -m 700 "$SYS_ETC/keys"
-  sudo -n install -o "$SVC" -g "$SVC" -m 640 /dev/null "$OWG_OWNER_LOG"
+  sudo -n install -o "$SVC" -g "$SVC" -m 600 /dev/null "$OWG_OWNER_LOG"
   ui_ok "Folders" "${SYS_OPT}, ${SYS_ETC}, ${SYS_VAR}"
   if [[ $(loginctl show-user "$SVC" -p Linger --value 2>/dev/null) != yes ]]; then
     sudo -n loginctl enable-linger "$SVC" || ui_die "Could not let the $SVC account start at boot (loginctl enable-linger)."
@@ -705,10 +781,10 @@ link_system_folders() {
 fetch_code() {
   if [[ -n $CHECKOUT && $DIR == "$CHECKOUT" ]]; then
     ui_ok "openWeightGym $(installed_version)" "this checkout, ${DIR/#$HOME/\~}"
-    CREATED_DIR=0
+    CREATED_DIR=${CREATED_DIR:-0}
     return 0
   fi
-  if [[ -e $DIR ]] && [[ -n $(ls -A "$DIR" 2>/dev/null) ]] && [[ ! -f $DIR/pyproject.toml && -e $DIR/data/install-receipt ]]; then
+  if [[ -e $DIR ]] && [[ -n $(ls -A "$DIR" 2>/dev/null) ]] && [[ ! -f $DIR/pyproject.toml ]] && receipt_present; then
     # What an earlier uninstall kept: settings, keys, data or models. Put the code back around them.
     ui_info "Found what an earlier installation kept in ${DIR/#$HOME/\~}" "it is used as it is"
     local clone=$DIR/.owg-clone
@@ -723,7 +799,7 @@ fetch_code() {
     [[ -f $DIR/pyproject.toml && -f $DIR/scripts/install-suite.sh ]] ||
       ui_die "$DIR exists and is not openWeightGym." "Choose another place with --dir, or empty that folder."
     ui_ok "openWeightGym is already in ${DIR/#$HOME/\~}"
-    CREATED_DIR=0
+    CREATED_DIR=${CREATED_DIR:-0}
   else
     ((SYSTEM)) || mkdir -p "$(dirname "$DIR")"
     ui_step "Fetching openWeightGym ($OWG_REF)" -- as_owner git clone --quiet --branch "$OWG_REF" "$OWG_REPO" "$DIR" ||
@@ -795,21 +871,32 @@ starter_model() {
 
 # ---- setting up -----------------------------------------------------------------------------
 
-setting_up() {
-  ui_section "Setting up" "Python, settings and services"
-  services_for
+save_machine_key() {
   if [[ $TOPOLOGY == compute && -n ${MACHINE_KEY:-} ]] && { ((PAIRED)) || ! as_owner test -f "$DIR/keys/machine.key"; }; then
     as_owner mkdir -p "$DIR/keys"
     as_owner chmod 700 "$DIR/keys"
     printf '%s\n' "$MACHINE_KEY" | as_owner bash -c 'umask 077 && cat >"$1"' _ "$DIR/keys/machine.key"
     ui_ok "Saved the console's machine key"
   fi
+  if [[ $TOPOLOGY == compute ]] && ((VOICE)); then
+    [[ -z $VOICE_KEY_FILE ]] || VOICE_KEY=$(<"$VOICE_KEY_FILE")
+    if [[ -n $VOICE_KEY ]]; then
+      printf '%s\n' "$VOICE_KEY" | as_owner bash -c 'umask 077 && cat >"$1" && chmod 600 "$1"' _ "$DIR/keys/voice-service.key"
+    fi
+  fi
+}
+
+setting_up() {
+  ui_section "Setting up" "Python, settings and services"
+  services_for
+  save_machine_key
   local options=(--root "$DIR" --embedded --non-interactive --yes --services "$SERVICES" --topology "$TOPOLOGY"
                  --address "$HOST_ADDRESS" --start-new --uv "$UV" --database "$DATABASE")
   [[ -n $FRONT_URL ]] && options+=(--front-url "$FRONT_URL")
   [[ -n $COMPUTE_URL ]] && options+=(--compute-url "$COMPUTE_URL")
   [[ -n ${LLAMA_SERVER:-} ]] && options+=(--llama-server "$LLAMA_SERVER")
   [[ -n $MACHINE_NAME ]] && options+=(--machine-name "$MACHINE_NAME")
+  ((VOICE)) && options+=(--voice-model "$STARTER_NAME")
   [[ $DATABASE == postgresql ]] && options+=(--install-postgresql --provision-postgresql)
   if [[ $DATABASE == postgresql ]]; then ui_sudo "installing and setting up PostgreSQL"; fi
   as_owner "$DIR/scripts/install-suite.sh" "${options[@]}" ||
@@ -821,19 +908,24 @@ finishing() {
   local loadcoach=(as_owner "$DIR/.venv/bin/loadcoach" --config "$DIR/settings/loadcoach.toml")
   API_KEY='' TEMPORARY=''
   if [[ $TOPOLOGY != compute ]]; then
-    if "${weightroom[@]}" user list 2>/dev/null | awk 'NR > 1 {print $1}' | grep -qx "$ADMIN"; then
+    local password_state
+    password_state=$("${weightroom[@]}" user list | awk -v name="$ADMIN" 'NR > 1 && $1 == name {print $4}')
+    if [[ -n $password_state ]]; then
       ui_ok "Account $ADMIN is already there"
     else
       local said
       said=$("${weightroom[@]}" user add "$ADMIN" superuser 2>>"$OWG_LOG") || ui_die "Could not add the account $ADMIN."
       API_KEY=$(printf '%s\n' "$said" | grep -oE 'lc_[A-Za-z0-9_-]+' | tail -1)
+    fi
+    # Account creation may have completed just before an interrupted password write.
+    if [[ -z $password_state || $password_state == - ]]; then
       if [[ -n $PASSWORD ]]; then
         printf '%s\n' "$PASSWORD" | "${weightroom[@]}" user password "$ADMIN" --stdin >>"$OWG_LOG" 2>&1 ||
           ui_die "Could not set $ADMIN's password."
       else
         TEMPORARY=$("${weightroom[@]}" user temporary "$ADMIN" 2>>"$OWG_LOG" | tail -1)
       fi
-      ui_ok "Made the account $ADMIN"
+      ui_ok "Set up the account $ADMIN"
     fi
   fi
   if ((STARTER)) && [[ $TOPOLOGY != front && ${STARTER_REGISTER:-1} == 1 && -n ${LLAMA_SERVER:-} ]]; then
@@ -859,7 +951,7 @@ finishing() {
   fi
   ((POWER_RULE)) && power_rule
   link_owg
-  write_receipt
+  write_receipt pending
 }
 
 # Let spotter put this machine to sleep, restart it or switch it off, through polkit.
@@ -896,12 +988,15 @@ link_owg() {
 
 # What this installer made, for the uninstaller: it removes only what is listed here.
 write_receipt() {
-  local unit_dir
+  local unit_dir state=${1:-complete} owg_link pointer
+  if ((SYSTEM)); then owg_link=$SYS_BIN/owg; pointer=$SYS_ETC/install
+  else owg_link=$HOME/.local/bin/owg; pointer=${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install; fi
   # shellcheck disable=SC2016  # expanded by the owner's shell, in the owner's home
   unit_dir=$(as_owner bash -c 'printf %s "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"')
   {
     echo "# What install.sh made here, read by the uninstaller. Only what is listed is removed."
-    echo "version=1"
+    echo "version=2"
+    echo "state=$state"
     echo "installed=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "mode=$( ((SYSTEM)) && printf system || printf user)"
     echo "dir=$DIR"
@@ -915,9 +1010,18 @@ write_receipt() {
     [[ -d $DIR/runtimes/llamacpp ]] && echo "runtime=$DIR/runtimes/llamacpp"
     [[ -d $DIR/models ]] && echo "models=$DIR/models"
     echo "linger_enabled=${LINGER_ENABLED:-0}"
-    echo "owg_link=$OWG_LINK"
-    echo "pointer=$POINTER"
+    echo "owg_link=${OWG_LINK:-$owg_link}"
+    echo "pointer=${POINTER:-$pointer}"
     echo "database=$DATABASE"
+    echo "llama=$LLAMA"
+    echo "starter=$STARTER"
+    echo "voice=$VOICE"
+    echo "linger_wanted=$LINGER_WANTED"
+    echo "power_rule=$POWER_RULE"
+    echo "front_url=$FRONT_URL"
+    echo "compute_url=$COMPUTE_URL"
+    echo "machine_name=$MACHINE_NAME"
+    echo "join_url=$JOIN_URL"
     [[ -n ${ADMIN:-} ]] && echo "admin=$ADMIN"
     [[ -n ${POLKIT_RULE:-} ]] && echo "polkit_rule=$POLKIT_RULE"
     if ((SYSTEM)); then
@@ -925,7 +1029,7 @@ write_receipt() {
       echo "etc_dir=$SYS_ETC"
       echo "var_dir=$SYS_VAR"
     fi
-  } | as_owner bash -c 'cat >"$1.new" && mv "$1.new" "$1"' _ "$DIR/data/install-receipt"
+  } | as_owner bash -c 'umask 022; cat >"$1.new" && chmod 644 "$1.new" && mv "$1.new" "$1"' _ "$DIR/.install-receipt"
 }
 
 # ---- spotting: checking it works ------------------------------------------------------------
@@ -943,7 +1047,7 @@ wait_http() {  # wait_http URL SECONDS [curl options...]: until something answer
 }
 
 check_services() {
-  local service
+  local service failed=0
   if ! can_start; then
     ui_info "Start the services by hand: see docs/installation.md"
     return 0
@@ -951,8 +1055,9 @@ check_services() {
   services_from_receipt
   for service in ${SERVICES//,/ }; do
     if owg_systemctl is-active --quiet "$service.service"; then ui_ok "$service is running"
-    else ui_fail "$service is not running" "owg logs $service"; fi
+    else ui_fail "$service is not running" "owg logs $service"; failed=1; fi
   done
+  return "$failed"
 }
 
 services_from_receipt() {

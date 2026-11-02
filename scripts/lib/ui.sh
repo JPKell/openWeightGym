@@ -290,7 +290,14 @@ ui__elapsed() {  # REPLY = seconds since $1, as 4s or 2m 05s
   if ((s >= 60)); then printf -v REPLY '%dm %02ds' $((s / 60)) $((s % 60)); else REPLY="${s}s"; fi
 }
 
-ui__log() { printf '%s\n' "$*" >>"${OWG_LOG:-/dev/null}" 2>/dev/null || true; }
+# Create logs privately even when a caller has the usual 022 umask. Never chmod a device.
+ui_log_init() {
+  [[ ${OWG_LOG:-/dev/null} != /dev/null ]] || return 0
+  (umask 077; mkdir -p -- "$(dirname -- "$OWG_LOG")" && : >>"$OWG_LOG") || return 1
+  chmod 600 -- "$OWG_LOG"
+}
+
+ui__log() { ui_log_init && printf '%s\n' "$*" >>"${OWG_LOG:-/dev/null}"; }
 
 # The last lines of the log, shown when a step fails.
 ui__tail_log() {  # ui__tail_log [FROM-LINE]
@@ -311,7 +318,8 @@ ui__log_lines() {  # REPLY = how many lines the log has now
 ui_step() {
   local label=$1 start=$SECONDS pid rc i=0 n mark
   shift; [[ ${1:-} == -- ]] && shift
-  ui__log "" "==== $label: $*"
+  # Arguments can contain API keys, passwords or signed URLs. Keep the step label only.
+  ui__log "" "==== $label" || return 1
   ui__log_lines; mark=$REPLY
   if ((!UI_ANIM)); then
     printf '  %s%s%s %s%s\n' "$C_MUTED" "$S_INFO" "$C_RESET" "$label" "$S_ELLIPSIS"
@@ -364,7 +372,7 @@ ui_download() {
   [[ $total =~ ^[0-9]+$ ]] || total=0
   mkdir -p "$(dirname "$dest")"
   rm -f "$dest.part"
-  ui__log "" "==== $label: $url -> $dest ($total bytes)"
+  ui__log "" "==== $label -> $dest ($total bytes)" || return 1
   if ((!UI_ANIM)); then
     ui__bytes "$total"
     printf '  %s%s%s %s%s%s\n' "$C_MUTED" "$S_INFO" "$C_RESET" "$label" "$( ((total)) && printf ' (%s)' "$REPLY")" "$S_ELLIPSIS"
@@ -417,7 +425,7 @@ ui_download() {
   else
     rm -f "$dest.part"
     ui_fail "$label" "download failed (curl exit $rc)"
-    ui__log "curl exit $rc for $url"
+    ui__log "curl exit $rc for $label"
   fi
   return "$rc"
 }

@@ -33,7 +33,7 @@ main() {
   load_ui
   ui_init
   : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/uninstall-$(date +%Y%m%d-%H%M%S).log}"
-  mkdir -p "$(dirname "$OWG_LOG")"
+  ui_log_init || ui_die "Cannot create a private uninstaller log at $OWG_LOG."
   export OWG_LOG
   trap 'ui_cleanup; printf "\n"; ui_fail "Stopped. What was removed so far stays removed; run this again to finish."; exit 130' INT
 
@@ -92,14 +92,19 @@ load_ui() {
 find_installation() {
   local -a candidates=() found=()
   local candidate owg
-  [[ -n $DIR ]] && candidates+=("$DIR")
+  if [[ -n $DIR ]]; then
+    DIR=$(realpath -m -- "$DIR")
+    receipt_find "$DIR" >/dev/null || ui_die "No install receipt was found in $DIR." "The explicit --dir was left untouched; choose the installation's actual folder." 2
+    candidates=("$DIR")
+  else
   [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install ]] && candidates+=("$(<"${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install")")
   [[ -r /etc/openweightgym/install ]] && candidates+=("$(</etc/openweightgym/install)")
   if owg=$(command -v owg 2>/dev/null); then candidates+=("$(dirname "$(dirname "$(readlink -f "$owg")")")"); fi
   candidates+=("$HOME/openWeightGym" /opt/openweightgym)
+  fi
   for candidate in "${candidates[@]}"; do
     candidate=$(realpath -m -- "$candidate")
-    [[ -r $candidate/data/install-receipt ]] || continue
+    receipt_find "$candidate" >/dev/null || continue
     [[ " ${found[*]} " == *" $candidate "* ]] || found+=("$candidate")
     [[ -n $DIR ]] && break
   done
@@ -109,7 +114,7 @@ find_installation() {
   fi
   if ((${#found[@]} > 1)); then
     local choice=0 options=()
-    for candidate in "${found[@]}"; do options+=("$candidate|$(sed -n 's/^mode=//p' "$candidate/data/install-receipt") installation"); done
+    for candidate in "${found[@]}"; do options+=("$candidate|openWeightGym installation"); done
     ui_choose choice "Which installation should be removed?" 0 "${options[@]}"
     DIR=${found[choice]}
   else
@@ -117,6 +122,7 @@ find_installation() {
   fi
   receipt_load "$DIR"
   MODE=$(receipt_get mode)
+  [[ $MODE == user || $MODE == system ]] || ui_die "The install receipt in $DIR has no valid installation mode."
   if [[ $MODE == system ]]; then OWG_OWNER=$(receipt_get service_user); export OWG_OWNER; fi
   ui_ok "Found openWeightGym in $DIR" "$(receipt_mode_label) · installed $(receipt_get installed)"
 }
@@ -305,6 +311,7 @@ as_root() { if [[ -n ${OWG_OWNER:-} ]] && ((EUID != 0)); then sudo -n "$@"; else
 
 remove() {
   ui_section "Cool-down" "Removing what you ticked"
+  receipt_publish "$DIR"
   stop_services
   local service unit_dir
   if [[ -n ${REMOVE[services]:-} ]]; then
@@ -345,10 +352,14 @@ remove() {
   local pointer
   pointer=$(receipt_get pointer)
   pointer=${pointer:-${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install}
-  if [[ ! -e $DIR/data/install-receipt && $(basename "$pointer") == install ]]; then
+  local id keep_metadata=0
+  for id in "${ITEMS[@]}"; do [[ -z ${REMOVE[$id]:-} ]] && keep_metadata=1; done
+  if ((!keep_metadata)); then remove_path "$DIR/.install-receipt"; fi
+  if ((!keep_metadata)) && [[ $(basename "$pointer") == install ]]; then
     as_root rm -f -- "$pointer"
     as_root rmdir -- "$(dirname "$pointer")" 2>/dev/null || true
     if [[ $MODE == system && -n $(receipt_get etc_dir) ]]; then as_root rmdir -- "$(receipt_get etc_dir)" 2>/dev/null || true; fi
+    [[ $(receipt_get created_dir) == 1 ]] && as_root rmdir -- "$DIR" 2>/dev/null || true
   fi
 }
 
@@ -361,6 +372,7 @@ remove_program() {
       [[ -e $entry || -L $entry ]] || continue
       keep=0
       case "${entry##*/}" in
+        .install-receipt) keep=1 ;;
         data) [[ -z ${REMOVE[data]:-} ]] && keep=1 ;;
         models) [[ -z ${REMOVE[models]:-} ]] && keep=1 ;;
         keys) [[ -z ${REMOVE[settings]:-} ]] && keep=1 ;;

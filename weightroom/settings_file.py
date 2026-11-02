@@ -8,7 +8,34 @@ openWeightGym's own Python environment exists.
 from __future__ import annotations
 
 import json
+import os
 import re
+import stat
+import tempfile
+import time
+import tomllib
+from pathlib import Path
+
+
+def save_settings(path: Path, text: str, reason: str) -> bool:
+    """Validate and atomically replace changed settings, retaining their mode and a private backup."""
+    original = path.read_text()
+    if text == original:
+        return False
+    tomllib.loads(text)
+    backup = path.with_name(path.name + f".before-{reason}-{time.time_ns()}")
+    with os.fdopen(os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output:
+        output.write(path.read_bytes())
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as output:
+        pending = Path(output.name)
+        try:
+            os.fchmod(output.fileno(), stat.S_IMODE(path.stat().st_mode))
+            output.write(text)
+            output.flush()
+            os.replace(pending, path)
+        finally:
+            pending.unlink(missing_ok=True)
+    return True
 
 
 def toml_value(value: object) -> str:

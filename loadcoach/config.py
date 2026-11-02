@@ -6,6 +6,7 @@ Everything else is handed a `Config` and never reads the file itself.
 from __future__ import annotations
 
 import math
+import re
 import sys
 import tomllib
 from dataclasses import dataclass, field
@@ -159,7 +160,8 @@ def config_from(path: Path, data: dict, file: dict) -> Config:
         )
     if not isinstance(data.get("model_defaults", {}), dict) or not isinstance(data.get("models", {}), dict):
         raise SystemExit(f"{path}: [model_defaults] and [models] must be tables")
-    if not isinstance(data.get("machine_name", "compute"), str) or not data.get("machine_name", "compute").isidentifier():
+    machine_name = data.get("machine_name", "compute")
+    if not isinstance(machine_name, str) or not (machine_name.isidentifier() or re.fullmatch(r"[a-z0-9][a-z0-9-]{0,30}", machine_name)):
         raise SystemExit(f"{path}: machine_name must be a stable identifier, matching [machines.NAME] on front")
     for gone in ("hosted", "keys"):  # outside services are the front machine's since milestone 114: their keys are files there, and compute makes no outside calls
         if data.pop(gone, None) is not None:

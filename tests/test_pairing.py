@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
 import stat
 import time
 import tomllib
+from pathlib import Path
 
 import httpx
 import pytest
@@ -69,14 +71,29 @@ def test_further_nodes_get_a_name_and_a_key_of_their_own(console):
     second = pairing.join(console, "10.0.0.7", "gpu-box")
     assert (first["name"], second["name"]) == ("gpu-box", "gpu-box-2")
     assert first["machine_key"] != second["machine_key"] != "the-machine-key"
-    key = console.parent.parent / "keys" / "gpu-box.key"
+    key = console.parent.parent / "keys" / "machines" / "gpu-box.key"
     assert key.read_text().strip() == first["machine_key"] and stat.S_IMODE(key.stat().st_mode) == 0o600
     told = tomllib.loads(console.read_text())
     assert told["compute"] == "http://127.0.0.1:9442"  # the console's own node is left alone
     assert told["machines"]["gpu-box"] == {"compute": "http://10.0.0.6:8442", "spotter": "http://10.0.0.6:8444",
-                                           "machine_key_file": "../keys/gpu-box.key"}
+                                           "machine_key_file": "../keys/machines/gpu-box.key"}
     assert set(turnstile_settings(console).machines) == {"gpu-box", "gpu-box-2"}
     assert pairing.join(console, "10.0.0.6", "other")["machine_key"] == first["machine_key"]  # paired again: as before
+
+
+def test_repair_moves_a_colliding_legacy_key_without_replacing_front_auth(console):
+    console.write_text(FRONT_ONLY + '''
+[machines.weightroom]
+compute = "http://10.0.0.6:8442"
+machine_key_file = "../keys/weightroom.key"
+''')
+    (console.parent / "loadcoach.toml").write_text("port = 9442\n")
+    joined = pairing.join(console, "10.0.0.6")
+    assert joined["name"] == "weightroom" and joined["machine_key"] != "lc_front" and joined["changed"]
+    assert (console.parent.parent / "keys/weightroom.key").read_text() == "lc_front\n"
+    assert tomllib.loads(console.read_text())["machines"]["weightroom"]["machine_key_file"] == "../keys/machines/weightroom.key"
+    backup = next(console.parent.glob("weightroom.toml.before-pairing-*"))
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o600
 
 
 def test_node_names_are_safe_and_never_the_main_one():
@@ -109,3 +126,29 @@ def test_pairing_over_http_gives_the_key_once_and_turns_away_guessing(console, m
         assert node.post("/pair", content=b"not json").status_code in (400, 429)
     assert tomllib.loads(console.read_text())["compute"] == "http://10.0.0.5:8442"
     assert len(restarts) == 1
+
+
+def test_voice_pairing_supplies_a_scoped_front_key_and_updates_gateway_routing(console, monkeypatch):
+    from loadcoach.users import Users
+    shutil.copytree(Path(__file__).parents[1] / "settings/defaults", console.parent / "defaults")
+    gateway = console.parent / "voice-gateway.toml"
+    gateway.write_text('voice = "http://127.0.0.1:9445"\n')
+    restarts = []
+    monkeypatch.setattr(pairing, "restart_later", lambda *units, **kwargs: restarts.append(units) or True)
+    unavailable = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(503)), base_url="http://front")
+    settings = Settings(compute="http://127.0.0.1:9442", key="lc_front", data=str(console.parent.parent / "data"), path=str(console))
+    code, _ = pairing.make_code(console.parent.parent / "data", "sam")
+    with TestClient(build_app(settings, unavailable, tools_client=unavailable, voice_client=unavailable),
+                    client=("10.0.0.5", 50000), base_url="http://console.lan:8440") as node:
+        answer = node.post("/pair", json={"code": code, "voice": True})
+        assert answer.status_code == 200
+        key = answer.json()["voice_key"]
+    users = Users(str(console.parent.parent / "data/accounts.db"), {})
+    try:
+        user = users.by_key(key)
+        assert user.name == "voice-service" and user.can("hold") and user.can("load") and not user.can("superuser")
+    finally:
+        users.db.close()
+    assert key != "the-machine-key" and 8445 in turnstile_settings(console).ports
+    assert tomllib.loads(gateway.read_text())["voice"] == "http://10.0.0.5:8445"
+    assert restarts == [(("turnstile.service", "voice-gateway.service", "weightroom.service"),)]

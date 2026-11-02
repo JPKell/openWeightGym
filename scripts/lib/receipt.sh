@@ -5,22 +5,65 @@
 
 [[ -n ${OWG_RECEIPT_LOADED:-} ]] && return 0
 OWG_RECEIPT_LOADED=1
+declare -gA RECEIPT=()
+RECEIPT_LOADED=0
 
-# Read ROOT's receipt into RECEIPT[key]. A missing receipt leaves it empty.
+# Find public metadata first; older installations kept the receipt inside private data/.
+receipt_find() {
+  local root=$1 pointer
+  if [[ -e $root/.install-receipt || -L $root/.install-receipt ]]; then
+    printf '%s' "$root/.install-receipt"
+  elif [[ -r $root/data/install-receipt ]]; then
+    printf '%s' "$root/data/install-receipt"
+  else
+    for pointer in "${OWG_SYSTEM_ETC:-/etc/openweightgym}/install"; do
+      if [[ -r $pointer && $(realpath -m -- "$(<"$pointer")") == "$(realpath -m -- "$root")" ]]; then
+        printf '%s' "$root/data/install-receipt"
+        return 0
+      fi
+    done
+    return 1
+  fi
+}
+
+# Read ROOT's metadata literally, never as shell code. Legacy system receipts need sudo once.
 receipt_load() {
   declare -gA RECEIPT=()
-  RECEIPT_FILE=$1/data/install-receipt
-  local line
-  [[ -r $RECEIPT_FILE ]] || return 0
+  RECEIPT_LOADED=0
+  RECEIPT_FILE=$(receipt_find "$1") || { RECEIPT_FILE=$1/.install-receipt; return 0; }
+  local line contents
+  if [[ -r $RECEIPT_FILE ]]; then
+    contents=$(cat -- "$RECEIPT_FILE") || return 1
+  else
+    ui_sudo "reading this system installation's legacy receipt"
+    contents=$(sudo -n cat -- "$RECEIPT_FILE") || ui_die "Cannot read the installation receipt in $1."
+  fi
   while IFS= read -r line; do
     [[ $line == \#* || $line != *=* ]] && continue
     RECEIPT[${line%%=*}]=${line#*=}
-  done <"$RECEIPT_FILE"
+  done <<<"$contents"
+  RECEIPT_LOADED=1
   return 0
 }
 
-receipt_present() { [[ -r ${RECEIPT_FILE:-} ]]; }
+receipt_present() { (( ${RECEIPT_LOADED:-0} )); }
 receipt_get() { printf '%s' "${RECEIPT[$1]:-}"; }
+
+# Publish only nonsecret fields when upgrading an old receipt. Keep the old copy for rollback.
+receipt_publish() {
+  local root=$1 key
+  [[ ${RECEIPT_FILE:-} != "$root/.install-receipt" ]] || return 0
+  receipt_present || return 0
+  {
+    for key in version state installed mode dir created_dir topology services unit_dir python venv uv runtime models \
+      linger_enabled owg_link pointer database admin polkit_rule service_user etc_dir var_dir \
+      llama starter voice linger_wanted power_rule front_url compute_url machine_name join_url; do
+      [[ -v RECEIPT[$key] ]] && printf '%s=%s\n' "$key" "${RECEIPT[$key]}"
+    done
+    :
+  } | as_owner bash -c 'umask 022; cat >"$1.new" && chmod 644 "$1.new" && mv "$1.new" "$1"' _ "$root/.install-receipt"
+  RECEIPT_FILE=$root/.install-receipt
+}
 
 receipt_unit_dir() {
   local dir=${RECEIPT[unit_dir]:-}
@@ -34,9 +77,10 @@ receipt_mode_label() {
 
 # The environment a service account's own systemd needs: OWNER_ENV=(HOME=... XDG_RUNTIME_DIR=...).
 owner_environment() {
-  local owner=$1 uid home
-  uid=$(id -u "$owner") home=$(getent passwd "$owner" | cut -d: -f6)
-  OWNER_ENV=("HOME=$home" "USER=$owner" "XDG_RUNTIME_DIR=/run/user/$uid" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus"
+  local owner=$1 owner_uid owner_home
+  owner_uid=$(id -u "$owner") owner_home=$(getent passwd "$owner" | cut -d: -f6)
+  OWNER_ENV=("HOME=$owner_home" "USER=$owner" "XDG_RUNTIME_DIR=/run/user/$owner_uid" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$owner_uid/bus"
+             "XDG_CONFIG_HOME=$owner_home/.config" "XDG_STATE_HOME=$owner_home/.local/state" "XDG_CACHE_HOME=$owner_home/.cache"
              "PATH=/usr/local/bin:/usr/bin:/bin" "LANG=${LANG:-C.UTF-8}")
   # The account's own log: it cannot write to the one in your home folder.
   [[ -n ${OWG_OWNER_LOG:-} ]] && OWNER_ENV+=("OWG_LOG=$OWG_OWNER_LOG")
