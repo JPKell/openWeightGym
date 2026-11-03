@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import importlib.util
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import json
 import os
+import re
 import shlex
 import shutil
+import socket
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import tomllib
 from pathlib import Path
@@ -24,8 +28,198 @@ sys.modules[SPEC.name] = support
 SPEC.loader.exec_module(support)
 
 
+@pytest.fixture(scope="module")
+def local_postgres(tmp_path_factory):
+    """A disposable PostgreSQL server with SCRAM authentication over TCP."""
+    binary = os.environ.get("OWG_TEST_POSTGRES_BINDIR")
+    initdb = str(Path(binary) / "initdb") if binary else shutil.which("initdb")
+    if not initdb or os.geteuid() == 0:
+        pytest.skip("requires PostgreSQL server binaries and an unprivileged test user")
+    bindir = Path(initdb).parent
+    work = tmp_path_factory.mktemp("installer-postgresql")
+    sockets = Path(tempfile.mkdtemp(prefix="owg-pg-socket-"))
+    data = work / "data"
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        port = reservation.getsockname()[1]
+    initialized = subprocess.run([initdb, "-D", str(data), "-U", "postgres", "--auth-local=trust",
+                                  "--auth-host=scram-sha-256", "--no-locale", "-E", "UTF8", "--no-sync"],
+                                 capture_output=True, text=True)
+    assert initialized.returncode == 0, initialized.stdout + initialized.stderr
+    started = subprocess.run([str(bindir / "pg_ctl"), "-D", str(data), "-l", str(work / "server.log"),
+                              "-o", f"-h 127.0.0.1 -p {port} -k {sockets} -F -c jit=off", "-w", "start"],
+                             capture_output=True, text=True)
+    assert started.returncode == 0, started.stdout + started.stderr + (work / "server.log").read_text()
+    commands = work / "commands"
+    commands.mkdir()
+    sudo = commands / "sudo"
+    sudo.write_text('''#!/usr/bin/env bash
+set -euo pipefail
+[[ ${1:-} != -n ]] || shift
+[[ ${1:-} == -u && ${2:-} == postgres ]] || exit 91
+shift 2
+exec "$@"
+''')
+    sudo.chmod(0o755)
+    (commands / "systemctl").write_text("#!/usr/bin/env bash\nexit 1\n")
+    (commands / "systemctl").chmod(0o755)
+    environment = {**os.environ, "PGHOST": str(sockets), "PGPORT": str(port), "PGUSER": "postgres",
+                   "PATH": f"{commands}{os.pathsep}{bindir}{os.pathsep}{os.environ['PATH']}",
+                   "PYTHONPATH": str(ROOT), "OWG_NO_TTY": "1", "OWG_PLAIN": "1"}
+    def admin(statement):
+        answer = subprocess.run(["psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "postgres"],
+                                input=statement, env=environment, text=True, capture_output=True)
+        assert answer.returncode == 0, answer.stderr
+        return answer.stdout.strip()
+    try:
+        yield {"environment": environment, "admin": admin, "port": port}
+    finally:
+        subprocess.run([str(bindir / "pg_ctl"), "-D", str(data), "-m", "fast", "-w", "stop"],
+                       capture_output=True, timeout=30)
+        shutil.rmtree(sockets)
+
+
+def provision_live_postgres(root, server, user, *, expect_success=True):
+    (root / "scripts").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SUPPORT_PATH, root / "scripts/install-suite-support.py")
+    suite = (ROOT / "scripts/install-suite.sh").read_text()
+    functions = []
+    for name in ("repair_postgresql", "provision_postgresql"):
+        functions.append(re.search(rf"(?ms)^{name}\(\) \{{.*?^\}}", suite)[0])
+    source = '''set -Eeuo pipefail
+source "$TEST_REPO/scripts/lib/ui.sh"
+ui_init
+ROOT=$INSTALL PY=$TEST_PYTHON USER=$TEST_USER PROVISION_POSTGRESQL=1 DRY_RUN=0 CHECK_ONLY=0 PG_CONNECTIONS_CHECKED=0
+declare -A DSNS=()
+REQUIRED_DSNS=(accounts roles chat benchmarks plugins alerts schedules)
+hostname() { printf pgtest; }
+note() { printf '%s\\n' "$*"; }
+die() { ui_die "$*"; }
+step() { local label=$1; shift; ui_step "$label" -- "$@" || die "$label failed"; }
+''' + "\n".join(functions) + '\nprovision_postgresql\n'
+    environment = {**server["environment"], "INSTALL": str(root), "TEST_PYTHON": sys.executable,
+                   "TEST_REPO": str(ROOT), "TEST_USER": user, "OWG_LOG": str(root / "install.log")}
+    answer = subprocess.run(["bash", "-c", source], env=environment, text=True, capture_output=True, timeout=45)
+    if expect_success:
+        assert answer.returncode == 0, answer.stdout + answer.stderr + (root / "install.log").read_text()
+    return answer
+
+
+def assert_postgres_connections(root):
+    import psycopg
+    paths = sorted((root / "keys/postgresql").glob("*.dsn"))
+    assert len(paths) == 7
+    for path in paths:
+        assert path.stat().st_mode & 0o077 == 0
+        with psycopg.connect(path.read_text().strip(), connect_timeout=3) as connection:
+            assert connection.execute("SELECT 1").fetchone() == (1,)
+
+
+@pytest.mark.parametrize("replacement_role", [False, True])
+def test_real_postgres_reinstall_after_database_removal_keeps_credentials(tmp_path, local_postgres, replacement_role):
+    root = tmp_path / "install"
+    user = "fixture_" + tmp_path.name[-8:].replace("-", "_")
+    provision_live_postgres(root, local_postgres, user)
+    assert_postgres_connections(root)
+    paths = sorted((root / "keys/postgresql").glob("*.dsn"))
+    original = {path: path.read_bytes() for path in paths}
+    from urllib.parse import urlsplit
+    parsed = [urlsplit(content.decode().strip()) for content in original.values()]
+    role = parsed[0].username
+    for uri in parsed:
+        local_postgres["admin"](f'DROP DATABASE "{uri.path.lstrip("/")}";')
+    local_postgres["admin"](f'DROP ROLE "{role}";')
+    if replacement_role:
+        local_postgres["admin"](f'CREATE ROLE "{role}" LOGIN PASSWORD \'a-new-unrecorded-password\';')
+    provision_live_postgres(root, local_postgres, user)
+    assert_postgres_connections(root)
+    assert {path: path.read_bytes() for path in paths} == original
+
+
+@pytest.mark.parametrize("one_working_file", [False, True])
+def test_real_postgres_password_recovery_preserves_existing_data(tmp_path, local_postgres, one_working_file):
+    import psycopg
+    from urllib.parse import urlsplit, urlunsplit
+    root = tmp_path / "install"
+    user = "fixture_" + tmp_path.name[-8:].replace("-", "_")
+    provision_live_postgres(root, local_postgres, user)
+    accounts = root / "keys/postgresql/accounts.dsn"
+    with psycopg.connect(accounts.read_text().strip()) as connection:
+        connection.execute("CREATE TABLE retained_user_data (value TEXT)")
+        connection.execute("INSERT INTO retained_user_data VALUES ('keep this data')")
+    uri = urlsplit(accounts.read_text().strip())
+    password = "new-valid-password"
+    local_postgres["admin"](f'ALTER ROLE "{uri.username}" PASSWORD \'{password}\';')
+    if one_working_file:
+        roles = root / "keys/postgresql/roles.dsn"
+        current = urlsplit(roles.read_text().strip())
+        roles.write_text(urlunsplit((current.scheme, f"{current.username}:{password}@{current.hostname}:{current.port}", current.path, "", "")) + "\n")
+    provision_live_postgres(root, local_postgres, user)
+    assert_postgres_connections(root)
+    with psycopg.connect(accounts.read_text().strip()) as connection:
+        assert connection.execute("SELECT value FROM retained_user_data").fetchall() == [("keep this data",)]
+    assert password not in (root / "install.log").read_text()
+
+
+@pytest.mark.parametrize("problem", ["foreign-owner", "foreign-port", "privileged-role"])
+def test_real_postgres_repair_refuses_unmanaged_database_changes(tmp_path, local_postgres, problem):
+    from urllib.parse import urlsplit, urlunsplit
+    root = tmp_path / "install"
+    user = "fixture_" + problem.replace("-", "_")
+    provision_live_postgres(root, local_postgres, user)
+    path = root / "keys/postgresql/accounts.dsn"
+    uri = urlsplit(path.read_text().strip())
+    expected = "privileged"
+    if problem == "foreign-owner":
+        local_postgres["admin"]("CREATE DATABASE foreign_database OWNER postgres;")
+        changed = urlunsplit((uri.scheme, uri.netloc, "/foreign_database", "", "")) + "\n"
+        path.write_text(changed)
+        expected = "owner differs"
+    elif problem == "foreign-port":
+        wrong_port = 1 if uri.port == 65535 else uri.port + 1
+        netloc = f"{uri.username}:{uri.password}@127.0.0.1:{wrong_port}"
+        path.write_text(urlunsplit((uri.scheme, netloc, uri.path, "", "")) + "\n")
+        expected = "server port differs"
+    else:
+        local_postgres["admin"](f'ALTER ROLE "{uri.username}" SUPERUSER;')
+    changed = path.read_text()
+    answer = provision_live_postgres(root, local_postgres, user, expect_success=False)
+    assert answer.returncode != 0 and path.read_text() == changed
+    assert expected in (root / "install.log").read_text()
+    assert uri.password not in answer.stdout + answer.stderr + (root / "install.log").read_text()
+
+
+def test_real_postgres_retained_connections_are_repaired_before_the_initial_audit(tmp_path, local_postgres):
+    from urllib.parse import urlsplit
+    root = tmp_path / "install"
+    provision_live_postgres(root, local_postgres, "fixture_preflight")
+    (root / "scripts/lib").mkdir()
+    shutil.copy2(ROOT / "scripts/lib/ui.sh", root / "scripts/lib/ui.sh")
+    (root / "pyproject.toml").write_text('[project]\nname = "fixture"\nversion = "0.1.0"\n')
+    (root / "settings").mkdir()
+    config = root / "settings/weightroom.toml"
+    config.write_text('data = "../data"\n')
+    files = sorted((root / "keys/postgresql").glob("*.dsn"))
+    support.configure(config, "weightroom", "postgresql", [f"{path.stem}={path}" for path in files])
+    role = urlsplit(files[0].read_text().strip()).username
+    local_postgres["admin"](f'ALTER ROLE "{role}" PASSWORD \'invalid-for-retained-files\';')
+    plan = (ROOT / "scripts/install-suite.sh").read_text().split("\ninstall_postgresql_packages\n", 1)[0]
+    runner = root / "scripts/preflight.sh"
+    runner.write_text(plan + "\n")
+    environment = {**local_postgres["environment"], "OWG_LOG": str(root / "preflight.log"),
+                   "XDG_CONFIG_HOME": str(tmp_path / "config"), "XDG_STATE_HOME": str(tmp_path / "state"),
+                   "PATH": f"{Path(sys.executable).parent}{os.pathsep}{local_postgres['environment']['PATH']}"}
+    answer = subprocess.run(["bash", str(runner), "--services", "weightroom,turnstile", "--database", "postgresql",
+                             "--provision-postgresql", "--non-interactive", "--yes"],
+                            env=environment, text=True, capture_output=True, timeout=45)
+    assert answer.returncode == 0, answer.stdout + answer.stderr + (root / "preflight.log").read_text()
+    assert "0 error(s)" in answer.stdout
+    assert_postgres_connections(root)
+
+
 @pytest.mark.skipif(shutil.which("uv") is None, reason="the bootstrap lifecycle requires uv")
-def test_piped_bootstrap_install_repair_uninstall_and_reinstall_preserves_data(tmp_path):
+@pytest.mark.parametrize("engine", ["sqlite", "postgresql"])
+def test_piped_bootstrap_install_repair_uninstall_and_reinstall_preserves_data(tmp_path, request, engine):
     """Exercise real entry points, Git, Python packaging and SQLite without host services."""
     source = tmp_path / "source"
     source.mkdir()
@@ -48,13 +242,26 @@ def test_piped_bootstrap_install_repair_uninstall_and_reinstall_preserves_data(t
     # Calls that could affect the real machine fail; service-manager discovery is offline.
     for command in ("systemctl", "sudo"):
         (commands / command).write_text("#!/usr/bin/env bash\nexit 91\n")
+    server = request.getfixturevalue("local_postgres") if engine == "postgresql" else None
+    if server:
+        (commands / "apt-get").write_text("#!/usr/bin/env bash\nexit 0\n")
+        (commands / "sudo").write_text('''#!/usr/bin/env bash
+set -euo pipefail
+[[ ${1:-} != -n ]] || shift
+if [[ ${1:-} == true ]]; then exit 0; fi
+if [[ ${1:-} == -u && ${2:-} == postgres ]]; then shift 2; exec "$@"; fi
+if [[ ${1:-} == systemctl && ${2:-} == enable ]]; then exit 0; fi
+if [[ ${1:-} == apt-get ]]; then exec "$@"; fi
+exit 91
+''')
     (commands / "loginctl").write_text('#!/usr/bin/env bash\n[[ $1 == show-user ]] && { echo no; exit 0; }; exit 91\n')
     real_uv = shlex.quote(shutil.which("uv"))
     interpreter = shlex.quote(sys.executable)
+    bare_interpreter = shlex.quote(sys._base_executable)
     (commands / "uv").write_text(f'''#!/usr/bin/env bash
 set -euo pipefail
 if [[ ${{1:-}} == python && ${{2:-}} == install ]]; then exit 0; fi
-if [[ ${{1:-}} == python && ${{2:-}} == find ]]; then printf '%s\\n' {interpreter}; exit 0; fi
+if [[ ${{1:-}} == python && ${{2:-}} == find ]]; then printf '%s\\n' {bare_interpreter}; exit 0; fi
 if [[ ${{1:-}} == venv ]]; then exec {real_uv} venv --seed --python {interpreter} "${{!#}}"; fi
 exec {real_uv} "$@"
 ''')
@@ -65,14 +272,15 @@ exec {real_uv} "$@"
             super().__init__(*args, directory=str(raw), **kwargs)
         def log_message(self, *args):
             pass
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    web_server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=web_server.serve_forever, daemon=True)
     thread.start()
-    environment = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
+    inherited = server["environment"] if server else os.environ
+    environment = {**inherited, "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
                    "XDG_STATE_HOME": str(home / ".local/state"), "OWG_NO_TTY": "1", "OWG_PLAIN": "1",
                    "OWG_LOG": str(tmp_path / "bootstrap.log"), "OWG_ADMIN_PASSWORD": "fixture-password",
-                   "OWG_RAW": f"http://127.0.0.1:{server.server_port}", "OWG_REPO": str(source),
-                   "PATH": str(commands) + os.pathsep + os.environ["PATH"]}
+                   "OWG_RAW": f"http://127.0.0.1:{web_server.server_port}", "OWG_REPO": str(source),
+                   "PATH": str(commands) + os.pathsep + inherited["PATH"]}
     environment.pop("PYTHONPATH", None)
     environment.pop("OWG_OWNER", None)
     environment.pop("OWG_OWNER_LOG", None)
@@ -82,8 +290,12 @@ exec {real_uv} "$@"
                                 input=bootstrap, env=environment, cwd=home, text=True,
                                 capture_output=True, timeout=180)
         assert answer.returncode == 0, answer.stdout + answer.stderr + (tmp_path / "bootstrap.log").read_text()
-    fresh = ("--yes", "--topology", "front", "--admin", "sam", "--llama", "skip", "--no-model", "--no-linger", "--no-browser")
+    fresh = ("--yes", "--topology", "front", "--database", engine, "--admin", "sam", "--llama", "skip", "--no-model", "--no-linger", "--no-browser")
     from loadcoach.users import Users
+    from db import Database
+    def accounts():
+        store = Database.postgresql(install / "keys/postgresql/accounts.dsn") if engine == "postgresql" else str(install / "data/accounts.db")
+        return Users(store, {})
     try:
         run(*fresh)
         receipt = install / ".install-receipt"
@@ -95,13 +307,20 @@ exec {real_uv} "$@"
             verified = subprocess.run(['systemd-analyze', '--user', '--man=no', 'verify', str(unit)],
                                       env=environment, capture_output=True, text=True, timeout=30)
             assert verified.returncode == 0, verified.stdout + verified.stderr
-        users = Users(str(install / "data/accounts.db"), {})
+        users = accounts()
         password = users.password_hash("sam")
         assert password and users.by_name("sam").can("superuser")
         users.db.close()
         retained = install / "data/retained-note"
         retained.write_text("keep this user data")
         machine_key = (install / "keys/machine.key").read_bytes()
+        if server:
+            from urllib.parse import urlsplit
+            role = urlsplit((install / "keys/postgresql/accounts.dsn").read_text().strip()).username
+            server["admin"](f'ALTER ROLE "{role}" PASSWORD \'unrecorded-password-after-failure\';')
+            receipt.write_text(receipt.read_text().replace('state=complete', 'state=pending'))
+            run(*fresh)
+            assert_postgres_connections(install)
         units = home / ".config/systemd/user"
         shutil.rmtree(units)
         run("--repair", "--yes", "--no-browser")
@@ -113,12 +332,12 @@ exec {real_uv} "$@"
         assert "state=complete" in receipt.read_text()
         assert retained.read_text() == "keep this user data"
         assert (install / "keys/machine.key").read_bytes() == machine_key
-        users = Users(str(install / "data/accounts.db"), {})
+        users = accounts()
         assert users.password_hash("sam") == password
         users.db.close()
     finally:
-        server.shutdown()
-        server.server_close()
+        web_server.shutdown()
+        web_server.server_close()
         thread.join(timeout=5)
 
 
