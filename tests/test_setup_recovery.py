@@ -104,12 +104,14 @@ die() { printf '%s\\n' "$*" >&2; exit 1; }
 hostname() { printf fixture; }
 psql() { return 99; }
 createdb() { return 99; }
+repair_postgresql() { :; }
 sudo() {
   [[ $1 == -u && $2 == postgres ]] || return 98
   shift 2
   case "$1" in
     psql)
       if [[ $2 == -Atqc ]]; then
+        if [[ $3 == 'SHOW port' ]]; then printf '5432\\n'; return 0; fi
         if [[ $3 == *"rolname = 'suite_fixture_fixture'"* ]]; then printf '1\\n'; fi
       else
         cat >/dev/null
@@ -147,10 +149,12 @@ declare -A DSNS=()
 REQUIRED_DSNS=(accounts roles telemetry benchmarks)
 psql() { :; }
 createdb() { :; }
+repair_postgresql() { :; }
 die() { exit 1; }
 sudo() {
   shift 2
   if [[ $1 == createdb ]]; then printf '%s\\n' "${!#}" >>"$DATABASES"
+  elif [[ $* == *'SHOW port'* ]]; then printf '5432\\n'
   elif [[ $2 != -Atqc ]]; then cat >/dev/null; fi
 }
 ''' + one_function("scripts/install-suite.sh", "provision_postgresql") + '\nprovision_postgresql\n',

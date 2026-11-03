@@ -247,6 +247,9 @@ and completes missing account passwords. Starting again opens the removal checkl
 prompts, then returns to setup with whatever you kept. Cancelling removal stops the restart.
 Services stopped for a backup are restarted if removal is cancelled or the backup fails.
 PostgreSQL removal failures stop the uninstall and preserve its connection files for recovery.
+When local PostgreSQL connections were kept after database removal, provisioning restores their
+managed roles and missing databases before compatibility checks. It verifies password authentication
+and preserves existing database contents; connections owned by another role are left for manual repair.
 When run through `curl | bash`, the uninstaller is fetched from the same source and branch as
 the installer, so an older partial checkout cannot supply an incompatible recovery helper.
 Continuing through `curl | bash` updates a clean Git checkout before setup; tracked local changes
@@ -256,6 +259,7 @@ the final service checks finish successfully. Passwords and consumed pairing cod
 
 | Seen | What to do |
 |---|---|
+| *password authentication failed for user suite_…* | Update the checkout and continue the previous PostgreSQL install. Provisioning reconciles retained credentials before the compatibility check. |
 | *systemd user services are not running* | in WSL, turn systemd on (above); in a container, install for the whole machine on the host instead |
 | *This account already runs openWeightGym from …* | update that installation with its own `install.sh`, or pass `--dir` with its folder |
 | *llama-server needs: libgomp.so.1* | let the installer add the package it names, or install it and run `scripts/install-llamacpp.sh` |

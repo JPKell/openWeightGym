@@ -13,11 +13,14 @@ import json
 import os
 import re
 import sqlite3
+import stat
+import subprocess
 import sys
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 # Running a script by path puts scripts/, rather than the repository root, on sys.path.
 REPOSITORY = Path(__file__).resolve().parent.parent
@@ -36,6 +39,104 @@ SERVICE_CONFIG = {
     "turnstile": "weightroom.toml",
     "voice-gateway": "voice-gateway.toml",
 }
+
+
+def repair_postgresql(root: Path) -> int:
+    """Reconcile retained installer credentials with their local roles and databases."""
+    directory = root / "keys/postgresql"
+    paths = sorted(directory.glob("*.dsn"))
+    if not paths:
+        return 0
+
+    def literal(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    def identifier(value: str) -> str:
+        return '"' + value.replace('"', '""') + '"'
+
+    def admin(statement: str, operation: str) -> str:
+        answer = subprocess.run(
+            ["sudo", "-u", "postgres", "psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "postgres"],
+            input="SET standard_conforming_strings=on;\n" + statement + ";\n",
+            text=True, capture_output=True, timeout=30,
+        )
+        if answer.returncode:
+            # PostgreSQL can include the SQL statement (and a password) in diagnostics.
+            raise ValueError(f"PostgreSQL administration failed while {operation}; no credentials were printed")
+        return answer.stdout.strip()
+
+    port = int(admin("SHOW port", "checking the local server"))
+    entries = []
+    for path in paths:
+        if path.name not in {f"{name}.dsn" for name in ("core", "telemetry", "accounts", "roles", "chat", "benchmarks", "plugins", "alerts", "schedules")}:
+            continue
+        if path.is_symlink() or stat.S_IMODE(path.stat().st_mode) & 0o077:
+            raise ValueError(f"PostgreSQL connection file must be a private regular file: {path}")
+        raw = path.read_text().strip()
+        uri = urlsplit(raw)
+        role, password, database = unquote(uri.username or ""), unquote(uri.password or ""), unquote(uri.path.lstrip("/"))
+        if (uri.scheme not in {"postgresql", "postgres"} or uri.hostname != "127.0.0.1"
+                or not re.fullmatch(r"suite_[A-Za-z0-9_]{1,57}", role)
+                or not re.fullmatch(r"[A-Za-z0-9_]{1,63}", database) or not password
+                or uri.query or uri.fragment):
+            raise ValueError(f"Refusing automatic repair of a connection that is not installer-managed and local: {path}")
+        if (uri.port or 5432) != port:
+            raise ValueError(f"Refusing to redirect retained PostgreSQL connection {path}: its server port differs from the selected local server")
+        owner = admin(
+            "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=" + literal(database),
+            f"checking ownership of {database}",
+        )
+        if owner and owner != role:
+            raise ValueError(f"Refusing to change database {database}: its owner differs from the retained connection file")
+        privilege = admin(
+            "SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls FROM pg_roles WHERE rolname=" + literal(role),
+            f"checking role {role}",
+        )
+        if privilege == "t":
+            raise ValueError(f"Refusing to change privileged PostgreSQL role {role}")
+        entries.append({"path": path, "raw": raw, "uri": uri, "role": role, "password": password,
+                        "database": database, "exists": bool(owner), "role_exists": bool(privilege)})
+
+    def connects(role: str, password: str, database: str) -> bool:
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("PG")}
+        environment.update(PGHOST="127.0.0.1", PGPORT=str(port), PGUSER=role, PGPASSWORD=password,
+                           PGDATABASE=database, PGCONNECT_TIMEOUT="5")
+        answer = subprocess.run(["psql", "-X", "-At", "-v", "ON_ERROR_STOP=1", "-c", "SELECT 1"],
+                                env=environment, text=True, capture_output=True, timeout=10)
+        return answer.returncode == 0 and answer.stdout.strip() == "1"
+
+    credentials = {}
+    for entry in entries:
+        credentials.setdefault(entry["role"], []).append(entry)
+    for role, group in credentials.items():
+        working = next((entry for entry in group
+                        if connects(role, entry["password"], entry["database"] if entry["exists"] else "postgres")), None)
+        password = (working or group[0])["password"]
+        if working is None:
+            verb = "ALTER" if group[0]["role_exists"] else "CREATE"
+            admin(f"{verb} ROLE {identifier(role)} LOGIN PASSWORD {literal(password)}", f"restoring role {role}")
+        for entry in group:
+            database, path = entry["database"], entry["path"]
+            if not entry["exists"]:
+                admin(f"CREATE DATABASE {identifier(database)} OWNER {identifier(role)}", f"restoring database {database}")
+            uri = entry["uri"]
+            updated = urlunsplit((uri.scheme,
+                                  f"{quote(role, safe='')}:{quote(password, safe='')}@127.0.0.1:{port}",
+                                  uri.path, "", ""))
+            if updated != entry["raw"]:
+                with tempfile.NamedTemporaryFile(mode="w", dir=directory, delete=False) as pending:
+                    pending_path = Path(pending.name)
+                    try:
+                        os.fchmod(pending.fileno(), 0o600)
+                        pending.write(updated + "\n")
+                        pending.flush()
+                        os.replace(pending_path, path)
+                    finally:
+                        pending_path.unlink(missing_ok=True)
+            if not connects(role, password, database):
+                raise ValueError(f"PostgreSQL authentication still fails for managed role {role} and database {database}")
+    print(f"Verified local PostgreSQL credentials for {len(entries)} retained store(s).")
+    return 0
 
 SCHEMAS = {
     "loadcoach.retirement": "COMPUTE_RETIREMENT",
@@ -580,7 +681,15 @@ def main() -> int:
     voice = subparsers.add_parser("voice")
     voice.add_argument("--root", type=Path, required=True)
     voice.add_argument("--services", required=True)
+    repairing = subparsers.add_parser("repair-postgresql")
+    repairing.add_argument("--root", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == "repair-postgresql":
+        try:
+            return repair_postgresql(args.root.resolve())
+        except (ValueError, OSError, subprocess.TimeoutExpired) as problem:
+            print(f"PostgreSQL recovery failed: {problem}", file=sys.stderr)
+            return 2
     if args.command == "voice":
         return prepare_voice(args.root.resolve(), args.services.split(","))
     if args.command == "render":

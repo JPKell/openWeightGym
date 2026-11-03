@@ -44,6 +44,7 @@ declare -A DSNS=()
 declare -A WAS_CONFIGURED=()
 declare -A CONFIG_BACKUPS=()
 declare -A EXISTING_INSTALL_SERVICES=()
+PG_CONNECTIONS_CHECKED=0
 
 usage() {
   cat <<'EOF'
@@ -113,6 +114,14 @@ step() {
   shift
   if ((DRY_RUN)); then run "$@"; return 0; fi
   ui_step "$label" -- "$@" || die "$label failed. Fix what the log says and run this again; nothing finished is undone."
+}
+
+repair_postgresql() {
+  ((PROVISION_POSTGRESQL && !DRY_RUN && !CHECK_ONLY && !PG_CONNECTIONS_CHECKED)) || return 0
+  if compgen -G "$ROOT/keys/postgresql/*.dsn" >/dev/null; then
+    step 'Recovering retained PostgreSQL connections' "$PY" "$ROOT/scripts/install-suite-support.py" repair-postgresql --root "$ROOT"
+  fi
+  PG_CONNECTIONS_CHECKED=1
 }
 section() { ((EMBEDDED)) || ui_section "$@"; }
 # The compatibility audit, its findings shown like the rest: audit [--quiet] PYTHON ARGUMENTS...
@@ -346,17 +355,45 @@ else
   if [[ -n $UV ]]; then CHECK_PYTHON=$("$UV" python find 3.13 2>/dev/null) || die 'uv has no Python 3.13; run: uv python install 3.13'; fi
 fi
 PY=$CHECK_PYTHON
+if [[ $DATABASE == postgresql ]]; then
+  repair_allowed=1
+  for existing_root in "${!EXISTING_INSTALL_SERVICES[@]}"; do
+    [[ $existing_root == "$ROOT" ]] || repair_allowed=0
+  done
+  if ((repair_allowed)); then repair_postgresql; fi
+fi
+CHECK_RUNNER=("$CHECK_PYTHON")
+# A retained PostgreSQL configuration may outlive its old virtual environment.
+# Keep audit dependencies in uv's cache instead of modifying the system Python.
+if ! "$CHECK_PYTHON" -c 'import psycopg' >/dev/null 2>&1 && "$CHECK_PYTHON" - "$ROOT/settings" <<'PY'
+from pathlib import Path
+import sys
+import tomllib
+for path in Path(sys.argv[1]).glob('*.toml'):
+    try:
+        settings = tomllib.loads(path.read_text())
+    except (OSError, ValueError):
+        continue
+    if any(store.get('engine') == 'postgresql' for store in settings.get('databases', {}).get('stores', {}).values() if isinstance(store, dict)):
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+then
+  [[ -n $UV ]] || die 'auditing retained PostgreSQL settings needs psycopg; pass --uv PATH or install the PostgreSQL Python extra'
+  CHECK_RUNNER=("$UV" run --no-project --python "$CHECK_PYTHON" --with 'psycopg[binary]>=3.2,<4' python)
+fi
+check_python() { "${CHECK_RUNNER[@]}" "$@"; }
 ui_info 'Existing-install compatibility check'
 initial_audit=(--root "$ROOT" --services "$SELECTED_CSV")
 ((CHECK_ONLY)) && initial_audit+=(--require-pg-tools)
-if ! audit "$CHECK_PYTHON" "${initial_audit[@]}"; then
-  die 'the existing installation is not compatible; no changes were made'
+if ! audit check_python "${initial_audit[@]}"; then
+  die 'the existing installation did not pass compatibility checks; services were not changed'
 fi
 for existing_root in "${!EXISTING_INSTALL_SERVICES[@]}"; do
   [[ $existing_root == "$ROOT" ]] && continue
   [[ -d $existing_root ]] || die "selected services point at missing installation $existing_root"
   ui_info "Compatibility check for existing installation at $existing_root"
-  if ! audit "$CHECK_PYTHON" \
+  if ! audit check_python \
       --root "$existing_root" --services "${EXISTING_INSTALL_SERVICES[$existing_root]}"; then
     die "the existing installation at $existing_root is not compatible; no changes were made"
   fi
@@ -388,7 +425,7 @@ elif [[ $AUDIOCPP_ACTION == install ]]; then
   die 'audio.cpp belongs on a compute host; select loadcoach or install it later on that host'
 fi
 
-read -r CURRENT_DATABASE DATABASE_CONTENT <<< "$("$CHECK_PYTHON" "$ROOT/scripts/install-suite-support.py" state --root "$ROOT" --services "$SELECTED_CSV")"
+read -r CURRENT_DATABASE DATABASE_CONTENT <<< "$(check_python "$ROOT/scripts/install-suite-support.py" state --root "$ROOT" --services "$SELECTED_CSV")"
 if [[ $DATABASE == auto ]]; then
   if ((NON_INTERACTIVE)); then DATABASE=keep; else
     ui_choose choice 'Where should openWeightGym keep its data?' 0 \
@@ -475,13 +512,16 @@ provision_postgresql() {
   ((PROVISION_POSTGRESQL)) || return 0
   ((DRY_RUN)) && { note 'DRY RUN: provision local PostgreSQL role, separate databases, and mode-600 DSN files'; return 0; }
   command -v psql >/dev/null && command -v createdb >/dev/null || die 'psql and createdb were not installed'
-  local host role prefix password key database dsn_dir existing
+  local host role prefix password key database dsn_dir existing port
   host=$(hostname -s | tr '[:upper:]-.' '[:lower:]__' | tr -cd 'a-z0-9_')
   role="suite_${USER//[^a-zA-Z0-9_]/_}_${host:-host}"
   role=${role:0:60}
   prefix=${SUITE_DATABASE_PREFIX:-${role}}
   dsn_dir=$ROOT/keys/postgresql
   install -d -m 700 "$dsn_dir"
+  repair_postgresql
+  port=$(sudo -u postgres psql -Atqc 'SHOW port' postgres)
+  [[ $port =~ ^[0-9]+$ ]] || die 'PostgreSQL did not return a valid local port'
   existing=$(sudo -u postgres psql -Atqc "SELECT 1 FROM pg_roles WHERE rolname = '$role'" postgres)
   if [[ $existing == 1 ]]; then
     local complete=1 suffix=2
@@ -511,7 +551,7 @@ provision_postgresql() {
     # Leave room for the store name so long host names/prefixes cannot collide.
     database="${prefix:0:48}_${key}"
     sudo -u postgres createdb --owner "$role" "$database"
-    printf 'postgresql://%s:%s@127.0.0.1:5432/%s\n' "$role" "$password" "$database" > "$dsn_dir/$key.dsn"
+    printf 'postgresql://%s:%s@127.0.0.1:%s/%s\n' "$role" "$password" "$port" "$database" > "$dsn_dir/$key.dsn"
     chmod 600 "$dsn_dir/$key.dsn"
     DSNS[$key]=$dsn_dir/$key.dsn
   done
