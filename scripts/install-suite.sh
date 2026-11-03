@@ -220,14 +220,14 @@ add_service() {
 }
 
 parse_services() {
-  local value=${1// /} item
+  local value=${1// /} item service
   SELECTED=()
   IFS=',' read -ra requested <<< "$value"
   for item in "${requested[@]}"; do
     case "$item" in
-      compute) for item in "${COMPUTE[@]}"; do add_service "$item"; done ;;
-      front) for item in "${FRONT[@]}"; do add_service "$item"; done ;;
-      all) for item in "${SERVICES[@]}"; do add_service "$item"; done ;;
+      compute) for service in "${COMPUTE[@]}"; do add_service "$service"; done ;;
+      front) for service in "${FRONT[@]}"; do add_service "$service"; done ;;
+      all) for service in "${SERVICES[@]}"; do add_service "$service"; done ;;
       ''|none) ;;
       *) add_service "$item" ;;
     esac
@@ -310,10 +310,10 @@ for service in "${SELECTED[@]}"; do
   elif [[ -e $unit || -L $unit ]]; then
     command_line=$(sed -n 's/^ExecStart=//p' "$unit" 2>/dev/null | head -1 || true)
     expanded_command=${command_line//\%h/$HOME}
-    executable=${expanded_command%% *}
+    expanded_command=${expanded_command#\"}
     existing_root=
-    if [[ $executable == */.venv/bin/* ]]; then
-      existing_root=${executable%%/.venv/bin/*}
+    if [[ $expanded_command == */.venv/bin/* ]]; then
+      existing_root=${expanded_command%%/.venv/bin/*}
     elif [[ $expanded_command =~ --config[[:space:]]+([^[:space:]]+) ]]; then
       existing_root=$(dirname -- "$(dirname -- "${BASH_REMATCH[1]}")")
     fi
@@ -334,7 +334,7 @@ for service in "${SELECTED[@]}"; do
 done
 if [[ -x $ROOT/.venv/bin/python ]]; then
   if "$ROOT/.venv/bin/python" -c 'import sys; raise SystemExit(sys.version_info < (3, 13))'; then
-    ui_ok "virtual environment: $($ROOT/.venv/bin/python --version 2>&1)"
+    ui_ok "virtual environment: $("$ROOT/.venv/bin/python" --version 2>&1)"
     CHECK_PYTHON=$ROOT/.venv/bin/python
   else
     die "$ROOT/.venv uses Python older than 3.13 and is not compatible"
@@ -449,7 +449,7 @@ install_postgresql_packages() {
 
 install_pgvector_package() {
   ((INSTALL_PGVECTOR)) || return 0
-  local package= major=
+  local package='' major=''
   if command -v apt-get >/dev/null; then
     if command -v pg_config >/dev/null; then major=$(pg_config --version | sed -E 's/.* ([0-9]+).*/\1/'); fi
     if [[ -n $major ]] && apt-cache show "postgresql-$major-pgvector" >/dev/null 2>&1; then
@@ -493,10 +493,10 @@ provision_postgresql() {
       note "Using existing local PostgreSQL role and DSN files for $role."
       return 0
     fi
-    while sudo -u postgres psql -Atqc "SELECT 1 FROM pg_roles WHERE rolname = '${role}_$suffix'" postgres | grep -q 1; do
+    while sudo -u postgres psql -Atqc "SELECT 1 FROM pg_roles WHERE rolname = '${role:0:55}_$suffix'" postgres | grep -q 1; do
       ((suffix++))
     done
-    role="${role}_$suffix"
+    role="${role:0:55}_$suffix"
     prefix=$role
   fi
   password=$("$PY" -c 'import secrets; print(secrets.token_urlsafe(32))')
@@ -508,7 +508,8 @@ provision_postgresql() {
       DSNS[$key]=$dsn_dir/$key.dsn
       continue
     fi
-    database="${prefix}_${key}"; database=${database:0:60}
+    # Leave room for the store name so long host names/prefixes cannot collide.
+    database="${prefix:0:48}_${key}"
     sudo -u postgres createdb --owner "$role" "$database"
     printf 'postgresql://%s:%s@127.0.0.1:5432/%s\n' "$role" "$password" "$database" > "$dsn_dir/$key.dsn"
     chmod 600 "$dsn_dir/$key.dsn"
@@ -737,13 +738,30 @@ render_unit() {
   else
     "$PY" - "$source" "$target" "$ROOT" <<'PY'
 from pathlib import Path
+import json
 import os
+import shlex
 import stat
 import sys
 import tempfile
 import time
 source, target, root = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
-text = source.read_text().replace('%h/ai/openWeightGym', root).replace('%h/ai/suite', root).replace('%h/weightroom', root)
+def replace_root(value):
+    return value.replace('%h/ai/openWeightGym', root).replace('%h/ai/suite', root).replace('%h/weightroom', root)
+def unit_argument(value):
+    return json.dumps(value, ensure_ascii=False) if any(c.isspace() or c in '\\"' for c in value) else value
+lines = []
+for line in source.read_text().splitlines(keepends=True):
+    if line.startswith('ExecStart='):
+        arguments = shlex.split(line.split('=', 1)[1])
+        line = 'ExecStart=' + ' '.join(unit_argument(replace_root(arg)) for arg in arguments) + '\n'
+    elif line.startswith('EnvironmentFile='):
+        key, value = line.rstrip('\n').split('=', 1)
+        line = key + '=' + unit_argument(replace_root(value)) + '\n'
+    else:
+        line = replace_root(line)
+    lines.append(line)
+text = ''.join(lines)
 masked = target.is_symlink() and os.readlink(target) == '/dev/null'
 if target.exists() and not masked:
     if not target.is_symlink() and target.read_text() == text:

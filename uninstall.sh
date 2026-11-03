@@ -35,6 +35,7 @@ main() {
   : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/uninstall-$(date +%Y%m%d-%H%M%S).log}"
   ui_log_init || ui_die "Cannot create a private uninstaller log at $OWG_LOG."
   export OWG_LOG
+  trap 'restore_stopped_services; ui_cleanup' EXIT
   trap 'ui_cleanup; printf "\n"; ui_fail "Stopped. What was removed so far stays removed; run this again to finish."; exit 130' INT
 
   printf '\n  %s%s%s  %s%s%s\n' "$C_BOLD" "$(ui_gradient openWeightGym)" "$C_RESET" "$C_MUTED" "uninstaller" "$C_RESET"
@@ -42,7 +43,9 @@ main() {
   find_installation
   inventory
   choose
-  [[ ${OWG_OWNER:-} ]] && ui_sudo "removing a system installation"
+  if [[ -n ${OWG_OWNER:-} || -n ${REMOVE[postgresql]:-} ]]; then
+    ui_sudo "backing up and removing the selected components"
+  fi
   backup
   confirm
   remove
@@ -136,6 +139,7 @@ legacy_report() {
     [[ -f $unit_dir/$unit.service ]] || continue
     command=$(sed -n 's/^ExecStart=//p' "$unit_dir/$unit.service" | head -1)
     command=${command//%h/$HOME}
+    command=${command#\"}
     [[ $command == */.venv/bin/* ]] && roots+=("${command%%/.venv/bin/*}")
   done
   if ((${#roots[@]})); then
@@ -237,7 +241,7 @@ backup() {
   stop_services
   local stamp work parts=()
   stamp=$(date +%Y%m%d-%H%M%S)
-  BACKUP_FILE=$HOME/openWeightGym-backup-$stamp.tar.gz
+  BACKUP_FILE=$(mktemp "$HOME/openWeightGym-backup-$stamp-XXXXXX.tar.gz")
   work=$(mktemp -d)
   [[ -d $DIR/settings ]] && parts+=(settings)
   [[ -e $DIR/keys ]] && parts+=(keys)
@@ -284,6 +288,19 @@ confirm() {
 # ---- removing -------------------------------------------------------------------------------
 
 SERVICES_STOPPED=0
+REMOVAL_STARTED=0
+STOPPED_SERVICES=()
+
+restore_stopped_services() {
+  ((BASH_SUBSHELL == 0 && !REMOVAL_STARTED)) || return 0
+  local service index
+  for ((index = ${#STOPPED_SERVICES[@]} - 1; index >= 0; index--)); do
+    service=${STOPPED_SERVICES[index]}
+    owg_systemctl start "$service.service" >>"$OWG_LOG" 2>&1 ||
+      ui_warn "Could not restart $service after stopping the uninstall" "Start it with owg start $service."
+  done
+}
+
 stop_services() {
   ((SERVICES_STOPPED)) && return 0
   SERVICES_STOPPED=1
@@ -292,7 +309,9 @@ stop_services() {
   for service in ${services//,/ }; do stopped=("$service" "${stopped[@]}"); done
   for service in "${stopped[@]}"; do
     owg_systemctl is-active --quiet "$service.service" 2>/dev/null || continue
-    ui_step "Stopping $service" -- owg_systemctl stop "$service.service" || true
+    ui_step "Stopping $service" -- owg_systemctl stop "$service.service" ||
+      ui_die "Could not stop $service." "No components were removed. Check the log and try again."
+    STOPPED_SERVICES+=("$service")
   done
 }
 
@@ -322,6 +341,7 @@ remove() {
   ui_section "Cool-down" "Removing what you ticked"
   receipt_publish "$DIR"
   stop_services
+  REMOVAL_STARTED=1
   local service unit_dir
   if [[ -n ${REMOVE[services]:-} ]]; then
     unit_dir=$(receipt_unit_dir)
@@ -411,12 +431,14 @@ drop_postgresql() {
     database=$(as_reader cat "$dsn" | sed -E 's#.*/([^/?]+).*#\1#')
     role=$(as_reader cat "$dsn" | sed -E 's#^postgresql://([^:@/]+).*#\1#')
     roles+=("$role")
-    ui_step "Dropping PostgreSQL database $database" -- sudo -n -u postgres dropdb --if-exists "$database" || true
+    ui_step "Dropping PostgreSQL database $database" -- sudo -n -u postgres dropdb --if-exists "$database" ||
+      ui_die "Could not remove PostgreSQL database $database." "Connection files were kept; fix the error and run the uninstaller again."
   done
   mapfile -t roles < <(printf '%s\n' "${roles[@]}" | sort -u)
   for role in "${roles[@]}"; do
     [[ $role == suite_* ]] || { ui_warn "Kept PostgreSQL role $role: the installer did not make it"; continue; }
-    ui_step "Dropping PostgreSQL role $role" -- sudo -n -u postgres dropuser --if-exists "$role" || true
+    ui_step "Dropping PostgreSQL role $role" -- sudo -n -u postgres dropuser --if-exists "$role" ||
+      ui_die "Could not remove PostgreSQL role $role." "Connection files were kept; fix the error and run the uninstaller again."
   done
 }
 

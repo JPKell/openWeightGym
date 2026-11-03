@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import os
+import shlex
 import shutil
 import sqlite3
 import subprocess
 import sys
+import threading
 import tomllib
 from pathlib import Path
 
@@ -19,6 +22,104 @@ assert SPEC and SPEC.loader
 support = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = support
 SPEC.loader.exec_module(support)
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="the bootstrap lifecycle requires uv")
+def test_piped_bootstrap_install_repair_uninstall_and_reinstall_preserves_data(tmp_path):
+    """Exercise real entry points, Git, Python packaging and SQLite without host services."""
+    source = tmp_path / "source"
+    source.mkdir()
+    paths = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
+    for relative in filter(None, paths):
+        target = source / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / relative, target)
+    for args in (["init", "-b", "main"], ["config", "user.name", "Installer fixture"],
+                 ["config", "user.email", "fixture@example.invalid"], ["add", "."], ["commit", "-m", "fixture"]):
+        subprocess.run(["git", "-C", str(source), *args], capture_output=True, check=True)
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "main").symlink_to(source, target_is_directory=True)
+    home = tmp_path / "home with spaces"
+    home.mkdir()
+    install = home / "openWeightGym"
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    # Calls that could affect the real machine fail; service-manager discovery is offline.
+    for command in ("systemctl", "sudo"):
+        (commands / command).write_text("#!/usr/bin/env bash\nexit 91\n")
+    (commands / "loginctl").write_text('#!/usr/bin/env bash\n[[ $1 == show-user ]] && { echo no; exit 0; }; exit 91\n')
+    real_uv = shlex.quote(shutil.which("uv"))
+    interpreter = shlex.quote(sys.executable)
+    (commands / "uv").write_text(f'''#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${{1:-}} == python && ${{2:-}} == install ]]; then exit 0; fi
+if [[ ${{1:-}} == python && ${{2:-}} == find ]]; then printf '%s\\n' {interpreter}; exit 0; fi
+if [[ ${{1:-}} == venv ]]; then exec {real_uv} venv --seed --python {interpreter} "${{!#}}"; fi
+exec {real_uv} "$@"
+''')
+    for command in commands.iterdir():
+        command.chmod(0o755)
+    class Handler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=str(raw), **kwargs)
+        def log_message(self, *args):
+            pass
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    environment = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
+                   "XDG_STATE_HOME": str(home / ".local/state"), "OWG_NO_TTY": "1", "OWG_PLAIN": "1",
+                   "OWG_LOG": str(tmp_path / "bootstrap.log"), "OWG_ADMIN_PASSWORD": "fixture-password",
+                   "OWG_RAW": f"http://127.0.0.1:{server.server_port}", "OWG_REPO": str(source),
+                   "PATH": str(commands) + os.pathsep + os.environ["PATH"]}
+    environment.pop("PYTHONPATH", None)
+    environment.pop("OWG_OWNER", None)
+    environment.pop("OWG_OWNER_LOG", None)
+    bootstrap = (ROOT / "install.sh").read_text()
+    def run(*arguments):
+        answer = subprocess.run(["bash", "-s", "--", "--dir", str(install), *arguments],
+                                input=bootstrap, env=environment, cwd=home, text=True,
+                                capture_output=True, timeout=180)
+        assert answer.returncode == 0, answer.stdout + answer.stderr + (tmp_path / "bootstrap.log").read_text()
+    fresh = ("--yes", "--topology", "front", "--admin", "sam", "--llama", "skip", "--no-model", "--no-linger", "--no-browser")
+    from loadcoach.users import Users
+    try:
+        run(*fresh)
+        receipt = install / ".install-receipt"
+        assert "state=complete" in receipt.read_text()
+        unit = home / ".config/systemd/user/weightroom.service"
+        command = next(line.split('=', 1)[1] for line in unit.read_text().splitlines() if line.startswith('ExecStart='))
+        assert shlex.split(command) == [str(install / '.venv/bin/weightroom'), '--config', str(install / 'settings/weightroom.toml')]
+        if shutil.which('systemd-analyze'):
+            verified = subprocess.run(['systemd-analyze', '--user', '--man=no', 'verify', str(unit)],
+                                      env=environment, capture_output=True, text=True, timeout=30)
+            assert verified.returncode == 0, verified.stdout + verified.stderr
+        users = Users(str(install / "data/accounts.db"), {})
+        password = users.password_hash("sam")
+        assert password and users.by_name("sam").can("superuser")
+        users.db.close()
+        retained = install / "data/retained-note"
+        retained.write_text("keep this user data")
+        machine_key = (install / "keys/machine.key").read_bytes()
+        units = home / ".config/systemd/user"
+        shutil.rmtree(units)
+        run("--repair", "--yes", "--no-browser")
+        assert (units / "weightroom.service").exists() and (units / "turnstile.service").exists()
+        run("--uninstall", "--yes")
+        assert not (install / ".venv").exists() and not (install / "install.sh").exists()
+        assert retained.read_text() == "keep this user data"
+        run(*fresh)
+        assert "state=complete" in receipt.read_text()
+        assert retained.read_text() == "keep this user data"
+        assert (install / "keys/machine.key").read_bytes() == machine_key
+        users = Users(str(install / "data/accounts.db"), {})
+        assert users.password_hash("sam") == password
+        users.db.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_front_toollocker_audit_inherits_owner_store_without_creating_another(tmp_path):
