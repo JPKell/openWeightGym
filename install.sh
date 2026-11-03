@@ -80,13 +80,19 @@ main() {
   load_ui
   ui_init
   : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/install-$(date +%Y%m%d-%H%M%S).log}"
-  ui_log_init || ui_die "Cannot create a private installer log at $OWG_LOG."
+  ui_log_init || ui_die "Cannot create a private installer log at $OWG_LOG." \
+    "Check this account can write to $(dirname "$OWG_LOG"), or name another log: OWG_LOG=/tmp/owg-install.log"
   export OWG_LOG
-  trap 'ui_cleanup; on_error $LINENO' ERR
+  if [[ -n $ARGUMENT_ERROR ]]; then
+    OWG_STOP_TITLE='Nothing was changed' ui_die --status 2 "$ARGUMENT_ERROR" "${ARGUMENT_STEPS[@]}" \
+      'See every option and what it takes: run the same command with --help'
+  fi
+  trap 'on_error $? "${BASH_SOURCE[0]:-}" $LINENO "$BASH_COMMAND"' ERR
   trap 'ui_cleanup' EXIT
   trap 'ui_cleanup; printf "\n"; ui_fail "Stopped. Nothing finished is undone; run the installer again to carry on."; exit 130' INT
 
   locate_installation
+  set_retry
   if [[ $ACTION == uninstall ]]; then run_uninstaller; fi
   ui_banner "$(installed_version)"
   RECOVERY_ACTION='continue'
@@ -123,11 +129,41 @@ main() {
   finale
 }
 
-on_error() {
+on_error() {  # on_error STATUS FILE LINE COMMAND, from the ERR trap, which reads $? before anything else
+  local status=$1 file=install.sh line=$3 command=$4
   ((BASH_SUBSHELL == 0)) || return 0  # a failure inside $(...) or a step is reported where it is used
-  ui_fail "Something went wrong (installer line $1)."
-  ui_note "Nothing finished is undone; fix what the log says and run the installer again."
-  ui_note "Log: $OWG_LOG"
+  # Piped through bash, this script itself has no file name; its sourced parts do.
+  [[ $2 == */* ]] && file=${2##*/}
+  trap - ERR
+  ui_cleanup
+  ((status)) || status=1
+  ui_die --status "$status" "The installer stopped unexpectedly, at $file line $line (exit status $status), running:
+  $command" \
+    "The lines just above it may say why: put that right" \
+    "If it happens again, keep the log for whoever looks into it"
+}
+
+# How to carry on after a failure, the last step every failure lists. The helpers this runs
+# (setting up, the engine, the uninstaller) list it too, so these are exported.
+set_retry() {
+  local command flags=''
+  if [[ -f $DIR/install.sh ]]; then
+    command=$(shell_path "$DIR/install.sh")
+  else
+    command="curl -fsSL $OWG_RAW/$OWG_REF/install.sh | bash"
+    if ((SYSTEM)); then flags+=' --system'; fi
+    if ((DIR_GIVEN)); then flags+=" --dir $(shell_path "$DIR")"; fi
+    if [[ -n $flags ]]; then command+=" -s --$flags"; fi
+  fi
+  OWG_RETRY_COMMAND=$command
+  OWG_RETRY="Run the installer again: $command
+It carries on where it stopped; nothing finished is undone."
+  case "$ACTION" in
+    uninstall) OWG_STOP_TITLE="Uninstalling stopped" OWG_RETRY='' ;;
+    update) OWG_STOP_TITLE="The update stopped" ;;
+    *) OWG_STOP_TITLE="The install stopped" ;;
+  esac
+  export OWG_RETRY OWG_RETRY_COMMAND OWG_STOP_TITLE
 }
 
 # ---- arguments ------------------------------------------------------------------------------
@@ -138,43 +174,55 @@ parse_arguments() {
   ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
   VOICE_KEY_FILE='' VOICE_KEY=''
   RESUMING_INSTALL=0
+  # A mistake in the options is told once the screen is set up (main), as loudly as any other stop.
+  ARGUMENT_ERROR='' ARGUMENT_STEPS=()
   declare -gA PLAN_GIVEN=()
+  local -A takes=([--dir]='a folder' [--topology]='all, front or compute' [--admin]='a name' [--front-url]='a URL'
+    [--machine-key-file]='a file' [--compute-url]='a URL' [--join]='the console address' [--code]='the pairing code'
+    [--llama]='a choice' [--database]='sqlite or postgresql' [--voice-key-file]='a file' [--ref]='a branch')
   [[ -n $DIR ]] && DIR_GIVEN=1
   while (($#)); do
+    if [[ -v takes[$1] ]] && { (($# < 2)) || [[ -z $2 ]]; }; then
+      ARGUMENT_ERROR="$1 needs ${takes[$1]}."
+      return 0
+    fi
     case "$1" in
-      --dir) DIR=${2:?--dir needs a folder}; DIR_GIVEN=1; shift 2 ;;
+      --dir) DIR=$2; DIR_GIVEN=1; shift 2 ;;
       --system) SYSTEM=1; shift ;;
-      --topology) TOPOLOGY=${2:?--topology needs all, front or compute}; PLAN_GIVEN[TOPOLOGY]=1; shift 2 ;;
+      --topology) TOPOLOGY=$2; PLAN_GIVEN[TOPOLOGY]=1; shift 2 ;;
       --yes|--express) ASSUME_YES=1; shift ;;
-      --admin) ADMIN=${2:?--admin needs a name}; PLAN_GIVEN[ADMIN]=1; shift 2 ;;
-      --front-url) FRONT_URL=${2:?--front-url needs a URL}; PLAN_GIVEN[FRONT_URL]=1; shift 2 ;;
-      --machine-key-file) MACHINE_KEY_FILE=${2:?--machine-key-file needs a file}; shift 2 ;;
-      --compute-url) COMPUTE_URL=${2:?--compute-url needs a URL}; PLAN_GIVEN[COMPUTE_URL]=1; shift 2 ;;
-      --join) JOIN_URL=${2:?--join needs the console address}; TOPOLOGY=compute; PLAN_GIVEN[JOIN_URL]=1; PLAN_GIVEN[TOPOLOGY]=1; shift 2 ;;
-      --code) PAIR_CODE=${2:?--code needs the pairing code}; shift 2 ;;
-      --llama) LLAMA=${2:?--llama needs a choice}; PLAN_GIVEN[LLAMA]=1; shift 2 ;;
-      --database) DATABASE=${2:?--database needs sqlite or postgresql}; PLAN_GIVEN[DATABASE]=1; shift 2 ;;
+      --admin) ADMIN=$2; PLAN_GIVEN[ADMIN]=1; shift 2 ;;
+      --front-url) FRONT_URL=$2; PLAN_GIVEN[FRONT_URL]=1; shift 2 ;;
+      --machine-key-file) MACHINE_KEY_FILE=$2; shift 2 ;;
+      --compute-url) COMPUTE_URL=$2; PLAN_GIVEN[COMPUTE_URL]=1; shift 2 ;;
+      --join) JOIN_URL=$2; TOPOLOGY=compute; PLAN_GIVEN[JOIN_URL]=1; PLAN_GIVEN[TOPOLOGY]=1; shift 2 ;;
+      --code) PAIR_CODE=$2; shift 2 ;;
+      --llama) LLAMA=$2; PLAN_GIVEN[LLAMA]=1; shift 2 ;;
+      --database) DATABASE=$2; PLAN_GIVEN[DATABASE]=1; shift 2 ;;
       --voice) VOICE=1; PLAN_GIVEN[VOICE]=1; shift ;;
-      --voice-key-file) VOICE_KEY_FILE=${2:?--voice-key-file needs a file}; shift 2 ;;
+      --voice-key-file) VOICE_KEY_FILE=$2; shift 2 ;;
       --power-control) POWER_RULE=1; PLAN_GIVEN[POWER_RULE]=1; shift ;;
       --no-model) STARTER=0; PLAN_GIVEN[STARTER]=1; shift ;;
       --no-linger) LINGER_WANTED=0; PLAN_GIVEN[LINGER_WANTED]=1; shift ;;
       --no-browser) BROWSER=0; shift ;;
-      --ref) OWG_REF=${2:?--ref needs a branch}; shift 2 ;;
+      --ref) OWG_REF=$2; shift 2 ;;
       --plain) export OWG_PLAIN=1; PASSTHROUGH+=(--plain); shift ;;
       --update) ACTION=update; shift ;;
       --repair) ACTION=repair; shift ;;
       --uninstall) ACTION=uninstall; shift ;;
       --everything|--no-backup) PASSTHROUGH+=("$1"); shift ;;
       -h|--help) usage; exit 0 ;;
-      *) echo "install.sh: unknown option $1 (see --help)" >&2; exit 2 ;;
+      *) ARGUMENT_ERROR="The installer has no option $1."; return 0 ;;
     esac
   done
-  [[ -z $TOPOLOGY || $TOPOLOGY =~ ^(all|front|compute)$ ]] || { echo "install.sh: --topology is all, front or compute" >&2; exit 2; }
-  [[ $DATABASE =~ ^(sqlite|postgresql)$ ]] || { echo "install.sh: --database is sqlite or postgresql" >&2; exit 2; }
-  if ((SYSTEM)) && [[ $DATABASE == postgresql ]]; then
-    echo "install.sh: a system installation uses SQLite for now; set PostgreSQL up afterwards (docs/database-storage.md)" >&2
-    exit 2
+  if [[ -n $TOPOLOGY && ! $TOPOLOGY =~ ^(all|front|compute)$ ]]; then
+    ARGUMENT_ERROR="--topology is all, front or compute, not $TOPOLOGY."
+  elif [[ ! $DATABASE =~ ^(sqlite|postgresql)$ ]]; then
+    ARGUMENT_ERROR="--database is sqlite or postgresql, not $DATABASE."
+  elif ((SYSTEM)) && [[ $DATABASE == postgresql ]]; then
+    ARGUMENT_ERROR='A system installation keeps its data in SQLite for now.'
+    ARGUMENT_STEPS=('Leave out --database postgresql, and move to PostgreSQL afterwards: docs/database-storage.md'
+                    'Or install for yourself, without --system, to use PostgreSQL from the start')
   fi
   ((ASSUME_YES)) && export OWG_DEFAULTS=1
   return 0
@@ -201,16 +249,30 @@ load_ui() {
       source "$CHECKOUT/scripts/lib/$part.sh"
     done
   else
-    command -v curl >/dev/null || { echo "install.sh needs curl." >&2; exit 1; }
+    command -v curl >/dev/null || boot_failed "The installer needs curl, and it is not installed." \
+      "Install it: sudo apt-get install curl, sudo dnf install curl, sudo zypper install curl or sudo pacman -S curl"
     BOOT=$(mktemp -d)
     for part in ui detect receipt; do
       curl -fsSL --retry 2 "$OWG_RAW/$OWG_REF/scripts/lib/$part.sh" -o "$BOOT/$part.sh" ||
-        { echo "Could not fetch openWeightGym's installer from $OWG_RAW ($OWG_REF). Check the network and try again." >&2; exit 1; }
+        boot_failed "The installer could not download its parts from $OWG_RAW (branch $OWG_REF)." \
+          "Check this machine can reach GitHub: curl -sSI https://raw.githubusercontent.com | head -1" \
+          "Behind a proxy? Tell the installer about it: export https_proxy=http://PROXY:PORT" \
+          "If you named a branch with --ref, check it exists"
       # shellcheck disable=SC1090
       source "$BOOT/$part.sh"
     done
     rm -rf "$BOOT"
   fi
+}
+
+# A stop before the look is loaded, said as plainly and as loudly: boot_failed "What went wrong" STEP...
+boot_failed() {
+  local n=0 step
+  printf '\n  FAILED: %s\n\n  What to do next:\n' "$1" >&2
+  shift
+  for step in "$@" 'Then run the installer again'; do n=$((n + 1)); printf '    %d. %s\n' "$n" "$step" >&2; done
+  printf '\n' >&2
+  exit 1
 }
 
 # Which installation this run is about: the one named, a system one already here, or the default
@@ -293,6 +355,7 @@ warm_up() {
   ui_section "Warm-up" "Checking your machine"
   detect_os
   detect_package_manager
+  core_tools
   detect_systemd
   detect_gpu
   detect_address
@@ -311,7 +374,7 @@ warm_up() {
 
   MISSING_TOOLS=()
   local tool
-  for tool in git tar; do command -v "$tool" >/dev/null || MISSING_TOOLS+=("$tool"); done
+  for tool in git curl tar gzip; do command -v "$tool" >/dev/null || MISSING_TOOLS+=("$tool"); done
   if ((${#MISSING_TOOLS[@]})); then ui_warn "Not installed: ${MISSING_TOOLS[*]}" "they will be installed with ${PKG_MANAGER:-your package manager}"
   else ui_ok "git, curl and tar"; fi
 
@@ -322,8 +385,19 @@ warm_up() {
     if ((LINGER)); then ui_ok "systemd user services" "kept running after you log out"
     else ui_ok "systemd user services"; fi
   else
-    ui_warn "systemd user services are not running for this account" "services will be set up but must be started by hand"
-    ((OS_WSL)) && ui_note "In WSL, add [boot] systemd=true to /etc/wsl.conf, run wsl --shutdown in Windows, and start again."
+    if ((OS_WSL)); then
+      ui_attention "systemd is not running in this WSL system, so the services will be set up but not started." \
+        "Switch it on: add these two lines to /etc/wsl.conf
+[boot]
+systemd=true" \
+        "Restart WSL: run wsl --shutdown in Windows, then open this system again" \
+        "Then start the services: owg start"
+    else
+      ui_attention "systemd user services are not running for this account, so the services will be set up but not started." \
+        "Log in as $(id -un) directly, or over SSH, rather than switching to it with su or sudo -i: systemd starts then" \
+        "Or keep them running without a log-in: sudo loginctl enable-linger $(id -un)" \
+        "Then start the services: owg start"
+    fi
   fi
 
   case "$GPU_KIND" in
@@ -347,19 +421,37 @@ warm_up() {
   fi
 
   ((SYSTEM)) && return 0
-  # Units of the same names, run from another folder, would be replaced: stop before that.
-  local unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user unit command other=''
-  for unit in loadcoach weightroom turnstile toollocker spotter voice voice-gateway frontdesk tooldoor; do
-    [[ -f $unit_dir/$unit.service ]] || continue
-    command=$(sed -n 's/^ExecStart=//p' "$unit_dir/$unit.service" | head -1)
-    command=${command//%h/$HOME}
-    command=${command#\"}
-    if [[ $command == */.venv/bin/* && ${command%%/.venv/bin/*} != "$DIR" ]]; then other=${command%%/.venv/bin/*}; break; fi
+  check_existing_units
+}
+
+# Units of the same names, or drop-ins that change what they run, would make the new services run
+# someone else's code: stop before anything is changed, and say exactly how to clear the way.
+check_existing_units() {
+  local other unit list=''
+  detect_units "$DIR"
+  for unit in "${UNITS_MASKED[@]}"; do
+    ui_warn "The $unit service is switched off (masked)" "if this installation uses it, it is switched back on"
   done
-  if [[ -n $other ]]; then
-    ui_die "This account already runs openWeightGym from $other." \
-      "Update that installation with $other/install.sh, or install this one with --dir $other."
+  ((${#UNITS_OTHER[@]} + ${#UNITS_DROPINS[@]})) || return 0
+  units_retire_steps
+  other=$UNITS_OTHER_ROOT
+  if [[ -n $other && -f $other/.install-receipt && -x $other/install.sh ]]; then
+    ui_die "openWeightGym is already installed for this account, in $other." \
+      "To update or repair that one, run its installer: $(shell_path "$other/install.sh")" \
+      "To install here instead, uninstall that one first: $(shell_path "$other/uninstall.sh")"
   fi
+  if [[ -n $other ]]; then
+    for unit in "${UNITS_OTHER[@]}"; do list+=", $unit"; done
+    ui_die "Another openWeightGym (or AiSuite) installation, not made by this installer, already runs
+services here from $(shell_path "$other"): ${list#, }.
+New services with the same names would replace them." \
+      "${UNITS_STEPS[@]}" \
+      "Its folder, $(shell_path "$other"), with its settings and data, is not touched by any of this"
+  fi
+  list=''
+  for unit in "${UNITS_DROPINS[@]}"; do list+=$'\n'"  $(shell_path "$unit")"; done
+  ui_die "Leftover systemd drop-ins would change what openWeightGym's services run (their code,
+libraries or command), whoever installed them:$list" "${UNITS_STEPS[@]}"
 }
 
 # ---- an existing installation ---------------------------------------------------------------
@@ -380,7 +472,7 @@ interrupted_menu() {
       case "$rc" in
         0) ;;
         3) RECOVERY_ACTION=quit; return 0 ;;
-        *) ui_die "Uninstalling did not finish." "The installation was not restarted. Check the log and try again." ;;
+        *) ui_child_failed "$rc" "Uninstalling did not finish, so the installation was not restarted." ;;
       esac
       receipt_load "$DIR"
       CREATED_DIR=${RECEIPT[created_dir]:-0}
@@ -417,13 +509,18 @@ installed_menu() {
 
 update() {
   if [[ -d $DIR/.git ]]; then
+    local git_dir
+    git_dir="git -C $(shell_path "$DIR")"
     if [[ -n $(as_owner git -C "$DIR" status --porcelain --untracked-files=no) ]]; then
-      ui_die "$DIR has changes of your own." "Commit or stash them, then update again."
+      ui_die "$DIR has changes of your own, and updating would mix them with the new code." \
+        "See them: $git_dir status" "Keep them aside: $git_dir stash (or commit them)"
     fi
     local before
     before=$(as_owner git -C "$DIR" rev-parse --short HEAD)
     ui_step "Fetching the latest openWeightGym" -- as_owner git -C "$DIR" pull --ff-only ||
-      ui_die "Could not fetch the latest openWeightGym." "The log says why: $OWG_LOG"
+      ui_die "Could not fetch the latest openWeightGym." \
+        "?The lines above say why: usually the network, or GitHub not answering" \
+        "If git says the branches have diverged, see where yours stands: $git_dir status"
     if [[ $(as_owner git -C "$DIR" rev-parse --short HEAD) == "$before" ]]; then ui_ok "Already up to date" "$before"
     else ui_ok "Updated" "$before → $(as_owner git -C "$DIR" rev-parse --short HEAD)"; fi
   else
@@ -471,8 +568,9 @@ reinstall() {
   local options=(--root "$DIR" --embedded --non-interactive --yes --database keep --uv "$UV")
   [[ -z $SERVICES ]] || options+=(--services "$SERVICES")
   ui_section "Setting up" "Packages, settings and services"
-  as_owner "$DIR/scripts/install-suite.sh" "${options[@]}" ||
-    ui_die "Reinstalling did not finish." "The log says why: ${OWG_OWNER_LOG:-$OWG_LOG}"
+  local rc=0
+  as_owner "$DIR/scripts/install-suite.sh" "${options[@]}" || rc=$?
+  ((rc == 0)) || ui_child_failed "$rc" "Reinstalling did not finish." "The lines above, from the log, say why: put that right"
   services_from_receipt
   if ! receipt_present && [[ ,$SERVICES, == *,weightroom,* ]] && ! console_account_ready; then
     if [[ ,$SERVICES, == *,loadcoach,* ]]; then TOPOLOGY=all; else TOPOLOGY=front; fi
@@ -488,7 +586,8 @@ reinstall() {
   receipt_publish "$DIR"
   ui_section "Spotting" "Checking it all works"
   check_services
-  ui_finale "Back in shape"
+  if ((${#UI_ATTENTION[@]})); then ui_finale "Back, with things to fix"; else ui_finale "Back in shape"; fi
+  ui_attention_box
 }
 
 # A legacy or interrupted front may have only the weightroom service identity, with no sign-in.
@@ -576,7 +675,9 @@ json_field() { sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" <<<"$2" | head -1; }
 
 ask_console() {
   if ((VOICE)) && [[ -n $VOICE_KEY_FILE ]]; then
-    [[ -r $VOICE_KEY_FILE ]] || ui_die "Cannot read the voice-service key in $VOICE_KEY_FILE."
+    [[ -r $VOICE_KEY_FILE ]] || ui_die "Cannot read the voice-service key in $VOICE_KEY_FILE." \
+      "Copy the console's keys/voice-service.key to this machine and give its path: --voice-key-file FILE" \
+      "Or join with a pairing code, which brings it: --join http://CONSOLE:8440 --code CODE"
   fi
   if [[ -z $JOIN_URL && -z $FRONT_URL ]] && ((!ASSUME_YES)); then
     local way=0 host=''
@@ -596,17 +697,23 @@ ask_console() {
   fi
   if [[ -z $FRONT_URL ]]; then
     local host=''
-    ((ASSUME_YES)) && ui_die "A GPU node needs --front-url, the console's address."
+    ((ASSUME_YES)) && ui_die "A GPU node needs to know its console, and --yes leaves nobody to ask." \
+      "Join with a pairing code: on the console run owg pair, then here add: --join http://CONSOLE:8440 --code CODE" \
+      "Or give the console's address and key: --front-url http://CONSOLE:8442 --machine-key-file FILE (a copy of its keys/machine.key)"
     ui_input host "The console machine's address (its IP or host name)" "" valid_host
     FRONT_URL=http://$host:8442
   fi
   if [[ -n $MACHINE_KEY_FILE ]]; then
-    [[ -r $MACHINE_KEY_FILE ]] || ui_die "Cannot read $MACHINE_KEY_FILE."
+    [[ -r $MACHINE_KEY_FILE ]] || ui_die "Cannot read the machine key in $MACHINE_KEY_FILE." \
+      "Copy the console's keys/machine.key to this machine (scp works) and give its path: --machine-key-file FILE" \
+      "Or join with a pairing code instead: --join http://CONSOLE:8440 --code CODE"
     MACHINE_KEY=$(<"$MACHINE_KEY_FILE")
   elif [[ -r $DIR/keys/machine.key ]]; then
     MACHINE_KEY=$(<"$DIR/keys/machine.key")
   else
-    ((ASSUME_YES)) && ui_die "A GPU node needs --machine-key-file, a copy of the console's keys/machine.key."
+    ((ASSUME_YES)) && ui_die "A GPU node needs the console's machine key, and --yes leaves nobody to paste it." \
+      "Copy the console's keys/machine.key here and add: --machine-key-file FILE" \
+      "Or join with a pairing code instead: --join http://CONSOLE:8440 --code CODE"
     ui_note "The console and this node sign what they send each other with one shared key."
     ui_note "On the console, show it with:  cat ~/openWeightGym/keys/machine.key"
     ui_secret MACHINE_KEY "Paste the console's machine key" 20 once
@@ -753,9 +860,11 @@ account() {
   default=$(printf '%s' "${default,,}" | tr -cd 'a-z0-9._-')
   [[ -n $default ]] || default='admin'
   if [[ -z $ADMIN ]]; then ui_input ADMIN "Your user name" "$default" valid_user_name; fi
-  valid_user_name "$ADMIN" || ui_die "$ADMIN cannot be a user name."
+  valid_user_name "$ADMIN" || ui_die "$ADMIN cannot be a user name." \
+    "Use lowercase letters, digits, dot, dash or underscore: --admin NAME"
   PASSWORD=${OWG_ADMIN_PASSWORD:-}
-  [[ -z $PASSWORD || ${#PASSWORD} -ge 8 ]] || ui_die "The administrator password must have at least 8 characters."
+  [[ -z $PASSWORD || ${#PASSWORD} -ge 8 ]] || ui_die "The administrator password must have at least 8 characters." \
+    "Set a longer one in OWG_ADMIN_PASSWORD, or leave it unset to be asked (or given a temporary one)"
   if [[ -z $PASSWORD ]]; then
     if ! ui_secret PASSWORD "A password for $ADMIN (8 characters or more)" 8; then
       PASSWORD=''
@@ -783,20 +892,47 @@ loading_plates() {
   write_receipt pending
   find_uv
   ui_step "Python 3.13" -- as_owner "$UV" python install --no-bin 3.13 ||
-    ui_die "uv could not fetch Python 3.13." "Check the network; the log has uv's own words."
+    ui_die "uv could not fetch Python 3.13." \
+      "?The lines above say why: usually the network, or github.com not answering" \
+      "Check this machine can reach it: curl -sI https://github.com"
+  # A GPU node is reached by the console at this address; the loopback one reaches nobody.
+  if [[ $TOPOLOGY == compute && $HOST_ADDRESS == 127.0.0.1 ]]; then
+    ui_attention "Could not find this machine's address on the network, so the console may not reach it" \
+      "Check the network is up: ip -4 addr" \
+      "Put this machine's address in $(shell_path "$DIR/settings/loadcoach.toml") (host = \"...\"), then: owg restart"
+  fi
   [[ $TOPOLOGY == front ]] || engine
   if ((STARTER)); then starter_model; fi
 }
 
 install_tools() {
   ((${#MISSING_TOOLS[@]})) || return 0
-  ((${#PKG_INSTALL[@]})) || ui_die "Please install ${MISSING_TOOLS[*]} and run the installer again."
   local packages=() tool
   for tool in "${MISSING_TOOLS[@]}"; do packages+=("$(package_for "$tool")"); done
-  ui_sudo "installing ${packages[*]}"
-  [[ $PKG_MANAGER == apt ]] && ui_step "Refreshing the package list" -- sudo -n apt-get update
-  ui_step "Installing ${packages[*]}" -- sudo -n "${PKG_INSTALL[@]}" "${packages[@]}" ||
-    ui_die "Could not install ${packages[*]}." "Install them yourself and run the installer again."
+  install_packages "${packages[@]}"
+}
+
+# The installer is written with awk, sed and grep, which minimal images (openSUSE's containers)
+# may lack. Nothing can be checked without them, so they are installed before anything else.
+core_tools() {
+  local packages=() tool
+  for tool in awk sed grep; do command -v "$tool" >/dev/null || packages+=("$(package_for "$tool")"); done
+  ((${#packages[@]})) || return 0
+  ui_warn "Not installed: ${packages[*]}" "the installer itself needs them, so they come first"
+  install_packages "${packages[@]}"
+}
+
+install_packages() {  # install_packages PACKAGE...: with sudo, never asking, or stop with what to do
+  ((${#PKG_INSTALL[@]})) || ui_die "The installer needs $*, and does not know this system's package manager." \
+    "Install $* with your package manager, then run the installer again"
+  ui_sudo "installing $*"
+  if [[ $PKG_MANAGER == apt ]]; then
+    ui_step "Refreshing the package list" -- sudo -n apt-get update ||
+      ui_die "apt could not refresh its package lists." "Run it yourself to see why: sudo apt-get update"
+  fi
+  ui_step "Installing $*" -- sudo -n "${PKG_INSTALL[@]}" "$@" ||
+    ui_die "Could not install $* with $PKG_MANAGER." "?$(pkg_refresh_hint)" \
+      "Then install them yourself: $(pkg_command "$@")"
 }
 
 # The account and folders of a system installation. The service account's own systemd, kept
@@ -807,9 +943,15 @@ install_tools() {
 prepare_system() {
   ui_sudo "making the $SVC account and its folders"
   if ! id "$SVC" >/dev/null 2>&1; then
+    # nologin is in sbin, which is not on everyone's PATH.
+    local shell=/bin/false candidate
+    for candidate in "$(command -v nologin || true)" /usr/sbin/nologin /sbin/nologin; do
+      [[ -n $candidate && -x $candidate ]] && { shell=$candidate; break; }
+    done
     ui_step "Making the $SVC account" -- sudo -n useradd --system --user-group --home-dir "$SYS_VAR" \
-      --shell "$(command -v nologin || printf /bin/false)" --comment "openWeightGym services" "$SVC" ||
-      ui_die "Could not make the $SVC account."
+      --shell "$shell" --comment "openWeightGym services" "$SVC" ||
+      ui_die "Could not make the $SVC account." \
+        "Make it yourself: sudo useradd --system --user-group --home-dir $SYS_VAR --shell $shell $SVC"
   else
     ui_ok "The $SVC account is already here"
   fi
@@ -824,14 +966,18 @@ prepare_system() {
   sudo -n install -o "$SVC" -g "$SVC" -m 600 /dev/null "$OWG_OWNER_LOG"
   ui_ok "Folders" "${SYS_OPT}, ${SYS_ETC}, ${SYS_VAR}"
   if [[ $(loginctl show-user "$SVC" -p Linger --value 2>/dev/null) != yes ]]; then
-    sudo -n loginctl enable-linger "$SVC" || ui_die "Could not let the $SVC account start at boot (loginctl enable-linger)."
+    sudo -n loginctl enable-linger "$SVC" 2>>"$OWG_LOG" ||
+      ui_die "Could not let the $SVC account start its services at boot." \
+        "Run it yourself to see why: sudo loginctl enable-linger $SVC"
     LINGER_ENABLED=1
   fi
-  # Its systemd starts a moment after linger is turned on.
+  # Its systemd starts a moment after linger is turned on. systemctl --user reaches it through its
+  # own socket; the D-Bus one is there only where a user D-Bus session is installed.
   local uid i
   uid=$(id -u "$SVC")
-  for ((i = 0; i < 20; i++)); do [[ -S /run/user/$uid/bus ]] && break; sleep 0.5; done
-  [[ -S /run/user/$uid/bus ]] && ui_ok "The $SVC account starts at boot" || ui_warn "The $SVC account's systemd has not started yet"
+  for ((i = 0; i < 20; i++)); do [[ -S /run/user/$uid/systemd/private ]] && break; sleep 0.5; done
+  if [[ -S /run/user/$uid/systemd/private ]]; then ui_ok "The $SVC account starts at boot"
+  else ui_warn "The $SVC account's systemd has not started yet" "if setting up cannot reach it: sudo systemctl status user@$uid.service"; fi
 }
 
 # A system installation's data, keys and models live outside the code folder, linked from it.
@@ -845,6 +991,8 @@ link_system_folders() {
 }
 
 fetch_code() {
+  local -a FETCH_STEPS=("?The lines above say why: usually the network, or GitHub not answering"
+                        "Check this machine can reach it: git ls-remote $OWG_REPO $OWG_REF")
   if [[ -n $CHECKOUT && $DIR == "$CHECKOUT" ]]; then
     ui_ok "openWeightGym $(installed_version)" "this checkout, ${DIR/#$HOME/\~}"
     CREATED_DIR=${CREATED_DIR:-0}
@@ -856,29 +1004,32 @@ fetch_code() {
     local clone=$DIR/.owg-clone
     as_owner rm -rf "$clone"
     ui_step "Fetching openWeightGym ($OWG_REF)" -- as_owner git clone --quiet --no-checkout --branch "$OWG_REF" "$OWG_REPO" "$clone" ||
-      ui_die "Could not fetch openWeightGym from $OWG_REPO."
+      ui_die "Could not fetch openWeightGym from $OWG_REPO." "${FETCH_STEPS[@]}"
     as_owner mv "$clone/.git" "$DIR/.git"
     as_owner rmdir "$clone"
     as_owner git -C "$DIR" reset --quiet --hard
     CREATED_DIR=1
   elif [[ -e $DIR ]] && [[ -n $(ls -A "$DIR" 2>/dev/null) ]]; then
     [[ -f $DIR/pyproject.toml && -f $DIR/scripts/install-suite.sh ]] ||
-      ui_die "$DIR exists and is not openWeightGym." "Choose another place with --dir, or empty that folder."
+      ui_die "$DIR exists and is not openWeightGym, so nothing was put there." \
+        "Choose another place: run the installer with --dir PATH" "Or empty that folder; see what is in it: ls -A $(shell_path "$DIR")"
     if ((${RESUMING_INSTALL:-0})) && [[ -z $CHECKOUT && -d $DIR/.git ]]; then
       [[ -z $(as_owner git -C "$DIR" status --porcelain --untracked-files=no) ]] ||
-        ui_die "$DIR has changes of your own." "Commit or stash them before resuming with updated code."
+        ui_die "$DIR has changes of your own, and resuming would mix them with updated code." \
+          "See them: git -C $(shell_path "$DIR") status" "Keep them aside: git -C $(shell_path "$DIR") stash (or commit them)"
       ui_step "Updating the interrupted installation" -- as_owner git -C "$DIR" pull --ff-only ||
-        ui_die "Could not update the interrupted installation." "The log says why: $OWG_LOG"
+        ui_die "Could not update the interrupted installation." "${FETCH_STEPS[@]}"
     fi
     ui_ok "openWeightGym is already in ${DIR/#$HOME/\~}"
     CREATED_DIR=${CREATED_DIR:-0}
   else
     ((SYSTEM)) || mkdir -p "$(dirname "$DIR")"
     ui_step "Fetching openWeightGym ($OWG_REF)" -- as_owner git clone --quiet --branch "$OWG_REF" "$OWG_REPO" "$DIR" ||
-      ui_die "Could not fetch openWeightGym from $OWG_REPO."
+      ui_die "Could not fetch openWeightGym from $OWG_REPO." "${FETCH_STEPS[@]}"
     CREATED_DIR=1
   fi
   CHECKOUT=$DIR
+  set_retry
   ((SYSTEM)) && link_system_folders
   return 0
 }
@@ -895,7 +1046,9 @@ find_uv() {
   work=$(mktemp -d)
   chmod 755 "$work"
   ui_download "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$arch-unknown-linux-gnu.tar.gz" \
-    "$work/uv.tar.gz" "uv $UV_VERSION" || ui_die "Could not download uv."
+    "$work/uv.tar.gz" "uv $UV_VERSION" || ui_die "Could not download uv, which fetches Python." \
+    "Check this machine can reach GitHub: curl -sI https://github.com" \
+    "Or install uv yourself (https://docs.astral.sh/uv/) so it is on your PATH"
   as_owner mkdir -p "$DIR/.tools"
   as_owner tar -xzf "$work/uv.tar.gz" -C "$DIR/.tools" --strip-components=1
   rm -rf "$work"
@@ -907,7 +1060,9 @@ engine() {
   LLAMA_SERVER=''
   case "$LLAMA" in
     skip) ui_info "llama.cpp: skipped" "install it later with scripts/install-llamacpp.sh"; return 0 ;;
-    /*) [[ -x $LLAMA ]] || ui_die "$LLAMA is not a program."; LLAMA_SERVER=$LLAMA; ui_ok "llama.cpp: your own $LLAMA"; return 0 ;;
+    /*) [[ -x $LLAMA ]] || ui_die "$LLAMA is not a program, so it cannot run the models." \
+          "Give the path of a llama-server that runs here: --llama /path/to/llama-server" "Or let the installer fetch one: --llama auto"
+        LLAMA_SERVER=$LLAMA; ui_ok "llama.cpp: your own $LLAMA"; return 0 ;;
   esac
   local options=(--prefix "$DIR/runtimes/llamacpp") runner=()
   ((ASSUME_YES)) && options+=(--yes)
@@ -917,9 +1072,18 @@ engine() {
     *) options+=(--backend "$LLAMA") ;;
   esac
   # A system installation's engine is fetched as root, which may add libraries, then handed to its account.
-  ((SYSTEM)) && runner=(sudo -n env "OWG_LOG=$OWG_LOG" "PATH=$PATH" "TERM=${TERM:-dumb}")
+  # Its failure does not stop the installation, so its panel says only what went wrong with it.
+  local quiet=("OWG_STOP_TITLE=llama.cpp did not install" "OWG_RETRY=")
+  if ((SYSTEM)); then runner=(sudo -n env "OWG_LOG=$OWG_LOG" "PATH=$PATH" "TERM=${TERM:-dumb}" "${quiet[@]}")
+  else runner=(env "${quiet[@]}"); fi
   if ! "${runner[@]}" "$DIR/scripts/install-llamacpp.sh" "${options[@]}"; then
-    ui_warn "llama.cpp did not install" "the rest goes on; run scripts/install-llamacpp.sh to try again"
+    local again
+    again="$( ((SYSTEM)) && printf 'sudo ')$(shell_path "$DIR/scripts/install-llamacpp.sh") --prefix $(shell_path "$DIR/runtimes/llamacpp")"
+    ui_info "The rest of the installation goes on without it"
+    ui_attention "llama.cpp is not installed, so no model can run yet" \
+      "Put right what its panel above says" \
+      "Then install it: $again$([[ $LLAMA == source ]] && printf ' --from-source')" \
+      "Or build it on this machine, which suits any system: $again --from-source"
     STARTER_REGISTER=0
     return 0
   fi
@@ -934,7 +1098,9 @@ starter_model() {
   # Downloaded as you, into a folder that is yours for the length of the download.
   if ((SYSTEM)); then sudo -n install -d -o "$(id -un)" -m 755 "$SYS_VAR/models/llm"; fi
   if ! ui_download "$STARTER_URL" "$model" "$STARTER_TITLE"; then
-    ui_warn "Skipping the starter model" "add models later from the console"
+    ui_attention "The starter model ($STARTER_TITLE) did not download" \
+      "Check this machine can reach Hugging Face: curl -sI https://huggingface.co" \
+      "Then add a model from Models in the console"
     STARTER=0
   fi
   if ((SYSTEM)); then sudo -n chown -R "$SVC:$SVC" "$SYS_VAR/models/llm"; fi
@@ -971,8 +1137,9 @@ setting_up() {
   ((VOICE)) && options+=(--voice-model "$STARTER_NAME")
   [[ $DATABASE == postgresql ]] && options+=(--install-postgresql --provision-postgresql)
   if [[ $DATABASE == postgresql ]]; then ui_sudo "installing and setting up PostgreSQL"; fi
-  as_owner "$DIR/scripts/install-suite.sh" "${options[@]}" ||
-    ui_die "Setting up did not finish." "The log says why: ${OWG_OWNER_LOG:-$OWG_LOG}"
+  local rc=0
+  as_owner "$DIR/scripts/install-suite.sh" "${options[@]}" || rc=$?
+  ((rc == 0)) || ui_child_failed "$rc" "Setting up did not finish." "The lines above, from the log, say why: put that right"
 }
 
 finishing() {
@@ -986,14 +1153,18 @@ finishing() {
       ui_ok "Account $ADMIN is already there"
     else
       local said
-      said=$("${weightroom[@]}" user add "$ADMIN" superuser 2>>"$OWG_LOG") || ui_die "Could not add the account $ADMIN."
+      said=$("${weightroom[@]}" user add "$ADMIN" superuser 2>>"$OWG_LOG") || ui_die "Could not add the account $ADMIN." \
+        "See why near the end of the log: $OWG_LOG" \
+        "Check the console's settings and data: owg doctor"
       API_KEY=$(printf '%s\n' "$said" | grep -oE 'lc_[A-Za-z0-9_-]+' | tail -1)
     fi
     # Account creation may have completed just before an interrupted password write.
     if [[ -z $password_state || $password_state == - ]]; then
       if [[ -n $PASSWORD ]]; then
         printf '%s\n' "$PASSWORD" | "${weightroom[@]}" user password "$ADMIN" --stdin >>"$OWG_LOG" 2>&1 ||
-          ui_die "Could not set $ADMIN's password."
+          ui_die "Could not set $ADMIN's password." \
+            "See why near the end of the log: $OWG_LOG" \
+            "Set it later yourself: $(shell_path "$DIR/.venv/bin/weightroom") --config $(shell_path "$DIR/settings/weightroom.toml") user password $ADMIN"
       else
         TEMPORARY=$("${weightroom[@]}" user temporary "$ADMIN" 2>>"$OWG_LOG" | tail -1)
       fi
@@ -1009,16 +1180,22 @@ finishing() {
       if "${loadcoach[@]}" models add "$STARTER_NAME" "$DIR/models/llm/$STARTER_FILE" "${flags[@]}" >>"$OWG_LOG" 2>&1; then
         ui_ok "Added $STARTER_NAME" "ask for it by that name"
       else
-        ui_warn "Could not add $STARTER_NAME" "add it from Models in the console"
+        ui_attention "$STARTER_NAME was downloaded but could not be added" \
+          "See why near the end of the log: $OWG_LOG" \
+          "Then add it from Models in the console; the file is $DIR/models/llm/$STARTER_FILE"
       fi
     fi
   fi
   if ((!SYSTEM && SYSTEMD_USER && LINGER_WANTED && !LINGER)); then
-    if loginctl enable-linger "${USER:-$(id -un)}" 2>>"$OWG_LOG"; then
+    local me=${USER:-$(id -un)}
+    # polkit lets most desktops do this unasked; elsewhere it needs root.
+    if loginctl enable-linger "$me" 2>>"$OWG_LOG" ||
+      { sudo -n true 2>/dev/null && sudo -n loginctl enable-linger "$me" 2>>"$OWG_LOG"; }; then
       ui_ok "Services keep running when you log out"
       LINGER_ENABLED=1
     else
-      ui_warn "Could not keep the services running after logout" "run: sudo loginctl enable-linger ${USER:-\$USER}"
+      ui_attention "The services stop when you log out of this machine" \
+        "Let them keep running: sudo loginctl enable-linger $me"
     fi
   fi
   ((POWER_RULE)) && power_rule
@@ -1028,12 +1205,34 @@ finishing() {
 
 # Let spotter put this machine to sleep, restart it or switch it off, through polkit.
 power_rule() {
-  POLKIT_RULE=/etc/polkit-1/rules.d/50-openweightgym-spotter.rules
-  local account=${OWG_OWNER:-${USER:-$(id -un)}}
-  [[ -d /etc/polkit-1/rules.d ]] || { ui_warn "polkit is not installed here" "the console cannot control power"; POLKIT_RULE=''; return 0; }
+  local account=${OWG_OWNER:-${USER:-$(id -un)}} version='' javascript=0
+  POLKIT_RULE=''
+  if command -v pkaction >/dev/null; then version=$(pkaction --version 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+)?' | head -1) || true; fi
+  if [[ -z $version ]] && ! compgen -G '/usr/lib*/polkit-1/polkitd' >/dev/null && [[ ! -x /usr/libexec/polkitd ]]; then
+    ui_attention "polkit is not installed, so the console cannot sleep, restart or switch off this machine" \
+      "Install it: $(pkg_command "$(package_for polkit)")" \
+      "Then run the installer again: $OWG_RETRY_COMMAND"
+    return 0
+  fi
   ui_sudo "letting the console control this machine's power"
-  sed -e "s/^var ACCOUNT = \".*\";/var ACCOUNT = \"$account\";/" -e 's/^var SERVICES = \[.*\];/var SERVICES = [];/' \
-    "$DIR/services/spotter.rules" | sudo -n tee "$POLKIT_RULE" >/dev/null
+  # polkit before 0.106 (Ubuntu 22.04) reads .pkla files, not JavaScript rules.
+  if [[ -n $version ]]; then
+    awk -v v="$version" 'BEGIN { exit !(v + 0 >= 0.106) }' && javascript=1
+  elif [[ -d /etc/polkit-1/rules.d ]]; then
+    javascript=1
+  fi
+  if ((javascript)); then
+    POLKIT_RULE=/etc/polkit-1/rules.d/50-openweightgym-spotter.rules
+    sudo -n mkdir -p /etc/polkit-1/rules.d
+    sed -e "s/^var ACCOUNT = \".*\";/var ACCOUNT = \"$account\";/" -e 's/^var SERVICES = \[.*\];/var SERVICES = [];/' \
+      "$DIR/services/spotter.rules" | sudo -n tee "$POLKIT_RULE" >/dev/null
+  else
+    POLKIT_RULE=/etc/polkit-1/localauthority/50-local.d/50-openweightgym-spotter.pkla
+    sudo -n mkdir -p "${POLKIT_RULE%/*}"
+    printf '%s\n' "[openWeightGym spotter: power]" "Identity=unix-user:$account" \
+      "Action=org.freedesktop.login1.suspend*;org.freedesktop.login1.reboot*;org.freedesktop.login1.power-off*" \
+      "ResultAny=yes" "ResultInactive=yes" "ResultActive=yes" | sudo -n tee "$POLKIT_RULE" >/dev/null
+  fi
   sudo -n chmod 644 "$POLKIT_RULE"
   ui_ok "The console may sleep, restart or switch off this machine" "$POLKIT_RULE"
 }
@@ -1118,8 +1317,9 @@ wait_http() {  # wait_http URL SECONDS [curl options...]: until something answer
   return 1
 }
 
+# Each service that is not running goes on the list of things to put right at the end.
 check_services() {
-  local service failed=0
+  local service said last title
   if ! can_start; then
     ui_info "Start the services by hand: see docs/installation.md"
     return 0
@@ -1127,9 +1327,20 @@ check_services() {
   services_from_receipt
   for service in ${SERVICES//,/ }; do
     if owg_systemctl is-active --quiet "$service.service"; then ui_ok "$service is running"
-    else ui_fail "$service is not running" "owg logs $service"; failed=1; fi
+    else
+      # What the program said last, in the journal: often the reason, plainly (a port taken, say).
+      said=$(owg_journalctl --user-unit "$service.service" -n 40 --no-pager -o cat 2>/dev/null) || said=''
+      diagnose_log "$said"
+      title="$service is not running."
+      if ((${#DIAGNOSIS[@]})); then title+=$'\n'"Why: ${DIAGNOSIS[0]}"
+      elif last=$(grep -iE 'error|exception|failed|denied|refused|not found' <<<"$said" | tail -1) && [[ -n $last ]]; then
+        title+=$'\n'"It last said: ${last:0:200}"
+      fi
+      ui_attention "$title" "${DIAGNOSIS_STEPS[@]}" "See all it said: owg logs $service" \
+        "Put that right, then start it: owg restart $service"
+    fi
   done
-  return "$failed"
+  return 0
 }
 
 services_from_receipt() {
@@ -1153,18 +1364,40 @@ spotting() {
   # Wait only for programs that started: one that did not is already reported above.
   case "$TOPOLOGY" in
     all|front)
-      if running weightroom; then ui_step "The console answers" -- wait_http http://127.0.0.1:8440/ 60 || true; fi
+      if running weightroom && ! ui_step "The console answers" -- wait_http http://127.0.0.1:8440/ 60; then
+        ui_attention "The console is running but does not answer on http://127.0.0.1:8440" \
+          "See why: owg logs weightroom" "Put that right, then: owg restart weightroom"
+      fi
       if [[ $TOPOLOGY == all ]] && running turnstile; then
         key=$(as_owner cat "$DIR/keys/weightroom.key")
-        ui_step "The API answers through the gateway" -- wait_http http://127.0.0.1:8442/v1/models 60 -H "Authorization: Bearer $key" || true
-      fi ;;
+        if ! ui_step "The API answers through the gateway" -- wait_http http://127.0.0.1:8442/v1/models 60 -H "Authorization: Bearer $key"; then
+          ui_attention "The API gateway is running but does not answer on http://127.0.0.1:8442" \
+            "See why: owg logs turnstile; owg logs loadcoach" "Put that right, then: owg restart turnstile loadcoach"
+        fi
+      fi
+      firewall_check 8440 8442 ;;
     compute)
-      if running loadcoach; then ui_step "LoadCoach answers on $HOST_ADDRESS" -- wait_http "http://$HOST_ADDRESS:8442/v1/models" 60 || true; fi ;;
+      if running loadcoach && ! ui_step "LoadCoach answers on $HOST_ADDRESS" -- wait_http "http://$HOST_ADDRESS:8442/v1/models" 60; then
+        ui_attention "LoadCoach is running but does not answer on http://$HOST_ADDRESS:8442, so the console cannot use this node" \
+          "See why: owg logs loadcoach" "Put that right, then: owg restart loadcoach"
+      fi
+      firewall_check 8442 ;;
   esac
   if [[ $TOPOLOGY == all ]] && ((STARTER)) && [[ -n $API_KEY ]] && running loadcoach; then first_rep; fi
 }
 
 running() { owg_systemctl is-active --quiet "$1.service" 2>/dev/null; }
+
+# Other machines reach this one on these ports: a firewall that keeps them out is worth saying.
+firewall_check() {  # firewall_check PORT...
+  [[ $HOST_ADDRESS == 127.0.0.1 ]] && return 0
+  firewall_steps "$@"
+  ((${#FIREWALL_STEPS[@]})) || return 0
+  local who="other devices" keeps=keeps
+  [[ $TOPOLOGY == compute ]] && who="the console machine"
+  ((FIREWALL_SURE)) || keeps="may keep"
+  ui_attention "The firewall here ($FIREWALL_NAME) $keeps $who from reaching port ${FIREWALL_CLOSED// / and }" "${FIREWALL_STEPS[@]}"
+}
 
 # The first request: load the starter model and ask it something.
 first_rep() {
@@ -1179,7 +1412,9 @@ first_rep() {
     # shellcheck disable=SC1111  # the quotation marks are meant
     [[ -n $FIRST_WORDS ]] && ui_note "“$FIRST_WORDS”"
   else
-    ui_warn "The model did not answer yet" "it may still be loading; try Chat in the console"
+    ui_attention "$STARTER_NAME did not answer its first request" \
+      "It may still be loading: try Chat in the console in a minute" \
+      "If it still does not answer, see why: owg logs loadcoach"
   fi
   rm -f "$reply"
 }
@@ -1187,7 +1422,7 @@ first_rep() {
 # ---- the finish -----------------------------------------------------------------------------
 
 finale() {
-  ui_finale "Set complete"
+  if ((${#UI_ATTENTION[@]})); then ui_finale "Set complete, with things to fix"; else ui_finale "Set complete"; fi
   local lines=() console_local=http://localhost:8440 console_lan=http://$HOST_ADDRESS:8440
   case "$TOPOLOGY" in
     all|front)
@@ -1216,6 +1451,7 @@ finale() {
   if ((SYSTEM)); then lines+=("${C_DIM}Installed in $DIR, run by the $SVC account · log: ${OWG_LOG/#$HOME/\~}${C_RESET}")
   else lines+=("${C_DIM}Installed in ${DIR/#$HOME/\~} · log: ${OWG_LOG/#$HOME/\~}${C_RESET}"); fi
   ui_box "You're in" "${lines[@]}"
+  ui_attention_box
   if ((BROWSER && !ASSUME_YES)) && [[ $TOPOLOGY != compute ]]; then ui_open_browser "$console_local" || true; fi
   printf '\n'
 }

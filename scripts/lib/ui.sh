@@ -62,8 +62,10 @@ ui_init() {
     ui__rgb 6dd9e8; C_CYAN=$REPLY
     ui__rgb c8a6ed; C_ORCHID=$REPLY
     if ((UI_COLOR == 16)); then C_MUTED=$'\e[37m'; else ui__rgb babac7; C_MUTED=$REPLY; fi
+    # A failure's title: dark letters on a solid block of the error colour.
+    if ((UI_COLOR == 16)); then C_ERR_BLOCK=$'\e[101;30m'; else C_ERR_BLOCK=${C_ERR/38;/48;}$'\e[30m'; fi
   else
-    C_RESET='' C_BOLD='' C_DIM='' C_ITALIC='' C_GOLD='' C_OK='' C_WARN='' C_ERR='' C_CYAN='' C_ORCHID='' C_MUTED=''
+    C_RESET='' C_BOLD='' C_DIM='' C_ITALIC='' C_GOLD='' C_OK='' C_WARN='' C_ERR='' C_CYAN='' C_ORCHID='' C_MUTED='' C_ERR_BLOCK=''
   fi
   C_EL=''; ((UI_OUT_TTY)) && C_EL=$'\e[K'  # clear to the end of the line
 
@@ -256,13 +258,144 @@ ui_info() { printf '  %s%s%s %s%s\n' "$C_CYAN" "$S_INFO" "$C_RESET" "$1" "${2:+ 
 ui_note() { printf '    %s%s%s\n' "$C_MUTED" "$1" "$C_RESET"; }
 ui_kv()   { printf '    %s%-18s%s %s\n' "$C_MUTED" "$1" "$C_RESET" "$2"; }
 
-# Stop with a plain message and, when there is one, what to do about it.
+# ---- when something goes wrong --------------------------------------------------------------
+
+# The exit status of a run stopped by ui_die. Its reason and next steps are already on screen, so
+# an installer that called it stops too, without saying it all again (ui_child_failed).
+UI_STOPPED=78
+
+# Stop loudly: what went wrong, the end of the log, and numbered steps to put it right.
+#   ui_die [--status N] "What went wrong" ["What to do" ...]
+# A step that starts with ? is a guess at the cause, shown only when the log does not name it.
+# OWG_RETRY, when set, is added as the last step: how to carry on once the others are done.
 ui_die() {
-  printf '\n' >&2
-  ui_fail "$1"
-  [[ -n ${2:-} ]] && printf '    %s\n' "$2" >&2
-  if [[ -n ${OWG_LOG:-} && -s ${OWG_LOG:-} ]]; then printf '    %sFull log: %s%s\n' "$C_MUTED" "$OWG_LOG" "$C_RESET" >&2; fi
-  exit "${3:-1}"
+  local status=$UI_STOPPED
+  if [[ ${1:-} == --status ]]; then status=$2; shift 2; fi
+  # The older form: ui_die MESSAGE HINT STATUS.
+  if (($# == 3)) && [[ $3 =~ ^[0-9]+$ ]]; then status=$3; set -- "$1" "$2"; fi
+  ui_failure "$@"
+  exit "$status"
+}
+
+# The left edge of a panel, in colour $1, then the rest of the line: ui__edge COLOUR TEXT...
+ui__edge() { local colour=$1; shift; printf '  %s%s%s%s\n' "$colour" "$UI_EDGE" "$C_RESET" "${*:+  $*}"; }
+
+# Numbered steps inside a panel; a step's later lines (after a newline) sit under its first.
+ui__steps() {  # ui__steps COLOUR STEP...
+  local colour=$1 step line n=0 first
+  shift
+  for step in "$@"; do
+    [[ -n $step ]] || continue
+    n=$((n + 1)) first=1
+    while IFS= read -r line; do
+      if ((first)); then ui__edge "$colour" "  $C_GOLD$n.$C_RESET $line"; else ui__edge "$colour" "     $line"; fi
+      first=0
+    done <<<"$step"
+  done
+}
+
+# A panel with only a left edge, so long commands are never cut: ui__panel_open COLOUR SYMBOL TITLE [BADGE]
+# A BADGE (a failure's FAILED) leads the title on a solid block, so the panel cannot be missed.
+ui__panel_open() {
+  if ((UI_UTF8)); then UI_EDGE='┃' UI_CORNER='┗'; ui__repeat '━' 64; else UI_EDGE='|' UI_CORNER='+'; ui__repeat '=' 64; fi
+  UI_RULE=$REPLY
+  local badge=${4:-} rest
+  rest=$((58 - ${#3} - ${#badge}))
+  ((rest > 4)) || rest=4
+  if [[ -n $badge && -n $C_ERR_BLOCK ]]; then
+    printf '\n  %s %s %s %s %s%s %s %s%s\n' "$C_ERR_BLOCK$C_BOLD" "$2" "$badge" "$C_RESET" "$1$C_BOLD" "${UI_RULE:0:2}" "$3" "${UI_RULE:0:rest}" "$C_RESET"
+  else
+    printf '\n  %s%s %s%s %s %s%s\n' "$1$C_BOLD" "$2" "${badge:+$badge }" "${UI_RULE:0:2}" "$3" "${UI_RULE:0:rest}" "$C_RESET"
+  fi
+}
+ui__panel_close() { printf '  %s%s%s%s\n' "$1" "$UI_CORNER" "$UI_RULE" "$C_RESET"; }
+
+# The panel ui_die shows, without stopping: ui_failure "What went wrong" ["What to do" ...]
+# After a failed step, what the step wrote may name the cause (diagnose_log, in detect.sh): the
+# panel then says why, and its fix comes first, in place of guesses (steps starting with ?) and of
+# a step that only says to read the log.
+ui_failure() {
+  local message=$1 line lines title=${OWG_STOP_TITLE:-Stopped} step
+  shift
+  local -a steps=() why=()
+  # A stop can come before the rest of the screen is set up (a mistyped option, say).
+  [[ -v C_ERR ]] || ui_init
+  if [[ -n ${UI_FAILED_MARK:-} && -n ${OWG_LOG:-} && -s ${OWG_LOG:-} ]] && declare -F diagnose_log >/dev/null; then
+    diagnose_log "$(tail -n "+$((UI_FAILED_MARK + 1))" "$OWG_LOG" 2>/dev/null || true)"
+    if ((${#DIAGNOSIS[@]})); then why=("${DIAGNOSIS[@]}") steps=("${DIAGNOSIS_STEPS[@]}"); fi
+  fi
+  for step in "$@"; do
+    if [[ $step == '?'* ]]; then ((${#why[@]})) || steps+=("${step#\?}")
+    elif ! ((${#why[@]})) || [[ ! $step =~ ^The\ lines\ (just\ )?above.*put\ that\ right$ ]]; then steps+=("$step")
+    fi
+  done
+  {
+    # A bell too, for whoever has looked away from a long installation.
+    [[ -t 2 && ${OWG_QUIET:-0} != 1 ]] && printf '\a'
+    ui__panel_open "$C_ERR" "$S_FAIL" "$title" FAILED
+    ui__edge "$C_ERR"
+    while IFS= read -r line; do ui__edge "$C_ERR" "$C_BOLD$line$C_RESET"; done <<<"$message"
+    if ((${#why[@]})); then
+      ui__edge "$C_ERR"
+      for line in "${why[@]}"; do ui__edge "$C_ERR" "${C_BOLD}Why:$C_RESET $line"; done
+    fi
+    # This run's log since its last step began, unless that step has shown it already.
+    if ((!${UI_TAIL_SHOWN:-0})) && [[ -n ${UI_LOG_MARK:-} && -n ${OWG_LOG:-} && -s ${OWG_LOG:-} ]]; then
+      lines=$(tail -n "+$((UI_LOG_MARK + 1))" "$OWG_LOG" | grep -v -e '^$' -e '^==== ' | tail -n 12) || lines=''
+      if [[ -n $lines ]]; then
+        ui__edge "$C_ERR"
+        ui__edge "$C_ERR" "${C_MUTED}Last lines of the log:$C_RESET"
+        while IFS= read -r line; do ui__edge "$C_ERR" "  $C_DIM$line$C_RESET"; done <<<"$lines"
+      fi
+    fi
+    if ((${#steps[@]})) || [[ -n ${OWG_RETRY:-} ]]; then
+      ui__edge "$C_ERR"
+      ui__edge "$C_ERR" "${C_BOLD}What to do next:$C_RESET"
+      ui__steps "$C_ERR" "${steps[@]}" "${OWG_RETRY:-}"
+    fi
+    if [[ -n ${OWG_LOG:-} && -s ${OWG_LOG:-} ]]; then
+      ui__edge "$C_ERR"
+      ui__edge "$C_ERR" "${C_MUTED}Full log: $OWG_LOG$C_RESET"
+    fi
+    ui__panel_close "$C_ERR"
+    printf '\n'
+  } >&2
+  ui__log "" "==== $title: $message" 2>/dev/null || true
+}
+
+# A helper of ours that stopped has shown why and what to do; anything else is said here.
+#   ui_child_failed STATUS "What did not finish" ["What to do" ...]
+ui_child_failed() {
+  local status=$1
+  shift
+  ((status == UI_STOPPED)) && exit "$UI_STOPPED"
+  ui_die "$@"
+}
+
+# Problems that do not stop the installation but leave something to do: a warning now, and the
+# same again in ui_attention_box at the end, where it cannot be lost in the scrollback.
+#   ui_attention "What is wrong" ["What to do" ...]
+# The first line of "What is wrong" is the warning now; the box shows all of it.
+UI_ATTENTION=()
+ui_attention() {
+  ui_warn "${1%%$'\n'*}" "${2%%$'\n'*}"
+  local IFS=$'\x1f'
+  UI_ATTENTION+=("$*")
+}
+
+ui_attention_box() {
+  ((${#UI_ATTENTION[@]})) || return 0
+  local item line
+  local -a parts
+  ui__panel_open "$C_WARN" "$S_WARN" "Needs your attention (${#UI_ATTENTION[@]})"
+  for item in "${UI_ATTENTION[@]}"; do
+    IFS=$'\x1f' read -r -d '' -a parts <<<"$item" || true
+    parts[-1]=${parts[-1]%$'\n'}
+    ui__edge "$C_WARN"
+    while IFS= read -r line; do ui__edge "$C_WARN" "$C_BOLD$line$C_RESET"; done <<<"${parts[0]}"
+    ui__steps "$C_WARN" "${parts[@]:1}"
+  done
+  ui__panel_close "$C_WARN"
 }
 
 # A rounded box: ui_box "Title" "line" "line" ... Lines may hold colour.
@@ -295,7 +428,13 @@ ui_log_init() {
   [[ ${OWG_LOG:-/dev/null} != /dev/null ]] || return 0
   (umask 077; mkdir -p -- "$(dirname -- "$OWG_LOG")" && : >>"$OWG_LOG") || return 1
   chmod 600 -- "$OWG_LOG"
+  # Where this run's own lines begin: a failure shows the log from here on, never an older run's.
+  [[ -n ${UI_LOG_MARK:-} ]] || { ui__log_lines; UI_LOG_MARK=$REPLY; }
 }
+
+# Lines logged from here on are the ones a failure shows: ui_log_mark, then run something. When
+# it fails, UI_FAILED_MARK=$UI_LOG_MARK hands its lines to the failure panel to say why.
+ui_log_mark() { ui__log_lines; UI_LOG_MARK=$REPLY UI_TAIL_SHOWN=0 UI_FAILED_MARK=''; }
 
 ui__log() { ui_log_init && printf '%s\n' "$*" >>"${OWG_LOG:-/dev/null}"; }
 
@@ -320,7 +459,7 @@ ui_step() {
   shift; [[ ${1:-} == -- ]] && shift
   # Arguments can contain API keys, passwords or signed URLs. Keep the step label only.
   ui__log "" "==== $label" || return 1
-  ui__log_lines; mark=$REPLY
+  ui_log_mark; mark=$UI_LOG_MARK
   if ((!UI_ANIM)); then
     printf '  %s%s%s %s%s\n' "$C_MUTED" "$S_INFO" "$C_RESET" "$label" "$S_ELLIPSIS"
     if "$@" >>"${OWG_LOG:-/dev/null}" 2>&1 </dev/null; then rc=0; else rc=$?; fi
@@ -346,6 +485,7 @@ ui_step() {
   else
     ui_fail "$label" "failed after $REPLY"
     ui__tail_log "$mark"
+    UI_TAIL_SHOWN=1 UI_FAILED_MARK=$mark
   fi
   return "$rc"
 }
@@ -632,12 +772,23 @@ ui_secret() {
 
 # Ask for sudo once, in the open, so later steps can use it without a prompt behind a spinner.
 ui_sudo() {
-  local why=$1
+  local why=$1 me
   ((EUID == 0)) && return 0
-  command -v sudo >/dev/null || ui_die "This needs root ($why), and sudo is not installed." "Run it as root, or install sudo."
+  me=$(id -un)
+  command -v sudo >/dev/null || ui_die "This step needs root ($why), and sudo is not installed." \
+    "As root, install sudo and let $me use it:
+the sudo group on Debian and Ubuntu (usermod -aG sudo $me), wheel elsewhere (usermod -aG wheel $me)" \
+    "Sign out and back in, so the new group applies"
   sudo -n true 2>/dev/null && return 0
+  if ((!UI_IN_TTY)); then
+    ui_die "This step needs your sudo password ($why), and there is no terminal to ask for it in." \
+      "Run the installer from a terminal, so it can ask" \
+      "Or run 'sudo -v' first, then start the installer within a few minutes"
+  fi
   ui_info "Your password is needed for: $why"
-  if ((UI_IN_TTY)); then sudo -v <&"$UI_TTY_FD" || ui_die "sudo was refused."; else sudo -v || ui_die "sudo was refused."; fi
+  sudo -v <&"$UI_TTY_FD" || ui_die "sudo did not allow this step ($why)." \
+    "Check the password: it is your own, not root's" \
+    "If sudo says $me may not use it, ask an administrator to add $me to the sudo (Debian, Ubuntu) or wheel group (Fedora, Arch, openSUSE)"
 }
 
 # ---- the finish -----------------------------------------------------------------------------

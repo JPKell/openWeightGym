@@ -10,7 +10,8 @@ curl -fsSL https://raw.githubusercontent.com/JPKell/openWeightGym/main/install.s
 The installer checks your machine, asks a few questions (Enter takes the defaults), fetches a
 prebuilt [llama.cpp](https://github.com/ggml-org/llama.cpp) for your graphics card and a small
 starter model, and finishes with the console open and a model answering. It needs Linux with systemd
-(Arch, Ubuntu, Debian, Fedora, or WSL2) and nothing else installed first: Python comes with it.
+(Ubuntu, Debian, Fedora, RHEL and Rocky, openSUSE, Arch, or WSL2) and nothing else installed
+first: Python comes with it.
 
 ## What you get
 

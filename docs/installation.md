@@ -18,9 +18,9 @@ deployment are in the [operations log](operations.md).
 
 | | |
 |---|---|
-| System | Linux on x86-64 or ARM64 with systemd: Arch, Ubuntu, Debian, Fedora and their relatives, or WSL2 with systemd turned on |
+| System | Linux on x86-64 or ARM64 with systemd: Ubuntu 22.04 or newer, Debian 12 or newer, Fedora, RHEL, Rocky and Alma 9 or newer, openSUSE Tumbleweed and Leap 16, Arch, and their relatives, or WSL2 with systemd turned on |
 | Disk | About 3 GB, plus room for models (the starter model is 1.8 GB) |
-| Tools | bash 4.4 or newer and curl. git and tar are installed for you if missing (apt, dnf or pacman) |
+| Tools | bash 4.4 or newer and curl. git, tar, gzip and awk are installed for you if missing (apt, dnf, zypper or pacman, told never to ask, since `curl \| bash` leaves nobody to answer) |
 | Python | Nothing to do: the installer fetches Python 3.13 with [uv](https://docs.astral.sh/uv/) into the installation and leaves the system's Python alone |
 | Graphics | Optional. NVIDIA cards need only the driver (the CUDA libraries come with the engine); AMD and Intel cards use Vulkan, or ROCm where it is installed; without a card, models run on the processor |
 | Network | GitHub, Hugging Face (for the starter model) and, for other devices, the ports below |
@@ -70,6 +70,13 @@ Ports, for a firewall:
 On one machine the gateway keeps 8442 to 8445 and the programs behind it listen on loopback only,
 1000 above (9442 to 9445); `compute = "http://127.0.0.1:9442"` in `settings/weightroom.toml` tells the
 gateway so. Other devices reach the console on 8440 and the API on 8442.
+
+Fedora, RHEL and openSUSE turn their firewall (firewalld) on as they install, and ufw may be on
+elsewhere. The installer does not open ports itself: it checks them, and when the firewall keeps
+other machines out it says so at the end, with the command that opens them, such as
+`sudo firewall-cmd --permanent --add-port=8442/tcp && sudo firewall-cmd --reload` or
+`sudo ufw allow 8442/tcp`. `owg doctor` checks the same. A GPU node whose port 8442 is closed
+installs and runs, but the console cannot reach it.
 
 ## Adding a GPU node
 
@@ -126,6 +133,14 @@ account. Its services are the account's own systemd user services, so every part
 that starts, stops or reads services works the same as in an installation for you. It uses SQLite;
 move it to PostgreSQL afterwards with the [database guide](database-storage.md). The account is
 added to the `video` and `render` groups for the graphics cards.
+
+With `--database postgresql` (installations for you), PostgreSQL is installed and its database
+cluster made the way each distribution expects: Debian and Ubuntu make one with the package,
+Fedora and RHEL with `postgresql-setup --initdb`, Arch and openSUSE with `initdb` in
+`/var/lib/postgres/data` and `/var/lib/pgsql/data`. A new cluster allows peer logins for the
+`postgres` account and password (SCRAM) logins over TCP, which is how openWeightGym signs in; the
+installer checks that sign-in works before going on, and if an existing server refuses it, shows
+the `pg_hba.conf` lines to add.
 
 ## Looking after it: `owg`
 
@@ -240,6 +255,20 @@ Start with `owg doctor`, then `owg logs PROGRAM`. The installer's own log is nam
 every run. Package and database-configuration steps save their output there and show the last
 lines when they fail.
 
+When something stops the installation, it says so in a red panel headed **FAILED**, with a
+terminal bell: what went wrong, the last lines of the log, numbered steps that put it right (the
+commands to type, for this distribution), the command that carries on where it stopped, and the
+full log's path. Nothing finished is undone. When the failed step's own output makes the cause
+plain, the panel says **Why** and leads with its fix: a full disk, a machine that cannot reach a
+server (named), a proxy or certificate problem, another program holding the package manager,
+signing keys or package lists out of date, a package missing from the system's sources, a missing
+compiler or program, too little memory, a read-only system, a file owned by another account, sudo
+that cannot ask for a password, or a port already taken. A mistyped option stops the same way,
+before anything is touched. Problems that do not stop it, such as a service that did not start
+(with the reason from its own journal), a starter model that did not download, a closed firewall
+port or a llama.cpp that could not be installed, are listed again in a yellow **Needs your
+attention** panel at the end, each with its own steps, so none is lost in the scrollback.
+
 An interrupted installation keeps its confirmed plan in `.install-receipt` with `state=pending`.
 Run the installer again with the same `--dir` to choose **Continue previous install**, **Uninstall
 components and start again**, or **Quit**. Continuing keeps existing settings, keys and passwords
@@ -261,11 +290,18 @@ the final service checks finish successfully. Passwords and consumed pairing cod
 |---|---|
 | *password authentication failed for user suite_…* | Update the checkout and continue the previous PostgreSQL install. Provisioning reconciles retained credentials before the compatibility check. |
 | *systemd user services are not running* | in WSL, turn systemd on (above); in a container, install for the whole machine on the host instead |
-| *This account already runs openWeightGym from …* | update that installation with its own `install.sh`, or pass `--dir` with its folder |
+| *openWeightGym is already installed for this account, in …* | update that installation with its own `install.sh`, or uninstall it first |
+| *Another openWeightGym (or AiSuite) installation, not made by this installer …* | run the steps it lists: they stop the older services and move their unit files and drop-ins aside, into `~/.config/systemd/retired-units`; its folder and data are not touched |
+| *Leftover systemd drop-ins would change what openWeightGym's services run* | move the drop-ins it lists aside, as it shows, and run the installer again |
+| *PostgreSQL could not be installed with …* | run the package manager's refresh it names, check the package installs by hand, or install with `--database sqlite` |
+| *PostgreSQL refuses the password sign-in openWeightGym uses* | add the `pg_hba.conf` lines it shows above the other `host` lines and reload PostgreSQL |
 | *llama-server needs: libgomp.so.1* | let the installer add the package it names, or install it and run `scripts/install-llamacpp.sh` |
+| *This prebuilt llama.cpp needs GLIBC_2.38, newer than this system's C library* | the prebuilt builds are made on a recent Ubuntu: install the build tools it names and run `scripts/install-llamacpp.sh --from-source` |
+| *The firewall here (firewalld) keeps the console machine from reaching port 8442* | run the command it gives, on that machine |
 | *It lists no graphics devices* | the driver is missing or too old for the build: update it, or run `scripts/install-llamacpp.sh --backend vulkan` |
 | Other devices cannot open the console | open port 8440 (and 8442 for the API) in the console machine's firewall |
 | *The console did not accept the code* | the code was used, mistyped or more than ten minutes old: make a new one |
+| *A port openWeightGym needs (8440) is taken by another program* | stop the program that holds it (`sudo ss -ltnp "sport = :8440"` names it), often an older openWeightGym still running, then `owg restart PROGRAM` |
 | Services stop when you log out | `sudo loginctl enable-linger $USER` |
 
 ## By hand: `install-suite.sh`

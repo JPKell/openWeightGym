@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "A self-hosted gym for open-weight models, chat, media, voice and benchmarks."
 readme = "docs/README.md"
 requires-python = ">=3.13"
-dependencies = ["starlette", "httpx", "uvicorn", "jinja2", "typer", "markdown-it-py", "Pillow", "jsonschema==4.26.0", "cryptography==50.0.2"]
+# tzdata: time zones for zoneinfo where the system has no /usr/share/zoneinfo (minimal Debian and Ubuntu).
+dependencies = ["starlette", "httpx", "uvicorn", "jinja2", "typer", "markdown-it-py", "Pillow", "jsonschema==4.26.0", "cryptography==50.0.2", "tzdata"]
 
 [project.optional-dependencies]
 knowledge = ["pypdf==6.20.1"]

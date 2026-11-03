@@ -30,7 +30,9 @@ def script_functions(name: str) -> str:
 
 def one_function(name: str, function: str) -> str:
     """Extract one real function when its script also has executable top-level setup."""
-    found = re.search(rf"(?ms)^{re.escape(function)}\(\) \{{.*?^\}}", (ROOT / name).read_text())
+    text = (ROOT / name).read_text()
+    found = (re.search(rf"(?m)^{re.escape(function)}\(\) \{{ .*\}}$", text)
+             or re.search(rf"(?ms)^{re.escape(function)}\(\) \{{.*?^\}}", text))
     assert found, function
     return found[0]
 
@@ -64,7 +66,7 @@ def test_explicit_missing_uninstall_target_does_not_fall_back(tmp_path):
     answer = shell(tmp_path, '"$TEST_REPO/uninstall.sh" --dir "$MISSING" --yes',
                    env={"MISSING": str(tmp_path / "missing")})
     assert answer.returncode != 0
-    assert "explicit --dir" in answer.stderr
+    assert "so nothing was touched" in answer.stderr and "--dir" in answer.stderr
     assert (other / "keep-me").exists()
 
 
@@ -102,10 +104,13 @@ REQUIRED_DSNS=(accounts roles chat benchmarks plugins alerts schedules)
 note() { printf '%s\\n' "$*"; }
 die() { printf '%s\\n' "$*" >&2; exit 1; }
 hostname() { printf fixture; }
+uname() { printf 'fixture\n'; }
 psql() { return 99; }
 createdb() { return 99; }
 repair_postgresql() { :; }
+check_postgresql_login() { :; }
 sudo() {
+  [[ $1 == -n ]] && shift
   [[ $1 == -u && $2 == postgres ]] || return 98
   shift 2
   case "$1" in
@@ -121,7 +126,7 @@ sudo() {
     *) return 97 ;;
   esac
 }
-''' + one_function("scripts/install-suite.sh", "provision_postgresql") + '''
+''' + one_function("scripts/install-suite.sh", "as_postgres") + "\n" + one_function("scripts/install-suite.sh", "provision_postgresql") + '''
 provision_postgresql
 provision_postgresql
 for key in "${REQUIRED_DSNS[@]}"; do
@@ -150,14 +155,16 @@ REQUIRED_DSNS=(accounts roles telemetry benchmarks)
 psql() { :; }
 createdb() { :; }
 repair_postgresql() { :; }
+check_postgresql_login() { :; }
 die() { exit 1; }
 sudo() {
+  [[ $1 == -n ]] && shift
   shift 2
   if [[ $1 == createdb ]]; then printf '%s\\n' "${!#}" >>"$DATABASES"
   elif [[ $* == *'SHOW port'* ]]; then printf '5432\\n'
   elif [[ $2 != -Atqc ]]; then cat >/dev/null; fi
 }
-''' + one_function("scripts/install-suite.sh", "provision_postgresql") + '\nprovision_postgresql\n',
+''' + one_function("scripts/install-suite.sh", "as_postgres") + "\n" + one_function("scripts/install-suite.sh", "provision_postgresql") + '\nprovision_postgresql\n',
                    env={"INSTALL": str(tmp_path / "install"), "TEST_PYTHON": sys.executable,
                         "SUITE_DATABASE_PREFIX": "p" * length, "DATABASES": str(tmp_path / "databases")})
     assert answer.returncode == 0, answer.stderr
@@ -179,6 +186,7 @@ def test_database_configuration_traceback_is_saved_in_the_installer_log(tmp_path
     end = suite.index('\nif ((!DRY_RUN)); then\n', start)
     answer = shell(tmp_path, '''set -euo pipefail
 source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/detect.sh"
 ui_init
 ROOT=$INSTALL PY=$TEST_PYTHON DATABASE=postgresql DRY_RUN=0
 SELECTED=(weightroom)
@@ -186,7 +194,7 @@ declare -A DSNS=([accounts]="$INSTALL/keys/accounts.dsn")
 declare -A WAS_CONFIGURED=([weightroom]=1)
 declare -A CONFIG_BACKUPS=()
 die() { ui_die "install-suite: $*" "" 2; }
-''' + one_function("scripts/install-suite.sh", "step") + "\n" +
+''' + one_function("scripts/install-suite.sh", "try_step") + "\n" +
                    one_function("scripts/install-suite.sh", "has_service") + suite[start:end],
                    env={"INSTALL": str(install), "TEST_PYTHON": sys.executable, "PYTHONPATH": str(ROOT)})
 
@@ -257,6 +265,7 @@ def test_public_system_receipt_does_not_require_private_data_access(tmp_path):
     data.chmod(0)
     try:
         answer = shell(tmp_path, '''set -euo pipefail
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 ui_sudo() { exit 99; }
 receipt_load "$INSTALL"
@@ -274,6 +283,7 @@ def test_legacy_receipt_migration_publishes_only_metadata(tmp_path):
     (install / "data").mkdir(parents=True)
     (install / "data/install-receipt").write_text("version=1\nmode=user\nservices=weightroom\npassword=never-publish\n")
     answer = shell(tmp_path, '''set -euo pipefail
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 receipt_load "$INSTALL"
 receipt_publish "$INSTALL"
@@ -303,9 +313,10 @@ def test_uninstall_keeps_recovery_metadata_with_data_then_purges_only_that_insta
     (install / ".install-receipt").write_text(f"version=2\nstate=complete\nmode=user\ndir={install}\ncreated_dir=1\n"
         f"services=loadcoach\nunit_dir={units}\npointer={pointer}\nowg_link={command}\n")
     source = script_functions("uninstall.sh") + '''
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 owg_systemctl() { return 1; }
-load_ui() { source "$TEST_REPO/scripts/lib/ui.sh"; }
+load_ui() { source "$TEST_REPO/scripts/lib/ui.sh"; source "$TEST_REPO/scripts/lib/detect.sh"; }
 main --dir "$INSTALL" --yes "$@"
 '''
     kept = shell(tmp_path, source, env={"INSTALL": str(install)})
@@ -385,6 +396,7 @@ def test_virtualenv_and_settings_do_not_complete_an_install(tmp_path):
     (install / "settings").mkdir()
     (install / "settings/loadcoach.toml").write_text("port = 9442\n")
     answer = shell(tmp_path, script_functions("install.sh") + '''
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 receipt_load "$INSTALL"
 is_installed "$INSTALL"
@@ -397,6 +409,7 @@ def test_default_discovery_finds_a_public_system_receipt(tmp_path):
     install.mkdir()
     (install / ".install-receipt").write_text("mode=system\nservice_user=fixture-service\nstate=pending\n")
     answer = shell(tmp_path, script_functions("install.sh") + '''
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 parse_arguments
 CHECKOUT=$OTHER_CHECKOUT SYS_OPT=$INSTALL
@@ -426,6 +439,7 @@ def test_interrupted_install_choices_control_whether_setup_runs(tmp_path, action
     receipt.write_text(original)
     answer = shell(tmp_path, script_functions("install.sh") + '''
 source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 load_ui() { CHECKOUT=$INSTALL; }
 ui_banner() { :; }
@@ -524,6 +538,7 @@ def test_restart_removes_selected_components_refetches_code_and_keeps_data(tmp_p
     uninstaller.write_text(script_functions("uninstall.sh") + '''
 load_ui() {
   source "$TEST_REPO/scripts/lib/ui.sh"
+  source "$TEST_REPO/scripts/lib/detect.sh"
   source "$TEST_REPO/scripts/lib/receipt.sh"
   owg_systemctl() { return 1; }
   ui_confirm() { return 0; }
@@ -537,6 +552,7 @@ main "$@"
         uninstaller.write_text('#!/usr/bin/env bash\nprintf "stale helper was called" >"$LEGACY_CALLED"\nexit 2\n')
     answer = shell(tmp_path, script_functions("install.sh") + '''
 source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 load_ui() { CHECKOUT=$FIXTURE_CHECKOUT; }
 curl() { cp "$REMOTE_UNINSTALLER" "${!#}"; }
@@ -686,6 +702,7 @@ def test_repair_recreates_services_listed_in_receipt_when_units_are_missing(tmp_
     suite.chmod(0o755)
     answer = shell(tmp_path, script_functions("install.sh") + '''
 source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 load_ui() { CHECKOUT=$INSTALL; }
 warm_up() { :; }
@@ -722,6 +739,7 @@ def test_bootstrap_resume_updates_clean_code_and_preserves_local_changes(tmp_pat
         (install / "scripts/install-suite.sh").write_text("user changes\n")
     answer = shell(tmp_path, script_functions("install.sh") + '''
 source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 parse_arguments --dir "$INSTALL"
 ui_init
@@ -746,6 +764,7 @@ def test_postgresql_removal_failure_keeps_connection_files_and_stops_uninstall(t
     (install / ".install-receipt").write_text("state=pending\nmode=user\ncreated_dir=1\nservices=\n")
     answer = shell(tmp_path, script_functions("uninstall.sh") + '''
 source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 load_ui() { :; }
 owg_systemctl() { return 1; }
@@ -760,7 +779,7 @@ main --dir "$INSTALL" --yes --everything --no-backup
     assert answer.returncode != 0
     assert (tmp_path / "privileges").read_text() == "requested"
     assert dsn.exists() and retained.read_text() == "retained data"
-    assert "Connection files were kept" in answer.stderr
+    assert "its connection files were kept" in answer.stderr
     assert "Cool-down complete" not in answer.stdout
 
 
@@ -800,6 +819,7 @@ def test_aborted_uninstall_restores_only_services_it_stopped(tmp_path, outcome):
     (install / ".install-receipt").write_text("mode=user\nservices=weightroom,turnstile\n")
     answer = shell(tmp_path, script_functions("uninstall.sh") + '''
 source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 load_ui() { :; }
 inventory() { :; }
@@ -814,7 +834,7 @@ tar() { [[ $OUTCOME != backup-failure ]] && command tar "$@"; }
 main --dir "$INSTALL" --for-reinstall
 ''', env={"INSTALL": str(install), "HOME": str(tmp_path), "OUTCOME": outcome,
           "OPERATIONS": str(tmp_path / "operations")})
-    assert answer.returncode == (3 if outcome == "cancel" else 1), answer.stdout + answer.stderr
+    assert answer.returncode == (3 if outcome == "cancel" else 78), answer.stdout + answer.stderr
     expected = ["stop turnstile.service", "stop weightroom.service"]
     if outcome != "stop-failure":
         expected.append("start weightroom.service")
@@ -949,6 +969,7 @@ def test_resume_finishes_an_account_interrupted_before_password_setup(tmp_path, 
     assert add.returncode == 0, add.stderr
     setup = '''
 source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/detect.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
 parse_arguments --dir "$INSTALL" --topology front --admin sam --no-model --llama skip
 CREATED_DIR=1 SERVICES=weightroom,turnstile
