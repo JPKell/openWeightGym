@@ -36,6 +36,8 @@ def test_documentation_index_covers_maintained_readmes_and_status_files():
     for path in ROOT.rglob("*"):
         if not path.is_file() or excluded_parts.intersection(path.relative_to(ROOT).parts):
             continue
+        if path.suffix == ".log":  # Diagnostic captures are not maintained documentation.
+            continue
         relative = path.relative_to(ROOT).as_posix()
         if relative.startswith("benchmarks/suites/ifeval/vendor/"):
             continue

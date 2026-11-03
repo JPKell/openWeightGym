@@ -16,12 +16,11 @@ receipt_find() {
   elif [[ -r $root/data/install-receipt ]]; then
     printf '%s' "$root/data/install-receipt"
   else
-    for pointer in "${OWG_SYSTEM_ETC:-/etc/openweightgym}/install"; do
-      if [[ -r $pointer && $(realpath -m -- "$(<"$pointer")") == "$(realpath -m -- "$root")" ]]; then
-        printf '%s' "$root/data/install-receipt"
-        return 0
-      fi
-    done
+    pointer=${OWG_SYSTEM_ETC:-/etc/openweightgym}/install
+    if [[ -r $pointer && $(realpath -m -- "$(<"$pointer")") == "$(realpath -m -- "$root")" ]]; then
+      printf '%s' "$root/data/install-receipt"
+      return 0
+    fi
     return 1
   fi
 }

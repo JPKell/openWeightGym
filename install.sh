@@ -89,7 +89,7 @@ main() {
   locate_installation
   if [[ $ACTION == uninstall ]]; then run_uninstaller; fi
   ui_banner "$(installed_version)"
-  RECOVERY_ACTION=continue
+  RECOVERY_ACTION='continue'
   if [[ $(receipt_get state) == pending ]]; then
     interrupted_menu
     [[ $RECOVERY_ACTION != quit ]] || return 0
@@ -97,6 +97,7 @@ main() {
   warm_up
   if [[ $(receipt_get state) == pending && $RECOVERY_ACTION != restart ]]; then
     resume_settings
+    RESUMING_INSTALL=1
     ui_info "Resuming the confirmed installation plan" "settings and existing accounts are kept"
   elif [[ $RECOVERY_ACTION != restart ]] && is_installed "$DIR"; then
     ((SYSTEM)) && ui_sudo "looking after the system installation"
@@ -136,6 +137,7 @@ parse_arguments() {
   COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 STARTER=1 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
   ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
   VOICE_KEY_FILE='' VOICE_KEY=''
+  RESUMING_INSTALL=0
   declare -gA PLAN_GIVEN=()
   [[ -n $DIR ]] && DIR_GIVEN=1
   while (($#)); do
@@ -259,6 +261,7 @@ is_installed() {
     [[ -f $unit_dir/$unit.service ]] || continue
     command=$(sed -n 's/^ExecStart=//p' "$unit_dir/$unit.service" | head -1)
     command=${command//%h/$HOME}
+    command=${command#\"}
     [[ $command == "$1"/.venv/bin/* ]] && return 0
   done
   return 1
@@ -350,6 +353,7 @@ warm_up() {
     [[ -f $unit_dir/$unit.service ]] || continue
     command=$(sed -n 's/^ExecStart=//p' "$unit_dir/$unit.service" | head -1)
     command=${command//%h/$HOME}
+    command=${command#\"}
     if [[ $command == */.venv/bin/* && ${command%%/.venv/bin/*} != "$DIR" ]]; then other=${command%%/.venv/bin/*}; break; fi
   done
   if [[ -n $other ]]; then
@@ -430,18 +434,44 @@ update() {
 
 # Run the uninstaller as a child so recovery can start a new setup after it finishes.
 uninstall_components() {
-  local script=${CHECKOUT:-$DIR}/uninstall.sh
-  [[ -x $DIR/uninstall.sh ]] && script=$DIR/uninstall.sh
-  if [[ -x $script ]]; then "$script" --dir "$DIR" "$@" "${PASSTHROUGH[@]}"; return; fi
-  bash -o pipefail -c 'curl -fsSL "$1" | bash -s -- "${@:2}"' _ "$OWG_RAW/$OWG_REF/uninstall.sh" --dir "$DIR" "$@" "${PASSTHROUGH[@]}"
+  local script work rc=0
+  # Use the running installer's helper, never one from an older target installation.
+  if [[ -n $CHECKOUT && -x $CHECKOUT/uninstall.sh ]] &&
+      { [[ ${1:-} != --for-reinstall ]] || grep -Fq -- '--for-reinstall)' "$CHECKOUT/uninstall.sh"; }; then
+    OWG_RAW=$OWG_RAW OWG_REF=$OWG_REF "$CHECKOUT/uninstall.sh" --dir "$DIR" "$@" "${PASSTHROUGH[@]}"
+    return
+  fi
+  # A downloaded installer needs the uninstaller from the same source and branch.
+  # Fetch it completely before removal, without changing the installed checkout.
+  work=$(mktemp -d) || return 1
+  script=$work/uninstall.sh
+  if ! ui_step "Fetching the uninstaller ($OWG_REF)" -- curl -fsSL --retry 2 "$OWG_RAW/$OWG_REF/uninstall.sh" -o "$script"; then
+    rm -rf -- "$work"
+    return 1
+  fi
+  if ! bash -n "$script"; then
+    rm -rf -- "$work"
+    return 1
+  fi
+  OWG_RAW=$OWG_RAW OWG_REF=$OWG_REF bash "$script" --dir "$DIR" "$@" "${PASSTHROUGH[@]}" || rc=$?
+  rm -rf -- "$work"
+  return "$rc"
 }
 
-run_uninstaller() { uninstall_components; exit "$?"; }
+run_uninstaller() {
+  local options=()
+  ((ASSUME_YES)) && options+=(--yes)
+  uninstall_components "${options[@]}"
+  exit "$?"
+}
 
 reinstall() {
   find_uv
+  services_from_receipt
+  local options=(--root "$DIR" --embedded --non-interactive --yes --database keep --uv "$UV")
+  [[ -z $SERVICES ]] || options+=(--services "$SERVICES")
   ui_section "Setting up" "Packages, settings and services"
-  as_owner "$DIR/scripts/install-suite.sh" --root "$DIR" --embedded --non-interactive --yes --database keep --uv "$UV" ||
+  as_owner "$DIR/scripts/install-suite.sh" "${options[@]}" ||
     ui_die "Reinstalling did not finish." "The log says why: ${OWG_OWNER_LOG:-$OWG_LOG}"
   services_from_receipt
   if ! receipt_present && [[ ,$SERVICES, == *,weightroom,* ]] && ! console_account_ready; then
@@ -834,6 +864,12 @@ fetch_code() {
   elif [[ -e $DIR ]] && [[ -n $(ls -A "$DIR" 2>/dev/null) ]]; then
     [[ -f $DIR/pyproject.toml && -f $DIR/scripts/install-suite.sh ]] ||
       ui_die "$DIR exists and is not openWeightGym." "Choose another place with --dir, or empty that folder."
+    if ((${RESUMING_INSTALL:-0})) && [[ -z $CHECKOUT && -d $DIR/.git ]]; then
+      [[ -z $(as_owner git -C "$DIR" status --porcelain --untracked-files=no) ]] ||
+        ui_die "$DIR has changes of your own." "Commit or stash them before resuming with updated code."
+      ui_step "Updating the interrupted installation" -- as_owner git -C "$DIR" pull --ff-only ||
+        ui_die "Could not update the interrupted installation." "The log says why: $OWG_LOG"
+    fi
     ui_ok "openWeightGym is already in ${DIR/#$HOME/\~}"
     CREATED_DIR=${CREATED_DIR:-0}
   else

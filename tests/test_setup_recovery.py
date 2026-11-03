@@ -139,6 +139,29 @@ done
     assert stat.S_IMODE(dsns.stat().st_mode) == 0o700
 
 
+@pytest.mark.parametrize("length", [5, 60, 100])
+def test_postgresql_names_stay_distinct_with_long_prefixes(tmp_path, length):
+    answer = shell(tmp_path, '''set -euo pipefail
+ROOT=$INSTALL PY=$TEST_PYTHON USER=fixture PROVISION_POSTGRESQL=1 DRY_RUN=0
+declare -A DSNS=()
+REQUIRED_DSNS=(accounts roles telemetry benchmarks)
+psql() { :; }
+createdb() { :; }
+die() { exit 1; }
+sudo() {
+  shift 2
+  if [[ $1 == createdb ]]; then printf '%s\\n' "${!#}" >>"$DATABASES"
+  elif [[ $2 != -Atqc ]]; then cat >/dev/null; fi
+}
+''' + one_function("scripts/install-suite.sh", "provision_postgresql") + '\nprovision_postgresql\n',
+                   env={"INSTALL": str(tmp_path / "install"), "TEST_PYTHON": sys.executable,
+                        "SUITE_DATABASE_PREFIX": "p" * length, "DATABASES": str(tmp_path / "databases")})
+    assert answer.returncode == 0, answer.stderr
+    names = (tmp_path / "databases").read_text().splitlines()
+    assert len(set(names)) == 4 and all(len(name) <= 60 for name in names)
+    assert [name.rsplit("_", 1)[-1] for name in names] == ["accounts", "roles", "telemetry", "benchmarks"]
+
+
 def test_database_configuration_traceback_is_saved_in_the_installer_log(tmp_path):
     install = tmp_path / "install"
     (install / "scripts").mkdir(parents=True)
@@ -328,6 +351,29 @@ die() { exit 1; }
     assert list(units.glob("*.before-suite-install-*")) == backups
 
 
+@pytest.mark.skipif(shutil.which("systemd-analyze") is None, reason="requires the systemd unit verifier")
+def test_all_service_templates_are_valid_with_spaces_in_installation_paths(tmp_path):
+    install = tmp_path / "install with spaces"
+    services = ("loadcoach", "weightroom", "turnstile", "spotter", "toollocker", "voice", "voice-gateway")
+    shutil.copytree(ROOT / "services", install / "services")
+    (install / ".venv/bin").mkdir(parents=True)
+    (install / ".env").touch()
+    for name in services:
+        program = install / ".venv/bin" / name
+        program.write_text("#!/usr/bin/env bash\nexit 0\n")
+        program.chmod(0o755)
+    units = tmp_path / "config/systemd/user"
+    units.mkdir(parents=True)
+    answer = shell(tmp_path, '''set -euo pipefail
+ROOT=$INSTALL UNIT_DIR=$UNITS PY=$TEST_PYTHON DRY_RUN=0
+die() { exit 1; }
+''' + one_function("scripts/install-suite.sh", "render_unit") + '''
+for service in loadcoach weightroom turnstile spotter toollocker voice voice-gateway; do render_unit "$service"; done
+systemd-analyze --user --man=no verify "$UNIT_DIR"/*.service
+''', env={"INSTALL": str(install), "UNITS": str(units), "TEST_PYTHON": sys.executable})
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+
+
 def test_virtualenv_and_settings_do_not_complete_an_install(tmp_path):
     install = tmp_path / "install"
     (install / ".venv/bin").mkdir(parents=True)
@@ -452,7 +498,8 @@ printf 'should not reach removal' >"$REMOVED"
     assert not (tmp_path / "removed").exists()
 
 
-def test_restart_removes_selected_components_refetches_code_and_keeps_data(tmp_path):
+@pytest.mark.parametrize("entry_point", ["checkout", "bootstrap", "mixed-checkout"])
+def test_restart_removes_selected_components_refetches_code_and_keeps_data(tmp_path, entry_point):
     install = tmp_path / "install"
     for folder in ("settings", "keys", "data", "models", ".venv"):
         (install / folder).mkdir(parents=True)
@@ -480,10 +527,15 @@ load_ui() {
 main "$@"
 ''')
     uninstaller.chmod(0o755)
+    remote_uninstaller = tmp_path / "remote-uninstall.sh"
+    shutil.copy2(uninstaller, remote_uninstaller)
+    if entry_point != "checkout":
+        uninstaller.write_text('#!/usr/bin/env bash\nprintf "stale helper was called" >"$LEGACY_CALLED"\nexit 2\n')
     answer = shell(tmp_path, script_functions("install.sh") + '''
 source "$TEST_REPO/scripts/lib/ui.sh"
 source "$TEST_REPO/scripts/lib/receipt.sh"
-load_ui() { CHECKOUT=$INSTALL; }
+load_ui() { CHECKOUT=$FIXTURE_CHECKOUT; }
+curl() { cp "$REMOTE_UNINSTALLER" "${!#}"; }
 ui_choose() { printf -v "$1" '%s' 1; }
 warm_up() { :; }
 game_plan() {
@@ -505,16 +557,266 @@ finishing() { :; }
 spotting() { :; }
 finale() { printf RESTARTED; }
 main --dir "$INSTALL" --no-browser
-''', env={"INSTALL": str(install), "UNIT": str(unit)})
+''', env={"INSTALL": str(install), "UNIT": str(unit),
+          "FIXTURE_CHECKOUT": "" if entry_point == "bootstrap" else str(install),
+          "REMOTE_UNINSTALLER": str(remote_uninstaller), "LEGACY_CALLED": str(tmp_path / "legacy-called")})
 
     assert answer.returncode == 0, answer.stdout + answer.stderr
     assert "RESTARTED" in answer.stdout
+    assert not (tmp_path / "legacy-called").exists()
     for name, content in kept.items():
         assert (install / name).read_text() == content
     assert not unit.exists() and not (install / "old-code").exists()
     assert (install / ".git").is_dir() and (install / "pyproject.toml").exists()
     receipt = (install / ".install-receipt").read_text()
     assert "state=complete" in receipt and "topology=front" in receipt and "admin=alex" in receipt
+
+
+@pytest.mark.parametrize("entry_point", ["checkout", "bootstrap", "mixed-checkout"])
+@pytest.mark.parametrize("child_status", [0, 3, 7])
+def test_uninstall_handoff_uses_the_running_installers_source_and_preserves_status(tmp_path, entry_point, child_status):
+    install = tmp_path / "older install"
+    checkout = tmp_path / "current checkout"
+    install.mkdir()
+    checkout.mkdir()
+    old = install / "uninstall.sh"
+    old.write_text('#!/usr/bin/env bash\nprintf stale >"$LEGACY_CALLED"\nexit 2\n')
+    old.chmod(0o755)
+    helper = checkout / "uninstall.sh"
+    helper.write_text(script_functions("uninstall.sh") + '''
+parse_arguments "$@"
+printf '%s\\n' "$OWG_RAW" "$OWG_REF" "$DIR" "$FOR_REINSTALL" >"$HANDOFF"
+exit "$CHILD_STATUS"
+''')
+    helper.chmod(0o755)
+    work = tmp_path / "temporary downloads"
+    work.mkdir()
+    answer = shell(tmp_path, script_functions("install.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+parse_arguments --dir "$INSTALL" --ref feature/recovery
+export -n OWG_REF
+CHECKOUT=$FIXTURE_CHECKOUT
+ui_init
+curl() {
+  printf '%s\\n' "$@" >"$FETCH_ARGUMENTS"
+  cp "$CURRENT_HELPER" "${!#}"
+}
+uninstall_components --for-reinstall
+''', env={"INSTALL": str(install), "FIXTURE_CHECKOUT": str(checkout) if entry_point == "checkout" else (str(install) if entry_point == "mixed-checkout" else ""),
+          "CURRENT_HELPER": str(helper), "HANDOFF": str(tmp_path / "handoff"),
+          "FETCH_ARGUMENTS": str(tmp_path / "fetch-arguments"), "LEGACY_CALLED": str(tmp_path / "legacy-called"),
+          "CHILD_STATUS": str(child_status), "OWG_RAW": "https://example.invalid/fork/openWeightGym",
+          "TMPDIR": str(work)})
+
+    assert answer.returncode == child_status, answer.stdout + answer.stderr
+    assert (tmp_path / "handoff").read_text().splitlines() == [
+        "https://example.invalid/fork/openWeightGym", "feature/recovery", str(install), "1"]
+    assert not (tmp_path / "legacy-called").exists()
+    assert "printf stale" in old.read_text()
+    assert list(work.iterdir()) == []
+    fetch = tmp_path / "fetch-arguments"
+    if entry_point != "checkout":
+        assert "https://example.invalid/fork/openWeightGym/feature/recovery/uninstall.sh" in fetch.read_text().splitlines()
+    else:
+        assert not fetch.exists()
+
+
+@pytest.mark.parametrize("failure", ["download", "syntax"])
+def test_uninstaller_fetch_failure_never_runs_partial_or_installed_helpers(tmp_path, failure):
+    install = tmp_path / "install"
+    install.mkdir()
+    old = install / "uninstall.sh"
+    old.write_text('#!/usr/bin/env bash\nprintf stale >"$CALLED"\n')
+    old.chmod(0o755)
+    partial = tmp_path / "partial.sh"
+    partial.write_text('printf partial >"$CALLED"\n' + ('if then\n' if failure == "syntax" else ''))
+    work = tmp_path / "downloads"
+    work.mkdir()
+    answer = shell(tmp_path, script_functions("install.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+parse_arguments --dir "$INSTALL"
+CHECKOUT=''
+ui_init
+curl() {
+  cp "$PARTIAL" "${!#}"
+  [[ $FAILURE != download ]]
+}
+uninstall_components --for-reinstall
+''', env={"INSTALL": str(install), "PARTIAL": str(partial), "FAILURE": failure,
+          "CALLED": str(tmp_path / "called"), "TMPDIR": str(work)})
+
+    assert answer.returncode != 0
+    assert not (tmp_path / "called").exists()
+    assert old.exists() and list(work.iterdir()) == []
+
+
+@pytest.mark.parametrize("assume_yes", [False, True])
+def test_installer_forwards_uninstall_confirmation_choice(tmp_path, assume_yes):
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    helper = checkout / "uninstall.sh"
+    helper.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$@" >"$ARGUMENTS"\n')
+    helper.chmod(0o755)
+    answer = shell(tmp_path, script_functions("install.sh") + '''
+parse_arguments --uninstall --dir "$CHECKOUT_PATH" "$@"
+CHECKOUT=$CHECKOUT_PATH
+run_uninstaller
+'''.replace('"$@"\nCHECKOUT=', ('--yes' if assume_yes else '') + '\nCHECKOUT='),
+                   env={"CHECKOUT_PATH": str(checkout), "ARGUMENTS": str(tmp_path / "arguments")})
+    assert answer.returncode == 0, answer.stderr
+    arguments = (tmp_path / "arguments").read_text().splitlines()
+    assert arguments[:2] == ["--dir", str(checkout)]
+    assert ("--yes" in arguments) == assume_yes
+
+
+def test_repair_recreates_services_listed_in_receipt_when_units_are_missing(tmp_path):
+    install = tmp_path / "install"
+    (install / "scripts").mkdir(parents=True)
+    (install / "settings").mkdir()
+    (install / "settings/weightroom.toml").write_text('data = "../data"\n')
+    (install / ".venv/bin").mkdir(parents=True)
+    (install / ".venv/bin/python").symlink_to(sys.executable)
+    (install / ".install-receipt").write_text("state=complete\nmode=user\nservices=weightroom,turnstile,voice-gateway\n")
+    suite = install / "scripts/install-suite.sh"
+    suite.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$@" >"$ARGUMENTS"\n')
+    suite.chmod(0o755)
+    answer = shell(tmp_path, script_functions("install.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/receipt.sh"
+load_ui() { CHECKOUT=$INSTALL; }
+warm_up() { :; }
+find_uv() { UV=fixture; }
+link_owg() { :; }
+check_services() { :; }
+main --repair --dir "$INSTALL" --yes
+''', env={"INSTALL": str(install), "ARGUMENTS": str(tmp_path / "arguments")})
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    arguments = (tmp_path / "arguments").read_text().splitlines()
+    assert arguments[arguments.index("--services") + 1] == "weightroom,turnstile,voice-gateway"
+
+
+@pytest.mark.parametrize("dirty", [False, True])
+def test_bootstrap_resume_updates_clean_code_and_preserves_local_changes(tmp_path, dirty):
+    source = tmp_path / "origin"
+    (source / "scripts").mkdir(parents=True)
+    (source / "pyproject.toml").write_text('[project]\nname = "fixture"\n')
+    helper = source / "scripts/install-suite.sh"
+    helper.write_text("old helper\n")
+    def git(*args):
+        subprocess.run(["git", *args], text=True, capture_output=True, check=True)
+    git("init", "-b", "main", str(source))
+    git("-C", str(source), "config", "user.name", "Installer fixture")
+    git("-C", str(source), "config", "user.email", "fixture@example.invalid")
+    git("-C", str(source), "add", ".")
+    git("-C", str(source), "commit", "-m", "old")
+    install = tmp_path / "install"
+    git("clone", str(source), str(install))
+    helper.write_text("updated helper\n")
+    git("-C", str(source), "commit", "-am", "fixed")
+    (install / "keep-me").write_text("retained user data")
+    if dirty:
+        (install / "scripts/install-suite.sh").write_text("user changes\n")
+    answer = shell(tmp_path, script_functions("install.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/receipt.sh"
+parse_arguments --dir "$INSTALL"
+ui_init
+CHECKOUT='' RESUMING_INSTALL=1
+fetch_code
+''', env={"INSTALL": str(install)})
+    assert (answer.returncode != 0) == dirty, answer.stdout + answer.stderr
+    expected = "user changes\n" if dirty else "updated helper\n"
+    assert (install / "scripts/install-suite.sh").read_text() == expected
+    assert (install / "keep-me").read_text() == "retained user data"
+
+
+@pytest.mark.parametrize("failure", ["database", "role"])
+def test_postgresql_removal_failure_keeps_connection_files_and_stops_uninstall(tmp_path, failure):
+    install = tmp_path / "install"
+    (install / "keys/postgresql").mkdir(parents=True)
+    dsn = install / "keys/postgresql/accounts.dsn"
+    dsn.write_text("postgresql://suite_fixture:fixture@127.0.0.1/suite_fixture_accounts\n")
+    (install / "data").mkdir()
+    retained = install / "data/keep-me"
+    retained.write_text("retained data")
+    (install / ".install-receipt").write_text("state=pending\nmode=user\ncreated_dir=1\nservices=\n")
+    answer = shell(tmp_path, script_functions("uninstall.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/receipt.sh"
+load_ui() { :; }
+owg_systemctl() { return 1; }
+ui_sudo() { printf requested >"$PRIVILEGES"; }
+sudo() {
+  if [[ $* == *dropdb* && $FAILURE == database ]]; then return 1; fi
+  if [[ $* == *dropuser* && $FAILURE == role ]]; then return 1; fi
+  return 0
+}
+main --dir "$INSTALL" --yes --everything --no-backup
+''', env={"INSTALL": str(install), "FAILURE": failure, "PRIVILEGES": str(tmp_path / "privileges")})
+    assert answer.returncode != 0
+    assert (tmp_path / "privileges").read_text() == "requested"
+    assert dsn.exists() and retained.read_text() == "retained data"
+    assert "Connection files were kept" in answer.stderr
+    assert "Cool-down complete" not in answer.stdout
+
+
+def test_backups_are_unique_and_private_before_data_is_copied(tmp_path):
+    install = tmp_path / "install"
+    (install / "data").mkdir(parents=True)
+    (install / "data/keep-me").write_text("backup data")
+    answer = shell(tmp_path, script_functions("uninstall.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+ui_init
+DIR=$INSTALL BACKUP_WANTED=1
+declare -A REMOVE=([data]=1)
+stop_services() { :; }
+date() { printf fixed-timestamp; }
+as_reader() {
+  if [[ $1 == cat ]]; then stat -c '%a' "$BACKUP_FILE" >>"$MODES"; fi
+  "$@"
+}
+backup
+backup
+''', env={"INSTALL": str(install), "HOME": str(tmp_path), "MODES": str(tmp_path / "modes")})
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    assert (tmp_path / "modes").read_text().splitlines() == ["600", "600"]
+    archives = list(tmp_path.glob("openWeightGym-backup-*.tar.gz"))
+    assert len(archives) == 2
+    for path in archives:
+        with tarfile.open(path) as archive:
+            assert archive.extractfile("data/keep-me").read() == b"backup data"
+
+
+@pytest.mark.parametrize("outcome", ["cancel", "backup-failure", "stop-failure"])
+def test_aborted_uninstall_restores_only_services_it_stopped(tmp_path, outcome):
+    install = tmp_path / "install"
+    (install / "data").mkdir(parents=True)
+    retained = install / "data/keep-me"
+    retained.write_text("retained data")
+    (install / ".install-receipt").write_text("mode=user\nservices=weightroom,turnstile\n")
+    answer = shell(tmp_path, script_functions("uninstall.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+source "$TEST_REPO/scripts/lib/receipt.sh"
+load_ui() { :; }
+inventory() { :; }
+choose() { ITEMS=(data); declare -gA REMOVE=([data]=1) LABEL=([data]=Data); }
+ui_confirm() { [[ $1 == 'Make a backup'* ]]; }
+owg_systemctl() {
+  [[ $1 == is-active ]] && return 0
+  printf '%s\\n' "$*" >>"$OPERATIONS"
+  [[ $OUTCOME != stop-failure || $1 != stop || $2 != weightroom.service ]]
+}
+tar() { [[ $OUTCOME != backup-failure ]] && command tar "$@"; }
+main --dir "$INSTALL" --for-reinstall
+''', env={"INSTALL": str(install), "HOME": str(tmp_path), "OUTCOME": outcome,
+          "OPERATIONS": str(tmp_path / "operations")})
+    assert answer.returncode == (3 if outcome == "cancel" else 1), answer.stdout + answer.stderr
+    expected = ["stop turnstile.service", "stop weightroom.service"]
+    if outcome != "stop-failure":
+        expected.append("start weightroom.service")
+    expected.append("start turnstile.service")
+    assert (tmp_path / "operations").read_text().splitlines() == expected
+    assert retained.read_text() == "retained data"
 
 
 @pytest.mark.parametrize("topology,services", [

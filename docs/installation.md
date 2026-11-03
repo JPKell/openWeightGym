@@ -184,7 +184,7 @@ It lists what the installer made, with sizes, as a checklist. The services, the 
 the engines, `owg` and the keep-running setting are ticked; settings and keys, data, models and
 PostgreSQL databases are not, so by default they stay and a later install in the same place picks
 them up. Before anything you ticked of yours goes, it offers a backup:
-`~/openWeightGym-backup-DATE.tar.gz`, readable by you only, with settings, keys, data and PostgreSQL
+`~/openWeightGym-backup-DATE-ID.tar.gz`, readable by you only, with settings, keys, data and PostgreSQL
 dumps (not models). Data deleted without a backup needs `delete` typed to go ahead.
 
 Only what the installer's receipt (`.install-receipt` in the installation) lists is removed, and never anything
@@ -245,6 +245,12 @@ Run the installer again with the same `--dir` to choose **Continue previous inst
 components and start again**, or **Quit**. Continuing keeps existing settings, keys and passwords
 and completes missing account passwords. Starting again opens the removal checklist and backup
 prompts, then returns to setup with whatever you kept. Cancelling removal stops the restart.
+Services stopped for a backup are restarted if removal is cancelled or the backup fails.
+PostgreSQL removal failures stop the uninstall and preserve its connection files for recovery.
+When run through `curl | bash`, the uninstaller is fetched from the same source and branch as
+the installer, so an older partial checkout cannot supply an incompatible recovery helper.
+Continuing through `curl | bash` updates a clean Git checkout before setup; tracked local changes
+are reported and left untouched. Repair uses the receipt's service list even when unit files are missing.
 `--yes` or `--repair` continues the saved plan directly. The receipt becomes complete only after
 the final service checks finish successfully. Passwords and consumed pairing codes are never stored in the receipt.
 
