@@ -133,7 +133,7 @@ def test_background_refreshes_never_wake_compute_when_it_sleeps_between_reads(tm
 
 def test_rename_from_users_page_and_case_insensitive_login(desk):
     browser, switch, users = desk
-    assert '<h1 class="page-title wrap">Home</h1>' in sign_in(browser, "PaT").text
+    assert '<h1 class="page-title wrap">Status</h1>' in sign_in(browser, "PaT").text
     pat_key = browser.cookies["weightroom"]
     sign_in(browser, "jordan")
     assert 'value="rename"' in browser.get("/users/pat").text
@@ -144,12 +144,12 @@ def test_rename_from_users_page_and_case_insensitive_login(desk):
     assert renamed.status_code == 200 and renamed.url.path == "/users/alex"
     assert "Renamed pat." in renamed.text and users.by_key(pat_key).name == "alex"
     assert "Wrong name or password" in sign_in(browser, "PAT").text
-    assert '<h1 class="page-title wrap">Home</h1>' in sign_in(browser, "AlEx").text
+    assert '<h1 class="page-title wrap">Status</h1>' in sign_in(browser, "AlEx").text
     assert browser.post("/users/alex", data={"do": "rename", "name": "other"}).status_code == 403
     sign_in(browser, "jordan")
     assert browser.post("/users/sam", data={"do": "rename", "name": "other"}).status_code == 400
     renamed = browser.post("/users/jordan", data={"do": "rename", "name": "admin2"})
-    assert renamed.status_code == 200 and '<h1 class="page-title wrap">Home</h1>' in browser.get("/").text
+    assert renamed.status_code == 200 and '<h1 class="page-title wrap">Status</h1>' in browser.get("/").text
 
     # With compute off the accounts are still here, with the same spelling and the same count of wrong tries.
     switch.off = True
@@ -172,7 +172,7 @@ def test_signing_in_is_checked_by_loadcoach_and_the_browser_gets_a_session(desk,
     wrong = sign_in(browser, "pat", "wrong horse")
     assert wrong.status_code == 401 and "Wrong name or password." in wrong.text
     home = sign_in(browser, "pat")
-    assert home.status_code == 200 and '<h1 class="page-title wrap">Home</h1>' in home.text and '>System</a>' in home.text
+    assert home.status_code == 200 and '<h1 class="page-title wrap">Status</h1>' in home.text and '>System</a>' in home.text
     # The categories stay in view. Section pages have a collapsible rail; the name opens the account menu.
     assert '<header class="sticky-top bg-body">' in home.text and 'pat</summary>' in home.text
     assert '<a class="dropdown-item" href="/account">My account</a>' in home.text and '<button class="dropdown-item">Sign out</button>' in home.text
@@ -194,13 +194,13 @@ def test_a_first_sign_in_chooses_a_password_and_sets_up_a_code_on_the_same_page(
     assert "A password of your own" in asked.text and f'name="password" value="{temporary}"' in asked.text
     unequal = sign_in(browser, "pat", temporary, new_password="battery staple", new_again="battery stable")
     assert "not the same" in unequal.text
-    assert '<h1 class="page-title wrap">Home</h1>' in sign_in(browser, "pat", temporary, new_password="battery staple", new_again="battery staple").text
+    assert '<h1 class="page-title wrap">Status</h1>' in sign_in(browser, "pat", temporary, new_password="battery staple", new_again="battery staple").text
     browser.post("/sign-out")
 
     setup = sign_in(browser, "cleo")
     secret = re.search(r'<pre class="secret">(\w+)</pre>', setup.text).group(1)
     assert "authenticator app" in setup.text
-    assert '<h1 class="page-title wrap">Home</h1>' in sign_in(browser, "cleo", code=code_at(secret, int(time.time() // 30))).text
+    assert '<h1 class="page-title wrap">Status</h1>' in sign_in(browser, "cleo", code=code_at(secret, int(time.time() // 30))).text
     browser.post("/sign-out")
     assert "Code from your authenticator app" in sign_in(browser, "cleo").text and "secret" not in sign_in(browser, "cleo").text
 
@@ -222,9 +222,9 @@ def test_my_account_shows_and_changes_what_is_ones_own(desk):
     refused = browser.post("/account/password", data={"current_password": "wrong", "new_password": "another one", "new_again": "another one"})
     assert refused.status_code == 400 and "current password" in refused.text
     changed = browser.post("/account/password", data={"current_password": "correct horse", "new_password": "another one", "new_again": "another one"})
-    assert "Password changed." in changed.text and '<h1 class="page-title wrap">Home</h1>' in browser.get("/").text  # still signed in here
+    assert "Password changed." in changed.text and '<h1 class="page-title wrap">Status</h1>' in browser.get("/").text  # still signed in here
     browser.post("/sign-out")
-    assert "Wrong name" in sign_in(browser, "pat").text and '<h1 class="page-title wrap">Home</h1>' in sign_in(browser, "pat", "another one").text
+    assert "Wrong name" in sign_in(browser, "pat").text and '<h1 class="page-title wrap">Status</h1>' in sign_in(browser, "pat", "another one").text
 
 
 def test_every_way_to_compute_goes_through_turnstile_on_this_machine(tmp_path):
@@ -250,7 +250,7 @@ def test_with_compute_off_it_says_so_and_anyone_may_sign_in_since_the_accounts_a
     assert browser.get("/models").status_code == 403  # permissions are checked before the compute lookup
     assert browser.cookies["weightroom"] == session  # the sign-in is kept for when compute is back
     switch.off = False
-    assert '<h1 class="page-title wrap">Home</h1>' in browser.get("/").text and "<b>compute</b>" in browser.get("/pulse").text
+    assert '<h1 class="page-title wrap">Status</h1>' in browser.get("/").text and "<b>compute</b>" in browser.get("/pulse").text
     assert "Your group may not wake compute." in browser.post("/wake").text and woken == []
 
     # Off again. Turnstile checks a password on this machine, so anyone may sign in, and see what compute last did.
@@ -258,7 +258,7 @@ def test_with_compute_off_it_says_so_and_anyone_may_sign_in_since_the_accounts_a
     assert "Wrong name or password" in sign_in(browser, "wanda", "wrong horse").text
     assert "Node unavailable: compute" in sign_in(browser, "pat").text and '<form method="post" action="/wake"' not in browser.get("/").text
     home = sign_in(browser, "wanda")
-    assert "Node unavailable: compute" in home.text and '<h1 class="page-title wrap">Home</h1>' in home.text
+    assert "Node unavailable: compute" in home.text and '<h1 class="page-title wrap">Status</h1>' in home.text
     # Waking compute is the one thing to do while it is off, for those whose group may.
     assert '<form method="post" action="/wake"' in home.text and woken == []
     assert "Asked compute to wake." in browser.post("/wake").text and woken == [("bc:fc:e7:3d:90:6c", "10.0.0.255")]
@@ -1315,7 +1315,7 @@ def test_the_machine_page_shows_telemetry_over_time_and_its_services(desk_with_m
     chart_script = browser.get("/static/charts.js").text
     assert 'src="/static/echarts.min.js"' in page and 'src="/static/charts.js?v=4"' in page and "echarts.min.js" not in browser.get("/status").text
     assert "connectNulls: true" in chart_script and 'areaStyle: { opacity: 0.18, origin: "start" }' in chart_script and 'type: "slider"' in chart_script and 'type: "inside"' in chart_script
-    assert "dataZoom" in browser.get("/static/dashboard.js").text and "dataZoom" in browser.get("/static/usage.js").text and "dataZoom" in browser.get("/static/reliability.js").text
+    assert "dataZoom" in browser.get("/static/usage.js").text and "dataZoom" in browser.get("/static/reliability.js").text
     assert "loadcoach.service" in page and "active" in page and "Restart loadcoach" not in page and "What it printed" not in page  # pat may look, not act
     assert browser.post("/machine/services/loadcoach/restart").status_code == 400 and "may not" in browser.post("/machine/services/loadcoach/restart").text
     assert "restart" not in (asked.read_text() if asked.exists() else "").replace("NRestarts", "")
@@ -1396,7 +1396,7 @@ def test_with_loadcoach_down_and_the_machine_up_someone_can_still_sign_in_and_st
     assert "Asked loadcoach to start." in browser.post("/machine/services/loadcoach/start").text and "--user start loadcoach.service" in asked.read_text()
 
     compute.off = False
-    assert '<h1 class="page-title wrap">Home</h1>' in browser.get("/").text  # LoadCoach is back, and the same sign-in carries on
+    assert '<h1 class="page-title wrap">Status</h1>' in browser.get("/").text  # LoadCoach is back, and the same sign-in carries on
 
     # With both down, anyone still signs in, and sees what compute last did.
     compute.off = machine.off = True
@@ -1592,7 +1592,7 @@ def test_the_cards_show_their_room_and_a_model_page_what_the_model_measured(live
     assert "14.6 GiB free for a model, of 15.6 GiB" in browser.get("/?part=status").text  # an empty card of 16000 MiB: all of it but the margin of 1024
     assert browser.get("/models").text.count("Not measured") == 4 and browser.get("/models/small").text.count("not measured yet") == 2
 
-    # A model that has loaded was measured. Home shows it on its card with that figure, and the room that is left.
+    # A model that has loaded was measured. Status shows it on its card with that figure, and the room that is left.
     assert jordan.post("/v1/chat/completions", json={"model": "small"}).status_code == 200
     home = browser.get("/?part=status").text
     assert "11.7 GiB free for a model, of 15.6 GiB" in home and '<a href="/models/small">small</a>' in home and "2.9 GiB VRAM" in home  # 3000 MiB

@@ -15,7 +15,7 @@ from loadcoach.settings import said
 from weightroom.navigation import navigation
 from weightroom.app import Settings, Person, build_app, current_batch_jobs
 from benchmarks.store import Benchmarks
-from test_weightroom import GROUPS, Switch, desk, sign_in  # noqa: F401
+from test_weightroom import GROUPS, Switch, desk, desk_with_machine, sign_in  # noqa: F401
 from front_helpers import door, loadcoach_through, machine_key, turnstile_to
 from loadcoach.statement import PROOF
 
@@ -38,7 +38,7 @@ def test_navigation_orders_and_detail_parents():
     assert [name for name, _ in nav['links']] == ['Compute nodes', 'Users', 'Groups', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
     assert navigation('/requests/42', can, True)['active'] == '/requests'
     assert navigation('/output', can, True)['section'] == 'Logs'
-    assert navigation('/', [], False)['section'] == 'Home'
+    assert navigation('/', [], False)['section'] == 'System'
     assert navigation('/status', [], False)['links'] == [('Status', '/status'), ('Telemetry', '/telemetry')]
     docs = navigation('/docs/voice', can, True)
     assert docs['section'] == 'Docs' and docs['active'] == '/docs/voice'
@@ -48,6 +48,51 @@ def test_navigation_orders_and_detail_parents():
     account = navigation('/account/appearance', can, True)
     assert account['section'] == 'My account' and account['active'] == '/account/appearance'
     assert account['links'] == [('Account', '/account'), ('Appearance', '/account/appearance'), ('Audio', '/account/audio'), ('Logs', '/account/logs')]
+
+
+def test_system_logs_keep_exact_filter_snapshots_during_outages(desk_with_machine, tmp_path):
+    server, compute, machine, users, _ = desk_with_machine
+    sign_in(server, 'jordan')
+    url = '/output?source=loadcoach&lines=500'
+    live = server.get(url)
+    assert live.status_code == 200 and 'loadcoach &lt;b&gt;started&lt;/b&gt;' in live.text
+    assert 'id="journal-offline"' not in live.text
+    compute.off = machine.off = True
+    cached = server.get(url)
+    assert cached.status_code == 200 and 'Showing logs last fetched' in cached.text
+    assert 'loadcoach &lt;b&gt;started&lt;/b&gt;' in cached.text
+    assert 'id="source"' in cached.text and 'value="500" selected' in cached.text
+    assert 'id="asking"' not in cached.text  # Cannot ask an offline model to explain old lines.
+    for path in ('/output?source=kernel&lines=500', '/output?source=loadcoach&lines=100'):
+        empty = server.get(path)
+        assert empty.status_code == 200 and 'No logs have been fetched for these filters yet' in empty.text
+        assert 'loadcoach &lt;b&gt;started&lt;/b&gt;' not in empty.text
+    compute.off = machine.off = False
+    (tmp_path / 'bin/journalctl').write_text('#!/bin/sh\necho "2026-10-08T10:01:00 loadcoach restored"\n')
+    fresh = server.get(url)
+    assert fresh.status_code == 200 and 'loadcoach restored' in fresh.text
+    assert 'id="journal-offline"' not in fresh.text
+    compute.off = machine.off = True
+    updated = server.get(url)
+    assert 'loadcoach restored' in updated.text and 'loadcoach &lt;b&gt;started&lt;/b&gt;' not in updated.text
+    users.add('operator', 'admin')
+    users.change('operator', password='correct horse')
+    sign_in(server, 'operator')
+    other = server.get(url)
+    assert 'No logs have been fetched for these filters yet' in other.text and 'loadcoach restored' not in other.text
+    sign_in(server, 'jordan')
+    users.change('jordan', group='plain')
+    denied = server.get(url)
+    assert denied.status_code == 403 and 'loadcoach &lt;b&gt;started&lt;/b&gt;' not in denied.text
+
+
+def test_system_logs_remain_live_when_only_the_model_service_is_off(desk_with_machine):
+    server, compute, _, _, _ = desk_with_machine
+    sign_in(server, 'jordan')
+    compute.off = True
+    logs = server.get('/output')
+    assert logs.status_code == 200 and 'loadcoach &lt;b&gt;started&lt;/b&gt;' in logs.text
+    assert 'id="journal-offline"' not in logs.text
 
 
 def test_admin_docs_map_and_component_outlines(desk):
@@ -67,7 +112,7 @@ def test_admin_docs_map_and_component_outlines(desk):
         assert page.status_code == 200 and '<h2 ' in page.text
     voice = browser.get('/docs/voice').text
     assert '<h1 class="page-title wrap">' in voice and 'aria-label="Source modules"' in voice
-    assert all(heading in voice for heading in ('Voice gateway', 'Desktop app', 'Web streams'))
+    assert 'gateway.py' in voice and 'desktop.py' in voice
     assert browser.get('/docs/not-a-topic').status_code == 404
     images = browser.get('/docs/mirrorwall').text
     assert '<title id="flow-title">Image generation workflow</title>' in images and 'id="models"' in images

@@ -364,22 +364,24 @@ Host-fingerprinted telemetry (milestone 123) upgrades front's existing event-log
 schema version 5, adding telemetry and host-registry tables without rewriting the audit chain.
 See [host setup](#multi-machine-telemetry) and the [telemetry contract](loadcoach.md#physical-host-telemetry).
 
-For front-owned model downloads and distribution, set `turnstile.artifact_machine` to the
-LoadCoach on the front host (normally `front_cpu`). Empty prefers `front_cpu` when configured,
-then `compute`. Each Spotter reads its node's LoadCoach `[places]`; these are the only file
-destinations it accepts. Deploy matching Turnstile, WeightRoom and Spotter code before enabling
-distribution.
+### Model-file storage
 
-Set `models_folder` in each LoadCoach file, or under that node on System → Compute nodes. After a
-restart, LoadCoach and Spotter use only `ROOT/llm`, `ROOT/adapters`, and `ROOT/projectors` as
-destinations. An empty value preserves explicit `[places]` for older installations. Move files
-and update model paths before removing an old place; a loaded server may keep an opened file,
-but the next load needs the new path.
+Front model storage is optional. Under **Settings → General → Model file locations**, choose
+**Front machine** and set an absolute cache path, storage path, or both. Empty disables a tier
+without deleting its files. Front creates the standard model subfolders and uses them immediately;
+no inference worker is required. The equivalent settings are `turnstile.models_folder` and
+`turnstile.models_storage_folder` in `settings/weightroom.toml`.
 
-Front can also set `models_storage_folder` to a separate complete library root. It adds
-`storage_llm`, `storage_adapters`, and `storage_projectors`; downloads prefer these destinations,
-and Files can copy from storage into the active cache while retaining the library copy. Both roots
-default to empty, so a new installation creates no model library until an operator chooses one.
+`turnstile.artifact_machine` can explicitly select `front` or an existing file-owning worker.
+Without an explicit selection, configured front storage is preferred, then `front_cpu`, then
+`compute`. Files remains available when a store is disabled or offline, with setup links and
+per-node availability. Distribution still requires an answering destination Spotter.
+
+Choose a compute node in the same location editor to save its paths while offline. Front retains
+the change and delivers it without waking that node when it reconnects, rechecking the saving
+account's permission. The node applies the paths after its compute service restarts. Changing
+folders does not move model weights or rewrite configured model paths; retain old copies until
+models have been updated and verified. Paths must be separate absolute folders.
 
 Multi-node Status requires matching Turnstile/WeightRoom on front and existing LoadCoach status/
 Spotter readings; no new service, store, key or port is required. For upgrades or added nodes,

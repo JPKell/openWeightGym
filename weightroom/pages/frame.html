@@ -18,8 +18,8 @@ try { document.documentElement.dataset.sidebar = matchMedia("(max-width: 767.98p
 catch { document.documentElement.dataset.sidebar = "closed"; }
 </script>
 <link rel="stylesheet" href="/static/tabler.min.css">
-<link rel="stylesheet" href="/static/style.css?v=33">
-<link rel="stylesheet" href="/static/themes.css?v=5">
+<link rel="stylesheet" href="/static/style.css?v=34">
+<link rel="stylesheet" href="/static/themes.css?v=6">
 {# htmx keeps no copy of a page for the Back button: going back loads the page again, so nothing that was shown is kept in the browser. #}
 <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
 <script src="/static/htmx.min.js" defer></script>
@@ -27,7 +27,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 <script src="/static/telemetry.js?v=4" defer></script>
 <script src="/static/sort.js?v=5" defer></script>
 <script src="/static/navigation.js?v=4" defer></script>
-<script src="/static/console.js?v=9" defer></script>
+<script src="/static/console.js?v=10" defer></script>
 <script src="/static/user-picker.js?v=1" defer></script>
 {% if person and nav.active == '/chat' %}<script src="/static/chat_sidebar.js?v=2" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
@@ -35,12 +35,12 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {# The navigation and the telemetry row beneath it stay in view while the page scrolls. #}
 <header class="sticky-top bg-body">
 <nav class="navbar suite-top border-bottom px-3 py-2 gap-2" aria-label="Categories">
-  <a class="navbar-brand fw-bold me-2" href="/" aria-label="openWeightGym home">{{ icon("barbell") }}<span>openWeightGym</span></a>
+  <a class="navbar-brand fw-bold me-2" href="/status" aria-label="weightRoom status">{{ icon("barbell") }}<span>weightRoom</span></a>
   {% if person %}
   <button id="mobile-menu-toggle" type="button" class="btn btn-outline-secondary btn-sm d-md-none" aria-controls="mobile-navigation" aria-haspopup="dialog" aria-expanded="false">Menu</button>
   <div class="navbar-nav category-links d-none d-md-flex">
     {% for category in nav.groups %}
-    <a class="nav-link{{ ' active' if nav.section == category.name }}" href="{{ category.links[0][1] }}"{% if nav.section == category.name %} aria-current="true"{% endif %}>{{ icon({"Home":"home", "Chat":"chat", "Models":"models", "Benchmark":"benchmark", "Logs":"logs", "System":"system", "Docs":"docs"}.get(category.name, "barbell")) }}{{ category.name }}</a>
+    <a class="nav-link{{ ' active' if nav.section == category.name }}" href="{{ category.links[0][1] }}"{% if nav.section == category.name %} aria-current="true"{% endif %}>{{ icon({"Chat":"chat", "Models":"models", "Benchmark":"benchmark", "Logs":"logs", "System":"system", "Docs":"docs"}.get(category.name, "barbell")) }}{{ category.name }}</a>
     {% endfor %}
   </div>
   {# The name opens a small menu. The browser opens and closes it; static/sort.js closes it when something else is clicked. #}
@@ -78,7 +78,8 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 <button type="button" class="sidebar-shade" tabindex="-1" aria-label="Close section pages" hidden></button>
 {% endif %}
 {% endif %}
-<main id="page-content" class="suite-page{{ ' px-3' if person and not nav.links }} {% block main_class %}container-fluid py-3{% endblock %}" {% block main_attributes %}{% endblock %}>
+{# Every page uses the same outer spacing; children only add content-specific classes. #}
+<main id="page-content" class="suite-page {% block page_class %}{% endblock %}" {% block main_attributes %}{% endblock %}>
 {% if person and person.me.get('unavailable_machines') %}
 <div class="alert alert-warning py-1 small" role="status" id="node-availability" data-offline-nodes='{{ person.me.unavailable_machines|tojson }}'>Node unavailable: {{ person.me.unavailable_machines|join(', ') }}. Live node controls are disabled. Selecting a deployed model will request wake and wait for a response.</div>
 {% if wake_button and 'front-wake' in person.can and 'compute' in person.me.unavailable_machines %}<form method="post" action="/wake" class="mb-2"><button class="btn btn-sm btn-outline-primary">Wake compute</button></form>{% endif %}

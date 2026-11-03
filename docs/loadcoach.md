@@ -3436,7 +3436,7 @@ what it is doing now, and when it was last asked for. "Now" is a few words: `not
 `old settings` if it was changed while loaded, and `its file is missing` in red. The list asks
 for itself again every five seconds, so it stays true while it is open.
 
-Above the table is a form to add a model: name, a cache/storage file picker, context size and cards. The LLM/Image/Audio pills select the table type. Cards defaults to
+Below the model list is a form to add a model: name, a cache/storage file picker, context size and cards. The LLM/Image/Audio pills select the table type. Cards defaults to
 `any`, including when the field is blank or omitted on submission; `0` explicitly selects
 CPU only. Adding refuses a name
 that is taken. LoadCoach's `POST /loadcoach/models/NAME` replaces by default, so `?new` was
@@ -3896,9 +3896,10 @@ and names those nodes separately. Storage has one compact File, Size, It says it
 table. A file missing from its matching cache can be promoted without removing the library copy;
 Delete uses the shared two-click confirmation and LoadCoach still refuses an in-use file. The
 page refreshes itself every five seconds, so copy and move progress remains current.
-Each refresh gives optional compute nodes a short deadline. If the required front-side store
-misses that deadline while scanning its filesystem, Turnstile retries that store once with the
-normal bounded request deadline instead of reporting that its configured places disappeared.
+Front storage is optional and can be configured under Settings → General without compute.
+See the [storage setup and offline delivery contract](operations.md#model-file-storage).
+Each refresh gives unavailable nodes a short deadline; an absent store produces an inline setup
+or offline state rather than a generic error page. An existing worker can still own the file store.
 
 Hugging Face discovery is its own **HuggingFace** item in the Models navigation. Downloads remain
 visible there and on Files while they are active.
@@ -5253,7 +5254,10 @@ since the machine last started. `journalctl` gives lines picked out with `-g` ne
 
 In `weightroom`: `output_page` is the handler and `output.html` the page. The Machine page
 used to show the last 200 lines of a service inside its Services card. That is gone: there is
-one view of what was printed, and it is this page.
+one view of what was printed, and it is this page. During compute outages it shows the last
+successful snapshot for the same account and exact filters, with its fetch time. Snapshots
+are bounded to 32 selections in the front process and are cleared on restart; an uncached
+selection shows an offline empty state. Journal access is checked again on every visit.
 
 ### Asking a model
 

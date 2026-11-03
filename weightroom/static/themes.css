@@ -68,6 +68,13 @@
 }
 /* Palette tokens replace presentation colours; status and heatmap colours keep their meaning. */
 html[data-site-theme] {
+  --tblr-bg-surface: var(--theme-surface);
+  --tblr-bg-surface-secondary: var(--theme-subtle);
+  --tblr-bg-surface-tertiary: var(--theme-subtle);
+  --tblr-bg-forms: var(--theme-surface);
+  --tblr-secondary: var(--theme-muted);
+  --tblr-secondary-rgb: var(--theme-muted-rgb);
+  --tblr-muted: var(--theme-muted);
   --tblr-body-bg: var(--theme-bg);
   --tblr-body-bg-rgb: var(--theme-bg-rgb);
   --tblr-body-color: var(--theme-text);
@@ -98,6 +105,19 @@ html[data-site-theme] {
   color: var(--theme-text);
 }
 html[data-site-theme] .bg-body { background-color: var(--theme-bg) !important; }
+html[data-site-theme] .suite-top { --tblr-navbar-color: var(--theme-text); background: var(--theme-subtle); }
+html[data-site-theme] .suite-top .category-links .nav-link.active { color: var(--theme-accent); }
+html[data-site-theme] .site-sidebar .section-link.btn {
+  --tblr-btn-color: var(--theme-text);
+  --tblr-btn-bg: transparent;
+  --tblr-btn-hover-color: var(--theme-text);
+  --tblr-btn-hover-bg: var(--theme-subtle);
+  --tblr-btn-active-color: var(--theme-text);
+  --tblr-btn-active-bg: var(--theme-subtle);
+  box-shadow: none;
+}
+html[data-site-theme] .input-group-text { color: var(--theme-text); background: var(--theme-subtle); }
+html[data-site-theme] .table thead th { color: var(--theme-text); }
 html[data-site-theme] .bg-primary, html[data-site-theme] .text-bg-primary { background-color: var(--theme-button) !important; }
 html[data-site-theme] .text-body, html[data-site-theme] .text-body-emphasis { color: var(--theme-text) !important; }
 html[data-site-theme] .text-secondary, html[data-site-theme] .text-body-secondary { color: var(--theme-muted) !important; }

@@ -2,7 +2,7 @@
 {% from "parts.html" import swaps, said_box, page_header %}
 {% from "filter_parts.html" import users_groups %}
 {% block title %}AI Logs · openWeightGym{% endblock %}
-{% block main_class %}container-fluid console-page py-3{% endblock %}
+{% block page_class %}console-page{% endblock %}
 {% block main %}
 {{ page_header("AI Logs", lead="Find recorded AI activity and inspect its details.") }}
 {{ said_box(said, failed) }}

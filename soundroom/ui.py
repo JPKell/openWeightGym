@@ -1,5 +1,6 @@
 """SoundRoom browser pages and narrow authenticated proxies into openWeightGym's existing APIs."""
 import time
+from contextlib import suppress
 from urllib.parse import parse_qs, quote, urlsplit
 
 from starlette.responses import JSONResponse, RedirectResponse, Response
@@ -41,8 +42,11 @@ def routes(for_people, page, ask, model_api, settings=None):
         """Show and change the administrator's audio defaults, kept with weightroom's own settings."""
         if "manage-settings" not in person.can:
             return page(request, "refused.html", person, status=403, why="Your account may not change settings.")
-        found = await ask("GET", "/loadcoach/settings", person.key)
-        settings_now = next((one["settings"] for one in found.json().get("programs", []) if one["program"] == "weightroom"), []) if found.is_success else []
+        from weightroom.app import ComputeOff
+        found = None
+        with suppress(ComputeOff):
+            found = await ask("GET", "/loadcoach/settings", person.key)
+        settings_now = next((one["settings"] for one in found.json().get("programs", []) if one["program"] == "weightroom"), []) if found is not None and found.is_success else []
         current = {one["name"]: one for one in settings_now}
         said, failed = request.query_params.get("said", ""), False
         if request.method == "POST":
@@ -69,8 +73,10 @@ def routes(for_people, page, ask, model_api, settings=None):
         fields = [{"name": name, "label": label, "help": help, "when": current.get(name, {}).get("when", ""),
                    "value": (current[name]["changed"]["value"] if current.get(name, {}).get("changed") else current.get(name, {}).get("value", ""))}
                   for name, label, help in DEFAULTS]
-        catalogue = await ask('GET', '/v1/models', person.key)
-        available = catalogue.json().get('data', []) if catalogue.is_success else []
+        catalogue = None
+        with suppress(ComputeOff):
+            catalogue = await ask('GET', '/v1/models', person.key)
+        available = catalogue.json().get('data', []) if catalogue is not None and catalogue.is_success else []
         for field in fields:
             kind = field['name'].removeprefix('audio_').removesuffix('_model')
             kinds = {'speech': ('speech', 'clone', 'design')}.get(kind, (kind,))

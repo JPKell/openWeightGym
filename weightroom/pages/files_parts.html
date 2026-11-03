@@ -28,7 +28,9 @@
 
 {% macro places_block(found) %}
 <div class="mb-4">
+  {% if not found.store_available|default(true) %}<div class="alert alert-info" role="status">No model-file locations are available yet. <a href="/settings?file_machine=front#model-files">Set up optional front cache or storage</a>, or connect a compute node.</div>{% endif %}
   {% for node in found.nodes %}
+    {% for problem in node.problems|default([]) %}<p class="text-warning-emphasis">{{ problem }}</p>{% endfor %}
     {% for group in node.place_groups %}
       {% if group.tier == "cache" or node.name == found.artifact_machine %}
       <section class="mb-3">
@@ -41,7 +43,7 @@
       </section>
       {% endif %}
     {% else %}
-      <section class="mb-3">{{ section_title(node.name) }}<div class="text-secondary">Storage is unavailable while this node is not answering.</div></section>
+      <section class="mb-3">{{ section_title(node.name) }}<div class="text-secondary">{% if node.name == 'front' %}Front model storage is optional. <a href="/settings?file_machine=front#model-files">Configure its locations</a>.{% elif node.answering %}No model-file folders are configured. <a href="/settings?file_machine={{ node.name|urlencode }}#model-files">Set cache and storage locations</a>.{% else %}This node is offline. Its files will be available when it reconnects.{% endif %}</div></section>
     {% endfor %}
   {% else %}
     <p class="text-secondary">No model-file locations are available.</p>

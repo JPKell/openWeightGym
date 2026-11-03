@@ -169,14 +169,14 @@ def test_catalogue_pills_and_node_settings_render_for_every_model_type(desk, tmp
     for kind, included, excluded in [('llm','language','picture'),('image','picture','song'),('audio','song','language')]:
         page = browser.get('/models?kind='+kind)
         assert page.status_code == 200
-        table = page.text.split('<table id="models-table"')[1]
+        table = page.text.split('<table id="models-table"')[1].split('</table>', 1)[0]
         assert included in table and excluded not in table
         assert page.text.index('Add a model') < page.text.index('<table id="models-table"')
         detail = browser.get('/models/'+included)
         assert detail.status_code == 200, detail.text
         assert 'Add model to node' in detail.text
         if kind != 'llm':
-            assert 'Global generation settings' in detail.text and 'no measurable language-token context' in detail.text
+            assert 'Generation defaults' in detail.text and 'Load-time measurements only.' in detail.text
 
 
 @pytest.mark.parametrize('engine', ['sdcpp', 'audiocpp'])

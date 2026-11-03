@@ -2,7 +2,7 @@
 {% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
 {% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
 {% block scripts %}{% if section in ('results','node-measurements','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}<script src="/static/benchmarks.js?v=5" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
-{% block main_class %}container-fluid benchmark-page py-3{% endblock %}
+{% block page_class %}benchmark-page{% endblock %}
 {% from "parts.html" import card, said_box, page_header %}
 {% block main %}
 {% call page_header('Run details · ' + detail.model if section == 'detail' else section_label, pretitle='Benchmark', id='benchmark-top', lead='Run benchmarks and inspect retained measurements and scores.') %}{% if section == 'detail' %}<a href="/benchmarks/runs" class="btn btn-outline-secondary btn-sm">Runs</a>{% endif %}{% endcall %}

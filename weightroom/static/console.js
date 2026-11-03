@@ -10,7 +10,6 @@
   window.suiteConfirmLoss = description => new Promise(resolve => {
     if (!dialog || pending) { resolve(false); return; }
     pending = resolve;
-    dialog.querySelector('[data-confirm-description]').textContent = description;
     const check = dialog.querySelector('[data-loss-confirm]');
     check.checked = false;
     check.labels[0].textContent = 'Yes, ' + description.charAt(0).toLowerCase() + description.slice(1);

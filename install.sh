@@ -1067,9 +1067,9 @@ engine() {
   local options=(--prefix "$DIR/runtimes/llamacpp") runner=()
   ((ASSUME_YES)) && options+=(--yes)
   case "$LLAMA" in
-    auto) ;;
+    auto) options+=(--prebuilt) ;;
     source) options+=(--from-source) ;;
-    *) options+=(--backend "$LLAMA") ;;
+    *) options+=(--prebuilt --backend "$LLAMA") ;;
   esac
   # A system installation's engine is fetched as root, which may add libraries, then handed to its account.
   # Its failure does not stop the installation, so its panel says only what went wrong with it.

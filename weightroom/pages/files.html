@@ -5,7 +5,7 @@
 {% block main %}
 {{ page_header('Files', 'Manage model files in cache, storage and compute locations.') }}
 {{ said_box(said) }}
-{% call more('About these files') %}<p class="text-secondary">Front keeps a complete library of used and unused models, plus a smaller active cache. Downloads prefer the library; copy a model into the cache when front should use it, or distribute it through the node monitor to compute nodes. Storage below is live for every answering node.</p>{% endcall %}
+{% call more('About these files') %}<p class="text-secondary">Front can optionally keep a model cache and storage library. Set their locations in <a href="/settings#model-files">General settings</a>, or keep files on your compute nodes. Downloads prefer storage; promote a model to cache before distributing it. Available folders are shown below.</p>{% endcall %}
 
 {% call more('Optional maintenance') %}<div class="row g-3">{% call form_section('Cache maintenance') %}<div class="col-12"><div class="d-flex flex-wrap gap-2 mb-3" aria-label="File maintenance">
   <form method="post" action="/files" {{ confirm_two() }}><button  class="btn btn-outline-warning btn-sm" name="do" value="clear-cache" {{ confirm_two() }}>Clear cache</button></form>

@@ -177,8 +177,12 @@ ports = [8442, 8443, 8444]
 # Seconds between turnstile's questions to each compute machine about itself (never waking one).
 # A machine counts as ready for three times this, then as not answering.
 # machines_poll_seconds = 10
-# LoadCoach on the front host that owns the model-file storage library and active cache. Empty prefers
-# front_cpu when configured, otherwise compute. Every distribution starts from this host.
+# Optional cache and storage on front; neither requires an inference worker. Both default to empty.
+# These paths can also be set under Settings → General → Model file locations → Front machine.
+# models_folder = "/home/you/models/cache"
+# models_storage_folder = "/home/you/models/storage"
+# File/download owner. Empty prefers optional front storage, then front_cpu, then compute.
+# Use "front" for front's built-in file manager, or an explicitly configured worker name.
 # artifact_machine = "front_cpu"
 
 # Further LoadCoach instances, inventoried on System > Telemetry and eligible for model

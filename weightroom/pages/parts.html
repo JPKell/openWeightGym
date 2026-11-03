@@ -28,13 +28,13 @@
 {% if said %}<div class="alert alert-{{ 'danger' if failed else 'warning' if warning else 'success' }} said said-box" role="{{ 'alert' if failed or warning else 'status' }}">{{ said }}</div>{% endif %}
 {% endmacro %}
 
-{# A consistent title, purpose and optional actions for console pages. #}
+{# A consistent title and optional actions; legacy lead arguments are not displayed. #}
 {% macro page_header(title, lead='', actions='', pretitle=None, back=None, id='', help=None) %}
 <header class="page-header mb-4"{% if id %} id="{{ id }}"{% endif %}>
 {% if back %}<a class="d-inline-block mb-2" href="{{ back[0] }}">← {{ back[1] }}</a>{% endif %}
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-  <div class="min-w-0">{% if pretitle %}<div class="eyebrow mb-1">{{ pretitle }}</div>{% endif %}<h1 class="page-title wrap">{{ title }}</h1>{% if lead %}<p class="text-secondary mb-0 mt-1">{{ lead }}{% if help %} <a href="{{ help }}">User guide</a>{% endif %}</p>{% elif help %}<a class="small" href="{{ help }}">User guide</a>{% endif %}</div>
-  {% if actions or caller is defined %}<div class="page-actions d-flex flex-wrap gap-2">{{ actions }}{% if caller is defined %}{{ caller() }}{% endif %}</div>{% endif %}
+  <div class="min-w-0">{% if pretitle %}<div class="eyebrow mb-1">{{ pretitle }}</div>{% endif %}<h1 class="page-title wrap">{{ title }}</h1></div>
+  {% if actions or caller is defined or help %}<div class="page-actions d-flex flex-wrap gap-2">{% if help %}<a class="btn btn-outline-secondary btn-sm" href="{{ help }}">User guide</a>{% endif %}{{ actions }}{% if caller is defined %}{{ caller() }}{% endif %}</div>{% endif %}
 </div></header>
 {% endmacro %}
 
@@ -97,7 +97,6 @@
 <dialog id="danger-confirmation" aria-labelledby="danger-confirmation-title">
 {% call card('Confirm action', class_='border-danger mb-0', header_id='danger-confirmation-title') %}
 <form method="dialog" data-confirm-dialog>
-<p data-confirm-description></p>
 {{ confirm_check('Yes, continue with this action.', 'danger-confirmation-check') }}
 <div class="d-flex flex-wrap gap-2"><button class="btn btn-danger" value="confirm">Continue</button><button class="btn btn-outline-secondary" value="cancel" formnovalidate>Cancel</button></div>
 </form>
