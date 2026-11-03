@@ -265,7 +265,9 @@ def main():
     parser.add_argument("action", choices=("list", "install", "remove"))
     parser.add_argument("packages", nargs="*", help="FAMILY/PACKAGE, such as ace_step/ace_step_turbo_bf16")
     parser.add_argument("--place", required=True, help="the audio folder, such as MODELS_FOLDER/audio")
-    parser.add_argument("--manifest", default=str(Path.home() / ".local/share/suite/audiocpp/current/installation.json"))
+    root = Path(__file__).resolve().parents[1]
+    parser.add_argument("--manifest", default=str(root / "runtimes/audiocpp/current/installation.json"),
+                        help="the audio.cpp release's installation.json (default: the one in ROOT/runtimes)")
     parser.add_argument("--token-file", default="", help="a Hugging Face token file, for gated repositories")
     args = parser.parse_args()
 

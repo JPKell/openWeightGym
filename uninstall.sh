@@ -33,8 +33,16 @@ main() {
   load_ui
   ui_init
   : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/uninstall-$(date +%Y%m%d-%H%M%S).log}"
-  ui_log_init || ui_die "Cannot create a private uninstaller log at $OWG_LOG."
+  : "${OWG_STOP_TITLE:=Uninstalling stopped}"
+  : "${OWG_RETRY=Run the uninstaller again: it carries on with what is left}"
+  export OWG_STOP_TITLE OWG_RETRY
+  ui_log_init || ui_die "Cannot create a private uninstaller log at $OWG_LOG." \
+    "Check that this account can write to $(dirname "$OWG_LOG"), or name another log: OWG_LOG=/tmp/uninstall.log"
   export OWG_LOG
+  if [[ -n $ARGUMENT_ERROR ]]; then
+    OWG_STOP_TITLE='Nothing was changed' OWG_RETRY='' ui_die --status 2 "$ARGUMENT_ERROR" \
+      'See every option and what it takes: run the same command with --help'
+  fi
   trap 'restore_stopped_services; ui_cleanup' EXIT
   trap 'ui_cleanup; printf "\n"; ui_fail "Stopped. What was removed so far stays removed; run this again to finish."; exit 130' INT
 
@@ -54,9 +62,11 @@ main() {
 
 parse_arguments() {
   DIR=${OWG_HOME:-} ASSUME_YES=0 EVERYTHING=0 BACKUP_WANTED='' FOR_REINSTALL=0
+  # A mistake in the options is told once the screen is set up (main), as loudly as any other stop.
+  ARGUMENT_ERROR=''
   while (($#)); do
     case "$1" in
-      --dir) DIR=${2:?--dir needs a folder}; shift 2 ;;
+      --dir) [[ -n ${2:-} ]] || { ARGUMENT_ERROR='--dir needs a folder.'; return 0; }; DIR=$2; shift 2 ;;
       --yes) ASSUME_YES=1; shift ;;
       --everything|--purge) EVERYTHING=1; shift ;;
       --no-backup) BACKUP_WANTED=0; shift ;;
@@ -64,11 +74,21 @@ parse_arguments() {
       --for-reinstall) FOR_REINSTALL=1; shift ;;
       --plain) export OWG_PLAIN=1; shift ;;
       -h|--help) usage; exit 0 ;;
-      *) echo "uninstall.sh: unknown option $1 (see --help)" >&2; exit 2 ;;
+      *) ARGUMENT_ERROR="The uninstaller has no option $1."; return 0 ;;
     esac
   done
   ((ASSUME_YES || EVERYTHING)) && export OWG_DEFAULTS=1
   return 0
+}
+
+# A stop before the look is loaded, said as plainly and as loudly: boot_failed "What went wrong" STEP...
+boot_failed() {
+  local n=0 step
+  printf '\n  FAILED: %s\n\n  What to do next:\n' "$1" >&2
+  shift
+  for step in "$@" 'Then run the uninstaller again'; do n=$((n + 1)); printf '    %d. %s\n' "$n" "$step" >&2; done
+  printf '\n' >&2
+  exit 1
 }
 
 load_ui() {
@@ -80,11 +100,15 @@ load_ui() {
       source "$base/$part.sh"
     done
   else
-    command -v curl >/dev/null || { echo "uninstall.sh needs curl." >&2; exit 1; }
+    command -v curl >/dev/null || boot_failed "The uninstaller needs curl, and it is not installed." \
+      "Install it: sudo apt-get install curl, sudo dnf install curl, sudo zypper install curl or sudo pacman -S curl"
     base=$(mktemp -d)
     for part in ui detect receipt; do
       curl -fsSL --retry 2 "$OWG_RAW/$OWG_REF/scripts/lib/$part.sh" -o "$base/$part.sh" ||
-        { echo "Could not fetch the uninstaller's parts from $OWG_RAW. Check the network and try again." >&2; exit 1; }
+        boot_failed "The uninstaller could not download its parts from $OWG_RAW (branch $OWG_REF)." \
+          "Check this machine can reach GitHub: curl -sSI https://raw.githubusercontent.com | head -1" \
+          "Behind a proxy? Tell the uninstaller about it: export https_proxy=http://PROXY:PORT" \
+          "Or run the uninstaller kept in the installation itself: ~/openWeightGym/uninstall.sh (or owg uninstall)"
       # shellcheck disable=SC1090
       source "$base/$part.sh"
     done
@@ -99,7 +123,9 @@ find_installation() {
   local candidate owg
   if [[ -n $DIR ]]; then
     DIR=$(realpath -m -- "$DIR")
-    receipt_find "$DIR" >/dev/null || ui_die "No install receipt was found in $DIR." "The explicit --dir was left untouched; choose the installation's actual folder." 2
+    receipt_find "$DIR" >/dev/null || ui_die --status 2 "No install receipt was found in $DIR, so nothing was touched." \
+      "Give the folder the installer made, the one holding .install-receipt: --dir /path/to/openWeightGym" \
+      "Or leave out --dir to look in the usual places"
     candidates=("$DIR")
   else
   [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install ]] && candidates+=("$(<"${XDG_CONFIG_HOME:-$HOME/.config}/openweightgym/install")")
@@ -127,27 +153,23 @@ find_installation() {
   fi
   receipt_load "$DIR"
   MODE=$(receipt_get mode)
-  [[ $MODE == user || $MODE == system ]] || ui_die "The install receipt in $DIR has no valid installation mode."
+  [[ $MODE == user || $MODE == system ]] || ui_die "The install receipt in $DIR has no valid installation mode, so nothing was touched." \
+    "Look at it: cat $(shell_path "$(receipt_find "$DIR")")" \
+    "Its mode= line should say user or system; put that right and run the uninstaller again"
   if [[ $MODE == system ]]; then OWG_OWNER=$(receipt_get service_user); export OWG_OWNER; fi
   ui_ok "Found openWeightGym in $DIR" "$(receipt_mode_label) · installed $(receipt_get installed)"
 }
 
 # An installation with no receipt was not made by install.sh: say where it is, and touch nothing.
 legacy_report() {
-  local unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user unit command roots=()
-  for unit in loadcoach weightroom turnstile toollocker spotter voice voice-gateway frontdesk tooldoor; do
-    [[ -f $unit_dir/$unit.service ]] || continue
-    command=$(sed -n 's/^ExecStart=//p' "$unit_dir/$unit.service" | head -1)
-    command=${command//%h/$HOME}
-    command=${command#\"}
-    [[ $command == */.venv/bin/* ]] && roots+=("${command%%/.venv/bin/*}")
-  done
-  if ((${#roots[@]})); then
-    mapfile -t roots < <(printf '%s\n' "${roots[@]}" | sort -u)
-    ui_warn "openWeightGym runs from ${roots[*]}, installed before install.sh"
-    ui_note "This uninstaller removes only what install.sh made, so it leaves that installation alone."
-    ui_note "To remove it by hand: stop and disable its units (systemctl --user disable --now NAME),"
-    ui_note "delete the unit files in $unit_dir, then the folder, keeping a copy of settings/, keys/ and data/."
+  detect_units ""
+  if ((${#UNITS_OTHER[@]} + ${#UNITS_DROPINS[@]})); then
+    units_retire_steps
+    ui_info "This uninstaller removes only what install.sh made, so it leaves that installation alone"
+    ui_attention "openWeightGym (or AiSuite) runs from $(shell_path "${UNITS_OTHER_ROOT:-$UNITS_DIR}"), installed before install.sh" \
+      "${UNITS_STEPS[@]}" \
+      "Then delete its folder if you no longer want it, keeping a copy of settings/, keys/ and data/"
+    ui_attention_box
   else
     ui_info "No openWeightGym installation was found here."
   fi
@@ -251,7 +273,9 @@ backup() {
   [[ -d $work/postgresql ]] && extra=(-C "$work" postgresql)
   ui_step "Writing the backup" -- as_reader tar --create --gzip --dereference --file "$work/backup.tar.gz" \
     --exclude='settings/defaults' --exclude='settings/examples' -C "$DIR" "${parts[@]}" "${extra[@]}" ||
-    ui_die "The backup could not be written, so nothing was removed." "The log says why: $OWG_LOG"
+    ui_die "The backup could not be written, so nothing was removed." \
+      "The lines above, from the log, say why (often a full disk: df -h ~): put that right" \
+      "Or remove without a backup, once you have your own copy: uninstall.sh --no-backup"
   as_reader cat "$work/backup.tar.gz" >"$BACKUP_FILE"
   chmod 600 "$BACKUP_FILE"
   rm -rf "$work"
@@ -264,8 +288,10 @@ dump_postgresql() {
   mkdir -p "$work"
   for dsn in "$DIR"/keys/postgresql/*.dsn; do
     database=$(as_reader cat "$dsn" | sed -E 's#.*/([^/?]+).*#\1#')
-    ui_step "Dumping PostgreSQL $database" -- bash -c 'sudo -n -u postgres pg_dump --format=custom "$1" >"$2"' _ "$database" "$work/$database.dump" ||
-      ui_die "Could not dump $database, so nothing was removed."
+    ui_step "Dumping PostgreSQL $database" -- bash -c 'cd / && sudo -n -u postgres pg_dump --format=custom "$1" >"$2"' _ "$database" "$work/$database.dump" ||
+      ui_die "Could not dump $database, so nothing was removed." \
+        "The lines above, from the log, say why; is PostgreSQL running? systemctl status postgresql" \
+        "Or keep the databases: run the uninstaller again and leave PostgreSQL databases unticked"
   done
 }
 
@@ -310,7 +336,8 @@ stop_services() {
   for service in "${stopped[@]}"; do
     owg_systemctl is-active --quiet "$service.service" 2>/dev/null || continue
     ui_step "Stopping $service" -- owg_systemctl stop "$service.service" ||
-      ui_die "Could not stop $service." "No components were removed. Check the log and try again."
+      ui_die "Could not stop $service, so nothing was removed." \
+        "See why: owg logs $service" "Stop it yourself if need be (owg stop $service), then run the uninstaller again"
     STOPPED_SERVICES+=("$service")
   done
 }
@@ -374,7 +401,7 @@ remove() {
     sudo -n loginctl disable-linger "$OWG_OWNER" 2>/dev/null || true
     sudo -n loginctl terminate-user "$OWG_OWNER" 2>/dev/null || true
     # shellcheck disable=SC2024  # the log is ours, not root's
-    if sudo -n userdel "$OWG_OWNER" >>"$OWG_LOG" 2>&1; then ui_ok "Removed the $OWG_OWNER account"; else ui_warn "Could not remove the $OWG_OWNER account"; fi
+    if sudo -n userdel "$OWG_OWNER" >>"$OWG_LOG" 2>&1; then ui_ok "Removed the $OWG_OWNER account"; else ui_attention "Could not remove the $OWG_OWNER account" "Its message is in the log; remove it by hand: sudo userdel $OWG_OWNER"; fi
     remove_path "$(receipt_get var_dir)"
   fi
   # The pointers that let owg and this uninstaller find the installation.
@@ -431,19 +458,21 @@ drop_postgresql() {
     database=$(as_reader cat "$dsn" | sed -E 's#.*/([^/?]+).*#\1#')
     role=$(as_reader cat "$dsn" | sed -E 's#^postgresql://([^:@/]+).*#\1#')
     roles+=("$role")
-    ui_step "Dropping PostgreSQL database $database" -- sudo -n -u postgres dropdb --if-exists "$database" ||
-      ui_die "Could not remove PostgreSQL database $database." "Connection files were kept; fix the error and run the uninstaller again."
+    ui_step "Dropping PostgreSQL database $database" -- bash -c 'cd / && sudo -n -u postgres dropdb --if-exists "$1"' _ "$database" ||
+      ui_die "Could not remove PostgreSQL database $database; its connection files were kept." \
+        "The lines above, from the log, say why (a program still connected to it, often): put that right"
   done
   mapfile -t roles < <(printf '%s\n' "${roles[@]}" | sort -u)
   for role in "${roles[@]}"; do
     [[ $role == suite_* ]] || { ui_warn "Kept PostgreSQL role $role: the installer did not make it"; continue; }
-    ui_step "Dropping PostgreSQL role $role" -- sudo -n -u postgres dropuser --if-exists "$role" ||
-      ui_die "Could not remove PostgreSQL role $role." "Connection files were kept; fix the error and run the uninstaller again."
+    ui_step "Dropping PostgreSQL role $role" -- bash -c 'cd / && sudo -n -u postgres dropuser --if-exists "$1"' _ "$role" ||
+      ui_die "Could not remove PostgreSQL role $role; its connection files were kept." \
+        "The lines above, from the log, say why (it may still own something): put that right"
   done
 }
 
 finish() {
-  ui_finale "Cool-down complete"
+  if ((${#UI_ATTENTION[@]})); then ui_finale "Cool-down complete, with things to fix"; else ui_finale "Cool-down complete"; fi
   local lines=() id kept=0
   for id in "${ITEMS[@]}"; do
     if [[ -z ${REMOVE[$id]:-} ]]; then lines+=("${C_OK}kept${C_RESET}     ${LABEL[$id]}"); kept=1; fi
@@ -455,6 +484,7 @@ finish() {
   lines+=("" "${C_DIM}Log: ${OWG_LOG/#$HOME/\~}${C_RESET}")
   ((${#lines[@]} > 2)) || lines=("Everything is gone. Thanks for training with openWeightGym." "${lines[@]}")
   ui_box "Done" "${lines[@]}"
+  ui_attention_box
   printf '\n'
 }
 

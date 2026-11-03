@@ -191,10 +191,13 @@ providing `nvcc`. Distribution build tools can be installed with
 separately. Vulkan needs its development headers/toolchain. CPU is an explicit backend choice.
 
 The script pins commit `95ff76230889898e1bf40058ba272a3699b50dc6`, verifies executables,
-preserves immutable releases under `~/.local/share/suite/sdcpp/releases`, and changes only
+preserves immutable releases under `runtimes/sdcpp/releases` in the installation (`--prefix` chooses
+another folder), and changes only
 `[engines.sdcpp]` in `settings/loadcoach.toml`, retaining a private configuration backup. It
 neither restarts services nor downloads weights. An optional-build failure is reported
-separately from completed base installation work; fix requirements and rerun the script.
+separately from completed base installation work; fix requirements and rerun the script. `--check`
+verifies the release that `[engines.sdcpp]` names, not whatever an older installation left elsewhere,
+and reports a broken one in a single line rather than stopping the installer's check.
 
 openWeightGym's default build includes a content-verified layer-placement patch. Explicit positive
 `layer_weights` ratios, such as `[3,1]`, permit unequal diffusion placement independent of live
@@ -267,7 +270,8 @@ Prerequisites are those of the image runtime above. The script pins audio.cpp v0
 every model family (`AUDIOCPP_MODEL_SET=full`) and without the optional server frontends or
 upstream model manager, using 6 build jobs by default (`--jobs`; never an unbounded `-j`). It
 copies the pinned `model_specs/` catalogue into the release, verifies executables, preserves
-immutable releases under `~/.local/share/suite/audiocpp/releases`, and changes only
+immutable releases under `runtimes/audiocpp/releases` in the installation (`--prefix` chooses another
+folder), and changes only
 `[engines.audiocpp]` in `settings/loadcoach.toml`, retaining a private configuration backup.
 It neither restarts services nor downloads weights. The one upstream submodule (server
 frontends, an SSH URL) is not fetched.

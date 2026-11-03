@@ -195,6 +195,7 @@ def test_real_postgres_retained_connections_are_repaired_before_the_initial_audi
     provision_live_postgres(root, local_postgres, "fixture_preflight")
     (root / "scripts/lib").mkdir()
     shutil.copy2(ROOT / "scripts/lib/ui.sh", root / "scripts/lib/ui.sh")
+    shutil.copy2(ROOT / "scripts/lib/detect.sh", root / "scripts/lib/detect.sh")
     (root / "pyproject.toml").write_text('[project]\nname = "fixture"\nversion = "0.1.0"\n')
     (root / "settings").mkdir()
     config = root / "settings/weightroom.toml"
@@ -382,6 +383,7 @@ def test_front_postgresql_plan_supplies_every_configured_store(tmp_path, service
     scripts = install / "scripts"
     (scripts / "lib").mkdir(parents=True)
     shutil.copy2(ROOT / "scripts/lib/ui.sh", scripts / "lib/ui.sh")
+    shutil.copy2(ROOT / "scripts/lib/detect.sh", scripts / "lib/detect.sh")
     shutil.copy2(SUPPORT_PATH, scripts / SUPPORT_PATH.name)
     (install / "pyproject.toml").write_text('[project]\nname = "fixture"\nversion = "0.1.0"\n')
     # Run real argument validation and planning, stopping before package/service changes.
@@ -599,8 +601,9 @@ def test_installer_refuses_to_switch_a_populated_store(tmp_path):
         timeout=30,
     )
 
-    assert answer.returncode == 2
-    assert "will not switch engines without a verified migration" in answer.stdout
+    assert answer.returncode == 78  # UI_STOPPED: the reason and next steps are on screen
+    assert "does not move data between database engines" in answer.stdout
+    assert "Keep the data where it is: --database keep" in answer.stdout
 
 
 def test_one_machine_settings_move_compute_ports_and_fill_in_folders(tmp_path):

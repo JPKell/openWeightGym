@@ -129,7 +129,7 @@ Markdown limited to `README.md` (the project's front page: what it is and the in
 Installation/deployment interfaces must change with their contracts:
 
 - [Guided installer](../install.sh), [uninstaller](../uninstall.sh), [`owg`](../scripts/owg) and their shared [terminal look](../scripts/lib/ui.sh), [machine checks](../scripts/lib/detect.sh) and [install receipt](../scripts/lib/receipt.sh); user-facing contract in [Installation](installation.md).
-- [openWeightGym installer](../scripts/install-suite.sh), [support](../scripts/install-suite-support.py), [settings editing](../weightroom/settings_file.py), [installer tests](../tests/test_installer.py).
+- [openWeightGym installer](../scripts/install-suite.sh), [support](../scripts/install-suite-support.py), [settings editing](../weightroom/settings_file.py), [installer tests](../tests/test_installer.py), [distribution tests](../tests/test_installer_distros.py).
 - [llama.cpp installer](../scripts/install-llamacpp.sh): pinned ggml-org builds by graphics card.
 - [Pairing](../weightroom/pairing.py) of GPU nodes with one-time codes, [tests](../tests/test_pairing.py).
 - Optional image runtime: [installer](../scripts/install-sdcpp.sh), [implementation](../scripts/install-sdcpp.py); operating instructions in the [operations log](operations.md#optional-image-generation-runtime).

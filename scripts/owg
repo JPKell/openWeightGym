@@ -147,7 +147,7 @@ control() {
     chosen=("${reversed[@]}")
   fi
   for program in "${chosen[@]}"; do
-    [[ $program =~ ^[a-z-]+$ ]] || ui_die "$program is not a program name."
+    [[ $program =~ ^[a-z-]+$ ]] || ui_die "$program is not a program name." "The programs are: ${ALL_PROGRAMS[*]}"
     ui_step "${action^} $program" -- owg_systemctl "$action" "$program.service" || failed=1
   done
   return "$failed"
@@ -165,7 +165,9 @@ logs() {
 }
 
 pair() {
-  programs | grep -qx weightroom || ui_die "Pairing codes come from the console machine, and this is not one."
+  programs | grep -qx weightroom || ui_die "Pairing codes come from the console machine, and this is not one." \
+    "Run owg pair on the console machine (the one running weightroom), or make a code in its Settings → Compute nodes" \
+    "Then join from here: install.sh --join http://CONSOLE:8440 --code CODE"
   as_owner "$ROOT/.venv/bin/weightroom" --config "$ROOT/settings/weightroom.toml" pair "$@"
 }
 
@@ -233,6 +235,21 @@ doctor() {
     port=$(setting weightroom port)
     code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:${port:-8440}/" 2>/dev/null) || code=000
     [[ $code =~ ^[23] ]] && ui_ok "The console answers" "port ${port:-8440}" || problem "The console does not answer on port ${port:-8440}" "owg logs weightroom"
+  fi
+
+  # Other machines reach the console on 8440 and the API (or this compute node) on 8442.
+  local reached=()
+  programs | grep -qx weightroom && reached+=(8440)
+  programs | grep -qxE 'loadcoach|turnstile' && reached+=(8442)
+  detect_address
+  if ((${#reached[@]})) && [[ $HOST_ADDRESS != 127.0.0.1 ]]; then
+    firewall_steps "${reached[@]}"
+    if ((${#FIREWALL_STEPS[@]})); then
+      local said="The firewall here ($FIREWALL_NAME) keeps other machines from port ${FIREWALL_CLOSED// / and }"
+      local fix
+      fix=$(printf '%s; ' "${FIREWALL_STEPS[@]}"); fix=${fix%; }
+      if ((FIREWALL_SURE)); then problem "$said" "$fix"; else warning "${said/keeps/may keep}" "$fix"; fi
+    fi
   fi
 
   detect_disk "$ROOT"

@@ -35,7 +35,8 @@ receipt_load() {
     contents=$(cat -- "$RECEIPT_FILE") || return 1
   else
     ui_sudo "reading this system installation's legacy receipt"
-    contents=$(sudo -n cat -- "$RECEIPT_FILE") || ui_die "Cannot read the installation receipt in $1."
+    contents=$(sudo -n cat -- "$RECEIPT_FILE") || ui_die "Cannot read the installation receipt in $1, even with sudo." \
+      "Check sudo works here: sudo -v" "Check the file is there: sudo ls -l $RECEIPT_FILE"
   fi
   while IFS= read -r line; do
     [[ $line == \#* || $line != *=* ]] && continue
@@ -93,8 +94,10 @@ as_owner() {
   local owner=${OWG_OWNER:-${RECEIPT[service_user]:-}}
   if [[ -z $owner || $owner == "$(id -un)" ]]; then "$@"; return; fi
   owner_environment "$owner"
-  if ((EUID == 0)) && command -v runuser >/dev/null; then runuser -u "$owner" -- env "${OWNER_ENV[@]}" "$@"
-  else sudo -n -u "$owner" env "${OWNER_ENV[@]}" "$@"; fi
+  # From / : tools such as uv look for their settings in the current folder and its parents, and
+  # stop with an error at a home folder (yours, mode 700 on Fedora and Arch) the account cannot enter.
+  if ((EUID == 0)) && command -v runuser >/dev/null; then (cd / && runuser -u "$owner" -- env "${OWNER_ENV[@]}" "$@")
+  else (cd / && sudo -n -u "$owner" env "${OWNER_ENV[@]}" "$@"); fi
 }
 
 owg_systemctl() { as_owner systemctl --user "$@"; }

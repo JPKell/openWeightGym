@@ -77,11 +77,20 @@ def verify(folder):
     return recorded
 
 
+def configured(root):
+    """The release folder settings/loadcoach.toml runs sdcpp from, or None when it runs none."""
+    try:
+        table=tomllib.loads((root/"settings/loadcoach.toml").read_text()).get("engines",{}).get("sdcpp") or {}
+    except FileNotFoundError:
+        return None
+    return Path(table["manifest"]).expanduser().parent if table.get("enabled") and table.get("manifest") else None
+
+
 def main():
     """Install a verified release and register it for subsequent engine launches."""
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root",type=Path,default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--prefix",type=Path,default=Path.home()/".local/share/suite/sdcpp")
+    parser.add_argument("--prefix",type=Path,help="where releases are kept (default: ROOT/runtimes/sdcpp)")
     parser.add_argument("--backend",choices=("cuda","vulkan","cpu"),default="cuda")
     parser.add_argument("--revision",default=REVISION)
     parser.add_argument("--source",type=Path,help="Existing clean source checkout; otherwise fetch pinned upstream")
@@ -93,17 +102,23 @@ def main():
     parser.add_argument("--dry-run",action="store_true")
     args=parser.parse_args()
     args.root=args.root.expanduser().resolve()
-    args.prefix=args.prefix.expanduser().resolve()
+    chosen=args.prefix is not None
+    args.prefix=(args.prefix or args.root/"runtimes/sdcpp").expanduser().resolve()
     if not re.fullmatch(r"[0-9a-f]{40}",args.revision) or not 1<=args.jobs<=32:
         parser.error("Use a full commit SHA and 1–32 build jobs")
     if not re.fullmatch(r"native|[0-9]+(?:;[0-9]+)*",args.cuda_architectures):
         parser.error("Invalid CUDA architectures")
     current=args.prefix/"current"
     if args.check:
-        if not current.is_dir():
+        # The release this installation runs, not whatever an older one left in a shared folder.
+        folder=current if chosen else configured(args.root)
+        if folder is None or chosen and not folder.is_dir():
             print("sdcpp: not installed (optional); run scripts/install-sdcpp.sh")
             return
-        print(json.dumps(verify(current),indent=2))
+        try:
+            print(json.dumps(verify(folder),indent=2))
+        except (OSError,KeyError,ValueError,subprocess.SubprocessError) as problem:
+            raise SystemExit(f"sdcpp in {folder} does not work: {problem}") from None
         return
     patch=Path(__file__).with_name("patches")/"balanced-layer-split.patch"
     patch_sha=digest(patch) if not args.upstream_only and patch.is_file() else ""
