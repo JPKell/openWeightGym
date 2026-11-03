@@ -70,6 +70,14 @@ class FrontSettings:
             if known is None:
                 return error(404, 'This program has not reported its settings on front.')
             current = {one['name']: one['value'] for one in known['settings']}
+            if program == 'turnstile' and {'models_folder', 'models_storage_folder'} & body.keys():
+                from turnstile.artifacts import checked_roots
+                effective = {**current, **self.changes.of(program), **body}
+                for name, value in body.items():
+                    if value is None:
+                        entry = next((row for row in known['settings'] if row['name'] == name), {})
+                        effective[name] = entry.get('file', '')
+                checked_roots({name: effective.get(name, '') for name in ('models_folder', 'models_storage_folder')})
             for name, value in body.items():
                 if name not in CHANGEABLE[program]:
                     return error(403, 'This setting belongs in the program file.')

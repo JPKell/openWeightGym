@@ -1,10 +1,13 @@
 {% extends "frame.html" %}
 {% from "parts.html" import said_box, swaps, page_header %}
 {% block title %}System logs · openWeightGym{% endblock %}
-{% block main_class %}container-fluid console-page py-3{% endblock %}
+{% block page_class %}console-page{% endblock %}
 {% block main %}
 {{ page_header("System logs", lead="Inspect program output and system diagnostics.") }}
 {{ said_box(said, true) }}
+{% if offline %}<div class="alert alert-warning" role="status" id="journal-offline">
+Compute is unavailable.{% if fetched %} Showing logs last fetched {{ fetched|timestamp }}. These lines may be out of date.{% else %} No logs have been fetched for these filters yet.{% endif %}
+</div>{% endif %}
 
 {# Show puts the page in again without loading it: the form, the lines, and what may be asked about them. #}
 <form method="get" action="/output" class="row g-2 align-items-end mb-3" {{ swaps("page-content", true) }} data-auto-submit>
@@ -25,12 +28,12 @@
 <table id="printed" class="printed">
   <tbody>
   {% for line in lines %}<tr><td>{{ line|log_line }}</td></tr>
-  {% else %}<tr><td class="text-secondary">Nothing was printed{{ " then" if at }}.</td></tr>
+  {% else %}<tr><td class="text-secondary">{% if offline %}No saved log lines for these filters.{% else %}Nothing was printed{{ " then" if at }}.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
 
 {% if output_command %}<div class="mt-2 mb-3 small"><span class="text-secondary">Command on compute</span><pre class="mb-0 mt-1"><code>{{ output_command }}</code></pre></div>{% endif %}
-{% if lines %}{% with log_text = lines|join("\n") %}{% include "ask.html" %}{% endwith %}{% endif %}
+{% if lines and not offline %}{% with log_text = lines|join("\n") %}{% include "ask.html" %}{% endwith %}{% endif %}
 {% endblock %}

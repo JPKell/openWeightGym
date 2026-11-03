@@ -3,7 +3,8 @@
 # graphics cards, or one built here from source. LoadCoach starts llama-server for each model it
 # loads; this is where that program comes from. Also called by install.sh.
 #
-#   scripts/install-llamacpp.sh                     find the cards and install the matching build
+#   scripts/install-llamacpp.sh                     choose a download or build here from source
+#   scripts/install-llamacpp.sh --prebuilt          find the cards and download the matching build
 #   scripts/install-llamacpp.sh --backend vulkan    or choose: cuda-13.4, cuda-12.8, rocm, vulkan, cpu
 #   scripts/install-llamacpp.sh --from-source       build it here with cmake instead
 #   scripts/install-llamacpp.sh --check             say what is installed and change nothing
@@ -28,7 +29,7 @@ PREFIX=${OWG_LLAMACPP_PREFIX:-$ROOT/runtimes/llamacpp}
 RELEASES=https://github.com/ggml-org/llama.cpp/releases/download
 SOURCE=https://github.com/ggml-org/llama.cpp.git
 BACKEND=auto
-FROM_SOURCE=0
+METHOD=auto
 CHECK=0
 ASSUME_YES=0
 
@@ -39,11 +40,14 @@ Usage: scripts/install-llamacpp.sh [options]
   --backend NAME     cuda-13.4, cuda-12.8, rocm, vulkan or cpu (default: chosen from the cards)
   --build TAG        a llama.cpp release tag (default: $BUILD)
   --prefix DIR       where builds are kept (default: $PREFIX)
+  --prebuilt         download the matching build without asking how to install
   --from-source      build llama-server here with cmake rather than downloading it
   --check            show the build in use and change nothing
   --yes              install missing system libraries without asking
   -h, --help         show this help
 
+Without --prebuilt or --from-source, a terminal menu offers both methods.
+Without a terminal (or with --yes), the default is a prebuilt download.
 The program LoadCoach should run is then PREFIX/current/llama-server.
 EOF
 }
@@ -56,7 +60,8 @@ while (($#)); do
     --backend) BACKEND=$2; shift 2 ;;
     --build) BUILD=$2; shift 2 ;;
     --prefix) PREFIX=$2; shift 2 ;;
-    --from-source) FROM_SOURCE=1; shift ;;
+    --prebuilt) METHOD=prebuilt; shift ;;
+    --from-source) METHOD=source; shift ;;
     --check) CHECK=1; shift ;;
     --yes) ASSUME_YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -183,11 +188,13 @@ download_release() {
 }
 
 build_from_source() {
-  local backend=$1 target=$2 work flags=() jobs
+  local backend=$1 target=$2 work flags=() jobs missing=()
   local tool
   for tool in git cmake c++ make; do
-    command -v "$tool" >/dev/null || ui_die "Building llama.cpp needs $tool." "Install your distribution's build tools (git, cmake, a C++ compiler) and run this again."
+    command -v "$tool" >/dev/null || missing+=("$tool")
   done
+  ((${#missing[@]} == 0)) || ui_die "Building llama.cpp needs: ${missing[*]}." \
+    "Install the missing build tools, then run scripts/install-llamacpp.sh --from-source again."
   case "$backend" in
     cuda-*) command -v nvcc >/dev/null || ui_die "A CUDA build needs nvcc, the CUDA toolkit." "Install it, or use the prebuilt build without --from-source."
             flags+=(-DGGML_CUDA=ON) ;;
@@ -227,15 +234,24 @@ main() {
     return 0
   fi
 
+  if [[ $METHOD == auto ]]; then
+    local choice=0
+    if ((!ASSUME_YES)); then
+      ui_choose choice "How should llama.cpp be installed?" 0 \
+        "Download a prebuilt release|for this machine; no compiler needed" \
+        "Build here from source|needs git, cmake, a C++ compiler and make; GPU builds need their toolkit"
+    fi
+    if ((choice == 1)); then METHOD=source; else METHOD=prebuilt; fi
+  fi
   [[ $BACKEND == auto ]] && BACKEND=$LLAMA_BACKEND
   local release=$BUILD-$BACKEND
-  ((FROM_SOURCE)) && release+=-source
+  [[ $METHOD == source ]] && release+=-source
   local target=$PREFIX/releases/$release
   mkdir -p "$PREFIX/releases"
 
   if [[ -x $target/llama-server ]]; then
     ui_ok "llama.cpp $release is already here"
-  elif ((FROM_SOURCE)); then
+  elif [[ $METHOD == source ]]; then
     build_from_source "$BACKEND" "$target"
   else
     download_release "$BACKEND" "$target"

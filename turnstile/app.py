@@ -32,6 +32,7 @@ import socket
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
@@ -49,7 +50,7 @@ from starlette.routing import Route
 from db import DatabaseRegistry
 from db.maintenance import Barrier, Gate
 from loadcoach import statement
-from loadcoach.config import CLI, read_settings
+from loadcoach.config import CLI, read_settings, model_places
 from loadcoach.groups import read_group
 from loadcoach.log import FRONT, Log, machine_slot, public_number, origin_number
 from loadcoach.files import PIECE, SPARE, sha256_of
@@ -64,6 +65,7 @@ from loadcoach.batches import Batches
 from turnstile.batches import FrontBatches
 from turnstile.tasks import FrontTasks
 from turnstile.settings import FrontSettings
+from turnstile.artifacts import FrontFiles, checked_roots
 from turnstile.hosted import Hosted
 from turnstile.machines import Machines, logical_catalogue, placement_order
 from turnstile.model_locations import ModelLocations
@@ -109,6 +111,8 @@ class Settings:
     front_settings: bool = False  # DB1: settings for front's own programs
     toollocker_url: str = ""  # optional front ToolLocker upstream; port 8443 never wakes compute
     artifact_machine: str = ""  # front-side LoadCoach that owns downloads; empty prefers front_cpu
+    models_folder: str = ""  # optional model cache on front; no inference service is required
+    models_storage_folder: str = ""  # optional model library on front; empty disables this tier
     image_adult_previews: bool = False  # permit individual users to opt in to adult Civitai previews
     compute_offset: int = 0  # how far compute's ports sit from `ports`, from the port in compute's URL. 0 unless both run on one machine
 
@@ -178,8 +182,9 @@ def load_settings(path: Path) -> Settings:
                 raise TypeError("[machines.NAME] needs compute = a URL such as http://host:8442, and the name compute is the main machine's own")
             if any(one.get("spotter") and (type(one["spotter"]) is not str or not one["spotter"].startswith("http")) for one in settings.machines.values()):
                 raise TypeError("[machines.NAME].spotter must be a URL such as http://host:8444")
-            if settings.artifact_machine and settings.artifact_machine not in {"compute", *settings.machines}:
-                raise TypeError("artifact_machine must name compute or a configured machine")
+            checked_roots({'models_folder': settings.models_folder, 'models_storage_folder': settings.models_storage_folder})
+            if settings.artifact_machine and settings.artifact_machine not in {"front", "compute", *settings.machines}:
+                raise TypeError("artifact_machine must name front, compute or a configured machine")
             slots = [machine_slot(name) for name in (*settings.machines, FRONT)]
             if FRONT in settings.machines or len(slots) != len(set(slots)):
                 raise TypeError("Configured machine names collide in the public request-ID range; rename one machine")
@@ -197,6 +202,7 @@ def say_what_runs(path: Path, settings: Settings) -> None:
     artifact_machine = settings.artifact_machine or ("front_cpu" if "front_cpu" in settings.machines else "compute")
     running = {**file, "host": settings.host, "ports": list(settings.ports), "wait": settings.wait,
                "voice_port": settings.voice_port, "artifact_machine": artifact_machine,
+               "models_folder": settings.models_folder, "models_storage_folder": settings.models_storage_folder,
                "image_adult_previews": settings.image_adult_previews}
     (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))))
 
@@ -723,6 +729,22 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     from mirrorwall.front import Front as ImageFront
     front_settings = FrontSettings(stores.database('weightroom.accounts'), log, ask_compute, settings.front_settings,
                                    programs=FRONT_PROGRAMS | {'toollocker'} if settings.toollocker_url else FRONT_PROGRAMS)
+
+    configured_file_roots = {name: getattr(settings, name) for name in ('models_folder', 'models_storage_folder')}
+    if settings.path and Path(settings.path).is_file():
+        configured = read_settings(Path(settings.path)).get('turnstile', {})
+        configured_file_roots = {name: configured.get(name, '') for name in configured_file_roots}
+
+    def front_file_roots():
+        """Read current front storage settings without depending on any compute node."""
+        changed = front_settings.changes.of('turnstile')
+        return {name: changed.get(name, value) for name, value in configured_file_roots.items()}
+
+    front_files = FrontFiles(front_file_roots, log)
+
+    def file_store():
+        """Prefer an explicitly selected store, then optional front storage, then legacy workers."""
+        return settings.artifact_machine or ('front' if any(front_file_roots().values()) else artifact_machine)
     image_work=ImageFront(ImageStore(batch_work.store.db,settings.data),batch_work,users,
                          adult_previews_allowed=lambda: front_settings.changes.of('turnstile').get(
                              'image_adult_previews', settings.image_adult_previews) is True)
@@ -1187,6 +1209,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         last_pruned = None  # the monotonic clock starts at boot, so a 0 here skipped the first day after a restart
         while True:
             await front_tasks.retry_publication()
+            await publish_file_settings()
             if last_pruned is None or time.monotonic() - last_pruned >= 86400:
                 users.forget_sessions()
                 log.prune()
@@ -1230,9 +1253,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Read all managed files without requiring the artifact host to be the source."""
         answers = await asyncio.gather(*(ask_machine(user, "GET", "/loadcoach/files", machine=name, timeout=5)
                                          for name in machines.names))
-        return [{"name": name, "answering": answer is not None and answer.status_code == 200,
+        nodes = [{"name": name, "answering": answer is not None and answer.status_code == 200,
                  **(answer.json() if answer is not None and answer.status_code == 200 else {"files": [], "places": []})}
                 for name, answer in zip(machines.names, answers)]
+        return [*nodes, {'name': 'front', 'answering': True, **await asyncio.to_thread(front_files.inventory)}]
 
     async def model_files_available(request):
         """The complete cache/storage picker, including preflight capacity warnings."""
@@ -1278,6 +1302,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if answer is None or answer.status_code != 201:
             raise ValueError(answer.json()["error"]["message"] if answer is not None else "The destination is not answering.")
         source = step["source"]
+        if source == 'front':
+            path = front_files.path(step['file']['path'])
+
+            async def local_pieces():
+                """Stream an approved front file without buffering model weights in memory."""
+                with path.open('rb') as file:
+                    while piece := await asyncio.to_thread(file.read, PIECE):
+                        job['done'] += len(piece)
+                        yield piece
+
+            received = await internal.put(spotter_base(step['node']) + answer.json()['upload'],
+                                          content=local_pieces(), timeout=None)
+            if received.status_code != 201:
+                raise ValueError(received.json()['error']['message'])
+            return
         other = settings.machines.get(source, {}) if source != "compute" else {}
         base = other["compute"].rstrip("/") if other else settings.upstream(settings.ports[0])
         path = "/loadcoach/files/content?" + urlencode({"path": step["file"]["path"]})
@@ -1372,7 +1411,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     async def ask_machine(user: User, method: str, path: str, body: bytes = b"", *, spotter: bool = False,
                           machine: str | None = None, timeout: float | None = 30) -> httpx.Response | None:
         """Send an authenticated request to the selected node without changing ownership."""
-        name = artifact_machine if machine is None else machine
+        name = file_store() if machine is None else machine
+        if name == 'front':
+            return await front_files.request(user, method, path, body)
         return await ask_compute(user, method, path, body, machine="" if name == "compute" else name,
                                  port=settings.ports[2] if spotter else None, timeout=timeout)
 
@@ -1389,9 +1430,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(404, "That front artifact operation is not available.")
         query = request.url.query
         path = "/loadcoach/" + suffix + (("?" + query) if query else "")
-        answer = await ask_machine(user, request.method, path, await request.body(), timeout=None)
+        body = await request.body()
+        if file_store() == 'front' and suffix in ('files/delete', 'files/move'):
+            if not user.can('manage-models'):
+                return error(403, 'Your account may not manage model files.')
+            try:
+                selected = json.loads(body).get('path')
+            except (ValueError, AttributeError):
+                return error(400, 'Choose a model file.')
+            nodes = await model_file_inventory(user)
+            unavailable = [node['name'] for node in nodes if not node['answering']]
+            if unavailable:
+                return error(409, 'Cannot verify whether this file is in use while these nodes are offline: ' + ', '.join(unavailable) + '.')
+            if any(file.get('used_by') for node in nodes if node['name'] != 'front'
+                   for file in node['files'] if file['path'] == selected):
+                return error(409, 'This file is used by a configured model. Update that model before moving or deleting its file.')
+        answer = await ask_machine(user, request.method, path, body, timeout=None)
         if answer is None:
-            return error(503, f"The front model-file store ({artifact_machine}) is not answering.")
+            return error(503, f"Model files on {file_store()} are unavailable. Configure front cache and storage in Settings → General, or connect that node.")
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
 
     async def artifact_files(request: Request) -> Response:
@@ -1401,28 +1457,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-models"):
             return error(403, "Your account may not manage model files.")
-        names = list(machines.names)
+        names = ['front', *machines.names]
         answers = list(await asyncio.gather(*(ask_machine(user, "GET", "/loadcoach/files", machine=name, timeout=5) for name in names)))
-        source_index = names.index(artifact_machine)
-        if answers[source_index] is None:
-            # Listing files can occasionally outlive the short deadline used to keep an
-            # unavailable compute node from delaying the page. The designated store is
-            # required, so give only that local source one normal bounded retry.
-            answers[source_index] = await ask_machine(user, "GET", "/loadcoach/files",
-                                                       machine=artifact_machine, timeout=30)
         reports = {one["name"]: one for one in machines.report()}
         nodes = []
         for name, answer in zip(names, answers):
             answering = answer is not None and answer.status_code == 200
             found = answer.json() if answering else {}
-            nodes.append({"name": name, "state": reports.get(name, {}).get("state", "unknown"),
+            nodes.append({"name": name, "state": 'ready' if name == 'front' else reports.get(name, {}).get("state", "unknown"),
                           "answering": answering,
                           "places": found.get("places", []), "files": found.get("files", []),
-                          "cleanup": found.get("cleanup", {})})
-        source = next((node for node in nodes if node["name"] == artifact_machine), None)
-        if source is None or not source["places"]:
-            return error(503, f"The front model-file store ({artifact_machine}) is not answering or has no available place.")
-        return JSONResponse({"artifact_machine": artifact_machine, "places": source["places"], "files": source["files"],
+                          "problems": found.get('problems', []), "cleanup": found.get("cleanup", {})})
+        source = next(node for node in nodes if node['name'] == file_store())
+        return JSONResponse({"artifact_machine": file_store(), "places": source["places"], "files": source["files"],
+                             "front_enabled": any(front_file_roots().values()),
+                             "store_available": bool(source['places']),
                              "cleanup": source.get("cleanup", {}),
                              "nodes": nodes, "distributions": list(distributions.values())}, headers={"cache-control": "no-store"})
 
@@ -1469,7 +1518,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return JSONResponse(found, status_code=answer.status_code)
         if action != "cleanup-nodes":
             return error(404, "That file cleanup action is not available.")
-        names = [name for name in machines.names if name != artifact_machine]
+        names = [name for name in machines.names if name != file_store()]
         body = json.dumps({"mode": "unused"}).encode()
         answers = await asyncio.gather(*(ask_machine(user, "POST", "/loadcoach/files/cleanup", body,
                                                      machine=name, timeout=None) for name in names))
@@ -1590,13 +1639,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return inventory
         listed = json.loads(inventory.body)
         source = next((one for one in listed.get("files", []) if one["path"] == asked.get("path")), None)
-        available = [node for node in listed.get("nodes", []) if node["name"] != artifact_machine and node["places"]]
+        available = [node for node in listed.get("nodes", []) if node["name"] in machines.names and node["name"] != file_store() and node["places"]]
         selected = asked.get("machines") or [node["name"] for node in available]
         if source is None or not isinstance(selected, list) or not selected or any(name not in {node["name"] for node in available} for name in selected):
             return error(400, "Choose a front model file and at least one available destination node.")
         number = secrets.token_urlsafe(8)
         job = distributions[number] = {"id": number, "file": Path(source["path"]).name, "path": source["path"],
-                                       "size": source["size"], "source": artifact_machine, "source_place": source["place"],
+                                       "size": source["size"], "source": file_store(), "source_place": source["place"],
                                        "source_places": listed["places"], "state": "queued", "targets": {}}
         task = asyncio.create_task(run_distribution(user, Path(source["path"]), source, selected, job, available))
         distribution_tasks.add(task)
@@ -1664,7 +1713,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 (settings.wake_mac if name == "compute" else settings.machines.get(name, {}).get("wake_mac"))]
         return JSONResponse({"machines": machines.report(), "hosts": hosts,
                              "models": machines.models(), "poll_seconds": settings.machines_poll_seconds,
-                             "artifact_machine": artifact_machine},
+                             "artifact_machine": file_store()},
                             headers={"cache-control": "no-store"})
 
     async def logical_models(request: Request) -> Response:
@@ -1724,6 +1773,79 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 request.client.host if request.client else "?", machine=machine, model_id=model_id)
         return JSONResponse({"machine": machine, "model_id": model_id, "enabled": enabled})
 
+    async def front_file_settings(request: Request) -> Response:
+        """Configure optional front storage even before a worker has connected."""
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, 'Missing or wrong API key.')
+        if not user.can('manage-settings'):
+            return error(403, 'Storage settings require manage-settings.')
+        if request.method == 'POST':
+            try:
+                raw = await request.body()
+                if len(raw) > 65536:
+                    raise ValueError('Storage settings must be at most 64 KiB.')
+                paths = checked_roots({**front_file_roots(), **json.loads(raw)})
+                if paths != front_file_roots() and front_files.tasks:
+                    return error(409, 'Wait for front file transfers to finish before changing their folders.')
+                for folder in model_places(paths['models_folder'], {}, paths['models_storage_folder']).values():
+                    await asyncio.to_thread(Path(folder).mkdir, parents=True, exist_ok=True)
+            except (OSError, ValueError, TypeError) as problem:
+                return error(400, str(problem))
+            for name, value in paths.items():
+                front_settings.changes.put('turnstile', name, value, user.name)
+            log.add('settings', 'changed', user.name, machine='front', program='model-files', **paths)
+        return JSONResponse({'machine': 'front', 'locations': front_file_roots(), 'pending': False},
+                            headers={'cache-control': 'no-store'})
+
+    def pending_file_settings(name):
+        """Read durable model-folder changes queued for exactly one configured node."""
+        return front_settings.changes.of('node-files:' + name).get('pending')
+
+    publication_lock = asyncio.Lock()
+
+    async def publish_file_settings():
+        """Retry queued roots without waking nodes, rechecking the saving account's authority."""
+        async with publication_lock:
+            for name in machines.names:
+                pending = pending_file_settings(name)
+                if not pending:
+                    continue
+                owner = users.by_identity(pending['owner'])
+                if owner is None or not owner.can('manage-settings'):
+                    continue
+                answer = await ask_compute(owner, 'POST', '/loadcoach/settings/loadcoach',
+                                           json.dumps(pending['locations']).encode(),
+                                           machine='' if name == 'compute' else name, timeout=5)
+                if answer is not None and answer.status_code == 200 and pending_file_settings(name) == pending:
+                    front_settings.changes.take_away('node-files:' + name, 'pending')
+                    log.add('settings', 'delivered', owner.name, machine=name, program='model-files')
+                elif answer is not None and answer.status_code >= 400:
+                    why = answer.json().get('error', {}).get('message', 'Node refused the saved locations.')
+                    if why != pending.get('error'):
+                        front_settings.changes.put('node-files:' + name, 'pending', {**pending, 'error': why}, owner.name)
+                        log.add('settings', 'delivery-failed', owner.name, machine=name, program='model-files', why=why)
+
+    def settings_with_pending(name, result):
+        """Expose editable folder settings even when a node has never reported its configuration."""
+        pending = pending_file_settings(name)
+        programs = result.setdefault('programs', [])
+        program = next((one for one in programs if one['program'] == 'loadcoach'), None)
+        if program is None:
+            program = {'program': 'loadcoach', 'seen': None, 'settings': []}
+            programs.append(program)
+        for field in ('models_folder', 'models_storage_folder'):
+            row = next((one for one in program['settings'] if one['name'] == field), None)
+            if row is None:
+                row = {'name': field, 'value': '', 'file': '', 'when': 'restart', 'changed': None,
+                       'says': 'Model-file location. Empty disables this location.'}
+                program['settings'].append(row)
+            if pending and field in pending['locations']:
+                desired = pending['locations'][field]
+                row['changed'] = {'value': row.get('file', '') if desired is None else desired,
+                                  'by': pending['by'], 'at': pending['at']}
+        return {**result, 'pending': bool(pending), 'pending_error': (pending or {}).get('error', '')}
+
     async def machine_settings(request: Request) -> Response:
         """Read or edit one host's LoadCoach/Spotter settings; never wake or fall back to another host."""
         user = caller(key_of(request))
@@ -1739,17 +1861,53 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if (request.method == "GET") != (program is None):
             return error(405, "Unsupported host settings operation.")
         path = "/loadcoach/settings" + ("/" + program if program else "")
-        answer = (await ask_live(user, "GET", path, machine=name) if request.method == "GET" else
-                  await ask_compute(user, request.method, path, await request.body(),
-                                    machine="" if name == "compute" else name, timeout=5))
+        if request.method == 'GET' and pending_file_settings(name):
+            await publish_file_settings()
+        raw = await request.body() if request.method == 'POST' else b''
+        locations = None
+        if program == 'loadcoach':
+            try:
+                body = json.loads(raw)
+                if isinstance(body, dict) and body and not body.keys() - {'models_folder', 'models_storage_folder'}:
+                    previous = pending_file_settings(name)
+                    current = (previous or {}).get('locations', {})
+                    locations = {**current, **body}
+                    checked_roots({field: value for field, value in locations.items() if value is not None})
+            except (ValueError, TypeError) as problem:
+                return error(400, str(problem))
+        if locations is not None:
+            async with publication_lock:
+                previous = pending_file_settings(name)
+                locations = {**(previous or {}).get('locations', {}), **body}
+                try:
+                    checked_roots({field: value for field, value in locations.items() if value is not None})
+                except (ValueError, TypeError) as problem:
+                    return error(400, str(problem))
+                raw = json.dumps(locations).encode()
+                answer = await ask_compute(user, request.method, path, raw,
+                                           machine='' if name == 'compute' else name, timeout=5)
+                if answer is None:
+                    front_settings.changes.put('node-files:' + name, 'pending',
+                                              {'locations': locations, 'owner': user.identity, 'by': user.name,
+                                               'at': datetime.now().isoformat(timespec='seconds')}, user.name)
+                    return JSONResponse({'machine': name, 'pending': True, 'locations': locations}, status_code=202)
+                if answer.status_code == 200:
+                    front_settings.changes.take_away('node-files:' + name, 'pending')
+        else:
+            answer = (await ask_live(user, "GET", path, machine=name) if request.method == "GET" else
+                      await ask_compute(user, request.method, path, raw,
+                                        machine="" if name == "compute" else name, timeout=5))
         if answer is None:
+            if request.method == 'GET':
+                return JSONResponse({**settings_with_pending(name, {}), 'machine': name, 'unavailable': True},
+                                    headers={'cache-control': 'no-store'})
             return JSONResponse({"error": {"message": f"LoadCoach {name} is not answering; verify its settings before retrying."}}, status_code=503, headers={"Retry-After": "5"})
         if answer.status_code != 200:
             return JSONResponse(answer.json(), status_code=answer.status_code)
         result = answer.json()
         if "programs" in result:
             result["programs"] = [p for p in result["programs"] if p["program"] in ("loadcoach", "spotter")]
-        return JSONResponse({**result, "machine": name, "unavailable": bool(answer.headers.get("x-suite-retained"))},
+        return JSONResponse({**settings_with_pending(name, result), "machine": name, "unavailable": bool(answer.headers.get("x-suite-retained"))},
                             headers={"cache-control": "no-store"})
 
     async def machine_engines(request: Request) -> Response:
@@ -1977,6 +2135,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         try:
             yield
         finally:
+            await front_files.close()
             maintenance_stop.set()
             for work in list(front_tasks.working.values()):
                 work.cancel()
@@ -2006,6 +2165,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/machines", machines_list),
                             Route("/turnstile/machines/{name}/wake", machine_wake, methods=["POST"]),
                             Route("/turnstile/artifacts/files", artifact_files),
+                            Route("/turnstile/artifacts/settings", front_file_settings, methods=['GET', 'POST']),
                             *[Route("/turnstile/artifacts/files/" + action, artifact_cleanup, methods=["POST"])
                               for action in ("clear-cache", "consolidate-cache", "cleanup-nodes")],
                             Route("/turnstile/artifacts/distribute", distribute, methods=["POST"]),
@@ -2055,6 +2215,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     app.state.mirrorwall = image_work
     app.state.soundroom = audio_work
     app.state.front_settings = front_settings
+    app.state.front_files = front_files
+    app.state.publish_file_settings = publish_file_settings
     app.state.rotate_due_keys_once = rotate_due_keys_once
     app.add_middleware(ClientAccesses, users=users, log=log, internal_prefix=internal_token + ':')
     app.add_middleware(ClientOrigin, key_file=settings.auth_key_file)

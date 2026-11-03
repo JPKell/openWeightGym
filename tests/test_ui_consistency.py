@@ -26,7 +26,7 @@ PAGES = (
     '/models/images/workflows', '/models/audio', '/dry-fit', '/roles', '/files',
     '/hub', '/civitai', '/fingerprints', '/cloud-apis', '/benchmarks', '/benchmarks/runs',
     '/benchmarks/results', '/benchmarks/embedders', '/benchmarks/compare',
-    '/benchmarks/manage', '/usage', '/requests', '/batches', '/log', '/reliability',
+    '/benchmarks/manage', '/usage', '/allowances', '/requests', '/batches', '/log', '/reliability',
     '/plugins/activity', '/output', '/status', '/system/voice', '/system/audio',
     '/telemetry', '/alerts', '/schedules', '/compute-nodes', '/users', '/groups',
     '/tools', '/plugins', '/backups', '/databases', '/settings', '/deploy', '/docs',
@@ -99,6 +99,7 @@ MEASURE = r"""() => {
     field.getAttribute('aria-labelledby')?.split(/\s+/).some(id => document.getElementById(id)?.textContent.trim()) || field.getAttribute('title')?.trim();
   const namelessFields = fields.filter(field => !named(field)).map(describe);
   return {titles, headers, sections, mismatches, invalidControls, rawValues, namelessFields,
+    headerDescriptions: [...main.querySelectorAll('.page-header > .d-flex > .min-w-0 > p')].map(e => e.textContent),
     overflow: document.documentElement.scrollWidth > innerWidth,
     theme: document.documentElement.dataset.bsTheme,
     palette: document.documentElement.dataset.siteTheme};
@@ -149,6 +150,15 @@ def ui_console(ui_host, desk_with_machine, tmp_path):
     workflow = seed(server, users)
     owner = users.identity('jordan')
     collection = server.portal.call(lambda: server.app.state.conversations.state.workflows.store.one(owner, workflow))['collection']
+    chunk = server.portal.call(lambda: server.app.state.conversations.state.knowledge.store.chunks(owner, collection))[0]['id']
+    chats = server.app.state.conversations.state.chats
+    conversation = chats.start(owner, 'Layout review')
+    chats.say(conversation, 'user', 'How does the page fit?')
+    chats.say(conversation, 'assistant', 'A saved reply for the layout review.', model='sample')
+    comparison = chats.start(owner, 'Compare layouts', compare=['sample', 'sample'])
+    chats.say(comparison, 'user', 'Compare the layouts.')
+    for branch in (0, 1):
+        chats.say(comparison, 'assistant', 'A comparison reply.', model='sample', branch=branch)
     file = gguf(tmp_path / 'sample.gguf', general__architecture='qwen', qwen__context_length=8192)
     library = Models(str(tmp_path / 'loadcoach.db'))
     library.put('sample', {'gpus': 0, 'flags': {'model': file, 'ctx-size': 8192}})
@@ -163,6 +173,7 @@ def ui_console(ui_host, desk_with_machine, tmp_path):
     run = store.create('jordan', 'sample', 'load')
     store.finish(run, 'completed')
     paths = (*PAGES, f'/benchmarks/run/{run}', f'/collections/{collection}',
+             f'/collections/{collection}/sources/{chunk}', f'/chat/{conversation}', f'/chat/{comparison}',
              '/file?path=' + quote(file, safe=''), f'/log/{number}', f'/requests/{number}', f'/workflows/{workflow}')
     yield server, paths
     assert not store.db.execute("SELECT id FROM benchmark_runs WHERE state IN ('queued','running')").fetchall()
@@ -201,6 +212,8 @@ def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, them
             result = page.evaluate(MEASURE)
             measurements.append({'path': path, **result})
             problems = []
+            if result['headerDescriptions']:
+                problems.append(('page descriptions', result['headerDescriptions']))
             if len(result['titles']) != 1 or any(t['size'] != '24px' for t in result['titles']):
                 problems.append(('page title', result['titles']))
             wrong_headers = [h for h in result['headers'] if (h['size'], h['weight'], h['padding']) !=
@@ -230,6 +243,75 @@ def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, them
     (output / f'{width}-{theme}-{palette}.json').write_text(json.dumps(measurements, indent=2))
     assert not errors, errors
     assert not failures, '\n'.join(failures)
+
+
+@pytest.mark.parametrize('sidebar', ['closed', 'open'])
+def test_all_console_pages_share_outer_layout_when_resized(ui_console, tmp_path, sidebar):
+    """Page gutters stay equal through navigation, rail toggles and breakpoint crossings."""
+    from test_console_browser import browser_context, playwright
+    server, paths = ui_console
+    widths = (1440, 320, 390, 575, 576, 767, 768, 900, 992, 1024, 1920, 2560)
+    failures = []
+    cases = [(path, 'sam' if path == '/deploy' else 'jordan', 200) for path in paths]
+    cases.extend([('/no-such-page', 'jordan', 404), ('/settings', 'pat', 403),
+                  ('/models/no-such-model', 'jordan', 404)])
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.add_init_script(f"localStorage.setItem('weightroom-sidebar', '{sidebar}')")
+        for path, account, status in cases:
+            sign_in(server, account)
+            response = page.goto('http://console.test' + path)
+            assert response.status == status, (path, response.status, failures)
+            for width in widths:
+                page.set_viewport_size({'width': width, 'height': 1000})
+                # Let matchMedia move the navigation before measuring the new layout.
+                page.evaluate('() => new Promise(requestAnimationFrame)')
+                layout = page.evaluate('''() => {
+                    const main = document.querySelector('#page-content');
+                    const rect = main.getBoundingClientRect(), style = getComputedStyle(main);
+                    const rail = document.querySelector('#site-sidebar');
+                    const start = rail?.getBoundingClientRect().right || 0;
+                    const viewport = document.documentElement.clientWidth;
+                    const header = main.querySelector('.page-header');
+                    // Chat and sign-in deliberately center an inner reading/form column.
+                    const centered = header?.closest('.chat-main, .entry');
+                    return {
+                        left: rect.left - start + parseFloat(style.paddingLeft),
+                        right: viewport - rect.right + parseFloat(style.paddingRight),
+                        start, mainLeft: rect.left, mainRight: rect.right, viewport,
+                        headerLeft: centered ? null : header?.getBoundingClientRect().left,
+                        contentLeft: rect.left + parseFloat(style.paddingLeft),
+                        overflow: document.documentElement.scrollWidth > viewport,
+                        overflowing: [...document.querySelectorAll('body *')]
+                            .filter(e => e.getBoundingClientRect().right > viewport + 1)
+                            .slice(0, 8).map(e => [e.tagName, e.className]),
+                        sidebar: document.documentElement.dataset.sidebar,
+                        hasRail: !!rail,
+                    };
+                }''')
+                problems = []
+                if abs(layout['left'] - layout['right']) > 1 or not 12 <= layout['left'] <= 28:
+                    problems.append(('gutters', layout['left'], layout['right']))
+                if abs(layout['mainLeft'] - layout['start']) > 1 or abs(layout['mainRight'] - layout['viewport']) > 1:
+                    problems.append(('container bounds', layout['start'], layout['mainLeft'], layout['mainRight']))
+                if layout['overflow']:
+                    problems.append(('overflow', layout['overflowing']))
+                if path != '/sign-in' and layout['headerLeft'] is not None:
+                    if abs(layout['headerLeft'] - layout['contentLeft']) > 1:
+                        problems.append(('header alignment', layout['headerLeft'], layout['contentLeft']))
+                if layout['hasRail']:
+                    expected = 'closed' if width < 768 else sidebar
+                    if layout['sidebar'] != expected:
+                        problems.append(('sidebar', layout['sidebar'], expected))
+                if problems:
+                    failures.append((path, width, sidebar, problems))
+                if (path, width) in {('/system/voice', 390), ('/system/voice', 1440),
+                                     ('/models/images', 768), ('/usage', 2560)}:
+                    page.screenshot(path=str(tmp_path / f'{sidebar}-{path.strip("/").replace("/", "-")}-{width}.png'))
+            # Keep a desktop viewport for the next full navigation as well.
+            page.set_viewport_size({'width': 1440, 'height': 1000})
+        browser.close()
+    assert not failures, '\n'.join(map(str, failures))
 
 
 def test_component_tokens_resize_fields_and_keep_native_card_behavior():
@@ -351,7 +433,7 @@ def test_errors_keep_console_status_identity_and_safe_details(desk, monkeypatch)
     unknown = server.get('/no-such-page')
     assert unknown.status_code == 404 and '<main ' in unknown.text
     assert '<title>Page not found · openWeightGym</title>' in unknown.text
-    assert 'href="/"' in unknown.text and 'Not here' not in unknown.text
+    assert 'href="/status"' in unknown.text and 'Not here' not in unknown.text
     sign_in(server, 'pat')
     for path, explanation in [('/settings', 'settings'), ('/models', 'models'),
                               ('/users', 'users'), ('/deploy', 'superuser'), ('/docs', 'documentation')]:
@@ -375,7 +457,7 @@ def test_errors_keep_console_status_identity_and_safe_details(desk, monkeypatch)
     original = Jinja2Templates.TemplateResponse
 
     def broken_home(self, request, name, *args, **kwargs):
-        if name == 'dashboard.html':
+        if name == 'home.html':
             raise RuntimeError('private exception details')
         return original(self, request, name, *args, **kwargs)
 
@@ -422,12 +504,12 @@ def test_error_pages_are_readable_and_navigable(desk, monkeypatch, width, theme)
     from starlette.templating import Jinja2Templates
     original = Jinja2Templates.TemplateResponse
 
-    def broken_dashboard(self, request, name, *args, **kwargs):
-        if name == 'dashboard.html' and 'simulate_error' in request.query_params:
+    def broken_status(self, request, name, *args, **kwargs):
+        if name == 'home.html' and 'simulate_error' in request.query_params:
             raise RuntimeError('private exception details')
         return original(self, request, name, *args, **kwargs)
 
-    monkeypatch.setattr(Jinja2Templates, 'TemplateResponse', broken_dashboard)
+    monkeypatch.setattr(Jinja2Templates, 'TemplateResponse', broken_status)
     server, _, _ = desk
     output = Path(os.environ.get('UI_REPORT_DIR', 'data/qualification/usability/v1'))
     output.mkdir(parents=True, exist_ok=True)
@@ -446,7 +528,7 @@ def test_error_pages_are_readable_and_navigable(desk, monkeypatch, width, theme)
             ('pat', '/models', 403, 'Access denied', None),
             ('pat', '/users', 403, 'Access denied', None),
             ('pat', '/deploy', 403, 'Access denied', None),
-            ('pat', '/?simulate_error=1', 500, 'Something went wrong', 'Home'),
+            ('pat', '/?simulate_error=1', 500, 'Something went wrong', 'System'),
             ('', '/no-such-page', 404, 'Page not found', None),
         ]:
             server.cookies.clear()
@@ -470,8 +552,8 @@ def test_error_pages_are_readable_and_navigable(desk, monkeypatch, width, theme)
             if width == 1440 and theme == 'light' and path == '/settings':
                 page.wait_for_timeout(7200)
                 playwright.expect(reason).to_be_visible()
-            page.get_by_role('link', name='Go to Home', exact=True).click()
-            playwright.expect(page.get_by_role('heading', name='Home' if account else 'Sign in', exact=True)).to_be_visible()
+            page.get_by_role('link', name='Go to Status', exact=True).click()
+            playwright.expect(page.get_by_role('heading', name='Status' if account else 'Sign in', exact=True)).to_be_visible()
         assert not errors
         browser.close()
 
@@ -530,6 +612,7 @@ def test_shared_confirmation_blocks_native_and_htmx_until_approved(tmp_path):
         playwright.expect(page.get_by_role('button', name='Stop', exact=True)).to_be_enabled()
         assert requests == ['kept=original&action=stop']
         page.get_by_role('button', name='Delete saved output', exact=True).click()
+        assert not page.locator('#danger-confirmation [data-confirm-description]').count()
         playwright.expect(page.get_by_role('dialog')).to_be_visible()
         page.get_by_role('button', name='Continue', exact=True).click()
         assert len(requests) == 1
@@ -595,7 +678,7 @@ def test_sign_in_keeps_safe_deep_links_and_rejects_external_destinations(desk):
     for destination in ['https://elsewhere.test/', '//elsewhere.test', '/\\elsewhere.test', '/%2felsewhere.test', '/%0d%0aLocation:evil', 'javascript:alert(1)']:
         server.cookies.clear()
         refused = server.post('/sign-in', data={'name': 'pat', 'password': 'correct horse', 'next': destination}, follow_redirects=False)
-        assert refused.status_code == 303 and refused.headers['location'] == '/'
+        assert refused.status_code == 303 and refused.headers['location'] == '/status'
 
 
 def test_mobile_menu_has_both_levels_keyboard_return_and_desktop_rail(desk):
@@ -612,7 +695,7 @@ def test_mobile_menu_has_both_levels_keyboard_return_and_desktop_rail(desk):
         menu.click()
         dialog = page.get_by_role('dialog', name='Navigation', exact=True)
         playwright.expect(dialog).to_be_visible()
-        assert dialog.locator('summary').all_text_contents() == ['Home','Chat','Models','Benchmark','Logs','System','Settings','Docs']
+        assert dialog.locator('summary').all_text_contents() == ['Chat','Models','Benchmark','Logs','System','Settings','Docs']
         dialog.locator('summary').filter(has_text='Settings').click()
         playwright.expect(dialog.get_by_role('link', name='General', exact=True)).to_be_visible()
         assert dialog.locator('.chat-sidebar').count() == 1
@@ -684,7 +767,7 @@ def test_display_preserves_zero_formats_counts_and_escapes_logs(desk):
     assert '<time ' in line and '&lt;script&gt;' in line and '<script>' not in line
     server, _, _ = desk
     sign_in(server,'pat')
-    home = server.get('/')
+    home = server.get('/usage')
     assert 'data-usage-total="total_tokens">0</strong>' in home.text
     assert 'data-usage-total="total_tokens">0.0' not in home.text
 
@@ -768,17 +851,21 @@ def test_models_list_leads_and_add_explains_disabled_state(ui_console):
         browser.close()
 
 
-def test_home_leads_with_permitted_models_and_chat_without_cost_breakdown(ui_console):
+def test_status_is_the_landing_page_without_home_navigation(ui_console):
     from test_console_browser import browser_context, playwright
-    server,_=ui_console;sign_in(server,'pat')
+    server, _ = ui_console
+    signed_in = sign_in(server, 'pat')
+    assert signed_in.url.path == '/status'
+    redirect = server.get('/', follow_redirects=False)
+    assert redirect.status_code == 303 and redirect.headers['location'] == '/status'
     with playwright.sync_playwright() as engine:
-        browser,page=browser_context(engine,server)
+        browser, page = browser_context(engine, server)
         page.goto('http://console.test/')
-        playwright.expect(page.get_by_role('link',name='Start a conversation',exact=True)).to_be_visible()
-        assert page.locator('#available-models').count() == 1
-        assert not page.locator('[data-usage-total="fallback_cost"]').count()
-        page.goto('http://console.test/usage')
-        assert page.locator('[data-usage-total="fallback_cost"]').count() == 1
+        playwright.expect(page.get_by_role('heading', name='Status', exact=True)).to_be_visible()
+        assert page.locator('.category-links [aria-current]').all_text_contents() == ['System']
+        assert not page.get_by_role('link', name='Home', exact=True).count()
+        assert page.locator('.navbar-brand').get_attribute('href') == '/status'
+        assert server.get('/static/site.webmanifest').json()['start_url'] == '/status'
         browser.close()
 
 

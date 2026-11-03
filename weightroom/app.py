@@ -965,7 +965,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     # ---- signing in and out -----------------------------------------------------------------
 
-    def welcome(cookie: str, seconds: float, where: str = "/") -> RedirectResponse:
+    def welcome(cookie: str, seconds: float, where: str = "/status") -> RedirectResponse:
         """Send the browser to the first page, carrying its cookie."""
         answer = go(where)
         # httponly: no script on a page can read it. lax: another site cannot make the browser send it with a form.
@@ -978,8 +978,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if (not value.startswith('/') or decoded.startswith('//') or '\\' in decoded
                 or any(ord(char) < 32 or ord(char) == 127 for char in decoded)
                 or urlsplit(value).netloc or urlsplit(value).scheme):
-            return '/'
-        return value
+            return '/status'
+        return '/status' if value == '/' else value
 
     def sign_in_url(request: Request) -> str:
         """Keep deep links; background fragments return to their current console page."""
@@ -992,7 +992,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         parsed = urlsplit(path)
         query = [(name, value) for name, value in parse_qsl(parsed.query) if name != 'part']
         path = sign_in_next(parsed.path + ('?' + urlencode(query) if query else ''))
-        return '/sign-in' + ('?next=' + quote(path, safe='') if path != '/' else '')
+        return '/sign-in' + ('?next=' + quote(path, safe='') if path != '/status' else '')
 
     async def sign_in_page(request: Request) -> Response:
         """Render the sign-in form without retaining its response in caches."""
@@ -1041,84 +1041,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     # ---- the pages --------------------------------------------------------------------------
 
-    async def home(request: Request, person: Person) -> Response:
-        """The selected usage summary. With compute off, what it last did."""
-        if request.query_params.get('part') in ('status', 'requests'):
-            return await system_status(request, person)
-        try:
-            return await dashboard(request, person)
-        except ComputeOff:
-            return await system_status(request, person)
-
-    async def dashboard(request: Request, person: Person) -> Response:
-        """One scope for the summary, chart and recent requests, from the log kept on front, which enforces it again. With compute off, the first page is what compute last did instead."""
-        asked = request.query_params
-        scope = asked.get('summary', 'mine')
-        group = asked.get('group', '').strip()
-        if scope not in ('mine', 'group', 'total') or (scope == 'group' and not group):
-            return Response('Choose your summary, a group or the total.', status_code=400)
-        if scope != 'mine' and 'see-summaries' not in person.can:
-            return Response('Your account may view only your own Home summary.', status_code=403)
-        selection = {'summary': scope, **({'group': group} if scope == 'group' else {})}
-        period = asked.get('period', '30')
-        if period not in ('1', '7', '30', 'all'):
-            period = '30'
-        limit, current = controls(asked)
-        recent = await fetch(request, person, '/loadcoach/requests',
-                             params={**selection, 'limit': limit, 'page': current, '_home': '1'})
-        if isinstance(recent, Response):
-            return recent
-        context = dict(recent=recent['requests'], completed=False, embedded=False, request_path='/', request_period=period,
-                       summary=scope, summary_group=group, summary_query=selection,
-                       summary_label='Your' if scope == 'mine' else f'{group} group' if scope == 'group' else 'Total',
-                       paging=pagination('/', {'period': period, **selection}, recent['total'], limit, recent['page']))
-        if asked.get('part') == 'list':
-            return page(request, 'requests_list.html', person, **context)
-        report = await fetch(request, person, '/loadcoach/usage',
-                             params={**selection, 'period': period, 'timezone': settings.timezone or 'UTC',
-                                     'bucket': 'hour' if period == '1' else 'day',
-                                     'input_rate': settings.mock_input_rate, 'output_rate': settings.mock_output_rate,
-                                     '_home': '1'})
-        if isinstance(report, Response):
-            return report
-        model_facts = {}
-        try:
-            answer = await ask('GET', '/loadcoach/facts', person.key)
-            if answer.is_success:
-                model_facts = answer.json().get('models', {})
-        except ComputeOff:
-            pass  # Home and its permitted catalogue remain usable without a worker.
-        available_models = []
-        for name in person.me.get('models', []):
-            fact = model_facts.get(name, {})
-            metadata = person.me.get('chat', {}).get('models', {}).get(name, {})
-            capabilities = fact.get('capabilities', {})
-            audio = capabilities.get('audio')
-            if capabilities.get('embeddings'):
-                kind, href = 'Embedder', '/collections'
-            elif capabilities.get('image_generation') or metadata.get('image_generation'):
-                kind, href = 'Images', '/chat/images'
-            elif audio or metadata.get('audio'):
-                kind, href = 'Audio', {'music':'/chat/music','sound':'/chat/sounds'}.get(audio, '/chat/speech')
-            else:
-                kind, href = 'Chat', '/chat?model=' + quote(name, safe='')
-            if fact.get('hosted') or metadata.get('hosted'):
-                state = 'Cloud API'
-            elif fact.get('machine', 'compute') in person.me.get('unavailable_machines', []):
-                state = 'Node unavailable'
-            elif fact.get('why_not'):
-                state = 'Unavailable'
-            elif fact.get('warm'):
-                state = 'Ready'
-            elif fact.get('resident'):
-                state = 'Busy'
-            elif fact.get('placed'):
-                state = 'Loads on use'
-            else:
-                state = 'State unavailable' if not fact else 'Waiting for capacity'
-            available_models.append({'name':name, 'kind':kind, 'href':href, 'state':state})
-        return page(request, 'dashboard.html', person, report=report, period=period,
-                    available_models=available_models, **context)
+    async def landing(request: Request, person: Person) -> Response:
+        """Keep existing root bookmarks pointing at the Status landing page."""
+        return go('/status' + ('?' + request.url.query if request.url.query else ''))
 
     async def system_status(request: Request, person: Person) -> Response:
         """What compute is doing right now, kept true as it changes, and the controls that steer it."""
@@ -1739,8 +1664,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         try:
             known = await all_models(request, person)
         except ComputeOff:
-            if not plugins.models(person.me):
-                raise
             known = {"models": [], "to_measure": [], "measuring": None}
         if isinstance(known, Response):
             return known
@@ -2797,27 +2720,42 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def settings_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None, opened: str = "", **unused) -> Response:
         """Render program settings with secret fields removed."""
-        found = await fetch(request, person, "/loadcoach/settings")
+        if 'manage-settings' not in person.can:
+            return page(request, 'refused.html', person, status=403, why='Your account may not manage settings.')
+        try:
+            found = await fetch(request, person, "/loadcoach/settings")
+        except ComputeOff:
+            found = {'programs': []}
         if isinstance(found, Response):
             return found
         found["programs"] = [program for program in found["programs"] if program["program"] not in ("loadcoach", "spotter")]
         found['programs'] = [program for program in found['programs'] if program['program'] not in ('voice', 'voice-gateway')]
         for program in found['programs']:
             program['settings'] = [row for row in program['settings'] if row['name'] != 'image_adult_previews'
+                                   and not (program['program'] == 'turnstile' and row['name'] in ('models_folder', 'models_storage_folder'))
                                    and not (program['program'] == 'weightroom' and row['name'].startswith('audio_') and row['name'].endswith('_model'))]
         asked = request.query_params
         machines_answer = await ask("GET", "/turnstile/machines", person.key)
         machine_report = machines_answer.json() if machines_answer.status_code == 200 else {}
-        machine_choices = machine_report.get("machines", [])
+        machine_choices = [{'name': 'front', 'state': 'ready'}, *machine_report.get("machines", [])]
         names = {row.get("name") for row in machine_choices}
         default_machine = machine_report.get("artifact_machine", "front_cpu" if "front_cpu" in names else "compute")
-        selected_machine = (typed_in or {}).get("file_machine") or asked.get("file_machine", default_machine)
-        file_locations, location_error = {}, ""
+        selected_machine = (typed_in or {}).get("file_machine") or asked.get("file_machine", 'front')
+        file_locations, location_error, file_pending, file_offline, file_delivery_error = {}, "", False, False, ''
         if selected_machine not in names:
             location_error = "That model-file machine is not configured."
+        elif selected_machine == 'front':
+            location_answer = await ask('GET', '/turnstile/artifacts/settings', person.key)
+            if location_answer.is_success:
+                file_locations = location_answer.json()['locations']
+            else:
+                location_error = 'Front file locations could not be read. Refresh this page to try again.'
         else:
             location_answer = await ask("GET", "/turnstile/machines/" + quote(selected_machine, safe="") + "/settings", person.key)
             if location_answer.status_code == 200:
+                file_pending = location_answer.json().get('pending', False)
+                file_delivery_error = location_answer.json().get('pending_error', '')
+                file_offline = location_answer.json().get('unavailable', False)
                 settings = next((row["settings"] for row in location_answer.json()["programs"] if row["program"] == "loadcoach"), [])
                 for name in ("models_folder", "models_storage_folder"):
                     setting = next((row for row in settings if row["name"] == name), {})
@@ -2827,7 +2765,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "settings.html", person, status=400 if failed else 200, programs=found["programs"], said=said or asked.get("said", ""), failed=failed,
                     typed_in=typed_in or {}, opened=opened or asked.get("open", ""), third_party_services=THIRD_PARTY_SERVICES,
                     selected_machine="", machine_choices=[], file_machine=selected_machine, file_machine_choices=machine_choices,
-                    file_artifact_machine=default_machine, file_locations=file_locations, location_error=location_error)  # fmt: skip
+                    file_artifact_machine=default_machine, file_locations=file_locations, location_error=location_error,
+                    file_pending=file_pending, file_offline=file_offline, file_delivery_error=file_delivery_error)  # fmt: skip
 
     async def image_settings_page(request: Request, person: Person) -> Response:
         """Edit the existing front-wide image policy without changing personal consent."""
@@ -2856,11 +2795,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await settings_page(request, person, "Cache and storage paths must be full paths, or empty.", True, typed_in=form)
         if cache and storage and Path(cache) == Path(storage):
             return await settings_page(request, person, "Cache and storage must use different paths.", True, typed_in=form)
-        answer = await ask("POST", "/turnstile/machines/" + quote(machine, safe="") + "/settings/loadcoach", person.key,
+        endpoint = '/turnstile/artifacts/settings' if machine == 'front' else "/turnstile/machines/" + quote(machine, safe="") + "/settings/loadcoach"
+        answer = await ask("POST", endpoint, person.key,
                            json={"models_folder": cache, "models_storage_folder": storage})
-        if answer.status_code != 200:
+        if answer.status_code not in (200, 202):
             return await settings_page(request, person, answer.json()["error"]["message"], True, typed_in=form)
-        return go("/settings?file_machine=" + quote(machine, safe="") + "&said=" + quote("Saved. Restart LoadCoach on that machine to apply the file paths."))
+        message = ('Saved. Front file locations are available now.' if machine == 'front' else
+                   'Saved on front. The node will receive these paths when it reconnects; restart its compute service to apply them.' if answer.status_code == 202 else
+                   'Saved. Restart LoadCoach on that machine to apply the file paths.')
+        return go("/settings?file_machine=" + quote(machine, safe="") + "&said=" + quote(message))
 
     async def compute_nodes_page(request: Request, person: Person, said: str = "", failed: bool = False,
                                  typed_in: dict | None = None, opened: str = "", gpu_disabled: list | None = None,
@@ -2915,6 +2858,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     machine_choices=choices, gpu_inventory=gpu_inventory, gpu_error=gpu_error,
                     gpu_disabled=gpu_disabled, machine_key=machine_key, resource_settings=resources,
                     may_pair="superuser" in person.can, pairing_code=pairing_code,
+                    node_settings_pending=found.get('pending', False), node_settings_error=found.get('pending_error', ''),
                     engine_choices=engine_choices, engine_error="" if engine_answer.is_success else "Engine controls require a matching LoadCoach update.")  # fmt: skip
 
     async def change_node_engine(request: Request, person: Person) -> Response:
@@ -3040,7 +2984,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def tools_page(request: Request, person: Person, said: str = "", failed: bool = False) -> Response:
         """Render the authorized tool catalogue and gateway configuration."""
-        found = await fetch(request, person, '/loadcoach/tools')
+        if 'manage-settings' not in person.can:
+            return page(request, 'refused.html', person, status=403, why='Your account may not manage tools.')
+        try:
+            found = await fetch(request, person, '/loadcoach/tools')
+        except ComputeOff:
+            found = {'program': None, 'tools': []}
         if isinstance(found, Response):
             return found
         config = {entry['name']: entry['value'] for entry in (found['program'] or {}).get('settings', [])}
@@ -3175,9 +3124,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return go(f"{destination}?{destination_query}open={quote(program)}&said=" + quote("Nothing was changed."))
         target = settings_path + "/" + quote(program, safe="")
         answer = await ask("POST", target, person.key, json=asked)
-        if answer.status_code != 200:
+        if answer.status_code not in (200, 202):
             return await render_settings(request, person, answer.json()["error"]["message"], failed=True, typed_in=form, opened=program)
-        return go(f"{destination}?{destination_query}open={quote(program)}&said=" + quote("Saved."))
+        message = 'Saved on front. The node will receive these locations when it reconnects.' if answer.status_code == 202 else 'Saved.'
+        return go(f"{destination}?{destination_query}open={quote(program)}&said=" + quote(message))
 
     # ---- chat -------------------------------------------------------------------------------
     #
@@ -3551,40 +3501,79 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         answer = await ask("GET", "/v1/models", person.key)
         return [model["id"] for model in answer.json()["data"] if model.get("owned_by") != "hosted"] if answer.status_code == 200 else []
 
+    journal_cache: dict[tuple, dict] = {}  # Bounded, account-scoped snapshots for offline viewing.
+
     async def output_page(request: Request, person: Person) -> Response:
-        """What a service printed, or what the kernel said about the cards and about memory: the latest lines, or those around a moment."""
+        """Read live journals when available, retaining exact-filter snapshots for outages."""
         if "restart-services" not in person.can:
             return page(request, "refused.html", person, status=403,
                         why="Your account needs the restart-services ability to read system logs.")
         asked = request.query_params
+        owner = person.me.get('identity') or person.name
+        previous = next((value for key, value in reversed(journal_cache.items()) if key[0] == owner), {})
+        sources = [name for name in previous.get('sources', ['loadcoach', 'kernel'])
+                   if name not in THIRD_PARTY_NAMES or name in settings.third_party_services]
+        requested = asked.get('source')
+        disabled = requested in THIRD_PARTY_NAMES and requested not in settings.third_party_services
+        wanted, why = {"lines": asked.get("lines") or "200"}, ""
+        before, after = 60, 15
         try:
-            now = await ask_spotter("GET", "/spotter/now", person.key, params={"system_services": ",".join(settings.third_party_services)})
+            before, after = float(asked.get("before") or 60), float(asked.get("after") or 15)
+            if not all(math.isfinite(value) and value >= 0 for value in (before, after)):
+                raise ValueError()
+            if asked.get("at"):
+                moment = datetime.fromisoformat(asked["at"]).replace(tzinfo=zone).timestamp()
+                wanted |= {"since": moment - before, "until": moment + after}
+        except ValueError:
+            before, after, why = 60, 15, "The moment is a date and a time, and the seconds before and after are nonnegative numbers."
+        if disabled:
+            why = f"{requested} is not selected under WeightRoom settings."
+
+        def selected_source():
+            """Choose the requested enabled journal or the available default."""
+            return (None if disabled else requested) or ('loadcoach' if 'loadcoach' in sources else sources[0])
+
+        def cache_key():
+            """Keep snapshots private and specific to the source, filters and service policy."""
+            return owner, source, tuple(sorted(wanted.items())), tuple(settings.third_party_services)
+
+        source, offline, saved = selected_source(), False, {}
+        try:
+            now = await ask_spotter("GET", "/spotter/now", person.key,
+                                    params={"system_services": ",".join(settings.third_party_services)})
+            if now.status_code >= 500:
+                raise MachineOff
             if now.status_code != 200:
                 return page(request, "refused.html", person, status=now.status_code, why=now.json()["error"]["message"])
             sources = [service["name"] for service in now.json()["services"]] + ["kernel"]
-            requested = asked.get("source")
-            disabled = requested in THIRD_PARTY_NAMES and requested not in settings.third_party_services
-            source = ("loadcoach" if "loadcoach" in sources else sources[0]) if disabled else requested or ("loadcoach" if "loadcoach" in sources else sources[0])
-            wanted, why = {"lines": asked.get("lines") or "200"}, ""
-            try:
-                before, after = float(asked.get("before") or 60), float(asked.get("after") or 15)
-                if asked.get("at"):  # around a moment, given as the time on compute's clock
-                    moment = datetime.fromisoformat(asked["at"]).replace(tzinfo=zone).timestamp()
-                    wanted |= {"since": moment - before, "until": moment + after}
-            except ValueError:
-                before, after, why = 60, 15, "The moment is a date and a time, and the seconds before and after are numbers."
-            if disabled:
-                printed = None
-                why = f"{requested} is not selected under WeightRoom settings."
-            else:
+            source = selected_source()
+            if not why:
                 printed = await ask_spotter("GET", f"/spotter/services/{quote(source, safe='')}/journal", person.key, params=wanted)
+                if printed.status_code >= 500:
+                    raise MachineOff
+                if printed.status_code == 200:
+                    saved = {**printed.json(), 'sources': sources, 'fetched': time.time()}
+                    key = cache_key()
+                    journal_cache.pop(key, None)
+                    journal_cache[key] = saved
+                    while len(journal_cache) > 32:
+                        journal_cache.pop(next(iter(journal_cache)))
+                else:
+                    why = printed.json()["error"]["message"]
         except MachineOff:
-            return page(request, "refused.html", person, status=503, why="spotter, the helper on compute, is not answering. It is what reads the lines.")
-        lines = printed.json()["lines"] if printed is not None and printed.status_code == 200 else []
-        why = why or ("" if printed is not None and printed.status_code == 200 else printed.json()["error"]["message"])
-        return page(request, "output.html", person, status=400 if why else 200, sources=sources, source=source, at=asked.get("at", ""), before=before, after=after,
-                    most=wanted["lines"], lines=lines, output_command=printed.json().get('command', '') if printed is not None else '',
-                    said=why, models=await local_models(person))  # fmt: skip
+            offline = True
+            if source not in sources:
+                sources = [source, *sources]
+            if not why:
+                saved = journal_cache.get(cache_key(), {})
+        models = []
+        if not offline:
+            with suppress(ComputeOff):
+                models = await local_models(person)
+        return page(request, "output.html", person, status=400 if why else 200,
+                    sources=sources, source=source, at=asked.get("at", ""), before=before, after=after,
+                    most=wanted['lines'], lines=saved.get('lines', []), output_command=saved.get('command', ''),
+                    offline=offline, fetched=saved.get('fetched'), said=why, models=models)
 
     async def ask_model(request: Request, person: Person) -> Response:
         """Send a log and a few words to a model, as this person, and give back its answer once it is whole."""
@@ -4492,7 +4481,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             Route("/sign-out", sign_out, methods=["POST"]),
             Route("/pulse", pulse),
             Route("/pair", pair_node, methods=["POST"]),
-            Route("/", for_people(home)),
+            Route("/", for_people(landing)),
             Route("/status", for_people(system_status)),
             route("/control", control, "POST"),
             route("/requests/{number:int}", request_page),

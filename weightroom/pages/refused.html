@@ -8,6 +8,6 @@
   <p class="wrap" role="alert">{{ why }}</p>
   {% if error_status == 403 %}<p class="text-secondary">Ask your administrator if you need access.</p>{% endif %}
   {% if error_request_id %}<p class="text-secondary">If you contact your administrator, include request ID <code class="wrap">{{ error_request_id }}</code>.</p>{% endif %}
-  <a class="btn btn-primary" href="/">Go to Home</a>
+  <a class="btn btn-primary" href="/status">Go to Status</a>
 {% endcall %}
 {% endblock %}

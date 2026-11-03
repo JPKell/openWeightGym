@@ -227,7 +227,7 @@ def test_chart_breakdowns_and_user_model_stacks_share_filters_and_scope(tmp_path
     assert empty["user_models"] == [] and all(rows == [] for rows in empty["breakdowns"].values())
 
 
-def test_home_summary_scope_covers_totals_requests_and_not_captured_text(desk, tmp_path, monkeypatch):
+def test_summary_api_scope_covers_totals_requests_and_not_captured_text(desk, tmp_path):
     browser, switch, users = desk
     log = Log(str(tmp_path / 'loadcoach.db'))
     ids = {}
@@ -235,26 +235,18 @@ def test_home_summary_scope_covers_totals_requests_and_not_captured_text(desk, t
         ids[name] = log.add('request', 'asked', name, model=name + '-model', group=group)
         log.add('request', 'done', name, model=name + '-model', group=group,
                 of=ids[name], prompt_tokens=tokens, answer_tokens=1, text='private response')
-    sign_in(browser, 'pat')
-    assert 'Summary scope' not in browser.get('/').text
-    for path in ['/?summary=total', '/?summary=group&group=plain', '/?part=list&summary=total']:
-        assert browser.get(path).status_code == 403
-    users.change('pat', own={'add': ['see-summaries']})
-    page = browser.get('/?summary=total&period=all&limit=10')
-    assert page.status_code == 200 and 'Total recent requests' in page.text
-    assert '>Admin</a>' in page.text and '>Plain</a>' in page.text
-    result = json.loads(re.search(r'id="home-usage-data">(.*?)</script>', page.text, re.S)[1])
-    assert result['totals']['input_tokens'] == 129
-    assert 'jordan-model' in page.text and 'private response' not in page.text
-    assert f'href="/requests/{ids["jordan"]}"' not in page.text
-    group = browser.get('/?summary=group&group=plain&period=all&limit=1')
-    assert 'plain group recent requests' in group.text and 'name="group" value="plain"' in group.text
-    data = json.loads(re.search(r'id="home-usage-data">(.*?)</script>', group.text, re.S)[1])
-    assert data['totals']['input_tokens'] == 30
-    partial = browser.get('/?part=list&summary=group&group=plain&period=all&limit=10')
-    assert 'pat-model' in partial.text and 'cleo-model' in partial.text and 'jordan-model' not in partial.text
     with TestClient(turnstile_to(tmp_path, users, {8442: switch}), base_url='http://front:8442') as api:
         headers = {'authorization': 'Bearer ' + users.new_key('pat')}
+        for endpoint in ('usage', 'requests'):
+            assert api.get('/loadcoach/' + endpoint + '?summary=total', headers=headers).status_code == 403
+        users.change('pat', own={'add': ['see-summaries']})
+        total = api.get('/loadcoach/usage?summary=total&period=all', headers=headers)
+        assert total.status_code == 200 and total.json()['totals']['input_tokens'] == 129
+        group = api.get('/loadcoach/usage?summary=group&group=plain&period=all', headers=headers)
+        assert group.json()['totals']['input_tokens'] == 30
+        rows = api.get('/loadcoach/requests?summary=group&group=plain', headers=headers)
+        assert {row['user'] for row in rows.json()['requests']} == {'pat', 'cleo'}
+        assert 'private response' not in rows.text
         assert api.get(f'/loadcoach/requests/{ids["jordan"]}', headers=headers).status_code == 403
         # Membership changes must not rewrite groups saved with a request.
         users.change('cleo', group='admin')
@@ -263,51 +255,7 @@ def test_home_summary_scope_covers_totals_requests_and_not_captured_text(desk, t
         users.change('pat', own={})
         for endpoint in ('usage', 'requests'):
             assert api.get('/loadcoach/' + endpoint + '?summary=total', headers=headers).status_code == 403
-    sign_in(browser, 'jordan')
-    assert 'Your recent requests' in browser.get('/').text  # personal remains the default
-
-
-def test_home_scope_pills_preserve_selection_in_a_browser(desk, tmp_path):
-    from playwright.sync_api import sync_playwright, expect
-    browser, _, _ = desk
-    log = Log(str(tmp_path / 'loadcoach.db'))
-    for name, group in [('jordan', 'admin'), ('pat', 'plain')]:
-        number = log.add('request', 'asked', name, model=name + '-model', group=group)
-        log.add('request', 'done', name, model=name + '-model', group=group, of=number, prompt_tokens=10, answer_tokens=1)
-    sign_in(browser, 'jordan')
-    with sync_playwright() as engine:
-        chromium = engine.chromium.launch(headless=True)
-        context = chromium.new_context(viewport={'width': 1440, 'height': 1000})
-        page = context.new_page()
-        def serve(route):
-            if route.request.url.split('?', 1)[0] == 'http://home.test/strip/stream':
-                from front_helpers import serve_browser_request
-                return serve_browser_request(browser, 'http://home.test', route)
-            request = route.request
-            response = browser.request(request.method, request.url.replace('http://home.test', ''), content=request.post_data_buffer,
-                                       headers={'HX-Request': request.headers.get('hx-request', 'false')})
-            route.fulfill(status=response.status_code, content_type=response.headers.get('content-type', 'text/html'), body=response.content)
-        context.route('http://home.test/**', serve)
-        page.goto('http://home.test/')
-        scope = page.get_by_role('navigation', name='Summary scope', exact=True)
-        scope.get_by_role('link', name='Plain', exact=True).click()
-        expect(page.locator('#home-requests-heading')).to_have_text('plain group recent requests')
-        expect(page.locator('#recent-requests')).to_contain_text('pat-model')
-        expect(page.locator('#recent-requests')).not_to_contain_text('jordan-model')
-        page.get_by_role('navigation', name='Usage period', exact=True).get_by_role('link', name='7 days', exact=True).click()
-        assert 'summary=group' in page.url and 'group=plain' in page.url
-        page.select_option('#request-limit', '10')
-        expect(page.locator('[name=summary]')).to_have_value('group')
-        expect(page.locator('[name=group]')).to_have_value('plain')
-        page.get_by_role('navigation', name='Summary scope', exact=True).get_by_role('link', name='Total', exact=True).click()
-        expect(page.locator('#recent-requests')).to_contain_text('pat-model')
-        expect(page.locator('#recent-requests')).to_contain_text('jordan-model')
-        images = Path('data/home-summary-previews'); images.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(images / 'desktop.png'), full_page=True)
-        page.set_viewport_size({'width': 390, 'height': 844})
-        page.wait_for_function('document.documentElement.scrollWidth <= innerWidth')
-        page.screenshot(path=str(images / 'mobile.png'), full_page=True)
-        chromium.close()
+    log.db.close()
 
 
 def test_hourly_summaries_match_the_endings_and_survive_event_pruning(tmp_path, monkeypatch):

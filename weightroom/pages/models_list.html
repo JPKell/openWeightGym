@@ -2,7 +2,7 @@
 {# The list of models. It asks for itself again every 5 seconds, so what is loaded and in use stays true. #}
 {% set node_query = '&node=' ~ (request.query_params.get('node')|urlencode) if request.query_params.get('node') else '' %}
 {% set node_query = node_query ~ ('&kind=' ~ kind if kind|default('llm') != 'llm' else '') ~ ('&install=' ~ (request.query_params.get('install')|urlencode) if request.query_params.get('install') else '') %}
-<div id="models" class="table-responsive" hx-get="/models?part=list{{ node_query }}" hx-trigger="every 5s" hx-swap="outerHTML">
+<div id="models" class="table-responsive mb-3" hx-get="/models?part=list{{ node_query }}" hx-trigger="every 5s" hx-swap="outerHTML">
 {% if installation %}<div class="alert alert-{{ 'danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info' }}" role="status"><strong>{{ installation.name }}</strong> on {{ installation.machine }}: {{ installation.state }}{% if installation.why %} · {{ installation.why }}{% endif %}{% if installation.of %} · {{ installation.done|size }} / {{ installation.of|size }}{% endif %}{% if installation.state == 'complete' %} · <a href="/models/{{ installation.name|urlencode }}?node={{ installation.machine|urlencode }}">Open model</a>{% endif %}</div>{% endif %}
 {# Measuring every model that has no measure: the button, or how far a run has got, or how the last one ended. #}
 {% set run = known.measuring %}

@@ -45,11 +45,10 @@ is read directly from the installed source; handler details remain in the same p
 
 ## Use the app
 
-Pages and controls depend on your account's permissions.
+The app opens on **System → Status**. Pages and controls depend on your account's permissions.
 
 | Section | What you can do |
 |---|---|
-| Home | Review personal, permitted group or total usage and recent requests. |
 | Chat | Keep conversations, use Mirror Wall image generation and SoundRoom music, sounds and speech, compare models, query private collections and run workflows; open Voice. |
 | Models | Configure language/image/audio models, image workflows and roles; install audio packages; manage Files, Hugging Face/Civitai downloads and cloud providers. |
 | Benchmark | Start at Runs; filter Results by LLM/Image/Audio, compare Node measurements or embedders and inspect saved evidence. |

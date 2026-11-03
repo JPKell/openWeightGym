@@ -66,7 +66,8 @@ CHANGEABLE: dict[str, dict[str, str]] = {
                    "observation_error_percent": NOW, "observation_p95_seconds": NOW, "observation_min_samples": NOW,
                    "observation_window_seconds": NOW, "observation_alert_hold_seconds": NOW,
                    **{f"audio_{kind}_model": RESTART for kind in ("lyrics", "music", "sound", "speech", "transcription")}},
-    "turnstile": {"wait": RESTART, "artifact_machine": RESTART, "image_adult_previews": NOW},
+    "turnstile": {"wait": RESTART, "artifact_machine": RESTART, "image_adult_previews": NOW,
+                  "models_folder": NOW, "models_storage_folder": NOW},
 }
 SECRET = re.compile(r"(^|_)(key|token|secret|password)$")  # a setting with such a name is never handed out
 

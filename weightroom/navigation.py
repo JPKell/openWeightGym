@@ -45,7 +45,7 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
     groups[5]['links'].sort(key=lambda link: settings_order.index(link[0]))
     groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups', 'Deploy'].index(link[0]))
     root = "/" + path.strip("/").split("/")[0]
-    active = {"/file": "/files", "/downloads": "/hub", "/measure-models": "/models", "/outside": "/cloud-apis",
+    active = {"/": "/status", "/file": "/files", "/downloads": "/hub", "/measure-models": "/models", "/outside": "/cloud-apis",
               "/control": "/status", "/ask": "/log", "/machine": "/telemetry", "/machines": "/telemetry"}.get(root, root)
     if path.rstrip("/") in ("/plugins/activity", "/voice/desktop"):
         active = path.rstrip("/")
@@ -71,9 +71,6 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
     if root in ('/docs', '/guide'):
         selected = next((group for group in groups if group['name'] == 'Docs'), None)
         active = path.rstrip('/') or '/docs'
-    groups.insert(0, {"name": "Home", "links": [("Home", "/")]})
-    if root == "/":
-        selected = groups[0]
     if root == "/account":
         links = [("Account", "/account"), ("Appearance", "/account/appearance"), ("Audio", "/account/audio"), ("Logs", "/account/logs")]
         active = next((url for _, url in links[1:] if path.rstrip('/') == url), '/account')

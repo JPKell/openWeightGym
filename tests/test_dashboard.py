@@ -1,7 +1,5 @@
-"""Personal dashboard periods, owner-only history, and account navigation."""
+"""Retained usage periods, owner-only history, and account navigation."""
 
-import json
-import re
 from datetime import datetime, timedelta, timezone
 
 from starlette.testclient import TestClient
@@ -10,10 +8,6 @@ from loadcoach.log import Log
 from loadcoach.usage import report
 from test_usage import recorded
 from test_weightroom import desk, sign_in  # noqa: F401
-
-
-def dashboard_data(html):
-    return json.loads(re.search(r'<script type="application/json" id="home-usage-data">(.*?)</script>', html, re.S)[1])
 
 
 def test_personal_periods_include_all_retained_history_without_other_users(monkeypatch):
@@ -37,7 +31,7 @@ def test_personal_periods_include_all_retained_history_without_other_users(monke
     log.db.close()
 
 
-def test_home_and_account_logs_remain_personal_for_admins_and_paginate(desk, tmp_path, monkeypatch):
+def test_account_logs_remain_personal_for_admins_and_paginate(desk, tmp_path, monkeypatch):
     browser, switch, users = desk
     log = Log(str(tmp_path / 'loadcoach.db'))
     today = datetime.now(timezone.utc).replace(hour=12, minute=0, second=0, microsecond=0)
@@ -62,19 +56,6 @@ def test_home_and_account_logs_remain_personal_for_admins_and_paginate(desk, tmp
         assert len(events['events']) == 10 and all(row['user'] == 'jordan' for row in events['events'])
         assert api.get('/loadcoach/account-events?limit=no', headers=headers).status_code == 400
     sign_in(browser, 'jordan')
-    for period, inputs in [('1', 100), ('7', 300), ('30', 700), ('all', 1500)]:
-        html = browser.get('/?period=' + period + '&user=pat&limit=10').text
-        data = dashboard_data(html)
-        assert data['totals']['input_tokens'] == inputs
-        assert data['mock_pricing']['input_rate'] == 2 and data['mock_pricing']['output_rate'] == 10
-        assert data['bucket'] == ('hour' if period == '1' else 'day')
-        assert len(data['hourly']) == (24 if period == '1' else 0)
-        assert 'private-model' not in html and data['filters']['user'] == 'jordan'
-        assert '18 results · Page 1 of 2' in html
-        assert data['breakdowns']['model'][0]['name'] == {'1': 'small', '7': 'bigger', '30': 'older', 'all': 'oldest'}[period]
-    fragment = browser.get('/?period=7&limit=10&page=2&part=list').text
-    assert 'Page 2 of 2' in fragment and 'name="period" value="7"' in fragment
-    assert 'id="home-usage-data"' not in fragment
     for path in ['/account', '/account/appearance', '/account/logs?limit=10']:
         html = browser.get(path).text
         categories = html.split('<div class="navbar-nav category-links d-none d-md-flex">')[1].split('</div>')[0]

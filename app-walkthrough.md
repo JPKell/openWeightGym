@@ -3,7 +3,7 @@
 **Page inventory reviewed:** 2026-10-30 against [navigation](weightroom/navigation.py), [console routes](weightroom/app.py), [image pages](mirrorwall/ui.py), [audio pages](soundroom/ui.py), [plugin pages](weightroom/plugin_pages.py) and [Docs topics](weightroom/system_docs.py). Automated reviews are recorded separately below; owner checklist results remain unchanged.
 
 Open **[openWeightGym](https://10.77.10.42/)**. Follow the current navigation:
-[Home](#home), [Chat](#chat), [Models](#models), [Benchmark](#benchmark), [Logs](#logs),
+[Chat](#chat), [Models](#models), [Benchmark](#benchmark), [Logs](#logs),
 [System](#system), [Settings](#settings), [Docs](#docs), and [My account](#my-account).
 Related detail pages follow their parent page. Also review [Sign-in and recovery](#sign-in-and-recovery),
 [connected clients](#connected-clients), and [wrap-up](#wrap-up).
@@ -119,33 +119,6 @@ Apply these to every page below, including a representative detail page. Run wit
 - [ ] Check browser-local times with retained UTC values and whole-number counts.
 - [ ] Check two-click confirmation for reversible/interrupting actions and an explicit Yes checkbox for data or credential loss; Cancel must leave the item unchanged.
 - [ ] Check slow-action feedback and blocked duplicate submissions; a connection-loss notice should remain visible until its failed polling/stream region recovers.
-
-**Result:** Not tested
-
-**Findings / follow-up:**
-
-## Home
-
-[Home](#home-home)
-
-<a id="home-home"></a>
-
-### Home
-
-[Open Home](https://10.77.10.42/).
-
-- [ ] Check that Start a conversation and your permitted models appear before usage. Open a model link and confirm the selected Chat model or appropriate image/audio/collection page.
-- [ ] Compare Ready, Busy, Loads on use and unavailable states with Status; missing readings must not be presented as current availability.
-
-**Result:** Not tested
-
-**Findings / follow-up:**
-
-#### Usage and recent activity
-
-- [ ] Check summary cards, usage charts, top models and recent-request links.
-- [ ] Change the time range and, when permitted, personal/group/total scope; compare a recent request with Logs.
-- [ ] Check empty states and whether the page makes its scope and freshness clear.
 
 **Result:** Not tested
 
@@ -941,7 +914,7 @@ The `/batches/{number}` links return batch files/results, not a separate HTML pa
 
 - [ ] Select available services, inspect recent output and use the time/context controls.
 - [ ] Follow an around-this-request link from diagnostics and check whether the chosen time/service is useful.
-- [ ] Check unavailable-service feedback and whether sensitive output is appropriately protected.
+- [ ] While compute is offline, check the last fetched logs and timestamp for the same account and filters; an uncached selection must show an empty offline state. Reconnect and verify live output replaces the snapshot.
 
 **Result:** Not tested
 
@@ -957,7 +930,7 @@ Reading service output requires `restart-services`; an account without it should
 
 ### Status
 
-[Open Status](https://10.77.10.42/status).
+[Open Status](https://10.77.10.42/status). Root bookmarks and default sign-in land here; Home is no longer a separate page.
 
 - [ ] Inspect every configured node, resident model, CPU/GPU placement, memory, active request and queue; compare with your Chat activity.
 - [ ] Check live updates and stale/unavailable labels; inspect the node selector before any control action.
@@ -1365,7 +1338,7 @@ User guide is available to every signed-in account. System reference and its top
 [Open User guide](https://10.77.10.42/guide).
 
 - [ ] Open as an ordinary account and follow Chat, Collections, Workflows, Voice/media and API-key/address sections; terminology and available actions should match the console.
-- [ ] Follow User guide from Home, Chat, Collections, Workflows, Voice and Account, then return without losing the selected page context.
+- [ ] Follow User guide from Status, Chat, Collections, Workflows, Voice and Account, then return without losing the selected page context.
 - [ ] Compare the documented model API address with the installed configuration; distinguish trusted LAN/VPN HTTP, browser HTTPS and any administrator-configured gateway.
 
 **Result:** Not tested
@@ -1676,7 +1649,7 @@ These pages/states are outside the signed-in navigation. They are included so en
 
 [Open Error and refusal pages](https://10.77.10.42/no-such-page). The same error page family handles missing objects, HTTP refusals and server failures at their original URLs.
 
-- [ ] Open an unknown URL and a nonexistent object: Page not found should name the missing resource appropriately, retain the console frame and offer Go to Home.
+- [ ] Open an unknown URL and a nonexistent object: Page not found should name the missing resource appropriately, retain the console frame and offer Go to Status.
 - [ ] Open a forbidden page with a restricted account: Access denied should name the needed ability, keep the reason visible and avoid highlighting an unrelated section or leaving an empty sidebar.
 - [ ] If a server error occurs, inspect Something went wrong, its request ID and recovery link; private exception details must not appear. Do not force a production exception to tick this check.
 - [ ] Check validation/refusal behavior on narrow screens and after waiting beyond temporary-notice duration; follow recovery links and browser Back.
@@ -1692,7 +1665,7 @@ These pages/states are outside the signed-in navigation. They are included so en
 Affected-page example: [Models](https://10.77.10.42/models). This is an alternate state of an affected page, not a new navigation destination. Use an already unavailable node or an isolated fixture; do not interrupt a host to create it.
 
 - [ ] When a node is already unavailable, inspect the affected model/machine page, retained identity/history, availability message and disabled node-dependent actions.
-- [ ] Check that front-owned Home, conversations, results and account pages remain readable; distinguish unavailable live readings from saved information.
+- [ ] Check that front-owned Status, conversations, results and account pages remain readable; distinguish unavailable live readings from saved information.
 - [ ] Inspect optional Wake guidance only when your account has that ability. Deliberate service outages or physical wake/suspend/reboot remain Optional maintenance, not a routine prerequisite.
 
 **Result:** Not tested

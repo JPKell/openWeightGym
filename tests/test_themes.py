@@ -20,6 +20,53 @@ def contrast(first, second):
     return (bright + .05) / (dim + .05)
 
 
+@pytest.mark.parametrize('width', [1440, 390])
+def test_usage_headers_and_field_groups_follow_the_saved_theme(desk, width):
+    from test_console_browser import browser_context
+    server, _, users = desk
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.set_viewport_size({'width': width, 'height': 1000})
+        for mode in ('light', 'dark'):
+            previous = None
+            for palette in ('slate', 'sunflower', 'carbon-cyan'):
+                page.goto('http://console.test/account/appearance')
+                page.locator(f'[name=palette][value="{palette}"]').check()
+                page.select_option('#theme-mode', mode)
+                page.get_by_role('button', name='Save theme', exact=True).click()
+                page.goto('http://console.test/usage')
+                colors = page.evaluate('''() => {
+                    const color = selector => {
+                        const style = getComputedStyle(document.querySelector(selector));
+                        return [style.color, style.backgroundColor];
+                    };
+                    const root = getComputedStyle(document.documentElement);
+                    const sample = document.createElement('span');
+                    sample.style.background = root.getPropertyValue('--theme-subtle');
+                    document.body.append(sample);
+                    const subtle = getComputedStyle(sample).backgroundColor;
+                    sample.remove();
+                    return {nav: color('.suite-top'), header: color('main .table thead th'),
+                            field: color('#usage-filters .input-group-text'), subtle};
+                }''')
+                for component in ('nav', 'header', 'field'):
+                    assert colors[component][1] == colors['subtle'], (mode, palette, component, colors)
+                for component in ('header', 'field'):
+                    assert contrast(*colors[component]) >= 4.5, (mode, palette, component, colors)
+                if previous:
+                    assert colors['nav'][1] != previous['nav'][1]
+                    assert colors['header'] != previous['header'] and colors['field'] != previous['field']
+                previous = colors
+                if width == 390:
+                    page.get_by_role('button', name='Menu', exact=True).click()
+                    dialog = page.get_by_role('dialog', name='Navigation', exact=True)
+                    assert dialog.evaluate('(e) => getComputedStyle(e).backgroundColor === getComputedStyle(document.documentElement).backgroundColor')
+                    page.keyboard.press('Escape')
+                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        browser.close()
+
+
 def test_theme_picker_contrast_persistence_account_isolation_and_mobile(desk, tmp_path):
     server, _, users = desk
     sign_in(server, "jordan")
@@ -65,9 +112,15 @@ def test_theme_picker_contrast_persistence_account_isolation_and_mobile(desk, tm
                     const token = name => root.getPropertyValue('--theme-' + name).trim();
                     const body = getComputedStyle(document.body);
                     const button = getComputedStyle(document.querySelector('[data-theme-form] .btn-primary'));
+                    const navbar = getComputedStyle(document.querySelector('.suite-top'));
+                    const navLink = getComputedStyle(document.querySelector('.category-links .nav-link'));
+                    const rail = getComputedStyle(document.querySelector('.site-sidebar'));
+                    const logout = getComputedStyle(document.querySelector('.site-sidebar button'));
                     return {bg: token('bg'), surface: token('surface'), text: token('text'),
                         muted: token('muted'), accent: token('accent'), button: token('button'),
                         bodyText: body.color, bodyBg: body.backgroundColor,
+                        navText: navLink.color, navBg: navbar.backgroundColor,
+                        logoutText: logout.color, logoutBg: logout.backgroundColor, railBg: rail.backgroundColor,
                         buttonText: button.color, buttonBg: button.backgroundColor};
                 }""")
                 for foreground, background in (("text", "bg"), ("text", "surface"), ("muted", "surface"), ("accent", "surface")):
@@ -75,6 +128,9 @@ def test_theme_picker_contrast_persistence_account_isolation_and_mobile(desk, tm
                 assert contrast("#ffffff", colors["button"]) >= 4.5, (palette, mode, "button")
                 assert contrast(colors["bodyText"], colors["bodyBg"]) >= 4.5, (palette, mode, "body CSS")
                 assert contrast(colors["buttonText"], colors["buttonBg"]) >= 4.5, (palette, mode, "button CSS")
+                assert contrast(colors['navText'], colors['navBg']) >= 4.5, (palette, mode, 'navigation CSS')
+                assert contrast(colors['logoutText'], colors['railBg']) >= 4.5, (palette, mode, 'logout CSS')
+                assert colors['logoutBg'] == 'rgba(0, 0, 0, 0)', (palette, mode, 'logout background')
                 if mode == "dark" and palette.startswith("carbon-"):
                     assert colors["bg"] == "#101112" and colors["surface"] == "#1a1c1f"
                     carbon_text.add(colors["text"])

@@ -6,6 +6,8 @@
 {{ page_header('Compute nodes', 'Manage hardware policy and runtime settings for the selected node.') }}
 {% if machine_choices|length > 1 %}<form method="get" action="/compute-nodes" class="d-flex flex-wrap align-items-center gap-2 mb-3"><label for="settings-machine">Compute node</label><select id="settings-machine" name="machine" class="form-select form-select-sm w-auto">{% for host in machine_choices %}<option value="{{ host.name }}"{% if host.name == selected_machine %} selected{% endif %}>{{ host.name }} · {{ host.state }}</option>{% endfor %}</select><button class="btn btn-outline-secondary btn-sm">Show node</button></form>{% endif %}
 {{ said_box(said, failed) }}
+{% if node_settings_error %}<p class="alert alert-warning" role="status">Saved file locations could not be applied: {{ node_settings_error }}</p>
+{% elif node_settings_pending %}<p class="alert alert-info" role="status">File locations are saved on front. They will be delivered when this node reconnects and apply after its compute service restarts.</p>{% endif %}
 {% if may_pair %}{% call card("Add a GPU node", id="add-node") %}
 {% if pairing_code %}
 <p class="mb-2">On the GPU machine, run:</p>

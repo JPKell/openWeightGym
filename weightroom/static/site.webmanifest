@@ -1,7 +1,7 @@
 {
   "name": "openWeightGym",
   "short_name": "openWeightGym",
-  "start_url": "/",
+  "start_url": "/status",
   "display": "standalone",
   "icons": [
     {

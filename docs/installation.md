@@ -171,11 +171,17 @@ other AMD and Intel cards, and the processor build otherwise. Missing system lib
 `libgomp`, are named, with the package that provides them. Run it again at any time:
 
 ```bash
+scripts/install-llamacpp.sh                      # choose a download or build from source
 scripts/install-llamacpp.sh --check              # the build in use
-scripts/install-llamacpp.sh --backend vulkan     # another prebuilt kind
+scripts/install-llamacpp.sh --prebuilt --backend vulkan  # another prebuilt kind
 scripts/install-llamacpp.sh --from-source        # build here with cmake (needs nvcc for CUDA)
 OWG_LLAMACPP_BUILD=b12024 scripts/install-llamacpp.sh   # another release
 ```
+
+Choose **Build here from source** to retry a build skipped during installation. Install any
+missing tools the script names, then run it again; an interrupted build resumes from its existing
+source and build folders. Without a terminal, or with `--yes`, a prebuilt download remains the
+default; use `--from-source` to select a source build explicitly.
 
 Builds are kept side by side in `runtimes/llamacpp/releases`, and `runtimes/llamacpp/current` points
 at the one in use, which is what LoadCoach's `llama_server` setting names. Nothing is restarted:

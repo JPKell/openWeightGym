@@ -190,7 +190,29 @@ def test_current_requests_can_stop_one_unlogged_row_without_request_links(desk, 
             browser.close()
 
 
-def test_personal_home_and_account_sections_pagination_and_display_auto_save(desk, tmp_path):
+def test_api_key_removal_confirmation_has_no_repeated_body_text(desk):
+    server, _, users = desk
+    users.new_key('jordan', 'confirmation-check')
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/account')
+        row = page.locator('#keys tbody tr').filter(has_text='confirmation-check')
+        row.get_by_role('button', name='Remove', exact=True).click()
+        dialog = page.get_by_role('dialog', name='Confirm action', exact=True)
+        playwright.expect(dialog).to_be_visible()
+        assert dialog.locator('p').count() == 0
+        playwright.expect(dialog.get_by_label('Yes, remove', exact=True)).to_be_visible()
+        dialog.get_by_role('button', name='Cancel', exact=True).click()
+        playwright.expect(row).to_have_count(1)
+        row.get_by_role('button', name='Remove', exact=True).click()
+        dialog.get_by_label('Yes, remove', exact=True).check()
+        dialog.get_by_role('button', name='Continue', exact=True).click()
+        playwright.expect(row).to_have_count(0)
+        browser.close()
+
+
+def test_account_sections_pagination_and_display_auto_save(desk, tmp_path):
     server, _, _ = desk
     log = Log(str(tmp_path / 'loadcoach.db'))
     for name, tokens in [('small', 1000000), ('large', 2000000)]:
@@ -202,32 +224,7 @@ def test_personal_home_and_account_sections_pagination_and_display_auto_save(des
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
-        page.goto('http://console.test/?period=7&limit=10')
-        playwright.expect(page.locator('#home-usage-chart svg')).to_be_visible()
-        assert page.locator('#home-models tbody tr').first.locator('td').first.inner_text() == 'large'
-        chart = page.locator('#home-chart-heading').bounding_box()
-        models = page.locator('#home-models-heading').bounding_box()
-        assert abs(chart['y'] - models['y']) < 1 and chart['x'] < models['x']
-        page.get_by_role('link', name='1 day', exact=True).click()
-        playwright.expect(page.locator('[aria-label="Usage period"] .active')).to_have_text('1 day')
-        hourly = page.locator('#home-usage-data').evaluate('node => JSON.parse(node.textContent)')
-        assert hourly['bucket'] == 'hour' and len(hourly['hourly']) == 24
-        assert page.locator('#home-usage-chart').get_attribute('aria-label').startswith('Your hourly')
-        page.get_by_role('link', name='All time', exact=True).click()
-        playwright.expect(page.locator('[aria-label="Usage period"] .active')).to_have_text('All time')
-        playwright.expect(page.locator('#home-usage-chart svg')).to_contain_text('Input tokens')
-        page.get_by_role('link', name='Next', exact=True).click()
-        playwright.expect(page.locator('#recent-requests nav')).to_contain_text('Page 2 of 4')
-        page.select_option('#request-limit', '25')
-        playwright.expect(page.locator('#recent-requests nav')).to_contain_text('Page 1 of 2')
-        assert page.locator('[name="period"]').input_value() == 'all'
         images = Path('data/console-previews'); images.mkdir(parents=True, exist_ok=True)
-        page.evaluate('scrollTo(0, 0)')
-        page.screenshot(path=str(images / 'home.png'))
-        page.set_viewport_size({'width': 390, 'height': 844})
-        page.wait_for_function('document.documentElement.scrollWidth <= innerWidth')
-        page.screenshot(path=str(images / 'home-mobile.png'))
-        page.set_viewport_size({'width': 1440, 'height': 1000})
         page.goto('http://console.test/account')
         assert page.locator('.category-links a.active').count() == 0
         assert 'btn-primary' in page.locator('.user-menu > summary').get_attribute('class')

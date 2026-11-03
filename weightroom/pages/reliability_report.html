@@ -6,7 +6,7 @@
       <div class="col-sm-4"><label class="form-label" for="reliability-model">Model</label><select id="reliability-model" name="model" class="form-select form-select-sm"><option value="">All models</option>{% for name in choices.model %}<option {{ 'selected' if request.query_params.get('model') == name }}>{{ name }}</option>{% endfor %}</select></div>
       <div class="col-sm-4"><label class="form-label" for="reliability-role">Role</label><input id="reliability-role" name="role" class="form-control form-control-sm" value="{{ request.query_params.get('role', '') }}" placeholder="All roles, including direct requests"></div>
       <div class="col-sm-2"><div class="form-check"><input id="reliability-issues" name="issues" value="1" type="checkbox" class="form-check-input" {{ 'checked' if request.query_params.get('issues') == '1' }}><label class="form-check-label" for="reliability-issues">Issues only</label></div></div>
-      <div class="col-sm-2"><button class="btn btn-primary btn-sm">Apply report filters</button></div>
+      <div class="col-sm-auto"><button class="btn btn-primary btn-sm">Apply report filters</button></div>
     </form>
     {% if reliability.rows %}
     <div id="reliability-chart" style="height: 320px; width: 100%" role="img" aria-label="Recent successful answers and model faults by model and role; exact values in the table below"></div>
