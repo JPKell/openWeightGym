@@ -4,6 +4,7 @@ import json
 import re
 import time
 import base64
+import asyncio
 from contextlib import asynccontextmanager
 
 import httpx
@@ -120,6 +121,98 @@ def worker(key_file, name, warm, state=None, model="small", content="a" * 64):
             return JSONResponse({"machine": name, "path": path})
         return JSONResponse({"error": path}, status_code=404)
     return statement.Statements(Starlette(routes=[Route("/{path:path}", answer, methods=["GET", "POST"])]), key_file)
+
+
+@pytest.fixture
+def metadata_front(tmp_path):
+    users = Users(str(tmp_path / "accounts.db"), {"plain": Group(can=frozenset({"load", "manage-models", "manage-settings", "benchmark"})),
+                                                "system": Group(can=frozenset({"follow-settings"}))})
+    users.add("pat", "plain")
+    users.add("weightroom", "system")
+    key = users.new_key("pat")
+    own = users.new_key("weightroom")
+    (tmp_path / "weightroom.key").write_text(own)
+    primary_key = machine_key(tmp_path)
+    rig_key = str(tmp_path / "rig.key")
+    statement.replace_key(rig_key, "r" * 40)
+
+    class Wire(Two):
+        down = False
+        blocked = False
+        refreshes = 0
+
+        def __init__(self):
+            super().__init__(worker(primary_key, "compute", False), worker(rig_key, "rig", False))
+            self.release = asyncio.Event()
+
+        async def handle_async_request(self, request):
+            if self.down:
+                self.calls.append((request.url.port, request.url.path))
+                raise httpx.ConnectTimeout("unavailable worker")
+            if self.blocked and request.url.path == '/loadcoach/me':
+                self.refreshes += 1
+                await self.release.wait()
+            return await super().handle_async_request(request)
+
+    wire = Wire()
+    app = build_app(Settings(compute="compute", data=str(tmp_path), machine_key_file=primary_key,
+                             auth_key_file=str(tmp_path / "weightroom.key"), machines_poll_seconds=3600,
+                             machines={"rig": {"compute": "http://compute:9442", "machine_key_file": rig_key}}),
+                    httpx.AsyncClient(transport=wire), users=users)
+    with TestClient(app, base_url="http://front:8442") as front:
+        front.portal.call(app.state.machines.poll)
+        assert front.get('/loadcoach/me', headers={'authorization': 'Bearer ' + key}).json()['models'] == ['small']
+        yield front, wire, users, key, own
+
+
+def test_offline_navigation_reuses_metadata_without_retrying_workers(metadata_front, tmp_path):
+    front, wire, users, key, own = metadata_front
+    wire.down = True
+    front.portal.call(front.app.state.machines.poll)
+    before = list(wire.calls)
+    browser = TestClient(build_weightroom(WeightRoomSettings(compute='http://compute', key=own,
+        data=str(tmp_path / 'web')), door(front.app, 8442)))
+    browser.cookies.set('weightroom', key)
+    for path in ('/guide', '/account/appearance', '/status', '/status?part=status', '/status?part=requests',
+                 '/chat', '/models', '/compute-nodes', '/settings', '/benchmarks/runs'):
+        response = browser.get(path)
+        assert response.status_code == 200
+        if '?' not in path:
+            assert 'Node unavailable: compute, rig' in response.text
+        assert wire.calls == before, (path, wire.calls[len(before):])
+    assert wire.calls == before
+    # Explicit reads still probe a node without the page's passive-read header.
+    front.get('/v1/models', headers={'authorization': 'Bearer ' + key})
+    assert len(wire.calls) > len(before)
+    before = list(wire.calls)
+    # A changed policy cannot reuse model metadata from the previous scope.
+    users.groups.put('plain', {'can': ['load'], 'models': ['different']})
+    me = front.get('/loadcoach/me', headers={'authorization': 'Bearer ' + key}).json()
+    assert me['models'] == [] and me['unavailable_machines'] == ['compute', 'rig']
+    users.change('pat', enabled=False)
+    assert front.get('/loadcoach/me', headers={'authorization': 'Bearer ' + key}).status_code == 401
+    assert wire.calls == before
+
+    users.change('pat', enabled=True)
+    wire.down = False
+    front.portal.call(front.app.state.machines.poll)
+    assert front.get('/loadcoach/me', headers={'authorization': 'Bearer ' + key}).json()['unavailable_machines'] == []
+
+
+def test_metadata_refresh_is_deduplicated_and_does_not_block_authentication(metadata_front):
+    front, wire, _, key, _ = metadata_front
+    front.app.state.log.db.execute('UPDATE node_discovery SET at=0')
+    wire.blocked = True
+
+    async def reads():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=front.app), base_url='http://front:8442') as client:
+            for _ in range(3):
+                response = await asyncio.wait_for(client.get('/loadcoach/me', headers={'authorization': 'Bearer ' + key}), .5)
+                assert response.status_code == 200 and response.json()['models'] == ['small']
+        assert wire.refreshes == 2  # one pending refresh per node, shared by all three reads
+        wire.release.set()
+
+    front.portal.call(reads)
 
 
 def test_required_file_store_gets_one_longer_retry_after_a_short_timeout(tmp_path):

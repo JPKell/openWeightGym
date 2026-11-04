@@ -13,6 +13,22 @@ from spotter.app import gathered, series
 READY, SILENT, UNKNOWN = "ready", "not answering", "unknown"
 
 
+class PassiveReads:
+    """Carry a page's no-wake read policy through its internal worker lookups."""
+
+    def __init__(self, app, current):
+        self.app, self.current = app, current
+
+    async def __call__(self, scope, receive, send):
+        headers = dict(scope.get("headers", []))
+        token = self.current.set(scope["type"] == "http" and scope["method"] == "GET"
+                                 and b"x-turnstile-no-wake" in headers)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            self.current.reset(token)
+
+
 def logical_catalogue(found: dict[str, dict]) -> list[dict]:
     """One caller-visible model with explicit per-machine copies.
 
@@ -73,6 +89,7 @@ class Machines:
         self.names, self.ask, self.every, self.now = list(names), ask, every, now
         self.ask_telemetry, self.store = ask_telemetry, store
         self.seen: dict[str, dict] = {}
+        self.checked: set[str] = set()
         self.last_saved: dict[str, float] = {}
         self.last_pruned = 0.0
         self.known_hosts = {} if store is None else {
@@ -91,6 +108,7 @@ class Machines:
             status = None if isinstance(status, Exception) else status
             models = None if isinstance(models, Exception) else models
             telemetry = None if isinstance(telemetry, Exception) else telemetry
+            self.checked.add(name)
             if status is None and telemetry is None:
                 if name in self.seen:
                     self.seen[name]["status_live"] = False
@@ -159,6 +177,14 @@ class Machines:
             out.append({"name": name, "state": state, "age": age, "telemetry_age": telemetry_age,
                         **({k: v for k, v in found.items() if k != "at"} if found else {})})
         return out
+
+    def available(self, name: str) -> bool | None:
+        """Latest passive status result; None until the first monitor poll completes."""
+        if name not in self.checked:
+            return None
+        found = self.seen.get(name, {})
+        at = found.get("at")
+        return bool(found.get("status_live") and at is not None and self.now() - at <= 3 * self.every)
 
     def hosts(self) -> list[dict]:
         """One card per physical host, even if it runs several LoadCoach instances."""

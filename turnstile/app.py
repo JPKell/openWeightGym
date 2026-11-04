@@ -23,6 +23,7 @@ from loadcoach import observability as observation
 from turnstile import observations
 
 import asyncio
+import contextvars
 import threading
 import base64
 import binascii
@@ -67,7 +68,7 @@ from turnstile.tasks import FrontTasks
 from turnstile.settings import FrontSettings
 from turnstile.artifacts import FrontFiles, checked_roots
 from turnstile.hosted import Hosted
-from turnstile.machines import Machines, logical_catalogue, placement_order
+from turnstile.machines import Machines, PassiveReads, logical_catalogue, placement_order
 from turnstile.model_locations import ModelLocations
 from engines import engine_for
 from turnstile.model_configuration import configuration, generation, with_generation
@@ -271,6 +272,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     Path(settings.data).mkdir(parents=True, exist_ok=True)
     stores = front_stores(settings.databases, Path(settings.path).parent if settings.path else Path.cwd(), Path(settings.data))
     model_locations = ModelLocations(stores.database("weightroom.roles"))
+    passive_reads = contextvars.ContextVar("turnstile_passive_reads", default=False)
     users = users or Users(stores.database("weightroom.accounts"), settings.groups)
     # The one event log: what was done here to the accounts, and since milestone 91 every entry compute sends.
     log = Log(stores.database("weightroom.accounts"), keep_days=settings.keep_days)
@@ -302,6 +304,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Compute is not answering. Said in a header too, so that weightroom can tell this from any other refusal."""
         return error(503, "Compute is not answering.", {"x-turnstile": "compute-off"})
 
+    def passive(request: Request) -> bool:
+        """Page reads may use the configured monitor instead of retrying offline nodes."""
+        return NO_WAKE in request.headers and bool(settings.auth_key_file)
+
     def signed_headers(user: User | None, method: str, where: str, body: bytes, headers: list, origin: str = "", key_file: str = "") -> tuple[list, str]:
         """The headers to send on: without the caller's key, and with a statement of who they are and where from. Also the statement's nonce."""
         sent = [(name, value) for name, value in headers if name not in HOP_HEADERS and name not in ("authorization", statement.HEADER)]
@@ -323,6 +329,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         Unless another `port` is given, LoadCoach is asked: the first of `ports`. `machine` names one of
         `settings.machines` instead of the main machine, which is signed with its own key.
         """
+        if method == "GET" and passive_reads.get() and settings.auth_key_file and machines.available(machine or "compute") is False:
+            return None
         if method == "GET":
             where = image_work.discovery_path(user, where)
         port = port or settings.ports[0]
@@ -339,6 +347,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     # Cache only discovery/configuration, under the complete current caller policy.
     # Runtime status and authorization failures are never replaced with old successes.
     retained_paths = {"/v1/models", "/loadcoach/facts", "/loadcoach/me", "/loadcoach/models", "/loadcoach/settings", "/loadcoach/engines"}
+    discovery_refreshes: dict[str, asyncio.Task] = {}
 
     def discovery_key(user, machine, path):
         """Bind retained node metadata to the current identity, policy and target."""
@@ -353,7 +362,26 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Augment front identity with permitted deployed models, including sleeping workers."""
         if method != "GET" or where != "/loadcoach/me":
             return await ask_compute(user, method, where, body, **kwargs)
-        answers = await asyncio.gather(*(ask_live(user, method, where, machine=name, prime=True) for name in machines.names))
+        async def metadata(name):
+            """Reuse policy-scoped model metadata; refresh old observations separately."""
+            key = discovery_key(user, name, where)
+            row = log.db.execute("SELECT at, data FROM node_discovery WHERE scope=?", (key,)).fetchone()
+            available = machines.available(name)
+            if row is None or available is None or not settings.auth_key_file:
+                return await ask_live(user, method, where, machine=name, prime=True, passive=bool(settings.auth_key_file))
+            if available is not False and time.time() - row[0] >= settings.machines_poll_seconds and key not in discovery_refreshes:
+                async def refresh():
+                    try:
+                        await ask_live(user, method, where, machine=name, prime=True)
+                    except Exception:
+                        print('turnstile: model metadata refresh failed; retrying on next read.', flush=True)
+                    finally:
+                        discovery_refreshes.pop(key, None)
+                discovery_refreshes[key] = asyncio.create_task(refresh(), context=contextvars.Context())
+            return httpx.Response(200, json=json.loads(row[1]),
+                                  headers={"x-suite-retained": "1"} if available is False else {})
+
+        answers = await asyncio.gather(*(metadata(name) for name in machines.names))
         good = [answer.json() for answer in answers if answer is not None and answer.status_code == 200]
         if not good:
             return httpx.Response(200, json={"models": [], "chat": {"models": {}}, "unavailable_machines": machines.names})
@@ -385,10 +413,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                           if answer is None or answer.headers.get("x-suite-retained") or answer.status_code != 200]
         return httpx.Response(200, json=result)
 
-    async def ask_live(user: User, method: str, where: str, machine: str = "", port: int | None = None, *, prime: bool = False) -> httpx.Response | None:
+    async def ask_live(user: User, method: str, where: str, machine: str = "", port: int | None = None, *, prime: bool = False, passive: bool = False) -> httpx.Response | None:
         """A bounded inventory/placement question; one silent machine must not stall the others."""
         try:
-            answer = await asyncio.wait_for(ask_compute(user, method, where, machine=machine, port=port), timeout=5)
+            answer = (None if passive and machines.available(machine or "compute") is False else
+                      await asyncio.wait_for(ask_compute(user, method, where, machine=machine, port=port), timeout=5))
         except TimeoutError:
             answer = None
         key = discovery_key(user, machine, where)
@@ -443,7 +472,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """
         policy = settings.machines.get(machine, {}) if machine and machine != "compute" else {
             "wake_mac": settings.wake_mac, "wake_address": settings.wake_address}
-        got = await attempt()
+        got = None if passive(request) and machines.available(machine or "compute") is False else await attempt()
         if got is None:
             if (not policy.get("wake_mac") or user is None or NO_WAKE in request.headers or
                 request.url.path.rstrip('/') in NO_WAKE_PATHS or
@@ -1070,7 +1099,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if port == settings.ports[0] and user is not None and request.method == "GET" and path.startswith("/v1/models/") and path.removeprefix("/v1/models/") in hosted.offered(user):
             return JSONResponse({"id": path.removeprefix("/v1/models/"), "object": "model", "created": 0, "owned_by": "hosted"})
         if port == settings.ports[0] and user is not None and request.method == "GET" and path in ("/loadcoach/models", "/loadcoach/settings", "/loadcoach/engines"):
-            answer = await ask_live(user, "GET", path)
+            answer = await ask_live(user, "GET", path, passive=passive(request))
             if answer is None:
                 return off()
             return JSONResponse(answer.json(), status_code=answer.status_code,
@@ -1097,7 +1126,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     async def combined_view(request: Request, user: User, path: str) -> Response:
         """A caller sees retained deployments and answering machines' active work."""
         names = ["compute", *settings.machines]
-        answers = await asyncio.gather(*(ask_live(user, "GET", path, machine="" if name == "compute" else name, prime=path == "/v1/models")
+        answers = await asyncio.gather(*(ask_live(user, "GET", path, machine="" if name == "compute" else name, prime=path == "/v1/models", passive=passive(request))
                                          for name in names))
         found = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
         if not found and path == "/v1/models":
@@ -1724,7 +1753,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if not user.can("manage-models"):
             return error(403, "Your account may not add, change and remove models.")
         names = ["compute", *settings.machines]
-        answers = await asyncio.gather(*(ask_live(user, "GET", "/loadcoach/models", machine="" if name == "compute" else name)
+        answers = await asyncio.gather(*(ask_live(user, "GET", "/loadcoach/models", machine="" if name == "compute" else name, passive=passive(request))
                                          for name in names))
         detailed = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
         if not detailed:
@@ -2144,7 +2173,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 task.cancel()
             for task in distribution_tasks:
                 task.cancel()
-            await asyncio.gather(*tasks, *batch_work.carrying, *distribution_tasks, return_exceptions=True)
+            for task in list(discovery_refreshes.values()):
+                task.cancel()
+            await asyncio.gather(*tasks, *batch_work.carrying, *distribution_tasks, *list(discovery_refreshes.values()), return_exceptions=True)
             await batch_work.door.aclose()
             front_settings.changes.db.close()
             model_locations.db.close()
@@ -2209,6 +2240,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             *routing.routes(),
                             Route("/{path:path}", pass_on, methods=methods)])
     app.state.plugins, app.state.users, app.state.log, app.state.routing = plugins, users, log, routing
+    app.state.machines = machines
+    app.add_middleware(PassiveReads, current=passive_reads)
     if plugins:
         plugins.controller.observation_log = log
     app.state.front_tasks = front_tasks

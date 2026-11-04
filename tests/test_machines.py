@@ -26,9 +26,11 @@ def test_a_machine_is_ready_then_not_answering_with_its_last_facts_and_unknown_b
         return answers.get(name, {}).get(path)
 
     machines = Machines(["a", "b"], ask, every=10, now=lambda: clock[0])
+    assert machines.available("a") is None
     assert [m["state"] for m in machines.report()] == ["unknown", "unknown"]
     asyncio.run(machines.poll())
     first, second = machines.report()
+    assert machines.available("a") is True and machines.available("b") is False
     assert first["state"] == "ready" and first["age"] == 0 and second["state"] == "unknown" and "cards" not in second
     assert first["cards"] == [{"card": "CUDA0", "total": 16000, "free": 15000, "others": 100}] and first["models"] == [{"name": "small", "content": "a" * 64}]  # a hosted model is not this machine's
     assert (first["running"], first["waiting"], first["busy"], first["draining"]) == (1, 2, 1, False)
@@ -38,6 +40,7 @@ def test_a_machine_is_ready_then_not_answering_with_its_last_facts_and_unknown_b
     clock[0] += 25
     asyncio.run(machines.poll())
     assert machines.report()[0]["state"] == "ready" and machines.report()[0]["age"] == 25
+    assert machines.available("a") is False  # the latest failure takes effect before history expires
     clock[0] += 10
     stale = machines.report()[0]
     assert stale["state"] == "not answering" and stale["age"] == 35 and stale["models"] == [{"name": "small", "content": "a" * 64}]
