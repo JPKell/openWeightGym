@@ -23,25 +23,28 @@ def alive(pid: int) -> bool:
         return False
 
 
-def held() -> dict[int, dict[int, int]]:
+def held(folder: Path = FOLDER) -> dict[int, dict[int, int]]:
     """What every running process uses of each card: {pid: {card: MiB}}. Pid 0 is everything that is not a model server."""
     return {
         int(file.stem): {int(card): mib for card, mib in json.loads(file.read_text()).items()}
-        for file in FOLDER.glob("*.json")
+        for file in folder.glob("*.json")
         if file.stem == "0" or alive(int(file.stem))
     }
 
 
-if __name__ == "__main__":
-    if '--query-gpu=index,uuid,name,memory.total,driver_version' in sys.argv:
+def answer(arguments: list[str], folder: Path | None = None) -> str:
+    """What this stand-in prints for its arguments. The tests also ask it in their own process (see conftest.py)."""
+    folder = Path(os.environ.get("FAKE_CARDS", ".")) if folder is None else folder
+    if '--query-gpu=index,uuid,name,memory.total,driver_version' in arguments:
         # Probe identity must not accidentally include transient memory usage as a driver version.
-        for card in (0, 1):
-            print(f'{card}, GPU-{card}, Fake GPU {card}, {TOTAL}, fake-driver-1')
-    elif any(argument.startswith("--query-gpu") for argument in sys.argv):  # index, uuid, memory.total, memory.used
-        for card in (0, 1):
-            print(f"{card}, GPU-{card}, {TOTAL}, {sum(uses.get(card, 0) for uses in held().values())}")
+        lines = [f'{card}, GPU-{card}, Fake GPU {card}, {TOTAL}, fake-driver-1' for card in (0, 1)]
+    elif any(argument.startswith("--query-gpu") for argument in arguments):  # index, uuid, memory.total, memory.used
+        uses = held(folder)
+        lines = [f"{card}, GPU-{card}, {TOTAL}, {sum(one.get(card, 0) for one in uses.values())}" for card in (0, 1)]
     else:  # --query-compute-apps: pid, gpu_uuid, used_memory
-        for pid, uses in held().items():
-            for card, mib in uses.items():
-                if pid:
-                    print(f"{pid}, GPU-{card}, {mib}")
+        lines = [f"{pid}, GPU-{card}, {mib}" for pid, uses in held(folder).items() for card, mib in uses.items() if pid]
+    return "".join(line + "\n" for line in lines)
+
+
+if __name__ == "__main__":
+    sys.stdout.write(answer(sys.argv[1:]))
