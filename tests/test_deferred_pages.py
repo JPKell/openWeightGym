@@ -26,18 +26,24 @@ def deferred_console(tmp_path):
         if path == '/loadcoach/me':
             return httpx.Response(200, json={'name': 'owner', 'identity': 'owner',
                 'can': ['manage-models', 'see-log'], 'models': [], 'choices': {'show_telemetry': False}}) if state['authorized'] else httpx.Response(401)
-        if path in ('/turnstile/models', '/loadcoach/usage', '/loadcoach/requests', '/loadcoach/events', '/turnstile/models/files'):
+        if path in ('/turnstile/models', '/loadcoach/usage', '/loadcoach/requests', '/loadcoach/events', '/turnstile/models/files',
+                    '/turnstile/artifacts/files', '/turnstile/artifacts/downloads'):
             calls.append(path)
             if state['delay']:
                 entered.set()
                 await release.wait()
         if path == '/loadcoach/usage' and state['fail']:
             return httpx.Response(503, json={'error': {'message': 'Usage is temporarily unavailable.'}})
+        if path == '/turnstile/artifacts/files' and state['fail']:
+            return httpx.Response(503, json={'error': {'message': 'The nodes did not answer.'}})
         values = {
             '/turnstile/models': {'models': [], 'to_measure': [], 'measuring': None},
             '/turnstile/machines': {'machines': [{'name': 'compute', 'state': 'ready', 'status_live': True}]},
             '/turnstile/machines/compute/engines': {'engines': [{'id': 'llama_cpp', 'label': 'llama.cpp', 'enabled': True, 'schema': engine_for().schema()}]},
             '/turnstile/models/files': {'nodes': []},
+            '/turnstile/artifacts/files': {'artifact_machine': 'front', 'places': [], 'files': [], 'front_enabled': False,
+                                           'store_available': False, 'cleanup': {}, 'nodes': [], 'distributions': []},
+            '/turnstile/artifacts/downloads': {'downloads': []},
             '/loadcoach/usage': usage,
             '/loadcoach/requests': {'requests': [], 'total': 0, 'page': 1, 'choices': {}, 'accesses': []},
             '/loadcoach/events': {'events': []},
@@ -93,3 +99,23 @@ def test_slow_report_does_not_block_navigation_and_expired_sessions_redirect(def
     state['authorized'] = False
     response = browser.get('/usage?part=report', headers={'HX-Request': 'true'}, follow_redirects=False)
     assert response.status_code == 204 and response.headers['HX-Redirect'].startswith('/sign-in')
+
+
+def test_files_page_comes_first_and_its_files_after(deferred_console):
+    browser, calls, state, _, _ = deferred_console
+    response = browser.get('/files?tier=storage&said=Done.')
+    assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+    assert 'id="files-content" data-deferred-loader' in response.text and 'Loading model files' in response.text
+    assert '/files?tier=storage&amp;said=Done.&amp;part=page' in response.text and 'Done.' in response.text
+    assert 'hx-trigger="load, every 2s"' in response.text  # the downloads ask for themselves straight away
+    assert not calls  # neither the nodes' files nor the downloads were waited for
+    part = browser.get('/files?tier=storage&part=page')
+    assert part.status_code == 200 and '<html' not in part.text
+    assert part.text.lstrip().startswith('<div id="files-content">') and 'id="files-places"' in part.text and 'id="files-storage"' in part.text
+    assert calls == ['/turnstile/artifacts/files']  # the part does not ask for the downloads, which are not in it
+    whole = browser.get('/files?complete=1')
+    assert '<html' in whole.text and 'id="files-places"' in whole.text and 'data-deferred-loader' not in whole.text
+    assert '/turnstile/artifacts/downloads' in calls
+    state['fail'] = True
+    failed = browser.get('/files?part=page')
+    assert failed.status_code == 503 and 'id="files-content" data-load-error' in failed.text and 'part=page' in failed.text

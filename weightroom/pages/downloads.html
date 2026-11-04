@@ -1,6 +1,6 @@
 {# The downloads from Hugging Face: coming, being checked, failed, or stopped and left half done. This asks for itself again every 2 seconds, and a button here gets this same piece back. #}
 {% from "parts.html" import said_box , confirm_two %}
-<div id="downloads" hx-get="/downloads" hx-trigger="every 2s" hx-swap="outerHTML">
+<div id="downloads" hx-get="/downloads" hx-trigger="{{ 'load, ' if downloads_later }}every 2s" hx-swap="outerHTML">
 {{ said_box(told, true) }}
 {% if downloads %}
 <div class="table-responsive mb-4">

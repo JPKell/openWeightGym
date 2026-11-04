@@ -18,6 +18,8 @@
 /* Tabler moves the whole page right by the scrollbar's width on wide screens (margin-left: calc(100vw - 100%)),
    which leaves a gap down the left edge whenever a page scrolls. The page stays against the left edge. */
 :root { margin-left: 0; }
+/* Let long pages grow: a viewport-height body makes the sticky header scroll away. */
+body { height: auto; }
 .card-header {
   font-size: var(--suite-card-title-size);
   font-weight: var(--suite-heading-weight);
@@ -526,13 +528,15 @@ form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
 .connection-status { margin: 0; border-radius: 0; padding: .35rem 1rem; font-size: .875rem; }
 
 /* Files page: one small card per model-file location, more to a row as the page widens (up to eight). */
+/* HuggingFace: an open repository, then a gap and a rule, then the search results to choose another. */
+.hub-divider { margin: 2.5rem 0 1.5rem; }
+.hub-repository:empty + .hub-results > .hub-divider { display: none; }
 .place-cards-frame { container-type: inline-size; }
 .place-cards { display: grid; gap: .75rem; grid-template-columns: repeat(var(--place-columns, 1), minmax(0, 1fr)); }
 @container (min-width: 24rem) { .place-cards { --place-columns: 2; } }
 @container (min-width: 36rem) { .place-cards { --place-columns: 3; } }
 @container (min-width: 48rem) { .place-cards { --place-columns: 4; } }
 @container (min-width: 64rem) { .place-cards { --place-columns: 6; } }
-@container (min-width: 88rem) { .place-cards { --place-columns: 8; } }
 .place-cards > .place-card { margin: 0 !important; min-width: 0; }
 .place-card > .card-body { padding: .75rem; }
 .place-card .place-card-heading { margin-bottom: 0 !important; flex-wrap: nowrap; min-width: 0; }
