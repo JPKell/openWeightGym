@@ -976,11 +976,16 @@ if [[ ! -f $ROOT/keys/weightroom.key ]] && (has_service weightroom || has_servic
 fi
 
 if has_service voice || has_service voice-gateway; then
+  ui__log_lines; VOICE_LOG_FROM=$REPLY
   try_step 'Preparing voice accounts and speech models' "$PY" "$ROOT/scripts/install-suite-support.py" voice --root "$ROOT" --services "$SELECTED_CSV" ||
     die 'The voice accounts and speech models could not be prepared.' \
       "The lines above, from the log, say why: put that right" \
-      '?Speech models come from huggingface.co: check this machine can reach it: curl -sSI https://huggingface.co | head -1' \
+      '?Speech models come from GitHub releases: check this machine can reach them: curl -sSI https://github.com | head -1' \
       'Or set up without voice: leave voice and voice-gateway out of --services'
+  # A speech bundle changed upstream is installed anyway; say so on screen, not only in the log.
+  if [[ -f ${OWG_LOG:-} ]]; then
+    while IFS= read -r line; do ui_warn "$line"; done < <(tail -n "+$((VOICE_LOG_FROM + 1))" "$OWG_LOG" | sed -n 's/^WARN //p')
+  fi
 fi
 
 if has_service loadcoach && [[ $SDCPP_ACTION == install ]]; then

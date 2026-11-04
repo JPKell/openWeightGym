@@ -26,16 +26,16 @@
     {
       "name": "kokoro-int8-multi-lang-v1_1",
       "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2",
-      "archive_sha256": "a1e94694776049035c4f2c6529f003aaece993c76aae9a78995831c3c4dcafc6",
+      "archive_sha256": "259c9c8bc906d6078e4e0570421885dabb68b539c2f970fcbb890a58eeaf3e9c",
       "license": "Apache-2.0; bundled espeak-ng data retains its upstream GPL licence",
       "files": {
         "tokens.txt": "931ab2df2400cd65d580a22402024c2347ced8ae9ea300e545144b1aacc48e14",
-        "lexicon-zh.txt": "11111d8cd695fba2ace1367a1d0a708b586e6ef5c1f9be91da5d7eef129b651c",
+        "lexicon-zh.txt": "fea060803db3e59193987f1a3436f56917bda09f3b3595b6588e46ae60cebf93",
         "date-zh.fst": "eb8aa079ae3cb81d8f4404992f39d61a0cb990947512b5b8d1e54d1f6980e718",
         "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
         "README.md": "e2d39356ea4d67ac15c39a7e5a238ea12b0f6fb8a55bb0c87bc2f659eb1cf7ac",
         "lexicon-us-en.txt": "7daaab53a181be9885b853a8582bf1838186317e5dadacbcef9c426d6fa0da14",
-        "model.int8.onnx": "bda15858163726a492d02a9a727bc263551b86ac77f90812c4b30ff41d380e26",
+        "model.int8.onnx": "05d793700b0b507f760c183c0e39bdd6a97b43d32fdc7bf7b54a5179f1b11222",
         "lexicon-gb-en.txt": "c4cbb37316f62210dff52718a7afcaae24f50c032cc75ab47ae67b831d1049e7",
         "phone-zh.fst": "1ac2b6fa56b1442320c4de7db08353bab8963a2b57f365eebcdd3a2d3562f8d7",
         "number-zh.fst": "743f402181fcfebf76cc2f0546b71fa26476e626fbe4e460fb7b4c3a7a8bd5bd",
@@ -433,7 +433,7 @@
     {
       "name": "kokoro-multi-lang-v1_0",
       "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2",
-      "archive_sha256": "c5f7e2d2caf082bc1d20fb70334a61d99d20b484500aad32e7cf84c128ea3298",
+      "archive_sha256": "60703707bc05ccd48d60e1eb723f38b07d6e474795a0b6a588d7220400e0f7a4",
       "license": "Apache-2.0; see bundled notices for espeak-ng data where applicable",
       "files": {
         "tokens.txt": "6ebb6bb288f20f3ae8d004d3c2ca27697da27c037d75e81a60e2a6a663f95425",
