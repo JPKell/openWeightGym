@@ -78,6 +78,13 @@ other machines out it says so at the end, with the command that opens them, such
 `sudo ufw allow 8442/tcp`. `owg doctor` checks the same. A GPU node whose port 8442 is closed
 installs and runs, but the console cannot reach it.
 
+## ToolLocker on the console machine
+
+The current **Console only** selection omits ToolLocker. To add front-local tools without a
+compute node, follow [ToolLocker setup and adding tools](../toollocker/README.md), also available
+in the console at **Docs → ToolLocker**. It covers requirements, the missing service and
+configuration, Turnstile routing, verification and adding a custom Python tool.
+
 ## Adding a GPU node
 
 A GPU node joins a console with a one-time code; no keys are copied by hand.

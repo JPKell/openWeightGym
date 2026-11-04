@@ -149,6 +149,12 @@ range. **Loop region** repeats that range, including a range that reaches the re
 with no selection it repeats the whole recording. **Clear region** restores whole-recording playback.
 Audio playback uses authenticated byte-range requests so seeking works through the console.
 
+### Tools
+
+Use **Settings → Tools** to connect and try tools your account may use. For gateway requirements,
+installation on a console-only machine, a custom Python tool and troubleshooting, see
+[ToolLocker setup and adding tools](../toollocker/README.md), also in **Docs → ToolLocker**.
+
 ## Where things run
 
 | Component | Responsibility |

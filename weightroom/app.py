@@ -4096,11 +4096,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response("Documentation page not found.", status_code=404)
         try:
             reference = await asyncio.to_thread(source_reference, slug, request.query_params.get('module', ''))
+            tool_guide = (await asyncio.to_thread((HERE.parent / 'toollocker' / 'README.md').read_text)
+                          if slug == 'toollocker' else '')
         except ValueError:
             return Response("Documentation source not found.", status_code=404)
         except (OSError, SyntaxError):
             return Response("Source documentation is temporarily unavailable.", status_code=503)
-        return page(request, "docs_topic.html", person, topic=topic, reference=reference)
+        return page(request, "docs_topic.html", person, topic=topic, reference=reference, tool_guide=tool_guide)
 
     def deploy_plan() -> dict:
         """The [deploy] part as the settings file has it now, so a machine added from the page counts at once."""

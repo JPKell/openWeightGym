@@ -1,172 +1,277 @@
-# Adding tools to the ToolLocker
+# ToolLocker setup and adding tools
 
-The ToolLocker gateway runs on front, with file/code tools on their owning machines.
-Its existing public MCP address is `http://10.77.10.42:8443/mcp`. A harness, such as
-Hermes, connects to it with an API key and is offered the tools its account may use. This page
-says how to add a tool of your own. How the ToolLocker itself works is in
-[docs/loadcoach.md, section 13](../docs/loadcoach.md#13-the-toollocker).
-The [local application sweep](../docs/loadcoach.md#application-sweep-2026-10-20) records pending
-discovery, transport and file-read limits; each tool's docstring describes its callable contract.
+ToolLocker is the MCP gateway for tools such as reading files, searching code and calling your
+own Python functions. A client connects to `http://FRONT:8443/mcp` with an openWeightGym API key.
+Turnstile checks the account and signs the request for the private gateway on port 9443.
+Tools run on the machine that owns their files or service; the gateway can run on front while
+compute is off. An MCP-capable client or agent executes tool calls; **Settings → Tools → Try a
+tool** checks them independently of a model.
 
-## Where tools live
+These same instructions are available in the console at **Docs → ToolLocker** (`/docs/toollocker`).
 
-Tools live in a **tool folder**. Each `.py` file in it holds one tool or several. When the tool
-host starts, it reads every file, registers every tool it finds, and serves them all:
+## Why tools can be missing
+
+The current **Console only** installer selection installs WeightRoom and Turnstile, and optionally
+the voice gateway. It does not install or configure the ToolLocker service. Repairing that same
+selection does not add it. A configured GPU node may have a gateway of its own, but front-local
+tools need the front setup below to work without that node.
+
+Three things must be present: a running gateway, at least one configured MCP server, and permission
+for the caller to see its tools. An empty recorded catalogue alone does not identify which is missing.
+
+## Requirements
+
+| Part | Requirement |
+|---|---|
+| Gateway | The installed openWeightGym checkout and its Python 3.13+ environment; `toollocker` is included in the base package. Use the same service account as the console. |
+| Authentication | Existing `settings/weightroom.toml`, its accounts/event database and Turnstile's machine-key file. `front = "weightroom.toml"` inherits them; a separate LoadCoach or accounts database is unnecessary. |
+| PostgreSQL | If the console uses PostgreSQL, its database must be reachable and the environment needs the project's `postgresql` extra. A console already using PostgreSQL has this dependency. |
+| Services | Linux with the console account's systemd user manager. The account needs access to the installation and tool files. |
+| Ports | Turnstile owns public port 8443; the front gateway listens on `127.0.0.1:9443`. Keep 9443 private. Clients use the trusted LAN/VPN or an HTTPS proxy for bearer-key access. |
+| Tool servers | At least one MCP server: a fixed stdio command, an authenticated HTTP address, or an explicitly public HTTPS address. Install each server's own dependencies in its runtime. |
+| Included tools | File tools need an explicitly allowed folder. Code tools also need `git` and an allowed repository. Neither requires a GPU or inference model. |
+| Client access | An enabled account/key, a matching group/account tool pattern, a sufficient sensitivity ceiling, and any selected tool set containing the tool. Administrators need `manage-settings` for the Tools page. |
+
+The separate lightweight remote tool host needs Python 3.11+; its built-in tools use the standard
+library. The full gateway uses the project's Python 3.13+ environment.
+
+## Install ToolLocker on front
+
+Run these steps on the console machine as the account that already runs WeightRoom and Turnstile.
+Examples assume a per-user installation at `~/openWeightGym`. For a system installation, the
+checkout is `/opt/openweightgym`, configuration belongs to `openweightgym`, and its user-service
+files are under `/var/lib/openweightgym/.config/systemd/user`. Use that account's service manager,
+not root's. The console's existing keep-running/linger setting also covers ToolLocker.
+
+### 1. Check what is installed
 
 ```bash
-python -m toollocker.tools FOLDER --settings tools.toml                                    # for a ToolLocker on this machine
-python -m toollocker.tools FOLDER --settings tools.toml --http 9100 --key-file host.key --bind 10.77.10.42
+cd ~/openWeightGym
+systemctl --user status toollocker.service
+systemctl --user cat toollocker.service
+.venv/bin/toollocker --help
 ```
 
-On a machine set up with `scripts/install-tool-host.sh`, the tool folder is
-`~/.local/share/toollocker-host/tools`, the settings are `~/.config/toollocker-host/tools.toml`,
-and the service is `toollocker-host.service`. The suite's own `files.py` and `code.py` are
-already there.
-The installer accepts `--bind ADDRESS` to listen on one IP address; use the private interface
-that compute can reach. Its user service has a 512 MiB memory ceiling, 32-task limit and no new
-privileges.
+`Unit toollocker.service could not be found` means the service still needs creating. An inactive
+existing unit needs its configuration checked before starting. If the executable is missing,
+repair the installed Python environment with `owg repair` first. The generic service template's
+paths may differ from this installation; use the actual checkout path from `pwd`.
 
-## Writing a tool
+### 2. Configure a first local tool server
 
-A tool is a Python function marked `@tool`:
+Create an allowed folder:
 
-```python
-"""Notes: find and read the notes in one folder."""
+```bash
+mkdir -p data/shared
+printf '%s\n' 'ToolLocker is working.' > data/shared/example.txt
+chmod 644 data/shared/example.txt
+```
 
-from pathlib import Path
+Create `settings/toollocker.toml` if absent. If it exists, merge the settings and preserve its
+server names, levels and tool sets. Replace `/home/you/openWeightGym` below with the absolute
+path printed by `pwd`; TOML command arguments do not expand `~` or `$HOME`.
 
+```toml
+front = "weightroom.toml"
+host = "127.0.0.1"
+port = 9443
+
+[servers.files]
+command = [
+    "/home/you/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.files",
+    "/home/you/openWeightGym/data/shared",
+]
+description = "Shared files on the console"
+level = "normal"
+```
+
+Use `front`, omitting `loadcoach`: this shares the console's existing SQLite or PostgreSQL accounts
+store and signing key. The included file tools skip hidden paths, paths without the other-read
+permission bit, and symlinks escaping the allowed folder. Keep the allowed folder separate from
+settings, keys and databases.
+
+### 3. Route MCP to the front gateway
+
+In `settings/weightroom.toml`, add or update these keys **inside the existing `[turnstile]` table**:
+
+```toml
+[turnstile]
+front_settings = true
+toollocker_url = "http://127.0.0.1:9443"
+```
+
+Keep the rest of that table, including its machine key and ports. Ensure its existing `ports`
+list includes `8443`; preserve any voice and other configured ports. Avoid adding a second
+`[turnstile]` table. Turnstile continues to own 8443; ToolLocker must use 9443.
+
+### 4. Install the missing service
+
+For a missing unit, run this from the checkout. If a unit already exists, retain its custom
+settings and verify its `WorkingDirectory` and `ExecStart` instead of replacing it.
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/toollocker.service <<EOF
+[Unit]
+Description=ToolLocker (front MCP gateway)
+After=network-online.target
+
+[Service]
+WorkingDirectory=$PWD
+ExecStart=$PWD/.venv/bin/toollocker --config $PWD/settings/toollocker.toml
+Restart=on-failure
+RestartSec=3
+MemoryMax=2G
+
+[Install]
+WantedBy=default.target
+Alias=tooldoor.service
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now toollocker.service
+```
+
+Then restart Turnstile and WeightRoom to pick up routing and front-owned settings:
+
+```bash
+systemctl --user restart turnstile.service weightroom.service
+systemctl --user is-active toollocker.service turnstile.service weightroom.service
+journalctl --user -u toollocker.service -n 50 --no-pager
+```
+
+Restart after active requests finish: restarting Turnstile interrupts requests it is carrying.
+Installing just the gateway does not require starting a compute node. The standalone
+`toollocker-host.service` is optional when a local stdio command runs the tools.
+
+## Verify the connection
+
+Open **Settings → Tools → Try a tool → Connect**. Expect `files__list_folder` and `files__read_file`.
+Call `files__list_folder` with an empty folder to list the allowed roots, then read the sample
+file by its absolute path. Recorded descriptions appear after gateway discovery.
+
+For an API check, set `OWG_API_KEY` to a key from **My account**, then run on front:
+
+```bash
+curl -fsS http://127.0.0.1:8443/mcp \
+  -H "Authorization: Bearer $OWG_API_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+Use public port 8443, including for local checks. Port 9443 accepts Turnstile's signed identity,
+not a browser's API key. No separate ToolLocker account/key is needed.
+
+On **Settings → Groups**, allow the needed names or patterns, such as `files__*`, and check the
+group's maximum sensitivity. Account tool overrides can narrow or extend that access; hidden
+patterns remove tools. Tool sets such as `/mcp/reading` narrow the permitted list further. Test
+with the account the client actually uses, then refresh its MCP tool list.
+
+## Add a Python tool
+
+This example adds a harmless greeting tool on front. From the checkout, create `data/tools/greeting.py`:
+
+```bash
+mkdir -p data/tools
+cat > data/tools/greeting.py <<'PY'
 from toollocker.tools import tool
 
-FOLDER = Path()  # set by setup
-
-
-def setup(settings: dict) -> None:
-    """Called once at start with this file's section of tools.toml, here [notes]."""
-    global FOLDER
-    FOLDER = Path(settings["folder"]).expanduser()
-    if not FOLDER.is_dir():
-        raise ValueError(f"notes: {FOLDER} is not a folder")
-
 
 @tool
-def find_notes(word: str, most: int = 20) -> str:
-    """Find notes whose text contains a word. Returns one file name per line, at most `most`."""
-    found = [path.name for path in sorted(FOLDER.glob("*.md")) if word.lower() in path.read_text(errors="replace").lower()]
-    return "\n".join(found[:most]) or "No note mentions that."
-
-
-@tool
-def read_note(name: str) -> str:
-    """Read one note by the file name find_notes gave."""
-    path = FOLDER / name
-    if path.parent != FOLDER or not path.is_file():
-        raise ValueError(f"There is no note named {name}.")
-    return path.read_text(errors="replace")
+def greet(name: str = "world") -> str:
+    """Return a greeting for the supplied name."""
+    return f"Hello, {name}."
+PY
 ```
 
-The rules:
+Check discovery and execution directly, before registering it with the gateway:
 
-- **`@tool` marks what is offered.** Other functions in the file, such as helpers, are not.
-- **The function's name is the tool's name.** Use lowercase words joined by `_`. Each name must
-  be unique in the folder: two files with a tool of the same name stop the host at start.
-- **The docstring is what the model reads** to decide when to use the tool and how. Write it
-  for the model: what it does, what it returns, what each parameter means.
-- **Parameters are `str`, `int` or `bool`.** A parameter without a default is required. Any
-  other kind leaves the whole file out at start, with the reason in the host's output.
-- **Return text.** A result longer than 40,000 characters is cut, and says so.
-- **To refuse, raise `ValueError`** with a reason the model can act on. The model sees the
-  message. Any other error is reported as a fault in the tool.
-- **`setup(settings)` is optional.** A file with one is handed its own section of the settings,
-  `[notes]` for `notes.py`, and is left out if that section is missing. A file without one is
-  always loaded. `setup` should raise `ValueError` when the settings are wrong.
-- **One call runs at a time** on one tool host. A slow tool holds up the next call.
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"greet","arguments":{"name":"Ada"}}}' \
+  | .venv/bin/python -m toollocker.tools "$PWD/data/tools"
+```
 
-The settings for the example:
+Expect `greet` in the list and `Hello, Ada.` in the result. Add a new section to
+`settings/toollocker.toml`, again replacing the installation path:
 
 ```toml
-[notes]
-folder = "~/notes"
+[servers.example]
+command = [
+    "/home/you/openWeightGym/.venv/bin/python", "-m", "toollocker.tools",
+    "/home/you/openWeightGym/data/tools",
+]
+description = "Custom tools on the console"
+level = "normal"
 ```
 
-### What a tool can do
+Run `systemctl --user restart toollocker.service`. Connect again in **Settings → Tools** and call
+`example__greet` with `{"name":"Ada"}`. Grant `example__greet` or `example__*` to the intended group
+if needed. Put future custom files in this tool folder; changing them requires another gateway
+restart because it owns the local tool process. Keep custom tools outside the shipped package
+so updates preserve them.
 
-A tool runs as the account that runs the tool host, with everything that account may do. The
-ToolLocker checks who may *call* a tool; it cannot check what the tool does once called. So:
+## Tool function contract
 
-- Keep a tool to its job. `files` and `code` only read, and refuse anything outside the folders
-  they are given, hidden files, and files only their owner may read.
-- Never pass text from the model to a shell, or to a program as an option. `code` passes a
-  search pattern after `-e` and a path after `--` for this reason.
-- A tool that changes things, such as sending email, should get a level of `sensitive` or
-  `restricted` on compute, so that only groups cleared for it see it and every call is kept.
+- Mark exported functions with `@tool`; each tool name must be unique within its folder.
+- Describe the purpose, arguments and result in its docstring: this is what the model reads.
+- Annotate parameters as `str`, `int` or `bool`. Parameters without defaults are required.
+- Return text. Results are cut after 40,000 characters. Raise `ValueError` for a refusal the
+  model can understand; other exceptions are reported as tool failures.
+- Optional `setup(settings)` receives its module's `[NAME]` section from a TOML settings file.
+  Register the host command with `--settings /absolute/path/tools.toml`; a module needing setup
+  is omitted when its section is absent or setup fails.
+- One call runs at a time on a tool host. Install extra Python dependencies in the environment
+  named by its `command`.
+- Tools run with their service account's filesystem and network permissions. Bound access to
+  explicit resources; avoid model-supplied shell commands. Assign tools that modify data an
+  appropriate `sensitive` or `restricted` level before granting access.
 
-## Adding a tool on a remote tool host
+## Add other MCP servers
 
-1. Put the file in `~/.local/share/toollocker-host/tools/`. Do not edit `files.py` or
-   `code.py` there: they are replaced when the installer runs again. Copy one to a new name
-   instead.
-2. If it has a `setup`, add its section to `~/.config/toollocker-host/tools.toml`.
-3. Check it on its own, before compute sees it:
+Add one `[servers.NAME]` section to the gateway configuration. Use `command = ["/absolute/program", "argument"]`
+for an MCP stdio server. The command is fixed operator configuration; tool arguments travel over
+MCP, not through a shell. For code tools, use `.venv/bin/python -m toollocker.tools.code` followed
+by absolute repository paths; `git` must be installed on that host.
 
-   ```bash
-   cd ~/.local/share/toollocker-host
-   printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
-     | python3 -m toollocker.tools tools --settings ~/.config/toollocker-host/tools.toml
-   ```
+For an HTTP server, use `url = "https://HOST/mcp"` and `key_file = "../keys/HOST.key"` instead of
+`command`. The owner-readable key file contains that upstream server's bearer key, not the
+console's machine signing key. Only intentionally unauthenticated HTTPS servers use `public = true`
+instead of `key_file`. Review discovered tools, levels and account access before enabling a server.
+Restart ToolLocker after changing its server configuration.
 
-   It prints which files it read and which tools each holds, then the tool list as JSON. A file
-   it left out is named with the reason.
-4. Restart the host: `systemctl --user restart toollocker-host.service`. Then
-   `journalctl --user -u toollocker-host.service` shows the same lines.
+## Remote tool hosts
 
-5. On the gateway host (front in this installation), restart the ToolLocker: `systemctl --user restart toollocker.service`. It reads
-   each server's tools when it starts, so a tool added to a host is offered only from then.
+Run `scripts/install-tool-host.sh` on the machine that owns the files, from a copy of the project:
 
-## Adding a tool folder on compute
-
-Edit the gateway's `~/weightroom/settings/toollocker.toml` on front and restart its
-ToolLocker. A folder on compute runs there through fixed SSH stdio:
-
-```toml
-[servers.mine]
-command = ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "10.77.10.84", "/home/jpk/ai/suite/.venv/bin/python", "-m", "toollocker.tools", "/home/jpk/tools", "--settings", "/home/jpk/tools/tools.toml"]
-description = "my own tools on compute"
+```bash
+scripts/install-tool-host.sh --name nas --files /srv/shared \
+  --bind 192.168.1.20 --address 192.168.1.20 --compute 192.168.1.10
 ```
 
-A folder on front can use a direct `command` with front's Python executable,
-`/home/jpk/weightroom/.venv/bin/python`, and its own local paths. SSH commands are
-fixed operator configuration; tool arguments travel through MCP over stdin.
+Here `192.168.1.20` is the tool host and `192.168.1.10` is the front gateway. The script's legacy
+`--compute` flag names the permitted gateway host for its printed firewall example. It creates
+`toollocker-host.service`, a private host key, tools under `~/.local/share/toollocker-host/tools`
+and `~/.config/toollocker-host/tools.toml`. Register the printed `[servers.nas]` section and a
+private copy of its host key on front. Allow only the gateway host to reach the tool-host port
+(default 9100); use a trusted private network or secure transport for HTTP bearer keys.
 
-Any other MCP server can be put behind the ToolLocker the same way: by `command` if it speaks
-stdio, or by `url` and a private `key_file` if it answers over HTTP. For an intentionally public,
-unauthenticated HTTPS server, use `url` with `public = true` instead of `key_file`; this explicit
-setting never sends an Authorization header. Review its tools and set server/tool levels and
-group/account access before offering them.
+Put custom Python files beside the tool host's `files.py` and `code.py`; add any setup sections to
+its `tools.toml`. Restart `toollocker-host.service` there, then `toollocker.service` on front.
+Do not edit the shipped tool files: the host installer replaces those on update while retaining
+custom files and settings. A fixed SSH stdio command is also supported when front already has
+SSH access to the file-owning host.
 
-## After a tool appears
+## Troubleshooting
 
-A tool is offered as the server's name, two underscores and its own name, such as
-`nas__find_notes`. The first time the ToolLocker sees it, and whenever its description changes,
-it writes that to the event log. Then, on the site:
-
-- **System → Tools** lists it under recorded tool descriptions. Set its level there if it should
-  differ from its server's, and add it to tool sets. **Try a tool** calls it as you.
-- **A group's page** sets which tools its members are shown, by name or pattern such as `nas__*`.
-  A group set to every tool sees a new tool as soon as it is offered, within its level.
-- **An account's page** shows it to, or hides it from, one account.
-
-A harness that listed tools before the tool existed sees it the next time it lists them.
-
-## This installation's remote qualification
-
-On 2026-10-16, the front machine's private-interface host served a harmless `files` folder
-to compute; both tools were discovered through the live ToolLocker. The owner-only bearer
-file, group/account/tool-level restrictions, request selection, description, signed caller
-identity and sensitivity were checked. Missing/wrong keys, browser Origin, outside-folder
-reads, hidden tools and a revoked account were refused. A public Microsoft Learn read-only
-HTTP MCP server was separately initialized, discovered and called through an isolated
-ToolLocker/front helper. [Exact bounded evidence](../data/qualification/delivery-2026-10-16.json)
-and [host installation details](../docs/operations.md#remote-tool-hosts).
-
-Front relocation, fixed SSH stdio commands, preserved tool identities, recovery boundaries and
-verification are maintained in [the installation guide](../docs/operations.md#front-toollocker-relocation-milestone-128).
+| Symptom | Check |
+|---|---|
+| Unit not found | Create the front gateway config and service above; the console-only preset omits it. |
+| Tool service has not reported configuration | Check `systemctl --user status toollocker` and its journal, then `front_settings`, `toollocker_url` and port 8443 in the console configuration. |
+| Gateway will not start | Check absolute command paths, Python/server dependencies, database access and the shared machine-key path. A legacy `loadcoach` setting must be replaced by `front` for a front-owned gateway. |
+| Address already in use | Turnstile uses 8443; the private gateway uses loopback 9443. Check `ss -ltnp`. |
+| No tools for one account | Check group/account tool patterns, hidden tools, sensitivity and the selected tool set. Refresh the client's list. |
+| No tools for any account | Configure at least one server; inspect the gateway journal for server startup/discovery failures. |
+| Custom module omitted | Test its stdio command directly. Check its annotations, imports, duplicate names and any required setup section. |
+| Files missing from a listing | Check the configured root, path permissions, dot paths and symlinks. The built-in tools omit private paths. |
+| Remote server unavailable | Check its service, routing/firewall, bearer file and server URL. Missing servers are retried on tool listing, at most once every 30 seconds. |

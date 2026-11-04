@@ -2154,6 +2154,9 @@ It is the installer's record of the package. It is not source and git ignores it
 
 ## 13. The ToolLocker
 
+For fresh-install requirements, installing the gateway on front and adding a Python tool, use
+[ToolLocker setup and adding tools](../toollocker/README.md), also available at **Docs → ToolLocker**.
+
 The ToolLocker is a second program in this repository. LoadCoach is the door to the models. The
 ToolLocker is the door to tools: reading files, looking at code, and whatever is added later. It has its own port, its own settings file and its own service, and it shares
 front's users, groups and event log. The gateway now runs on front; file/code tools remain on

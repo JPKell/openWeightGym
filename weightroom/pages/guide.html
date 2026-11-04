@@ -3,7 +3,7 @@
 {% block title %}User guide · openWeightGym{% endblock %}
 {% block main %}
 {{ page_header('User guide', 'Start with a task. Your account determines which models and controls are available.') }}
-<nav class="d-flex flex-wrap gap-3 mb-3" aria-label="Guide topics"><a href="#chat">Chat</a><a href="#collections">Collections</a><a href="#workflows">Workflows</a><a href="#voice">Voice and media</a><a href="#api">API keys and address</a></nav>
+<nav class="d-flex flex-wrap gap-3 mb-3" aria-label="Guide topics"><a href="#chat">Chat</a><a href="#collections">Collections</a><a href="#workflows">Workflows</a><a href="#voice">Voice and media</a><a href="#tools">Tools</a><a href="#api">API keys and address</a></nav>
 {% call card('Chat', id='chat') %}
 <p><a href="/chat">Start a conversation</a>, choose the model beside Send, and type your message. The selected model stays visible. A model may need to load or its compute node may need to wake before it can answer.</p>
 <p>Open Options to change the system prompt, reasoning and sampling, add attachments, or compare two models in a new conversation. Saved conversation options carry into follow-ups. Enter sends on a desktop keyboard; Shift+Enter adds a line. On phones, Enter adds a line.</p>
@@ -20,6 +20,14 @@
 {% call card('Voice and media', id='voice') %}
 <p>If Voice is available to your account, open <a href="/voice">Voice</a>, allow microphone access and start a conversation. Browser calls need HTTPS or localhost. Speak to interrupt a reply, use Mute to pause your microphone, and Hang up when finished. The <a href="/voice/desktop">desktop app</a> is another way to call.</p>
 <p class="mb-0">Image generation, Music, Sounds and Speech are under Chat. Choose an appropriate permitted model, enter your prompt and generate. Saved media stays in your library. Recording a voice call is optional; the call page tells you when audio will be retained.</p>
+{% endcall %}
+{% call card('Tools', id='tools') %}
+<p>ToolLocker offers permitted tools to an MCP-capable client or agent at <code>{{ api_base|replace(':8442/v1', ':8443/mcp') }}</code>, using a key from My account. Your group, account, sensitivity level and chosen tool set determine which tools are available.</p>
+{% if 'manage-settings' in person.can %}
+<p class="mb-0">Open <a href="/tools">Settings → Tools</a> to connect and try a tool. If the list is empty, see <a href="/docs/toollocker">ToolLocker setup and adding tools</a> for requirements, installing the gateway on front and a worked Python example.</p>
+{% else %}
+<p class="mb-0">If no tools are available, ask your administrator to check the ToolLocker service, configured servers and your tool access.</p>
+{% endif %}
 {% endcall %}
 {% call card('API keys and model API', id='api') %}
 <p>Open <a href="/account">My account</a> to create an API key. Copy it when shown; it cannot be displayed again. Give it to your client as its API key, and keep it private. Removing a key ends access for clients using that key.</p>
