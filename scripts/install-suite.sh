@@ -38,7 +38,7 @@ FRONT_URL=
 COMPUTE_URL=
 LLAMA_SERVER=
 MACHINE_NAME=
-VOICE_MODEL=qwen3-1.7b
+VOICE_MODEL=
 START_NEW=0
 UV=
 EMBEDDED=0
@@ -81,7 +81,7 @@ change both the service set and database engine before anything is installed.
   --compute-url URL          the GPU node's LoadCoach, such as http://192.168.1.20:8442
   --llama-server PATH        the llama-server LoadCoach runs (see install-llamacpp.sh)
   --machine-name NAME        the name the console knows this GPU node by (default: compute)
-  --voice-model NAME         initial conversation model for newly written voice settings
+  --voice-model NAME         conversation model for newly written voice settings (default: the voice defaults')
   --start-new                also start services whose settings were just written
   --uv PATH                  make the environment and install packages with uv
   --embedded                 leave headings and the summary to the program calling this
@@ -875,7 +875,7 @@ install_example_config() {
       ui_note "DRY RUN: render $source_config to $target_config for $ROOT and $HOME ($TOPOLOGY)"
     else
       local voice_options=()
-      (has_service voice || has_service voice-gateway) && voice_options=(--voice --voice-model "$VOICE_MODEL")
+      (has_service voice || has_service voice-gateway) && voice_options=(--voice ${VOICE_MODEL:+--voice-model "$VOICE_MODEL"})
       "$PY" "$ROOT/scripts/install-suite-support.py" render --example "$source_config" --target "$target_config" \
         --root "$ROOT" --home "$HOME" --topology "$TOPOLOGY" --address "${ADDRESS:-127.0.0.1}" \
         --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" --machine-name "$MACHINE_NAME" "${voice_options[@]}" ||

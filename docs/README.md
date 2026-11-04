@@ -15,8 +15,8 @@ curl -fsSL https://raw.githubusercontent.com/JPKell/openWeightGym/main/install.s
 ```
 
 [`install.sh`](../install.sh) checks the machine, asks where it fits (one machine, console only or a
-GPU node), fetches Python, a prebuilt [llama.cpp](../scripts/install-llamacpp.sh) and a starter
-model, and starts everything. Afterwards [`owg`](../scripts/owg) shows status, logs, updates and
+GPU node), fetches Python and a prebuilt [llama.cpp](../scripts/install-llamacpp.sh), and starts
+everything; models are downloaded afterwards from the console. Afterwards [`owg`](../scripts/owg) shows status, logs, updates and
 repairs; [`uninstall.sh`](../uninstall.sh) removes it, keeping what you choose. The full guide is
 [Installation](installation.md); the [project README](../README.md) is the short version.
 

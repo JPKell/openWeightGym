@@ -42,7 +42,7 @@ detect_package_manager() {
     command -v "$candidate" >/dev/null || continue
     case "$candidate" in
       pacman) PKG_MANAGER=pacman PKG_INSTALL=(pacman -S --needed --noconfirm) ;;
-      apt-get) PKG_MANAGER=apt PKG_INSTALL=(env DEBIAN_FRONTEND=noninteractive apt-get install -y) ;;
+      apt-get) PKG_MANAGER=apt PKG_INSTALL=(/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y) ;;
       dnf) PKG_MANAGER=dnf PKG_INSTALL=(dnf install -y) ;;
       yum) PKG_MANAGER=dnf PKG_INSTALL=(yum install -y) ;;
       zypper) PKG_MANAGER=zypper PKG_INSTALL=(zypper --non-interactive install) ;;
@@ -80,6 +80,29 @@ build_packages() {
     apt) echo git cmake build-essential ;;
     pacman) echo git cmake base-devel ;;
     *) echo git cmake gcc-c++ make ;;
+  esac
+}
+
+# Development packages for a source build; callers split the returned package names into an array.
+build_dependency_packages() {  # build_dependency_packages tools|openssl|cuda|vulkan|rocm
+  case "$PKG_MANAGER:$1" in
+    *:tools) build_packages ;;
+    apt:openssl) echo pkg-config libssl-dev ;;
+    pacman:openssl) echo pkgconf openssl ;;
+    dnf:openssl) echo pkgconf-pkg-config openssl-devel ;;
+    zypper:openssl) echo pkg-config libopenssl-devel ;;
+    apt:cuda) echo nvidia-cuda-toolkit ;;
+    pacman:cuda) echo cuda ;;
+    dnf:cuda|zypper:cuda) echo cuda-toolkit ;;
+    apt:vulkan) echo libvulkan-dev glslc spirv-headers ;;
+    pacman:vulkan) echo vulkan-headers vulkan-icd-loader shaderc spirv-headers ;;
+    dnf:vulkan) echo vulkan-loader-devel glslc spirv-headers-devel ;;
+    zypper:vulkan) echo vulkan-devel shaderc spirv-headers-devel ;;
+    apt:rocm) echo hipcc libhipblas-dev librocblas-dev ;;
+    pacman:rocm) echo hip-runtime-amd hipblas rocblas ;;
+    dnf:rocm) echo rocm-hip-devel hipblas-devel rocblas-devel ;;
+    zypper:rocm) echo hip-devel hipblas-devel rocblas-devel ;;
+    *) return 1 ;;
   esac
 }
 

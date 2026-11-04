@@ -48,6 +48,7 @@ Usage: scripts/install-llamacpp.sh [options]
 
 Without --prebuilt or --from-source, a terminal menu offers both methods.
 Without a terminal (or with --yes), the default is a prebuilt download.
+Source builds install missing build tools and the selected GPU toolkit with the system package manager.
 The program LoadCoach should run is then PREFIX/current/llama-server.
 EOF
 }
@@ -103,9 +104,7 @@ missing_versions() {
 # What to do when the build cannot run here, for the ui_die that follows a failed supply_libraries.
 LIBRARY_PROBLEM='' LIBRARY_STEPS=()
 source_steps() {
-  detect_package_manager
-  LIBRARY_STEPS+=("Install the build tools: $(pkg_command "$(build_packages)")"
-                  "Build llama.cpp on this machine: $SELF --from-source --backend $BACKEND")
+  LIBRARY_STEPS+=("Build llama.cpp on this machine (missing build requirements are installed for you): $SELF --from-source --backend $BACKEND")
 }
 
 # Offer to install the system packages for missing libraries. Returns 1 if some are still missing.
@@ -187,19 +186,103 @@ download_release() {
   mv "$target.partial" "$target"
 }
 
-build_from_source() {
-  local backend=$1 target=$2 work flags=() jobs missing=()
-  local tool
-  for tool in git cmake c++ make; do
-    command -v "$tool" >/dev/null || missing+=("$tool")
+# Toolkits are often installed outside PATH, including when installed earlier in this process.
+gpu_build_tool() {  # gpu_build_tool nvcc|hipcc
+  local tool=$1 candidate
+  local candidates=("$(command -v "$tool" || true)")
+  if [[ $tool == nvcc ]]; then
+    candidates=("${CUDACXX:-}" "${CUDAToolkit_ROOT:-}/bin/nvcc" "${CUDA_PATH:-}/bin/nvcc" "${CUDA_HOME:-}/bin/nvcc"
+                "${candidates[@]}" /opt/cuda/bin/nvcc /usr/local/cuda/bin/nvcc /usr/local/cuda-*/bin/nvcc)
+  else
+    candidates=("${ROCM_PATH:-}/bin/hipcc" "${HIP_PATH:-}/bin/hipcc" "${candidates[@]}" /opt/rocm/bin/hipcc)
+  fi
+  for candidate in "${candidates[@]}"; do
+    if [[ -f $candidate && -x $candidate ]]; then printf '%s\n' "$candidate"; return 0; fi
   done
-  ((${#missing[@]} == 0)) || ui_die "Building llama.cpp needs: ${missing[*]}." \
-    "Install the missing build tools, then run scripts/install-llamacpp.sh --from-source again."
+  return 1
+}
+
+cuda_build_ready() {
+  local compiler root folder headers=0
+  compiler=$(gpu_build_tool nvcc) || return 1
+  root=$(dirname -- "$(dirname -- "$compiler")")
+  for folder in "$root/include" "$root/targets/$OS_ARCH-linux/include"; do
+    if [[ -r $folder/cuda_runtime.h && -r $folder/cublas_v2.h ]]; then headers=1; break; fi
+  done
+  ((headers)) || return 1
+  for folder in "$root/lib64" "$root/lib" "$root/lib/$OS_ARCH-linux-gnu" "$root/targets/$OS_ARCH-linux/lib"; do
+    [[ -r $folder/libcudart.so && -r $folder/libcublas.so ]] && return 0
+  done
+  return 1
+}
+
+# One missing group per line; development headers matter even when the runtime library is present.
+missing_build_requirements() {
+  local backend=$1 tool missing=0 hip_root
+  for tool in git cmake cc c++ make; do
+    command -v "$tool" >/dev/null || missing=1
+  done
+  ((missing == 0)) || echo tools
+  if ! command -v pkg-config >/dev/null || ! pkg-config --exists openssl; then echo openssl; fi
   case "$backend" in
-    cuda-*) command -v nvcc >/dev/null || ui_die "A CUDA build needs nvcc, the CUDA toolkit." "Install it, or use the prebuilt build without --from-source."
-            flags+=(-DGGML_CUDA=ON) ;;
+    cuda-*) cuda_build_ready || echo cuda ;;
+    vulkan)
+      if ! command -v glslc >/dev/null || ! command -v pkg-config >/dev/null ||
+          ! pkg-config --exists vulkan SPIRV-Headers; then echo vulkan; fi ;;
+    rocm)
+      hip_root=$(gpu_build_tool hipcc) || hip_root=''
+      [[ -z $hip_root ]] || hip_root=$(dirname -- "$(dirname -- "$hip_root")")
+      if [[ -z $hip_root ]] || ! compgen -G "$hip_root/lib*/cmake/hipblas/hipblas-config.cmake" >/dev/null ||
+          ! compgen -G "$hip_root/lib*/cmake/rocblas/rocblas-config.cmake" >/dev/null; then echo rocm; fi ;;
+  esac
+  return 0
+}
+
+install_build_requirements() {
+  local backend=$1 group names package
+  local missing=() packages=() root=() hints=()
+  mapfile -t missing < <(missing_build_requirements "$backend")
+  ((${#missing[@]})) || return 0
+  detect_package_manager
+  ((${#PKG_INSTALL[@]})) || ui_die "Building llama.cpp needs: ${missing[*]}, and no supported package manager was found." \
+    "Use a system with apt, dnf, zypper or pacman, then run $SELF --from-source again."
+  local -A seen=()
+  for group in "${missing[@]}"; do
+    [[ $group != cuda ]] || hints+=("CUDA package sources: https://docs.nvidia.com/cuda/cuda-installation-guide-linux/")
+    names=$(build_dependency_packages "$group") || ui_die "No $group build packages are known for $PKG_MANAGER." \
+      "Install the $group development packages for this system, then run $SELF --from-source again."
+    for package in $names; do
+      [[ -z ${seen[$package]:-} ]] || continue
+      packages+=("$package"); seen[$package]=1
+    done
+  done
+  ui_info "Installing llama.cpp build requirements" "${packages[*]}"
+  ui_sudo "installing llama.cpp build requirements (${packages[*]})"
+  ((EUID == 0)) || root=(sudo -n)
+  if [[ $PKG_MANAGER == apt ]]; then
+    ui_step "Refreshing the package list" -- "${root[@]}" apt-get update ||
+      ui_die "Could not refresh the package list for the llama.cpp build." "$(pkg_refresh_hint)"
+  fi
+  ui_step "Installing build requirements (${packages[*]})" -- "${root[@]}" "${PKG_INSTALL[@]}" "${packages[@]}" ||
+    ui_die "Could not install llama.cpp's build requirements with $PKG_MANAGER." \
+      "?$(pkg_refresh_hint)" "Check the packages: $(pkg_command "${packages[@]}")" \
+      "${hints[@]}"
+  hash -r
+  mapfile -t missing < <(missing_build_requirements "$backend")
+  ((${#missing[@]} == 0)) || ui_die "The packages were installed, but llama.cpp still needs: ${missing[*]}." \
+    "Check the package installation and toolkit paths, then run $SELF --from-source again."
+}
+
+build_from_source() {
+  local backend=$1 target=$2 work flags=() jobs compiler
+  install_build_requirements "$backend"
+  case "$backend" in
+    cuda-*) compiler=$(gpu_build_tool nvcc)
+            flags+=(-DGGML_CUDA=ON "-DCMAKE_CUDA_COMPILER=$compiler") ;;
     vulkan) flags+=(-DGGML_VULKAN=ON) ;;
-    rocm) flags+=(-DGGML_HIP=ON) ;;
+    rocm) compiler=$(gpu_build_tool hipcc)
+          export PATH="$(dirname -- "$compiler"):$PATH"  # CMake also asks hipconfig for the HIP compiler.
+          flags+=(-DGGML_HIP=ON "-DCMAKE_PREFIX_PATH=$(dirname -- "$(dirname -- "$compiler")")") ;;
   esac
   work=$PREFIX/source/$BUILD
   if [[ ! -d $work/.git ]]; then
@@ -239,7 +322,7 @@ main() {
     if ((!ASSUME_YES)); then
       ui_choose choice "How should llama.cpp be installed?" 0 \
         "Download a prebuilt release|for this machine; no compiler needed" \
-        "Build here from source|needs git, cmake, a C++ compiler and make; GPU builds need their toolkit"
+        "Build here from source|installs missing build tools and the GPU toolkit; compiles here"
     fi
     if ((choice == 1)); then METHOD=source; else METHOD=prebuilt; fi
   fi

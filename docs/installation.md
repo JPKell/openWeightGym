@@ -19,11 +19,11 @@ deployment are in the [operations log](operations.md).
 | | |
 |---|---|
 | System | Linux on x86-64 or ARM64 with systemd: Ubuntu 22.04 or newer, Debian 12 or newer, Fedora, RHEL, Rocky and Alma 9 or newer, openSUSE Tumbleweed and Leap 16, Arch, and their relatives, or WSL2 with systemd turned on |
-| Disk | About 3 GB, plus room for models (the starter model is 1.8 GB) |
+| Disk | About 3 GB, plus room for models |
 | Tools | bash 4.4 or newer and curl. git, tar, gzip and awk are installed for you if missing (apt, dnf, zypper or pacman, told never to ask, since `curl \| bash` leaves nobody to answer) |
 | Python | Nothing to do: the installer fetches Python 3.13 with [uv](https://docs.astral.sh/uv/) into the installation and leaves the system's Python alone |
 | Graphics | Optional. NVIDIA cards need only the driver (the CUDA libraries come with the engine); AMD and Intel cards use Vulkan, or ROCm where it is installed; without a card, models run on the processor |
-| Network | GitHub, Hugging Face (for the starter model) and, for other devices, the ports below |
+| Network | GitHub, Hugging Face (for the models you download afterwards) and, for other devices, the ports below |
 
 In WSL, add `[boot]` and `systemd=true` to `/etc/wsl.conf`, run `wsl --shutdown` in Windows and
 start WSL again before installing.
@@ -34,18 +34,19 @@ start WSL again before installing.
    driver supports), disk space, and whether this account already runs openWeightGym from another
    folder, in which case it stops rather than replace those services.
 2. **Game plan.** Asks how this machine fits in (below), shows the plan and offers **Customize**:
-   who it runs as, voice, the database, the llama.cpp build, the starter model, power control and
+   who it runs as, voice, the database, the llama.cpp build, power control and
    whether services keep running after you log out.
 3. **Account.** Asks for your console user name and password, typed twice.
 4. **Loading plates.** Fetches the code, uv and Python 3.13, a prebuilt llama.cpp for the cards it
-   found, and the starter model, with progress bars.
+   found, with progress bars.
 5. **Setting up.** Runs [`scripts/install-suite.sh`](../scripts/install-suite.sh), which makes the
    Python environment, writes settings for this machine's part, makes the keys and the `weightroom`
    service account, and installs and starts the systemd services.
-6. **Spotting.** Checks every service is running and answering, then asks the starter model to say
-   hello: the first real request.
+6. **Spotting.** Checks every service is running and answering.
 
 It ends with the console's address, your sign-in, the API address and an API key (shown once).
+No model comes with it: download one under **Models → HuggingFace** in the console, then add it
+as a model from **Files**.
 Step output is in the private log it names, under `~/.local/state/openweightgym/`; command
 arguments containing credentials are omitted. Logs are readable only by their owner.
 
@@ -122,8 +123,8 @@ Add `--voice` to the node's install command to receive a separate voice-service 
 enable the console's voice API route. Install the console with `--voice` for the browser voice
 gateway. For manual pairing, also copy the console's `keys/voice-service.key` and pass
 `--voice-key-file FILE`; the machine signing key cannot substitute for it. Voice setup creates
-the service and browser accounts, verifies the speech bundles required by the settings and
-uses the starter conversation model in newly written voice settings.
+the service and browser accounts and verifies the speech bundles required by the settings. Once
+you have added a model, choose it as the conversation model under **Settings → Voice**.
 
 ## For you, or for the whole machine
 
@@ -190,14 +191,23 @@ other AMD and Intel cards, and the processor build otherwise. Missing system lib
 scripts/install-llamacpp.sh                      # choose a download or build from source
 scripts/install-llamacpp.sh --check              # the build in use
 scripts/install-llamacpp.sh --prebuilt --backend vulkan  # another prebuilt kind
-scripts/install-llamacpp.sh --from-source        # build here with cmake (needs nvcc for CUDA)
+scripts/install-llamacpp.sh --from-source        # install build requirements and compile here
 OWG_LLAMACPP_BUILD=b12024 scripts/install-llamacpp.sh   # another release
 ```
 
-Choose **Build here from source** to retry a build skipped during installation. Install any
-missing tools the script names, then run it again; an interrupted build resumes from its existing
-source and build folders. Without a terminal, or with `--yes`, a prebuilt download remains the
-default; use `--from-source` to select a source build explicitly.
+Choose **Build here from source** to retry a build skipped during installation. The installer adds
+missing C/C++ build tools, CMake, make, pkg-config and OpenSSL development headers with the system
+package manager. It also installs the selected backend's requirements: the CUDA toolkit (including
+`nvcc`, runtime and cuBLAS development files), Vulkan headers and shader compiler, or HIP and BLAS
+libraries for ROCm. It asks for your sudo password when needed and checks the requirements again
+before compiling. GPU packages must be available in the configured repositories; failures name
+the package command and, for CUDA, link to NVIDIA's repository instructions.
+
+Existing toolkits are reused, including CUDA in `/opt/cuda`, `/usr/local/cuda` or the location named
+by `CUDACXX`, `CUDAToolkit_ROOT`, `CUDA_PATH` or `CUDA_HOME`, without requiring a new login.
+An interrupted build resumes from its existing source and build folders. Without a terminal, or
+with `--yes`, a prebuilt download remains the default; use `--from-source` to select a source build
+explicitly. Prebuilt downloads and `--check` do not install build tools.
 
 Builds are kept side by side in `runtimes/llamacpp/releases`, and `runtimes/llamacpp/current` points
 at the one in use, which is what LoadCoach's `llama_server` setting names. Nothing is restarted:
@@ -267,7 +277,7 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 | `--voice` | also speech recognition and voices |
 | `--voice-key-file FILE` | front-owned voice service key for a GPU node joined by hand |
 | `--power-control` | let the console sleep, restart or switch off this machine (a polkit rule) |
-| `--no-model`, `--no-linger`, `--no-browser` | skip the starter model, linger, or opening the console |
+| `--no-linger`, `--no-browser` | skip linger, or opening the console |
 | `--ref BRANCH` | which branch to install |
 | `--plain`, `NO_COLOR`, `OWG_QUIET=1` | no colour and no animation, or colour without animation |
 
@@ -287,8 +297,8 @@ signing keys or package lists out of date, a package missing from the system's s
 compiler or program, too little memory, a read-only system, a file owned by another account, sudo
 that cannot ask for a password, or a port already taken. A mistyped option stops the same way,
 before anything is touched. Problems that do not stop it, such as a service that did not start
-(with the reason from its own journal), a starter model that did not download, a closed firewall
-port or a llama.cpp that could not be installed, are listed again in a yellow **Needs your
+(with the reason from its own journal), a closed firewall port or a llama.cpp that could not be
+installed, are listed again in a yellow **Needs your
 attention** panel at the end, each with its own steps, so none is lost in the scrollback.
 
 An interrupted installation keeps its confirmed plan in `.install-receipt` with `state=pending`.
@@ -317,6 +327,7 @@ the final service checks finish successfully. Passwords and consumed pairing cod
 | *Leftover systemd drop-ins would change what openWeightGym's services run* | move the drop-ins it lists aside, as it shows, and run the installer again |
 | *PostgreSQL could not be installed with …* | run the package manager's refresh it names, check the package installs by hand, or install with `--database sqlite` |
 | *PostgreSQL refuses the password sign-in openWeightGym uses* | add the `pg_hba.conf` lines it shows above the other `host` lines and reload PostgreSQL |
+| Components says llama.cpp is missing after installation, with no engine steps in the log | Older installers could silently skip the engine when uv's `~/.local/bin/env` shadows the system program. Update the installer; repair the existing runtime with `cd ~/openWeightGym && scripts/install-llamacpp.sh --from-source`, which installs missing build requirements as described above. |
 | *llama-server needs: libgomp.so.1* | let the installer add the package it names, or install it and run `scripts/install-llamacpp.sh` |
 | *This prebuilt llama.cpp needs GLIBC_2.38, newer than this system's C library* | the prebuilt builds are made on a recent Ubuntu: install the build tools it names and run `scripts/install-llamacpp.sh --from-source` |
 | *The firewall here (firewalld) keeps the console machine from reaching port 8442* | run the command it gives, on that machine |
