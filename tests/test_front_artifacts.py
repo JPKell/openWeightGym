@@ -22,7 +22,7 @@ def test_cold_settings_and_files_are_accessible_without_compute(desk, front_sett
         response = browser.get(path)
         assert response.status_code == 200, (path, response.status_code, response.text[:500])
         assert 'Something went wrong' not in response.text
-    files = browser.get('/files').text
+    files = browser.get('/files?complete=1').text
     assert 'Set up optional front cache or storage' in files
     assert 'store (compute)' not in files
     settings = browser.get('/settings').text
@@ -39,7 +39,7 @@ def test_front_locations_work_without_compute_and_persist(desk, tmp_path):
     assert saved.status_code == 200 and 'Front file locations are available now' in saved.text, saved.text[saved.text.find('said-box'):][:600]
     assert (cache / 'llm').is_dir() and (storage / 'image').is_dir()
     file = gguf(storage / 'llm' / 'front-model.gguf', general__name='Front model', general__architecture='qwen')
-    listing = browser.get('/files?tier=storage')
+    listing = browser.get('/files?tier=storage&complete=1')
     assert listing.status_code == 200 and 'front-model.gguf' in listing.text and 'Front model' in listing.text
     assert 'No model-file locations are available yet' not in listing.text
     detail = browser.get('/file', params={'path': file})
@@ -270,6 +270,7 @@ def test_offline_storage_setup_and_model_list_spacing_in_browser(desk, tmp_path,
         page.get_by_role('button', name='Save file locations', exact=True).click()
         playwright.expect(page.locator('.said-box')).to_contain_text('Front file locations are available now')
         page.goto('http://console.test/files')
+        page.locator('#files-places').wait_for()  # the file data comes after the page
         assert not page.get_by_text('No model-file locations are available yet.', exact=False).count()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.goto('http://console.test/models')

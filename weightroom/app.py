@@ -3889,15 +3889,28 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return found
 
     async def files_page(request: Request, person: Person) -> Response:
-        """Render the selected node's model files, storage and active transfers."""
+        """Render the selected node's model files, storage and active transfers.
+
+        A plain visit gets the page at once and its files afterwards (`part=page`), since reading
+        every node's folders can take seconds; `complete=1` gives the whole page in one answer.
+        """
+        if "manage-models" not in person.can:  # asked here too, so the page that comes first is refused like its files
+            return page(request, "refused.html", person, status=403, why="Your account may not manage model files.")
+        asked = request.query_params
+        tier = asked.get("tier", "cache")
+        tier = tier if tier in ("cache", "storage") else "cache"
+        said = asked.get("said", "")
+        if initial_page(request):  # the downloads list asks for itself as soon as it is on the page
+            return page(request, "files.html", person, deferred=True, fragment_url=fragment_url(request, "page"),
+                        said=said, downloads=[], downloads_later=True, tier=tier)
+        part = asked.get("part") if asked.get("complete") != "1" else None
         found = await all_files(request, person)
         if isinstance(found, Response):
-            return found
+            return fragment_error(request, person, "files-content", "page", found) if part == "page" else found
         found = files_view(found)
-        tier = request.query_params.get("tier", "cache")
-        tier = tier if tier in ("cache", "storage") else "cache"
-        template = "files_poll.html" if request.query_params.get("part") == "list" else "files.html"  # the pieces of the list, asked for again
-        return page(request, template, person, found=found, said=request.query_params.get("said", ""), downloads=await coming(person),
+        template = {"list": "files_poll.html", "page": "files_content.html"}.get(part, "files.html")  # list: the pieces, asked for again
+        downloads = await coming(person) if template == "files.html" else []
+        return page(request, template, person, found=found, said=said, downloads=downloads,
                     tier=tier, address=model_address, file_address=file_address)  # fmt: skip
 
     async def files_do(request: Request, person: Person) -> Response:

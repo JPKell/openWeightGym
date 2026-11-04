@@ -662,7 +662,7 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     sign_in(browser, "jordan")
     assert 'href="/files"' in browser.get("/models?complete=1").text  # Files belongs to the Models category's rail.
 
-    files = browser.get("/files").text
+    files = browser.get("/files?complete=1").text
     assert 'value="clear-cache"' in files and 'value="consolidate-cache"' in files and 'value="cleanup-nodes"' in files
     assert "Large libraries can take an hour or more" in files and "continues in the background" in files
     refused_cleanup = browser.post("/files", data={"do": "clear-cache"})
@@ -726,7 +726,7 @@ def test_files_separates_cache_and_storage_and_promotes_or_two_click_deletes(tmp
     settings = Settings(compute="http://compute", key=users.new_key("panel"), data=str(data))
     with TestClient(build_app(settings, door(front, 8442))) as browser:
         sign_in(browser, "jordan")
-        cache_page = browser.get("/files?tier=cache").text
+        cache_page = browser.get("/files?tier=cache&complete=1").text
         places_html = cache_page.split('id="files-places"', 1)[1].split('<nav class="nav nav-pills', 1)[0].replace("<wbr>", "")
         assert places_html.count(str(cache)) == 1 and places_html.count(str(storage)) == 1
         # A card each for front (nothing set up), the cache and storage; each lists its subfolders, and a drive counts once.
@@ -735,7 +735,7 @@ def test_files_separates_cache_and_storage_and_promotes_or_two_click_deletes(tmp
         assert "Last used" not in cache_page and "Used on nodes" in cache_page
         assert '<a href="/models/mine">mine</a>' in cache_page and "compute" in cache_page
 
-        storage_page = browser.get("/files?tier=storage").text
+        storage_page = browser.get("/files?tier=storage&complete=1").text
         table = storage_page.split('id="files-storage-table"', 1)[1].split("</table>", 1)[0]
         assert all(heading in table for heading in ("File", "Size", "It says it is", "Buttons"))
         assert "Used by" not in table and "Last used" not in table and "Place" not in table
@@ -780,7 +780,7 @@ def test_a_file_is_moved_and_deleted_from_its_own_page(desk, tmp_path):
     wrong = browser.post("/file", data={"path": spare, "name": "spare", "do": "delete"})
     assert wrong.status_code == 400 and "give its file name exactly: spare.gguf" in wrong.text and Path(spare).exists()
     gone = browser.post("/file", data={"path": spare, "name": "spare.gguf", "do": "delete"})
-    assert "Deleted spare.gguf." in gone.text and not Path(spare).exists() and "spare.gguf</a>" not in browser.get("/files").text
+    assert "Deleted spare.gguf." in gone.text and not Path(spare).exists() and "spare.gguf</a>" not in browser.get("/files?complete=1").text
 
 
 @pytest.fixture
@@ -1553,7 +1553,7 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
     assert browser.get("/hub?q=tiny").status_code == 403 and "acme" not in browser.get("/hub?q=tiny").text
     browser.post("/sign-out")
     sign_in(browser, "jordan")
-    assert 'Find a model file at Hugging Face</a>' not in browser.get("/files").text and 'id="downloads"' in browser.get("/files").text
+    assert 'Find a model file at Hugging Face</a>' not in browser.get("/files?complete=1").text and 'id="downloads"' in browser.get("/files").text
     assert 'href="/hub">HuggingFace</a>' in browser.get("/files").text
 
     found = browser.get("/hub?q=tiny").text
@@ -1583,7 +1583,7 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
     # What is here already is marked and cannot be ticked. It is on Files, to be added as a model.
     again = browser.get("/hub?repository=acme/tiny-GGUF").text
     assert f"in {fast}</span>" in again and 'value="tiny-q4.gguf" type="checkbox" class="form-check-input" disabled' in again
-    assert "tiny-q4.gguf</a>" in browser.get("/files").text
+    assert "tiny-q4.gguf</a>" in browser.get("/files?complete=1").text
     refused = browser.post("/downloads", data={"do": "discard", "path": str(target)})
     assert "There is no unfinished download to that path." in refused.text
 
@@ -1723,7 +1723,7 @@ def test_adapters_and_projectors_are_listed_with_the_model_each_is_for_and_put_o
     sign_in(browser, "jordan")
 
     # Files has a part for each kind. A part's row says which model it was made for and which model here that is, or that there is none.
-    listed = browser.get("/files").text
+    listed = browser.get("/files?complete=1").text
     adapters, projectors = listed[listed.index('id="files-adapters"') : listed.index('id="files-projectors"')], listed[listed.index('id="files-projectors"') :]
     assert listed.index('id="files-models"') < listed.index("base.gguf</a>") < listed.index('id="files-adapters"') and "terse.gguf" not in listed[: listed.index('id="files-adapters"')]
     assert "<td>Base</td>" in adapters and '<a href="/models/base">base</a>' in adapters and ">Make a model</a>" in adapters
@@ -1741,7 +1741,7 @@ def test_adapters_and_projectors_are_listed_with_the_model_each_is_for_and_put_o
     # A copy of the model with the adapter attached. The model it was made from is as it was.
     assert kept.stored("base-terse") == {"flags": {"model": base, "ctx-size": 2048}, "gpus": 1, "adapters": {"terse": {"file": terse}}}
     assert kept.stored("base") == {"gpus": 1, "flags": {"model": base, "ctx-size": 2048}}
-    assert "with terse</small>" in browser.get("/models?complete=1").text and '<a href="/models/base-terse">base-terse</a>' in browser.get("/files").text  # the file is one of the model's now
+    assert "with terse</small>" in browser.get("/models?complete=1").text and '<a href="/models/base-terse">base-terse</a>' in browser.get("/files?complete=1").text  # the file is one of the model's now
 
     # On a model's page an adapter is chosen from the adapters there are, not typed. A row with its word emptied is an adapter taken away.
     assert f'<option value="{terse}" selected>{terse} · metadata names agree</option>' in made.text and f'<option value="{stray}" >{stray} · says it is for Another Model</option>' in made.text
