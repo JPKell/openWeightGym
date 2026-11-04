@@ -57,7 +57,7 @@ receipt_publish() {
   {
     for key in version state installed mode dir created_dir topology services unit_dir python venv uv runtime models \
       linger_enabled owg_link pointer database admin polkit_rule service_user etc_dir var_dir \
-      llama starter voice linger_wanted power_rule front_url compute_url machine_name join_url; do
+      llama voice linger_wanted power_rule front_url compute_url machine_name join_url; do
       [[ -v RECEIPT[$key] ]] && printf '%s=%s\n' "$key" "${RECEIPT[$key]}"
     done
     :

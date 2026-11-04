@@ -52,7 +52,7 @@ def fake_programs(tmp_path, *names, script="#!/bin/sh\nexit 0\n") -> str:
 
 @pytest.mark.parametrize("family,tool,expected,typed", [
     ("arch", "pacman", "pacman -S --needed --noconfirm", "sudo pacman -S --needed postgresql"),
-    ("debian", "apt-get", "env DEBIAN_FRONTEND=noninteractive apt-get install -y", "sudo apt-get install postgresql"),
+    ("debian", "apt-get", "/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y", "sudo apt-get install postgresql"),
     ("fedora", "dnf", "dnf install -y", "sudo dnf install postgresql"),
     ("suse", "zypper", "zypper --non-interactive install", "sudo zypper install postgresql"),
 ])
@@ -279,8 +279,8 @@ printf '%s\n' "$LIBRARY_PROBLEM" "${LIBRARY_STEPS[@]}"''', env={"PATH": fake_pro
     assert answer.returncode == 0, answer.stderr
     said = answer.stdout.splitlines()
     assert said[0] == "This prebuilt llama.cpp needs GLIBC_2.38, newer than this system's C library (2.36)."
-    assert said[1] == "Install the build tools: sudo apt-get install git cmake build-essential"
-    assert said[2] == "Build llama.cpp on this machine: install-llamacpp.sh --from-source --backend cpu"
+    assert said[1] == ("Build llama.cpp on this machine (missing build requirements are installed for you): "
+                       "install-llamacpp.sh --from-source --backend cpu")
 
 
 def test_a_cuda_build_without_the_nvidia_driver_offers_vulkan_and_cpu(tmp_path):

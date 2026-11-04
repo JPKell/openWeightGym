@@ -24,12 +24,6 @@ OWG_RAW=${OWG_RAW:-https://raw.githubusercontent.com/JPKell/openWeightGym}
 OWG_REF=${OWG_REF:-main}
 OWG_VERSION=0.1.0
 UV_VERSION=${OWG_UV_VERSION:-0.13.1}
-# The starter model: small, open (Apache 2.0) and quick on any machine.
-STARTER_NAME=qwen3-1.7b
-STARTER_TITLE="Qwen3 1.7B"
-STARTER_URL=https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf
-STARTER_FILE=Qwen3-1.7B-Q8_0.gguf
-STARTER_CONTEXT=8192
 # Where a system installation goes, and the account it runs as.
 SVC=${OWG_SERVICE_USER:-openweightgym}
 SYS_OPT=${OWG_SYSTEM_OPT:-/opt/openweightgym}
@@ -57,7 +51,6 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --voice                 also install speech recognition and voices
   --voice-key-file FILE   manual GPU-node setup: the console's voice-service.key (pairing supplies it)
   --power-control         let the console put this machine to sleep, restart or switch it off
-  --no-model              skip the starter model
   --no-linger             let the services stop when you log out
   --no-browser            do not open the console in a browser at the end
   --ref BRANCH            which branch of openWeightGym to fetch (default: main)
@@ -170,7 +163,7 @@ It carries on where it stopped; nothing finished is undone."
 
 parse_arguments() {
   DIR=${OWG_HOME:-} DIR_GIVEN=0 SYSTEM=0 TOPOLOGY='' ASSUME_YES=0 ADMIN='' FRONT_URL='' MACHINE_KEY_FILE=''
-  COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 STARTER=1 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
+  COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
   ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
   VOICE_KEY_FILE='' VOICE_KEY=''
   RESUMING_INSTALL=0
@@ -202,7 +195,7 @@ parse_arguments() {
       --voice) VOICE=1; PLAN_GIVEN[VOICE]=1; shift ;;
       --voice-key-file) VOICE_KEY_FILE=$2; shift 2 ;;
       --power-control) POWER_RULE=1; PLAN_GIVEN[POWER_RULE]=1; shift ;;
-      --no-model) STARTER=0; PLAN_GIVEN[STARTER]=1; shift ;;
+      --no-model) shift ;;  # no model is downloaded any more; still accepted so older commands work
       --no-linger) LINGER_WANTED=0; PLAN_GIVEN[LINGER_WANTED]=1; shift ;;
       --no-browser) BROWSER=0; shift ;;
       --ref) OWG_REF=$2; shift 2 ;;
@@ -332,7 +325,7 @@ is_installed() {
 # Restore a confirmed plan without saving passwords, API keys or the consumed pairing code.
 resume_settings() {
   local pair variable key value
-  for pair in TOPOLOGY:topology ADMIN:admin DATABASE:database LLAMA:llama STARTER:starter VOICE:voice \
+  for pair in TOPOLOGY:topology ADMIN:admin DATABASE:database LLAMA:llama VOICE:voice \
     LINGER_WANTED:linger_wanted POWER_RULE:power_rule FRONT_URL:front_url COMPUTE_URL:compute_url \
     MACHINE_NAME:machine_name JOIN_URL:join_url; do
     variable=${pair%%:*} key=${pair#*:}
@@ -574,7 +567,7 @@ reinstall() {
   services_from_receipt
   if ! receipt_present && [[ ,$SERVICES, == *,weightroom,* ]] && ! console_account_ready; then
     if [[ ,$SERVICES, == *,loadcoach,* ]]; then TOPOLOGY=all; else TOPOLOGY=front; fi
-    STARTER=0 DATABASE=keep
+    DATABASE=keep
     account
     finishing
     spotting
@@ -613,7 +606,6 @@ game_plan() {
     local -a topologies=(all front compute)
     TOPOLOGY=${topologies[choice]}
   fi
-  [[ $TOPOLOGY != front ]] || STARTER=0
   if [[ $TOPOLOGY == compute ]]; then ask_console; fi
   if [[ $TOPOLOGY == front && -z $COMPUTE_URL ]] && ((!ASSUME_YES)); then
     local node=''
@@ -781,8 +773,6 @@ show_plan() {
   lines+=("${C_MUTED}Data         ${C_RESET}$([[ $DATABASE == keep ]] && printf 'keep existing stores' || { [[ $DATABASE == sqlite ]] && printf 'SQLite, on this machine' || printf 'PostgreSQL, on this machine'; })")
   if [[ $TOPOLOGY != front ]]; then
     lines+=("${C_MUTED}Engine       ${C_RESET}llama.cpp · $(backend_label "$engine")")
-    if ((STARTER)); then lines+=("${C_MUTED}First model  ${C_RESET}$STARTER_TITLE, about 1.8 GB")
-    else lines+=("${C_MUTED}First model  ${C_RESET}none for now"); fi
     ((POWER_RULE)) && lines+=("${C_MUTED}Power        ${C_RESET}the console may sleep, restart or switch off this machine")
   fi
   ui_box "Your setup" "${lines[@]}"
@@ -833,11 +823,6 @@ customize() {
       3) LLAMA=source ;;
       4) LLAMA=skip ;;
     esac
-    if [[ $LLAMA != skip ]]; then
-      ui_confirm "Download $STARTER_TITLE (about 1.8 GB) so you can chat straight away?" y && STARTER=1 || STARTER=0
-    else
-      STARTER=0
-    fi
     ui_confirm "Let the console put this machine to sleep, restart it or switch it off?" n && POWER_RULE=1 || POWER_RULE=0
   fi
   if ((SYSTEMD_USER && !SYSTEM)); then
@@ -902,7 +887,6 @@ loading_plates() {
       "Put this machine's address in $(shell_path "$DIR/settings/loadcoach.toml") (host = \"...\"), then: owg restart"
   fi
   [[ $TOPOLOGY == front ]] || engine
-  if ((STARTER)); then starter_model; fi
 }
 
 install_tools() {
@@ -1073,10 +1057,13 @@ engine() {
   esac
   # A system installation's engine is fetched as root, which may add libraries, then handed to its account.
   # Its failure does not stop the installation, so its panel says only what went wrong with it.
+  # uv can put a PATH setup script named env in ~/.local/bin; use the system program.
   local quiet=("OWG_STOP_TITLE=llama.cpp did not install" "OWG_RETRY=")
-  if ((SYSTEM)); then runner=(sudo -n env "OWG_LOG=$OWG_LOG" "PATH=$PATH" "TERM=${TERM:-dumb}" "${quiet[@]}")
-  else runner=(env "${quiet[@]}"); fi
-  if ! "${runner[@]}" "$DIR/scripts/install-llamacpp.sh" "${options[@]}"; then
+  if ((SYSTEM)); then runner=(sudo -n /usr/bin/env "OWG_LOG=$OWG_LOG" "PATH=$PATH" "TERM=${TERM:-dumb}" "${quiet[@]}")
+  else runner=(/usr/bin/env "${quiet[@]}"); fi
+  local executable=$DIR/runtimes/llamacpp/current/llama-server
+  if ! "${runner[@]}" "$DIR/scripts/install-llamacpp.sh" "${options[@]}" || [[ ! -f $executable || ! -x $executable ]]; then
+    [[ -f $executable && -x $executable ]] || ui_warn "No executable llama-server was installed at $executable"
     local again
     again="$( ((SYSTEM)) && printf 'sudo ')$(shell_path "$DIR/scripts/install-llamacpp.sh") --prefix $(shell_path "$DIR/runtimes/llamacpp")"
     ui_info "The rest of the installation goes on without it"
@@ -1084,27 +1071,10 @@ engine() {
       "Put right what its panel above says" \
       "Then install it: $again$([[ $LLAMA == source ]] && printf ' --from-source')" \
       "Or build it on this machine, which suits any system: $again --from-source"
-    STARTER_REGISTER=0
     return 0
   fi
   ((SYSTEM)) && sudo -n chown -R "$SVC:$SVC" "$DIR/runtimes"
-  LLAMA_SERVER=$DIR/runtimes/llamacpp/current/llama-server
-}
-
-starter_model() {
-  local folder=$DIR/models/llm
-  local model=$folder/$STARTER_FILE
-  if [[ -s $model ]]; then ui_ok "$STARTER_TITLE is already here"; return 0; fi
-  # Downloaded as you, into a folder that is yours for the length of the download.
-  if ((SYSTEM)); then sudo -n install -d -o "$(id -un)" -m 755 "$SYS_VAR/models/llm"; fi
-  if ! ui_download "$STARTER_URL" "$model" "$STARTER_TITLE"; then
-    ui_attention "The starter model ($STARTER_TITLE) did not download" \
-      "Check this machine can reach Hugging Face: curl -sI https://huggingface.co" \
-      "Then add a model from Models in the console"
-    STARTER=0
-  fi
-  if ((SYSTEM)); then sudo -n chown -R "$SVC:$SVC" "$SYS_VAR/models/llm"; fi
-  return 0
+  LLAMA_SERVER=$executable
 }
 
 # ---- setting up -----------------------------------------------------------------------------
@@ -1134,7 +1104,6 @@ setting_up() {
   [[ -n $COMPUTE_URL ]] && options+=(--compute-url "$COMPUTE_URL")
   [[ -n ${LLAMA_SERVER:-} ]] && options+=(--llama-server "$LLAMA_SERVER")
   [[ -n $MACHINE_NAME ]] && options+=(--machine-name "$MACHINE_NAME")
-  ((VOICE)) && options+=(--voice-model "$STARTER_NAME")
   [[ $DATABASE == postgresql ]] && options+=(--install-postgresql --provision-postgresql)
   if [[ $DATABASE == postgresql ]]; then ui_sudo "installing and setting up PostgreSQL"; fi
   local rc=0
@@ -1144,7 +1113,6 @@ setting_up() {
 
 finishing() {
   local weightroom=(as_owner "$DIR/.venv/bin/weightroom" --config "$DIR/settings/weightroom.toml")
-  local loadcoach=(as_owner "$DIR/.venv/bin/loadcoach" --config "$DIR/settings/loadcoach.toml")
   API_KEY='' TEMPORARY=''
   if [[ $TOPOLOGY != compute ]]; then
     local password_state
@@ -1169,21 +1137,6 @@ finishing() {
         TEMPORARY=$("${weightroom[@]}" user temporary "$ADMIN" 2>>"$OWG_LOG" | tail -1)
       fi
       ui_ok "Set up the account $ADMIN"
-    fi
-  fi
-  if ((STARTER)) && [[ $TOPOLOGY != front && ${STARTER_REGISTER:-1} == 1 && -n ${LLAMA_SERVER:-} ]]; then
-    if "${loadcoach[@]}" models list 2>/dev/null | grep -qw "$STARTER_NAME"; then
-      ui_ok "$STARTER_NAME is already set up"
-    else
-      local flags=("ctx-size=$STARTER_CONTEXT")
-      if [[ $GPU_KIND == none || $LLAMA == cpu || $LLAMA_BACKEND == cpu && $LLAMA == auto ]]; then flags+=(gpus=0); else flags+=(gpus=1 gpu-layers=all); fi
-      if "${loadcoach[@]}" models add "$STARTER_NAME" "$DIR/models/llm/$STARTER_FILE" "${flags[@]}" >>"$OWG_LOG" 2>&1; then
-        ui_ok "Added $STARTER_NAME" "ask for it by that name"
-      else
-        ui_attention "$STARTER_NAME was downloaded but could not be added" \
-          "See why near the end of the log: $OWG_LOG" \
-          "Then add it from Models in the console; the file is $DIR/models/llm/$STARTER_FILE"
-      fi
     fi
   fi
   if ((!SYSTEM && SYSTEMD_USER && LINGER_WANTED && !LINGER)); then
@@ -1285,7 +1238,6 @@ write_receipt() {
     echo "pointer=${POINTER:-$pointer}"
     echo "database=$DATABASE"
     echo "llama=$LLAMA"
-    echo "starter=$STARTER"
     echo "voice=$VOICE"
     echo "linger_wanted=$LINGER_WANTED"
     echo "power_rule=$POWER_RULE"
@@ -1383,7 +1335,6 @@ spotting() {
       fi
       firewall_check 8442 ;;
   esac
-  if [[ $TOPOLOGY == all ]] && ((STARTER)) && [[ -n $API_KEY ]] && running loadcoach; then first_rep; fi
 }
 
 running() { owg_systemctl is-active --quiet "$1.service" 2>/dev/null; }
@@ -1399,26 +1350,6 @@ firewall_check() {  # firewall_check PORT...
   ui_attention "The firewall here ($FIREWALL_NAME) $keeps $who from reaching port ${FIREWALL_CLOSED// / and }" "${FIREWALL_STEPS[@]}"
 }
 
-# The first request: load the starter model and ask it something.
-first_rep() {
-  local reply
-  reply=$(mktemp)
-  if ui_step "First rep: $STARTER_NAME says hello" -- curl -sS --fail --max-time 240 -o "$reply" \
-      -H "Authorization: Bearer $API_KEY" -H 'content-type: application/json' \
-      -d "{\"model\": \"$STARTER_NAME\", \"max_tokens\": 60, \"chat_template_kwargs\": {\"enable_thinking\": false},
-           \"messages\": [{\"role\": \"user\", \"content\": \"Welcome me to my new openWeightGym in one short, upbeat sentence.\"}]}" \
-      http://127.0.0.1:8442/v1/chat/completions; then
-    FIRST_WORDS=$("$DIR/.venv/bin/python" -c 'import json, sys; print(json.load(open(sys.argv[1]))["choices"][0]["message"]["content"].strip().splitlines()[0][:70])' "$reply" 2>/dev/null || true)
-    # shellcheck disable=SC1111  # the quotation marks are meant
-    [[ -n $FIRST_WORDS ]] && ui_note "“$FIRST_WORDS”"
-  else
-    ui_attention "$STARTER_NAME did not answer its first request" \
-      "It may still be loading: try Chat in the console in a minute" \
-      "If it still does not answer, see why: owg logs loadcoach"
-  fi
-  rm -f "$reply"
-}
-
 # ---- the finish -----------------------------------------------------------------------------
 
 finale() {
@@ -1431,7 +1362,7 @@ finale() {
       lines+=("${C_MUTED}Sign in     ${C_RESET}$ADMIN${TEMPORARY:+  ${C_DIM}temporary password:${C_RESET} $TEMPORARY}")
       lines+=("${C_MUTED}API         ${C_RESET}http://$HOST_ADDRESS:8442/v1")
       [[ -n $API_KEY ]] && lines+=("${C_MUTED}API key     ${C_RESET}$API_KEY  ${C_DIM}(shown once)${C_RESET}")
-      ((STARTER)) && [[ $TOPOLOGY == all ]] && lines+=("${C_MUTED}Model       ${C_RESET}$STARTER_NAME")
+      [[ $TOPOLOGY == all ]] && lines+=("${C_MUTED}Models      ${C_RESET}download one under Models → HuggingFace, then add it from Files")
       if [[ $TOPOLOGY == front ]]; then
         lines+=("" "${C_BOLD}Add a GPU node${C_RESET}: run ${C_GOLD}owg pair${C_RESET} here, or open Settings → Compute nodes,")
         lines+=("and run the command it gives on the GPU machine.")
