@@ -24,6 +24,25 @@ def test_production_definitions_have_docstrings():
     assert not missing, '\n'.join(missing)
 
 
+def test_toollocker_setup_guide_is_available_without_compute_and_stays_private(desk):
+    """An administrator can reach setup from Tools while a fresh console has no worker."""
+    browser, switch, _ = desk
+    sign_in(browser, 'jordan')
+    switch.off = True
+    assert 'href="/docs/toollocker"' in browser.get('/tools').text
+    response = browser.get('/docs/toollocker')
+    assert response.status_code == 200
+    for anchor in ('requirements', 'install-toollocker-on-front', 'verify-the-connection', 'add-a-python-tool', 'troubleshooting'):
+        assert f'href="#{anchor}"' in response.text and f'id="{anchor}"' in response.text
+    for instruction in ('front_settings', 'toollocker_url', 'enable --now toollocker.service', 'example__greet'):
+        assert instruction in response.text
+    sign_in(browser, 'pat')
+    guide = browser.get('/guide').text
+    assert 'id="tools"' in guide and 'http://testserver:8443/mcp' in guide
+    assert 'href="/docs/toollocker"' not in guide
+    assert browser.get('/docs/toollocker').status_code == 403
+
+
 def test_reference_parses_without_importing_and_invalidates_on_edit(tmp_path, monkeypatch):
     """Documentation never executes a service and reflects edited source revisions."""
     monkeypatch.setattr(system_docs, 'ROOT', tmp_path)
