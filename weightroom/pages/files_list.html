@@ -5,7 +5,7 @@
 <div id="files" hx-get="/files?part=list&amp;tier={{ tier }}" hx-trigger="every 5s" hx-swap="none" data-refresh-companions="{{ companions }}"></div>
 <div id="files-cleanup">{{ cleanup_status(found) }}</div>
 <div id="files-distributions">{{ distributions_table(found) }}</div>
-<div id="files-places">{{ places_block(found) }}</div>
+{% call card("Model file locations", open=true, key="files-places", hint="What model files take on each drive, and what is still free.", body_attrs={"id": "files-places"}) %}{{ places_block(found) }}{% endcall %}
 
 <nav class="nav nav-pills gap-1 mb-3" aria-label="File location">
   <a class="nav-link{{ ' active' if tier == 'cache' }}" href="/files?tier=cache"{% if tier == 'cache' %} aria-current="page"{% endif %}>Cache</a>
