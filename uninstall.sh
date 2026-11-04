@@ -254,31 +254,46 @@ cancel() {
 # ---- the backup -----------------------------------------------------------------------------
 
 backup() {
-  BACKUP_FILE=''
+  BACKUP_FILE='' NOTHING_TO_BACK_UP=0
   removing_data || return 0
+  local parts=()
+  [[ -d $DIR/settings ]] && parts+=(settings)
+  [[ -e $DIR/keys ]] && parts+=(keys)
+  [[ -e $DIR/data ]] && parts+=(data)
+  # An installation that stopped early may not have made any of these yet: a backup would be empty.
+  if ((${#parts[@]} == 0)) && [[ -z ${REMOVE[postgresql]:-} ]]; then
+    NOTHING_TO_BACK_UP=1
+    ui_info "No backup needed" "there are no settings, keys or data here yet"
+    return 0
+  fi
   if [[ -z $BACKUP_WANTED ]]; then
     if ui_confirm "Make a backup of settings, keys and data first? (models are not included)" y; then BACKUP_WANTED=1; else BACKUP_WANTED=0; fi
   fi
   ((BACKUP_WANTED)) || return 0
   stop_services
-  local stamp work parts=()
+  local stamp work extra=()
   stamp=$(date +%Y%m%d-%H%M%S)
-  BACKUP_FILE=$(mktemp "$HOME/openWeightGym-backup-$stamp-XXXXXX.tar.gz")
   work=$(mktemp -d)
-  [[ -d $DIR/settings ]] && parts+=(settings)
-  [[ -e $DIR/keys ]] && parts+=(keys)
-  [[ -e $DIR/data ]] && parts+=(data)
   if [[ -n ${REMOVE[postgresql]:-} ]]; then dump_postgresql "$work"; fi
-  local extra=()
   [[ -d $work/postgresql ]] && extra=(-C "$work" postgresql)
-  ui_step "Writing the backup" -- as_reader tar --create --gzip --dereference --file "$work/backup.tar.gz" \
-    --exclude='settings/defaults' --exclude='settings/examples' -C "$DIR" "${parts[@]}" "${extra[@]}" ||
+  if ! ui_step "Writing the backup" -- as_reader tar --create --gzip --dereference --file "$work/backup.tar.gz" \
+      --exclude='settings/defaults' --exclude='settings/examples' -C "$DIR" "${parts[@]}" "${extra[@]}"; then
+    rm -rf -- "$work"
     ui_die "The backup could not be written, so nothing was removed." \
       "The lines above, from the log, say why (often a full disk: df -h ~): put that right" \
       "Or remove without a backup, once you have your own copy: uninstall.sh --no-backup"
-  as_reader cat "$work/backup.tar.gz" >"$BACKUP_FILE"
+  fi
+  # The backup gets its name in your home folder only once it is whole, so a failure leaves nothing behind.
+  BACKUP_FILE=$(mktemp "$HOME/openWeightGym-backup-$stamp-XXXXXX.tar.gz")
+  if ! as_reader cat "$work/backup.tar.gz" >"$BACKUP_FILE"; then
+    rm -f -- "$BACKUP_FILE"
+    rm -rf -- "$work"
+    ui_die "The backup could not be saved in $HOME, so nothing was removed." \
+      "Make room there (see how full it is: df -h ~), then run the uninstaller again" \
+      "Or remove without a backup, once you have your own copy: uninstall.sh --no-backup"
+  fi
   chmod 600 "$BACKUP_FILE"
-  rm -rf "$work"
+  rm -rf -- "$work"
   ui_ok "Backup written" "$BACKUP_FILE"
 }
 
@@ -301,7 +316,7 @@ confirm() {
   for id in "${ITEMS[@]}"; do [[ -z ${REMOVE[$id]:-} ]] && lines+=("${C_OK}keep  ${C_RESET}  ${LABEL[$id]}"); done
   ui_box "The cool-down" "${lines[@]}"
   ((ASSUME_YES || EVERYTHING)) && return 0
-  if removing_data && [[ -z $BACKUP_FILE ]]; then
+  if removing_data && [[ -z $BACKUP_FILE ]] && ((!${NOTHING_TO_BACK_UP:-0})); then
     local typed=''
     ui_warn "Data will be deleted and there is no backup."
     ui_input typed "Type delete to go ahead" ""

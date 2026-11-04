@@ -810,6 +810,29 @@ backup
             assert archive.extractfile("data/keep-me").read() == b"backup data"
 
 
+def test_an_install_with_nothing_to_back_up_is_not_offered_an_empty_backup(tmp_path):
+    # An install that stopped early has no settings, keys or data yet; tar refuses an empty archive.
+    install = tmp_path / "install"
+    install.mkdir()
+    answer = shell(tmp_path, script_functions("uninstall.sh") + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+ui_init
+DIR=$INSTALL BACKUP_WANTED='' ASSUME_YES=0 EVERYTHING=0
+ITEMS=(settings)
+declare -A REMOVE=([settings]=1) LABEL=([settings]="Settings and keys")
+stop_services() { echo stop_services >>"$CALLS"; }
+tar() { echo tar >>"$CALLS"; command tar "$@"; }
+ui_confirm() { printf '%s\\n' "$1" >>"$CALLS"; }
+ui_input() { echo ui_input >>"$CALLS"; }
+backup
+confirm
+''', env={"INSTALL": str(install), "HOME": str(tmp_path), "CALLS": str(tmp_path / "calls")})
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    assert "No backup needed" in answer.stdout
+    assert (tmp_path / "calls").read_text().splitlines() == ["Go ahead?"]
+    assert not list(tmp_path.glob("openWeightGym-backup-*"))
+
+
 @pytest.mark.parametrize("outcome", ["cancel", "backup-failure", "stop-failure"])
 def test_aborted_uninstall_restores_only_services_it_stopped(tmp_path, outcome):
     install = tmp_path / "install"
@@ -841,6 +864,8 @@ main --dir "$INSTALL" --for-reinstall
     expected.append("start turnstile.service")
     assert (tmp_path / "operations").read_text().splitlines() == expected
     assert retained.read_text() == "retained data"
+    if outcome == "backup-failure":
+        assert not list(tmp_path.glob("openWeightGym-backup-*"))
 
 
 @pytest.mark.parametrize("topology,services", [
@@ -899,25 +924,117 @@ def test_voice_compute_requires_a_front_key_before_downloading_weights(tmp_path)
         support.prepare_voice(tmp_path, ["voice"], install_models=lambda *args, **kwargs: pytest.fail("unexpected download"))
 
 
-def test_selected_speech_bundles_still_require_matching_checksums(tmp_path, monkeypatch):
-    spec = importlib.util.spec_from_file_location("recovery_voice_models", ROOT / "scripts/voice-models.py")
+def voice_models(tmp_path, monkeypatch, *, pinned_files, archive_files, archive_pinned, published):
+    """The real voice-models.py against one fixture bundle; returns the module and a list of downloads."""
+    spec = importlib.util.spec_from_file_location("fixture_voice_models", ROOT / "scripts/voice-models.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "__file__", str(tmp_path / "scripts/voice-models.py"))
-    monkeypatch.setattr(module.urllib.request, "urlretrieve", lambda *args: pytest.fail("unexpected download"))
+    source = tmp_path / "source/bundle"
+    source.mkdir(parents=True)
+    for name, data in archive_files.items():
+        (source / name).write_bytes(data)
+    built = tmp_path / "bundle.tar.bz2"
+    with tarfile.open(built, "w:bz2") as packed:
+        packed.add(source, arcname="bundle")
+    digest = hashlib.sha256(built.read_bytes()).hexdigest()
+    manifest = {"bundles": [{"name": name, "url": "https://github.com/owner/repo/releases/download/models/bundle.tar.bz2",
+                             "archive_sha256": digest if archive_pinned else hashlib.sha256(b"first upload").hexdigest(),
+                             "files": {key: hashlib.sha256(value).hexdigest() for key, value in pinned_files.items()}}
+                            for name in ("bundle", "unused")]}
     (tmp_path / "voice").mkdir()
-    manifest = {"bundles": [{"name": name, "url": "https://invalid.example/unused", "files": {
-        "model.onnx": hashlib.sha256(b"fixture model").hexdigest()}} for name in ("needed", "unused")]}
     (tmp_path / "voice/models.json").write_text(json.dumps(manifest))
-    model = tmp_path / "models/needed/model.onnx"
+    downloads = []
+
+    def fetch(url, target):
+        downloads.append(url)
+        shutil.copyfile(built, target)
+    monkeypatch.setattr(module.urllib.request, "urlretrieve", fetch)
+    answers = {"match": digest, "none": None, "damaged": hashlib.sha256(b"something else").hexdigest()}
+    monkeypatch.setattr(module, "published_sha256",
+                        lambda url: pytest.fail("asked the publisher") if published == "never" else answers[published])
+    return module, downloads
+
+
+PINNED = {"model.onnx": b"fixture model", "tokens.txt": b"fixture tokens"}
+
+
+@pytest.mark.parametrize("case,archive_files,archive_pinned,published,warning", [
+    ("pinned archive", PINNED, True, "never", None),
+    ("rebuilt archive, same files", PINNED, False, "none", None),
+    ("new files the publisher confirms", {**PINNED, "model.onnx": b"new model"}, False, "match",
+     "WARN bundle has changed upstream: installed the new version, which matches"),
+    ("new files nobody can confirm", {**PINNED, "model.onnx": b"new model"}, False, "none",
+     "WARN bundle has changed upstream and its publisher lists no checksum"),
+])
+def test_speech_bundles_install_when_upstream_rebuilds_or_updates_them(tmp_path, monkeypatch, capsys, case,
+                                                                        archive_files, archive_pinned, published, warning):
+    module, downloads = voice_models(tmp_path, monkeypatch, pinned_files=PINNED, archive_files=archive_files,
+                                     archive_pinned=archive_pinned, published=published)
+    models = tmp_path / "models"
+    module.install(models, bundles=["bundle"])
+    assert {path.name: path.read_bytes() for path in (models / "bundle").iterdir()} == archive_files
+    output = capsys.readouterr().out
+    assert (warning in output) if warning else ("WARN" not in output)
+    # What was installed is what later runs check, so an updated bundle is not downloaded again.
+    module.install(models, bundles=["bundle"])
+    assert len(downloads) == 1 and sorted(path.name for path in models.iterdir()) == [".bundle.files.json", "bundle"]
+
+
+def test_a_download_that_differs_from_its_publishers_checksum_is_retried_then_refused(tmp_path, monkeypatch):
+    module, downloads = voice_models(tmp_path, monkeypatch, pinned_files=PINNED,
+                                     archive_files={**PINNED, "model.onnx": b"truncated"},
+                                     archive_pinned=False, published="damaged")
+    with pytest.raises(ValueError, match="download is damaged"):
+        module.install(tmp_path / "models", bundles=["bundle"])
+    assert len(downloads) == 2 and list((tmp_path / "models").iterdir()) == []
+
+
+def test_a_damaged_installed_bundle_is_downloaded_again(tmp_path, monkeypatch):
+    module, downloads = voice_models(tmp_path, monkeypatch, pinned_files=PINNED, archive_files=PINNED,
+                                     archive_pinned=True, published="never")
+    models = tmp_path / "models"
+    model = models / "bundle/model.onnx"
     model.parent.mkdir(parents=True)
-    model.write_bytes(b"fixture model")
-    module.install(tmp_path / "models", bundles=["needed"])
+    for name, data in PINNED.items():
+        (models / "bundle" / name).write_bytes(data)
+    module.install(models, bundles=["bundle"])
+    assert downloads == []
     model.write_bytes(b"damaged")
-    with pytest.raises(ValueError, match="Installed checksum differs"):
-        module.install(tmp_path / "models", bundles=["needed"])
+    module.install(models, bundles=["bundle"])
+    assert len(downloads) == 1 and model.read_bytes() == b"fixture model"
+    assert not (models / "unused").exists()
     with pytest.raises(ValueError, match="Unknown speech bundles"):
-        module.install(tmp_path / "models", bundles=["unknown"])
+        module.install(models, bundles=["unknown"])
+
+
+@pytest.mark.parametrize("url,release,expected", [
+    ("https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro.tar.bz2",
+     {"assets": [{"name": "other.tar.bz2", "digest": "sha256:" + "1" * 64},
+                 {"name": "kokoro.tar.bz2", "digest": "sha256:" + "a" * 64}]}, "a" * 64),
+    ("https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/old.tar.bz2",
+     {"assets": [{"name": "old.tar.bz2", "digest": None}]}, None),
+    ("https://example.com/bundle.tar.bz2", None, None),
+    ("https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro.tar.bz2", OSError("rate limited"), None),
+])
+def test_publisher_checksums_come_from_the_github_release(monkeypatch, url, release, expected):
+    spec = importlib.util.spec_from_file_location("publisher_voice_models", ROOT / "scripts/voice-models.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    asked = []
+
+    def answer(request, timeout):
+        asked.append(request.full_url)
+        if isinstance(release, Exception):
+            raise release
+        import io
+        return io.BytesIO(json.dumps(release).encode())
+    monkeypatch.setattr(module.urllib.request, "urlopen", answer)
+    assert module.published_sha256(url) == expected
+    if release is None:
+        assert asked == []
+    else:
+        assert asked == ["https://api.github.com/repos/k2-fsa/sherpa-onnx/releases/tags/" + url.split("/")[-2]]
 
 
 def test_voice_identity_preserves_existing_policy_keys_and_disabled_accounts(tmp_path):
