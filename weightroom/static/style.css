@@ -516,3 +516,23 @@ form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
 }
 
 .connection-status { margin: 0; border-radius: 0; padding: .35rem 1rem; font-size: .875rem; }
+
+/* Files page: one small card per model-file location, more to a row as the page widens (up to eight). */
+.place-cards-frame { container-type: inline-size; }
+.place-cards { display: grid; gap: .75rem; grid-template-columns: repeat(var(--place-columns, 1), minmax(0, 1fr)); }
+@container (min-width: 24rem) { .place-cards { --place-columns: 2; } }
+@container (min-width: 36rem) { .place-cards { --place-columns: 3; } }
+@container (min-width: 48rem) { .place-cards { --place-columns: 4; } }
+@container (min-width: 64rem) { .place-cards { --place-columns: 6; } }
+@container (min-width: 88rem) { .place-cards { --place-columns: 8; } }
+.place-cards > .place-card { margin: 0 !important; min-width: 0; }
+.place-card > .card-body { padding: .75rem; }
+.place-card .place-card-heading { margin-bottom: 0 !important; flex-wrap: nowrap; min-width: 0; }
+.place-card .place-card-title { font-size: .95rem; }
+.place-card-path { font-size: .75rem; line-height: 1.3; }
+.place-card-amount { font-size: .875rem; }
+.place-folders { table-layout: fixed; font-size: .8rem; }
+.place-folders > :not(caption) > * > * { padding: .1rem 0; background: transparent; }
+.place-folders td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: .5rem; }
+.place-folders-size { width: 5.5rem; }
+.place-folders td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }

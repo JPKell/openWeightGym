@@ -668,7 +668,9 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     refused_cleanup = browser.post("/files", data={"do": "clear-cache"})
     assert "Configure a model storage library before clearing the cache." in refused_cleanup.text
     assert "The form could not be submitted" not in refused_cleanup.text
-    assert f"{folder}" in files and "free of" in files and 'class="progress-bar"' in files  # the place, and the room on its drive
+    assert f"{folder}" in files and "</b> free" in files and 'class="progress-bar"' in files  # the place, and the room on its drive
+    # The locations are cards in one collapsible card; the 5-second refresh replaces only its body, so it stays as left.
+    assert ">Model file locations<" in files and '<div class="card-body" id="files-places">' in files and 'class="card mb-3 place-card"' in files
     assert "Fresh-Download.Q8.gguf" in files and "In-Use.Q4.gguf" in files and '<a href="/models/mine">mine</a>' in files
     assert "Fresh &lt;b&gt;Download&lt;/b&gt;" in files  # what a file says of itself is text like any other, never HTML
     part = browser.get("/files?part=list").text
@@ -725,9 +727,11 @@ def test_files_separates_cache_and_storage_and_promotes_or_two_click_deletes(tmp
     with TestClient(build_app(settings, door(front, 8442))) as browser:
         sign_in(browser, "jordan")
         cache_page = browser.get("/files?tier=cache").text
-        places_html = cache_page.split('id="files-places"', 1)[1].split('<nav class="nav nav-pills', 1)[0]
+        places_html = cache_page.split('id="files-places"', 1)[1].split('<nav class="nav nav-pills', 1)[0].replace("<wbr>", "")
         assert places_html.count(str(cache)) == 1 and places_html.count(str(storage)) == 1
-        assert places_html.count('d-flex flex-nowrap') == 2
+        # A card each for front (nothing set up), the cache and storage; each lists its subfolders, and a drive counts once.
+        assert places_html.count('class="card mb-3 place-card"') == 3 and 'aria-label="Storage"' in places_html
+        assert places_html.count('<td title="llm">llm</td>') == 2 and places_html.count("</b> free") == 2 and "drives" not in places_html
         assert "Last used" not in cache_page and "Used on nodes" in cache_page
         assert '<a href="/models/mine">mine</a>' in cache_page and "compute" in cache_page
 
