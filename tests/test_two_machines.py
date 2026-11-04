@@ -174,7 +174,8 @@ def test_offline_navigation_reuses_metadata_without_retrying_workers(metadata_fr
         data=str(tmp_path / 'web')), door(front.app, 8442)))
     browser.cookies.set('weightroom', key)
     for path in ('/guide', '/account/appearance', '/status', '/status?part=status', '/status?part=requests',
-                 '/chat', '/models', '/compute-nodes', '/settings', '/benchmarks/runs'):
+                 '/chat', '/models', '/compute-nodes', '/settings', '/benchmarks/runs',
+                 '/usage?part=report', '/requests?part=page', '/log?part=page'):
         response = browser.get(path)
         assert response.status_code == 200
         if '?' not in path:

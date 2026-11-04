@@ -3,27 +3,7 @@
 {% block title %}Requests · openWeightGym{% endblock %}
 {% block main %}
 {{ page_header("Requests", lead="Find requests, traces and diagnostic evidence.") }}
-{% call card("Trace search", observation_report is not none, 'trace-search') %}
-<form method="get" action="/requests" class="row g-2 mb-3">
-{% for key,label in [('request_id','Ingress ID'),('trace_id','Distributed trace ID'),('service','Service'),('machine','Machine'),('application','Application label'),('outcome','Outcome'),('error_code','Error code'),('since','From (Unix seconds)'),('until','To (Unix seconds)')] %}
-<div class="col-12 col-sm-6 col-xl-4"><label for="trace-{{ key }}" class="form-label small">{{ label }}</label><input class="form-control form-control-sm" id="trace-{{ key }}" name="{{ key }}" value="{{ request.query_params.get(key,'') }}" maxlength="128"></div>
-{% endfor %}<div class="col-12"><button class="btn btn-sm btn-primary" name="observe" value="1">Search traces and metrics</button> <a class="btn btn-sm btn-outline-secondary" href="/requests?{{ request.query_params|string }}&amp;export=jsonl">Export metadata</a>{% if request.query_params.get('request_id') %} <a class="btn btn-sm btn-outline-secondary" href="/requests?request_id={{ request.query_params['request_id']|query }}&amp;since=0&amp;export=receipt">Failure receipt</a>{% endif %}</div>
-</form>
-{% include "observation_trace.html" %}
-{% if not observation_report %}<p class="small text-secondary mb-0">Search to load trace metadata and operational metrics.</p>{% endif %}
-{% endcall %}
-{% if operation_report %}{% call card("Operational metrics", false, 'observation-metrics') %}
-<p class="small text-secondary">{{ operation_report.basis }} Window {{ operation_report.since }}–{{ operation_report.until }} (Unix seconds). Benchmarks excluded. Ingress calls and internal operations have separate denominators.</p>
-<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Service</th><th>Operation</th><th>Measurement</th><th>Count</th><th>Total</th><th>p50</th><th>p95</th><th>Per second</th><th>Errors / cancelled</th></tr></thead><tbody>
-{% for group in operation_report.groups %}<tr><td>{{ group.service }}</td><td>{{ group.operation }}</td><td>{{ group.metric }}</td><td>{{ group.count }}</td><td>{{ '%.3f'|format(group.total) }}</td><td>{{ group.p50 if group.p50 is not none else 'Unavailable' }}</td><td>{{ group.p95 if group.p95 is not none else 'Unavailable' }}</td><td>{{ '%.3f'|format(group.per_second|default(0)) }}</td><td>{{ '%.1f'|format(group.error_percent|default(0)) }}% / {{ '%.1f'|format(group.cancelled_percent|default(0)) }}%</td></tr>{% else %}<tr><td colspan="9">No measured operations in this window.</td></tr>{% endfor %}</tbody></table></div>
-{% if operation_report.local %}<p class="small mb-1">Local active spans: {{ operation_report.local.active }} · queue: {{ operation_report.local.pending }} · dropped/sampled: {{ operation_report.local.dropped }}</p>{% endif %}
-{% for source in operation_report.sources|default([]) %}<p class="small mb-1">{{ source.machine }}: {{ 'Fresh' if source.fresh else 'Stale / unknown' }} · forwarding backlog {{ source.backlog_count|default('Unavailable') }} · dropped/sampled {{ source.dropped|default({}) }}</p>{% endfor %}
-{% endcall %}{% endif %}
-{% call card("Recent requests", true, 'recent-requests-card') %}{% include "requests_list.html" %}{% endcall %}
-{% call card("Client access", false, 'client-access') %}
-<div class="table-responsive"><table class="table table-sm align-middle mb-0">
-<thead><tr><th>IP</th><th>User</th><th>First seen</th><th>Last seen</th><th>Accepted attempts</th><th>Rejected attempts</th></tr></thead>
-<tbody>{% for access in accesses %}<tr><td>{{ access.ip }}</td><td>{{ access.user or 'Unknown key' }}</td><td class="when">{{ access.first_at_display }}</td><td class="when">{{ access.last_at_display }}</td><td>{{ access.accepted }}</td><td>{{ access.failed }}</td></tr>{% else %}<tr><td colspan="6" class="text-secondary">No client key accesses recorded.</td></tr>{% endfor %}</tbody>
-</table></div>
-{% endcall %}
+{% if deferred %}{% from "deferred.html" import loading %}
+{{ loading('requests-report', fragment_url, 'Loading requests…') }}
+{% else %}{% include "requests_content.html" %}{% endif %}
 {% endblock %}

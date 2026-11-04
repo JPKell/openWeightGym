@@ -93,16 +93,16 @@ def test_usage_api_and_page_enforce_scope_and_validate_filters(desk, tmp_path, m
         for query in ["start=bad", "start=2026-10-05&end=2026-10-01", "timezone=invalid", "group_by=detail", "start=0001-01-01&end=2026-01-01", "input_rate=-1", "output_rate=NaN", "input_rate=Infinity", "output_rate=no", "input_rate=1000001", "bucket=minute", "start=2026-10-01&end=2026-10-02&bucket=hour"]:
             assert api.get("/loadcoach/usage?" + query, headers=headers).status_code == 400
     sign_in(browser, "pat")
-    page = browser.get("/usage?start=2026-10-01&end=2026-10-02")
+    page = browser.get("/usage?start=2026-10-01&end=2026-10-02&complete=1")
     assert page.status_code == 200 and "Showing your usage only" in page.text
     defaults = json.loads(re.search(r'<script type="application/json" id="usage-data">(.*?)</script>', page.text, re.S)[1])
     assert defaults["mock_pricing"]["input_rate"] == 2 and defaults["mock_pricing"]["output_rate"] == 10
     assert "private-model" not in page.text and 'name="user"' not in page.text
-    assert browser.get("/usage?user=jordan").status_code == 403
-    assert browser.get("/usage?start=bad").status_code == 400
+    assert browser.get("/usage?user=jordan&complete=1").status_code == 403
+    assert browser.get("/usage?start=bad&complete=1").status_code == 400
     browser.post("/sign-out")
     sign_in(browser, "jordan")
-    page = browser.get("/usage?start=2026-10-01&end=2026-10-02&group_by=user&input_rate=2.5&output_rate=5")
+    page = browser.get("/usage?start=2026-10-01&end=2026-10-02&group_by=user&input_rate=2.5&output_rate=5&complete=1")
     result = json.loads(re.search(r'<script type="application/json" id="usage-data">(.*?)</script>', page.text, re.S)[1])
     assert result["mock_pricing"]["input_rate"] == 2.5
     assert result["totals"]["total_cost"] == pytest.approx((1009 * 2.5 + 2 * 5) / 1_000_000)
@@ -189,7 +189,7 @@ def test_usage_api_uses_registered_model_prices_without_disclosing_catalog(desk,
              prompt_tokens=1000, answer_tokens=500, service="rented")
     recorded(log, monkeypatch, "2026-10-01T12:00:00+00:00", "jordan", model="secret-model", cost=100)
     sign_in(browser, "pat")
-    page = browser.get("/usage?start=2026-10-01&end=2026-10-02")
+    page = browser.get("/usage?start=2026-10-01&end=2026-10-02&complete=1")
     result = json.loads(re.search(r'<script type="application/json" id="usage-data">(.*?)</script>', page.text, re.S)[1])
     assert result["totals"]["model_cost"] == .005
     assert result["totals"]["effective_cost"] == .005

@@ -7,82 +7,13 @@
 {% block page_class %}usage-page{% endblock %}
 {% block scripts %}
 <script src="/static/echarts.min.js" defer></script>
-<script src="/static/usage.js?v=3" defer></script>
+<script src="/static/usage.js?v=4" defer></script>
 {% endblock %}
 {% block main %}
-{% call page_header('Usage', 'Inspect recorded requests, token usage and costs.', pretitle='Logs') %}<span class="text-secondary small">{{ report.start }} – {{ report.end }} · {{ report.timezone }}</span>{% endcall %}
+{{ page_header('Usage', 'Inspect recorded requests, token usage and costs.', pretitle='Logs') }}
 <p><a href="/allowances">Spending allowances and remaining recorded amounts</a></p>
-<form id="usage-filters" method="get" action="/usage" class="mb-3">
-  <div class="row g-2 align-items-end">
-    <div class="col-md-6 col-lg-4">
-      <label class="form-label" for="usage-start">Date range</label>
-      <div class="input-group input-group-sm">
-        <input class="form-control form-control-sm" id="usage-start" name="start" type="date" aria-label="From" value="{{ report.start }}" required>
-        <span class="input-group-text">through</span>
-        <input class="form-control form-control-sm" id="usage-end" name="end" type="date" aria-label="Through" value="{{ report.end }}" required>
-      </div>
-    </div>
-    <div class="col-md-6 col-lg-4">{{ users_groups('usage', report.choices.group, report.user_groups, report.filters.user, report.filters.group, report.everyone) }}</div>
-    {% for key, label in [('model', 'Model'), ('source', 'Source'), ('outcome', 'Outcome'), ('level', 'Level')] %}
-    {% if key == 'source' %}
-  </div>
-  <div class="row g-2 align-items-end mt-0">
-    {% endif %}
-    <div class="col-md-6 col-lg-4">
-      <label class="form-label" for="usage-{{ key }}">{{ label }}</label>
-      <select class="form-select form-select-sm" id="usage-{{ key }}" name="{{ key }}">
-        <option value="">All</option>
-        {% if report.filters[key] and report.filters[key] not in report.choices[key] %}<option selected value="{{ report.filters[key] }}">{{ report.filters[key] }}</option>{% endif %}
-        {% for value in report.choices[key] %}<option value="{{ value }}" {{ 'selected' if report.filters[key] == value }}>{{ value }}</option>{% endfor %}
-      </select>
-    </div>
-    {% endfor %}
-    <div class="col-md-6 col-lg-4 d-flex gap-2"><button class="btn btn-primary btn-sm">Apply</button><a class="btn btn-outline-secondary btn-sm" href="/usage">Reset</a></div>
-  </div>
-  <input type="hidden" name="timezone" value="{{ report.timezone }}">
-</form>
-<hr class="my-4">
-{% include "usage_kpis.html" %}
-
-<div class="row g-2 mb-3">
-{% for side in ['input', 'output'] %}<div class="col-sm-6 col-lg-3"><label class="form-label" for="usage-{{ side }}-rate">Mock {{ side }} rate / M tokens</label><input form="usage-filters" class="form-control form-control-sm" id="usage-{{ side }}-rate" name="{{ side }}_rate" type="number" min="0" max="1000000" step="any" value="{{ report.mock_pricing[side ~ '_rate'] }}" required></div>{% endfor %}
-</div>
-<hr class="my-4">
-{% if not report.totals.requests %}<p class="empty-state">No recorded requests match these filters.</p>{% endif %}
-{% call card("", attrs={"aria-labelledby": "usage-chart-heading"}) %}
-    <div class="nav nav-pills gap-1 mb-3" role="group" aria-label="Usage chart view">
-      {% for key, label in [('trend', 'Over time'), ('user', 'By user'), ('group', 'By group'), ('model', 'By model'), ('source', 'By source'), ('outcome', 'By outcome'), ('level', 'By level')] %}
-      <button type="button" class="btn btn-sm nav-link {{ 'active' if key == 'trend' }}" data-usage-view="{{ key }}" aria-pressed="{{ 'true' if key == 'trend' else 'false' }}" aria-controls="usage-chart">{{ label }}</button>
-      {% endfor %}
-    </div>
-    <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-      <label class="small text-secondary" for="usage-metric">Metric</label><select id="usage-metric" class="form-select form-select-sm w-auto"><option value="tokens">Tokens</option><option value="cost">Cost by source (USD)</option><option value="mock">All-mock comparison (USD)</option></select>
-      <div id="usage-lines-control" class="d-flex align-items-center gap-2"><label class="small text-secondary" for="usage-lines">Lines</label><select id="usage-lines" class="form-select form-select-sm w-auto"><option value="total">Total tokens</option><option value="split">Input / output</option></select></div>
-      <div id="usage-mode-control" class="d-flex align-items-center gap-2"><label class="small text-secondary" for="usage-mode">View</label><select id="usage-mode" class="form-select form-select-sm w-auto"><option value="daily">Per day</option><option value="cumulative">Cumulative</option></select></div>
-      <div id="usage-stack-control" class="form-check ms-2 d-none"><input class="form-check-input" type="checkbox" id="usage-stack"><label class="form-check-label small" for="usage-stack">Stack by model</label></div>
-    </div>
-    {{ section_title("Tokens over time", id="usage-chart-heading") }}
-    <div id="usage-chart" class="usage-chart frame" role="img" aria-label="Daily total tokens; exact values in the daily totals table below."></div>
-    <noscript><p class="text-secondary small">Enable JavaScript to switch chart views. Usage tables are available below.</p></noscript>
-  {% endcall %}
-{% call card("", attrs={"aria-labelledby": "usage-range-heading"}, body=false) %}
-  <div class="card-body d-flex align-items-center gap-2 flex-wrap">{% set _section_title2 %}Selected range by {{ report.group_by }}{% endset %}
-{{ section_title(_section_title2, id="usage-range-heading") }}<label class="ms-auto small text-secondary" for="usage-group-by">Table breakdown</label><select form="usage-filters" class="form-select form-select-sm w-auto" id="usage-group-by" name="group_by">{% for key, label in [('model', 'Model'), ('user', 'User'), ('group', 'Group'), ('source', 'Source'), ('outcome', 'Outcome'), ('level', 'Level')] %}<option value="{{ key }}" {{ 'selected' if report.group_by == key }}>{{ label }}</option>{% endfor %}</select></div>
-  <div class="table-responsive">
-    <table id="usage-breakdown" class="table sortable align-middle mb-0">
-      <thead><tr><th scope="col" data-sort="text">{{ report.group_by|title }}</th>{% for title in ['Requests', 'Input tokens', 'Output tokens', 'Total tokens', 'Recorded USD', 'Model-rate USD', 'Mock fallback USD', 'Total cost USD', 'Missing counts'] %}<th scope="col" class="text-end" data-sort="value">{{ title }}</th>{% endfor %}</tr></thead>
-      <tbody>{% for row in report.breakdown %}<tr><th scope="row">{{ row.name }}</th>{% for key in ['requests', 'input_tokens', 'output_tokens', 'total_tokens', 'recorded_cost', 'model_cost', 'fallback_cost', 'effective_cost', 'missing_usage'] %}<td class="text-end" data-value="{{ row[key] }}">{{ money(row[key]) if key.endswith('_cost') else '{:,}'.format(row[key]) }}</td>{% endfor %}</tr>{% else %}<tr><td colspan="10" class="text-secondary">No usage in this range.</td></tr>{% endfor %}</tbody>
-      <tfoot><tr><th scope="row">Total</th>{% for key in ['requests', 'input_tokens', 'output_tokens', 'total_tokens', 'recorded_cost', 'model_cost', 'fallback_cost', 'effective_cost', 'missing_usage'] %}<td class="text-end">{{ money(report.totals[key]) if key.endswith('_cost') else '{:,}'.format(report.totals[key]) }}</td>{% endfor %}</tr></tfoot>
-    </table>
-  </div>
-{% endcall %}
-{% call card("Daily totals · counts and costs", open=false, body=false) %}<div class="table-responsive usage-daily-table"><table id="usage-daily" class="table mb-0"><thead><tr><th scope="col">Date</th>{% for title in ['Requests', 'Input tokens', 'Output tokens', 'Total tokens', 'Recorded USD', 'Model-rate USD', 'Mock fallback USD', 'Total cost USD', 'Missing counts'] %}<th scope="col" class="text-end">{{ title }}</th>{% endfor %}</tr></thead><tbody>{% for row in report.daily %}<tr><th scope="row">{{ row.date }}</th>{% for key in ['requests', 'input_tokens', 'output_tokens', 'total_tokens', 'recorded_cost', 'model_cost', 'fallback_cost', 'effective_cost', 'missing_usage'] %}<td class="text-end">{{ money(row[key]) if key.endswith('_cost') else '{:,}'.format(row[key]) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% endcall %}
-<p class="text-secondary small">Costs use the recorded request cost first ({{ report.totals.recorded_requests }} requests), then current model pricing ({{ report.totals.model_requests }}), then mock rates ({{ report.totals.fallback_requests }}). Recorded costs include provider-reported charges or estimates saved at request time; a recorded $0 is kept. The combined total includes estimates, not just billed spend. Mock rates are USD per million tokens and stay in this page’s bookmarkable URL.</p>
-{% if not report.everyone %}<p class="text-secondary small">Showing your usage only.</p>{% endif %}
-{% if report.totals.missing_usage %}<p class="text-warning small">{{ report.totals.missing_usage }} request(s) did not report complete token counts. Token-based estimates include only the counts received and may be understated; recorded costs are kept even without token counts.</p>{% endif %}
-{% if report.totals.inferred_group %}<p class="text-secondary small">Group membership for {{ report.totals.inferred_group }} older request(s) uses current membership where available, or “unknown” for deleted accounts. New requests keep their original group.</p>{% endif %}
-<p class="text-secondary small">Calendar days use {{ report.timezone }}. Cumulative totals start at the selected range's beginning.
-  Based on retained model-request logs{% if report.keep_days %} ({{ '%g'|format(report.keep_days) }}-day retention){% endif %}{% if report.oldest %}; earliest retained request in your access scope: {{ report.oldest }}{% endif %}.
-  Unlogged requests and isolated benchmark probes are excluded.</p>
-<script type="application/json" id="usage-data">{{ report|tojson }}</script>
+{% if report is defined %}{% include 'usage_content.html' %}{% else %}
+{% from "deferred.html" import loading %}
+{{ loading('usage-report', fragment_url, 'Loading usage data…') }}
+{% endif %}
 {% endblock %}

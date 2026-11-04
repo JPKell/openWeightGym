@@ -1,0 +1,7 @@
+{% macro loading(id, url, label, trigger='load') %}
+<div id="{{ id }}" data-deferred-loader aria-busy="true" hx-get="{{ url }}" hx-trigger="{{ trigger }}" hx-swap="outerHTML" hx-sync="this:drop">
+  <p class="text-secondary" role="status" data-loading-message><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>{{ label }}</p>
+  <button type="button" class="btn btn-outline-secondary btn-sm" data-load-retry hidden hx-get="{{ url }}" hx-target="#{{ id }}" hx-swap="outerHTML">Retry loading</button>
+  <noscript><a href="{{ url }}&amp;complete=1">Load this page with its data</a></noscript>
+</div>
+{% endmacro %}

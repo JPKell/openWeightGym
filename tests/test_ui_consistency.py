@@ -383,7 +383,7 @@ def test_dynamic_image_cards_use_shared_templates(ui_console):
                      'assets': [], 'references': [], 'presets': [], 'jobs': [], 'can_manage': True}
         elif path.startswith('/mirrorwall-discovery?'):
             value = {'found': [{'name': unsafe_name, 'kind': 'checkpoint', 'base_model': 'SDXL',
-                                'url': 'https://example.invalid/model', 'repository': 'fixture'}]}
+                                'url': 'https://example.invalid/model', 'repository': 'civitai/123'}]}
         elif path == '/mirrorwall-api/presets':
             body = json.loads(route.request.post_data)
             submitted.append(body)
@@ -752,7 +752,7 @@ def test_user_facing_product_name_does_not_rename_runtime_identity(desk):
 def test_status_and_empty_state_copy_is_plain(desk):
     server, _, _ = desk
     sign_in(server,'jordan')
-    assert 'Every fingerprint there has been' not in server.get('/models').text
+    assert 'Every fingerprint there has been' not in server.get('/models?complete=1').text
     assert 'No conversations yet.' in server.get('/chat').text
     status=(ROOT/'weightroom/pages/status_nodes.html').read_text()
     assert 'No GPUs are reserved exclusively' in status and 'Nobody holds' not in status
@@ -767,7 +767,7 @@ def test_display_preserves_zero_formats_counts_and_escapes_logs(desk):
     assert '<time ' in line and '&lt;script&gt;' in line and '<script>' not in line
     server, _, _ = desk
     sign_in(server,'pat')
-    home = server.get('/usage')
+    home = server.get('/usage?complete=1')
     assert 'data-usage-total="total_tokens">0</strong>' in home.text
     assert 'data-usage-total="total_tokens">0.0' not in home.text
 
@@ -955,7 +955,7 @@ def test_system_logs_refusal_is_permanent_and_unavailable_link_is_hidden(desk_wi
     sign_in(server, 'pat')
     response = server.get('/output')
     assert response.status_code == 403 and 'restart-services ability' in response.text
-    assert 'said-box' not in response.text and 'href="/output"' not in server.get('/usage').text
+    assert 'said-box' not in response.text and 'href="/output"' not in server.get('/usage?complete=1').text
 
 
 def test_telemetry_chart_times_use_browser_zone_and_keep_utc_tooltips():

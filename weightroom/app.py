@@ -833,6 +833,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     response.form_retained = True
         return response
 
+    def fragment_url(request: Request, part: str) -> str:
+        """Preserve bookmarkable filters while selecting one independently loaded section."""
+        return request.url.path + '?' + urlencode([(key, value) for key, value in request.query_params.multi_items()
+                                                   if key not in ('part', 'complete')] + [('part', part)])
+
+    def initial_page(request: Request) -> bool:
+        """Plain navigations render immediately; fragments and explicit full-data views do work separately."""
+        return (request.method == 'GET' and not request.query_params.get('part')
+                and request.query_params.get('complete') != '1' and request.headers.get('hx-request') != 'true')
+
+    def fragment_error(request: Request, person: Person, region: str, part: str, answer: Response | httpx.Response) -> Response:
+        """Keep a delayed-data refusal and its retry inside the original section."""
+        why = 'This section could not be loaded. Check the filters and retry.'
+        if isinstance(answer, httpx.Response):
+            try:
+                why = answer.json().get('error', {}).get('message') or why
+            except (ValueError, AttributeError):
+                pass
+        return page(request, 'deferred_error.html', person, status=answer.status_code,
+                    region=region, why=why, retry_url=fragment_url(request, part))
+
     async def http_error(request: Request, problem: HTTPException) -> Response:
         """Keep missing pages and HTTP refusals inside the console, without changing their status."""
         person = getattr(request.state, 'person', None)
@@ -1154,6 +1175,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response(answer.content, status_code=answer.status_code, headers={
                 'content-type':answer.headers.get('content-type', 'application/json'), 'cache-control':'no-store',
                 'x-content-type-options':'nosniff'})
+        if initial_page(request):
+            return page(request, 'requests.html', person, deferred=True, fragment_url=fragment_url(request, 'page'))
         limit, current = controls(request.query_params)
         completed = request.query_params.get('completed') == '1'
         filters = {key: request.query_params[key] for key in REQUEST_FILTER_FIELDS if request.query_params.get(key)}
@@ -1174,7 +1197,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             'limit': limit, 'page': current, 'completed': int(completed),
             **(sent_filters if not filter_error else {})})
         if isinstance(found, Response):
-            return found
+            return fragment_error(request, person, 'requests-report', 'page', found) if request.query_params.get('part') == 'page' else found
         choices = found.get('choices', {})
         choices['model'] = sorted(set(choices.get('model', [])) | set(person.me.get('models', [])))
         if filter_error:
@@ -1198,7 +1221,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 operation_report = await fetch(request, person, '/loadcoach/observation-metrics')
                 if isinstance(operation_report, Response):
                     operation_report = None
-        return page(request, 'requests_list.html' if request.query_params.get('part') == 'list' else 'requests.html', person,
+        template = ('requests_list.html' if request.query_params.get('part') == 'list' else
+                    'requests_content.html' if request.query_params.get('part') == 'page' and request.query_params.get('complete') != '1' else 'requests.html')
+        return page(request, template, person,
                     observation_report=observation_report, operation_report=operation_report,
                     recent=[] if filter_error else found['requests'], completed=completed, embedded=request.query_params.get('embedded') == '1',
                     accesses=found.get('accesses', []), **filters_context,
@@ -1665,21 +1690,31 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def models_page(request: Request, person: Person, said: str = "", failed: bool = False, form: dict | None = None) -> Response:
         """Render the merged authorized model catalogue in configured order."""
+        if 'manage-models' not in person.can:
+            return page(request, 'refused.html', person, status=403, why='Your account may not add, change and remove models.')
+        asked = request.query_params
+        kind = asked.get('kind', 'llm')
+        if kind not in ('llm', 'image', 'audio'):
+            kind = 'llm'
+        part = asked.get('part') if asked.get('complete') != '1' else None
+        if initial_page(request) and form is None and not failed:
+            initial_form = ({'file': asked['file'], 'trained': asked.get('trained', ''),
+                             'name': asked.get('name') or Path(asked['file']).stem.lower()} if 'file' in asked else {})
+            return page(request, 'models.html', person, deferred=True, known={}, kind=kind,
+                        list_url=fragment_url(request, 'list'), editor_url=fragment_url(request, 'editor'),
+                        selected_node=asked.get('node', 'compute'), form=initial_form,
+                        said=said or asked.get('said', ''), failed=False)
         try:
-            known = await all_models(request, person)
+            known = await all_models(request, person) if part != 'editor' else {'models': []}
         except ComputeOff:
             known = {"models": [], "to_measure": [], "measuring": None}
         if isinstance(known, Response):
-            return known
-        asked = request.query_params
-        kind = asked.get("kind", "llm")
-        if kind not in ("llm", "image", "audio"):
-            kind = "llm"
+            return fragment_error(request, person, 'models', 'list', known) if part == 'list' else known
         kinds = {"sdcpp": "image", "audiocpp": "audio"}
         known['models'] = [one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == kind]
         progress = await ask("GET", "/turnstile/artifacts/distributions", person.key) if asked.get("install") else None
         installation = next((job for job in progress.json().get("distributions", []) if job["id"] == asked.get("install")), None) if progress and progress.is_success else None
-        if asked.get("part") == "list":  # the list asking for itself again
+        if part == "list":  # the list asking for itself again
             return page(request, "models_list.html", person, known=known, address=lambda label: node_model_address(request, label),
                         kind=kind, installation=installation, adaptor_models=plugins.models(person.me) if kind == 'llm' else [])
         if form is None and "file" in asked:
@@ -1691,6 +1726,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         selected_node = (form or {}).get("node") or asked.get("node", "compute")
         if node_choices and selected_node not in {node["name"] for node in node_choices}:
             return page(request, "refused.html", person, status=404, why="That compute node is not configured.")
+        if part == 'editor':
+            known['cards'] = [card['card'] for node in node_choices if node['name'] == selected_node for card in node.get('cards', [])]
         engine_answer = await ask("GET", "/turnstile/machines/" + quote(selected_node, safe="") + "/engines", person.key)
         engine_choices = engine_answer.json().get("engines", []) if engine_answer.is_success else [
             {"id": "llama_cpp", "label": "llama.cpp", "enabled": True, "schema": engine_for().schema()}] if engine_answer.status_code == 404 else []
@@ -1705,7 +1742,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         file_nodes = available.json().get("nodes", []) if available and available.is_success else []
         file_choices = [{**file, "machine": node["name"]} for node in sorted(file_nodes, key=lambda row: row['name'] != selected_node)
                         for file in node.get("files", []) if file.get("facts", {}).get("what") == "model" and not file.get("moving")]
-        return page(request, "models.html", person, status=400 if failed else 200, known=known,
+        return page(request, 'models_editor.html' if part == 'editor' else "models.html", person, status=400 if failed else 200, known=known,
                     kind=kind, installation=installation, file_choices=file_choices, file_nodes=file_nodes,
                     node_choices=node_choices, selected_node=selected_node, engine_choices=engine_choices,
                     selected_engine=chosen_engine, engine_schema=engine_schema,
@@ -3402,16 +3439,22 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def usage_page(request: Request, person: Person) -> Response:
         """Show the caller's token history with calendar filters and browser-side chart modes."""
+        if initial_page(request):
+            return page(request, 'usage_report.html', person, fragment_url=fragment_url(request, 'report'))
         params = {key: request.query_params[key] for key in
                   ("start", "end", "user", "group", "model", "source", "outcome", "group_by", "timezone", "input_rate", "output_rate")
                   if request.query_params.get(key)}
         params.setdefault("timezone", settings.timezone or "UTC")
         params.setdefault("input_rate", settings.mock_input_rate)
         params.setdefault("output_rate", settings.mock_output_rate)
-        result = await fetch(request, person, "/loadcoach/usage", params=params)
-        if isinstance(result, Response):
-            return result
-        return page(request, "usage_report.html", person, report=result)
+        answer = await ask('GET', '/loadcoach/usage', person.key, params=params)
+        if not answer.is_success:
+            if request.query_params.get('part') == 'report':
+                return fragment_error(request, person, 'usage-report', 'report', answer)
+            return page(request, 'refused.html', person, status=answer.status_code, why=answer.json()['error']['message'])
+        template = ('usage_content.html' if request.query_params.get('part') == 'report'
+                    and request.query_params.get('complete') != '1' else 'usage_report.html')
+        return page(request, template, person, report=answer.json())
 
     async def allowances_page(request: Request, person: Person) -> Response:
         """Advisory remaining USD, manually refreshed without replacing active selections."""
@@ -3442,16 +3485,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         asks for itself again every few seconds.
         """
         asked = request.query_params
+        if initial_page(request):
+            return page(request, 'log.html', person, deferred=True, fragment_url=fragment_url(request, 'page'),
+                        said=asked.get('said', ''), failed=asked.get('failed') == '1')
         wanted = {key: asked[key].strip() for key in ("kind", "what", "user", "group", "model", "trace", "start", "end") if asked.get(key, "").strip()}
         limit, _ = controls(asked, 100)
         going_back = {"before": asked["before"]} if asked.get("before") else {}
         found = await fetch(request, person, "/loadcoach/events", params={**wanted, **going_back, 'timezone': settings.timezone or 'UTC', "limit": limit})
         if isinstance(found, Response):
-            return found
+            return fragment_error(request, person, 'log-view', 'page', found) if asked.get('part') == 'page' else found
         template = "log_list.html" if asked.get("part") == "list" else "log.html"  # the table asking for itself again
         choices = await fetch(request, person, '/loadcoach/event-choices') if template == 'log.html' else {}
         if isinstance(choices, Response):
-            return choices
+            return fragment_error(request, person, 'log-view', 'page', choices) if asked.get('part') == 'page' else choices
+        if asked.get('part') == 'page' and asked.get('complete') != '1':
+            template = 'log_content.html'
         return page(request, template, person, events=found["events"][::-1], wanted=wanted,
                     said=asked.get('said', ''), failed=asked.get('failed') == '1',
                     narrowed=urlencode({**wanted, 'limit': limit}), going_back=bool(going_back),

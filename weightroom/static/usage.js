@@ -1,7 +1,9 @@
 // Draw authorized counts, costs by source or an all-mock comparison. Chart toggles need no request.
-(() => {
+/** Initialize controls after the initial document or an independently loaded section arrives. */
+function initializeUsage() {
   const data = document.getElementById("usage-data");
-  if (!data || !window.echarts) return;
+  if (!data || !window.echarts || data.dataset.initialized) return;
+  data.dataset.initialized = "true";
   const report = JSON.parse(data.textContent);
   const style = getComputedStyle(document.documentElement);
   /** Read a usage-chart color from the active theme. */
@@ -189,4 +191,6 @@
   }
   draw();
   new ResizeObserver(() => chart.resize()).observe(place);
-})();
+}
+initializeUsage();
+document.addEventListener('htmx:afterSwap', initializeUsage);
