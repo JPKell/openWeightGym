@@ -1,11 +1,11 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, card, section_title %}
+{% from "docs_parts.html" import doc_header, doc_section %}
 {% block title %}System docs · openWeightGym{% endblock %}
 {% block main %}
 <div class="docs-page">
-  {{ page_header("System docs", lead="Select a component in the system map or its page below.") }}
+  {{ doc_header("System docs", contents=[('system-map', 'System map'), ('docs-pages', 'Component pages')]) }}
 
-  {% call card("System map", attrs={"aria-labelledby": "system-map-title"}, header_id="system-map-title") %}
+  {% call doc_section("System map", "system-map", hint="Select a component for its page.") %}
       <p class="small text-secondary mb-2 d-md-none">Swipe across the map to see the full system.</p>
       <div class="docs-map-scroll">
       {% macro node(x, y, width, title, subtitle, slug) -%}
@@ -92,13 +92,13 @@
       </div>
     {% endcall %}
 
-  <section aria-labelledby="docs-pages-title">
-    {{ section_title("Component pages", id="docs-pages-title") }}
-    <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-2">
+  {% call doc_section("Component pages", "docs-pages", hint="What each part of openWeightGym does, with its code reference.") %}
+    <div class="docs-directory">
       {% for slug, title, headings in topics %}
-      <div class="col">{% call card("", tag="a", class_="docs-directory-link h-100 text-decoration-none", attrs={"href": "/docs/" ~ (slug)}) %}{{ title }} <span aria-hidden="true">→</span>{% endcall %}</div>
+      <a class="docs-directory-link" href="/docs/{{ slug }}"><span class="docs-directory-title">{{ title }} <span aria-hidden="true">→</span></span>
+        <span class="docs-directory-detail">{{ headings|join(' · ') }}</span></a>
       {% endfor %}
     </div>
-  </section>
+  {% endcall %}
 </div>
 {% endblock %}

@@ -1,13 +1,13 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, section_title %}
+{% from "parts.html" import section_title %}
+{% from "docs_parts.html" import doc_header, doc_document, doc_section %}
 {% block title %}{{ topic.title }} · System docs · openWeightGym{% endblock %}
 {% block main %}
 <div class="docs-page">
-  <nav aria-label="Documentation breadcrumb" class="mb-3"><a href="/docs">System docs</a> <span aria-hidden="true">/</span> {{ topic.title }}</nav>
-  {{ page_header(topic.title, lead=topic.headings|join(' · ')) }}
-  {% include "docs_" ~ topic.slug ~ ".html" ignore missing %}
-  <section class="mt-4" aria-labelledby="source-title">
-    {{ section_title("Code reference", id="source-title") }}
+  {{ doc_header(topic.title, back=('System docs', '/docs')) }}
+  {% if document %}{{ doc_document(document, more=[('source', 'Code reference')]) }}
+  {% else %}{% include "docs_" ~ topic.slug ~ ".html" ignore missing %}{% endif %}
+  {% call doc_section("Code reference", "source", hint="The modules behind " ~ topic.title ~ ", read from the source as it is now. Covers " ~ topic.headings|join(' · ') ~ ".") %}
     <div class="row g-3">
       <nav class="col-lg-4" aria-label="Source modules">
         <div class="docs-modules border rounded">
@@ -46,6 +46,6 @@
         {% endif %}
       </div>
     </div>
-  </section>
+  {% endcall %}
 </div>
 {% endblock %}
