@@ -1,0 +1,70 @@
+{# What each machine has installed: one card per machine, listing every service and engine whether it is there or not. #}
+{% from "parts.html" import card, section_title, node_state %}
+{% from "icons.html" import icon %}
+
+{# Installed, not installed, or unknown when the machine did not answer or could not be asked. #}
+{% macro have(installed) -%}
+{% if installed is none %}<span class="badge bg-yellow-lt">Unknown</span>
+{%- elif installed %}<span class="badge bg-green text-green-fg component-have">{{ icon("check") }}Installed</span>
+{%- else %}<span class="badge bg-secondary-lt component-lack">Not installed</span>{% endif %}
+{%- endmacro %}
+
+{# How an installed service or engine is doing, with where it was found or why it cannot be used on hover. #}
+{% macro how(row, kind) -%}
+{% if row.installed %}
+{% if kind == 'services' %}
+{% set word, tone = row.state or 'unknown', {'running': 'good', 'failed': 'bad'}.get(row.state, 'other') %}
+{% set told = [row.unit, 'system manager' if row.scope == 'system' else 'own manager' if row.scope == 'user' else '', row.detail]|select|join(' · ') %}
+{% else %}
+{% set word = 'ready' if row.available else 'turned off' if not row.enabled else 'not usable' %}
+{% set tone = 'good' if row.available else 'other' if not row.enabled else 'bad' %}
+{% set told = [row.build and 'build ' ~ row.build, row.why]|select|join(' · ') %}
+{% endif %}
+<span class="component-state component-state-{{ tone }}"{% if told %} title="{{ told }}"{% endif %}>{{ word }}</span>
+{%- endif %}
+{%- endmacro %}
+
+{% macro listing(title, kind, rows, answering, listed=()) %}
+{% set count = rows|selectattr('installed')|list|length %}
+<table class="table table-sm component-table" aria-label="{{ title }} {{ kind }}">
+  <caption class="component-caption">{{ kind|capitalize }}{% if answering %}<span class="text-secondary fw-normal"> · {{ count }} of {{ rows|length }} installed</span>{% endif %}</caption>
+  <tbody>
+  {% for row in rows %}
+  {% set installed = row.installed if answering else none %}
+  <tr class="{{ 'component-missing' if installed == false }}">
+    <th scope="row" class="fw-normal"><span class="component-name">{{ row.label }}</span>{% if kind == 'services' %} <code class="component-id">{{ row.id }}</code>{% endif %}
+      {% if installed == false and row.id in listed %}<div class="small text-warning">The install receipt lists it, but systemd has no unit for it.</div>{% endif %}</th>
+    <td class="text-end">{{ have(installed) }}</td>
+    <td class="text-end component-state-cell">{{ how(row, kind) if answering }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
+<div id="components-report">
+<p class="text-secondary small mb-3">Every service the installer can set up and every engine, on each machine. A service is installed when systemd knows its unit; an engine when its program is found. Nothing is started, changed or woken to find out.</p>
+<div class="component-cards-frame"><div class="component-cards">
+{% for node in found.nodes or [] %}
+{% set title = 'Front' if node.name == 'front' else node.name %}
+{% set receipt = node.receipt or {} %}
+{% call card(tag='article', class_='component-card', attrs={'aria-label': title}) %}
+  <div class="d-flex align-items-start gap-2">
+    {{ section_title(title, level=2, class_='component-card-title text-truncate', wrapper_class='component-card-heading', attrs={'title': title}) }}
+    {% if node.name != 'front' %}<span class="badge bg-{{ 'green' if node.state == 'ready' else 'yellow' }}-lt ms-auto">{{ node_state(node.state) }}</span>{% endif %}
+  </div>
+  <div class="component-card-about text-secondary small mb-2">
+    {% if node.hostname %}<span>{{ node.hostname }}</span>{% endif %}
+    {% if node.name != 'front' and node.with_front %}<span>Same machine as front</span>{% endif %}
+    {% if receipt.topology %}<span>Installed as {{ {'all': 'front and compute', 'front': 'front', 'compute': 'compute'}.get(receipt.topology, receipt.topology) }}{% if receipt.mode %}, {{ receipt.mode }} mode{% endif %}{% if receipt.installed %}, {{ receipt.installed[:10] }}{% endif %}</span>
+    {% elif node.answering %}<span>No install receipt</span>{% endif %}
+  </div>
+  {% if not node.answering %}<div class="alert alert-warning py-2 small mb-2" role="status">{{ node.why }}</div>{% endif %}
+  {{ listing(title, 'services', node.services if node.answering else found.services, node.answering, (receipt.services or '').split(',')) }}
+  {{ listing(title, 'engines', node.engines if node.answering else found.engines, node.answering) }}
+{% endcall %}
+{% else %}
+<p class="text-secondary">No machines are configured.</p>
+{% endfor %}
+</div></div>
+</div>

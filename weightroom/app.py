@@ -25,6 +25,7 @@ import re
 import math
 import os
 import secrets
+import socket
 import uuid
 import sqlite3
 import subprocess
@@ -4156,6 +4157,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """The [deploy] part as the settings file has it now, so a machine added from the page counts at once."""
         return deploying.checked(read_settings(Path(settings.path)).get("deploy", {}) if settings.path else settings.deploy)
 
+    async def components_page(request: Request, person: Person) -> Response:
+        """Every service and engine on front and on each compute node, installed or not. Changes nothing and wakes nothing."""
+        if "manage-settings" not in person.can:
+            return page(request, "refused.html", person, status=403, why="Seeing what each machine has installed requires manage-settings.")
+        if initial_page(request):
+            return page(request, "components.html", person, deferred=True, fragment_url=fragment_url(request, "page"))
+        part = request.query_params.get("part") == "page" and request.query_params.get("complete") != "1"
+        answer = await ask("GET", "/turnstile/components", person.key)
+        if answer.status_code != 200:
+            if part:
+                return fragment_error(request, person, "components-report", "page", answer)
+            return page(request, "refused.html", person, status=answer.status_code, why=answer.json()["error"]["message"])
+        found = answer.json()
+        for node in found["nodes"]:
+            # The console showing this page is running, on front's machine when it is the one that answered, unit or not.
+            if node["name"] == "front" and node.get("hostname") == socket.gethostname():
+                for row in node["services"]:
+                    if row["id"] == "weightroom" and not row["installed"]:
+                        row.update(installed=True, state="running", detail="running without a systemd unit")
+        return page(request, "components_content.html" if part else "components.html", person, found=found, deferred=False)
+
     async def deploy_page(request: Request, person: Person) -> Response:
         """Front's source checkout, every machine's deployed commit and services, and the deploy jobs."""
         if "superuser" not in person.can:
@@ -4561,6 +4583,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route('/settings/image', image_settings_page, 'POST'),
             route("/guide", user_guide),
             route("/docs", docs_page),
+            route("/system/components", components_page),
             route("/deploy", deploy_page),
             route("/deploy", deploy_do, "POST"),
             route("/docs/{slug}", docs_page),

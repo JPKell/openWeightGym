@@ -1958,6 +1958,40 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(503, f"LoadCoach {name} is not answering.")
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
 
+    async def components_list(request: Request) -> Response:
+        """Which services and engines front and each compute node have. Changes nothing, wakes nothing; a node that does not answer says so."""
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, "Missing or wrong API key.")
+        if not user.can("manage-settings"):
+            return error(403, "Seeing what is installed requires manage-settings.")
+        from loadcoach import components
+        shared = Path(settings.path).parent / "loadcoach.toml" if settings.path else None
+        front = {"name": "front", "state": "ready", "answering": True, "with_front": True,
+                 **await components.here(running_here=("turnstile",), settings=shared)}
+        reports = {one["name"]: one for one in machines.report()}
+
+        def on_front(name: str) -> bool:
+            """Whether this node's LoadCoach is reached on front's own loopback address, so it is the same machine."""
+            address = settings.compute if name == "compute" else urlsplit(settings.machines[name]["compute"]).hostname or ""
+            return address in LOOPBACK
+
+        async def node(name: str) -> dict:
+            """What one compute node says it has, or why it says nothing."""
+            found ={"name": name, "state": reports.get(name, {}).get("state", "unknown"), "with_front": on_front(name)}
+            answer = await ask_live(user, "GET", "/loadcoach/components", machine=name, passive=True)
+            if answer is not None and answer.status_code == 200:
+                told = answer.json()
+                found["with_front"] = found["with_front"] or told.get("hostname") == front["hostname"]
+                return {**found, **told, "answering": True}
+            why = ("This node is not answering, so what it has cannot be checked. It is not woken for this." if answer is None
+                   else "This node runs an older openWeightGym that cannot say what is installed. Update it to see." if answer.status_code == 404
+                   else f"This node did not say what is installed ({answer.status_code}).")
+            return {**found, "answering": False, "why": why}
+
+        nodes = await asyncio.gather(*(node(name) for name in machines.names))
+        return JSONResponse({"nodes": [front, *nodes], **components.everything()}, headers={"cache-control": "no-store"})
+
     async def machine_model_api(request: Request) -> Response:
         """Bounded model-management surface for one explicitly selected node."""
         user = caller(key_of(request))
@@ -2212,6 +2246,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/models/location", model_location, methods=["POST"]),
                             Route("/turnstile/machines/{name}/settings", machine_settings),
                             Route("/turnstile/machines/{name}/settings/{program}", machine_settings, methods=["POST"]),
+                            Route("/turnstile/components", components_list),
                             Route("/turnstile/machines/{name}/engines", machine_engines),
                             Route("/turnstile/machines/{name}/model-api/{operation:path}", machine_model_api, methods=["GET", "POST", "DELETE"]),
                             Route("/turnstile/machines/{name}/cards", machine_cards, methods=["GET", "POST"]),

@@ -34,6 +34,7 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
         groups[3]["links"].append(("System logs", "/output"))
     groups[4]["links"].append(("Telemetry", "/telemetry"))
     if "manage-settings" in can:
+        groups[4]["links"].append(("Components", "/system/components"))
         groups[4]["links"].append(("Voice", "/system/voice/status"))
         groups[4]["links"].append(("Alerts", "/alerts"))
         groups[4]["links"].append(("Schedules", "/schedules"))
@@ -43,11 +44,11 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
             groups[4 if url in ('/backups', '/databases', '/deploy') else 5]["links"].append((label, url))
     settings_order = ['Compute nodes', 'Users', 'Groups', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
     groups[5]['links'].sort(key=lambda link: settings_order.index(link[0]))
-    groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups', 'Deploy'].index(link[0]))
+    groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Components', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups', 'Deploy'].index(link[0]))
     root = "/" + path.strip("/").split("/")[0]
     active = {"/": "/status", "/file": "/files", "/downloads": "/hub", "/measure-models": "/models", "/outside": "/cloud-apis",
               "/control": "/status", "/ask": "/log", "/machine": "/telemetry", "/machines": "/telemetry"}.get(root, root)
-    if path.rstrip("/") in ("/plugins/activity", "/voice/desktop"):
+    if path.rstrip("/") in ("/plugins/activity", "/voice/desktop", "/system/components"):
         active = path.rstrip("/")
     if root == "/benchmarks":
         active = path.rstrip("/")
