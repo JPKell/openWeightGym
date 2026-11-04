@@ -608,7 +608,7 @@ game_plan() {
     local choice=0
     ui_choose choice "How should openWeightGym run here?" 0 \
       "Everything on this machine|the console, the API and the models together: the quickest start" \
-      "Console only|the web console and API; GPU machines join it later" \
+      "Console only|the web console, API and tools; GPU machines join it later" \
       "GPU node|add this machine's graphics cards to a console you already run"
     local -a topologies=(all front compute)
     TOPOLOGY=${topologies[choice]}
@@ -738,8 +738,8 @@ backend_label() {
 services_for() {
   case "$TOPOLOGY" in
     all) SERVICES=loadcoach,toollocker,spotter,weightroom,turnstile; ((VOICE)) && SERVICES+=,voice,voice-gateway ;;
-    front) SERVICES=weightroom,turnstile; ((VOICE)) && SERVICES+=,voice-gateway ;;
-    compute) SERVICES=loadcoach,toollocker,spotter; ((VOICE)) && SERVICES+=,voice ;;
+    front) SERVICES=weightroom,turnstile,toollocker; ((VOICE)) && SERVICES+=,voice-gateway ;;
+    compute) SERVICES=loadcoach,spotter; ((VOICE)) && SERVICES+=,voice ;;
   esac
   return 0
 }

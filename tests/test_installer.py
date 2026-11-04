@@ -83,8 +83,8 @@ def provision_live_postgres(root, server, user, *, expect_success=True):
     (root / "scripts").mkdir(parents=True, exist_ok=True)
     shutil.copy2(SUPPORT_PATH, root / "scripts/install-suite-support.py")
     suite = (ROOT / "scripts/install-suite.sh").read_text()
-    functions = []
-    for name in ("repair_postgresql", "provision_postgresql"):
+    functions = [re.search(r'(?m)^as_postgres\(\).*$', suite)[0]]
+    for name in ("repair_postgresql", "provision_postgresql", "check_postgresql_login"):
         functions.append(re.search(rf"(?ms)^{name}\(\) \{{.*?^\}}", suite)[0])
     source = '''set -Eeuo pipefail
 source "$TEST_REPO/scripts/lib/ui.sh"
@@ -95,7 +95,7 @@ REQUIRED_DSNS=(accounts roles chat benchmarks plugins alerts schedules)
 hostname() { printf pgtest; }
 note() { printf '%s\\n' "$*"; }
 die() { ui_die "$*"; }
-step() { local label=$1; shift; ui_step "$label" -- "$@" || die "$label failed"; }
+try_step() { local label=$1; shift; ui_step "$label" -- "$@"; }
 ''' + "\n".join(functions) + '\nprovision_postgresql\n'
     environment = {**server["environment"], "INSTALL": str(root), "TEST_PYTHON": sys.executable,
                    "TEST_REPO": str(ROOT), "TEST_USER": user, "OWG_LOG": str(root / "install.log")}
@@ -224,7 +224,7 @@ def test_piped_bootstrap_install_repair_uninstall_and_reinstall_preserves_data(t
     """Exercise real entry points, Git, Python packaging and SQLite without host services."""
     source = tmp_path / "source"
     source.mkdir()
-    paths = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
+    paths = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=ROOT).decode().split("\0")
     for relative in filter(None, paths):
         target = source / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -245,14 +245,17 @@ def test_piped_bootstrap_install_repair_uninstall_and_reinstall_preserves_data(t
         (commands / command).write_text("#!/usr/bin/env bash\nexit 91\n")
     server = request.getfixturevalue("local_postgres") if engine == "postgresql" else None
     if server:
-        (commands / "apt-get").write_text("#!/usr/bin/env bash\nexit 0\n")
+        for manager in ('apt-get', 'pacman', 'dnf', 'yum', 'zypper'):
+            (commands / manager).write_text("#!/usr/bin/env bash\nexit 0\n")
         (commands / "sudo").write_text('''#!/usr/bin/env bash
 set -euo pipefail
 [[ ${1:-} != -n ]] || shift
 if [[ ${1:-} == true ]]; then exit 0; fi
 if [[ ${1:-} == -u && ${2:-} == postgres ]]; then shift 2; exec "$@"; fi
 if [[ ${1:-} == systemctl && ${2:-} == enable ]]; then exit 0; fi
-if [[ ${1:-} == apt-get ]]; then exec "$@"; fi
+if [[ ${1:-} == test && ${2:-} == -f && ${3:-} == */PG_VERSION ]]; then exit 0; fi
+if [[ ${1:-} == env ]]; then shift; while [[ ${1:-} == *=* ]]; do shift; done; fi
+case "${1:-}" in apt-get|pacman|dnf|yum|zypper) exec "$@";; esac
 exit 91
 ''')
     (commands / "loginctl").write_text('#!/usr/bin/env bash\n[[ $1 == show-user ]] && { echo no; exit 0; }; exit 91\n')
@@ -301,6 +304,17 @@ exec {real_uv} "$@"
         run(*fresh)
         receipt = install / ".install-receipt"
         assert "state=complete" in receipt.read_text()
+        assert 'services=weightroom,turnstile,toollocker\n' in receipt.read_text()
+        assert (home / '.config/systemd/user/toollocker.service').exists()
+        assert not (install / 'settings/loadcoach.toml').exists()
+        assert not (install / 'data/loadcoach.db').exists()
+        gateway = tomllib.loads((install / 'settings/toollocker.toml').read_text())
+        front = tomllib.loads((install / 'settings/weightroom.toml').read_text())
+        assert (gateway['front'], gateway['host'], gateway['port']) == ('weightroom.toml', '127.0.0.1', 9443)
+        assert front['turnstile']['front_settings'] is True
+        assert front['turnstile']['toollocker_url'] == 'http://127.0.0.1:9443'
+        assert support.configured_targets(install / 'settings/toollocker.toml', 'toollocker') == [
+            ('identity', engine, install / ('keys/postgresql/accounts.dsn' if server else 'data/accounts.db'))]
         unit = home / ".config/systemd/user/weightroom.service"
         command = next(line.split('=', 1)[1] for line in unit.read_text().splitlines() if line.startswith('ExecStart='))
         assert shlex.split(command) == [str(install / '.venv/bin/weightroom'), '--config', str(install / 'settings/weightroom.toml')]
@@ -325,7 +339,7 @@ exec {real_uv} "$@"
         units = home / ".config/systemd/user"
         shutil.rmtree(units)
         run("--repair", "--yes", "--no-browser")
-        assert (units / "weightroom.service").exists() and (units / "turnstile.service").exists()
+        assert all((units / f'{name}.service').exists() for name in ('weightroom', 'turnstile', 'toollocker'))
         run("--uninstall", "--yes")
         assert not (install / ".venv").exists() and not (install / "install.sh").exists()
         assert retained.read_text() == "keep this user data"
@@ -342,17 +356,85 @@ exec {real_uv} "$@"
         thread.join(timeout=5)
 
 
-def test_front_toollocker_audit_inherits_owner_store_without_creating_another(tmp_path):
+@pytest.mark.parametrize('owner,target', [
+    ('data = "front-data"\n', 'front-data/accounts.db'),
+    ('', 'accounts.db'),
+    ('[databases.stores.authority]\nengine = "sqlite"\npath = "authority.db"\n'
+     '[databases.bindings]\n"weightroom.accounts" = "authority"\n', 'authority.db'),
+])
+def test_front_toollocker_audit_inherits_owner_store_without_creating_another(tmp_path, owner, target):
     config = tmp_path / 'toollocker.toml'
     config.write_text('front = "weightroom.toml"\nport = 9443\n')
-    (tmp_path / 'weightroom.toml').write_text('data = "front-data"\n')
-    assert support.configured_targets(config, 'toollocker') == [('identity', 'sqlite', tmp_path / 'front-data/accounts.db')]
+    (tmp_path / 'weightroom.toml').write_text(owner)
+    assert support.configured_targets(config, 'toollocker') == [('identity', 'sqlite', tmp_path / target)]
     original = config.read_text()
     assert support.configure(config, 'toollocker', 'sqlite', []) == 0
     assert config.read_text() == original
     import pytest
     with pytest.raises(ValueError, match='owning database'):
         support.configure(config, 'toollocker', 'postgresql', [])
+
+
+def test_front_toollocker_audit_resolves_the_owners_defaults(tmp_path):
+    """Audit and gateway startup must agree when the owner inherits its accounts binding."""
+    from toollocker.door import shared_store
+    config = tmp_path / 'toollocker.toml'
+    config.write_text('front = "weightroom.toml"\n')
+    (tmp_path / 'weightroom.toml').write_text('')
+    (tmp_path / 'defaults').mkdir()
+    (tmp_path / 'defaults/weightroom.toml').write_text('data = "retained-front"\n')
+    assert support.configured_targets(config, 'toollocker')[0][2] == shared_store(config, {'front': 'weightroom.toml'})[1].path
+
+
+def test_front_toollocker_preflight_runs_without_installed_runtime_packages(tmp_path):
+    """A retained front gateway must not import Typer or ASGI dependencies before reinstalling Python packages."""
+    settings = tmp_path / 'settings'
+    settings.mkdir()
+    (settings / 'weightroom.toml').write_text('data = "../data"\n')
+    (settings / 'toollocker.toml').write_text('front = "weightroom.toml"\nport = 9443\n')
+    answer = subprocess.run([sys._base_executable, str(SUPPORT_PATH), 'audit', '--root', str(tmp_path),
+                             '--services', 'toollocker'], capture_output=True, text=True, timeout=10)
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    assert str(tmp_path / 'data/accounts.db') in answer.stdout
+    assert not (tmp_path / 'data').exists()
+
+
+@pytest.mark.parametrize('selection', ['--services', '--preset'])
+@pytest.mark.parametrize('preset,services,stores', [
+    ('front', {'weightroom', 'turnstile', 'toollocker', 'voice-gateway'},
+     {'accounts', 'roles', 'chat', 'benchmarks', 'plugins', 'alerts', 'schedules'}),
+    ('compute', {'loadcoach', 'spotter', 'voice'}, {'core', 'telemetry'}),
+    ('all', {'loadcoach', 'spotter', 'voice', 'weightroom', 'turnstile', 'toollocker', 'voice-gateway'},
+     {'core', 'telemetry', 'accounts', 'roles', 'chat', 'benchmarks', 'plugins', 'alerts', 'schedules'}),
+])
+def test_service_presets_plan_toollocker_and_its_owning_stores(tmp_path, selection, preset, services, stores):
+    """Both lower-level preset entry points assign gateway ownership and PostgreSQL stores together."""
+    scripts = tmp_path / 'scripts'
+    (scripts / 'lib').mkdir(parents=True)
+    for name in ('ui.sh', 'detect.sh'):
+        shutil.copy2(ROOT / 'scripts/lib' / name, scripts / 'lib' / name)
+    shutil.copy2(SUPPORT_PATH, scripts / SUPPORT_PATH.name)
+    (tmp_path / 'pyproject.toml').write_text('[project]\nname = "fixture"\nversion = "0.1.0"\n')
+    commands = tmp_path / 'commands'
+    commands.mkdir()
+    (commands / 'systemctl').write_text('#!/usr/bin/env bash\nexit 1\n')
+    (commands / 'systemctl').chmod(0o755)
+    runner = scripts / 'plan.sh'
+    plan = (ROOT / 'scripts/install-suite.sh').read_text().split('\ninstall_postgresql_packages\n', 1)[0]
+    runner.write_text(plan + '''
+printf '%s\\n' "$SELECTED_CSV" >"$ROOT/selected"
+printf '%s\\n' "${REQUIRED_DSNS[@]}" >"$ROOT/stores"
+''')
+    environment = {**os.environ, 'HOME': str(tmp_path / 'home'), 'OWG_NO_TTY': '1', 'OWG_PLAIN': '1',
+                   'XDG_CONFIG_HOME': str(tmp_path / 'config'), 'XDG_STATE_HOME': str(tmp_path / 'state'),
+                   'OWG_LOG': str(tmp_path / 'install.log'), 'PYTHONPATH': str(ROOT),
+                   'PATH': f'{commands}{os.pathsep}{Path(sys.executable).parent}{os.pathsep}{os.environ["PATH"]}'}
+    answer = subprocess.run(['bash', str(runner), selection, preset, '--database', 'postgresql',
+                             '--provision-postgresql', '--dry-run', '--non-interactive', '--yes'],
+                            env=environment, capture_output=True, text=True, timeout=30)
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    assert set((tmp_path / 'selected').read_text().strip().split(',')) == services
+    assert set((tmp_path / 'stores').read_text().splitlines()) == stores
 
 
 def test_database_configuration_replaces_managed_tables_and_keeps_other_settings(tmp_path):

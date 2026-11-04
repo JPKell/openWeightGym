@@ -58,6 +58,6 @@ with files in `/opt`, `/etc` and `/var/lib`.
 | WeightRoom | the console | the web console, chat, collections, workflows and benchmarks |
 | Turnstile | the console | the way in: keys, accounts, model placement and signed routing to GPU machines |
 | LoadCoach | each GPU machine | starts llama-server for each model, schedules requests, shares the cards |
-| ToolLocker | the console or a GPU machine | the MCP gateway for tools |
+| ToolLocker | the console | the authenticated MCP gateway; tool servers run on their owning hosts |
 | Spotter | each GPU machine | telemetry, and the service and power controls it is allowed |
 | Voice and voice gateway | GPU machine and console | speech recognition and voices, and the browser, desktop and phone connections |

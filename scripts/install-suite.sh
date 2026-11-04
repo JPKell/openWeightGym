@@ -12,8 +12,8 @@ source "$SCRIPT_DIR/lib/ui.sh"
 source "$SCRIPT_DIR/lib/detect.sh"
 UNIT_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 SERVICES=(loadcoach toollocker spotter voice weightroom turnstile voice-gateway)
-COMPUTE=(loadcoach toollocker spotter voice)
-FRONT=(weightroom turnstile voice-gateway)
+COMPUTE=(loadcoach spotter voice)
+FRONT=(weightroom turnstile toollocker voice-gateway)
 
 CHECK_ONLY=0
 DRY_RUN=0
@@ -320,8 +320,8 @@ else
   choice=0
   ui_choose choice 'Which programs should run on this machine?' 0 \
     'All of them|the console and a GPU node on this one machine' \
-    'The console|weightroom, turnstile and voice-gateway' \
-    'A GPU node|loadcoach, toollocker, spotter and voice'
+    'The console|weightroom, turnstile, toollocker and voice-gateway' \
+    'A GPU node|loadcoach, spotter and voice'
   PRESETS=(all front compute)
   parse_services "${PRESETS[choice]}"
 fi
@@ -334,7 +334,7 @@ if ((!NON_INTERACTIVE && ${#DETECTED[@]})); then
 fi
 if ((!NON_INTERACTIVE)); then
   declare -A ABOUT=(
-    [loadcoach]='runs the models (GPU node)' [toollocker]='tools for models over MCP (GPU node)'
+    [loadcoach]='runs the models (GPU node)' [toollocker]='authenticated MCP tool gateway (console)'
     [spotter]='watches the GPU node' [voice]='speech recognition and voices (GPU node)'
     [weightroom]='the web console' [turnstile]='the way in: keys and routing (console)'
     [voice-gateway]='browser and phone voice (console)')
@@ -540,10 +540,24 @@ if ((USES_POSTGRESQL && !NON_INTERACTIVE && !INSTALL_PGVECTOR)); then
   ask_yes_no 'Install pgvector for possible future use?' n && { INSTALL_PGVECTOR=1; INSTALL_POSTGRESQL=1; }
 fi
 
+# New gateways inherit front's accounts. Existing compute-owned settings remain supported.
+TOOLLOCKER_FRONT=0
+if has_service toollocker; then
+  TOOLLOCKER_FRONT=1
+  if [[ -f $ROOT/settings/toollocker.toml ]]; then
+    TOOLLOCKER_FRONT=$(check_python - "$ROOT/settings/toollocker.toml" <<'PY'
+from pathlib import Path
+import sys
+import tomllib
+print(int(bool(tomllib.loads(Path(sys.argv[1]).read_text()).get('front'))))
+PY
+)
+  fi
+fi
 REQUIRED_DSNS=()
-if has_service loadcoach || has_service spotter || has_service toollocker; then REQUIRED_DSNS+=(core); fi
+if has_service loadcoach || has_service spotter || { has_service toollocker && ((!TOOLLOCKER_FRONT)); }; then REQUIRED_DSNS+=(core); fi
 has_service spotter && REQUIRED_DSNS+=(telemetry)
-if has_service weightroom || has_service turnstile; then REQUIRED_DSNS+=(accounts roles chat benchmarks plugins alerts schedules); fi
+if has_service weightroom || has_service turnstile || ((TOOLLOCKER_FRONT)); then REQUIRED_DSNS+=(accounts roles chat benchmarks plugins alerts schedules); fi
 
 # What to do instead when PostgreSQL cannot be set up here: the last of a failure's steps.
 PG_INSTEAD=("Or set PostgreSQL up yourself (docs/database-storage.md) so that 'sudo -u postgres psql' answers, then run this again"
@@ -843,7 +857,7 @@ mkdir_if_real() { if ((DRY_RUN)); then ui_note "DRY RUN: mkdir -p $*"; else mkdi
 mkdir_if_real "$ROOT/settings/defaults" "$ROOT/settings/examples" "$ROOT/data" "$ROOT/keys" "$UNIT_DIR"
 ((DRY_RUN)) || chmod 700 "$ROOT/keys"
 # The folder the files tool reads, and the models folder LoadCoach is given, for new settings.
-if [[ $TOPOLOGY != keep ]]; then mkdir_if_real "$ROOT/data/shared" "$ROOT/models"; fi
+if [[ $TOPOLOGY != keep ]] || ((TOOLLOCKER_FRONT)); then mkdir_if_real "$ROOT/data/shared" "$ROOT/models"; fi
 
 config_for() {
   case "$1" in turnstile) printf 'weightroom';; *) printf '%s' "$1";; esac
@@ -874,12 +888,14 @@ install_example_config() {
   fi
 }
 
+# Write the owning settings before the gateway that inherits them.
+if ((TOOLLOCKER_FRONT)); then install_example_config weightroom; fi
 for service in "${SELECTED[@]}"; do
   config_name=$(config_for "$service")
   [[ $config_name == voice-gateway || $config_name == voice || $config_name == loadcoach || $config_name == spotter || $config_name == toollocker || $config_name == weightroom ]] || continue
   install_example_config "$config_name"
 done
-if (has_service spotter || has_service toollocker) && [[ ! -f $ROOT/settings/loadcoach.toml ]]; then
+if { has_service spotter || { has_service toollocker && ((!TOOLLOCKER_FRONT)); }; } && [[ ! -f $ROOT/settings/loadcoach.toml ]]; then
   ui_info 'Installing LoadCoach settings as the shared identity configuration for Spotter/ToolLocker.'
   install_example_config loadcoach
 fi
@@ -894,9 +910,9 @@ restore_configs() {
 
 if [[ $DATABASE != keep ]]; then
   timestamp=$(date -u +%Y%m%dT%H%M%SZ)
-  for service in loadcoach spotter toollocker weightroom; do
+  for service in weightroom loadcoach spotter toollocker; do
     if ! has_service "$service"; then
-      [[ $service == weightroom ]] && has_service turnstile || continue
+      [[ $service == weightroom ]] && { has_service turnstile || ((TOOLLOCKER_FRONT)); } || continue
     fi
     config=$ROOT/settings/$service.toml
     [[ -f $config ]] || continue

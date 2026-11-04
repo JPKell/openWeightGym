@@ -50,10 +50,8 @@ host = "0.0.0.0"
 
 port = 8440
 
-# Optional web-chat model door. Defaults to local turnstile when [turnstile]
-# Optional front-owned ToolLocker upstream; requires front_settings = true. Never wakes compute.
-# toollocker_url = "http://127.0.0.1:9443" is configured,
-# otherwise compute. Authentication and request logs still come from compute.
+# Optional web-chat model door. Defaults to local turnstile when [turnstile] is configured,
+# otherwise compute.
 # chat_model_url = "http://127.0.0.1:8442"
 
 # Where LoadCoach is.
@@ -165,10 +163,12 @@ toollocker = ""
 [turnstile]
 host = "0.0.0.0"
 ports = [8442, 8443, 8444]
+# Front owns settings and the authenticated MCP gateway, even while compute is unavailable.
+front_settings = true
+toollocker_url = "http://127.0.0.1:9443"
 # DB1 switches, disabled until the coordinated migration gates pass. Existing front
 # task IDs retain front ownership even when front_tasks is disabled for rollback.
 # front_tasks = false
-# front_settings = false
 # machine_key_file = "../keys/machine.key"
 # keep_days = 90
 # max_in_flight = 200

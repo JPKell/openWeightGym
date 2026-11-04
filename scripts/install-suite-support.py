@@ -249,6 +249,24 @@ def path_from(base: Path, value: str) -> Path:
     return path if path.is_absolute() else (base / path).resolve()
 
 
+def front_toollocker_target(config: Path, told: dict) -> tuple[str, str, Path]:
+    """Resolve front's authoritative store before the gateway's runtime packages are installed."""
+    if 'loadcoach' in told:
+        raise ValueError('Choose front or loadcoach for ToolLocker, not both')
+    owner = path_from(config.parent, str(told['front']))
+    defaults = owner.parent / 'defaults' / owner.name
+    first = tomllib.loads(defaults.read_text()) if defaults.is_file() else {}
+    explicit = tomllib.loads(owner.read_text())
+    merged = {name: {**first[name], **explicit[name]} for name in first.keys() & explicit.keys()
+              if isinstance(first[name], dict) and isinstance(explicit[name], dict)}
+    main = {**first, **explicit, **merged}
+    from db import DatabaseRegistry
+    data = path_from(owner.parent, str(main.get('data', '.')))
+    store = DatabaseRegistry.from_config(main.get('databases'), owner.parent,
+                                        {'weightroom.accounts': data / 'accounts.db'}).database('weightroom.accounts')
+    return 'identity', store.engine, Path(store.store.dsn_file) if store.engine == 'postgresql' else store.path
+
+
 def configured_targets(config: Path, service: str) -> list[tuple[str, str, Path]]:
     """Return (name, engine, local path or DSN file) without reading DSN contents."""
     told = tomllib.loads(config.read_text())
@@ -286,9 +304,7 @@ def configured_targets(config: Path, service: str) -> list[tuple[str, str, Path]
         return [("core", "sqlite", path_from(config.parent, legacy) if legacy else data / "loadcoach.db")]
     if service in {"spotter", "toollocker"}:
         if service == "toollocker" and told.get("front"):
-            from toollocker.door import shared_store
-            store = shared_store(config, told)[1]
-            return [("identity", store.engine, Path(store.store.dsn_file) if store.engine == "postgresql" else store.path)]
+            return [front_toollocker_target(config, told)]
         loadcoach = path_from(config.parent, str(told.get("loadcoach", "loadcoach.toml")))
         main = tomllib.loads(loadcoach.read_text()) if loadcoach.exists() else {}
         main_data = path_from(loadcoach.parent, str(main.get("data", "../data")))
@@ -507,8 +523,7 @@ def configure(config: Path, service: str, engine: str, dsn_values: list[str]) ->
         name, raw = value.split("=", 1)
         dsns[name] = Path(raw).expanduser().resolve()
     if service == "toollocker" and config.exists() and tomllib.loads(config.read_text()).get("front"):
-        from toollocker.door import shared_store
-        if shared_store(config, tomllib.loads(config.read_text()))[1].engine != engine:
+        if front_toollocker_target(config, tomllib.loads(config.read_text()))[1] != engine:
             raise ValueError("Configure WeightRoom's owning database before its front ToolLocker")
         return 0
     block = database_block(service, engine, config, dsns)
@@ -523,8 +538,8 @@ def configure(config: Path, service: str, engine: str, dsn_values: list[str]) ->
 # Older examples named the original author's folders; they are still understood.
 TEMPLATE_PATHS = re.compile(r"/home/you/openWeightGym|/home/jpk/ai/openWeightGym|/home/jpk/ai/suite|/home/jpk/weightroom|/home/you|/home/jpk")
 
-# When everything runs on one machine, turnstile keeps the usual 8442-8445 and each compute program
-# moves up by 1000. Weightroom's `compute` URL carries that port, which turnstile follows.
+# Turnstile keeps public ports 8442-8445. The front ToolLocker always stays on loopback 9443;
+# compute programs also move up by 1000 when everything shares the same machine.
 SHARED_HOST_PORTS = {"loadcoach": 9442, "toollocker": 9443, "spotter": 9444, "voice": 9445}
 
 
@@ -549,8 +564,10 @@ def topology_values(config_name: str, topology: str, root: Path, address: str, f
         if machine_name:  # the name a console gave this node when it joined
             values["machine_name"] = machine_name
         return values
-    if config_name in ("toollocker", "spotter"):
-        return {"host": here, "port": port(config_name, 8443 if config_name == "toollocker" else 8444)}
+    if config_name == "toollocker":
+        return {"host": "127.0.0.1", "port": 9443, "front": "weightroom.toml"}
+    if config_name == "spotter":
+        return {"host": here, "port": port("spotter", 8444)}
     if config_name == "voice":
         profiles = {}
         if voice_model:
