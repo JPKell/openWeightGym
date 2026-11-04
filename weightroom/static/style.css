@@ -15,6 +15,9 @@
   --sidebar-width: 12rem;
   --drawer-handle-width: 2.5rem;
 }
+/* Tabler moves the whole page right by the scrollbar's width on wide screens (margin-left: calc(100vw - 100%)),
+   which leaves a gap down the left edge whenever a page scrolls. The page stays against the left edge. */
+:root { margin-left: 0; }
 .card-header {
   font-size: var(--suite-card-title-size);
   font-weight: var(--suite-heading-weight);
