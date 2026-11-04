@@ -3,19 +3,48 @@
 ToolLocker is the MCP gateway for tools such as reading files, searching code and calling your
 own Python functions. A client connects to `http://FRONT:8443/mcp` with an openWeightGym API key.
 Turnstile checks the account and signs the request for the private gateway on port 9443.
-Tools run on the machine that owns their files or service; the gateway can run on front while
+Tools run on the machine that owns their files or service; the gateway runs on front while
 compute is off. An MCP-capable client or agent executes tool calls; **Settings → Tools → Try a
 tool** checks them independently of a model.
 
 These same instructions are available in the console at **Docs → ToolLocker** (`/docs/toollocker`).
 
+## Installer defaults
+
+For a fresh installation, choose one of these options in `./install.sh`:
+
+| Main installer choice | Command-line option | ToolLocker |
+|---|---|---|
+| Console only | `--topology front` | Installed on the console with WeightRoom and Turnstile. |
+| Everything on this machine | `--topology all` | Installed alongside the console; uses the front account store. |
+| GPU node | `--topology compute` | Gateway omitted. Tools hosted here are connected to the front gateway separately. |
+
+New front installations write `settings/toollocker.toml`, configure local MCP routing in
+`settings/weightroom.toml`, and install `toollocker.service`. The gateway inherits the console's
+SQLite or PostgreSQL accounts/event store; it needs no local LoadCoach or separate identity
+database. The installer creates `data/shared/` and registers these bundled servers:
+
+| Server | Default resource on front | Offered tools |
+|---|---|---|
+| `files` | The installation's `data/shared/` folder | `files__list_folder`, `files__read_file` |
+| `code` | The installation's Git repository | Repository listing, search, status, history and changes under `code__*` |
+
+The caller's permissions still determine which tools are offered and callable. A tool hosted on
+an unavailable machine remains unavailable even when the front gateway is running.
+
+The lower-level `scripts/install-suite.sh` assigns ToolLocker to its `front` and `all` presets,
+including `--services front` and `--preset front`; its `compute` preset omits the gateway.
+Its front preset also selects the voice gateway. To select only the core front services, use
+`--services weightroom,turnstile,toollocker`. Voice is optional in the main installer.
+
+For a new installation, continue at [Verify the connection](#verify-the-connection). For an
+existing console without ToolLocker, use [Install ToolLocker on front](#install-toollocker-on-front).
+
 ## Why tools can be missing
 
-New **Console only** and **Everything on this machine** installations include ToolLocker on
-front; **GPU node** installs omit it. Earlier console-only installs omitted the gateway, and
-Repair keeps their saved service selection. Use the front setup below to add it to those installs.
-Existing compute-owned gateways retain their settings; moving one requires configuring its
-servers on front and preserving access to tools on their owning hosts.
+Earlier console-only installs omitted ToolLocker. Update and Repair retain their saved service
+selection and existing settings, so they do not automatically add or relocate a gateway. A
+compute-owned gateway needs the [migration steps](#moving-a-compute-owned-gateway).
 
 Three things must be present: a running gateway, at least one configured MCP server, and permission
 for the caller to see its tools. An empty recorded catalogue alone does not identify which is missing.
@@ -39,7 +68,7 @@ library. The full gateway uses the project's Python 3.13+ environment.
 ## Install ToolLocker on front
 
 Run these steps on the console machine as the account that already runs WeightRoom and Turnstile.
-Fresh installations already have this configuration; these steps repair older or custom installs.
+Use the updated installer checkout for these steps, which add the gateway to older or custom installs.
 Examples assume a per-user installation at `~/openWeightGym`. For a system installation, the
 checkout is `/opt/openweightgym`, configuration belongs to `openweightgym`, and its user-service
 files are under `/var/lib/openweightgym/.config/systemd/user`. Use that account's service manager,
@@ -61,17 +90,11 @@ paths may differ from this installation; use the actual checkout path from `pwd`
 
 ### 2. Configure a first local tool server
 
-Create an allowed folder:
-
-```bash
-mkdir -p data/shared
-printf '%s\n' 'ToolLocker is working.' > data/shared/example.txt
-chmod 644 data/shared/example.txt
-```
-
-Create `settings/toollocker.toml` if absent. If it exists, merge the settings and preserve its
-server names, levels and tool sets. Replace `/home/you/openWeightGym` below with the absolute
-path printed by `pwd`; TOML command arguments do not expand `~` or `$HOME`.
+If `settings/toollocker.toml` is absent, the installer in step 4 writes the bundled server
+configuration automatically. To configure it by hand, use the example below. For an existing
+file, merge the front ownership settings and preserve its server names, levels and tool sets.
+Replace `/home/you/openWeightGym` with the absolute path printed by `pwd`; TOML command arguments
+do not expand `~` or `$HOME`.
 
 ```toml
 front = "weightroom.toml"
@@ -85,6 +108,12 @@ command = [
 ]
 description = "Shared files on the console"
 level = "normal"
+
+[servers.code]
+command = [
+    "/home/you/openWeightGym/.venv/bin/python", "-m", "toollocker.tools.code",
+    "/home/you/openWeightGym",
+]
 ```
 
 Use `front`, omitting `loadcoach`: this shares the console's existing SQLite or PostgreSQL accounts
@@ -106,36 +135,24 @@ Keep the rest of that table, including its machine key and ports. Ensure its exi
 list includes `8443`; preserve any voice and other configured ports. Avoid adding a second
 `[turnstile]` table. Turnstile continues to own 8443; ToolLocker must use 9443.
 
-### 4. Install the missing service
+### 4. Install the gateway service
 
-For a missing unit, run this from the checkout. If a unit already exists, retain its custom
-settings and verify its `WorkingDirectory` and `ExecStart` instead of replacing it.
+From the checkout, select just ToolLocker so the installer does not add other optional services:
 
 ```bash
-mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/toollocker.service <<EOF
-[Unit]
-Description=ToolLocker (front MCP gateway)
-After=network-online.target
-
-[Service]
-WorkingDirectory=$PWD
-ExecStart=$PWD/.venv/bin/toollocker --config $PWD/settings/toollocker.toml
-Restart=on-failure
-RestartSec=3
-MemoryMax=2G
-
-[Install]
-WantedBy=default.target
-Alias=tooldoor.service
-EOF
-systemctl --user daemon-reload
-systemctl --user enable --now toollocker.service
+scripts/install-suite.sh --services toollocker --database keep \
+  --non-interactive --yes --no-start
 ```
 
-Then restart Turnstile and WeightRoom to pick up routing and front-owned settings:
+`--database keep` preserves the existing store bindings. `--no-start` installs and enables the
+unit without starting it; the installer writes its executable/settings paths and `tooldoor.service`
+alias. Existing configuration is kept, and replaced service units are backed up. Review custom
+units and drop-ins with `systemctl --user cat toollocker.service` before replacing them.
+
+Then start or restart ToolLocker and reload the console's routing:
 
 ```bash
+systemctl --user restart toollocker.service
 systemctl --user restart turnstile.service weightroom.service
 systemctl --user is-active toollocker.service turnstile.service weightroom.service
 journalctl --user -u toollocker.service -n 50 --no-pager
@@ -145,7 +162,31 @@ Restart after active requests finish: restarting Turnstile interrupts requests i
 Installing just the gateway does not require starting a compute node. The standalone
 `toollocker-host.service` is optional when a local stdio command runs the tools.
 
+## Moving a compute-owned gateway
+
+Installing on front does not move an existing compute gateway's settings or records. Preserve
+the server names, descriptions, sensitivity levels, tool sets and per-tool overrides. Replace
+compute-local stdio paths with a fixed SSH command or a remote MCP host so tools still execute
+where their files and dependencies live; see [Remote tool hosts](#remote-tool-hosts).
+
+Settings changed through the console and recorded tool schemas live in the owning database,
+separately from `toollocker.toml`. Follow **Front ToolLocker relocation (milestone 128)** in
+`docs/operations.md` for the verified store transfer, cutover and rollback procedure. Verify the
+front gateway's tool list, permissions and calls before retiring the old service. The installer
+does not disable a legacy compute gateway automatically.
+
 ## Verify the connection
+
+For the bundled file server, create a sample in its default allowed folder on front:
+
+```bash
+cd ~/openWeightGym
+printf '%s\n' 'ToolLocker is working.' > data/shared/example.txt
+chmod 644 data/shared/example.txt
+```
+
+Use your installation's checkout path for a system or custom install. If the file server uses a
+different root, place the sample there instead.
 
 Open **Settings → Tools → Try a tool → Connect**. Expect `files__list_folder` and `files__read_file`.
 Call `files__list_folder` with an empty folder to list the allowed roots, then read the sample
@@ -268,7 +309,7 @@ SSH access to the file-owning host.
 
 | Symptom | Check |
 |---|---|
-| Unit not found | Create the front gateway config and service above for an older or custom install. |
+| Unit not found | Add ToolLocker with the installer command above; Update/Repair of an older console-only selection does not add a missing service. |
 | Tool service has not reported configuration | Check `systemctl --user status toollocker` and its journal, then `front_settings`, `toollocker_url` and port 8443 in the console configuration. |
 | Gateway will not start | Check absolute command paths, Python/server dependencies, database access and the shared machine-key path. A legacy `loadcoach` setting must be replaced by `front` for a front-owned gateway. |
 | Address already in use | Turnstile uses 8443; the private gateway uses loopback 9443. Check `ss -ltnp`. |
