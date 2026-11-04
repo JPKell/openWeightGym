@@ -48,7 +48,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
 
     async def ask(request, method, path, **kwargs):
         """Send one authenticated benchmark management request to the configured openWeightGym API."""
-        response = await compute.request(method, path, headers={'authorization': request.headers.get('authorization','')}, **kwargs)
+        response = await compute.request(method, path, headers={'authorization': request.headers.get('authorization',''),
+                                                              'x-turnstile-no-wake': '1'}, **kwargs)
         response.raise_for_status()
         return response.json()
 

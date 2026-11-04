@@ -8,10 +8,9 @@ To install openWeightGym on a machine of your own, see [Installation](installati
 
 This checkout starts a fresh Git history at `/home/jpk/ai/openWeightGym`. The original repository
 and its history remain at `/home/jpk/ai/suite`; historical commit IDs and local qualification
-receipts in these guides belong to that original installation. Existing deployed services have not
-been switched to this checkout.
+receipts in these guides belong to that original installation.
 
-Front is **k-srv, `10.77.10.42`**, installed under `~/weightroom`; the main compute checkout is
+Front is **k-srv, `10.77.10.42`**, installed under `~/openWeightGym`; the historical main compute checkout is
 **`10.77.10.84`, `/home/jpk/ai/suite`**. Additional CPU workers appear in **Compute nodes**.
 
 Current installation addresses, documented **2026-10-20**:
@@ -23,6 +22,40 @@ Current installation addresses, documented **2026-10-20**:
 | MCP tools | `http://10.77.10.42:8443/mcp` or `/mcp/TOOLSET` |
 | Browser voice | [Private HTTPS voice app](https://k-srv.tailaf60c6.ts.net/) |
 | Desktop voice | Front server, port `8447`; [download](https://10.77.10.42/static/LoadCoach-Voice.zip) |
+
+### Offline page latency (2026-11-03)
+
+Console reads now skip workers the passive node monitor has found unavailable. Accounts,
+permissions and sessions are checked locally on every request; only model metadata is cached
+under the current caller policy and refreshed in the background. Benchmark reads preserve the
+no-wake header even with an injected HTTP client. Explicit compute requests retain live probing
+and wake behavior. Recovery follows the configured monitor interval (10 seconds here); discovery
+before the first completed poll, or without a configured monitoring account, still probes live.
+
+Authenticated loopback HTTP on front, with compute unavailable: before is one request per route;
+after is the mean of three. Eight HTTPS Chromium navigations from the workstation completed
+loading in 51–159 ms with no JavaScript errors.
+
+| Page | Before | After |
+|---|---:|---:|
+| Guide | 2.04 s | 44 ms |
+| Appearance | 2.05 s | 28 ms |
+| Status | 4.07 s | 60 ms |
+| Chat | 4.09 s | 81 ms |
+| Models | 8.13 s | 86 ms |
+| Compute nodes | 8.14 s | 86 ms |
+| Settings | 4.12 s | 56 ms |
+| Benchmark runs | 8.20 s | 109 ms |
+
+Validation: 193 targeted tests passed and one skipped; the file-store retry test also fails on
+unchanged code and was excluded. Regression cases cover navigation without worker attempts,
+deduplicated background refresh, policy changes, disabled accounts and node recovery. Live
+invalid-key checks return 401; temporary audit sessions were revoked.
+
+Delivered `benchmarks/app.py`, `turnstile/app.py`, `turnstile/machines.py` and `weightroom/app.py`
+to front and restarted only Turnstile and WeightRoom after confirming an empty benchmark queue.
+For rollback, reverse this patch in those four files and restart the same services, preserving
+later unrelated edits.
 
 ## Delivering services
 

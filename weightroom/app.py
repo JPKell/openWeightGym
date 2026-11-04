@@ -1048,23 +1048,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def system_status(request: Request, person: Person) -> Response:
         """What compute is doing right now, kept true as it changes, and the controls that steer it."""
         now = None
-        try:  # what this person may see of it, which is more than weightroom's own key sees
-            now = (await ask("GET", "/loadcoach/status", person.key)).json()
-            now['active_batches'] = current_batch_jobs(now, person, benchmarks.state.worker, benchmarks.state.store)
-        except ComputeOff:
-            pass  # the page says compute is off, and shows the last it saw
         nodes, poll_seconds = [], 10
-        if request.query_params.get("part") != "requests":
+        told = {}
+        try:
+            inventory = await ask("GET", "/turnstile/machines", person.key)
+            if inventory.status_code == 200:
+                told = inventory.json()
+                poll_seconds = told.get("poll_seconds", 10)
+        except ComputeOff:
+            pass
+        # Never wait for a node already known to be unavailable. Live status stays
+        # caller-scoped; shared monitoring data is used only for availability.
+        available = [node for node in told.get("machines", [])
+                     if node.get("state") == "ready" and node.get("status_live")]
+        missing = person.me.get("unavailable_machines", [])
+        if available or not told.get("machines") or any(node["name"] not in missing for node in told["machines"]):
             try:
-                inventory = await ask("GET", "/turnstile/machines", person.key)
-                if inventory.status_code == 200:
-                    told = inventory.json()
-                    poll_seconds = told.get("poll_seconds", 10)
-                    nodes = status_nodes(told, poll_seconds, now)
+                now = (await ask("GET", "/loadcoach/status", person.key)).json()
+                now['active_batches'] = current_batch_jobs(now, person, benchmarks.state.worker, benchmarks.state.store)
             except ComputeOff:
                 pass
-            if not nodes and now:
-                nodes = status_nodes({}, poll_seconds, now)
+        nodes = status_nodes(told, poll_seconds, now)
         if request.query_params.get("part") == "status":  # the status asking for itself again
             return page(request, "status.html", person, now=now, nodes=nodes, poll_seconds=poll_seconds, address=model_address)
         if request.query_params.get('part') == 'requests':
