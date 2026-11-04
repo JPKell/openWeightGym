@@ -184,8 +184,9 @@ def test_desktop_refused_key_never_prepares_a_session(tmp_path):
     assert not any(method == "POST" for method, _ in paths)
 
 
-def test_browser_revoked_key_ends_active_direct_session(tmp_path):
+def test_browser_revoked_key_ends_active_direct_session(tmp_path, monkeypatch):
     """The server-held browser key is checked again during a live call without a real voice backend."""
+    monkeypatch.setattr("voice.gateway.KEY_CHECK_SECONDS", .05)
     import asyncio
     from contextlib import asynccontextmanager
 

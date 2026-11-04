@@ -585,7 +585,8 @@ def test_cuda_allocation_disconnect_becomes_failed_fit_and_search_steps_down(fak
         assert c.get('/loadcoach/status',headers=owner).json()['lock'] is None
 
 
-def test_repeated_unknown_native_crash_fails_after_three_attempts(fake_llama_server,fake_cards):
+def test_repeated_unknown_native_crash_fails_after_three_attempts(fake_llama_server,fake_cards,monkeypatch):
+    monkeypatch.setattr('benchmarks.worker.RETRY_SECONDS', .01)
     models=bench_model()
     models['small']['flags'].update({'benchmark-crash-above':0,'benchmark-crash-message':'CUDA error: an illegal memory access was encountered'})
     with gateway(fake_llama_server,models=models,nvidia_smi=fake_cards[0]) as c:

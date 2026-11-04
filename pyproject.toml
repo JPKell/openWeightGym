@@ -15,7 +15,7 @@ dependencies = ["starlette", "httpx", "uvicorn", "jinja2", "typer", "markdown-it
 knowledge = ["pypdf==6.20.1"]
 benchmarks = ["jsonschema==4.26.0", "absl-py==2.3.1", "langdetect==1.0.9", "nltk==3.10.3", "immutabledict==4.2.2"]
 postgresql = ["psycopg[binary]>=3.2,<4"]
-dev = ["pypdf==6.20.1", "pywebrtc-audio==0.2.0", "pytest", "numpy", "psycopg[binary]>=3.2,<4", "websockets>=15,<17", "audioop-lts; python_version >= '3.13'"]
+dev = ["pypdf==6.20.1", "pywebrtc-audio==0.2.0", "pytest", "pytest-xdist>=3.8,<4", "numpy", "psycopg[binary]>=3.2,<4", "websockets>=15,<17", "audioop-lts; python_version >= '3.13'"]
 voice = ["sherpa-onnx==1.13.8", "numpy", "websockets>=15,<17"]
 voice-desktop = ["pywebrtc-audio==0.2.0", "sounddevice>=0.5,<0.6", "websockets>=15,<17", "audioop-lts; python_version >= '3.13'"]
 voice-gateway = ["pywebrtc-audio==0.2.0", "websockets>=15,<17", "audioop-lts; python_version >= '3.13'"]
@@ -55,3 +55,6 @@ plugins = ["README.md"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# Tests run across every core: most of their time is spent waiting on child processes and
+# servers, not computing. Add -n 0 to run in one process, for a debugger or print output.
+addopts = "-n auto --dist worksteal"
