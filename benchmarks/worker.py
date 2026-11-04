@@ -13,6 +13,8 @@ import httpx
 from . import TEXT, quality
 from .store import TERMINAL
 
+RETRY_SECONDS = 1  # a failed native attempt waits this times 2, then times 4, before its retry
+
 
 class Retry(Exception):
     """An incomplete sample can be retried after preemption or an unavailable service."""
@@ -170,7 +172,7 @@ class BenchmarkWorker:
             if attempts >= 3:
                 raise ValueError(f'{sample}: stopped after {attempts} failed native attempts. '
                                  f'Completed samples are kept. {problem}') from problem
-            delay = 2 ** attempts
+            delay = RETRY_SECONDS * 2 ** attempts
             self.store.message(number, f'{sample}: native attempt {attempts}/3 failed; retry in {delay}s. {problem}')
             await asyncio.sleep(delay)
             raise Retry(f'{sample}: retrying after native failure {attempts}/3.') from problem

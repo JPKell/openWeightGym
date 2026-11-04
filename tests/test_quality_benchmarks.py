@@ -388,7 +388,7 @@ def test_quality_preemption_resume_and_answer_keys_stay_local(fake_llama_server,
             assert 'expected' not in body and 'schema' not in body
         return await request(self,number,method,suffix,**kw)
     monkeypatch.setattr(BenchmarkWorker,'request',observe)
-    database=str(tmp_path/'resume.db');models=bench_model(.2)
+    database=str(tmp_path/'resume.db');models=bench_model(.05)
     if name in ('abstention','tables','turns','reasoning','hierarchy'):
         gguf('small.gguf',general__architecture='tiny',tiny__context_length=32768,general__parameter_count=123456)
         models['small']['flags']['ctx-size']=32768

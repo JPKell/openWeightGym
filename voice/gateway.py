@@ -51,6 +51,7 @@ def may(person, mode):
 
 
 RECORDING_BYTES = 16000 * 2 * 60 * 30  # thirty minutes of the caller's 16 kHz sound; the assistant's 24 kHz side gets the same time
+KEY_CHECK_SECONDS = 10  # how often a live call asks Turnstile whether its key is still allowed
 
 
 def build_app(settings, client=None, connector=connect, following=None, prompt_cache=None):
@@ -561,7 +562,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         async def still_allowed():
             """A key that is taken away or disabled ends the call. Turnstile is asked every so often, from the accounts."""
             while True:
-                await asyncio.sleep(10)
+                await asyncio.sleep(KEY_CHECK_SECONDS)
                 try:
                     me = await ask("GET", turnstile + "/loadcoach/me", key, timeout=5)
                 except httpx.HTTPError:
