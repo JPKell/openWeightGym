@@ -1,12 +1,9 @@
-{% from "parts.html" import section_title %}
-<nav class="d-flex flex-wrap gap-3 mb-3" aria-label="API reference sections">
-  <a href="#api-connection">Connection</a><a href="#api-compatible">Implemented OpenAI endpoints</a>
-  <a href="#api-unsupported">Not implemented</a><a href="#api-headers">Request headers</a>
-  <a href="#api-custom">Custom endpoints</a><a href="#api-response-headers">Response headers</a>
-</nav>
+{% from "docs_parts.html" import doc_contents, doc_section, doc_heading, doc_table %}
+{{ doc_contents([('api-connection', 'Connection'), ('api-compatible', 'Implemented OpenAI endpoints'), ('api-unsupported', 'Not implemented'),
+                 ('api-headers', 'Request headers'), ('api-custom', 'Custom endpoints'), ('api-response-headers', 'Response headers'),
+                 ('source', 'Code reference')], label='API reference sections') }}
 
-<section id="api-connection" class="mb-4">
-  {{ section_title("Connection and scope") }}
+{% call doc_section("Connection and scope", "api-connection") %}
   <p>Use Turnstile's model listener, normally <code>http://FRONT:8442/v1</code>, as an OpenAI client's base URL.
     Send <code>Authorization: Bearer API_KEY</code> using your openWeightGym account key. A configured model or role name replaces an OpenAI model name.
     Model permissions, engine capabilities, installed runtimes and node availability still apply.</p>
@@ -16,11 +13,11 @@
   <p class="small text-secondary">Compatibility terminology checked against the
     <a href="https://developers.openai.com/api/reference/overview" target="_blank" rel="noopener noreferrer">official OpenAI API reference</a>
     on 2026-10-26. openWeightGym support is established by the source linked below.</p>
-</section>
+{% endcall %}
 
 {% macro endpoints(identifier, caption, rows) -%}
-<div class="table-responsive mb-3" tabindex="0" role="region" aria-label="{{ caption }}">
-  <table id="{{ identifier }}" class="table table-sm align-top api-endpoints">
+<div class="table-responsive docs-table-frame" tabindex="0" role="region" aria-label="{{ caption }}">
+  <table id="{{ identifier }}" class="table table-sm docs-table api-endpoints">
     <caption class="visually-hidden">{{ caption }}</caption>
     <thead><tr><th scope="col">Method</th><th scope="col">Endpoint</th><th scope="col">Support and limits</th><th scope="col">Request headers beyond Common</th></tr></thead>
     <tbody>{% for method, path, note, headers in rows %}
@@ -30,8 +27,7 @@
 </div>
 {%- endmacro %}
 
-<section id="api-compatible" class="mb-4">
-  {{ section_title("Implemented OpenAI endpoints") }}
+{% call doc_section("Implemented OpenAI endpoints", "api-compatible") %}
   <p>“Inference” below means the local inference header group. Hosted and plugin models have narrower header contracts, described under Request headers.
     GET routes also support HTTP HEAD through Starlette unless noted otherwise.</p>
   {{ endpoints('api-openai', 'Implemented OpenAI-compatible endpoints', [
@@ -56,10 +52,9 @@
     Other OpenAI batch endpoint choices are not implemented. See the
     <a href="https://developers.openai.com/api/reference/resources/batches/methods/create" target="_blank" rel="noopener noreferrer">official Batch API</a>
     for the upstream contract; openWeightGym's narrower list above is authoritative here.</p>
-</section>
+{% endcall %}
 
-<section id="api-unsupported" class="mb-4">
-  {{ section_title("Not implemented by openWeightGym") }}
+{% call doc_section("Not implemented by openWeightGym", "api-unsupported") %}
   <p>The worker registers a broad <code>POST /v1/{path}</code> inference proxy. A backend may accept an additional POST with a model field;
     that is backend-dependent passthrough, not an openWeightGym implementation or a compatibility promise. Unknown requests need not return 404:
     model validation or an engine refusal can happen first. Hosted forwarding likewise does not implement OpenAI resources locally.</p>
@@ -76,22 +71,21 @@
     ('GET, POST, DELETE', '/v1/uploads, /v1/fine_tuning, /v1/vector_stores, /v1/assistants, /v1/threads', 'No multipart-upload lifecycle, fine-tuning, vector-store or Assistants resource implementation.', 'No openWeightGym-specific endpoint contract'),
     ('Various', 'Other OpenAI resource families', 'No openWeightGym implementation of OpenAI Videos, Evals, Agents, Live, ChatKit, Containers, Skills, webhooks, safety/provenance resources, organization/project administration, usage or billing APIs. openWeightGym benchmarks, plugins, accounts and usage reports have separate contracts.', 'No openWeightGym-specific endpoint contract')
   ]) }}
-</section>
+{% endcall %}
 
-<section id="api-headers" class="mb-4">
-  {{ section_title("Request headers") }}
-  {{ section_title("Common", level=3) }}
+{% call doc_section("Request headers", "api-headers") %}
+  {{ doc_heading("Common") }}
   <p>Header names are case-insensitive. Ordinary HTTP headers still apply: <code>Authorization</code>, appropriate <code>Content-Type</code>
     (usually <code>application/json</code>, or multipart where listed), and WebSocket handshake headers. An ignored header does not enable a feature.</p>
-  <dl>
+  <dl class="docs-terms">
     <dt><code>traceparent</code></dt><dd>Optional valid W3C trace context on instrumented HTTP/WebSocket entry points; an invalid value is not adopted. <code>baggage</code> and <code>tracestate</code> are stripped.</dd>
     <dt><code>X-Suite-Application</code></dt><dd>Optional observation label, at most 128 characters from letters, digits, dot, underscore, colon or dash. Invalid labels are not recorded. This grants no permissions.</dd>
     <dt><code>X-LoadCoach-Trace</code> on management routes</dt><dd>The same bounded label syntax groups observation metadata. Inference adds the validation and sticky-sensitivity rules below; this header does not otherwise change a management operation.</dd>
     <dt><code>X-Turnstile-No-Wake</code></dt><dd>Any presence prevents the proxy's wake-and-wait path when a worker is unavailable. It does not prevent model loading on an awake node, and front-owned handlers already avoid that wake path. No direct-worker effect.</dd>
   </dl>
-  {{ section_title("Inference", id="api-inference-headers", level=3) }}
+  {{ doc_heading("Inference", id="api-inference-headers") }}
   <p>These headers are interpreted for local model inference; they are not general settings for every management endpoint.</p>
-  <dl>
+  <dl class="docs-terms">
     <dt><code>X-LoadCoach-Priority</code></dt><dd><code>high</code>, <code>normal</code> or <code>low</code>. High requires the relevant group priority or <code>high</code> ability. This orders admission, not native execution already underway.</dd>
     <dt><code>X-LoadCoach-Lock</code></dt><dd>Token returned by <code>POST /loadcoach/lock</code>. Also used by the explicitly marked lock, facts and load-out routes below.</dd>
     <dt><code>X-LoadCoach-Sensitivity</code></dt><dd><code>normal</code>, <code>sensitive</code> or <code>restricted</code>, within the account's allowance. A trace retains its highest sensitivity; non-normal work cannot be offloaded.</dd>
@@ -101,17 +95,17 @@
       <dd>Send all three together (each 1–256 characters) to pin a local model identity, configured fingerprint and engine build. A mismatch returns 409 before inference. Cannot be combined with offload or a hosted model.</dd>
     <dt><code>X-LoadCoach-Offload</code></dt><dd>Hosted model name to consider when the local model would wait. Turnstile checks access, sensitivity and spending policy. This is permission to consider a fallback, not a forced switch; direct workers reject it.</dd>
   </dl>
-  {{ section_title("Hosted and plugin differences", level=3) }}
+  {{ doc_heading("Hosted and plugin differences") }}
   <p>Hosted inference implements sensitivity and trace handling; hosted requests reject unlogged work and local identity guards.
     Local lock and priority headers do not control a provider's queue.</p>
   <p>For plugin aliases on <code>POST /v1/chat/completions</code>, the plugin path handles <code>X-LoadCoach-Sensitivity</code> and permitted
     <code>X-LoadCoach-Log: off</code>, and forwards these session controls to the selected adapter:</p>
-  <dl>
+  <dl class="docs-terms">
     <dt><code>X-Suite-Session-Mode</code></dt><dd><code>fresh</code> (default) or <code>persistent</code>.</dd>
     <dt><code>X-Suite-Session-ID</code></dt><dd>Resume the caller's adapter session in persistent mode; incompatible with fresh mode.</dd>
     <dt><code>Idempotency-Key</code></dt><dd>1–128 characters without control characters, scoped by adapter ownership. Reuse with different input returns 409. Not a general openWeightGym inference idempotency guarantee.</dd>
   </dl>
-  {{ section_title("Special and internal headers", level=3) }}
+  {{ doc_heading("Special and internal headers") }}
   <p><code>X-LoadCoach-Task</code> is a scoped external-task token, not general API access. <code>X-LoadCoach-Probe-ID</code> identifies a front-owned probe attempt.
     <code>X-ToolLocker-Sets</code> is a comma-separated tool-set filter, further restricted by caller permissions.
     MCP accepts <code>X-LoadCoach-Sensitivity</code> and <code>X-LoadCoach-Trace</code>; absent a trace, <code>Mcp-Session-Id</code> supplies its work grouping.</p>
@@ -122,10 +116,9 @@
     <code>X-LoadCoach-From</code>, <code>X-Suite-User-ID</code>, <code>X-Suite-Instance</code> and <code>X-Suite-Model</code>
     belong to trusted inter-service or adapter traffic. A header alone cannot impersonate another user or bypass a signed statement, grant or token.
     Clients select roles using the JSON <code>model</code> field.</p>
-</section>
+{% endcall %}
 
-<section id="api-custom" class="mb-4">
-  {{ section_title("Custom endpoints") }}
+{% call doc_section("Custom endpoints", "api-custom") %}
   <p>Benchmark submissions accept explicit <code>targets: [{model, machine}]</code> for quality and resource runs.
     Recurring schedules also accept <code>machine</code>; kind <code>outstanding</code> uses optional
     <code>model_ids</code>/<code>benchmarks</code> scopes and freezes one missing/stale pair per occurrence.
@@ -152,12 +145,12 @@
     <code>/turnstile/power</code> require machine signatures. <code>/loadcoach/front-probes</code> and its interrupt route are internal dispatch only and are refused on the public front path.
     Schedule dispatch uses its scoped grant. Worker file PUT uses the short-lived preparation token in the path.</p>
   {% for group in reference.api %}
-    <details class="border rounded mb-2">
-      <summary class="p-2"><code class="text-break">{{ group.path }}</code> <span class="text-secondary small">· {{ group.rows|length }} operations</span></summary>
-      <div class="px-2 pb-2">
-        <p class="small"><a href="?module={{ group.path|urlencode }}#source-title">Read handler documentation and parameters</a></p>
-        <div class="table-responsive" tabindex="0" role="region" aria-label="{{ group.path }} endpoints">
-          <table class="table table-sm align-top api-endpoints">
+    <details class="docs-disclosure">
+      <summary><code class="text-break">{{ group.path }}</code> <span class="text-secondary small">· {{ group.rows|length }} operations</span></summary>
+      <div class="docs-disclosure-body">
+        <p><a href="?module={{ group.path|urlencode }}#source-title">Read handler documentation and parameters</a></p>
+        <div class="table-responsive docs-table-frame" tabindex="0" role="region" aria-label="{{ group.path }} endpoints">
+          <table class="table table-sm docs-table api-endpoints">
             <caption class="visually-hidden">{{ group.path }} custom endpoints</caption>
             <thead><tr><th scope="col">Method</th><th scope="col">Endpoint</th><th scope="col">Purpose</th><th scope="col">Request headers beyond Common</th></tr></thead>
             <tbody>{% for row in group.rows %}
@@ -169,10 +162,9 @@
       </div>
     </details>
   {% endfor %}
-</section>
+{% endcall %}
 
-<section id="api-response-headers" class="mb-4">
-  {{ section_title("Response headers are separate") }}
+{% call doc_section("Response headers are separate", "api-response-headers") %}
   <p><code>X-Request-ID</code> and <code>X-LoadCoach-Request-ID</code> identify observed or retained requests; they are not idempotency keys.
     Depending on the route, responses can also include <code>X-LoadCoach-Model-ID</code>, <code>X-LoadCoach-Configured-Fingerprint</code>,
     <code>X-LoadCoach-Fingerprint</code>, <code>X-LoadCoach-Build</code>, <code>X-LoadCoach-Role</code>, <code>X-LoadCoach-Picked</code>,
@@ -180,4 +172,4 @@
     <code>Retry-After</code> is standard HTTP. Unlogged work has no retained request number.</p>
   <p><code>X-Suite-Proof</code> is worker-response verification, <code>X-Suite-Data-Owner</code> describes front-owned responses,
     and adapter session/request IDs are returned for plugin work. Sending these response headers as request headers does not enable those behaviours.</p>
-</section>
+{% endcall %}

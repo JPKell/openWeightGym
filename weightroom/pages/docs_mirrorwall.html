@@ -1,10 +1,12 @@
-{% from "parts.html" import section_title %}
-<div class="docs-guide">
-  <p class="lead fs-6">Mirror Wall makes images on the compute machine with stable-diffusion.cpp. You write a prompt under <a href="/chat/images">Chat → Images</a>, optionally add reference images, and the finished pictures are kept privately on front. Administrators set up models under <a href="/models/images">Models → Images</a>.</p>
-  <nav aria-label="On this page" class="small mb-4"><a href="#workflow">How an image is made</a> · <a href="#models">Models and their parts</a> · <a href="#adding">Adding a model</a> · <a href="#references">Reference images</a> · <a href="#trouble">When something goes wrong</a></nav>
+{% from "docs_parts.html" import doc_contents, doc_section, doc_heading, doc_table %}
+{{ doc_contents([('workflow', 'How an image is made'), ('models', 'Models and their parts'), ('adding', 'Adding a model'),
+                 ('references', 'Reference images'), ('trouble', 'When something goes wrong'), ('source', 'Code reference')]) }}
 
-  <section id="workflow" class="mb-5" aria-labelledby="workflow-title">
-    {{ section_title("How an image is made", id="workflow-title") }}
+  {% call doc_section("Overview", "overview") %}
+  <p>Mirror Wall makes images on the compute machine with stable-diffusion.cpp. You write a prompt under <a href="/chat/images">Chat → Images</a>, optionally add reference images, and the finished pictures are kept privately on front. Administrators set up models under <a href="/models/images">Models → Images</a>.</p>
+  {% endcall %}
+
+  {% call doc_section("How an image is made", "workflow") %}
     <p>Every request takes the same path. Front checks it and queues it; LoadCoach reserves the cards and memory the whole job needs before anything loads; sd.cpp then runs the stages in order, loading each part only when its stage starts, so the text encoder and the diffusion weights need not be on the card at the same time.</p>
     <p class="small text-secondary mb-2 d-md-none">Swipe across the diagram to see all of it.</p>
     <div class="docs-map-scroll">
@@ -52,7 +54,7 @@
       </g>
     </svg>
     </div>
-    <ol class="small mt-3">
+    <ol class="docs-steps mt-3">
       <li><strong>Check and queue.</strong> Front refuses at once what would fail later: more reference images than the model uses, a reference too small for a model without an upscaler, or a mask without a reference.</li>
       <li><strong>Admission.</strong> LoadCoach reserves the whole job's measured peak on each card plus headroom. A model without a measurement yet takes its cards to itself.</li>
       <li><strong>Prepare references.</strong> Each reference is scaled to the model's reference size, keeping its shape. A smaller one is first enlarged with the upscaler; an ordinary resize is never used to enlarge.</li>
@@ -63,13 +65,11 @@
       <li><strong>Upscale</strong> the output 2× or 4× with the upscaler, if asked.</li>
       <li><strong>Keep.</strong> The PNG goes into your private library on front; nothing about the prompt is written into the file.</li>
     </ol>
-  </section>
+  {% endcall %}
 
-  <section id="models" class="mb-5" aria-labelledby="models-title">
-    {{ section_title("Models and their parts", id="models-title") }}
+  {% call doc_section("Models and their parts", "models") %}
     <p>An image model is several files that must belong together. The diffusion weights decide everything else: each size of Flux 2 reads prompts with its own text encoder, and all of them decode with the Flux 2 VAE. Sizes are on disk; VRAM is the measured peak of the whole job on this machine's 16 GB cards.</p>
-    <div class="table-responsive">
-    <table class="table table-sm align-top docs-models">
+    {% call doc_table("Image models and their parts", class_="docs-models") %}
       <thead><tr><th scope="col">Model</th><th scope="col">Good at</th><th scope="col">Parts it needs</th><th scope="col">On this machine</th><th scope="col">References</th><th scope="col">Starting settings</th></tr></thead>
       <tbody>
         <tr><th scope="row">Flux 2 klein 9B<br><span class="badge text-bg-success fw-normal">qualified</span></th>
@@ -95,31 +95,29 @@
           <td>UNet weights<br>VAE: SDXL VAE (4 channels)<br><strong>CLIP L</strong> and <strong>CLIP G</strong> text encoders</td>
           <td>Expect one card</td><td>1 start image</td><td>As above</td></tr>
       </tbody>
-    </table>
-    </div>
-    <p class="small">Not run by Mirror Wall: Flux 1, Stable Diffusion 1.x, 2.x and 3, and the other families stable-diffusion.cpp knows. The checklist on Models → Images says so when it reads one.</p>
-    {{ section_title("What each part does", level=3) }}
-    <dl class="row small">
-      <dt class="col-sm-3">Diffusion weights</dt><dd class="col-sm-9">The model itself: it draws the picture, step by step. Its size decides which text encoder it needs.</dd>
-      <dt class="col-sm-3">Text encoder</dt><dd class="col-sm-9">Turns the prompt into what the diffusion weights read. It must be the one the model was trained with: a Flux 2 klein 9B with the Qwen3 4B encoder does not work. Any quantization of the right model will do.</dd>
-      <dt class="col-sm-3">VAE</dt><dd class="col-sm-9">Turns the finished latent image into pixels, and reference images into latents. Flux 2 uses a 32-channel VAE; SDXL a 4-channel one. They are not interchangeable.</dd>
-      <dt class="col-sm-3">CLIP L, CLIP G</dt><dd class="col-sm-9">SDXL's two text encoders. A full SDXL checkpoint has them inside; leave these empty for it and for every Flux 2 model.</dd>
-      <dt class="col-sm-3">Upscaler</dt><dd class="col-sm-9">An image enlarger such as 4x-UltraSharp (67 MB). Without one, reference images must already be at least the reference size, and outputs cannot be upscaled.</dd>
-      <dt class="col-sm-3">LoRA</dt><dd class="col-sm-9">A small add-on that teaches a style or subject. It works only on the base it was trained for: a klein 9B LoRA on klein 9B.</dd>
+    {% endcall %}
+    <p class="text-secondary">Not run by Mirror Wall: Flux 1, Stable Diffusion 1.x, 2.x and 3, and the other families stable-diffusion.cpp knows. The checklist on Models → Images says so when it reads one.</p>
+    {{ doc_heading("What each part does") }}
+    <dl class="docs-terms">
+      <dt>Diffusion weights</dt><dd>The model itself: it draws the picture, step by step. Its size decides which text encoder it needs.</dd>
+      <dt>Text encoder</dt><dd>Turns the prompt into what the diffusion weights read. It must be the one the model was trained with: a Flux 2 klein 9B with the Qwen3 4B encoder does not work. Any quantization of the right model will do.</dd>
+      <dt>VAE</dt><dd>Turns the finished latent image into pixels, and reference images into latents. Flux 2 uses a 32-channel VAE; SDXL a 4-channel one. They are not interchangeable.</dd>
+      <dt>CLIP L, CLIP G</dt><dd>SDXL's two text encoders. A full SDXL checkpoint has them inside; leave these empty for it and for every Flux 2 model.</dd>
+      <dt>Upscaler</dt><dd>An image enlarger such as 4x-UltraSharp (67 MB). Without one, reference images must already be at least the reference size, and outputs cannot be upscaled.</dd>
+      <dt>LoRA</dt><dd>A small add-on that teaches a style or subject. It works only on the base it was trained for: a klein 9B LoRA on klein 9B.</dd>
     </dl>
-    {{ section_title("Where to get them", level=3) }}
-    <ul class="small">
+    {{ doc_heading("Where to get them") }}
+    <ul>
       <li>Flux 2 klein: <code>leejet/FLUX.2-klein-9B-GGUF</code>, <code>leejet/FLUX.2-klein-4B-GGUF</code>; text encoders <code>unsloth/Qwen3-8B-GGUF</code>, <code>unsloth/Qwen3-4B-GGUF</code>.</li>
       <li>Flux 2 Dev: <code>city96/FLUX.2-dev-gguf</code>; text encoder <code>unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF</code>.</li>
       <li>Flux 2 VAE: <code>split_files/vae/flux2-vae.safetensors</code> in <code>Comfy-Org/Flux-2-Dev</code>.</li>
       <li>SDXL: <code>stabilityai/stable-diffusion-xl-base-1.0</code>, or a fine-tune from <a href="/civitai">Civitai</a>; VAE <code>madebyollin/sdxl-vae-fp16-fix</code>.</li>
       <li>Upscaler: <code>4x-UltraSharp.pth</code> in <code>Kim2091/UltraSharp</code>.</li>
     </ul>
-  </section>
+  {% endcall %}
 
-  <section id="adding" class="mb-5" aria-labelledby="adding-title">
-    {{ section_title("Adding a model", id="adding-title") }}
-    <ol>
+  {% call doc_section("Adding a model", "adding") %}
+    <ol class="docs-steps">
       <li><strong>Bring the diffusion weights down.</strong> Find them on the <a href="/hub">Hugging Face</a> page (type the repository, tick the file) or on <a href="/civitai">Civitai</a>. Downloads arrive in front's library.</li>
       <li><strong>Copy it to the compute node.</strong> On <a href="/files">Files</a>, copy the file to compute, into the image folder. Files on the node are what a model can use.</li>
       <li><strong>Start the model.</strong> Press <em>Configure</em> beside the file on Files, or <a href="/models/images">Models → Images</a> → <em>Add image model</em> and paste its path into Diffusion weights.</li>
@@ -134,31 +132,27 @@
       <li><strong>Choose the cards.</strong> One GPU suits klein; Flux 2 Dev needs both cards with <em>diffusion layers</em> split. Leave the host RAM cap at 8 GiB unless the job needs more (Dev uses 12 GiB).</li>
       <li><strong>Save, then try it</strong> in <a href="/chat/images">Chat → Images</a>. The first full job is measured; until then the model keeps its cards to itself, so other models wait.</li>
     </ol>
-  </section>
+  {% endcall %}
 
-  <section id="references" class="mb-5" aria-labelledby="references-title">
-    {{ section_title("Reference images", id="references-title") }}
+  {% call doc_section("Reference images", "references") %}
     <p>The Images page shows, for the chosen model, whether it takes references, how many, and marks each image: <span class="badge text-bg-success">1 · main</span> used, <span class="badge text-bg-info">Enlarged</span> small but the model can enlarge it, <span class="badge text-bg-danger">Too small</span> or <span class="badge text-bg-danger">Not used</span>. Generate stays off, with the reason beneath it, until the references fit.</p>
-    <div class="table-responsive">
-    <table class="table table-sm">
+    {% call doc_table("How each model uses reference images") %}
       <thead><tr><th scope="col">Model</th><th scope="col">How it uses them</th><th scope="col">How many</th><th scope="col">Tips</th></tr></thead>
       <tbody>
         <tr><th scope="row">Flux 2 klein, Flux 2 Dev</th><td>Reference conditioning: the model looks at them while it draws a new picture.</td><td>Up to 2 (the model's limit)</td><td>Order matters; image 1 is the main one. Say what to take from each: “the person from image 1 wearing the jacket from image 2”.</td></tr>
         <tr><th scope="row">SDXL</th><td>Image-to-image: it starts from the one image and redraws it.</td><td>1</td><td>Strength 0.3–0.5 keeps the picture; 0.7–0.9 follows the prompt.</td></tr>
       </tbody>
-    </table>
-    </div>
-    <ul class="small">
+    {% endcall %}
+    <ul>
       <li><strong>Size.</strong> Each reference is scaled to the reference size (1 MP for klein, 0.5 MP for Dev here), keeping its shape. Smaller images need the model's upscaler; without one, use larger images or lower the reference size under Advanced settings.</li>
       <li><strong>Shape.</strong> Between 1:8 and 8:1; crop anything longer before uploading. Transparent areas become white.</li>
       <li><strong>Edit mask.</strong> A PNG the size of the first reference. White or transparent areas are replaced by the new picture; the output must keep the first reference's shape.</li>
       <li><strong>Privacy.</strong> References are yours alone. Prepared copies are kept in memory for an hour so that a sweep does not enlarge the same image for each seed; with <em>Temporary</em> nothing is kept.</li>
     </ul>
-  </section>
+  {% endcall %}
 
-  <section id="trouble" class="mb-5" aria-labelledby="trouble-title">
-    {{ section_title("When something goes wrong", id="trouble-title") }}
-    <dl class="small">
+  {% call doc_section("When something goes wrong", "trouble") %}
+    <dl class="docs-faq">
       <dt>“Reference 1 is smaller than this model's reference size and the model has no upscaler”</dt><dd>Use a larger image, lower Reference size under Advanced settings, or add an upscaler to the model on Models → Images.</dd>
       <dt>“Flux 2 requires explicit VAE and text-encoder components”</dt><dd>Fill both on Models → Images; the checklist offers matching files.</dd>
       <dt>Black, grey or noisy SDXL images</dt><dd>Set the VAE to <code>sdxl-vae-fp16-fix</code>.</dd>
@@ -166,5 +160,4 @@
       <dt>“No available image model”</dt><dd>The sd.cpp runtime is not installed on the node, or no image model may be used by your group. Administrators: <code>scripts/install-sdcpp.sh</code>, then Models → Images.</dd>
       <dt>A LoRA changes nothing</dt><dd>It is for another base model; the checklist marks it with ✗. LoRA strength 0 also turns it off.</dd>
     </dl>
-  </section>
-</div>
+  {% endcall %}

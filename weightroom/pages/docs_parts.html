@@ -1,0 +1,57 @@
+{# Pieces every documentation page is built from, so that docs look like the rest of the console:
+   a title with a way back, the links to the page's sections, each section a card, and tables, notes,
+   steps and code blocks styled the same everywhere. Markdown documents are made into the same pieces
+   by weightroom/doc_markdown.py. #}
+{% from "parts.html" import card, page_header, section_title %}
+
+{# The page's title, under a link back to where it belongs (`back` is (label, url)), and the links to its sections. #}
+{% macro doc_header(title, back=None, contents=()) %}
+{% if back %}<nav class="docs-crumbs" aria-label="Documentation breadcrumb"><a href="{{ back[1] }}">{{ back[0] }}</a><span aria-hidden="true">/</span><span>{{ title }}</span></nav>{% endif %}
+{{ page_header(title) }}
+{{ doc_contents(contents) }}
+{% endmacro %}
+
+{# Links to the sections on this page, as (id, label) pairs. #}
+{% macro doc_contents(contents, label='On this page') %}
+{% if contents %}<nav class="docs-contents" aria-label="{{ label }}">{% for ident, text in contents %}<a href="#{{ ident }}">{{ text }}</a>{% endfor %}</nav>{% endif %}
+{% endmacro %}
+
+{# One section of a document: a card titled with it, which the contents links reach by its id. #}
+{% macro doc_section(title, id, hint='', actions='') %}
+{% set content = caller() %}{# a nested call block cannot reach this macro's caller, so it is taken first #}
+{% call card(title, id=id, hint=hint, actions=actions, class_='docs-section', body_class='docs-prose', header_id=id ~ '-title',
+             attrs={'aria-labelledby': id ~ '-title'}) %}{{ content }}{% endcall %}
+{% endmacro %}
+
+{# A heading inside a section. With `step`, it is a numbered step of a procedure. #}
+{% macro doc_heading(title, id='', step=None) %}
+{{ section_title(title, id=id, level=3, class_='docs-step' if step else 'docs-heading', wrapper_class='docs-heading-row',
+                 attrs={'data-step': step} if step else {}) }}
+{% endmacro %}
+
+{# A table that scrolls by itself on a narrow screen. The caller gives its <thead> and <tbody>. #}
+{% macro doc_table(label, class_='') %}
+<div class="table-responsive docs-table-frame" tabindex="0" role="region" aria-label="{{ label }}">
+<table class="table table-sm docs-table{{ ' ' ~ class_ if class_ }}"><caption class="visually-hidden">{{ label }}</caption>{{ caller() }}</table>
+</div>
+{% endmacro %}
+
+{# Something the reader should not miss. `kind` is note, tip or warning. #}
+{% macro doc_note(kind='note', title='') %}
+<div class="docs-note docs-note-{{ kind }}" role="note">{% if title %}<strong class="docs-note-title">{{ title }}</strong>{% endif %}{{ caller() }}</div>
+{% endmacro %}
+
+{# A block of code or commands with a Copy button. `id` must be unique on the page. #}
+{% macro doc_code(id, language='Shell') %}
+<div class="docs-code"><div class="docs-code-head"><span>{{ language }}</span><button type="button" class="btn btn-sm docs-code-copy" data-copy-target="{{ id }}" aria-label="Copy this {{ language }} block">Copy</button></div>
+<pre><code id="{{ id }}">{{ caller()|trim }}</code></pre></div>
+{% endmacro %}
+
+{# A whole Markdown document from weightroom/doc_markdown.py: its overview, then each of its sections as a card. #}
+{% macro doc_document(document, more=()) %}
+{{ doc_contents(document.contents + more|list) }}
+{% if document.overview %}{% call doc_section('Overview', 'overview') %}{{ document.overview }}{% endcall %}{% endif %}
+{% for section in document.sections %}
+{% call doc_section(section.title, section.id) %}{{ section.body }}{% endcall %}
+{% endfor %}
+{% endmacro %}

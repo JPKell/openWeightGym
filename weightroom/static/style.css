@@ -428,8 +428,13 @@ html[data-sidebar="open"] .drawer-handle span { display: inline-block; transform
 .docs-flow-part rect { stroke: var(--bs-border-color); }
 .docs-models th[scope=row] { min-width: 9rem; }
 .docs-models td { min-width: 10rem; }
-.docs-directory-link { color: var(--bs-body-color); }
-.docs-directory-link:hover, .docs-directory-link:focus-visible { border-color: var(--suite-accent); color: var(--bs-body-color); }
+/* The docs index's component pages: one tile each, as many across as fit. */
+.docs-directory { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); }
+.docs-directory-link { display: flex; flex-direction: column; gap: .2rem; padding: .65rem .8rem; border: 1px solid var(--bs-border-color);
+  border-radius: var(--suite-frame-radius); color: var(--bs-body-color); text-decoration: none; }
+.docs-directory-link:hover, .docs-directory-link:focus-visible { border-color: var(--suite-accent); background: var(--bs-tertiary-bg); color: var(--bs-body-color); }
+.docs-directory-title { font-weight: var(--suite-heading-weight); }
+.docs-directory-detail { font-size: .8125rem; color: var(--bs-secondary-color); }
 
 /* Shared console form rhythm. Native details retain their independent state. */
 .page-header { margin-top: 0; min-height: 0; }
@@ -563,3 +568,72 @@ form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
 .component-state-bad { color: var(--tblr-red); }
 .component-state-other { color: var(--tblr-secondary); }
 .component-state-cell { min-width: 4.5rem; }
+
+/* Documentation pages (docs_parts.html, weightroom/doc_markdown.py): every section is a card, and what
+   is inside reads the same on every docs page, whether written as a template or in Markdown. */
+.docs-crumbs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; font-size: .875rem; color: var(--bs-secondary-color); }
+.docs-page .page-header { margin-bottom: 1rem !important; }
+.docs-contents { display: flex; flex-wrap: wrap; column-gap: 1.25rem; row-gap: .35rem; margin-bottom: 1rem; }
+.docs-section { scroll-margin-top: 6rem; }
+.docs-prose { line-height: 1.6; }
+.docs-prose > :last-child, .docs-prose > :last-child > :last-child { margin-bottom: 0; }
+.docs-prose :where(p, ul, ol, dl) { max-width: 110ch; }
+.docs-prose :where(p, ul, ol, dl, .docs-code, .docs-table-frame, .docs-note, .docs-map-scroll) { margin-bottom: 1rem; }
+.docs-prose li + li { margin-top: .35rem; }
+.docs-prose li > :is(ul, ol) { margin-top: .35rem; margin-bottom: 0; }
+.docs-prose :is(h3, h4, .docs-heading, .docs-step) { font-size: var(--suite-section-title-size); font-weight: var(--suite-heading-weight); line-height: 1.4; scroll-margin-top: 6rem; }
+.docs-prose > :is(h3, h4), .docs-prose > .docs-heading-row { margin: 1.5rem 0 .6rem; }
+.docs-prose > :is(h3, h4):first-child, .docs-prose > .docs-heading-row:first-child { margin-top: 0; }
+.docs-prose .docs-heading-row { margin-bottom: .6rem; }
+/* A numbered step of a procedure: its number in a circle, with a rule above to set it apart from the step before. */
+.docs-prose > h3.docs-step, .docs-prose > .docs-heading-row:has(.docs-step) { padding-top: 1.25rem; border-top: 1px solid var(--bs-border-color); }
+.docs-prose > h3.docs-step:first-child { padding-top: 0; border-top: 0; }
+.docs-step { display: flex; align-items: center; gap: .6rem; }
+.docs-step::before { content: attr(data-step); flex: none; display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem;
+  border-radius: 50%; background: var(--suite-accent-bg); color: var(--suite-accent); font-size: .8125rem; font-weight: 700; }
+/* Numbered lists of steps, written by hand, with the same circles. */
+.docs-prose ol.docs-steps { list-style: none; padding-left: 0; counter-reset: docs-step; }
+.docs-prose ol.docs-steps > li { position: relative; padding-left: 2.4rem; counter-increment: docs-step; }
+.docs-prose ol.docs-steps > li + li { margin-top: .75rem; }
+.docs-prose ol.docs-steps > li::before { content: counter(docs-step); position: absolute; left: 0; top: 0; display: grid; place-items: center;
+  width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--suite-accent-bg); color: var(--suite-accent); font-size: .8125rem; font-weight: 700; }
+/* Tables: the console's own, framed like the tables on other pages. */
+.docs-table-frame { border: 1px solid var(--bs-border-color); border-radius: var(--suite-frame-radius); }
+.docs-table { margin-bottom: 0; }
+.docs-table > :not(caption) > * > * { padding: .5rem .75rem; vertical-align: top; }
+.docs-table > tbody > tr:last-child > * { border-bottom: 0; }
+.docs-table code { white-space: normal; overflow-wrap: anywhere; }
+.docs-table > tbody > tr > :first-child { font-weight: var(--suite-heading-weight); }
+.docs-table.api-endpoints { table-layout: fixed; min-width: 48rem; }
+.docs-table.api-endpoints > tbody > tr > :first-child { font-weight: normal; }
+.api-endpoints th:nth-child(1) { width: 8rem; }
+.api-endpoints th:nth-child(2) { width: 27%; }
+.api-endpoints th:nth-child(4) { width: 22%; }
+/* Code: a label saying what it is and a Copy button above it. */
+.docs-code { border: 1px solid var(--bs-border-color); border-radius: var(--suite-frame-radius); overflow: hidden; background: var(--bs-tertiary-bg); }
+.docs-code-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .3rem .4rem .3rem .75rem;
+  border-bottom: 1px solid var(--bs-border-color); font-size: .75rem; font-weight: var(--suite-heading-weight); color: var(--bs-secondary-color); }
+.docs-code-copy { --suite-field-height: var(--suite-control-compact-height); font-size: .75rem; color: var(--bs-secondary-color); border-color: transparent; }
+.docs-code-copy:hover, .docs-code-copy:focus-visible { color: var(--bs-body-color); background: var(--bs-secondary-bg); }
+.docs-code pre { margin: 0; padding: .75rem; background: transparent; color: var(--bs-body-color); border: 0; border-radius: 0; font-size: .8125rem; line-height: 1.5; overflow-x: auto; }
+.docs-code pre code { color: inherit; background: none; padding: 0; white-space: pre; }
+/* Something not to miss. */
+.docs-note { padding: .75rem 1rem; border: 1px solid var(--bs-border-color); border-left: 4px solid var(--tblr-azure, #4299e1); border-radius: var(--suite-frame-radius); background: var(--bs-tertiary-bg); }
+.docs-note-tip { border-left-color: var(--tblr-green, #2fb344); }
+.docs-note-warning { border-left-color: var(--tblr-yellow, #f59f00); }
+.docs-note-title { display: block; margin-bottom: .25rem; }
+.docs-note > :last-child { margin-bottom: 0; }
+.docs-prose blockquote { padding: .75rem 1rem; border: 1px solid var(--bs-border-color); border-left: 4px solid var(--tblr-azure, #4299e1);
+  border-radius: var(--suite-frame-radius); background: var(--bs-tertiary-bg); color: inherit; font-size: inherit; }
+/* Terms and their meanings, and questions with their answers. */
+.docs-terms { display: grid; grid-template-columns: minmax(9rem, max-content) 1fr; column-gap: 1.25rem; row-gap: .5rem; }
+.docs-terms > dt { font-weight: var(--suite-heading-weight); }
+.docs-terms > dd { margin: 0; }
+@media (max-width: 575.98px) { .docs-terms { grid-template-columns: 1fr; row-gap: .15rem; } .docs-terms > dd { margin-bottom: .5rem; } }
+.docs-faq > dt { font-weight: var(--suite-heading-weight); }
+.docs-faq > dd { margin: .2rem 0 .9rem; }
+/* A list that opens, inside a section. */
+.docs-disclosure { border: 1px solid var(--bs-border-color); border-radius: var(--suite-frame-radius); margin-bottom: .5rem; }
+.docs-disclosure > summary { padding: .5rem .75rem; cursor: pointer; }
+.docs-disclosure[open] > summary { border-bottom: 1px solid var(--bs-border-color); }
+.docs-disclosure-body { padding: .75rem; }

@@ -99,7 +99,8 @@ from loadcoach.role_evidence import RoleEvidence
 from loadcoach.roles import Roles
 from weightroom import voice_settings, display
 from weightroom.navigation import navigation
-from weightroom.system_docs import BY_SLUG, TOPICS, source_reference
+from weightroom.system_docs import BY_SLUG, TOPICS, WRITTEN_DOCS, source_reference
+from weightroom import doc_markdown
 from weightroom.alerts import Alerts, machine_conditions
 from weightroom.schedules import Schedules, ScheduleWorker
 from loadcoach.schedule_time import validate as validate_schedule
@@ -4145,13 +4146,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response("Documentation page not found.", status_code=404)
         try:
             reference = await asyncio.to_thread(source_reference, slug, request.query_params.get('module', ''))
-            tool_guide = (await asyncio.to_thread((HERE.parent / 'toollocker' / 'README.md').read_text)
-                          if slug == 'toollocker' else '')
+            written = WRITTEN_DOCS.get(slug)
+            document = doc_markdown.document(await asyncio.to_thread((HERE.parent / written).read_text)) if written else None
         except ValueError:
             return Response("Documentation source not found.", status_code=404)
         except (OSError, SyntaxError):
             return Response("Source documentation is temporarily unavailable.", status_code=503)
-        return page(request, "docs_topic.html", person, topic=topic, reference=reference, tool_guide=tool_guide)
+        return page(request, "docs_topic.html", person, topic=topic, reference=reference, document=document)
 
     def deploy_plan() -> dict:
         """The [deploy] part as the settings file has it now, so a machine added from the page counts at once."""

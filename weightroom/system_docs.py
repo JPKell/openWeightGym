@@ -28,6 +28,9 @@ TOPICS = (
 )
 
 BY_SLUG = {slug: {"slug": slug, "title": title, "headings": headings} for slug, title, headings in TOPICS}
+# Topics whose guide is a Markdown file in the repository, shown on the topic's page so that the
+# web and the repository say the same thing. The rest are written as templates: docs_SLUG.html.
+WRITTEN_DOCS = {"toollocker": "toollocker/README.md"}
 LINKS = [(title, "/docs/" + slug) for slug, title, _ in TOPICS]
 
 # Fixed source ownership keeps query parameters from becoming arbitrary file reads.
