@@ -536,3 +536,30 @@ form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
 .place-folders td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: .5rem; }
 .place-folders-size { width: 5.5rem; }
 .place-folders td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* System → Components: one card per machine, as many side by side as fit. */
+.component-cards-frame { container-type: inline-size; }
+.component-cards { display: grid; gap: .75rem; grid-template-columns: repeat(var(--component-columns, 1), minmax(0, 1fr)); }
+@container (min-width: 40rem) { .component-cards { --component-columns: 2; } }
+@container (min-width: 62rem) { .component-cards { --component-columns: 3; } }
+@container (min-width: 84rem) { .component-cards { --component-columns: 4; } }
+.component-cards > .component-card { margin: 0 !important; min-width: 0; }
+.component-card > .card-body { padding: .75rem; }
+.component-card .component-card-heading { margin-bottom: 0 !important; flex-wrap: nowrap; min-width: 0; }
+.component-card .component-card-title { font-size: 1rem; }
+.component-card-about { display: flex; flex-wrap: wrap; column-gap: .75rem; }
+.component-table { font-size: .8125rem; margin-bottom: .75rem; }
+.component-table:last-child { margin-bottom: 0; }
+.component-table > :not(caption) > * > * { padding: .2rem .25rem; background: transparent; vertical-align: middle; }
+.component-table > :not(caption) > * > :first-child { padding-left: 0; }
+.component-table > :not(caption) > * > :last-child { padding-right: 0; }
+.component-caption { caption-side: top; padding: 0 0 .25rem; color: var(--tblr-body-color); font-weight: 600; }
+.component-id { font-size: .75rem; color: var(--tblr-secondary); background: none; padding: 0; }
+.component-table td { white-space: nowrap; width: 1%; }
+.component-have .suite-icon { width: .85rem; height: .85rem; margin-right: .2rem; vertical-align: -.1rem; }
+.component-missing .component-name { color: var(--tblr-secondary); }
+.component-state { font-size: .75rem; }
+.component-state-good { color: var(--tblr-green); }
+.component-state-bad { color: var(--tblr-red); }
+.component-state-other { color: var(--tblr-secondary); }
+.component-state-cell { min-width: 4.5rem; }

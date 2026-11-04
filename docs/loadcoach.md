@@ -36,6 +36,12 @@ Changes require that node's normal restart; saving neither installs software nor
 anything. The page distinguishes active availability from pending restart values.
 `GET /loadcoach/engines` returns schemas, path availability and cached build information
 without executing help or loading a model; it requires manage-models or manage-settings.
+`GET /loadcoach/components` (manage-settings) says which openWeightGym services this machine has
+installed — a service counts when systemd, the account's own manager or the system one, knows its
+unit, under its current or former name — and which engines' programs are found, with the install
+receipt's topology, mode and date. It only reads `systemctl show`; nothing is started or run.
+`GET /turnstile/components` gathers it from front and every compute node for the console's
+System → Components page; a node the monitor finds silent is reported as such and never woken.
 
 Models may explicitly store `engine = "llama_cpp"`; omission still means llama.cpp.
 No database migration or eager model rewrite is introduced. Explicit/default llama.cpp

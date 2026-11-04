@@ -1845,6 +1845,16 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             engine["build"] = runner.known_version({"engine": engine["id"]})
         return JSONResponse({"engines": listed}, headers={"cache-control": "no-store"})
 
+    async def components_here(request: Request, user: User) -> Response:
+        """Which openWeightGym services and engines this machine has. Changes nothing and runs no engine."""
+        if denied := lacks(user, "manage-settings"):
+            return denied
+        from loadcoach import components
+        found = await components.here(config, running_here=("loadcoach",))
+        for engine in found["engines"]:
+            engine["build"] = runner.known_version({"engine": engine["id"]}) if engine["installed"] else ""
+        return JSONResponse(found, headers={"cache-control": "no-store"})
+
     async def flags(request: Request, user: User) -> Response:
         """The selected engine's installed, model-launch option catalogue."""
         if denied := lacks(user, "manage-models"):
@@ -2963,6 +2973,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             route('/loadcoach/loadouts', loadout_control),
             route('/loadcoach/loadouts', loadout_control, 'POST'),
             route("/loadcoach/engines", engines_list),
+            route("/loadcoach/components", components_here),
             route("/loadcoach/flags", flags),
             route("/loadcoach/model-rename", model_rename, "POST"),  # not under /models/, where everything after is a model's name
             route("/loadcoach/model-forget-measure", model_forget_measure, "POST"),
