@@ -167,8 +167,9 @@ installation on a console-only machine, a custom Python tool and troubleshooting
 | Spotter | Each host's telemetry and allowed service/power controls. |
 | Voice service | Compute-side CPU speech recognition and synthesis. |
 
-The console machine (front) runs WeightRoom, Turnstile and the voice gateway; each GPU or CPU worker
-runs LoadCoach and Spotter. On one machine they run side by side. Workers appear in **Compute nodes**.
+The console machine (front) runs WeightRoom, Turnstile, ToolLocker and optionally the voice gateway;
+each GPU or CPU worker runs LoadCoach and Spotter. On one machine they run side by side.
+Workers appear in **Compute nodes**.
 Front owns accounts and retained application history. Workers own model files and local runtime
 state. Front-owned pages and saved records remain usable when inference workers are unavailable.
 **Telemetry** offers **Wake** on the overview and host detail for nodes with Wake-on-LAN configured

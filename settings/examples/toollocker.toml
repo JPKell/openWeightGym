@@ -8,19 +8,16 @@
 # Address and port the ToolLocker listens on. Loopback means this machine only.
 host = "127.0.0.1"
 
-port = 8443
+port = 9443
 
-# LoadCoach's own settings file. The ToolLocker takes its machine key and identity/event store
-# from it. Front sends the caller and current group rules in a signed statement. Left out, as
-# here, the file is loadcoach.toml beside this file.
-# loadcoach = "/home/you/openWeightGym/settings/loadcoach.toml"
+# WeightRoom owns the accounts/event store and Turnstile's machine key. No local LoadCoach
+# is needed. Turnstile authenticates callers on public port 8443 and signs requests for this
+# private gateway. Its [turnstile].toollocker_url must be "http://127.0.0.1:9443".
+front = "weightroom.toml"
 
-# A front-owned gateway instead sets front = "weightroom.toml" (omit loadcoach).
-# It inherits WeightRoom's accounts/event store and Turnstile's machine-key path,
-# without needing a local LoadCoach. Listen on 127.0.0.1:9443 and set
-# [turnstile].toollocker_url = "http://127.0.0.1:9443" in weightroom.toml.
-# File tools still run on their owning host; a fixed SSH stdio command can reach
-# compute without moving files or changing the server/tool names.
+# Tools run on their owning hosts; a fixed SSH stdio command or remote MCP server can reach
+# compute without moving files. Legacy compute-owned gateways use loadcoach = "loadcoach.toml"
+# instead of front; existing settings are preserved by the installer.
 
 # ToolLocker can name its identity/event store explicitly. Keep this binding on the same
 # authoritative store as its owner: WeightRoom on front, LoadCoach for legacy compute gateways.

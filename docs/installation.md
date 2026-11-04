@@ -54,8 +54,8 @@ arguments containing credentials are omitted. Logs are readable only by their ow
 | Choice | Runs | Use it for |
 |---|---|---|
 | **Everything on this machine** | the console, the API gateway, the model runner, tools and the monitor | one box with a graphics card: the quickest start |
-| **Console only** | the web console and the API gateway | a small always-on machine; GPU machines join it |
-| **GPU node** | the model runner, tools and the monitor | a machine whose cards a console should use |
+| **Console only** | the web console, the API gateway and ToolLocker | a small always-on machine; GPU machines join it |
+| **GPU node** | the model runner and the monitor | a machine whose cards a console should use |
 
 Ports, for a firewall:
 
@@ -63,13 +63,16 @@ Ports, for a firewall:
 |---|---|---|
 | Web console | 8440 | |
 | API (OpenAI-compatible) | 8442 | 8442, reached by the console only |
-| Tools (MCP) | 8443 | 8443, reached by the console only |
+| Tools (MCP) | 8443, through the front gateway | |
 | Monitor | 8444, through the gateway | 8444, reached by the console only |
 | Voice | 8445 to 8447, when installed | 8445, when installed |
 
 On one machine the gateway keeps 8442 to 8445 and the programs behind it listen on loopback only,
 1000 above (9442 to 9445); `compute = "http://127.0.0.1:9442"` in `settings/weightroom.toml` tells the
 gateway so. Other devices reach the console on 8440 and the API on 8442.
+ToolLocker always listens privately on `127.0.0.1:9443` on front, including a console-only
+installation. Turnstile authenticates public MCP requests on 8443 and routes them locally;
+the gateway shares front's accounts/event store and remains available without compute.
 
 Fedora, RHEL and openSUSE turn their firewall (firewalld) on as they install, and ufw may be on
 elsewhere. The installer does not open ports itself: it checks them, and when the firewall keeps
@@ -80,10 +83,16 @@ installs and runs, but the console cannot reach it.
 
 ## ToolLocker on the console machine
 
-The current **Console only** selection omits ToolLocker. To add front-local tools without a
-compute node, follow [ToolLocker setup and adding tools](../toollocker/README.md), also available
-in the console at **Docs → ToolLocker**. It covers requirements, the missing service and
-configuration, Turnstile routing, verification and adding a custom Python tool.
+New **Console only** and **Everything on this machine** installations include ToolLocker with
+the bundled file and code tools. **GPU node** installs omit the gateway; remote tool servers
+can still run there and connect to front. Both installers use this ownership in their presets.
+Voice remains optional in `install.sh`; the lower-level `scripts/install-suite.sh` presets also
+select the corresponding voice services before its editable checklist.
+
+Existing settings and the service list saved for Repair are preserved. Older console-only
+installs need the [front ToolLocker setup](../toollocker/README.md#install-toollocker-on-front)
+to add it; existing compute gateways are not automatically moved or removed. The same guide,
+available at **Docs → ToolLocker**, covers verification, adding tools and remote tool hosts.
 
 ## Adding a GPU node
 

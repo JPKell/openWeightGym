@@ -1,6 +1,7 @@
 """Front ToolLocker ownership with compute unavailable and existing signed MCP clients."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -18,6 +19,46 @@ from loadcoach.settings import Changes
 from loadcoach.users import Users
 from toollocker.door import Config, build_app, load_config
 from turnstile.app import Settings, build_app as build_front, load_settings
+
+
+@pytest.mark.parametrize('topology', ['front', 'all', 'keep'])
+def test_installer_generated_gateway_lists_and_calls_tools_without_compute(tmp_path, topology):
+    """Fresh installer settings authenticate real bundled tools without a LoadCoach config or service."""
+    from test_installer import ROOT, support
+    settings = tmp_path / 'settings'
+    settings.mkdir()
+    subprocess.run(['git', 'init', str(tmp_path)], capture_output=True, check=True)
+    (tmp_path / 'keys').mkdir()
+    executable = tmp_path / '.venv/bin/python'
+    executable.parent.mkdir(parents=True)
+    executable.symlink_to(sys.executable)
+    shared = tmp_path / 'data/shared'
+    shared.mkdir(parents=True)
+    sample = shared / 'example.txt'
+    sample.write_text('front tool works with compute offline')
+    sample.chmod(0o644)
+    for name in ('weightroom', 'toollocker'):
+        values = {} if topology == 'keep' else support.topology_values(
+            name, topology, tmp_path, '192.168.1.10', '', 'http://offline-compute:8442', '')
+        support.render(ROOT / f'settings/examples/{name}.toml', settings / f'{name}.toml', tmp_path, tmp_path, values)
+    front = load_settings(settings / 'weightroom.toml')
+    assert front.front_settings and front.toollocker_url == 'http://127.0.0.1:9443'
+    gateway = load_config(settings / 'toollocker.toml')
+    assert gateway.host == '127.0.0.1' and gateway.port == 9443
+    users = Users(gateway.database, {'reader': Group(tools=('files__*',))})
+    users.add('reader', 'reader')
+    headers = {'authorization': 'Bearer ' + users.new_key('reader')}
+    with front_of(lambda _: build_app(gateway), users, tmp_path / 'keys', port=8443,
+                  front_settings=front.front_settings, toollocker_url=front.toollocker_url) as client:
+        listed = client.post('/mcp', headers=headers, json={'id': 1, 'method': 'tools/list'})
+        assert listed.status_code == 200
+        assert {tool['name'] for tool in listed.json()['result']['tools']} == {'files__list_folder', 'files__read_file'}
+        call = {'id': 2, 'method': 'tools/call', 'params': {'name': 'files__read_file', 'arguments': {'file': str(sample)}}}
+        response = client.post('/mcp', headers=headers, json=call)
+        assert 'front tool works with compute offline' in response.json()['result']['content'][0]['text']
+        assert client.post('/mcp', headers={'authorization': 'Bearer invalid'}, json=call).status_code == 401
+    users.db.close()
+    assert not (settings / 'loadcoach.toml').exists() and not (tmp_path / 'data/loadcoach.db').exists()
 
 
 def test_front_config_inherits_named_accounts_and_key_without_loadcoach(tmp_path):

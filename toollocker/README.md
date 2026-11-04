@@ -11,10 +11,11 @@ These same instructions are available in the console at **Docs → ToolLocker** 
 
 ## Why tools can be missing
 
-The current **Console only** installer selection installs WeightRoom and Turnstile, and optionally
-the voice gateway. It does not install or configure the ToolLocker service. Repairing that same
-selection does not add it. A configured GPU node may have a gateway of its own, but front-local
-tools need the front setup below to work without that node.
+New **Console only** and **Everything on this machine** installations include ToolLocker on
+front; **GPU node** installs omit it. Earlier console-only installs omitted the gateway, and
+Repair keeps their saved service selection. Use the front setup below to add it to those installs.
+Existing compute-owned gateways retain their settings; moving one requires configuring its
+servers on front and preserving access to tools on their owning hosts.
 
 Three things must be present: a running gateway, at least one configured MCP server, and permission
 for the caller to see its tools. An empty recorded catalogue alone does not identify which is missing.
@@ -38,6 +39,7 @@ library. The full gateway uses the project's Python 3.13+ environment.
 ## Install ToolLocker on front
 
 Run these steps on the console machine as the account that already runs WeightRoom and Turnstile.
+Fresh installations already have this configuration; these steps repair older or custom installs.
 Examples assume a per-user installation at `~/openWeightGym`. For a system installation, the
 checkout is `/opt/openweightgym`, configuration belongs to `openweightgym`, and its user-service
 files are under `/var/lib/openweightgym/.config/systemd/user`. Use that account's service manager,
@@ -266,7 +268,7 @@ SSH access to the file-owning host.
 
 | Symptom | Check |
 |---|---|
-| Unit not found | Create the front gateway config and service above; the console-only preset omits it. |
+| Unit not found | Create the front gateway config and service above for an older or custom install. |
 | Tool service has not reported configuration | Check `systemctl --user status toollocker` and its journal, then `front_settings`, `toollocker_url` and port 8443 in the console configuration. |
 | Gateway will not start | Check absolute command paths, Python/server dependencies, database access and the shared machine-key path. A legacy `loadcoach` setting must be replaced by `front` for a front-owned gateway. |
 | Address already in use | Turnstile uses 8443; the private gateway uses loopback 9443. Check `ss -ltnp`. |

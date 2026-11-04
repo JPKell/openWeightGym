@@ -55,6 +55,26 @@ def support_module():
     return module
 
 
+@pytest.mark.parametrize('topology,expected', [
+    ('all', {'loadcoach', 'spotter', 'weightroom', 'turnstile', 'toollocker'}),
+    ('front', {'weightroom', 'turnstile', 'toollocker'}),
+    ('compute', {'loadcoach', 'spotter'}),
+])
+@pytest.mark.parametrize('voice', [False, True])
+def test_bootstrap_assigns_toollocker_to_front_with_optional_voice(tmp_path, topology, expected, voice):
+    """The public installer keeps MCP on front regardless of the voice selection."""
+    answer = shell(tmp_path, script_functions('install.sh') + '''
+parse_arguments --topology "$TEST_TOPOLOGY"
+VOICE=$TEST_VOICE
+services_for
+printf '%s\\n' "$SERVICES"
+''', env={'TEST_TOPOLOGY': topology, 'TEST_VOICE': str(int(voice))})
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    if voice:
+        expected = expected | ({'voice'} if topology == 'compute' else {'voice-gateway'} if topology == 'front' else {'voice', 'voice-gateway'})
+    assert set(answer.stdout.strip().split(',')) == expected
+
+
 def test_explicit_missing_uninstall_target_does_not_fall_back(tmp_path):
     other = tmp_path / "other"
     other.mkdir()
