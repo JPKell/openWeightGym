@@ -247,7 +247,7 @@ def test_with_compute_off_it_says_so_and_anyone_may_sign_in_since_the_accounts_a
     off = browser.get("/")
     assert off.status_code == 200 and "Node unavailable: compute" in off.text  # the first page, with the last it saw
     assert "compute off<span class=\"reading\"> since" in browser.get("/pulse").text
-    assert browser.get("/models").status_code == 403  # permissions are checked before the compute lookup
+    assert browser.get("/models?complete=1").status_code == 403  # permissions are checked before the compute lookup
     assert browser.cookies["weightroom"] == session  # the sign-in is kept for when compute is back
     switch.off = False
     assert '<h1 class="page-title wrap">Status</h1>' in browser.get("/").text and "<b>compute</b>" in browser.get("/pulse").text
@@ -523,10 +523,10 @@ def test_the_groups_page_adds_a_group_and_its_own_page_changes_it(desk):
 def test_the_models_page_is_for_those_who_may_manage_models(desk):
     browser, _, _ = desk
     assert 'href="/models"' not in sign_in(browser, "pat").text  # no link to a page that would refuse
-    refused = browser.get("/models")
+    refused = browser.get("/models?complete=1")
     assert refused.status_code == 403 and "may not add, change and remove models" in refused.text
     browser.post("/sign-out")
-    assert 'href="/models"' in sign_in(browser, "jordan").text and "No models yet." in browser.get("/models").text
+    assert 'href="/models"' in sign_in(browser, "jordan").text and "No models yet." in browser.get("/models?complete=1").text
 
 
 @pytest.mark.parametrize("cards, expected", [(None, "any"), ("", "any"), ("   ", "any"), ("any", "any"), ("0", "any"), ("1", "any"), ("all", "any")])
@@ -603,7 +603,7 @@ def test_a_model_is_added_edited_and_removed_from_its_one_page(desk, tmp_path):
 
     # The list, and the piece of it that the page asks for again by itself.
     kept.put("lost", {"gpus": 0, "flags": {"model": "/no/such/file.gguf", "ctx-size": 1}})
-    whole, part = browser.get("/models").text, browser.get("/models?part=list").text
+    whole, part = browser.get("/models?complete=1").text, browser.get("/models?part=list").text
     assert "<html" in whole and "<html" not in part and 'hx-get="/models?part=list"' in part
     assert '<a href="/models/org/small:v1">org/small:v1</a>' in part and "8,192" in part and "its file is missing" in part
     state = browser.get("/models/org/small:v1?part=state").text
@@ -660,7 +660,7 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     assert 'href="/files"' not in sign_in(browser, "pat").text and browser.get("/files").status_code == 403
     browser.post("/sign-out")
     sign_in(browser, "jordan")
-    assert 'href="/files"' in browser.get("/models").text  # Files belongs to the Models category's rail.
+    assert 'href="/files"' in browser.get("/models?complete=1").text  # Files belongs to the Models category's rail.
 
     files = browser.get("/files").text
     assert 'value="clear-cache"' in files and 'value="consolidate-cache"' in files and 'value="cleanup-nodes"' in files
@@ -684,7 +684,7 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
 
     # "Add" beside a file no model uses opens the Add form with the file in it and a name made from the file's own.
     link = re.search(r'href="(/models\?file=[^"]+)"', files).group(1).replace("&amp;", "&")
-    form = browser.get(link).text
+    form = browser.get(link + '&complete=1').text
     assert 'name="artifact" class="form-select"' in form and f'{fresh} · compute · cache' in form and 'value="fresh-download.q8"' in form
     assert "this file was trained for 32,768" in form and re.search(r'<details[^>]*id="add-model"[^>]*open', form)
 
@@ -898,19 +898,19 @@ def test_the_log_page_shows_what_is_on_record_and_a_request_page_what_was_said(l
     assert "temperature <code>0.2</code>" in its and "1 tool offered: <code>add</code>" in its and "Looked at" not in its
 
     # The log: one's own entries, each request leading to its one page.
-    mine = browser.get("/log")
+    mine = browser.get("/log?complete=1")
     assert 'href="/log"' in mine.text and f'<a href="/requests/{number}">asked</a>' in mine.text and f'<a href="/requests/{number}">done</a>' in mine.text
     assert 'name="user"' not in mine.text and "<td>jordan</td>" not in mine.text and "status</span> 200" in mine.text
 
     # Someone who may read everyone's: narrowed by what is typed, which is kept in the address.
     sign_in(browser, "jordan")
-    everyone = browser.get("/log").text
+    everyone = browser.get("/log?complete=1").text
     assert 'name="user"' in everyone and "<td>pat</td>" in everyone  # jordan only signed in, and sign-ins are on record at the front machine
-    loaded = browser.get("/log?kind=model").text
+    loaded = browser.get("/log?kind=model&complete=1").text
     assert ">loaded</a>" in loaded and "<td>request</td>" not in loaded and 'value="model"' in loaded
     part = browser.get("/log?part=list&kind=request&user=pat").text
     assert "<html" not in part and 'hx-get="/log?part=list&amp;kind=request&amp;user=pat&amp;limit=100"' in part and "<td>jordan</td>" not in part
-    back = browser.get("/log?before=1&kind=request").text
+    back = browser.get("/log?before=1&kind=request&complete=1").text
     assert "Nothing on record that fits." in back and "hx-get" not in back.split('id="log"')[1].split(">")[0]  # gone back, it stays as it is
 
     # Reading what someone else's request said is on record, and shown on its page.
@@ -933,18 +933,18 @@ def test_a_failure_has_a_page_with_what_was_printed_and_a_model_can_be_asked_abo
 
     # The request's own page says why it was turned away.
     sign_in(browser, "jordan")
-    listed = browser.get("/log?kind=request&what=refused").text
+    listed = browser.get("/log?kind=request&what=refused&complete=1").text
     its = browser.get("/requests/" + re.search(r'href="/requests/(\d+)">refused', listed).group(1)).text
     assert "<dt class=\"col-4 col-md-2\">Why</dt>" in its and "cudaMalloc failed: out of memory" in its
 
     # The model's failure has a page: everything llama-server printed before it gave up, and where to look next.
-    number = re.search(r'href="/log/(\d+)">failed</a>', browser.get("/log?kind=model").text).group(1)
+    number = re.search(r'href="/log/(\d+)">failed</a>', browser.get("/log?kind=model&complete=1").text).group(1)
     entry = browser.get(f"/log/{number}").text
     assert "model failed" in entry and "What llama-server printed last" in entry and "exiting due to model loading error" in entry and "fake: starting with" in entry
     assert "Ask a model about this" in entry and "<option>small</option>" in entry and "<option>broken</option>" in entry and 'hx-post="/ask"' in entry
     assert "/output?at=" not in entry  # this desk has no spotter to read the lines, so no way to them is offered
     # An entry about a request leads to the request's one page. The entry has front's number; the request is known by compute's.
-    entry_id, asked_entry = re.search(r'data-value="(\d+)">(?:<time[^>]*>[^<]*</time>|[^<]*)</td>\s*<td>request</td>\s*<td><a href="/requests/(\d+)">asked', browser.get("/log?kind=request").text).groups()
+    entry_id, asked_entry = re.search(r'data-value="(\d+)">(?:<time[^>]*>[^<]*</time>|[^<]*)</td>\s*<td>request</td>\s*<td><a href="/requests/(\d+)">asked', browser.get("/log?kind=request&complete=1").text).groups()
     assert str(browser.get(f"/log/{entry_id}").url).endswith(f"/requests/{asked_entry}")
     assert browser.get("/log/99999").status_code == 404
 
@@ -1237,7 +1237,7 @@ def test_a_form_that_changes_a_piece_of_its_page_names_a_piece_that_is_there(des
     browser, _, _, users, _ = desk_with_machine
     sign_in(browser, "jordan")
     # htmx takes the piece a form names out of the page that comes back. A name that is on no page would leave nothing in its place.
-    pieces = {"/log": "log-view", "/machine": "stretch", "/account/logs": "usage", "/output?source=loadcoach": "page-content", "/fingerprints": "found", "/hub": "hub-found",
+    pieces = {"/log?complete=1": "log-view", "/machine": "stretch", "/account/logs": "usage", "/output?source=loadcoach": "page-content", "/fingerprints": "found", "/hub": "hub-found",
               "/benchmarks/runs": "benchmark-choice", "/benchmarks/compare": "compare-content", "/cloud-apis": "page-content", "/roles": "page-content", "/settings": "page-content",
               "/users/pat": "page-content", "/groups/plain": "page-content"}  # fmt: skip
     for address, piece in pieces.items():
@@ -1245,10 +1245,10 @@ def test_a_form_that_changes_a_piece_of_its_page_names_a_piece_that_is_there(des
         named = set(re.findall(r'hx-select="#([^"]+)"', page.text))
         assert page.status_code == 200 and piece in named and all(f'id="{name}"' in page.text for name in named), address
     # A form that changes something leaves the address bar alone. One that shows something puts what was asked for in it.
-    assert 'hx-push-url="false"' in browser.get("/users/pat").text and 'hx-push-url="false"' not in browser.get("/log").text
+    assert 'hx-push-url="false"' in browser.get("/users/pat").text and 'hx-push-url="false"' not in browser.get("/log?complete=1").text
     # Removing an account leads to another page, so that form is sent the usual way.
     assert "hx-" not in browser.get("/users/pat").text.split('value="remove"')[0].rsplit("<form", 1)[1]
-    assert browser.get("/static/pieces.js").status_code == 200 and versioned_script("frame.html", "pieces") in browser.get("/log").text
+    assert browser.get("/static/pieces.js").status_code == 200 and versioned_script("frame.html", "pieces") in browser.get("/log?complete=1").text
 
 
 def test_every_button_result_uses_the_shared_temporary_notice():
@@ -1594,13 +1594,13 @@ def test_the_cards_show_their_room_and_a_model_page_what_the_model_measured(live
     kept = Models(str(tmp_path / "loadcoach.db"))
     sign_in(browser, "jordan")
     assert "14.6 GiB free for a model, of 15.6 GiB" in browser.get("/?part=status").text  # an empty card of 16000 MiB: all of it but the margin of 1024
-    assert browser.get("/models").text.count("Not measured") == 4 and browser.get("/models/small").text.count("not measured yet") == 2
+    assert browser.get("/models?complete=1").text.count("Not measured") == 4 and browser.get("/models/small").text.count("not measured yet") == 2
 
     # A model that has loaded was measured. Status shows it on its card with that figure, and the room that is left.
     assert jordan.post("/v1/chat/completions", json={"model": "small"}).status_code == 200
     home = browser.get("/?part=status").text
     assert "11.7 GiB free for a model, of 15.6 GiB" in home and '<a href="/models/small">small</a>' in home and "2.9 GiB VRAM" in home  # 3000 MiB
-    assert "2.9 GB" in browser.get("/models").text and browser.get("/models").text.count("Not measured") == 2
+    assert "2.9 GB" in browser.get("/models?complete=1").text and browser.get("/models?complete=1").text.count("Not measured") == 2
     page = browser.get("/models/small").text
     # Its page says it at the top, among what is known of the model: at its minimum and its maximum context, which are one here.
     assert page.count('2.9 GB <small class="text-secondary">at 2,048 tokens</small>') == 2 and 'value="forget-measure"' in page
@@ -1614,7 +1614,7 @@ def test_the_cards_show_their_room_and_a_model_page_what_the_model_measured(live
     assert 'name="alone" value="yes" type="checkbox" class="form-check-input" checked' in browser.get("/models/tiny").text
     assert jordan.post("/v1/chat/completions", json={"model": "tiny"}).status_code == 200
     home = browser.get("/?part=status").text
-    assert "<td>the whole card" in home and "0 MiB free for a model, of 15.6 GiB" in home and "alone</small>" in browser.get("/models").text
+    assert "<td>the whole card" in home and "0 MiB free for a model, of 15.6 GiB" in home and "alone</small>" in browser.get("/models?complete=1").text
 
 
 def test_the_models_pages_show_a_fingerprint_and_every_one_ever_seen_can_be_read_back(live_desk, tmp_path):
@@ -1627,7 +1627,7 @@ def test_the_models_pages_show_a_fingerprint_and_every_one_ever_seen_can_be_read
     kept = Models(str(tmp_path / "loadcoach.db"))
     mark, nothing = kept.fingerprint(kept.get("small")), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"  # the SHA-256 of an empty file, which small.gguf is
 
-    listed = browser.get("/models").text
+    listed = browser.get("/models?complete=1").text
     assert f'<a href="/fingerprints?start={mark}"><code>{mark[:12]}</code></a>' in listed and "llama-server on compute is 1 (fake)" in listed
     page = browser.get("/models/small").text
     assert f"<code>{mark}</code>" in page and f"<code>{nothing}</code>" in page and "1 (fake)" in page
@@ -1657,7 +1657,7 @@ def test_the_models_pages_show_a_fingerprint_and_every_one_ever_seen_can_be_read
 def test_a_button_measures_every_model_that_has_no_measure(live_desk):
     browser, _, _ = live_desk
     sign_in(browser, "jordan")
-    assert 'value="start">Measure the 2 models needing measurements</button>' in browser.get("/models").text
+    assert 'value="start">Measure the 2 models needing measurements</button>' in browser.get("/models?complete=1").text
     pressed = browser.post("/measure-models", data={"do": "start"})
     assert "Measuring the models that have no measure." in pressed.text
     deadline = time.monotonic() + 8
@@ -1741,7 +1741,7 @@ def test_adapters_and_projectors_are_listed_with_the_model_each_is_for_and_put_o
     # A copy of the model with the adapter attached. The model it was made from is as it was.
     assert kept.stored("base-terse") == {"flags": {"model": base, "ctx-size": 2048}, "gpus": 1, "adapters": {"terse": {"file": terse}}}
     assert kept.stored("base") == {"gpus": 1, "flags": {"model": base, "ctx-size": 2048}}
-    assert "with terse</small>" in browser.get("/models").text and '<a href="/models/base-terse">base-terse</a>' in browser.get("/files").text  # the file is one of the model's now
+    assert "with terse</small>" in browser.get("/models?complete=1").text and '<a href="/models/base-terse">base-terse</a>' in browser.get("/files").text  # the file is one of the model's now
 
     # On a model's page an adapter is chosen from the adapters there are, not typed. A row with its word emptied is an adapter taken away.
     assert f'<option value="{terse}" selected>{terse} · metadata names agree</option>' in made.text and f'<option value="{stray}" >{stray} · says it is for Another Model</option>' in made.text
@@ -1759,7 +1759,7 @@ def test_adapters_and_projectors_are_listed_with_the_model_each_is_for_and_put_o
     seeing = browser.post("/file", data={"path": eyes, "do": "project", "model": "base", "name": "base-vision"})
     assert "Made base-vision: base with the projector eyes.gguf" in seeing.text and str(seeing.url).split("?")[0].endswith("/models/base-vision")
     assert kept.stored("base-vision") == {"flags": {"model": base, "ctx-size": 2048, "mmproj": eyes}, "gpus": 1} and "mmproj" not in kept.stored("base")["flags"]
-    assert "vision</small>" in browser.get("/models").text
+    assert "vision</small>" in browser.get("/models?complete=1").text
     # On a model's page the projector is chosen from the projectors there are, or taken away. It is not a flag to type.
     assert f'<option value="{eyes}" selected>{eyes} · metadata names agree</option>' in seeing.text and 'name="flag" class="form-control" value="mmproj"' not in seeing.text
     browser.post("/models/base-vision", data={**form, "projector": ""})

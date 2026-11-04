@@ -169,6 +169,10 @@ class FrontFiles:
             if method == 'GET' and action == 'hub':
                 repository = query.get('repository', '')
                 if not repository:
+                    if query.get('source') == 'civitai':
+                        from mirrorwall.civitai import search
+                        return response({'found': await search(self.web, query['search'], adult=query.get('adult') == 'true')
+                                         if query.get('search') else []})
                     return response({'found': await hub.search(self.web, query['search']) if query.get('search') else []})
                 if not hub.REPOSITORY.fullmatch(repository):
                     raise ValueError('A repository is written OWNER/NAME.')

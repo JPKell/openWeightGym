@@ -57,6 +57,25 @@ to front and restarted only Turnstile and WeightRoom after confirming an empty b
 For rollback, reverse this patch in those four files and restart the same services, preserving
 later unrelated edits.
 
+Follow-up: Models, Usage, Requests and AI Logs now return an authenticated page shell before
+fetching their contents. The collapsed Add a model form reads node engines and model-file
+headers only when opened. Offline report refreshes also skip `POST /loadcoach/send-log` to
+unavailable workers, removing another two-second timeout per report. Failed loads offer Retry;
+each fragment rechecks the session and permissions. `complete=1` retains the full-data view.
+
+After delivery, three authenticated loopback samples averaged 26–27 ms for these four shells;
+their list/report fragments took 46–80 ms. HTTPS Chromium measured 52–131 ms to DOM readiness,
+with working deferred charts and model-file controls. Opening the model editor still took
+5.37 s for file inventory, without delaying initial navigation. Targeted server and browser
+regressions passed; no live JavaScript errors or mobile overflow were found.
+
+Civitai front-owned discovery now dispatches to Civitai instead of Hugging Face and applies
+the caller's preview policy. Cards reject wrong-provider results rather than showing undefined
+metadata. Live search returned 36 named versions with type/base-model fields. These changes
+require matching WeightRoom templates/static files and Turnstile artifact routing; both front
+services were restarted with an empty benchmark queue. Roll back their matching code and
+assets together, preserving unrelated later changes; no migration or dependency is involved.
+
 ## Delivering services
 
 Deliver `engines/`, its `llama_cpp/schema.json`, and the engine-specific

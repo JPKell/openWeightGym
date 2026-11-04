@@ -19,9 +19,9 @@
     const shown=found.filter(one=>(!$('type').value||one.kind===$('type').value)&&(!$('base').value||one.base_model===$('base').value));
     $('found').replaceChildren();$('status').textContent=shown.length+' of '+found.length+' returned versions';
     shown.forEach(one=>{
-      const column=el('div',undefined,'col-sm-6 col-lg-4 col-xl-3');const card=$('discovery-card').content.firstElementChild.cloneNode(true);card.querySelector('.card-heading').textContent=one.name;
+      const column=el('div',undefined,'col-sm-6 col-lg-4 col-xl-3');const card=$('discovery-card').content.firstElementChild.cloneNode(true);card.querySelector('.card-heading').textContent=one.name||'Unnamed model version';
       if(one.preview){const image=el('img');image.className='card-img-top';image.style.cssText='height:220px;object-fit:cover';image.src=one.preview;image.alt=one.name;image.referrerPolicy='no-referrer';image.loading='lazy';card.prepend(image);}
-      const body=card.querySelector('[data-discovery-body]');body.append(el('p',one.kind+' · '+one.base_model,'text-secondary small'));
+      const body=card.querySelector('[data-discovery-body]');body.append(el('p',(one.kind||'Type unavailable')+' · '+(one.base_model||'Base model unavailable'),'text-secondary small'));
       if(one.trigger_words?.length)body.append(el('p','Trigger words: '+one.trigger_words.join(', '),'small'));
       const source=el('a','Model page','btn btn-link btn-sm ps-0');source.href=one.url;source.target='_blank';source.rel='noopener noreferrer';body.append(source);
       const details=el('button','Choose file','btn btn-outline-primary btn-sm');const files=el('div',undefined,'mt-3');
@@ -37,9 +37,13 @@
   }
   for(const name of ['type','base','format'])$(name).onchange=renderResults;
   $('search').onsubmit=safe(async event=>{
-    event.preventDefault();$('status').textContent='Searching…';$('found').replaceChildren();
+    event.preventDefault();$('status').textContent='Searching…';$('found').replaceChildren();found=[];
     await refreshPreferences();
-    const value=await api('/mirrorwall-discovery?q='+encodeURIComponent($('q').value));found=value.found;
+    const value=await api('/mirrorwall-discovery?q='+encodeURIComponent($('q').value));
+    const invalid=!Array.isArray(value.found)||value.found.some(one=>
+      !one||typeof one.name!=='string'||typeof one.repository!=='string'||!one.repository.startsWith('civitai/'));
+    if(invalid){$('status').textContent='Search failed.';throw new Error('Civitai returned incomplete model data. Please retry the search.');}
+    found=value.found;
     for(const [name,key,title] of [['type','kind','All types'],['base','base_model','All base models']]){
       const selected=$(name).value;$(name).replaceChildren(new Option(title,''));
       [...new Set(found.map(row=>row[key]).filter(Boolean))].sort().forEach(value=>$(name).add(new Option(value,value)));

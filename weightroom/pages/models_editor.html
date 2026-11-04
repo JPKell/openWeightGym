@@ -1,0 +1,15 @@
+{% from "parts.html" import form_section, more, node_state %}
+<div id="model-editor">
+  <form id="model-node-form" method="get" action="/models">{% if form.file %}<input type="hidden" name="file" value="{{ form.file }}">{% endif %}</form>
+  <form method="post" action="/models?node={{ selected_node|urlencode }}" class="row g-2 align-items-end" data-create-model>
+    <input type="hidden" name="node" value="{{ selected_node }}">
+    <input type="hidden" name="prepare_files" value="yes">
+    <div class="col-md-4"><label for="model-node" class="form-label">Compute node</label><div class="d-flex gap-2"><select id="model-node" name="node" form="model-node-form" class="form-select">{% for node in node_choices %}<option value="{{ node.name }}"{{ ' selected' if node.name == selected_node }}>{{ node.name }} · {{ node_state(node.state) }}</option>{% else %}<option value="compute">compute</option>{% endfor %}</select><button form="model-node-form" class="btn btn-outline-secondary text-nowrap">Browse node files</button></div></div>
+    <div class="col-md-4"><label for="file" class="form-label">File</label>{% include 'model_file_picker.html' %}</div>
+    <div class="col-md-4"><label for="model-engine" class="form-label">Engine</label><select id="model-engine" name="engine" class="form-select" data-engine-picker>{% for engine in engine_choices if engine.enabled %}<option value="{{ engine.id }}"{{ ' selected' if engine.id == selected_engine }}>{{ engine.label }}</option>{% endfor %}</select></div>
+    <div class="col-md-4"><label for="name" class="form-label">Name</label><input id="name" name="name" class="form-control" value="{{ form.name or '' }}" autocapitalize="none" spellcheck="false" required></div>
+    {% if engine_schema %}{% include engine_schema.create_template %}{% else %}<p class="text-danger">No enabled engine is available on this node.</p>{% endif %}
+    <div class="col-12"><div class="form-text" data-trained-note>{% if form.trained %}this file was trained for {{ "{:,}".format(form.trained|int) }} tokens{% endif %}</div></div>
+  </form>
+<script type="application/json" id="model-file-inventory">{{ file_nodes|tojson }}</script>
+</div>

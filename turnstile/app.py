@@ -329,7 +329,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         Unless another `port` is given, LoadCoach is asked: the first of `ports`. `machine` names one of
         `settings.machines` instead of the main machine, which is signed with its own key.
         """
-        if method == "GET" and passive_reads.get() and settings.auth_key_file and machines.available(machine or "compute") is False:
+        # Log flushing is observation too; its POST must not make offline reports wait.
+        observing = method == "GET" or (method == "POST" and where == "/loadcoach/send-log")
+        if observing and passive_reads.get() and settings.auth_key_file and machines.available(machine or "compute") is False:
             return None
         if method == "GET":
             where = image_work.discovery_path(user, where)
@@ -1442,6 +1444,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Send an authenticated request to the selected node without changing ownership."""
         name = file_store() if machine is None else machine
         if name == 'front':
+            if method == 'GET':
+                path = image_work.discovery_path(user, path)
             return await front_files.request(user, method, path, body)
         return await ask_compute(user, method, path, body, machine="" if name == "compute" else name,
                                  port=settings.ports[2] if spotter else None, timeout=timeout)

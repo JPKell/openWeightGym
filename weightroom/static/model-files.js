@@ -1,8 +1,10 @@
 /* Cache/storage choices are advisory here; the server rechecks the entire bundle. */
-(() => {
+/** Initialize controls after the initial document or an independently loaded section arrives. */
+function initializeModelFiles() {
   'use strict';
   const picker = document.querySelector('[data-model-file]');
-  if (!picker) return;
+  if (!picker || picker.dataset.initialized) return;
+  picker.dataset.initialized = "true";
   const nodes = JSON.parse(document.getElementById('model-file-inventory')?.textContent || '[]');
   const warning = document.querySelector('[data-file-warning]');
   const submit = document.querySelector('[data-file-submit]');
@@ -44,4 +46,6 @@
   picker.addEventListener('change', () => { contextDefaults(); check(); });
   if (!document.querySelector('#ctx')?.value) contextDefaults();
   check();
-})();
+}
+initializeModelFiles();
+document.addEventListener('htmx:afterSwap', initializeModelFiles);

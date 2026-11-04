@@ -4,6 +4,7 @@ from pathlib import Path
 import time
 
 import pytest
+import httpx
 
 from test_weightroom import desk, gguf, sign_in  # noqa: F401
 from test_console_browser import browser_context, playwright
@@ -160,6 +161,72 @@ def test_front_downloads_use_the_existing_verified_hub_contract(desk, tmp_path):
         time.sleep(.02)
     assert target.read_bytes() == compute.hub.files['tiny-q4.gguf']
     assert not target.with_suffix('.gguf.part').exists()
+
+
+def test_front_civitai_search_uses_civitai_metadata_and_current_preview_policy(desk, monkeypatch, tmp_path):
+    """Front-only discovery keeps provider fields and cannot bypass the caller's preview policy."""
+    from mirrorwall import civitai
+    browser, compute, _ = desk
+    compute.off = True
+    sign_in(browser, 'jordan')
+    assert browser.post('/settings/model-files', data={'file_machine': 'front',
+        'models_folder': str(tmp_path / 'front-cache'), 'models_storage_folder': ''}).status_code == 200
+    calls = []
+
+    async def search(http, words, token='', adult=False):
+        """Return the exact model-version contract expected by the discovery cards."""
+        calls.append((words, adult))
+        return [{'name': 'Test model · v1', 'repository': 'civitai/123', 'kind': 'Checkpoint',
+                 'base_model': 'SDXL', 'url': 'https://civitai.com/models/1?modelVersionId=123'}]
+
+    monkeypatch.setattr(civitai, 'search', search)
+    response = browser.get('/mirrorwall-discovery?q=style')
+    assert response.status_code == 200
+    assert response.json()['found'][0]['name'] == 'Test model · v1'
+    assert response.json()['found'][0]['kind'] == 'Checkpoint'
+    assert calls == [('style', False)]
+
+    async def forged_search():
+        """Try an explicit adult flag through the same authenticated front artifact route."""
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=compute.front), base_url='http://front:8442') as client:
+            return await client.get('/turnstile/artifacts/hub?source=civitai&search=style&adult=true',
+                                    headers={'authorization': 'Bearer ' + browser.cookies['weightroom']})
+
+    assert browser.portal.call(forged_search).status_code == 200
+    assert calls[-1] == ('style', False)
+
+
+def test_civitai_cards_reject_wrong_provider_data_and_show_model_metadata(desk):
+    """Wrong-shaped provider results show a useful error rather than blank undefined cards."""
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    result = {'found': [{'id': 'huggingface/repository'}]}
+
+    def capture(route, path):
+        """Exercise the real card renderer with both the regressed and corrected contracts."""
+        if path.startswith('/mirrorwall-discovery?'):
+            import json
+            route.fulfill(status=200, content_type='application/json', body=json.dumps(result))
+            return True
+        return False
+
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture)
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/civitai')
+        page.get_by_role('textbox', name='Search Civitai', exact=True).fill('style')
+        page.get_by_role('button', name='Search', exact=True).click()
+        playwright.expect(page.locator('#mw-message')).to_contain_text('incomplete model data')
+        assert page.locator('#mw-found article').count() == 0
+        result['found'] = [{'name': 'Test model · v1', 'repository': 'civitai/123', 'kind': 'Checkpoint',
+                            'base_model': 'SDXL', 'url': 'https://civitai.com/models/1?modelVersionId=123'}]
+        page.get_by_role('button', name='Search', exact=True).click()
+        playwright.expect(page.locator('#mw-found .card-heading')).to_have_text('Test model · v1')
+        playwright.expect(page.locator('#mw-found')).to_contain_text('Checkpoint · SDXL')
+        assert 'undefined' not in page.locator('#mw-found').inner_text()
+        assert not errors
+        browser.close()
 
 
 def test_front_cache_cleanup_keeps_conflicting_storage_copies(desk, tmp_path):
