@@ -83,8 +83,15 @@ class LlamaCpp:
         installed = self.installation(config)
         if not installed.enabled:
             raise ValueError("llama.cpp is disabled on this compute node.")
-        return Launch(command_line(installed.executable, port, settings["flags"], cards, settings.get("adapters")),
-                      server_environment(config, settings.get("adapters")))
+        from loadcoach.devices import cuda_environment
+        details = {one['id']: one for one in config.gpu_details}
+        around = server_environment(config, settings.get('adapters'))
+        if all(card.startswith('CUDA') for card in cards):
+            around['CUDA_VISIBLE_DEVICES'] = cuda_environment(config, cards)['CUDA_VISIBLE_DEVICES']
+            devices = tuple(f'CUDA{index}' for index in range(len(cards)))
+        else:
+            devices = tuple(details.get(card, {}).get('llama_device', card) for card in cards)
+        return Launch(command_line(installed.executable, port, settings['flags'], devices, settings.get('adapters')), around)
 
     def failure_reason(self, output: str) -> str:
         """Classify engine failure output for the operator."""

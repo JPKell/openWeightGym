@@ -27,6 +27,7 @@ within their own layouts.
 | Deferred loading and retry | [deferred.html](weightroom/pages/deferred.html), [deferred_error.html](weightroom/pages/deferred_error.html) |
 | Model fields and engine-specific controls | [model_form.html](weightroom/pages/model_form.html), [engines/](weightroom/pages/engines/) |
 | File lists and locations | [files_parts.html](weightroom/pages/files_parts.html) |
+| Node GPU assignments and RAM policy | [cards.html](weightroom/pages/cards.html) |
 | Node/component summaries and model details | [machines.html](weightroom/pages/machines.html), [components_content.html](weightroom/pages/components_content.html), [multimedia_model.html](weightroom/pages/multimedia_model.html) |
 | Benchmark values and shared panels | [benchmark_parts.html](weightroom/pages/benchmark_parts.html) and adjacent `benchmark_*.html` includes |
 | Icons | [icons.html](weightroom/pages/icons.html) |

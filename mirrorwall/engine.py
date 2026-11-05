@@ -14,6 +14,7 @@ from engines.contracts import Installation,Launch
 from mirrorwall import model
 from mirrorwall.requests import checked_request
 from loadcoach.engine_memory import delegated_parent
+from loadcoach.devices import cuda_environment, identity
 
 
 @lru_cache(maxsize=16)
@@ -123,10 +124,11 @@ class SDCpp:
         try:
             token=secrets.token_urlsafe(32)
             path=Path(directory.name)/"launch.json"
-            path.write_text(json.dumps({"port":port,"token":token,"settings":settings,"installation":options,"cards":list(cards),"scratch":directory.name}))
+            path.write_text(json.dumps({"port":port,"token":token,"settings":settings,"installation":options,"cards":list(cards),
+                                        'monitor_cards': [identity(config, card) if identity(config, card).startswith('GPU-') else card for card in cards],
+                                        "scratch":directory.name}))
             path.chmod(0o600)
-            around={**os.environ,"CUDA_DEVICE_ORDER":"PCI_BUS_ID",
-                    "CUDA_VISIBLE_DEVICES":",".join(str(int(card.removeprefix("CUDA"))) for card in cards),
+            around={**cuda_environment(config, cards),
                     "GGML_CUDA_ENABLE_UNIFIED_MEMORY":"0","OMP_NUM_THREADS":str(settings["sdcpp"].get("threads",4))}
             return Launch([sys.executable,"-I","-B",str(Path(__file__).with_name("runtime.py")),str(path)],around,
                           process_group=True,memory_mib=self.host_ram_budget(config,settings),
@@ -193,7 +195,7 @@ class SDCpp:
         """Validate typed image settings using the same contract as execution."""
         errors=[]
         try:
-            model.check_model(name,candidate,tuple(runner.cards))
+            model.check_model(name,candidate,runner.engine_cards(candidate))
         except (ValueError,TypeError) as problem:
             errors.append(str(problem))
         if engine_error:

@@ -24,7 +24,7 @@
 <div class="fit-room mb-3" data-card="{{ card }}"{% if room %} data-total="{{ room.total }}" data-others="{{ room.others }}"{% endif %}>
   <div class="d-flex flex-wrap justify-content-between gap-2"><b>{{ card }}</b><span class="fit-says"></span></div>
   <div class="progress fit-bar" role="img" aria-label="what is ticked onto {{ card }}"></div>
-  <small class="text-secondary">{% if room %}{{ room.total|mib }} card, of which {{ margin|mib }} is kept free{% if room.others %} and {{ room.others|mib }} is used by other programs{% endif %}{% else %}The size of this card is not known: nvidia-smi does not answer for it.{% endif %}</small>
+  <small class="text-secondary">{% if room %}{{ room.total|mib }} card, of which {{ margin|mib }} is kept free{% if room.others %} and {{ room.others|mib }} is used by other programs{% endif %}{% else %}The size of this card is not known: driver memory measurements are unavailable.{% endif %}</small>
 </div>
 {% else %}
 <p class="text-secondary">This machine has no cards listed.</p>

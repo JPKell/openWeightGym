@@ -37,7 +37,10 @@ class Meter:
             self.check(self.lib.nvmlInit_v2())
             for card in cards:
                 handle=ctypes.c_void_p()
-                self.check(self.lib.nvmlDeviceGetHandleByIndex_v2(int(card.removeprefix('CUDA')),ctypes.byref(handle)))
+                if card.startswith('GPU-'):
+                    self.check(self.lib.nvmlDeviceGetHandleByUUID(card.encode(),ctypes.byref(handle)))
+                else:
+                    self.check(self.lib.nvmlDeviceGetHandleByIndex_v2(int(card.removeprefix('CUDA')),ctypes.byref(handle)))
                 self.handles.append(handle)
         except Exception as problem:
             self.problem=type(problem).__name__

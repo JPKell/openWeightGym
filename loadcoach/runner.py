@@ -30,11 +30,11 @@ from loadcoach.waiting import estimate
 from loadcoach.host_memory import memory_snapshot, resident_mib
 from loadcoach.processes import ProcessGroup, adopt_orphans
 from loadcoach.engine_memory import MemoryGroup
+from loadcoach.devices import allowed, disabled, telemetry_index
 
 # A place in line is decided by rank first, then by arrival. A request to take the lock
 # outranks everything; the other three are chosen by the caller.
 RANK = {"lock": 0, "high": 1, "normal": 2, "low": 3}
-CARD_NUMBER = re.compile(r"\d+$")  # the card llama-server calls CUDA0 is the one nvidia-smi calls 0. See `start`
 LOOK_EVERY = 5  # seconds that what nvidia-smi said is believed, before it is asked again
 
 
@@ -284,16 +284,20 @@ class Runner:
 
     def needs(self, settings: dict) -> int | list[str]:
         """The required cards. Automatic placement starts with one; unsaid keeps the legacy all."""
-        return engine_for(settings).model.required_devices(settings, self.cards)
+        return engine_for(settings).model.required_devices(settings, self.engine_cards(settings))
 
     @property
     def cards(self) -> tuple[str, ...]:
         """Only enabled devices may be handed to a model, including probes and reloads."""
-        return tuple(card for card in self.config.gpus if card not in self.config.disabled_gpus)
+        return tuple(card for card in self.config.gpus if not disabled(self.config, card))
+
+    def engine_cards(self, settings) -> tuple[str, ...]:
+        """Intersect the node policy with this engine's supported devices."""
+        return allowed(self.config, engine_for(settings).id)
 
     def layouts(self, settings: dict) -> list[dict]:
         """Keep explicit placements; for any, try one card and optionally a two-card split."""
-        return engine_for(settings).model.layouts(settings, self.cards)
+        return engine_for(settings).model.layouts(settings, self.engine_cards(settings))
 
     def measured_settings(self, model: str, settings: dict | None = None) -> dict:
         """Select one memory curve for display and measuring, keeping different layouts apart."""
@@ -314,7 +318,7 @@ class Runner:
         points = self.models.measurements(model, settings)
         if self.models.calibrated(model, settings) and not any(point["mib"] for point in points):
             return True
-        if settings["gpus"] != 1 or not self.cards:
+        if settings["gpus"] != 1 or not self.engine_cards(settings):
             return False
         minimum = next((point for point in points if point["context"] == contexts(settings)[0] and point["mib"]), None)
         lower = 0
@@ -325,7 +329,7 @@ class Runner:
             except OSError:
                 pass
         required = minimum["mib"][0] if minimum else lower
-        return all(self.known(card) and required > self.known(card)["total"] - self.config.card_margin for card in self.cards)
+        return all(self.known(card) and required > self.known(card)["total"] - self.config.card_margin for card in self.engine_cards(settings))
 
     def busy(self, server: Server) -> int:
         """How many requests are being answered by this server right now."""
@@ -543,8 +547,8 @@ class Runner:
 
     def known(self, card: str) -> dict | None:
         """What nvidia-smi last said of a card, or None if it said nothing of it."""
-        number = CARD_NUMBER.search(card)
-        return self.seen["cards"].get(int(number[0])) if self.seen and number else None
+        number = telemetry_index(self.config, card)
+        return self.seen["cards"].get(number) if self.seen and number is not None else None
 
     def uses(self, server: Server) -> list[int] | None:
         """What a model server's process used on each of its cards at the last look, in MiB. None if that is not known for every one."""
@@ -566,7 +570,7 @@ class Runner:
         for pid in pids:
             for card, size in (self.seen["pids"].get(pid, {}) if self.seen else {}).items():
                 mine[card] = mine.get(card, 0) + size
-        each = [mine.get(int(number[0])) if (number := CARD_NUMBER.search(card)) else None for card in server.cards]
+        each = [mine.get(telemetry_index(self.config, card)) for card in server.cards]
         return each if each and all(each) else None  # type: ignore[return-value]
 
     def others(self, card: str) -> int:
@@ -791,7 +795,7 @@ class Runner:
         whole = (calibrating or measured is None or settings.get("alone") or
                  len(measured["mib"]) != count or (count > 1 and not fixed_split))
         retiring_cards = {card for server in self.retiring for card in server.cards}
-        available = [card for card in self.cards if card not in taken | retiring_cards]
+        available = [card for card in self.engine_cards(settings) if card not in taken | retiring_cards]
         choices = ([tuple(need) if engine_for(settings).id=='sdcpp' else tuple(card for card in self.config.gpus if card in need)]
                    if isinstance(need, list) else combinations(available, count))
         plans = []
@@ -1064,7 +1068,7 @@ class Runner:
             automatic = (server.configured or {}).get("gpus") == "any"
             if automatic and not server.calibrating:
                 self.models.measured(server.model, server.settings, None, str(refusal))
-            split_retry = bool(automatic and (server.configured or {}).get("allow_split") and len(server.cards) == 1 and len(self.cards) >= 2
+            split_retry = bool(automatic and (server.configured or {}).get("allow_split") and len(server.cards) == 1 and len(self.engine_cards(server.settings)) >= 2
                                and ("out of memory" in str(refusal).lower() or "cannot fit" in str(refusal).lower()))
             for ticket in [] if again or split_retry else [ticket for ticket in self.waiting if ticket.model == server.model]:
                 self.waiting.remove(ticket)
@@ -1167,8 +1171,9 @@ class Runner:
                     continue
                 if server is None:
                     need = self.needs(settings)
-                    impossible = (not set(need) <= set(self.cards)) if isinstance(need, list) else need > len(self.cards)
-                    impossible = impossible or (not self.cards and settings.get("gpus") != 0)
+                    pool = self.engine_cards(settings)
+                    impossible = (not set(need) <= set(pool)) if isinstance(need, list) else need > len(pool)
+                    impossible = impossible or (not pool and settings.get("gpus") != 0)
                     if impossible:
                         self.waiting.remove(ticket)
                         ticket.error = Refusal(503, f"{ticket.model} has too few enabled cards. Change its Cards setting or enable a card under System → Compute nodes.")
@@ -1184,7 +1189,7 @@ class Runner:
                             ticket.turn.set()
                             continue
                         need = self.needs(settings)
-                        taken |= set(need if isinstance(need, list) else self.config.gpus)
+                        taken |= set(need if isinstance(need, list) else pool)
                         continue
                     server = self.load(ticket.model, *placed)
                 if ticket.observe:
@@ -1263,8 +1268,8 @@ class Runner:
 
     async def start(self, server: Server) -> None:
         """Start on enabled cards only, including isolated probes."""
-        if not set(server.cards) <= set(self.cards):
-            raise Refusal(503, "A card selected for this model has been disabled.")
+        if not set(server.cards) <= set(self.engine_cards(server.settings)):
+            raise Refusal(503, "A card selected for this model is disabled, reserved for another engine or unsupported by this engine.")
         port = free_port()
         engine = engine_for(server.settings)
         if server in self.retiring:

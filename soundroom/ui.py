@@ -137,6 +137,7 @@ def routes(for_people, page, ask, model_api, settings=None):
         if answer.is_error:
             return Response(answer.content, answer.status_code, media_type="application/json")
         value = answer.json()
+        value['cards'] = value.get('engine_cards', {}).get('audiocpp', value.get('cards', []))
         value["models"] = [one for one in value["models"] if one.get("engine") == "audiocpp"]
         engines = await model_api(request, person, "GET", "/loadcoach/engines")
         value["engines"] = engines.json() if engines.is_success else {}

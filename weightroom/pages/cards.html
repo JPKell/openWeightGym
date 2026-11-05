@@ -1,18 +1,24 @@
 {% from "parts.html" import card, alert, empty_row %}
 {% call card("Manage GPUs and host RAM", id="manage-gpus") %}
 {% if gpu_error %}{% call alert('warning', class_='mb-0') %}{{ gpu_error }}{% endcall %}{% else %}
-<p class="text-secondary">GPUs are detected when the compute service starts. Select Disable to exclude a GPU from openWeightGym models and benchmarks. Idle models on it are unloaded when you save; a card that is loading, answering or held must finish first.</p>
+<p class="text-secondary">NVIDIA, AMD and Intel GPUs are detected from this node's hardware when compute starts, independently of llama.cpp. Disable a card for all engines, or choose which engines may use it. Models and benchmarks share these assignments. Idle models affected by a change unload when you save; loading, answering or held models must finish first.</p>
+{% set gpu_engines = gpu_inventory.engines|default([]) %}
+{% set assignments = typed_in.get('gpu_engines', gpu_inventory.engine_gpus|default({})) %}
 <form method="post" action="/compute-nodes/gpus"><input type="hidden" name="machine" value="{{ selected_machine }}">
+{% for engine in gpu_engines %}<input type="hidden" name="gpu-engine-present" value="{{ engine.id }}">{% endfor %}
 <div class="table-responsive"><table class="sortable table align-middle">
-  <thead><tr><th>Card</th><th>Device</th><th>Loaded models</th><th>Disable</th></tr></thead>
+  <thead><tr><th>Card</th><th>Device</th><th>Loaded models</th><th>Disable</th>{% for engine in gpu_engines %}<th>{{ engine.label }}</th>{% endfor %}</tr></thead>
   <tbody>{% for device in gpu_inventory.cards %}
-    <tr><td><code>{{ device.id }}</code></td><td>{{ device.description or "Configured device" }}</td><td>{{ device.models|join(", ") or "none" }}</td>
-    <td><input class="form-check-input" type="checkbox" name="disabled" value="{{ device.id }}" aria-label="Disable {{ device.id }}" {{ "checked" if (device.id in gpu_disabled if gpu_disabled is not none else device.disabled) }}></td></tr>
-  {% else %}{% call empty_row(4) %}No cards detected. Check the llama-server device list on compute, then restart the compute service.{% endcall %}{% endfor %}</tbody>
+    {% set device_key = device.key|default(device.id) %}
+    <tr><td><code>{{ device.id }}</code></td><td>{{ device.description or "Configured device" }}{% if device.vendor %}<small class="d-block text-secondary">{{ device.vendor }} · {{ device.pci }}</small>{% endif %}</td><td>{{ device.models|join(", ") or "none" }}</td>
+    <td><input class="form-check-input" type="checkbox" name="disabled" value="{{ device_key }}" aria-label="Disable {{ device.id }}" {{ "checked" if (device_key in gpu_disabled or device.id in gpu_disabled if gpu_disabled is not none else device.disabled) }}></td>
+    {% for engine in gpu_engines %}<td>{% if engine.id in device.compatible_engines|default([]) %}<input class="form-check-input" type="checkbox" name="gpu-engine-{{ engine.id }}" value="{{ device_key }}" aria-label="Allow {{ device.id }} for {{ engine.label }}"{{ ' checked' if engine.id not in assignments or device.id in assignments[engine.id] or device_key in assignments[engine.id] }}>{% else %}<span class="small text-secondary">Unsupported backend</span>{% endif %}</td>{% endfor %}</tr>
+  {% else %}{% call empty_row(4 + gpu_engines|length) %}No NVIDIA, AMD or Intel GPUs were detected. Check hardware and driver access on this node, then restart compute.{% endcall %}{% endfor %}</tbody>
 </table></div>
 {% if gpu_inventory.missing_disabled %}<p class="text-secondary">Excluded cards currently missing: {{ gpu_inventory.missing_disabled|join(", ") }}. Their exclusions are kept if they return.</p>{% endif %}
 <button class="btn btn-primary">Save GPUs</button>
 </form>
+<p class="form-hint mt-2 mb-0">Hardware detection does not require an inference engine. GPU execution requires a compatible driver and engine build; image, audio and Strata currently use CUDA. A card with no engine selected stays available to other programs.</p>
 {% endif %}
 {% if resource_settings %}
 <form method="post" action="/settings/loadcoach" class="row g-3 mt-3"><input type="hidden" name="machine" value="{{ selected_machine }}">

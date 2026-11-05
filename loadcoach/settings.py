@@ -54,7 +54,7 @@ def program_name(program: str) -> str:
 # shown on the site, and cannot be changed there, since they could do harm from a browser.
 # Engine executable paths are an explicit manage-settings exception, pending restart.
 CHANGEABLE: dict[str, dict[str, str]] = {
-    "loadcoach": {"engines": RESTART, "llama_server": RESTART, "disabled_gpus": NOW, "load_timeout": NOW, "max_wait": NOW, "max_estimated_wait": NOW, "keep_days": NOW, "keep_text": NOW, "batch_keep_days": NOW, "unlogged": NOW, "card_margin": NOW, "model_idle_minutes": NOW, "host_ram_headroom_mib": NOW, "host_ram_limit_mib": NOW, "cpu_idle_minutes": NOW, "disable_ram_offload": RESTART, "models_folder": RESTART, "models_storage_folder": RESTART, "model_defaults": NOW},
+    "loadcoach": {"engines": RESTART, "llama_server": RESTART, "disabled_gpus": NOW, "engine_gpus": NOW, "load_timeout": NOW, "max_wait": NOW, "max_estimated_wait": NOW, "keep_days": NOW, "keep_text": NOW, "batch_keep_days": NOW, "unlogged": NOW, "card_margin": NOW, "model_idle_minutes": NOW, "host_ram_headroom_mib": NOW, "host_ram_limit_mib": NOW, "cpu_idle_minutes": NOW, "disable_ram_offload": RESTART, "models_folder": RESTART, "models_storage_folder": RESTART, "model_defaults": NOW},
     "toollocker": {"call_timeout": NOW, "toolsets": NOW, "tool_levels": NOW},
     "spotter": {"sample_every": NOW, "keep_days": NOW, "sleep_after": NOW, "busy_gpu": NOW, "busy_processor": NOW},
     "voice": {"max_active_sessions": NOW, "max_starting_sessions": NOW, "max_session_minutes": NOW, "idle_seconds": NOW, "hold_seconds": NOW,

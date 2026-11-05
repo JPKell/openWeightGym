@@ -163,7 +163,7 @@ watches and stops. LoadCoach is its *parent*.
 **Port.** A number that identifies one listening program on a machine. LoadCoach listens on
 `8442`. Each `llama-server` it starts gets a free port chosen at that moment.
 
-**Card.** One GPU, known by the name `llama-server --list-devices` prints, such as `CUDA0`.
+**Card.** One GPU in the compute node's hardware inventory, such as `CUDA0`.
 
 **The three libraries.**
 
@@ -257,7 +257,7 @@ A frozen dataclass. Frozen means it cannot change after startup.
 | Field | Default | Meaning |
 |---|---|---|
 | `models` | none, required | One entry per model: the cards it needs and its `llama-server` flags |
-| `gpus` | empty | The cards LoadCoach hands out, by `llama-server`'s device names |
+| `gpus` | auto | Physical GPU inventory; explicit legacy device lists are also accepted |
 | `host` | `127.0.0.1` | Address LoadCoach listens on |
 | `port` | `8442` | Port LoadCoach listens on |
 | `groups` | empty | What the members of each group may do. See section 5 |
@@ -6956,11 +6956,9 @@ away. `POST /loadcoach/model-forget-measure` with `name` is the request behind t
 
 ### Which card is which
 
-`llama-server` calls the cards `CUDA0`, `CUDA1`. `nvidia-smi` numbers them 0, 1. The number at
-the end of a card's name is taken to be nvidia-smi's number. That only holds if both count the
-same way, and by default they do not: CUDA puts the fastest card first, `nvidia-smi` goes by
-where a card sits in the machine. So `start()` runs every model server with
-`CUDA_DEVICE_ORDER=PCI_BUS_ID`, which makes CUDA count as `nvidia-smi` does.
+See [card discovery](#card-discovery-and-automatic-splitting-2026-10-11) for hardware IDs,
+CUDA visibility and per-engine assignments. NVIDIA memory accounting uses the discovered
+`nvidia-smi` index; legacy `CUDA0`/`GPU0` configurations retain their numeric mapping.
 
 ### Placing a model
 
@@ -9241,20 +9239,37 @@ on 2026-10-13, and the loaded files match this checkout.
 Milestone 46. Omitting `gpus` detects devices automatically instead of listing exactly two devices.
 Existing explicit `gpus = "auto"` configurations remain supported; see
 [worker delivery evidence](#the-command-line).
-`loadcoach/cards.py` reads the configured `llama-server --list-devices` at startup, preserving
-its device IDs and descriptions and using `CUDA_DEVICE_ORDER=PCI_BUS_ID`, as loading does.
-A failed discovery returns no devices; it never invents cards. Explicit device lists remain
-supported for older configurations, and `gpus = []` can still describe a CPU-only machine.
+`loadcoach/devices.py` detects NVIDIA, AMD and Intel display/compute GPUs from Linux PCI
+sysfs, and enriches NVIDIA entries with names, PCI addresses and UUIDs from `nvidia-smi`.
+Discovery works without llama.cpp or any other inference engine. NVIDIA keeps `CUDA0`,
+`CUDA1`, etc. in PCI order; AMD/Intel hardware IDs include the PCI address. A llama device
+list can supply verified PCI/backend aliases; on systems without PCI inventory its legacy
+device list remains a fallback. Explicit `gpus` lists remain supported, and `gpus = []`
+still describes a CPU-only machine.
+
+Hardware detection and engine support are separate. Image, audio and Strata currently
+require CUDA GPUs. Other llama.cpp backends require a matching engine build and an
+unambiguous PCI/backend mapping; unmapped cards remain visible but cannot be allocated
+to that engine. Unknown AMD/Intel memory measurements reserve the entire card rather
+than borrowing NVIDIA memory readings from a coincidentally matching device number.
 
 Settings → Compute nodes puts a non-collapsible **Manage GPUs and host RAM** section immediately
 below the machine key. It uses each named node's proxied `GET/POST /loadcoach/cards` (both require
-`manage-settings`). POST accepts `disabled_gpus`, a list persisted through the existing
-settings-change table. Exclusions survive restarts and temporary hardware removal. The
-scheduler, status, dry-fit page and isolated probes use enabled cards only. Disabling a card
+`manage-settings`). POST accepts `disabled_gpus` and `engine_gpus`, persisted through the
+existing settings-change table. `engine_gpus` maps engine IDs to card lists: omitted engines
+may use all compatible enabled cards, while `[]` permits no GPU work for that engine.
+For example, `llama_cpp = ["CUDA0"]` and `sdcpp = ["CUDA1"]` reserve separate cards for
+language and image models. Global exclusions always win. Assignments survive restarts
+and temporary hardware removal. The web controls save physical UUIDs/PCI identities, so
+renumbering cards does not move a reservation to another GPU; legacy device names remain
+accepted for existing configuration files. Model editors show only their engine's permitted cards.
+The scheduler, split retries, reloads and isolated probes use the same policy. Disabling a card
 unloads idle models on it, but a loading, answering or held model, or an active exclusive
 lock, causes 409 with no change applied. Re-enabling a card makes it eligible immediately.
 An unavailable explicit placement gets 503 instead of blocking unrelated requests.
-The raw `gpus` and `disabled_gpus` fields are not repeated in the generic settings renderer.
+CUDA children see exactly their assigned cards through `CUDA_VISIBLE_DEVICES`; llama.cpp
+receives the corresponding local device numbers. CPU-only launches see no CUDA device.
+The raw `gpus`, `disabled_gpus` and `engine_gpus` fields are not repeated in the generic settings renderer.
 The same section owns `disable_ram_offload`, `host_ram_headroom_mib` and `host_ram_limit_mib`.
 Old `/cards` bookmarks redirect to `/compute-nodes#manage-gpus`, and old GPU form posts remain compatible.
 

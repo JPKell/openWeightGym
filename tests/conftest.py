@@ -18,6 +18,12 @@ from loadcoach.runner import Runner
 REAL_SMI = Runner.smi
 
 
+@pytest.fixture(autouse=True)
+def isolate_host_gpu_discovery(monkeypatch):
+    """Tests must never inherit this workstation's physical GPU inventory."""
+    monkeypatch.setattr('loadcoach.devices.hardware', lambda **kwargs: [])
+
+
 def is_stand_in(program: str) -> bool:
     """Whether a configured nvidia-smi is a script that runs fake_nvidia_smi.py."""
     path = Path(program)
