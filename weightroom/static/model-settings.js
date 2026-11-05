@@ -29,10 +29,10 @@
       const mode = gpus === 0 ? 'cpu' : pinned.length ? 'pin' : 'auto';
       const area = box.querySelector('[data-hardware-cards]'); area.replaceChildren();
       [...new Set([...cards, ...pinned])].forEach(card => {
-        const label = document.createElement('label'); label.className = 'form-check';
-        const input = document.createElement('input'); input.type = box.dataset.hardwareLegacy === 'audio' ? 'radio' : 'checkbox'; input.name = prefix + '-gpu'; input.className = 'form-check-input'; input.dataset.gpuCard = ''; input.value = card; input.checked = pinned.includes(card);
-        const text = document.createElement('span'); text.className = 'form-check-label'; text.textContent = card;
-        label.append(input, text); area.append(label);
+        const label = box.querySelector('[data-hardware-card]').content.firstElementChild.cloneNode(true);
+        const input = label.querySelector('input'); input.value = card; input.checked = pinned.includes(card);
+        label.querySelector('.form-check-label').textContent = card;
+        area.append(label);
       });
       box.querySelector(`[data-hardware-mode][value="${mode}"]`).checked = true;
       box.querySelector('[data-hardware-empty]').hidden = area.children.length > 0;

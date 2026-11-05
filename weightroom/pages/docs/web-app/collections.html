@@ -1,0 +1,8 @@
+{% from "docs_parts.html" import doc_contents, doc_section %}
+{{ doc_contents([('collections', 'Make a collection'), ('collections-ask', 'Ask and check the sources')]) }}
+{% call doc_section('Make a collection', 'collections') %}
+<p><a href="/collections">Create a collection</a> with a local embedding model and a sensitivity level. Upload UTF-8 text or a searchable PDF, then select Index. Wait for Ready before searching.</p>
+{% endcall %}
+{% call doc_section('Ask and check the sources', 'collections-ask') %}
+<p>Ask a question and choose an answer model, or retrieve excerpts only. Review the cited sources: similarity is a retrieval score, not a guarantee that an answer is correct. Collections and their sources are private to their owner. Resetting the embedding space clears its vectors and requires indexing again.</p>
+{% endcall %}

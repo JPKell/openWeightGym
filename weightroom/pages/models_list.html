@@ -1,23 +1,23 @@
-{% from "parts.html" import card, section_title , confirm_two %}
+{% from "parts.html" import card, section_title , confirm_two, alert, empty_row %}
 {# The list of models. It asks for itself again every 5 seconds, so what is loaded and in use stays true. #}
 {% set node_query = '&node=' ~ (request.query_params.get('node')|urlencode) if request.query_params.get('node') else '' %}
 {% set node_query = node_query ~ ('&kind=' ~ kind if kind|default('llm') != 'llm' else '') ~ ('&install=' ~ (request.query_params.get('install')|urlencode) if request.query_params.get('install') else '') %}
 <div id="models" class="table-responsive mb-3" hx-get="/models?part=list{{ node_query }}" hx-trigger="every 5s" hx-swap="outerHTML">
-{% if installation %}<div class="alert alert-{{ 'danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info' }}" role="status"><strong>{{ installation.name }}</strong> on {{ installation.machine }}: {{ installation.state }}{% if installation.why %} · {{ installation.why }}{% endif %}{% if installation.of %} · {{ installation.done|size }} / {{ installation.of|size }}{% endif %}{% if installation.state == 'complete' %} · <a href="/models/{{ installation.name|urlencode }}?node={{ installation.machine|urlencode }}">Open model</a>{% endif %}</div>{% endif %}
+{% if installation %}{% call alert(('danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info'), role='status') %}<strong>{{ installation.name }}</strong> on {{ installation.machine }}: {{ installation.state }}{% if installation.why %} · {{ installation.why }}{% endif %}{% if installation.of %} · {{ installation.done|size }} / {{ installation.of|size }}{% endif %}{% if installation.state == 'complete' %} · <a href="/models/{{ installation.name|urlencode }}?node={{ installation.machine|urlencode }}">Open model</a>{% endif %}{% endcall %}{% endif %}
 {# Measuring every model that has no measure: the button, or how far a run has got, or how the last one ended. #}
 {% set run = known.measuring %}
 {% if run and not run.ended %}
-<form method="post" action="/measure-models{{ node_query|replace('&', '?', 1) }}" class="alert alert-primary d-flex flex-wrap align-items-center gap-2">
+{% call alert('primary', class_='d-flex flex-wrap align-items-center gap-2', tag='form', attrs={'method': 'post', 'action': '/measure-models' ~ (node_query|replace('&', '?', 1))}) %}
   <span class="flex-grow-1"><b>Measuring the models</b>, asked by {{ run.by }}: {{ run.now or "between two" }} now, {{ run.done|length }} done, {{ run.left|length }} left{% if run.failed %}, {{ run.failed|length }} would not load{% endif %}.
     It gives way as soon as anyone asks for a model.</span>
   <button  class="btn btn-outline-danger btn-sm" name="do" value="stop" {{ confirm_two() }}>Stop</button>
-</form>
+{% endcall %}
 {% else %}
 {% if run %}
-<div class="alert alert-secondary">
+{% call alert('secondary') %}
   The last measuring, asked by {{ run.by }} at {{ run.since|timestamp }}: {{ run.done|length }} measured, {{ run.left|length }} left. {{ run.ended }}
   {% for name, why in run.failed.items() %}<br><b>{{ name }}</b> would not load: {{ why }}{% endfor %}
-</div>
+{% endcall %}
 
 {% endif %}
 {% if known.to_measure and kind|default('llm') == 'llm' %}
@@ -52,7 +52,7 @@
     <td data-value="{{ model.last_used or "" }}">{{ model.last_used|timestamp if model.last_used else "never" }}</td>
   </tr>
   {% else %}
-  <tr><td colspan="{{ 10 if kind|default('llm') == 'llm' else 9 if kind == 'audio' else 8 }}"><div class="empty py-4"><p class="empty-title mb-1">No models yet.</p><p class="empty-subtitle mb-0">Add a model to see its availability here.</p></div></td></tr>
+  {% call empty_row((10 if kind|default('llm') == 'llm' else 9 if kind == 'audio' else 8), class_='') %}<div class="empty py-4"><p class="empty-title mb-1">No models yet.</p><p class="empty-subtitle mb-0">Add a model to see its availability here.</p></div>{% endcall %}
   {% endfor %}
   </tbody>
 </table>

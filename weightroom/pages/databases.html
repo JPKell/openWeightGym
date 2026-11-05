@@ -1,12 +1,12 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, page_header %}
+{% from "parts.html" import card, said_box, page_header, alert, empty_row %}
 {% block title %}DB · openWeightGym{% endblock %}
 {% block main %}
 {{ page_header("Database storage", "Live inventory, restorable SQL exports and engine migration readiness.") }}
 
-{% if compute_error %}<div class="alert alert-warning py-2">{{ compute_error }}</div>{% endif %}
+{% if compute_error %}{% call alert('warning', class_='py-2') %}{{ compute_error }}{% endcall %}{% endif %}
 {{ said_box(said) }}
-<div class="alert alert-info py-2">SQL exports can contain password verifiers, authenticator secrets, API-key hashes, retained prompts and responses. Keep downloaded dumps private and owner-readable.</div>
+{% call alert('info', class_='py-2') %}SQL exports can contain password verifiers, authenticator secrets, API-key hashes, retained prompts and responses. Keep downloaded dumps private and owner-readable.{% endcall %}
 
 <div class="row g-3 mb-3">
   <div class="col-md-4">{% call card("", class_="h-100") %}<div class="text-secondary small">Databases</div><div class="fs-4 fw-semibold">{{ database_count }}</div>{% endcall %}</div>
@@ -66,7 +66,7 @@
   </div>
   {% if not database.error %}<a class="btn btn-outline-primary btn-sm" href="/databases/{{ database.machine }}/{{ database.id }}/dump">Dump complete database</a>{% endif %}
 </div>
-{% if database.error %}<div class="alert alert-danger py-2 mb-0">{{ database.error }}</div>{% else %}
+{% if database.error %}{% call alert('danger', class_='py-2 mb-0') %}{{ database.error }}{% endcall %}{% else %}
 <div class="row g-2 small mb-2">
   <div class="col-md-3"><span class="text-secondary">On disk</span><br><strong>{{ database.size|disk_size }}</strong></div>
   <div class="col-md-3"><span class="text-secondary">Main file</span><br><strong>{{ database.main_size|disk_size }}</strong></div>
@@ -78,11 +78,11 @@
   <tbody>
   {% for table in database.tables %}
     <tr><td><code>{{ table.name }}</code></td><td class="text-end" data-value="{{ table.records }}">{{ "{:,}".format(table.records) }}</td><td class="text-end" data-value="{{ table.size if table.size is not none else '' }}">{{ table.size|disk_size }}</td><td class="text-end" data-value="{{ table.indexes }}">{{ table.indexes }}</td><td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/databases/{{ database.machine }}/{{ database.id }}/dump?table={{ table.name|query }}">Dump SQL</a></td></tr>
-  {% else %}<tr><td colspan="5" class="text-secondary">No user tables.</td></tr>{% endfor %}
+  {% else %}{% call empty_row(5) %}No user tables.{% endcall %}{% endfor %}
   </tbody>
 </table></div>
 <div class="small text-secondary mt-2">Table size includes its allocated table and index storage.{% if database.engine == "SQLite" %} Database size also includes active WAL and shared-memory sidecars.{% else %} Database size is reported by <code>pg_database_size</code>.{% endif %}</div>
 {% endif %}
 {% endcall %}
-{% else %}<div class="alert alert-secondary">No database files were found.</div>{% endfor %}
+{% else %}{% call alert('secondary') %}No database files were found.{% endcall %}{% endfor %}
 {% endblock %}

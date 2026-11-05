@@ -1,10 +1,10 @@
 {% extends "frame.html" %}
-{% from "parts.html" import swaps, page_header, section_title %}
+{% from "parts.html" import swaps, page_header, section_title, alert %}
 {% block title %}{{ host.hostname }} telemetry · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/echarts.min.js" defer></script><script src="/static/charts.js?v=4" defer></script>{% endblock %}
 {% block main %}
 {{ page_header(host.hostname, "Inspect retained telemetry and resource history for this host.", back=("/telemetry", "All telemetry")) }}
-{% if request.query_params.get('said') %}<p class="alert alert-{{ 'danger' if request.query_params.get('failed') else 'info' }} py-1" role="status">{{ request.query_params.get('said') }}</p>{% endif %}
+{% if request.query_params.get('said') %}{% call alert(('danger' if request.query_params.get('failed') else 'info'), class_='py-1', tag='p', role='status') %}{{ request.query_params.get('said') }}{% endcall %}{% endif %}
 <p class="small text-secondary">{{ host.machines|join(", ") }} · {{ host.state }}{% if host.fingerprint %} · fingerprint <code>{{ host.fingerprint }}</code>{% endif %}</p>
 {% include "host_wake.html" %}
 {% include "host_models.html" %}

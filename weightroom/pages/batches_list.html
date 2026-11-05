@@ -1,5 +1,5 @@
 {# The batches, the latest first. It asks for itself again every 5 seconds, so the counts move as requests are answered. #}
-{% from "parts.html" import swaps , confirm_two %}
+{% from "parts.html" import swaps , confirm_two, empty_row %}
 <div id="batches" hx-get="/batches?part=list&limit={{ paging.limit }}&page={{ paging.page }}" hx-trigger="every 5s" hx-swap="outerHTML">
 <form method="get" action="/batches" class="d-flex gap-2 align-items-center mb-2" {{ swaps('batches', true) }} data-auto-submit>
 <label for="batch-limit">Results per page</label><select id="batch-limit" name="limit" class="form-select form-select-sm w-auto">{% for n in paging.sizes %}<option value="{{ n }}" {{ 'selected' if n == paging.limit }}>{{ n }}</option>{% endfor %}</select><noscript><button class="btn btn-primary btn-sm">Show</button></noscript></form>
@@ -31,7 +31,7 @@
     </td>
   </tr>
   {% else %}
-  <tr><td colspan="7" class="text-secondary">No batches.</td></tr>
+  {% call empty_row(7) %}No batches.{% endcall %}
   {% endfor %}
   </tbody>
 </table>

@@ -93,7 +93,7 @@ select the corresponding voice services before its editable checklist.
 Existing settings and the service list saved for Repair are preserved. Older console-only
 installs need the [front ToolLocker setup](../toollocker/README.md#install-toollocker-on-front)
 to add it; existing compute gateways are not automatically moved or removed. The same guide,
-available at **Docs → ToolLocker**, covers verification, adding tools and remote tool hosts.
+available at **Docs → Modules → ToolLocker**, covers verification, adding tools and remote tool hosts.
 
 ## Adding a GPU node
 

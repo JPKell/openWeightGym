@@ -1,12 +1,12 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, form_section, more , empty_row %}
+{% from "parts.html" import card, said_box, swaps, page_header, form_section, more , empty_row, alert %}
 {% block title %}Voice settings · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/settings.js?v=1" defer></script><script src="/static/voice_admin.js?v=1" defer></script>{% endblock %}
 {% block main %}
 <div class="settings-page">
 {% call page_header('Voice settings', 'Configure Direct conversations, the Hermes agent and shared speech.') %}<a class="btn btn-outline-secondary btn-sm" href="/system/voice/status">Voice status</a>{% endcall %}
 {{ said_box(said, failed) }}
-{% if voice_problem %}<div class="alert alert-warning" role="status">{{ voice_problem }}</div>{% endif %}
+{% if voice_problem %}{% call alert('warning', role='status') %}{{ voice_problem }}{% endcall %}{% endif %}
 {% include 'settings_sections.html' %}
 {% call card("Preview a voice") %}
 <form method="post" action="/system/voice/preview" data-voice-preview>

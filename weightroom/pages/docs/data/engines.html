@@ -1,0 +1,15 @@
+{% from "docs_parts.html" import doc_contents, doc_section %}
+{{ doc_contents([('engines', 'One storage layer, two engines'), ('migration', 'Moving a store')]) }}
+{% call doc_section('One storage layer, two engines', 'engines') %}
+<p>The shared <code>db/</code> package makes connections and transactions, binds each service's repositories to a named store, runs each store's numbered schema migrations,
+  and backs up and restores either engine. Different machines, services and repositories can use different stores and engines.</p>
+<p>SQLite is the default, and existing SQLite files are upgraded in place by the same migrations. PostgreSQL stores need the native <code>pg_dump</code> and <code>pg_restore</code>
+  programs, of a compatible version, on the machine that owns the store; <a href="/databases">System → DB</a> says whether they are there.
+  Credentials are read from an owner-only connection file and never written to manifests or errors.</p>
+{% endcall %}
+{% call doc_section('Moving a store', 'migration') %}
+<p>The installer will not switch a populated store to another engine. Moving one is a separate, offline maintenance step: an operator writes an owner-only migration profile
+  under <code>settings/migrations/</code>, prepares the empty target and its acceptance checks, and installs the same openWeightGym code on every host.
+  System → DB then previews the profile's target and bindings, and starts it only after that preview.</p>
+<p>A migration copies one named store while its services are stopped, checks the copy, and changes only that store's bindings. If the acceptance checks fail, it rolls back to the original store.</p>
+{% endcall %}

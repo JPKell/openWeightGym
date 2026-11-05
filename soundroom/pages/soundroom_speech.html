@@ -1,11 +1,11 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, card, section_title %}
+{% from "parts.html" import page_header, card, section_title, alert %}
 {% block title %}Speech · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=7" defer></script><script src="/soundroom-static/speech.js?v=3" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom" data-mode="speech" data-defaults="{{ audio | tojson | forceescape }}">
   {{ page_header("Speech", lead="Generate speech, transcribe audio and manage speaker voices.") }}
-  <div id="sr-message" class="alert alert-danger" role="alert" hidden></div>
+  {% call alert('danger', role='alert', attrs={'id': 'sr-message', 'hidden': ''}) %}{% endcall %}
   <ul class="nav nav-tabs mb-3" role="tablist">
     <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link active" data-tab="studio" type="button" role="tab" aria-selected="true">Studio</button></li>
     <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link" data-tab="transcribe" type="button" role="tab" aria-selected="false">Transcribe</button></li>

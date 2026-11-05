@@ -1,4 +1,4 @@
-{% from "parts.html" import card %}
+{% from "parts.html" import card, empty_row %}
 {% set diagnostic = facts.diagnostics or {} %}
 {% call card("Diagnostics", true, "request-diagnostics", id="request-diagnostics") %}
 <p class="small text-secondary">Wall-clock stages are measured on compute, starting at admission. Front authentication, waking compute and delivery to your app are outside this measurement. Native timings overlap these stages.</p>
@@ -14,7 +14,7 @@
   <thead><tr><th>Stage</th><th>Duration</th><th>Evidence</th></tr></thead>
   <tbody>{% for phase in diagnostic.phases or [] %}
   <tr><td>{{ phase.label }}</td><td class="text-nowrap">{{ '%.3f'|format(phase.seconds) }} s</td><td>{{ phase.basis }}</td></tr>
-  {% else %}<tr><td colspan="3" class="text-secondary">Stage durations unavailable.</td></tr>{% endfor %}</tbody>
+  {% else %}{% call empty_row(3) %}Stage durations unavailable.{% endcall %}{% endfor %}</tbody>
 </table>
 </div>
 <div class="table-responsive">
@@ -58,7 +58,7 @@
 <tr><td class="text-nowrap">{{ event.at|timestamp }}</td><td>{{ event.kind }}</td>
 <td><a href="{% if event.kind == 'request' %}/requests/{{ event.of or event.source or event.id }}{% else %}/log/{{ event.id }}{% endif %}">{{ event.what }}</a></td>
 <td class="text-nowrap">{% if event.took is defined %}{{ event.took }} s{% else %}Unavailable{% endif %}</td><td class="wrap">{{ event.tool or event.model or '' }}{% if event.why %} · {{ event.why }}{% endif %}</td></tr>
-{% else %}<tr><td colspan="5" class="text-secondary">No correlated activity is available in your log scope.</td></tr>{% endfor %}</tbody>
+{% else %}{% call empty_row(5) %}No correlated activity is available in your log scope.{% endcall %}{% endfor %}</tbody>
 </table></div>
 {% if related.truncated %}<p class="small text-secondary">Recent activity is capped at 200 trace entries and 50 model events. Open the trace log for more.</p>{% endif %}
 {% endcall %}

@@ -1,0 +1,9 @@
+{% from "docs_parts.html" import doc_contents, doc_section %}
+{{ doc_contents([('api', 'Create a key'), ('api-connect', 'Connect a client')]) }}
+{% call doc_section('Create a key', 'api') %}
+<p>Open <a href="/account">My account</a> to create an API key. Copy it when shown; it cannot be displayed again. Give it to your client as its API key, and keep it private. Removing a key ends access for clients using that key.</p>
+{% endcall %}
+{% call doc_section('Connect a client', 'api-connect') %}
+<p>The standard model API address on this front server is <code>{{ api_base }}</code>, for trusted LAN or VPN access. If your administrator configured a different host, port or HTTPS gateway, use that address instead.</p>
+<p>Use an OpenAI-compatible client, choose an allowed model, and send the key as a Bearer token. The model list is <code>GET /v1/models</code>. Chat uses <code>POST /v1/chat/completions</code>. Your usual model permissions and usage limits apply to API requests.{% if 'manage-settings' in person.can %} Every endpoint and header is in the <a href="/docs/api">API reference</a>.{% endif %}</p>
+{% endcall %}

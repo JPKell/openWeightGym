@@ -7,7 +7,7 @@ Tools run on the machine that owns their files or service; the gateway runs on f
 compute is off. An MCP-capable client or agent executes tool calls; **Settings → Tools → Try a
 tool** checks them independently of a model.
 
-These same instructions are available in the console at **Docs → ToolLocker** (`/docs/toollocker`).
+These same instructions are available in the console at **Docs → Modules → ToolLocker** (`/docs/modules/toollocker`).
 
 ## Installer defaults
 

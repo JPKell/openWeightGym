@@ -1,0 +1,44 @@
+# Repository instructions
+
+## Web UI
+
+Before creating or changing a web element, search the templates below and their callers.
+Reuse the matching macro, include or DOM `<template>`; extend it when necessary instead of
+copying its markup. When a meaningful component repeats without a template, extract one and
+update all matching uses, including fragments and JavaScript-generated content.
+
+Preserve form names, IDs, HTMX targets, data attributes, escaping and accessibility behavior.
+Use the existing CSS tokens and Bootstrap primitives for ordinary tags; do not introduce
+one-off styles or wrappers around every HTML tag. Keep unique diagrams and standalone clients
+within their own layouts.
+
+### Template index
+
+| Element | Canonical source |
+|---|---|
+| Page shell, navigation, common assets and DOM templates | [frame.html](weightroom/pages/frame.html) |
+| Page/section headings, cards, form sections, notices, disclosures, empty rows, hardware controls and confirmation | [parts.html](weightroom/pages/parts.html) |
+| Documentation sections, contents, tables, notes and code blocks | [docs_parts.html](weightroom/pages/docs_parts.html) |
+| Pill links, view buttons, radio choices and pagination | [navigation_parts.html](weightroom/pages/navigation_parts.html), [pagination.html](weightroom/pages/pagination.html) |
+| User/group filters | [filter_parts.html](weightroom/pages/filter_parts.html) |
+| Usage amounts and totals | [usage_parts.html](weightroom/pages/usage_parts.html), [usage_kpis.html](weightroom/pages/usage_kpis.html) |
+| Settings forms and rows | [settings_program.html](weightroom/pages/settings_program.html), [setting_row.html](weightroom/pages/setting_row.html) |
+| Chat options, model choices and prompt navigation | [chat_main.html](weightroom/pages/chat_main.html), [chat_navigation.html](weightroom/pages/chat_navigation.html) |
+| Deferred loading and retry | [deferred.html](weightroom/pages/deferred.html), [deferred_error.html](weightroom/pages/deferred_error.html) |
+| Model fields and engine-specific controls | [model_form.html](weightroom/pages/model_form.html), [engines/](weightroom/pages/engines/) |
+| File lists and locations | [files_parts.html](weightroom/pages/files_parts.html) |
+| Node/component summaries and model details | [machines.html](weightroom/pages/machines.html), [components_content.html](weightroom/pages/components_content.html), [multimedia_model.html](weightroom/pages/multimedia_model.html) |
+| Benchmark values and shared panels | [benchmark_parts.html](weightroom/pages/benchmark_parts.html) and adjacent `benchmark_*.html` includes |
+| Icons | [icons.html](weightroom/pages/icons.html) |
+| Image files, discovery cards, workflows and editor warnings | [mirrorwall_files.html](mirrorwall/pages/mirrorwall_files.html), [mirrorwall_discovery.html](mirrorwall/pages/mirrorwall_discovery.html), [mirrorwall_workflows.html](mirrorwall/pages/mirrorwall_workflows.html), [mirrorwall_models.html](mirrorwall/pages/mirrorwall_models.html) |
+| Audio player and preferences | [soundroom_player.html](soundroom/pages/soundroom_player.html), [soundroom_preferences.html](soundroom/pages/soundroom_preferences.html) |
+| Standalone API/MCP diagnostic layout | [diagnostic_frame.html](loadcoach/pages/diagnostic_frame.html), used by [LoadCoach](loadcoach/test.html) and [ToolLocker](toollocker/test.html) |
+| Standalone voice client | [index.html](voice/static/index.html) and [voice.css](voice/static/voice.css) (independent static client) |
+| Shared appearance and browser behavior | [style.css](weightroom/static/style.css), [console.js](weightroom/static/console.js), [model-settings.js](weightroom/static/model-settings.js) |
+
+For UI changes, run the component audit in [test_ui_consistency.py](tests/test_ui_consistency.py)
+and the affected feature tests. Shared component changes also require the all-page browser
+checks there, including narrow layouts, empty/error states and dynamic replacements.
+
+Keep this index current when introducing or moving shared components. Record UI conventions
+here; Claude's entry point imports this file.

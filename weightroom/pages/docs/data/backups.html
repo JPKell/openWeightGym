@@ -1,0 +1,20 @@
+{% from "docs_parts.html" import doc_contents, doc_section %}
+{{ doc_contents([('recovery-sets', 'Recovery sets'), ('excluded', 'What a set leaves out'), ('identities', 'Keeping identities through a reinstall')]) }}
+{% call doc_section('Recovery sets', 'recovery-sets') %}
+<p><a href="/backups">System → Backups</a> backs up both machines at once. Each machine archives every store it is configured with, and the set is verified only when both halves are:
+  SQLite stores are copied with SQLite's online backup and checked for integrity, and PostgreSQL stores are dumped with <code>pg_dump</code>, restored into a temporary database and compared with the source.
+  A configured store that is missing or does not answer stops the set rather than leaving it quietly incomplete.</p>
+<p>Choose how many sets each machine keeps; older ones are removed after a backup succeeds, and zero keeps them all. Restore preview shows what a set would change before anything is restored.
+  Restoring needs a maintenance window: stop the services that use the stores first.</p>
+{% endcall %}
+{% call doc_section('What a set leaves out', 'excluded') %}
+<p>Archives stay on the machine that made them, readable only by its service account, and are not offered as browser downloads.</p>
+<p>The accounts store holds the password verifiers and authenticator secrets needed to recover accounts. Raw API keys, provider keys, key folders, environment files,
+  runtime command-line tokens and the console's cookie-signing secret are not included: recover them separately from where you keep them.
+  Model weights are not included either; the compute manifest records each model's identity, path, size, known SHA-256 and likely Hugging Face source.</p>
+{% endcall %}
+{% call doc_section('Keeping identities through a reinstall', 'identities') %}
+<p>Run <code>suite-identity</code> in a terminal on each host to export a passphrase-encrypted bundle of accounts, permissions, service credentials and configuration.
+  Request and conversation history is not included. Stop the services that take part before exporting or importing. An import previews its changes first and refuses to replace different existing accounts.
+  The <a href="/docs/system/accounts?module=loadcoach/identity_bundle.py#source-title">identity export and import reference</a> has the details.</p>
+{% endcall %}

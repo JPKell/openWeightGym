@@ -1,14 +1,14 @@
-{% from "parts.html" import confirm_two %}
+{% from "parts.html" import confirm_two, alert %}
 {# Every configured the compute service is shown, including an unavailable one. #}
 {% set seen = now %}
 <div id="status" class="{{ '' if now or nodes else 'old' }}" {% if now or nodes %}hx-get="/status?part=status" hx-trigger="every 2s" hx-swap="outerHTML" data-refresh-companions="#current-requests"{% endif %}>
 {% for node in nodes if node.state == 'ready' and node.status_live and (node.draining or (node.name == 'compute' and seen and seen.draining)) %}
-<form method="post" action="/control" class="alert alert-warning d-flex flex-wrap align-items-center gap-2">
+{% call alert('warning', class_='d-flex flex-wrap align-items-center gap-2', tag='form', attrs={'method': 'post', 'action': '/control'}) %}
   <input type="hidden" name="machine" value="{{ node.name }}">
   <span class="flex-grow-1"><b>No new requests are taken by {{ node.name }}.</b>
     {% if node.name == 'compute' and seen and seen.draining %}Since {{ seen.draining.since|timestamp }}, asked by {{ seen.draining.by }}: {{ seen.draining.why }}. {{ seen.busy }} still here.{% endif %}</span>
   {% if "drain" in person.can %}<button class="btn btn-outline-secondary btn-sm" name="do" value="open">Take requests again</button>{% endif %}
-</form>
+{% endcall %}
 {% endfor %}
 {% if nodes and ('drain' in person.can or 'clear-line' in person.can or 'unload' in person.can) %}
 <div id="status-controls" class="mb-3 status-controls" hx-preserve>

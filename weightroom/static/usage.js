@@ -62,8 +62,8 @@ function initializeUsage() {
     table.tHead.rows[0].cells[0].textContent = group[0].toUpperCase() + group.slice(1);
     table.tBodies[0].replaceChildren(...rows.map(row => cells(row, row.name)));
     if (!rows.length) {
-      const tr = document.createElement('tr'), td = document.createElement('td');
-      td.colSpan = 10; td.textContent = 'No usage in this range.'; td.className = 'text-secondary'; tr.append(td); table.tBodies[0].append(tr);
+      const tr = document.getElementById('empty-row-template').content.firstElementChild.cloneNode(true);
+      tr.cells[0].colSpan = 10; tr.cells[0].textContent = 'No usage in this range.'; table.tBodies[0].append(tr);
     }
     table.tFoot.replaceChildren(cells(report.totals, 'Total'));
     document.getElementById('usage-range-heading').textContent = `Selected range by ${group}`;

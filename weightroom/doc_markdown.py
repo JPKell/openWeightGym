@@ -4,6 +4,7 @@ A document's `# ` heading is its title and each `## ` heading starts one of its 
 docs pages show as cards; what comes before the first section is its overview. Tables take the
 console's table style, numbered `### 1. Step` headings become step headings, and every code block
 is labelled with its language and has a Copy button. Raw HTML in the source is shown as text, never run.
+A `links` function, when given, decides where each link goes: a new address, or None to keep only its text.
 """
 
 import re
@@ -49,10 +50,32 @@ for rule, function in (("table_open", _table_open), ("table_close", _table_close
     RENDERER.add_render_rule(rule, function)
 
 
-def render(text: str, prefix: str = "doc") -> Markup:
+def _relink(tokens, links) -> None:
+    """Point each link where `links` says, or drop the link and keep its text."""
+    for token in tokens:
+        if token.type != "inline" or not token.children:
+            continue
+        kept, dropping = [], False
+        for child in token.children:
+            if child.type == "link_open":
+                target = links(str(child.attrGet("href") or ""))
+                if target is None:
+                    dropping = True
+                    continue
+                child.attrSet("href", target)
+            elif child.type == "link_close" and dropping:
+                dropping = False
+                continue
+            kept.append(child)
+        token.children = kept
+
+
+def render(text: str, prefix: str = "doc", links=None) -> Markup:
     """One part of a document as HTML. `prefix` keeps its heading and code-block ids apart from other parts' on the same page."""
     env = {"prefix": prefix}
     tokens = RENDERER.parse(text, env)
+    if links is not None:
+        _relink(tokens, links)
     for number, token in enumerate(tokens):
         if token.type != "heading_open":
             continue
@@ -71,7 +94,7 @@ def render(text: str, prefix: str = "doc") -> Markup:
     return Markup(RENDERER.renderer.render(tokens, RENDERER.options, env))
 
 
-def document(text: str) -> dict:
+def document(text: str, links=None) -> dict:
     """A whole Markdown document: its title, its overview and its sections, each rendered, with the links to them."""
     lines = text.splitlines()
     title, title_lines, starts = "", range(0), []
@@ -88,6 +111,6 @@ def document(text: str) -> dict:
     for place, ((start, after), heading) in enumerate(zip(starts, headings)):
         end = starts[place + 1][0] if place + 1 < len(starts) else len(lines)
         ident = slug(heading) or f"section-{place + 1}"
-        sections.append({"id": ident, "title": heading, "body": render("\n".join(lines[after:end]), ident)})
-    return {"title": title, "overview": render(overview, "overview") if overview.strip() else Markup(""),
+        sections.append({"id": ident, "title": heading, "body": render("\n".join(lines[after:end]), ident, links)})
+    return {"title": title, "overview": render(overview, "overview", links) if overview.strip() else Markup(""),
             "sections": sections, "contents": [(section["id"], section["title"]) for section in sections]}

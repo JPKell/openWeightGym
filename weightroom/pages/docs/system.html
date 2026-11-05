@@ -1,15 +1,10 @@
-{% extends "frame.html" %}
-{% from "docs_parts.html" import doc_header, doc_section %}
-{% block title %}System docs · openWeightGym{% endblock %}
-{% block main %}
-<div class="docs-page">
-  {{ doc_header("System docs", contents=[('system-map', 'System map'), ('docs-pages', 'Component pages')]) }}
-
+{% from "docs_parts.html" import doc_contents, doc_section, doc_directory %}
+{{ doc_contents([('system-map', 'System map'), ('docs-sections', 'Documentation sections'), ('topics', 'In this section')]) }}
   {% call doc_section("System map", "system-map", hint="Select a component for its page.") %}
       <p class="small text-secondary mb-2 d-md-none">Swipe across the map to see the full system.</p>
       <div class="docs-map-scroll">
-      {% macro node(x, y, width, title, subtitle, slug) -%}
-      <a href="/docs/{{ slug }}" aria-label="{{ title }} documentation" class="docs-map-node">
+      {% macro node(x, y, width, title, subtitle, url) -%}
+      <a href="{{ url }}" aria-label="{{ title }} documentation" class="docs-map-node">
         <rect x="{{ x }}" y="{{ y }}" width="{{ width }}" height="64" rx="5"/>
         <text class="docs-node-title" x="{{ x + width / 2 }}" y="{{ y + 26 }}" text-anchor="middle">{{ title }}</text>
         <text class="docs-node-detail" x="{{ x + width / 2 }}" y="{{ y + 45 }}" text-anchor="middle">{{ subtitle }}</text>
@@ -76,29 +71,22 @@
         {{ wire_label(346, 639, 100, 'Telemetry') }}
         {{ wire_label(347, 814, 130, 'Speech models') }}
 
-        {{ node(170, 320, 220, 'Voice gateway', 'Clients / audio / auth', 'voice') }}
-        {{ node(490, 320, 220, 'openWeightGym', 'Web console / benchmarks', 'weightroom') }}
-        {{ node(825, 320, 220, 'Plugins', 'Adapters / integrations', 'plugins') }}
-        {{ node(170, 500, 220, 'Logs', 'Requests / reliability', 'logs') }}
-        {{ node(490, 500, 220, 'Turnstile', 'Routing / placement / auth', 'turnstile') }}
-        {{ node(825, 500, 220, 'ToolLocker', 'MCP tools', 'toollocker') }}
-        {{ node(95, 740, 200, 'Voice services', 'Recognition / synthesis', 'voice') }}
-        {{ node(340, 740, 200, 'Spotter', 'Telemetry / service health', 'spotter') }}
-        {{ node(590, 740, 200, 'LoadCoach', 'Models / queue / inference', 'loadcoach') }}
-        {{ node(830, 740, 200, 'Hosted providers', 'Permitted offload', 'hosted-providers') }}
-        {{ node(590, 865, 200, 'Models', 'Local model processes', 'models') }}
-        {{ node(830, 865, 200, 'Data and backups', 'Front / compute stores', 'data') }}
+        {{ node(170, 320, 220, 'Voice gateway', 'Clients / audio / auth', '/docs/modules/voice') }}
+        {{ node(490, 320, 220, 'openWeightGym', 'Web console / benchmarks', '/docs/modules/weightroom') }}
+        {{ node(825, 320, 220, 'Plugins', 'Adapters / integrations', '/docs/modules/plugins') }}
+        {{ node(170, 500, 220, 'Logs', 'Requests / reliability', '/docs/system/logs') }}
+        {{ node(490, 500, 220, 'Turnstile', 'Routing / placement / auth', '/docs/modules/turnstile') }}
+        {{ node(825, 500, 220, 'ToolLocker', 'MCP tools', '/docs/modules/toollocker') }}
+        {{ node(95, 740, 200, 'Voice services', 'Recognition / synthesis', '/docs/modules/voice') }}
+        {{ node(340, 740, 200, 'Spotter', 'Telemetry / service health', '/docs/modules/spotter') }}
+        {{ node(590, 740, 200, 'LoadCoach', 'Models / queue / inference', '/docs/modules/loadcoach') }}
+        {{ node(830, 740, 200, 'Hosted providers', 'Permitted offload', '/docs/system/hosted-providers') }}
+        {{ node(590, 865, 200, 'Models', 'Local model processes', '/docs/system/models') }}
+        {{ node(830, 865, 200, 'Data and backups', 'Front / compute stores', '/docs/data') }}
       </svg>
       </div>
     {% endcall %}
 
-  {% call doc_section("Component pages", "docs-pages", hint="What each part of openWeightGym does, with its code reference.") %}
-    <div class="docs-directory">
-      {% for slug, title, headings in topics %}
-      <a class="docs-directory-link" href="/docs/{{ slug }}"><span class="docs-directory-title">{{ title }} <span aria-hidden="true">→</span></span>
-        <span class="docs-directory-detail">{{ headings|join(' · ') }}</span></a>
-      {% endfor %}
-    </div>
+  {% call doc_section("Documentation sections", "docs-sections", hint="Each section starts with an overview; its topics open beneath it in the menu.") %}
+    {{ doc_directory(sections|rejectattr('slug', 'equalto', 'system')) }}
   {% endcall %}
-</div>
-{% endblock %}

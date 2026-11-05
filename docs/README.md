@@ -27,7 +27,7 @@ Replace `CONSOLE` with the console machine's address (the installer prints it at
 
 | Use | Address |
 |---|---|
-| Web console | `http://CONSOLE:8440`, with the in-app user guide at `/guide` (HTTPS once [`scripts/front-https.sh`](../scripts/front-https.sh) is set up) |
+| Web console | `http://CONSOLE:8440`, with in-app help under **Docs → Web app** (`/docs/web-app`) (HTTPS once [`scripts/front-https.sh`](../scripts/front-https.sh) is set up) |
 | Model API base | `http://CONSOLE:8442/v1` |
 | MCP tools | `http://CONSOLE:8443/mcp` or `/mcp/TOOLSET` |
 | Browser voice | the voice gateway's page, served over HTTPS |
@@ -153,7 +153,7 @@ Audio playback uses authenticated byte-range requests so seeking works through t
 
 Use **Settings → Tools** to connect and try tools your account may use. For gateway requirements,
 installation on a console-only machine, a custom Python tool and troubleshooting, see
-[ToolLocker setup and adding tools](../toollocker/README.md), also in **Docs → ToolLocker**.
+[ToolLocker setup and adding tools](../toollocker/README.md), also in **Docs → Modules → ToolLocker**.
 
 ## Where things run
 

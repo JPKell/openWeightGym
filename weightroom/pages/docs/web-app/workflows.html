@@ -1,0 +1,8 @@
+{% from "docs_parts.html" import doc_contents, doc_section %}
+{{ doc_contents([('workflows', 'Run a workflow'), ('workflows-retry', 'Retries and changes')]) }}
+{% call doc_section('Run a workflow', 'workflows') %}
+<p><a href="/workflows">Create a workflow</a> using a collection, research question, models and prompt versions. Start research, review its sources and accept the result. Then start and review the draft.</p>
+{% endcall %}
+{% call doc_section('Retries and changes', 'workflows-retry') %}
+<p>Accepted research remains available after a failed draft. Resume / retry creates another attempt. Existing runs keep their selected models and prompt versions; create a new workflow to change its configuration. Deleting a workflow also removes its saved outputs.</p>
+{% endcall %}

@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, form_section, more, node_state %}
+{% from "parts.html" import card, said_box, swaps, page_header, form_section, more, node_state, alert %}
 {% block title %}Settings · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/settings.js?v=1" defer></script>{% endblock %}
 {% block main %}
@@ -14,9 +14,9 @@
     </select></div><button class="btn btn-outline-secondary btn-sm">Show node</button>
   </form>
   {% if location_error %}<p class="text-warning-emphasis mb-0">{{ location_error }}</p>{% else %}
-  {% if file_delivery_error %}<p class="alert alert-warning" role="status">{{ file_machine }} could not apply the saved locations: {{ file_delivery_error }} Check the paths and save again.</p>
-  {% elif file_pending %}<p class="alert alert-info" role="status">Locations saved on front. They will be sent to {{ file_machine }} when it reconnects, and apply after its compute service restarts.</p>
-  {% elif file_offline %}<p class="alert alert-info" role="status">{{ file_machine }} is offline. You can save its cache and storage locations now.</p>{% endif %}
+  {% if file_delivery_error %}{% call alert('warning', tag='p', role='status') %}{{ file_machine }} could not apply the saved locations: {{ file_delivery_error }} Check the paths and save again.{% endcall %}
+  {% elif file_pending %}{% call alert('info', tag='p', role='status') %}Locations saved on front. They will be sent to {{ file_machine }} when it reconnects, and apply after its compute service restarts.{% endcall %}
+  {% elif file_offline %}{% call alert('info', tag='p', role='status') %}{{ file_machine }} is offline. You can save its cache and storage locations now.{% endcall %}{% endif %}
   <form method="post" action="/settings/model-files" class="row g-2">
     <input type="hidden" name="file_machine" value="{{ file_machine }}">
     <div class="col-md-6"><label class="form-label" for="models-folder">Active cache path</label><input id="models-folder" name="models_folder" class="form-control font-monospace" value="{{ typed_in.models_folder if typed_in.models_folder is defined else file_locations.models_folder }}"><div class="form-text">Contains llm, encoders, adapters, projectors, image and audio. {{ 'Optional on front; empty disables the cache.' if file_machine == 'front' else 'A restart applies changes.' }}</div></div>

@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, page_header, card %}
+{% from "parts.html" import said_box, page_header, card, alert %}
 {% block title %}Sign in · openWeightGym{% endblock %}
 {% block main %}
 {% call card("", class_="mx-auto mt-4 entry") %}
@@ -8,7 +8,7 @@
     {% if compute.up is false %}
     <p class="text-secondary">Compute is off since {{ compute.since|timestamp }}. Only people who can do something while it is off can sign in.</p>
     {% endif %}
-    {% if why %}<p class="alert alert-danger" role="alert">{{ why }}</p>{% endif %}
+    {% if why %}{% call alert('danger', tag='p', role='alert') %}{{ why }}{% endcall %}{% endif %}
 
     <form method="post" action="/sign-in" class="row g-3">
       <input type="hidden" name="next" value="{{ next or '/' }}">

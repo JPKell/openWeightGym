@@ -1,12 +1,12 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, page_header, card, section_title , confirm_two %}
+{% from "parts.html" import said_box, page_header, card, section_title , confirm_two, alert %}
 {% block title %}{{ manifest.name }} · {{ instance or "New instance" }}{% endblock %}
 {% block main %}
 <p><a href="/plugins">Plugins</a> / <a href="/plugins/{{ manifest.id }}">{{ manifest.name }}</a> / {{ instance or "New instance" }}</p>
 {% call page_header(instance or "New instance", lead="Configure an adapter instance and its model access.") %}{% if instance %}<a href="/plugins/{{ manifest.id }}/instances/{{ instance }}/installer" class="btn btn-outline-primary">Download Linux installer</a>{% endif %}{% endcall %}
 {{ said_box(said, failed) }}
 {% if instance %}<p>Settings: <strong>desired {{ config.revision }}</strong>, applied {{ config.applied_revision }} · {{ "Pending" if config.revision != config.applied_revision else "Synchronized" }}{% if config.restart_required %} · <span class="text-warning-emphasis">Restart the adapter service on its machine to apply its listening address/port.</span>{% endif %}</p>{% endif %}
-{% if config.error %}<div class="alert alert-warning">{{ config.error }}</div>{% endif %}
+{% if config.error %}{% call alert('warning') %}{{ config.error }}{% endcall %}{% endif %}
 {% call card("", tag="form", attrs={"method": "post"}) %}
 <input type="hidden" name="do" value="save">
 {{ section_title("Connection and settings") }}

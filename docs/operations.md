@@ -17,7 +17,7 @@ Current installation addresses, documented **2026-10-20**:
 
 | Use | Address |
 |---|---|
-| Web console | [openWeightGym](https://192.168.1.10/) · [in-app user guide](https://192.168.1.10/guide) |
+| Web console | [openWeightGym](https://192.168.1.10/) · [in-app help](https://192.168.1.10/docs/web-app) |
 | Model API base | `http://192.168.1.10:8442/v1` |
 | MCP tools | `http://192.168.1.10:8443/mcp` or `/mcp/TOOLSET` |
 | Browser voice | [Private HTTPS voice app](https://front-srv.tailnet.ts.net/) |

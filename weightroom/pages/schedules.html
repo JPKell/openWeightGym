@@ -1,5 +1,6 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, page_header, section_title , confirm_loss, confirm_two %}
+{% from "navigation_parts.html" import pager %}
+{% from "parts.html" import card, said_box, page_header, section_title , confirm_loss, confirm_two, empty_row %}
 {% block title %}Schedules · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/schedules.js" defer></script>{% endblock %}
 {% block main %}
@@ -23,7 +24,7 @@
 <form method="post" action="/schedules/{{ schedule.id }}" {{ confirm_two() }}><button  name="do" value="delete" class="btn btn-outline-danger btn-sm" aria-label="Delete {{ schedule.name }}" {{ confirm_loss() }}>Delete</button></form>
 </div></td>
 </tr>
-{% else %}<tr><td colspan="6" class="text-secondary">No schedules yet.</td></tr>{% endfor %}
+{% else %}{% call empty_row(6) %}No schedules yet.{% endcall %}{% endfor %}
 </tbody></table></div>
 {% endcall %}
 {% call card("Edit schedule · " ~ editing.name if editing else "Add schedule", true, "schedule-form", id="schedule-form") %}
@@ -47,7 +48,7 @@
 {% call card("Occurrence history", true) %}
 {% for occurrence in history %}<article class="border-bottom py-2">{% set _section_title1 %}{{ occurrence.name }} <span class="badge text-bg-secondary">{{ occurrence.state }}</span>{% endset %}
 {{ section_title(_section_title1) }}<div class="small">Due: {{ occurrence.due_at|timestamp }}</div><div class="small text-break">{{ occurrence.message }}{% if occurrence.href %} <a href="{{ occurrence.href }}">Open work</a>{% endif %}</div></article>{% else %}<p class="text-secondary mb-0">No occurrences yet.</p>{% endfor %}
-<nav class="d-flex gap-3 mt-2" aria-label="Schedule history pages">{% if history_page > 1 %}<a href="/schedules?page={{ history_page-1 }}">Previous</a>{% endif %}<span class="small text-secondary">Page {{ history_page }}</span>{% if more_history %}<a href="/schedules?page={{ history_page+1 }}">Next</a>{% endif %}</nav>
+{{ pager('/schedules?page=' ~ (history_page - 1) if history_page > 1 else none, '/schedules?page=' ~ (history_page + 1) if more_history else none, 'Page ' ~ history_page, label='Schedule history pages') }}
 {% endcall %}
 <script id="schedule-catalogue" type="application/json">{{ catalogue|tojson }}</script>
 {% endblock %}

@@ -1,6 +1,8 @@
 """Model-file setup and optional front storage remain usable without an inference worker."""
 
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+import threading
 import time
 
 import pytest
@@ -9,6 +11,7 @@ import httpx
 from test_weightroom import desk, gguf, sign_in  # noqa: F401
 from test_console_browser import browser_context, playwright
 from loadcoach.settings import Changes, said
+from loadcoach.models import Models
 
 
 @pytest.mark.parametrize('front_settings', [True, False])
@@ -49,6 +52,68 @@ def test_front_locations_work_without_compute_and_persist(desk, tmp_path):
     sign_in(browser, 'pat')
     assert browser.get('/files').status_code == 403
     assert browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '/tmp/forbidden'}).status_code == 403
+
+
+def test_compute_node_pill_lists_its_files_and_preserves_selection(desk, tmp_path):
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    cache, storage = tmp_path / 'front-cache', tmp_path / 'front-storage'
+    server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
+                                             'models_storage_folder': str(storage)})
+    gguf(cache / 'llm' / 'front-only.gguf', general__architecture='qwen')
+    worker = tmp_path / 'worker'
+    worker.mkdir(exist_ok=True)
+    worker_file = gguf(worker / 'node-only.gguf', general__name='Node model', general__architecture='qwen')
+    Models(str(tmp_path / 'loadcoach.db')).put('on-compute', {'flags': {'model': worker_file}})
+
+    listing = server.get('/files?machine=compute&complete=1')
+    assert listing.status_code == 200
+    assert 'href="/files?machine=compute" aria-current="page">Compute</a>' in listing.text
+    table = listing.text.split('id="files-node-table"', 1)[1].split('</table>', 1)[0]
+    assert worker_file in table and 'Node model' in table and 'front-only.gguf' not in table
+    assert 'href="/models/on-compute?node=compute"' in table
+    assert 'href="/file?' not in table
+    assert 'hx-get="/files?part=list&amp;machine=compute"' in listing.text
+    part = server.get('/files?part=list&machine=compute').text
+    assert 'id="files-node" hx-swap-oob="true"' in part and worker_file in part
+    assert 'id="files-models"' not in part
+    shell = server.get('/files?machine=compute').text
+    assert 'machine=compute' in shell and 'part=page' in shell
+
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        try:
+            page.goto('http://console.test/files')
+            page.get_by_role('link', name='Compute', exact=True).click()
+            playwright.expect(page.locator('nav[aria-label="File location"] [aria-current="page"]')).to_have_text('Compute')
+            playwright.expect(page.locator('#files-node-table')).to_contain_text(worker_file)
+            assert 'front-only.gguf' not in page.locator('#files-node-table').inner_text()
+            page.evaluate('window.priorFiles = document.querySelector("#files-node")')
+            page.wait_for_function('document.querySelector("#files-node") !== window.priorFiles', timeout=10000)
+            playwright.expect(page.locator('#files-node-table')).to_contain_text(worker_file)
+            page.reload()
+            playwright.expect(page.locator('nav[aria-label="File location"] [aria-current="page"]')).to_have_text('Compute')
+            assert not errors
+        finally:
+            browser.close()
+
+
+def test_compute_node_files_distinguish_empty_offline_unknown_and_forbidden(desk):
+    server, compute, _ = desk
+    sign_in(server, 'jordan')
+    empty = server.get('/files?machine=compute&complete=1')
+    assert empty.status_code == 200 and 'No model files found on this node.' in empty.text
+    assert server.get('/files?machine=missing&complete=1').status_code == 404
+    compute.off = True
+    offline = server.get('/files?machine=compute&complete=1')
+    assert offline.status_code == 200 and 'This node is offline.' in offline.text
+    assert 'No model files found on this node.' not in offline.text
+    assert 'href="/files?machine=compute" aria-current="page">Compute</a>' in offline.text
+    sign_in(server, 'pat')
+    assert server.get('/files?machine=compute').status_code == 403
+    assert server.get('/files?part=list&machine=compute').status_code == 403
 
 
 def test_offline_node_locations_are_queued_then_delivered_only_to_that_node(desk, tmp_path):
@@ -96,6 +161,9 @@ def test_front_library_promotes_without_overwriting_and_disabling_preserves_file
     promoted = browser.post('/file', data={'do': 'copy', 'path': str(source), 'to': 'llm', 'return': 'storage'})
     assert promoted.status_code == 200
     target = cache / 'llm' / source.name
+    deadline = time.monotonic() + 5
+    while not target.exists() and time.monotonic() < deadline:
+        time.sleep(.01)
     assert source.read_bytes() == target.read_bytes() == original
     repeated = browser.post('/file', data={'do': 'copy', 'path': str(source), 'to': 'llm', 'return': 'storage'})
     assert 'already exists' in repeated.text and target.read_bytes() == original
@@ -107,6 +175,123 @@ def test_front_library_promotes_without_overwriting_and_disabling_preserves_file
     disabled = browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '', 'models_storage_folder': ''})
     assert disabled.status_code == 200 and browser.get('/files').status_code == 200
     assert source.read_bytes() == target.read_bytes() == original
+
+
+@pytest.mark.parametrize('action', ['copy', 'move'])
+def test_front_promotion_returns_before_copy_finishes_and_prevents_conflicting_actions(desk, tmp_path, monkeypatch, action):
+    from turnstile.artifacts import carry
+    browser, compute, _ = desk
+    sign_in(browser, 'jordan')
+    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
+    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
+                                              'models_storage_folder': str(storage)})
+    source = Path(gguf(storage / 'llm' / 'slow.gguf', general__architecture='qwen'))
+    original = source.read_bytes()
+    started, release = threading.Event(), threading.Event()
+
+    def slow_copy(source, target, progress):
+        progress['done'] = 1
+        started.set()
+        if not release.wait(5):
+            raise OSError('Copy was not released by the test.')
+        carry(source, target, progress)
+
+    monkeypatch.setattr('turnstile.artifacts.carry', slow_copy)
+    form = {'do': action, 'path': str(source), 'to': 'llm', 'return': 'storage'}
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(browser.post, '/file', data=form, follow_redirects=False)
+        try:
+            assert started.wait(2)
+            response = pending.result(timeout=1)
+            assert response.status_code == 303 and 'tier=storage' in response.headers['location']
+            inventory = browser.get('/files?tier=storage&complete=1').text
+            assert ('copying' if action == 'copy' else 'moving') + ' to llm' in inventory
+            assert 'Promote to cache' not in inventory
+            assert not (cache / 'llm' / source.name).exists() and source.is_file()
+            repeated = browser.post('/file', data=form)
+            assert repeated.status_code == 400 and 'already being copied or moved' in repeated.text
+            deleted = browser.post('/file', data={**form, 'do': 'delete', 'name': source.name})
+            assert deleted.status_code == 400 and source.is_file()
+            cleanup = browser.post('/files', data={'do': 'clear-cache'})
+            assert 'Wait for active front file transfers' in cleanup.text
+        finally:
+            release.set()
+    deadline = time.monotonic() + 5
+    while compute.front.state.front_files.tasks and time.monotonic() < deadline:
+        time.sleep(.01)
+    assert (cache / 'llm' / source.name).read_bytes() == original
+    assert source.exists() == (action == 'copy')
+    if action == 'copy':
+        assert source.read_bytes() == original
+        assert 'In cache' in browser.get('/files?tier=storage&complete=1').text
+
+
+def test_storage_promote_button_shows_progress_then_cached(desk, tmp_path, monkeypatch):
+    from turnstile.artifacts import carry
+    server, compute, _ = desk
+    compute.off = True
+    sign_in(server, 'jordan')
+    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
+    server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
+                                             'models_storage_folder': str(storage)})
+    source = Path(gguf(storage / 'llm' / 'browser.gguf', general__architecture='qwen'))
+    release = threading.Event()
+
+    def slow_copy(source, target, progress):
+        if not release.wait(15):
+            raise OSError('Copy was not released by the browser test.')
+        carry(source, target, progress)
+
+    monkeypatch.setattr('turnstile.artifacts.carry', slow_copy)
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        try:
+            page.goto('http://console.test/files?tier=storage')
+            page.get_by_role('button', name='Promote to cache', exact=True).click()
+            playwright.expect(page.get_by_role('button', name='Copying…', exact=True)).to_be_disabled()
+            assert 'The form could not be submitted' not in page.content()
+            assert source.is_file() and not (cache / 'llm' / source.name).exists()
+            release.set()
+            playwright.expect(page.locator('#files-storage-table')).to_contain_text('In cache', timeout=10000)
+            assert source.read_bytes() == (cache / 'llm' / source.name).read_bytes()
+            assert not errors
+        finally:
+            release.set()
+            browser.close()
+
+
+def test_front_promotion_failure_is_visible_and_can_be_retried(desk, tmp_path, monkeypatch):
+    from turnstile.artifacts import carry
+    browser, compute, _ = desk
+    compute.off = True
+    sign_in(browser, 'jordan')
+    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
+    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
+                                              'models_storage_folder': str(storage)})
+    source = Path(gguf(storage / 'llm' / 'retry.gguf', general__architecture='qwen'))
+    def refused(*args):
+        raise OSError('Cache drive refused the copy.')
+    monkeypatch.setattr('turnstile.artifacts.carry', refused)
+    form = {'do': 'copy', 'path': str(source), 'to': 'llm', 'return': 'storage'}
+    response = browser.post('/file', data=form)
+    assert response.status_code == 200
+    deadline = time.monotonic() + 5
+    while compute.front.state.front_files.tasks and time.monotonic() < deadline:
+        time.sleep(.01)
+    listing = browser.get('/files?tier=storage&complete=1').text
+    assert 'Cache drive refused the copy.' in listing and 'Promote to cache' in listing
+    assert source.is_file() and not (cache / 'llm' / source.name).exists()
+    assert 'Cache drive refused the copy.' in browser.get('/file', params={'path': str(source)}).text
+    monkeypatch.setattr('turnstile.artifacts.carry', carry)
+    assert browser.post('/file', data=form).status_code == 200
+    deadline = time.monotonic() + 5
+    while compute.front.state.front_files.tasks and time.monotonic() < deadline:
+        time.sleep(.01)
+    listing = browser.get('/files?tier=storage&complete=1').text
+    assert 'In cache' in listing and 'Cache drive refused the copy.' not in listing
+    assert (cache / 'llm' / source.name).read_bytes() == source.read_bytes()
 
 
 def test_queued_node_paths_recheck_permissions_before_delivery(desk, tmp_path):
@@ -274,6 +459,7 @@ def test_offline_storage_setup_and_model_list_spacing_in_browser(desk, tmp_path,
         assert not page.get_by_text('No model-file locations are available yet.', exact=False).count()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.goto('http://console.test/models')
+        playwright.expect(page.locator('#models-table')).to_be_visible()
         listing = page.locator('#models').bounding_box()
         addition = page.locator('#add-model').bounding_box()
         assert addition['y'] - listing['y'] - listing['height'] >= 15

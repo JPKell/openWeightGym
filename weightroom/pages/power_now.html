@@ -1,3 +1,4 @@
+{% from "parts.html" import alert %}
 {# What is known about compute's power: whether it sleeps by itself, and any sleep, restart or switching off
    that is on its way. While one is, this asks for itself again every 3 seconds, so the count of requests
    still to finish is true. Otherwise it stays as it is, so that a tick box on the page is not unticked. #}
@@ -5,14 +6,14 @@
 <div id="power-now" {% if power.pending %}hx-get="/machine?part=power" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
   {% if power.pending %}
   {% set doing = {"sleep": "go to sleep", "reboot": "restart", "off": "switch off"}[power.pending.action] %}
-  <form method="post" action="/machine/power/cancel" class="alert alert-warning d-flex flex-wrap align-items-center gap-2">
+  {% call alert('warning', class_='d-flex flex-wrap align-items-center gap-2', tag='form', attrs={'method': 'post', 'action': '/machine/power/cancel'}) %}
     <span class="flex-grow-1"><b>Compute will {{ doing }}</b>, asked by {{ power.pending.by }} at {{ power.pending.since|timestamp }}.
     {% if power.pending.forced %}Without waiting.{% elif power.pending.waiting_for %}Waiting for {{ power.pending.waiting_for }} request{{ "" if power.pending.waiting_for == 1 else "s" }} at the compute service to finish.{% else %}No requests remain on the compute node.{% endif %}</span>
     {% if power.may %}<button class="btn btn-outline-secondary btn-sm">Call it off</button>{% endif %}
-  </form>
+  {% endcall %}
   {% endif %}
   {% if power.failed %}
-  <div class="alert alert-danger">Compute could not {{ {"sleep": "go to sleep", "reboot": "restart", "off": "switch off"}[power.failed.action] }} at {{ power.failed.at|timestamp }}. systemd said: {{ power.failed.said or "nothing" }}</div>
+  {% call alert('danger') %}Compute could not {{ {"sleep": "go to sleep", "reboot": "restart", "off": "switch off"}[power.failed.action] }} at {{ power.failed.at|timestamp }}. systemd said: {{ power.failed.said or "nothing" }}{% endcall %}
   {% endif %}
   <p class="{{ 'mb-3' if power.may else 'mb-0' }}">
     {% if power.sleep_after %}Compute puts itself to sleep after {{ power.sleep_after|round|int }} minutes with nothing using it.{% else %}Compute never goes to sleep by itself.{% endif %}

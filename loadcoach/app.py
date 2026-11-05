@@ -42,6 +42,7 @@ from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from loadcoach.web import diagnostic_page
 from starlette.routing import Route
 
 from db import DatabaseRegistry, local_path, schema_version
@@ -2319,7 +2320,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         # No key needed to load it. The page holds no secrets, and every request it sends
         # goes through `forward` like any other caller's.
         """Serve the static API exerciser; its requests still require authentication."""
-        return FileResponse(TEST_PAGE)
+        return diagnostic_page(TEST_PAGE)
 
     async def forget_old_entries() -> None:
         """Once a day, drop log entries older than the configuration keeps them."""

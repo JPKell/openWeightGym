@@ -173,7 +173,7 @@ def test_offline_navigation_reuses_metadata_without_retrying_workers(metadata_fr
     browser = TestClient(build_weightroom(WeightRoomSettings(compute='http://compute', key=own,
         data=str(tmp_path / 'web')), door(front.app, 8442)))
     browser.cookies.set('weightroom', key)
-    for path in ('/guide', '/account/appearance', '/status', '/status?part=status', '/status?part=requests',
+    for path in ('/docs/web-app', '/account/appearance', '/status', '/status?part=status', '/status?part=requests',
                  '/chat', '/models', '/compute-nodes', '/settings', '/benchmarks/runs',
                  '/usage?part=report', '/requests?part=page', '/log?part=page'):
         response = browser.get(path)

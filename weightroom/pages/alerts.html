@@ -1,4 +1,5 @@
 {% extends "frame.html" %}
+{% from "navigation_parts.html" import pager %}
 {% from "parts.html" import card, page_header, section_title %}
 {% block title %}Alerts · openWeightGym{% endblock %}
 {% block main %}
@@ -32,6 +33,6 @@
 <div class="small text-break">{{ alert.recovery }}</div>
 {% if alert.acknowledged_at %}<div class="small">Acknowledged by {{ alert.acknowledged_by }} at {{ alert.acknowledged_at|timestamp }}.</div>{% endif %}
 </article>{% else %}<p class="text-secondary mb-0">No closed episodes.</p>{% endfor %}
-<nav class="d-flex gap-3 mt-2" aria-label="Alert history pages">{% if history_page > 1 %}<a href="/alerts?page={{ history_page-1 }}">Previous</a>{% endif %}<span class="small text-secondary">Page {{ history_page }}</span>{% if more_history %}<a href="/alerts?page={{ history_page+1 }}">Next</a>{% endif %}</nav>
+{{ pager('/alerts?page=' ~ (history_page - 1) if history_page > 1 else none, '/alerts?page=' ~ (history_page + 1) if more_history else none, 'Page ' ~ history_page, label='Alert history pages') }}
 {% endcall %}
 {% endblock %}

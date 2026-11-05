@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, section_title , confirm_check, confirm_loss %}
+{% from "parts.html" import card, said_box, swaps, section_title , confirm_check, confirm_loss, alert %}
 {% from "parts.html" import page_header, form_section, more %}
 {% block title %}Cloud APIs · openWeightGym{% endblock %}
 {% block main %}
@@ -25,7 +25,7 @@
       </div>
       <div class="col-md-3"><button class="btn btn-primary" type="submit">{{ "Update API key" if service.key else "Install API key" }}</button></div>
     </form>
-    {% if service.ceiling and left <= 0 %}<div class="alert alert-danger">It has cost what it may in a day. Its models are refused until that falls again.</div>{% endif %}
+    {% if service.ceiling and left <= 0 %}{% call alert('danger') %}It has cost what it may in a day. Its models are refused until that falls again.{% endcall %}{% endif %}
 
     <form method="post" action="/cloud-apis" class="row g-3 align-items-end mb-4" {{ swaps() }}>
       <input type="hidden" name="name" value="{{ service.name }}">
@@ -71,7 +71,7 @@
 
     {% if asked == service.name %}
     <div id="offers" class="mt-4">
-      {% if why %}<div class="alert alert-danger">{{ why }}</div>{% else %}
+      {% if why %}{% call alert('danger') %}{{ why }}{% endcall %}{% else %}
       {% set _section_title2 %}What {{ service.name }} says it has{% endset %}
 {{ section_title(_section_title2) }}
       <p class="text-secondary">Tick the ones to offer here. Each is added under the service's own name for it, which can be changed above afterwards.</p>

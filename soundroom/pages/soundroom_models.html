@@ -1,14 +1,14 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, form_section, more, hardware, card, section_title , empty_row %}
+{% from "parts.html" import page_header, form_section, more, hardware, card, section_title , empty_row, alert %}
 {% from "model_form.html" import number %}
 {% block title %}Audio models · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/static/model-settings.js?v=2" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/soundroom-static/models.js?v=4" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/soundroom-static/models.js?v=4" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom-models">
 <p><a href="/models?kind=audio">Audio models</a></p>
   {{ page_header('Audio model settings', 'Choose model files, hardware and output defaults for the selected node.') }}
 <form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3"><div><label for="am-node" class="form-label">Compute node</label><select id="am-node" name="node" class="form-select form-select-sm"><option value="compute">compute</option></select></div><button class="btn-sm btn btn-outline-secondary">Browse node files</button></form>
-  <div id="am-message" class="alert alert-danger" role="alert" hidden></div>
+  {% call alert('danger', role='alert', attrs={'id': 'am-message', 'hidden': ''}) %}{% endcall %}
   <p id="am-runtime" class="text-secondary"></p>
   {% call card("Add a model", header_id="am-heading") %}
     <form id="am-form" class="row g-3">

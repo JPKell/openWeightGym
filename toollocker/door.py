@@ -37,7 +37,8 @@ import typer
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.responses import JSONResponse, Response
+from loadcoach.web import diagnostic_page
 from starlette.routing import Route
 
 from loadcoach.app import TRACE
@@ -349,7 +350,7 @@ def build_app(config: Config) -> Starlette:
         # No key needed to load it. The page holds no secrets, and every message it sends
         # goes through `mcp` like any harness's.
         """Serve the static MCP exerciser without granting access to any tool."""
-        return FileResponse(TEST_PAGE)
+        return diagnostic_page(TEST_PAGE)
 
     async def in_step() -> None:
         """Every few seconds, take on what was changed in the settings on the site, and say what the door runs with. See loadcoach/settings.py."""

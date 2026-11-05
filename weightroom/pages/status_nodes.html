@@ -1,4 +1,4 @@
-{% from "parts.html" import section_title %}
+{% from "parts.html" import section_title, empty_row %}
 <div class="row g-3 mb-4">
   <div class="col-md-6">
     {{ section_title("Compute capacity", class_="text-secondary") }}
@@ -63,10 +63,10 @@
                 <td>{{ model.cards|join(' + ') or 'CPU' }}</td>
                 <td>{% if model.mib %}{{ model.mib|sum|memory_mib }} VRAM{% elif model.cards %}the whole card{{ 's' if model.cards|length > 1 }}{% endif %}{% if model.rss_mib is defined and model.rss_mib is not none %}{% if model.cards %}<br>{% endif %}{{ model.rss_mib|memory_mib }} RSS{% elif not model.cards %}RSS unavailable{% endif %}</td>
                 <td class="text-end">{% if 'unload' in person.can %}<form method="post" action="/control" class="m-0"><input type="hidden" name="model" value="{{ model.model }}"><input type="hidden" name="machine" value="{{ node.name }}"><button class="btn btn-link btn-sm p-0" name="do" value="{{ 'unlock-model' if model.locked else 'lock-model' }}" aria-label="{{ 'Unlock' if model.locked else 'Lock' }} {{ model.model }} on {{ node.name }}">{{ 'Unlock' if model.locked else 'Lock' }}</button></form>{% else %}{{ 'Locked' if model.locked else 'Unlocked' }}{% endif %}</td></tr>
-              {% else %}<tr><td colspan="4" class="text-secondary">No models are loaded.</td></tr>{% endfor %}
-            {% else %}<tr><td colspan="4" class="text-secondary">Loaded models unavailable.</td></tr>{% endif %}
+              {% else %}{% call empty_row(4) %}No models are loaded.{% endcall %}{% endfor %}
+            {% else %}{% call empty_row(4) %}Loaded models unavailable.{% endcall %}{% endif %}
           </tbody>
-          {% else %}<tbody><tr><td colspan="4" class="text-secondary">No compute nodes have reported to front yet.</td></tr></tbody>{% endfor %}
+          {% else %}<tbody>{% call empty_row(4) %}No compute nodes have reported to front yet.{% endcall %}</tbody>{% endfor %}
         </table>
       </div>
       {% if seen %}<div class="list-group-item small">{% if seen.lock %}Primary compute GPUs are held by <b>{{ seen.lock.user }}</b> from {{ seen.lock.caller }}, {{ seen.lock.seconds_left|round|int }} s left{{ ", turning others away" if seen.lock.refuse }}.{% else %}<span class="text-secondary">No GPUs are reserved exclusively on the primary compute node.</span>{% endif %}</div>{% endif %}

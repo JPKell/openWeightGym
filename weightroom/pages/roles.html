@@ -1,5 +1,6 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, swaps, card, section_title , confirm_check, confirm_loss %}
+{% from "navigation_parts.html" import pills, pill_link %}
+{% from "parts.html" import said_box, swaps, card, section_title , confirm_check, confirm_loss, alert %}
 {% from "parts.html" import page_header, form_section, more %}
 {% block title %}Roles · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/role-preferences.js?v=1" defer></script>{% endblock %}
@@ -22,7 +23,7 @@
 </div>
 <p class="small text-secondary">The <code>:fast</code> estimate uses 60 seconds to load and 10 output tokens/s when measurements are missing. A resident or warm model has no estimated load cost. Its reuse weighting is a preference, not a reduction in measured seconds. Prompt processing and queue wait are not included, so this is a comparison estimate, not a response-time guarantee. The previews below use your permissions and current model state; an actual request also checks its context, images, tools and sensitivity requirements.</p>
 </details>
-{% if publication_warning %}<p class="alert alert-warning">{{ publication_warning }}</p>{% endif %}
+{% if publication_warning %}{% call alert('warning', tag='p') %}{{ publication_warning }}{% endcall %}{% endif %}
 
 <form method="post" action="/roles" class="row g-2 align-items-end mb-3" {{ swaps() }}>
 {% call form_section('Add a role') %}
@@ -39,9 +40,9 @@
 {% endcall %}
 </form>
 
-{% if names %}<nav class="nav nav-pills gap-1 mb-3" aria-label="Roles">
-  {% for name in names %}<a class="nav-link {{ 'active' if name == role.name }}" {{ 'aria-current=page' if name == role.name }} href="/roles?role={{ name|urlencode }}" {{ swaps(push=true) }}>{{ name }}</a>{% endfor %}
-</nav>{% endif %}
+{% if names %}{% call pills('Roles') %}
+  {% for name in names %}{{ pill_link(name, '/roles?role=' ~ (name|urlencode), name == role.name, target='page-content') }}{% endfor %}
+{% endcall %}{% endif %}
 
 {% if role %}
 {% set _card_title1 %}{{ role.name }} <small class="text-secondary fw-normal">{{ role.order|length }} model{{ "" if role.order|length == 1 else "s" }}</small>{% endset %}

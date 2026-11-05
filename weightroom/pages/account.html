@@ -1,8 +1,8 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, card, page_header , confirm_loss %}
+{% from "parts.html" import said_box, card, page_header , confirm_loss, empty_row %}
 {% block title %}Account · openWeightGym{% endblock %}
 {% block main %}
-{{ page_header("Account", lead="Manage your password, sign-in security and API keys.", help="/guide#api") }}
+{{ page_header("Account", lead="Manage your password, sign-in security and API keys.", help="/docs/web-app/api-keys") }}
 {{ said_box(said, failed) }}
 <dl class="row facts mb-4">
   <dt class="col-5 col-md-2">Name</dt><dd class="col-7 col-md-4">{{ me.name }}</dd>
@@ -46,7 +46,7 @@
       <td class="text-end"><form method="post" action="/account/keys/{{ key.id }}/remove" class="m-0"><button  class="btn btn-outline-danger btn-sm" {{ confirm_loss() }}>Remove</button></form></td>
     </tr>
     {% else %}
-    <tr><td colspan="4" class="text-secondary">No keys.</td></tr>
+    {% call empty_row(4) %}No keys.{% endcall %}
     {% endfor %}
     </tbody>
   </table>

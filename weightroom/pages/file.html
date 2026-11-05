@@ -1,14 +1,15 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, page_header, section_title , confirm_loss %}
+{% from "parts.html" import said_box, page_header, section_title , confirm_loss, alert %}
 {% set name = file.path.rsplit("/", 1)[-1] %}
 {% block title %}{{ name }} · openWeightGym{% endblock %}
 {% block main %}
 <nav class="mb-2"><a href="/files">Files</a></nav>
 {{ page_header(name, lead="Inspect this file and the models that use it.") }}
 {{ said_box(said, failed) }}
+{% if file.transfer_failure %}{% call alert('danger', role='alert') %}Transfer failed: {{ file.transfer_failure }}{% endcall %}{% endif %}
 
 <dl class="row facts mb-4">
-  <dt class="col-4 col-md-2">Place</dt><dd class="col-8 col-md-4">{{ file.place }}{% if file.tier %} · {{ file.tier }}{% endif %}{% if file.moving %} <span class="badge text-bg-primary">{{ "copying" if file.moving.copy else "moving" }} to {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}</dd>
+  <dt class="col-4 col-md-2">Place</dt><dd class="col-8 col-md-4">{{ file.place }}{% if file.tier %} · {{ file.tier }}{% endif %}{% if file.moving %} <span class="badge text-bg-primary">{{ "copying" if file.moving.get('copy') else "moving" }} to {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}</dd>
   <dt class="col-4 col-md-2">Size</dt><dd class="col-8 col-md-4">{{ file.size|size }}</dd>
   <dt class="col-4 col-md-2">Used by</dt><dd class="col-8 col-md-4">{% for model in file.used_by %}<a href="{{ address(model) }}">{{ model }}</a>{{ ", " if not loop.last }}{% else %}no model. <a href="/models?file={{ file.path|urlencode }}&trained={{ file.facts.trained_context or '' if file.facts else '' }}">Add it</a>{% endfor %}</dd>
   <dt class="col-4 col-md-2">Last used</dt><dd class="col-8 col-md-4">{{ file.last_used|timestamp if file.last_used else "never" }}</dd>
@@ -86,7 +87,7 @@
 
 {{ section_title("Move") }}
 {% if file.moving %}
-<p>It is being moved to {{ file.moving.to }} now.</p>
+<p>It is being {{ 'copied' if file.moving.get('copy') else 'moved' }} to {{ file.moving.to }} now.</p>
 {% else %}
 {# One row of buttons, a place on each. Which button was pressed says where to: it is sent as `to`. #}
 <form method="post" action="/file" class="d-flex flex-wrap gap-2 mb-2">

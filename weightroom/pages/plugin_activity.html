@@ -1,13 +1,13 @@
 {% extends "frame.html" %}
 {% block title %}Plugin logs · openWeightGym{% endblock %}
-{% from "parts.html" import card, swaps, page_header %}
+{% from "parts.html" import card, swaps, page_header, empty_row %}
 {% block main %}
 {% call page_header("Plugin logs", lead="Inspect retained plugin requests and activity.") %}{% if "front-manage-plugins" in person.can %}<a href="/plugins">Manage plugins</a>{% endif %}{% endcall %}
 {% call card("Plugin logs", true, 'plugin-logs') %}
 <div id="plugin-logs">
 <form method="get" action="/plugins/activity" class="d-flex gap-2 align-items-center mb-2" {{ swaps('plugin-logs', true) }} data-auto-submit><label for="plugin-limit">Results per page</label><select id="plugin-limit" name="limit" class="form-select form-select-sm w-auto">{% for n in paging.sizes %}<option value="{{ n }}" {{ 'selected' if n == paging.limit }}>{{ n }}</option>{% endfor %}</select><noscript><button class="btn btn-primary btn-sm">Show</button></noscript></form>
 <div class="table-responsive"><table class="table table-sm table-hover"><thead><tr><th>When</th><th>User</th><th>Model</th><th>Plugin</th><th>Instance / profile</th><th>Outcome</th></tr></thead><tbody>
-{% for use in uses %}<tr><td>{{ use.at|timestamp }}</td><td>{{ use.user }}</td><td><code>{{ use.model }}</code></td><td>{{ use.plugin }}</td><td>{{ use.instance }} / {{ use.profile }}</td><td>{{ use.outcome }}</td></tr>{% else %}<tr><td colspan="6" class="text-secondary">No plugin uses yet.</td></tr>{% endfor %}
+{% for use in uses %}<tr><td>{{ use.at|timestamp }}</td><td>{{ use.user }}</td><td><code>{{ use.model }}</code></td><td>{{ use.plugin }}</td><td>{{ use.instance }} / {{ use.profile }}</td><td>{{ use.outcome }}</td></tr>{% else %}{% call empty_row(6) %}No plugin uses yet.{% endcall %}{% endfor %}
 </tbody></table></div>
 {% with target='plugin-logs' %}{% include 'pagination.html' %}{% endwith %}
 </div>

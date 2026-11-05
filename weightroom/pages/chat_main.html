@@ -1,5 +1,5 @@
 {# Shared prompt controls are used by the composer and Ask again. #}
-{% from "parts.html" import said_box, page_header , confirm_two %}
+{% from "parts.html" import said_box, page_header , confirm_two, alert %}
 {% set last_model = ((talk.messages|selectattr('model', 'defined')|list|last or {}).model if talk else '') %}
 {% macro model_choice(chosen, compact=false) %}
 <select name="model" class="form-select{{ ' form-select-sm' if compact }}" aria-label="Model" data-chat-setting data-chat-model-picker{{ ' disabled' if not models }}>
@@ -16,7 +16,7 @@
 {% endif %}
 </div>
 {% endmacro %}
-{% if not models %}<div class="alert alert-info" role="status" id="chat-no-models">No models are available to your account. Ask your administrator to grant model access.</div>{% endif %}
+{% if not models %}{% call alert('info', role='status', attrs={'id': 'chat-no-models'}) %}No models are available to your account. Ask your administrator to grant model access.{% endcall %}{% endif %}
 
 {% macro options(prefix, retry=false) %}
 {% set edited = typed_in.tuning %}
@@ -69,7 +69,7 @@
 
 {% if not talk %}
 <div class="chat-new">
-  {{ page_header("New conversation", lead="Talk with your permitted models and keep your conversations.", help="/guide#chat") }}
+  {{ page_header("New conversation", lead="Talk with your permitted models and keep your conversations.", help="/docs/web-app/chat") }}
   {{ said_box(said, true) }}
   <form method="post" action="/chat" data-chat-form class="composer-box frame">
     <textarea aria-label="Message" name="content" rows="3" class="form-control border-0 shadow-none" placeholder="Ask something" data-enter required autofocus>{{ typed_in.content or "" }}</textarea>
@@ -83,7 +83,7 @@
 
 {% else %}
 {% set _page_title2 %}<span data-conversation-heading>{{ talk.title }}</span>{% if talk.temporary %} <span class="badge text-bg-secondary">temporary</span>{% endif %}{% endset %}
-{{ page_header(_page_title2, lead="Talk with your permitted models and keep your conversations.", help="/guide#chat") }}
+{{ page_header(_page_title2, lead="Talk with your permitted models and keep your conversations.", help="/docs/web-app/chat") }}
 {{ said_box(said, true) }}
 
 {% if talk.memory and not talk.compare %}
@@ -128,7 +128,7 @@
     {% if message.left_out %}<p class="text-secondary small">{{ message.left_out }} earlier messages were left out of what the model was sent, so that it fitted. The first two exchanges and the latest are always sent.</p>{% endif %}
     {% with answer = message, live = false %}{% include "chat_answer.html" %}{% endwith %}
     {% if message.summarized %}<p class="text-warning small">Used a summary of {{ message.summarized }} older messages.</p>{% endif %}
-    {% if message.error %}<div class="alert alert-danger said">{{ message.error }}{% if "context size" in message.error %} Try a shorter message or a model with a larger context.{% endif %}</div>{% endif %}
+    {% if message.error %}{% call alert('danger', class_='said') %}{{ message.error }}{% if "context size" in message.error %} Try a shorter message or a model with a larger context.{% endif %}{% endcall %}{% endif %}
     {% if not message.error and message.content and message.finish != "stop" %}<p class="text-secondary small">This answer ended before it was finished.</p>{% endif %}
     <div class="turn-facts">
       {# Asked for under a role, the answer says which model was picked. Why is told when the pointer rests on it. #}

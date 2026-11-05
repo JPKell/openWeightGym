@@ -2,7 +2,7 @@
 {% from "parts.html" import card, said_box, swaps, page_header, form_section, more, hardware, section_title , confirm_check, confirm_loss %}
 {% block title %}{{ model.name }} · openWeightGym{% endblock %}
 {% block main_attributes %}data-card-scope="model"{% endblock %}
-{% block scripts %}<script src="/static/model-settings.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/model-settings.js?v=3" defer></script>{% endblock %}
 {% block main %}
 <nav class="mb-2"><a href="/models">Models</a></nav>
 {% call page_header(model.name, 'Configure this model and review its availability across nodes.') %}{% include "model_state.html" %}{% endcall %}

@@ -8,8 +8,8 @@
   <thead><tr><th>Asked for as</th><th>Picks</th><th>In this fit</th><th>Because</th></tr></thead>
   <tbody>
   {% for role in roles %}
-  <tr class="table-active"><td colspan="4"><a href="/roles"><b>{{ role.name }}</b></a> <small class="text-secondary">in order:
-    {% for name in role.order %}{{ name }}{{ " ✓" if name in on }}{{ ", " if not loop.last }}{% else %}no model with a weight above 0{% endfor %}</small></td></tr>
+  <tr class="table-active"><th colspan="4" scope="rowgroup" class="fw-normal"><a href="/roles"><b>{{ role.name }}</b></a> <small class="text-secondary">in order:
+    {% for name in role.order %}{{ name }}{{ " ✓" if name in on }}{{ ", " if not loop.last }}{% else %}no model with a weight above 0{% endfor %}</small></th></tr>
   {% for asked, picked in role.picks.items() %}
   <tr><td><code>{{ asked }}</code></td>
     {% if picked %}<td><a href="{{ address(picked[0]) }}">{{ picked[0] }}</a></td><td>{% if picked[0] in on %}loaded{% else %}<span class="text-warning-emphasis">has to be loaded</span>{% endif %}</td><td>{{ picked[1] }}</td>

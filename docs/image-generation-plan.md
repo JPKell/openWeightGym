@@ -202,7 +202,7 @@ The source igen installation and its user data remain intact. Visual quality acc
 
 ### Review 2026-10-24
 
-Operator guide: System docs → Mirror Wall (images) (`weightroom/pages/docs_mirrorwall.html`): the workflow diagram, a models table with each model's parts, sizes and measured peaks, adding a model, and reference-image rules.
+Operator guide: Docs → Modules → Mirror Wall (`weightroom/pages/docs/modules/mirrorwall.html`): the workflow diagram, a models table with each model's parts, sizes and measured peaks, adding a model, and reference-image rules.
 
 - Fixed: an SDXL checkpoint was launched with `--diffusion-model`, which loads its tensors under the diffusion prefix, so its built-in CLIP and VAE could not load; a checkpoint without separate CLIP files now uses `--model`. SDXL uses only its first reference as the start image, yet accepted two: its limit is now one, and a profile asking for more is refused. SDXL strength had no control on the Images page.
 - Fixed: a reference smaller than the reference size on a model without an upscaler, too many references and a mask without a reference all failed only after the job was queued; front now refuses them at once, and the Images page says why before Generate.

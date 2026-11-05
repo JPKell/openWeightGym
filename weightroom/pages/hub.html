@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, swaps, section_title %}
+{% from "parts.html" import said_box, swaps, section_title, empty_row %}
 {% from "parts.html" import page_header, form_section %}
 {% block title %}HuggingFace · openWeightGym{% endblock %}
 {% block main %}
@@ -35,7 +35,7 @@
       <td>{% if row.here %}<span class="badge text-bg-secondary">in {{ row.here }}</span>{% endif %}</td>
     </tr>
     {% else %}
-    <tr><td colspan="4" class="text-secondary">This repository holds no .gguf file.</td></tr>
+    {% call empty_row(4) %}This repository holds no .gguf file.{% endcall %}
     {% endfor %}
     </tbody>
   </table>
@@ -64,7 +64,7 @@
     <td data-value="{{ one.downloads }}">{{ one.downloads }}</td><td data-value="{{ one.likes }}">{{ one.likes }}</td><td>{{ one.made }}</td>
   </tr>
   {% else %}
-  <tr><td colspan="4" class="text-secondary">Nothing found for those words.</td></tr>
+  {% call empty_row(4) %}Nothing found for those words.{% endcall %}
   {% endfor %}
   </tbody>
 </table>

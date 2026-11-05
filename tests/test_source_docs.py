@@ -29,18 +29,18 @@ def test_toollocker_setup_guide_is_available_without_compute_and_stays_private(d
     browser, switch, _ = desk
     sign_in(browser, 'jordan')
     switch.off = True
-    assert 'href="/docs/toollocker"' in browser.get('/tools').text
-    response = browser.get('/docs/toollocker')
+    assert 'href="/docs/modules/toollocker"' in browser.get('/tools').text
+    response = browser.get('/docs/modules/toollocker')
     assert response.status_code == 200
     for anchor in ('requirements', 'install-toollocker-on-front', 'verify-the-connection', 'add-a-python-tool', 'troubleshooting'):
         assert f'href="#{anchor}"' in response.text and f'id="{anchor}"' in response.text
     for instruction in ('front_settings', 'toollocker_url', 'enable --now toollocker.service', 'example__greet'):
         assert instruction in response.text
     sign_in(browser, 'pat')
-    guide = browser.get('/guide').text
+    guide = browser.get('/docs/web-app/tools').text
     assert 'id="tools"' in guide and 'http://testserver:8443/mcp' in guide
-    assert 'href="/docs/toollocker"' not in guide
-    assert browser.get('/docs/toollocker').status_code == 403
+    assert 'href="/docs/modules/toollocker"' not in guide
+    assert browser.get('/docs/modules/toollocker').status_code == 403
 
 
 def test_reference_parses_without_importing_and_invalidates_on_edit(tmp_path, monkeypatch):
@@ -76,12 +76,16 @@ def test_source_docs_require_admin_and_reject_unknown_files(desk):
     browser, _, _ = desk
     sign_in(browser, 'pat')
     assert browser.get('/docs/loadcoach?module=loadcoach/users.py').status_code == 403
+    assert browser.get('/docs/modules/loadcoach?module=loadcoach/users.py').status_code == 403
     sign_in(browser, 'jordan')
-    response = browser.get('/docs/accounts?module=loadcoach/users.py')
+    moved = browser.get('/docs/accounts?module=loadcoach/users.py', follow_redirects=False)  # a link from before the docs had sections
+    assert moved.status_code == 308 and moved.headers['location'] == '/docs/system/accounts?module=loadcoach/users.py'
+    response = browser.get('/docs/system/accounts?module=loadcoach/users.py')
     assert response.status_code == 200
     assert 'Users.sign_in' in response.text and 'deliberately slow, salted hash' in response.text
     assert response.headers['cache-control'] == 'no-store'
-    assert browser.get('/docs/accounts?module=../../.env').status_code == 404
+    assert browser.get('/docs/system/accounts?module=../../.env').status_code == 404
+    assert browser.get('/docs/system/nope').status_code == 404 and browser.get('/docs/nope/models').status_code == 404
 
 
 def test_docstring_html_is_escaped(desk, monkeypatch):
@@ -90,13 +94,13 @@ def test_docstring_html_is_escaped(desk, monkeypatch):
     sign_in(browser, 'jordan')
     monkeypatch.setattr('weightroom.app.source_reference', lambda *args: {
         'files': ('example.py',), 'module': {'path': 'example.py', 'doc': '<script>bad()</script>',
-            'definitions': [{'name': 'example', 'line': 1, 'kind': 'def', 'signature': '()', 'doc': '<img onerror="bad()">'}]},
-        'api': [{'path': 'example.py', 'rows': [{'method': 'GET', 'path': '/<script>bad()</script>',
-            'summary': '<img onerror="bad()">', 'headers': ['<script>bad()</script>']}]}]})
-    text = browser.get('/docs/accounts?module=example.py').text
+            'definitions': [{'name': 'example', 'line': 1, 'kind': 'def', 'signature': '()', 'doc': '<img onerror="bad()">'}]}})
+    monkeypatch.setattr('weightroom.app.api_reference', lambda *args: [{'path': 'example.py', 'rows': [{'method': 'GET', 'path': '/<script>bad()</script>',
+            'summary': '<img onerror="bad()">', 'headers': ['<script>bad()</script>']}]}])
+    text = browser.get('/docs/system/accounts?module=example.py').text
     assert '&lt;script&gt;bad()&lt;/script&gt;' in text
     assert '<img onerror="bad()">' not in text
-    api = browser.get('/docs/api').text
+    api = browser.get('/docs/api/custom').text
     assert '&lt;script&gt;bad()&lt;/script&gt;' in api
     assert '<script>bad()</script>' not in api and '<img onerror="bad()">' not in api
 
@@ -117,7 +121,7 @@ def test_identity_portability_reference_and_backup_guidance_are_admin_only(desk)
     """Offline credential tools have source guidance, never a raw-credential web route."""
     browser, _, _ = desk
     sign_in(browser, 'jordan')
-    response = browser.get('/docs/accounts?module=loadcoach/identity_bundle.py')
+    response = browser.get('/docs/system/accounts?module=loadcoach/identity_bundle.py')
     assert response.status_code == 200
     assert 'restore' in response.text and 'AES-256-GCM' in response.text
     response = browser.get('/backups')
@@ -125,7 +129,7 @@ def test_identity_portability_reference_and_backup_guidance_are_admin_only(desk)
     assert 'suite-identity' in response.text
     sign_in(browser, 'pat')
     assert browser.get('/backups').status_code == 403
-    assert browser.get('/docs/accounts?module=loadcoach/identity_bundle.py').status_code == 403
+    assert browser.get('/docs/system/accounts?module=loadcoach/identity_bundle.py').status_code == 403
 
 
 def test_api_inventory_reads_routes_without_execution_and_tracks_edits(tmp_path, monkeypatch):
@@ -162,8 +166,9 @@ def test_api_page_lists_compatibility_gaps_custom_routes_and_scoped_headers(desk
     assert browser.get('/docs/api').status_code == 403
     sign_in(browser, 'jordan')
     assert 'href="/docs/api"' in browser.get('/docs').text
-    response = browser.get('/docs/api')
-    assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+    pages = [browser.get('/docs/api' + part) for part in ('', '/openai', '/custom', '/headers')]
+    assert all(page.status_code == 200 and page.headers['cache-control'] == 'no-store' for page in pages)
+    response = type('Pages', (), {'text': ''.join(page.text for page in pages)})
     for text in ('Implemented OpenAI endpoints', 'Not implemented by openWeightGym', '/v1/chat/completions',
                  '/v1/responses', 'backend-dependent passthrough', 'purpose=batch',
                  '/v1/audio/generations', '/v1/audio/diarizations', '/turnstile/models/install',
@@ -171,8 +176,8 @@ def test_api_page_lists_compatibility_gaps_custom_routes_and_scoped_headers(desk
                  'X-LoadCoach-Require-Model-ID', 'X-LoadCoach-Task', 'X-ToolLocker-Sets', 'X-Twilio-Signature',
                  'X-Suite-Application', 'X-Suite-Session-Mode', 'Idempotency-Key'):
         assert text in response.text, text
-    assert browser.get('/docs/api?module=../../settings/voice.toml').status_code == 404
-    assert browser.get('/docs/api?module=turnstile/app.py').status_code == 200
+    assert browser.get('/docs/api/source?module=../../settings/voice.toml').status_code == 404
+    assert browser.get('/docs/api/source?module=turnstile/app.py').status_code == 200
     assert system_docs.api_headers('loadcoach/app.py', '/loadcoach/settings', 'GET') == ()
     assert 'X-LoadCoach-Lock' in system_docs.api_headers('loadcoach/app.py', '/loadcoach/facts', 'GET')
     assert 'X-LoadCoach-Task' in system_docs.api_headers('loadcoach/tasks.py', '/loadcoach/tasks/{number}/probe', 'POST')

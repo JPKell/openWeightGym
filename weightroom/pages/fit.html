@@ -1,15 +1,16 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box %}
+{% from "navigation_parts.html" import pills, pill_link, pill_button %}
+{% from "parts.html" import card, said_box, empty_row %}
 {% from "parts.html" import page_header, form_section, more %}
 {% block title %}Dry fit · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/fit.js?v=3" defer></script>{% endblock %}
 {% block main %}
 {{ page_header('Dry fit', 'Explore how model selections fit on the selected node without loading them.') }}
 {{ said_box(said, failed) }}
-<nav class="nav nav-pills mb-3" aria-label="Compute node">
-  {% for name in nodes %}<a class="nav-link{{ ' active' if name == machine }}" href="/dry-fit?machine={{ name|urlencode }}"{{ ' aria-current="page"' if name == machine }}>{{ name }}</a>{% endfor %}
-</nav>
-<nav class="nav nav-pills gap-2 mb-3" aria-label="Model type">{% for kind,label in [('llm','LLM'),('audio','Audio'),('image','Image')] %}<button type="button" class="nav-link{{ ' active' if kind=='llm' }}" data-fit-kind="{{ kind }}" aria-pressed="{{ 'true' if kind=='llm' else 'false' }}">{{ label }}</button>{% endfor %}</nav>
+{% call pills('Compute node', class_='mb-3') %}
+  {% for name in nodes %}{{ pill_link(name, '/dry-fit?machine=' ~ (name|urlencode), name == machine) }}{% endfor %}
+{% endcall %}
+{% call pills('Model type', class_='gap-2 mb-3', buttons=true) %}{% for kind,label in [('llm','LLM'),('audio','Audio'),('image','Image')] %}{{ pill_button(label, kind == 'llm', attrs={'data-fit-kind': kind}) }}{% endfor %}{% endcall %}
 <div class="form-check form-switch mb-3">
   <input id="fit-auto" class="form-check-input" type="checkbox" role="switch">
   <label for="fit-auto" class="form-check-label">Auto fit <small class="text-secondary">Adjust context to fit selected models.</small></label>
@@ -87,7 +88,7 @@
     <td>{% for role in roles if model.name in role.order %}{{ role.name }} <small class="text-secondary">{{ role.order.index(model.name) + 1 }}</small>{{ ", " if not loop.last }}{% endfor %}</td>
   </tr>
   {% else %}
-  <tr><td colspan="{{ known.cards|length + 4 }}" class="text-secondary">No models yet.</td></tr>
+  {% call empty_row((known.cards|length + 4)) %}No models yet.{% endcall %}
   {% endfor %}
   </tbody>
 </table>

@@ -1,37 +1,144 @@
-"""Admin documentation and a cached source reference, read without importing services."""
+"""The documentation's sections and topics, and a cached source reference, read without importing services.
+
+The docs are seven sections, each with an overview and topics of its own. A topic's page shows what is
+written for it, as a template in pages/docs/SECTION/TOPIC.html, sections of a Markdown file in the
+repository (so that the web and the repository say the same thing), or both, and then the code
+reference for its modules when it has some. Only the Web app section is open to every account.
+"""
 
 import ast
+import posixpath
 import re
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
+
+from markupsafe import Markup
+
+from weightroom import doc_markdown
 
 ROOT = Path(__file__).resolve().parents[1]
 
-TOPICS = (
-    ("api", "API reference", ("OpenAI compatibility", "Unsupported APIs", "Custom endpoints", "Request headers")),
-    ("weightroom", "WeightRoom", ("Web console", "Chat and conversations", "Administration", "Accessibility and appearance")),
-    ("turnstile", "Turnstile", ("Authentication and authorization", "Request routing", "Machine placement", "Wake and recovery")),
-    ("loadcoach", "LoadCoach", ("Model admission and scheduling", "GPU residency", "Inference APIs", "Request lifecycle")),
-    ("toollocker", "ToolLocker", ("Tool catalogue", "MCP transport", "Permissions", "Execution and results")),
-    ("voice", "Voice", ("Voice gateway", "Desktop app", "Web streams", "Recognition and synthesis", "Greetings and administration")),
-    ("spotter", "Spotter", ("Machine telemetry", "Service health", "Alerts", "Power controls")),
-    ("hosted-providers", "Hosted providers", ("Provider configuration", "Credentials", "Routing and limits", "Costs and allowances")),
-    ("plugins", "Plugins", ("Plugin contract", "Adapters", "Installation", "Activity and errors")),
-    ("logs", "Logs", ("Request records", "Captured content", "System and plugin logs", "Reliability evidence")),
-    ("models", "Models", ("Files and metadata", "Configuration and presets", "Roles and selection", "Projectors and embeddings")),
-    ("mirrorwall", "Mirror Wall (images)", ("How an image is made", "Models and their parts", "Adding a model", "Reference images")),
-    ("benchmarks", "Benchmarks", ("Suites and cases", "Runs and results", "Scoring and qualification", "Schedules")),
-    ("data", "Data and backups", ("Databases and ownership", "Backups and restore", "Retention and migrations")),
-    ("accounts", "Accounts and groups", ("Users and groups", "API keys and sessions", "Permissions and sensitivity")),
-    ("collections", "Collections and workflows", ("Document collections", "Retrieval", "Prompt versions", "Workflow state")),
-    ("operations", "Deployment and operations", ("Topology", "Installation and deployment", "Configuration", "Health and recovery")),
-)
 
-BY_SLUG = {slug: {"slug": slug, "title": title, "headings": headings} for slug, title, headings in TOPICS}
-# Topics whose guide is a Markdown file in the repository, shown on the topic's page so that the
-# web and the repository say the same thing. The rest are written as templates: docs_SLUG.html.
-WRITTEN_DOCS = {"toollocker": "toollocker/README.md"}
-LINKS = [(title, "/docs/" + slug) for slug, title, _ in TOPICS]
+def _topic(slug: str, title: str, summary: str, source: str | None = None, doc: str | None = None, parts: tuple[str, ...] = ()) -> dict:
+    """One topic: `source` names its code reference in SOURCES, `doc` a Markdown file and `parts` the `## ` sections of it to show (all when empty)."""
+    return {"slug": slug, "title": title, "summary": summary, "source": source, "doc": doc, "parts": parts}
+
+
+def _section(slug: str, title: str, summary: str, topics: tuple[dict, ...], public: bool = False) -> dict:
+    """One section and its topics, each given its address. System reference is the docs' front page, at /docs."""
+    url = "/docs" if slug == "system" else "/docs/" + slug
+    topics = tuple(topic | {"url": f"/docs/{slug}/{topic['slug']}"} for topic in topics)
+    return {"slug": slug, "title": title, "summary": summary, "url": url, "public": public,
+            "topics": topics, "by_slug": {topic["slug"]: topic for topic in topics}}
+
+
+BENCHMARK_GUIDE = "benchmarks/README.md"
+SECTIONS = (
+    _section("system", "System reference", "How openWeightGym's parts fit together: which machine runs what, how a request travels between them, and the ideas every part shares.", (
+        _topic("models", "Models", "Model files and their metadata, configuration and presets, the roles that stand in for a model's name, and projectors and embedding models.", source="models"),
+        _topic("accounts", "Accounts and groups", "Users and groups, API keys and sessions, and the abilities and sensitivity levels that decide what each account may do.", source="accounts"),
+        _topic("logs", "Logs", "Request records, what is kept of captured content, system and plugin logs, and the reliability evidence built from them.", source="logs"),
+        _topic("hosted-providers", "Hosted providers", "Model services elsewhere whose models are offered here: their configuration, credentials, routing and limits, and costs and allowances.", source="hosted-providers"),
+    )),
+    _section("api", "API reference", "The model API that OpenAI-compatible clients use, openWeightGym's own endpoints, and the headers both accept.", (
+        _topic("openai", "OpenAI compatibility", "Which OpenAI endpoints openWeightGym implements and their limits, and which it does not implement."),
+        _topic("custom", "Custom endpoints", "openWeightGym's own endpoints, read from the route declarations in the source as it is now."),
+        _topic("headers", "Headers", "The request headers that change how work is admitted, traced and logged, and the headers that responses carry."),
+        _topic("source", "Code reference", "The modules that declare the API's routes, with each handler's documentation.", source="api"),
+    )),
+    _section("web-app", "Web app", "Using the web console: chat, collections, workflows, voice and media, tools, and your API keys.", (
+        _topic("chat", "Chat", "Start a conversation, choose its model and change its options."),
+        _topic("collections", "Collections", "Keep private sources and ask questions answered from them."),
+        _topic("workflows", "Workflows", "Run research and drafting as repeatable steps you review."),
+        _topic("voice", "Voice and media", "Talk with a model by voice, and make images, music, sounds and speech."),
+        _topic("tools", "Tools", "Give an MCP client or agent the tools your account may use."),
+        _topic("api-keys", "API keys", "Create a key and connect an OpenAI-compatible client to the model API."),
+    ), public=True),
+    _section("modules", "Modules", "The programs openWeightGym is made of: what each one does, where it runs, and its code.", (
+        _topic("weightroom", "WeightRoom", "The web console on front: its pages, chat, collections and workflows, administration and the benchmark worker.", source="weightroom"),
+        _topic("turnstile", "Turnstile", "Front's door: it signs callers in, checks what they may do, and sends each request to the machine that should do the work, waking it when needed.", source="turnstile"),
+        _topic("loadcoach", "LoadCoach", "Runs on each worker: admits and schedules work, keeps models resident on its GPUs, and serves inference.", source="loadcoach"),
+        _topic("toollocker", "ToolLocker", "The MCP gateway on front: which tools exist, who may use them, and how they run.", source="toollocker", doc="toollocker/README.md"),
+        _topic("voice", "Voice", "The voice gateway on front and the speech service on compute: clients, recognition and synthesis.", source="voice", doc="voice/README.md"),
+        _topic("spotter", "Spotter", "Runs on each host: telemetry, service health, and the service and power controls front may use.", source="spotter"),
+        _topic("plugins", "Plugins", "Adapters that offer external agents and services as models at the same /v1 address.", source="plugins", doc="plugins/README.md"),
+        _topic("mirrorwall", "Mirror Wall", "Image generation with stable-diffusion.cpp: how an image is made, the models and their parts, and adding one.", source="mirrorwall"),
+        _topic("soundroom", "SoundRoom", "Music, sounds, speech and transcription with audio models, and each person's private audio library on front.", source="soundroom"),
+    )),
+    _section("benchmarks", "Benchmarks", "How models are measured: what a run does, what each benchmark tests, how scores are kept, and how the benchmark worker is run.", (
+        _topic("runs", "How a run works", "From choosing a model to a saved result.", doc=BENCHMARK_GUIDE, parts=("From a selected model to a result",)),
+        _topic("measures", "What is measured", "Each benchmark: what it tests, how it is scored and what its score does not show.", doc=BENCHMARK_GUIDE,
+               parts=("What the benchmarks measure", "Tool use and recovery (P4)", "General conversation probe (Part 4, milestone 101)",
+                      "Multi-turn consistency (Part 6, milestone 102)", "Extraction and retrieval answer room (2026-10-16)",
+                      "Paired JSON and schema (Part 7, milestone 103)", "Expanded tool use (Part 8, milestone 104)")),
+        _topic("scores", "Scores and results", "The benchmark pages, how scores are calculated, and what makes two results comparable.", doc=BENCHMARK_GUIDE, parts=("Pages, scores and result identity",)),
+        _topic("operation", "Files and operation", "Ports, endpoints, files and the day-to-day running of the benchmark worker.", doc=BENCHMARK_GUIDE, parts=("Key ports and endpoints", "Files and operation")),
+        _topic("source", "Code reference", "The benchmark package: plans, the queue, suites and scoring.", source="benchmarks"),
+    )),
+    _section("data", "Data and backups", "Where openWeightGym keeps its data, which program owns each store, and how to back it up, restore it and move it to another database engine.", (
+        _topic("stores", "Stores and ownership", "Each database, the machine it lives on and the programs that write it."),
+        _topic("backups", "Backups and restore", "Recovery sets from both machines, what they leave out, and keeping identities through a reinstall."),
+        _topic("engines", "SQLite and PostgreSQL", "The two database engines, and moving a store from one to the other."),
+        _topic("source", "Code reference", "The shared storage layer, backups and database administration.", source="data"),
+    )),
+    _section("operations", "Deployment and operations", "Installing openWeightGym, where each part runs, its settings, and deploying updates from front.", (
+        _topic("installation", "Installation", "The installer, one machine or several, adding a GPU node, the owg command, and uninstalling.", doc="docs/installation.md"),
+        _topic("topology", "Where things run", "Which programs run on front and which on each worker, and what happens while a worker is away.", doc="docs/README.md", parts=("Where things run",)),
+        _topic("settings", "Settings", "Where settings come from, model file places, and what is kept private.", doc="docs/README.md", parts=("Settings, data and privacy",)),
+        _topic("deploying", "Deploying from front", "Deploying from front's checkout to every machine, and serving the console over HTTPS on the LAN.", doc="docs/operations.md",
+               parts=("Deploying from front", "Console over HTTPS on the LAN")),
+        _topic("source", "Code reference", "Install and deploy scripts, and the settings code.", source="operations"),
+    )),
+)
+BY_SLUG = {section["slug"]: section for section in SECTIONS}
+# Where each topic lived before the docs had sections, so that old links and bookmarks still arrive.
+MOVED = {"weightroom": "/docs/modules/weightroom", "turnstile": "/docs/modules/turnstile", "loadcoach": "/docs/modules/loadcoach",
+         "toollocker": "/docs/modules/toollocker", "voice": "/docs/modules/voice", "spotter": "/docs/modules/spotter",
+         "plugins": "/docs/modules/plugins", "mirrorwall": "/docs/modules/mirrorwall", "collections": "/docs/web-app/collections",
+         "models": "/docs/system/models", "accounts": "/docs/system/accounts", "logs": "/docs/system/logs",
+         "hosted-providers": "/docs/system/hosted-providers"}
+# A link in a Markdown file to another file that the docs show goes to that page; whole files go to their topic.
+# A file shown only in parts goes to the section showing them.
+DOC_PAGES = {topic["doc"]: section["url"] for section in SECTIONS for topic in section["topics"] if topic["doc"]}
+DOC_PAGES |= {topic["doc"]: topic["url"] for section in SECTIONS for topic in section["topics"] if topic["doc"] and not topic["parts"]}
+
+
+def visible(can) -> tuple[dict, ...]:
+    """The sections this account may read: all of them with manage-settings, otherwise the Web app alone."""
+    return tuple(section for section in SECTIONS if section["public"] or "manage-settings" in can)
+
+
+def _links(source: str):
+    """How links in the Markdown file `source` are shown on the web: other repository files become their docs page or plain text."""
+    folder = posixpath.dirname(source)
+
+    def resolve(href: str) -> str | None:
+        """The link's new address, or None to show only its text."""
+        if not href or href.startswith(("#", "/")) or urlsplit(href).scheme:
+            return href
+        return DOC_PAGES.get(posixpath.normpath(posixpath.join(folder, href.split("#", 1)[0])))
+    return resolve
+
+
+@lru_cache(maxsize=32)
+def _written(relative: str, modified: int, size: int) -> dict:
+    """One Markdown file made into a document, cached for its current revision."""
+    return doc_markdown.document((ROOT / relative).read_text(encoding="utf-8"), links=_links(relative))
+
+
+def written(topic: dict) -> dict | None:
+    """What the repository has written for a topic: the whole Markdown file, or only the sections it names."""
+    if not topic.get("doc"):
+        return None
+    stat = (ROOT / topic["doc"]).stat()
+    found = _written(topic["doc"], stat.st_mtime_ns, stat.st_size)
+    if not topic["parts"]:
+        return found
+    sections = [section for section in found["sections"] if section["title"] in topic["parts"]]
+    return {"title": found["title"], "overview": Markup(""), "sections": sections,
+            "contents": [(section["id"], section["title"]) for section in sections]}
+
 
 # Fixed source ownership keeps query parameters from becoming arbitrary file reads.
 SOURCES = {
@@ -40,7 +147,7 @@ SOURCES = {
             "turnstile/allowances.py", "turnstile/tasks.py", "turnstile/settings.py", "turnstile/hosted.py",
             "soundroom/front.py", "mirrorwall/front.py", "plugins/_turnstile.py", "plugins/_runtime.py",
             "voice/gateway.py", "voice/service.py", "spotter/app.py", "toollocker/door.py"),
-    "weightroom": ("weightroom",), "turnstile": ("turnstile",),
+    "weightroom": ("weightroom",), "turnstile": ("turnstile",), "soundroom": ("soundroom",),
     "loadcoach": ("loadcoach",), "toollocker": ("toollocker",),
     "voice": ("voice",), "spotter": ("spotter",), "plugins": ("plugins",),
     "benchmarks": ("benchmarks",), "data": ("db", "loadcoach/backups.py", "loadcoach/database_admin.py"),
@@ -50,7 +157,6 @@ SOURCES = {
     "mirrorwall": ("mirrorwall", "engines/sdcpp"),
     "models": ("engines", "mirrorwall", "soundroom", "loadcoach/models.py", "loadcoach/model_setup.py", "loadcoach/roles.py", "loadcoach/files.py", "loadcoach/hub.py"),
     "accounts": ("loadcoach/identity_bundle.py", "loadcoach/users.py", "loadcoach/groups.py", "loadcoach/statement.py", "turnstile/accounts.py"),
-    "collections": ("weightroom/knowledge.py", "weightroom/knowledge_store.py", "weightroom/workflows.py", "weightroom/workflow_store.py"),
     "operations": ("scripts", "weightroom/deploy.py", "loadcoach/config.py", "loadcoach/settings.py"),
 }
 

@@ -1,4 +1,4 @@
-{% from "parts.html" import section_title %}
+{% from "parts.html" import section_title, alert %}
 {% if answer.answers is defined %}
 <div class="chat-comparison">
   {% for one in answer.answers %}
@@ -6,7 +6,7 @@
     {% set _section_title1 %}{{ one.model }}{% if one.done %} <span class="text-secondary small">Finished</span>{% endif %}{% endset %}
 {{ section_title(_section_title1) }}
     {% with answer=one, live=not one.done %}{% include "chat_answer.html" %}{% endwith %}
-    {% if one.error %}<div class="alert alert-danger said">{{ one.error }}</div>{% endif %}
+    {% if one.error %}{% call alert('danger', class_='said') %}{{ one.error }}{% endcall %}{% endif %}
   </div>
   {% endfor %}
 </div>

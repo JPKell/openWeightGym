@@ -1,10 +1,10 @@
-{% from "parts.html" import empty_row %}
+{% from "parts.html" import empty_row, more %}
 {% call card('Read-only machine values', false, 'machine-values') %}
 <p class="form-hint">These values come from each service's TOML file.</p>
 <div class="table-responsive"><table class="table table-sm sortable" aria-label="Read-only machine values" data-empty-message="No read-only values reported by this node."><thead><tr><th>Service</th><th>Setting</th><th>Value</th></tr></thead><tbody>
 {% set reported = namespace(count=0) %}
 {% for program in programs|sort(attribute='program') %}{% for setting in program.settings|sort(attribute='name') if setting.when == 'file' %}
-{% set reported.count = reported.count + 1 %}<tr><td>{{ program.program }}</td><th class="fw-normal"><code>{{ setting.name }}</code></th><td class="wrap">{% set text = setting.value|written %}{% if text|length > 90 %}<details class="more"><summary>{{ text|truncate(90, true) }} · show</summary><pre class="setting-value mb-0">{{ text }}</pre></details>{% else %}<code>{{ text }}</code>{% endif %}</td></tr>
+{% set reported.count = reported.count + 1 %}<tr><td>{{ program.program }}</td><th class="fw-normal"><code>{{ setting.name }}</code></th><td class="wrap">{% set text = setting.value|written %}{% if text|length > 90 %}{% call more((text|truncate(90, true)) ~ ' · show') %}<pre class="setting-value mb-0">{{ text }}</pre>{% endcall %}{% else %}<code>{{ text }}</code>{% endif %}</td></tr>
 {% endfor %}{% endfor %}
 {% if not reported.count %}{{ empty_row(3, "No read-only values reported by this node.") }}{% endif %}
 </tbody></table></div>
