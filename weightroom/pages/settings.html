@@ -21,7 +21,7 @@
     <input type="hidden" name="file_machine" value="{{ file_machine }}">
     <div class="col-md-6"><label class="form-label" for="models-folder">Active cache path</label><input id="models-folder" name="models_folder" class="form-control font-monospace" value="{{ typed_in.models_folder if typed_in.models_folder is defined else file_locations.models_folder }}"><div class="form-text">Contains llm, encoders, adapters, projectors, image and audio. {{ 'Optional on front; empty disables the cache.' if file_machine == 'front' else 'A restart applies changes.' }}</div></div>
     <div class="col-md-6"><label class="form-label" for="models-storage-folder">Storage library path</label><input id="models-storage-folder" name="models_storage_folder" class="form-control font-monospace" value="{{ typed_in.models_storage_folder if typed_in.models_storage_folder is defined else file_locations.models_storage_folder }}"><div class="form-text">The complete library used to refill cache. Empty disables it.</div></div>
-    <div class="col-12"><button class="btn btn-primary ">Save file locations</button></div>
+    <div class="col-12"><button class="btn btn-primary">Save file locations</button></div>
   </form>{% endif %}
 {% endcall %}
 

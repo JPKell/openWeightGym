@@ -17,9 +17,11 @@ class PassiveReads:
     """Carry a page's no-wake read policy through its internal worker lookups."""
 
     def __init__(self, app, current):
+        """Wrap an ASGI app; `current` is the context variable that holds the no-wake flag."""
         self.app, self.current = app, current
 
     async def __call__(self, scope, receive, send):
+        """Mark a GET that asks for no wake while it runs, and clear the mark after."""
         headers = dict(scope.get("headers", []))
         token = self.current.set(scope["type"] == "http" and scope["method"] == "GET"
                                  and b"x-turnstile-no-wake" in headers)

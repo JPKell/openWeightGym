@@ -45,13 +45,13 @@
 {% call card("Set up a new machine", attrs={"aria-labelledby": "setup-heading"}, header_id="setup-heading") %}
     <p class="small text-secondary">For a fresh machine with Python 3.13 or newer, rsync and front's ssh key in its <code>authorized_keys</code>; accept its host key from front once first (<code>ssh HOST true</code>). The machine is added to <code>[deploy.nodes]</code> in front's settings, the code is copied and <code>scripts/install-suite.sh</code> makes its environment, settings and units with SQLite stores. New settings are not started: review them on the machine (front's address, <code>machine_name</code>, the machine key), add it to <code>[machines]</code> here, then use Restart services.</p>
     <form method="post" action="/deploy" class="row g-2 align-items-end" {{ confirm_two() }}>
-      <div class="col-sm-6 col-lg-2"><label class="form-label small" for="setup-name">Name</label><input id="setup-name" name="name" required pattern="[a-z0-9_-]{1,40}" class="form-control " placeholder="rig"></div>
-      <div class="col-sm-6 col-lg-3"><label class="form-label small" for="setup-ssh">ssh destination</label><input id="setup-ssh" name="ssh" required class="form-control " placeholder="jpk@10.77.10.90"></div>
-      <div class="col-sm-6 col-lg-2"><label class="form-label small" for="setup-folder">Folder under home</label><input id="setup-folder" name="folder" required value="openWeightGym" class="form-control "></div>
+      <div class="col-sm-6 col-lg-2"><label class="form-label small" for="setup-name">Name</label><input id="setup-name" name="name" required pattern="[a-z0-9_-]{1,40}" class="form-control" placeholder="rig"></div>
+      <div class="col-sm-6 col-lg-3"><label class="form-label small" for="setup-ssh">ssh destination</label><input id="setup-ssh" name="ssh" required class="form-control" placeholder="jpk@10.77.10.90"></div>
+      <div class="col-sm-6 col-lg-2"><label class="form-label small" for="setup-folder">Folder under home</label><input id="setup-folder" name="folder" required value="openWeightGym" class="form-control"></div>
       <fieldset class="col-sm-6 col-lg-3"><legend class="form-label small mb-1">Services</legend>
         {% for service in setup_services %}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" id="setup-{{ service }}" name="services" value="{{ service }}" {{ 'checked' if service in ('loadcoach', 'spotter') }}><label class="form-check-label small" for="setup-{{ service }}">{{ service }}</label></div>{% endfor %}
       </fieldset>
-      <div class="col-12"><button class="btn btn-success " name="do" value="add" {{ 'disabled' if busy or source.missing }}>Add and set up</button></div>
+      <div class="col-12"><button class="btn btn-success" name="do" value="add" {{ 'disabled' if busy or source.missing }}>Add and set up</button></div>
     </form>
   {% endcall %}
 

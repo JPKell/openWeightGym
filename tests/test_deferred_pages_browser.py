@@ -39,7 +39,8 @@ def test_usage_appears_after_navigation_and_retries_a_failed_report(deferred_con
         page.get_by_role('button', name='By model', exact=True).click()
         playwright.expect(page.locator('#usage-chart-heading')).to_contain_text('by model')
         page.set_viewport_size({'width': 390, 'height': 844})
-        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        # The chart redraws from a ResizeObserver after the next layout, so the page fits once that has run.
+        page.wait_for_function('document.documentElement.scrollWidth <= innerWidth')
         assert not errors
         browser.close()
 

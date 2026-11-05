@@ -24,8 +24,8 @@
   <div class="col-lg-4">
     {% call card("", class_="h-100") %}
       <form method="post" action="/backups/retention" class="row g-2 align-items-end">
-        <div class="col"><label for="retention" class="form-label small mb-1">Recovery sets to keep on each machine</label><input id="retention" name="retention" type="number" min="0" max="100" step="1" value="{{ retention }}" class="form-control "></div>
-        <div class="col-auto"><button class="btn btn-outline-primary ">Save</button></div>
+        <div class="col"><label for="retention" class="form-label small mb-1">Recovery sets to keep on each machine</label><input id="retention" name="retention" type="number" min="0" max="100" step="1" value="{{ retention }}" class="form-control"></div>
+        <div class="col-auto"><button class="btn btn-outline-primary">Save</button></div>
       </form>
       <div class="small text-secondary mt-1">Zero keeps every set. Rotation follows a successful backup.</div>
     {% endcall %}

@@ -7,6 +7,7 @@ from starlette.responses import HTMLResponse
 
 
 def diagnostic_page(template: Path) -> HTMLResponse:
+    """Render a standalone diagnostic page with the shared layout beside it in `loadcoach/pages`."""
     environment = Environment(
         loader=FileSystemLoader([template.parent, Path(__file__).with_name('pages')]),
         autoescape=select_autoescape(['html']),

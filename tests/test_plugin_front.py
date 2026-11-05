@@ -115,7 +115,7 @@ def test_adapter_models_remain_in_web_chat_when_compute_service_is_off(desk_with
         chat = browser.get('/chat').text
         assert 'hermes:gandalf' in chat and '· Plugin' in chat and 'Plugin conversation' in chat
         assert 'data-plugin-model="true"' in chat and 'Adaptor conversation' not in chat
-        page = browser.get('/models')
+        page = browser.get('/models?complete=1')  # the list is loaded after the page
         assert page.status_code == 200 and 'hermes:gandalf' in page.text and 'Adaptor' in page.text
 
 

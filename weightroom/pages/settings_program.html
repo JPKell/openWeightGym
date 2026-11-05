@@ -11,7 +11,7 @@
 {% for setting in group.programs[0].settings %}{% include 'setting_row.html' %}{% endfor %}
 {% endcall %}{% endfor %}
 {% endif %}
-<div class="col-12"{% if fragment|default(false) %} data-settings-fallback{% endif %}><button class="btn btn-primary ">Save {{ program.program }}</button></div>
+<div class="col-12"{% if fragment|default(false) %} data-settings-fallback{% endif %}><button class="btn btn-primary">Save {{ program.program }}</button></div>
 </form>
 {% endmacro %}
 {% if fragment|default(false) %}{{ settings_form() }}{% else %}

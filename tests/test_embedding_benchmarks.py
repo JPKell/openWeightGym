@@ -636,10 +636,10 @@ def test_embedder_page_cards_results_and_model_page_keep_families_separate(desk,
         assert 'vector-only' in grid and 'text-only' not in grid and 'private-vector' not in grid
         assert f'data-unit="{unit}"' in grid
         assert all(f'?benchmark={candidate}&amp;kind=embedding#node-measurements' in nodes for candidate in KINDS)
-        assert 'aria-current=page>Embedders</a>' in nodes
+        assert 'aria-current="page">Embedders</a>' in nodes
     for query in ('benchmark=embedding_speed', 'family=embedding&benchmark=embedding_speed', 'kind=embedding&benchmark=speed'):
         nodes = browser.get('/benchmarks/node-measurements?' + query).text
-        assert 'aria-current=page>Embedders</a>' in nodes
+        assert 'aria-current="page">Embedders</a>' in nodes
         assert 'kind=llm&amp;benchmark=speed' in nodes
         assert 'kind=embedding&amp;benchmark=embedding_speed' in nodes
     language = browser.get('/benchmarks/node-measurements?kind=llm&benchmark=embedding_speed').text

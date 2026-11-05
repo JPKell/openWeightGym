@@ -19,7 +19,7 @@ def test_model_type_pills_and_cache_warning_block_add(desk, tmp_path, monkeypatc
     sign_in(server,'jordan')
     def capture(route,path):
         if path == '/models?low=1':
-            response = server.get('/models?new=1')
+            response = server.get('/models?new=1&complete=1')  # the editor and its inventory, in the page itself
             text = response.text
             match = re.search(r'(<script type="application/json" id="model-file-inventory">)(.*?)(</script>)', text, re.S)
             inventory = json.loads(match[2])

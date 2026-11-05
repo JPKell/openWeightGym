@@ -118,7 +118,7 @@
       <summary class="btn btn-link btn-sm text-secondary">Edit</summary>
       <form method="post" action="/chat/{{ talk.id }}" data-chat-form class="composer-box frame mt-1">
         <textarea aria-label="Message" name="content" rows="3" class="form-control border-0 shadow-none" required>{{ message.content }}</textarea>
-        <div class="d-flex gap-2 align-items-center mt-2">{{ model_choice(last_model) }}<span class="flex-grow-1"></span><button class="btn btn-primary " name="do" value="edit">Ask this instead</button></div>
+        <div class="d-flex gap-2 align-items-center mt-2">{{ model_choice(last_model) }}<span class="flex-grow-1"></span><button class="btn btn-primary" name="do" value="edit">Ask this instead</button></div>
       </form>
     </details>
     {% endif %}

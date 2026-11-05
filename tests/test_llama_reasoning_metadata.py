@@ -127,7 +127,9 @@ def test_model_options_suggest_reported_levels_and_escape_them():
         showing={"flags": {}, "adapters": {}}, parallel={"enabled": False, "count": 2, "context": 2048},
         global_flags=[], unusable_flags=[], every={"ours": [], "flags": [], "why": ""}, known={"defaults": {}},
         part_choice=lambda *args: "", card=lambda *args, **kwargs: "", suggestions=[], selected_node="compute")
-    assert 'list="reasoning-effort-levels"' in rendered
+    effort = rendered.split('id="generation-reasoning-effort"', 1)[1].split('</select>', 1)[0]
+    assert '<option value="brief">Brief</option>' in effort and '<option value="high">High</option>' in effort  # reported levels join the usual ones
+    assert '&lt;future&gt;' in effort and '<future>' not in effort
     rendered = environment.get_template("model_reasoning.html").render(
         model={"chat_template_caps": {"reasoning_effort_levels": ["brief", "<future>"]}}, selected_node="compute")
     assert '<option value="brief">' in rendered

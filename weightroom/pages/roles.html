@@ -70,7 +70,7 @@
         {% for model in picks[role.name].models %}
         <tr>
           <td>{{ model.name }}<input type="hidden" name="model" value="{{ model.name }}"></td>
-          <td style="max-width: 6rem"><input name="weight" class="form-control " type="number" min="0" step="any" value="{{ model.weight }}" aria-label="weight of {{ model.name }}" inputmode="decimal"></td>
+          <td style="max-width: 6rem"><input name="weight" class="form-control" type="number" min="0" step="any" value="{{ model.weight }}" aria-label="weight of {{ model.name }}" inputmode="decimal"></td>
           <td>{{ model.score|round(3) }}{% if model.quality is not none %}<small class="d-block">Quality {{ (model.quality * 100)|round(1) }}%</small>{% endif %}
             <small class="d-block">Reliability ×{{ model.reliability.factor|round(3) }} · {{ model.reliability.state }} · <a href="/reliability?model={{ model.name|urlencode }}&amp;role={{ role.name|urlencode }}">report</a></small>
             {% if model.loaded_factor is defined %}<small class="d-block">Loaded ×{{ model.loaded_factor|round(3) }} · ordinary-role score {{ model.routing_score|round(3) }}</small>
@@ -91,16 +91,16 @@
         {% for model, weight in role.models.items() if weight == 0 %}
         <tr class="text-secondary">
           <td>{{ model }}<input type="hidden" name="model" value="{{ model }}"></td>
-          <td style="max-width: 6rem"><input name="weight" class="form-control " type="number" min="0" step="any" value="0" aria-label="weight of {{ model }}" inputmode="decimal"></td>
+          <td style="max-width: 6rem"><input name="weight" class="form-control" type="number" min="0" step="any" value="0" aria-label="weight of {{ model }}" inputmode="decimal"></td>
           <td colspan="5">left out: its weight is 0</td>
         </tr>
         {% endfor %}
         <tr>
-          <td><select name="model" class="form-select " aria-label="another model">
+          <td><select name="model" class="form-select" aria-label="another model">
             <option value="">another model…</option>
             {% for model in models if model not in role.models %}<option>{{ model }}</option>{% endfor %}
           </select></td>
-          <td style="max-width: 6rem"><input name="weight" class="form-control " type="number" min="0" step="any" value="1" aria-label="its weight" inputmode="decimal"></td>
+          <td style="max-width: 6rem"><input name="weight" class="form-control" type="number" min="0" step="any" value="1" aria-label="its weight" inputmode="decimal"></td>
           <td colspan="5" class="text-secondary">To take a model out of the role for good, empty its weight.</td>
         </tr>
         </tbody>
@@ -126,9 +126,9 @@
 {{ section_title(_section_title4) }}
       <p class="small text-secondary">These weights apply only to <strong>{{ role.name }}</strong>. Use 0 to ignore a benchmark; 3 gives it three times the influence of 1. For example, code at 3 and instructions at 1 make up 75% and 25% of the quality score. Multiplying all weights by the same factor keeps the same balance. Model weights above are a separate preference.</p>
       <div class="d-flex flex-wrap gap-2 mb-2">
-        <button type="button" class="btn btn-outline-secondary " data-benchmark-preset="{{ benchmark_presets.coding|tojson|forceescape }}">Use coding weights</button>
-        <button type="button" class="btn btn-outline-secondary " data-benchmark-preset="{{ benchmark_presets.chat|tojson|forceescape }}">Use chat weights</button>
-        <button type="button" class="btn btn-outline-secondary " data-benchmark-preset="{}">Ignore all benchmarks</button>
+        <button type="button" class="btn btn-outline-secondary" data-benchmark-preset="{{ benchmark_presets.coding|tojson|forceescape }}">Use coding weights</button>
+        <button type="button" class="btn btn-outline-secondary" data-benchmark-preset="{{ benchmark_presets.chat|tojson|forceescape }}">Use chat weights</button>
+        <button type="button" class="btn btn-outline-secondary" data-benchmark-preset="{}">Ignore all benchmarks</button>
       </div>
       <p class="small text-secondary">Editable starting points: Coding emphasizes code reading, structured answers and instruction following; Chat emphasizes instructions, recall and generation speed. They set other benchmark weights to 0 in this role. Code reading does not measure code generation or tool use. Use <strong>Save</strong> to apply changes.</p>
       <p class="small text-secondary" data-benchmark-status aria-live="polite"></p>

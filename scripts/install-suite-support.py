@@ -49,12 +49,15 @@ def repair_postgresql(root: Path) -> int:
         return 0
 
     def literal(value: str) -> str:
+        """Quote a value as an SQL string literal."""
         return "'" + value.replace("'", "''") + "'"
 
     def identifier(value: str) -> str:
+        """Quote a value as an SQL identifier."""
         return '"' + value.replace('"', '""') + '"'
 
     def admin(statement: str, operation: str) -> str:
+        """Run one statement as the local postgres superuser; a failure names the operation, never the SQL."""
         answer = subprocess.run(
             ["sudo", "-u", "postgres", "psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "postgres"],
             input="SET standard_conforming_strings=on;\n" + statement + ";\n",
@@ -98,6 +101,7 @@ def repair_postgresql(root: Path) -> int:
                         "database": database, "exists": bool(owner), "role_exists": bool(privilege)})
 
     def connects(role: str, password: str, database: str) -> bool:
+        """Whether this role and password can open the database on the local server."""
         environment = {key: value for key, value in os.environ.items() if not key.startswith("PG")}
         environment.update(PGHOST="127.0.0.1", PGPORT=str(port), PGUSER=role, PGPASSWORD=password,
                            PGDATABASE=database, PGCONNECT_TIMEOUT="5")

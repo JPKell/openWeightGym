@@ -11,7 +11,7 @@
   {% else %}{% call empty_row(4) %}No cards detected. Check the llama-server device list on compute, then restart the compute service.{% endcall %}{% endfor %}</tbody>
 </table></div>
 {% if gpu_inventory.missing_disabled %}<p class="text-secondary">Excluded cards currently missing: {{ gpu_inventory.missing_disabled|join(", ") }}. Their exclusions are kept if they return.</p>{% endif %}
-<button class="btn btn-primary ">Save GPUs</button>
+<button class="btn btn-primary">Save GPUs</button>
 </form>
 {% endif %}
 {% if resource_settings %}
@@ -20,6 +20,6 @@
 {% set program = {'program': 'loadcoach'} %}
 {% for name in ('disable_ram_offload', 'host_ram_headroom_mib', 'host_ram_limit_mib') %}{% set setting = resource_settings.get(name) %}{% if setting %}{% include 'setting_row.html' %}{% endif %}{% endfor %}
 {% endcall %}
-<div class="col-12"><button class="btn btn-primary ">Save GPU and RAM policy</button></div></form>
+<div class="col-12"><button class="btn btn-primary">Save GPU and RAM policy</button></div></form>
 {% endif %}
 {% endcall %}

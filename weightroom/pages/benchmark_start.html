@@ -6,7 +6,7 @@
 {% if section == 'runs' %}
 <form method="post" action="/benchmarks/runs" class="row g-2 align-items-end mb-4">
   <input type="hidden" name="action" value="outstanding">
-  <div class="col-md-8"><label for="outstanding-model" class="form-label">Model</label><select id="outstanding-model" name="model" class="form-select " required>
+  <div class="col-md-8"><label for="outstanding-model" class="form-label">Model</label><select id="outstanding-model" name="model" class="form-select" required>
     {% for model in models if model.capabilities is not defined or model.capabilities.native_probes is not defined or model.capabilities.native_probes %}<option value="{{ model.id }}">{{ model.id }}</option>{% endfor %}
   </select></div>
   <div class="col-md-4"><button class="btn btn-primary w-100"{% if not may_run or not models %} disabled{% endif %}>Queue outstanding benchmarks</button></div>

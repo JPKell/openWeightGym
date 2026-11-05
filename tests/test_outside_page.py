@@ -36,7 +36,7 @@ def test_the_cloud_apis_page_registers_a_service_and_its_models_are_ticked_from_
     browser.post("/cloud-apis", data={"do": "models", "name": "rented", "ours": ["big-out", ""], "theirs": ["vendor/big", ""], "in": ["2", ""], "out": ["6.5", ""]})
     assert kept.get("rented")["models"] == {"big-out": {"theirs": "vendor/big", "in": 2, "out": 6.5}}
     shown = browser.get("/cloud-apis").text
-    assert 'name="ours" class="form-control form-control-sm" value="big-out"' in shown and "1 model" in shown and "$0.00 in the last 24 hours of $1.50" in shown
+    assert 'name="ours" class="form-control" value="big-out"' in shown and "1 model" in shown and "$0.00 in the last 24 hours of $1.50" in shown
 
     browser.post("/cloud-apis", data={"do": "save", "name": "rented", "url": service, "ceiling": ""})  # the ceiling emptied: none. Its models are as they were
     assert "ceiling" not in kept.get("rented") and list(kept.get("rented")["models"]) == ["big-out"]

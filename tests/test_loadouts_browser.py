@@ -75,6 +75,8 @@ def test_dry_fit_saves_cpu_selection_reviews_loads_holds_and_undoes(loadout_desk
         page.get_by_role('button', name='Restore settings', exact=True).click()
         assert library.stored('cpu') == settings
         page.get_by_role('button', name='Delete saved set', exact=True).click()
+        page.get_by_label('Yes, delete saved set').check()  # a deletion is confirmed first
+        page.get_by_role('button', name='Continue', exact=True).click()
         playwright.expect(page.locator('#fit-saved')).to_contain_text('No saved load-outs.')
         assert not errors
         browser.close()

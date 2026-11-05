@@ -71,6 +71,8 @@ def windows() -> float | None:
         return None
 
     class LastInput(ctypes.Structure):
+        """Windows' LASTINPUTINFO: its own size, and the tick count of the last input."""
+
         _fields_ = [("size", ctypes.c_uint), ("at", ctypes.c_uint)]
 
     last = LastInput(ctypes.sizeof(LastInput))
@@ -137,6 +139,7 @@ class Wayland:
     """
 
     def __init__(self) -> None:
+        """Start with no line to the desktop; one is opened when idle time is first asked for."""
         self.listening: asyncio.Task | None = None
         self.looked = -AGAIN  # when a desktop was last looked for, on the clock that only goes forward
         self.answering: float | None = None  # when a desktop agreed to say
@@ -211,6 +214,8 @@ async def session_environment() -> dict[str, str]:
 
 
 class ScreenSaverInfo(ctypes.Structure):
+    """XScreenSaverInfo from the X screensaver extension; `idle` is milliseconds since the last input."""
+
     _fields_ = [("window", ctypes.c_ulong), ("state", ctypes.c_int), ("kind", ctypes.c_int),
                 ("til_or_since", ctypes.c_ulong), ("idle", ctypes.c_ulong), ("event_mask", ctypes.c_ulong)]  # fmt: skip
 

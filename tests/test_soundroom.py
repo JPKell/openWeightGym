@@ -380,7 +380,7 @@ def test_audio_pages_assets_sharing_and_voices_require_identity_origin_and_conse
     assert browser.get("/chat/music", follow_redirects=False).status_code == 303
     sign_in(browser, "jordan")
     for path, title in (("/chat/music", "Music"), ("/chat/sounds", "Sounds"), ("/chat/speech", "Speech"), ("/models/audio", "Audio models"),
-                        ("/account/audio", "Your own choices"), ("/system/audio", "Audio settings")):
+                        ("/account/audio", "Download format"), ("/system/audio", "Audio settings")):
         answer = browser.get(path)
         assert answer.status_code == 200 and title in answer.text, path
     assert browser.get("/soundroom-static/music.js").status_code == 200
