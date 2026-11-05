@@ -2913,10 +2913,10 @@ def downloads(caller, who, until=lambda listed: not listed):
 
 def test_model_files_are_found_at_hugging_face_brought_down_and_gone_on_with(fake_llama_server, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("loadcoach.hub.PIECE", 64)  # small pieces, so that small files come in several
-    fast, tiny, one, two = tmp_path / "fast", os.urandom(1000), os.urandom(700), os.urandom(500)
+    fast, stored, tiny, one, two = tmp_path / "fast", tmp_path / "stored", os.urandom(1000), os.urandom(700), os.urandom(500)
     there = FakeHub({"tiny-q4.gguf": tiny, "parts/big-00001-of-00002.gguf": one, "parts/big-00002-of-00002.gguf": two})
-    folder = fast / "acme--tiny-GGUF"  # a repository's files go into a folder named after it, one below the place
-    with gateway(fake_llama_server, places={"fast": str(fast)}, web=there.client()) as caller:
+    folder = stored / "acme--tiny-GGUF"  # a repository's files go into a folder named after it, one below the storage place
+    with gateway(fake_llama_server, places={"fast": str(fast), "storage_llm": str(stored)}, web=there.client()) as caller:
         admin = add_user(caller, "jordan", "admin")
         pat = add_user(caller, "pat", "plain", by=admin)
         look = lambda who=admin, **what: caller.get("/loadcoach/hub", params=what, headers=who)  # noqa: E731
@@ -2926,8 +2926,9 @@ def test_model_files_are_found_at_hugging_face_brought_down_and_gone_on_with(fak
         found, nothing = look(search="TINY").json()["found"], look(search="llama").json()["found"]
         seen = look(repository=there.repository).json()
         wrong = [look(repository="no slash").status_code, look(repository="acme/other").status_code, start("none.gguf").status_code, start("tiny-q4.gguf", place="nowhere").status_code]
+        cache = start("tiny-q4.gguf", place="fast")  # the cache is never a download's destination
 
-        # One part of a split model brings both. The place need not be named where there is only one.
+        # One part of a split model brings both. The place need not be named where there is only one storage place.
         started = start("big-00002-of-00002.gguf", "tiny-q4.gguf")
         downloads(caller, admin)
         kept = {file.name: file.read_bytes() for file in folder.iterdir()}
@@ -2951,17 +2952,31 @@ def test_model_files_are_found_at_hugging_face_brought_down_and_gone_on_with(fak
         printed = capsys.readouterr().out
 
     assert closed == [403, 403, 403] and wrong == [400, 403, 404, 400]
+    assert cache.status_code == 400 and "never the cache" in cache.json()["error"]["message"] and not (fast / "acme--tiny-GGUF").exists()
     assert found == [{"repository": "acme/tiny-GGUF", "downloads": 5, "likes": 2, "made": "2026-01-02"}] and nothing == []
     # Smallest first. The two parts are one row. Nothing but model files is listed.
     assert [(row["file"], row["parts"], row["size"], row["here"]) for row in seen["files"]] == [("tiny-q4.gguf", 1, 1000, None), ("parts/big-00001-of-00002.gguf", 2, 1200, None)]
-    assert seen["places"][0]["name"] == "fast" and seen["places"][0]["free"] > 0
-    assert started.status_code == 202 and started.json()["to"] == "fast" and started.json()["size"] == 2200
+    assert [place["name"] for place in seen["places"]] == ["storage_llm"] and seen["places"][0]["free"] > 0  # storage alone is offered
+    assert started.status_code == 202 and started.json()["to"] == "storage_llm" and started.json()["size"] == 2200
     assert kept == {"tiny-q4.gguf": tiny, "big-00001-of-00002.gguf": one, "big-00002-of-00002.gguf": two}  # whole, and no `.part` left
-    assert [row["here"] for row in after] == ["fast", "fast"] and listed["tiny-q4.gguf"] == "fast" and again.status_code == 409
+    assert [row["here"] for row in after] == ["storage_llm", "storage_llm"] and listed["tiny-q4.gguf"] == "storage_llm" and again.status_code == 409
     assert [(entry["file"], entry["repository"], entry["state"], entry["done"]) for entry in left] == [("tiny-q4.gguf", "acme/tiny-GGUF", "stopped", 300)]
     assert resumed.status_code == 202 and (folder / "tiny-q4.gguf").read_bytes() == tiny and there.asked_of("cdn.test")[-1]["range"] == "bytes=300-"
     assert whats == ["downloading"] * 3 + ["downloaded"] * 3 + ["downloading", "downloaded"]
-    assert "acme/tiny-GGUF" in printed and "big-00001-of-00002.gguf" in printed and "fast (" in printed
+    assert "acme/tiny-GGUF" in printed and "big-00001-of-00002.gguf" in printed and "storage_llm (" in printed and "fast (" not in printed
+
+
+def test_with_no_storage_place_nothing_is_downloaded_into_the_cache(fake_llama_server, tmp_path):
+    there, cache = FakeHub({"tiny-q4.gguf": os.urandom(1000)}), tmp_path / "cache"
+    cache.mkdir()
+    with gateway(fake_llama_server, places={"llm": str(cache)}, web=there.client()) as caller:
+        admin = add_user(caller, "jordan", "admin")
+        seen = caller.get("/loadcoach/hub", params={"repository": there.repository}, headers=admin).json()
+        refused = [caller.post("/loadcoach/downloads", json={"repository": there.repository, "files": ["tiny-q4.gguf"], **chosen}, headers=admin)
+                   for chosen in ({}, {"place": "llm"})]
+    assert seen["files"] and seen["places"] == []  # the files are listed, with nowhere to put them
+    assert [answer.status_code for answer in refused] == [409, 409]
+    assert all("never the cache" in answer.json()["error"]["message"] for answer in refused) and not any(cache.iterdir())
 
 
 def test_a_download_that_goes_wrong_says_why_and_one_is_stopped_and_thrown_away(fake_llama_server, tmp_path, monkeypatch, capsys):
@@ -2969,7 +2984,7 @@ def test_a_download_that_goes_wrong_says_why_and_one_is_stopped_and_thrown_away(
     fast, tiny, token = tmp_path / "fast", os.urandom(1000), tmp_path / "hub.token"
     there, target = FakeHub({"tiny-q4.gguf": tiny, "huge.gguf": b"small really"}), fast / "acme--tiny-GGUF" / "tiny-q4.gguf"
     part = target.with_name("tiny-q4.gguf.part")
-    with gateway(fake_llama_server, places={"fast": str(fast)}, hub_token_file=str(token), web=there.client()) as caller:
+    with gateway(fake_llama_server, places={"storage_llm": str(fast)}, hub_token_file=str(token), web=there.client()) as caller:
         admin = add_user(caller, "jordan", "admin")
         post = lambda what, **body: caller.post("/loadcoach/downloads" + what, json=body, headers=admin)  # noqa: E731
         start = lambda name="tiny-q4.gguf": post("", repository=there.repository, files=[name])  # noqa: E731

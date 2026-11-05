@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 
 from loadcoach import hub
-from loadcoach.config import model_places
+from loadcoach.config import NO_STORAGE, model_places, storage_places
 from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
 from loadcoach.gguf import facts, read_metadata
 from mirrorwall.assets import supported, image_asset, facts as image_facts
@@ -183,7 +183,7 @@ class FrontFiles:
                                         if all((Path(folder) / hub.folder_of(repository) / name).exists() for name in names)), None)
                     row['parts'] = len(names)
                 return response({'repository': repository, 'files': rows, 'places': [
-                    {'name': name, 'free': room(folder)['free']} for name, folder in spots.items() if Path(folder).is_dir()]})
+                    {'name': name, 'free': room(folder)['free']} for name, folder in sorted(storage_places(spots).items()) if Path(folder).is_dir()]})
             if method == 'POST' and action == 'downloads':
                 return await self.download(user, asked)
             if method == 'POST' and action in ('downloads/stop', 'downloads/discard'):
@@ -312,15 +312,18 @@ class FrontFiles:
         return httpx.Response(202, json=dict(self.cleanup))
 
     async def download(self, user, asked):
-        """Download verified public repository files into the chosen front tier."""
+        """Download verified public repository files into front storage; the cache is never a destination."""
         repository, names, place = asked.get('repository', ''), asked.get('files'), asked.get('place')
         if self.cleanup.get('state') == 'running':
             raise ValueError('Wait for cache maintenance to finish before downloading files.')
         if not isinstance(repository, str) or not hub.REPOSITORY.fullmatch(repository) or not isinstance(names, list) or not names:
             raise ValueError('Choose a repository, files and a destination.')
-        folder = self.places().get(place)
+        stored = storage_places(self.places())
+        if not stored:
+            raise ValueError(NO_STORAGE)
+        folder = stored.get(place)
         if folder is None or not Path(folder).is_dir():
-            raise ValueError('Configure a front cache or storage folder before downloading.')
+            raise ValueError('Downloads go into storage, never the cache. Choose a front storage folder that exists.')
         entries = hub.chosen(await hub.files(self.web, repository), names)
         targets = [self.path(str(Path(folder) / hub.folder_of(repository) / Path(entry['path']).name)) for entry in entries]
         if any(target.with_name(target.name + '.part').is_symlink() for target in targets):

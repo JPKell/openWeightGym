@@ -3938,7 +3938,7 @@ their older meaning. Spotter derives the same effective places, including a save
 so uploads cannot escape the selected root.
 
 `models_storage_folder` optionally adds a complete library as `storage_llm`, `storage_adapters`,
-and `storage_projectors`. Downloads list these first. `POST /loadcoach/files/copy` takes the same
+and `storage_projectors`. Downloads go only to these places. `POST /loadcoach/files/copy` takes the same
 `path` and `to` fields as move and retains the source and existing model bindings. Same-drive
 copies use a hard link; cross-drive copies check byte size, without an independent destination
 hash check. This promotes a stored file into the active cache. The setting defaults empty.
@@ -6682,7 +6682,7 @@ expired transfers never expose a model file.
 
 Until this milestone a model file reached compute by hand: found in a browser, fetched with a
 command, put in a folder. Now LoadCoach does the three steps. A search finds repositories, a
-repository lists its model files, and the ones chosen come down into a place. A file that has
+repository lists its model files, and the ones chosen come down into a storage place. A file that has
 come down is a file like any other. It is on the Files page, and it is added as a model there
 in the usual way, with a name, a context size and cards.
 
@@ -6711,7 +6711,7 @@ All need `manage-models`.
 |---|---|
 | `GET /loadcoach/hub?search=WORDS` | `found`: repositories, each with `downloads`, `likes` and the day it was `made` |
 | `GET /loadcoach/hub?repository=OWNER/NAME` | `files`: one row for each file or split model, with `size`, how many `parts`, and `here`, the place it is in already. `places`: each place and its free room |
-| `POST /loadcoach/downloads` | Body `repository`, `files`, `place`. Starts each file now and answers 202. `place` may be left out where there is only one |
+| `POST /loadcoach/downloads` | Body `repository`, `files`, `place`. Starts each file now and answers 202. `place` must be a storage place; a cache place is refused, and with no storage configured the answer is 409. It may be left out where there is only one storage place |
 | `GET /loadcoach/downloads` | Every download: `state` is `coming`, `checking`, `failed` or `stopped`, with `done` and `of` in bytes, `speed` in bytes a second, and `why` for one that failed |
 | `POST /loadcoach/downloads/stop` | Body `path`. Stops one that is coming. What came stays |
 | `POST /loadcoach/downloads/discard` | Body `path`. Throws away one that failed or was stopped, with what came of it |
@@ -6721,7 +6721,10 @@ is how a download left half done is continued, since its `.part` file says no mo
 
 ### Where a file goes, and how it comes
 
-A file comes down to `PLACE/OWNER--NAME/FILE`: a folder named after its repository, one below
+A file comes down to `PLACE/OWNER--NAME/FILE`, where `PLACE` is a storage place: downloads from
+Hugging Face and Civitai are never put in the cache, partial `.part` files included. A model
+file reaches the cache only as a copy promoted from storage for use, which cache cleanup may
+remove again. The folder is named after its repository, one below
 the place. That is as deep as the Files page looks. Hugging Face allows no `--` in a name, so
 the folder says which repository it was, and that is how an unfinished download is known
 again after a restart. A file that sits in a folder inside its repository is put straight
@@ -6801,7 +6804,7 @@ Kind `file`: `downloading`, `downloaded` with the seconds it took, `download-fai
 ```bash
 loadcoach search qwen 14b                       # repositories, the most downloaded first
 loadcoach download OWNER/NAME                   # the files of one, and the places
-loadcoach download OWNER/NAME FILE --to fast    # start it. Returns at once
+loadcoach download OWNER/NAME FILE --to storage_llm  # start it. Returns at once
 loadcoach downloads                             # how far each has got
 loadcoach downloads stop PATH                   # stop one, leaving its partial file
 loadcoach downloads resume PATH                 # continue one from its partial file
@@ -6823,7 +6826,7 @@ retry; [delivery evidence](../data/qualification/gates-2026-10-16/worker-deliver
 
 **HuggingFace** is at `/hub`, reached from the Models navigation. A box takes words or a
 repository written `OWNER/NAME`. Words give a table of repositories. A repository gives its
-files with a tick box each, a place to choose, and one button. A file that is in a place
+files with a tick box each, a storage place to choose, and one button. A file that is in a place
 already is marked and cannot be ticked.
 
 **The list of downloads** is `downloads.html`. It is on that page and on Files, and asks for

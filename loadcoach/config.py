@@ -214,6 +214,17 @@ def model_places(models_folder, places, models_storage_folder="") -> dict[str, s
     return made
 
 
+# Files from Hugging Face and Civitai are kept in the storage library alone. The active cache
+# holds only copies promoted from storage for use, which cache cleanup can remove again.
+NO_STORAGE = ("Downloads from Hugging Face and Civitai go into model storage, never the cache. "
+              "Set a model storage folder in Settings → Model file locations first.")
+
+
+def storage_places(places: dict[str, str]) -> dict[str, str]:
+    """The storage places alone: where downloads from Hugging Face and Civitai may go."""
+    return {name: folder for name, folder in places.items() if name.startswith("storage_")}
+
+
 def checked(config: Config, path) -> Config:
     """The same settings, if they make sense together. If not, SystemExit with a message that names the cause.
 

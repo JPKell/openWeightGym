@@ -64,7 +64,7 @@ from loadcoach.database_admin import catalogs as database_catalogs, dump_tools, 
 from db.health import stores_health
 from loadcoach.tasks import Tasks
 from loadcoach.capture import answer_text, request_text, said_wrong
-from loadcoach.config import Config, checked, data_folder, read_settings
+from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings, storage_places
 from loadcoach.settings import CHANGEABLE, NOW, Changes, front_programs, program_name, said, wrong_kind
 from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
 from loadcoach.gguf import facts, goes_with, read_metadata
@@ -1677,7 +1677,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """With `?search=WORDS`, the repositories at Hugging Face that match. With `?repository=OWNER/NAME`, the model files of that one.
 
         A file is listed with `here`, the place it already is in, and the parts of a split model
-        are one row. The places are listed too, each with its free room, to choose where a file goes.
+        are one row. The storage places are listed too, each with its free room, to choose where a
+        file goes: a download is never put in the cache.
         """
         if denied := lacks(user, "manage-models"):
             return denied
@@ -1698,8 +1699,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             names = [Path(part["path"]).name for part in row["parts"]]
             row["here"] = next((name for name, folder in spots.items() if all((Path(folder) / hub.folder_of(repository) / one).exists() for one in names)), None)
             row["parts"] = len(names)
-        ordered = sorted(spots.items(), key=lambda one: (not one[0].startswith("storage_"), one[0]))
-        return JSONResponse({"repository": repository, "files": listed, "places": [{"name": name, "free": room(folder)["free"]} for name, folder in ordered]})
+        kept = sorted(storage_places(spots).items())
+        return JSONResponse({"repository": repository, "files": listed, "places": [{"name": name, "free": room(folder)["free"]} for name, folder in kept]})
 
     def left_behind() -> dict[str, dict]:
         """Downloads that were not finished and are not coming now, by the path each would have. Found by the `.part` files they left."""
@@ -1735,22 +1736,25 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         return JSONResponse(await asyncio.to_thread(image_parts, asked.get("settings") or {}, spots.get("image", ""), list(spots.values())))
 
     async def download_start(request: Request, user: User) -> Response:
-        """Bring `files` of `repository` down into `place`. Each starts now and runs on; the list of downloads shows how far it has got.
+        """Bring `files` of `repository` down into the storage place `place`. Each starts now and runs on; the list of downloads shows how far it has got.
 
         Naming one part of a split model brings all its parts. A file left half done is gone on
-        with from where it stopped. `place` may be left out where there is only one.
+        with from where it stopped. `place` may be left out where there is only one storage place.
+        A cache place is refused: downloads are kept in storage alone.
         """
         if denied := lacks(user, "manage-models"):
             return denied
         asked = await read_json(request, {"repository", "files", "place"})
         if isinstance(asked, Response):
             return asked
-        repository, names, spots = asked.get("repository"), asked.get("files"), places()
+        repository, names, spots = asked.get("repository"), asked.get("files"), storage_places(places())
         place = asked.get("place") or (next(iter(spots)) if len(spots) == 1 else "")
         if not isinstance(repository, str) or not hub.REPOSITORY.fullmatch(repository) or not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names):
             return error(400, "Give repository as OWNER/NAME, and files as a list of the files wanted from it.")
+        if not spots:
+            return error(409, NO_STORAGE)
         if place not in spots or not Path(spots[place]).is_dir():
-            return error(400, f"There is no place named {place!r} with a folder that exists. Places: {', '.join(spots)}")
+            return error(400, f"Downloads go into storage, never the cache. There is no storage place named {place!r} with a folder that exists. Storage places: {', '.join(spots)}")
         try:
             wanted = hub.chosen(await hub.files(web, repository, download_token(repository)), names)
         except hub.Refused as problem:

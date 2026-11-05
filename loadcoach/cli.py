@@ -1050,9 +1050,9 @@ def download(
     ctx: typer.Context,
     repository: Annotated[str, typer.Argument(metavar="REPOSITORY", help="A repository at Hugging Face, as OWNER/NAME.")],
     files: Annotated[Optional[list[str]], typer.Argument(metavar="[FILE...]", help="The files wanted. One part of a split model brings all its parts. With none, the files are listed.")] = None,
-    to: Annotated[str, typer.Option(metavar="PLACE", help="The place they go to. Needed where there is more than one.")] = "",
+    to: Annotated[str, typer.Option(metavar="PLACE", help="The storage place they go to; never a cache place. Needed where there is more than one storage place.")] = "",
 ) -> None:
-    """Bring model files down from Hugging Face into a place. It runs on inside LoadCoach; this returns at once."""
+    """Bring model files down from Hugging Face into a storage place. It runs on inside LoadCoach; this returns at once."""
     with running(opened(ctx)[0]) as server:
         server_command(server, "download", repository, *(files or []), place=to)
 

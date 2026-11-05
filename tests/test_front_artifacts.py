@@ -348,6 +348,26 @@ def test_front_downloads_use_the_existing_verified_hub_contract(desk, tmp_path):
     assert not target.with_suffix('.gguf.part').exists()
 
 
+def test_front_downloads_never_go_into_the_cache(desk, tmp_path):
+    """With a cache alone on front, nothing is offered or accepted as a download destination."""
+    browser, compute, _ = desk
+    compute.off = True
+    sign_in(browser, 'jordan')
+    cache = tmp_path / 'cache'
+    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache), 'models_storage_folder': ''})
+    store = compute.front.state.front_files
+    browser.portal.call(store.web.aclose)
+    store.web = compute.hub.client()
+    page = browser.get('/hub?repository=acme/tiny-GGUF')
+    assert page.status_code == 200 and 'tiny-q4.gguf' in page.text and 'name="place"' not in page.text
+    assert 'Set a model storage folder</a>' in page.text
+    refused = browser.post('/hub', data={'repository': 'acme/tiny-GGUF', 'file': 'tiny-q4.gguf', 'place': 'llm'})
+    assert 'never the cache' in refused.text and not (cache / 'llm' / 'acme--tiny-GGUF').exists()
+    civitai = browser.post('/mirrorwall-discovery', json={'repository': 'civitai/123', 'files': ['a.safetensors'], 'place': 'image'})
+    assert civitai.status_code == 400 and 'never the cache' in civitai.json()['error']['message']
+    assert not (cache / 'image').exists() or not any((cache / 'image').iterdir())
+
+
 def test_front_civitai_search_uses_civitai_metadata_and_current_preview_policy(desk, monkeypatch, tmp_path):
     """Front-only discovery keeps provider fields and cannot bypass the caller's preview policy."""
     from mirrorwall import civitai
