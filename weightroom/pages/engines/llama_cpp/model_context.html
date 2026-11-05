@@ -1,3 +1,4 @@
+{% from "parts.html" import form_section, more %}
 {% call form_section('Context and requests', 'This node') %}
     <div class="col-md-6">
       <label for="min-context" class="form-label">Context{% if told and told.facts.trained_context %} <small class="text-secondary">trained for {{ "{:,}".format(told.facts.trained_context) }}</small>{% endif %}</label>

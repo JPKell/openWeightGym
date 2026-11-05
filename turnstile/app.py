@@ -373,6 +373,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 return await ask_live(user, method, where, machine=name, prime=True, passive=bool(settings.auth_key_file))
             if available is not False and time.time() - row[0] >= settings.machines_poll_seconds and key not in discovery_refreshes:
                 async def refresh():
+                    """Renew the retained discovery answer in the background; a failure keeps the old one."""
                     try:
                         await ask_live(user, method, where, machine=name, prime=True)
                     except Exception:
@@ -1490,8 +1491,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-models"):
             return error(403, "Your account may not manage model files.")
-        names = ['front', *machines.names]
+        names, store = ['front', *machines.names], file_store()
         answers = list(await asyncio.gather(*(ask_machine(user, "GET", "/loadcoach/files", machine=name, timeout=5) for name in names)))
+        if store != 'front' and store in names and answers[names.index(store)] is None:
+            # Listing files can outlive the short deadline that keeps an unavailable node from delaying
+            # the page. The designated store is required, so it alone gets one normal bounded retry.
+            answers[names.index(store)] = await ask_machine(user, "GET", "/loadcoach/files", machine=store, timeout=30)
         reports = {one["name"]: one for one in machines.report()}
         nodes = []
         for name, answer in zip(names, answers):

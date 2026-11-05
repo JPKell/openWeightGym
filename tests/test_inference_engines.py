@@ -154,11 +154,13 @@ def test_engine_catalogue_and_explicit_model_api_keep_permissions(fake_llama_ser
 def test_console_model_and_node_forms_use_engine_schema_and_keep_changes_pending(desk, tmp_path):
     browser, _, _ = desk
     sign_in(browser, "jordan")
-    page = browser.get("/models?node=compute").text
+    page = browser.get("/models?node=compute&complete=1").text
     assert 'name="engine"' in page and 'value="llama_cpp"' in page
     made = browser.post("/models?node=compute", data={"engine": "llama_cpp", "name": "explicit", "file": "missing.gguf", "ctx": "2048", "cards": "0"})
     assert made.status_code == 200 and made.url.params.get("node") == "compute"
-    assert 'id="model-engine"' in made.text and 'Global generation defaults' in made.text and 'Loading flags on compute' in made.text
+    # The engine is fixed on the page; generation defaults apply on every node, and the page says which node it configures.
+    assert '<input type="hidden" name="engine" value="llama_cpp">' in made.text and 'Generation defaults' in made.text
+    assert 'Configuring <strong class="text-body">compute</strong>' in made.text
     assert '?node=compute&amp;part=state' in made.text
     listing = browser.get("/models?node=compute&part=list").text
     assert '/models?part=list&amp;node=compute' in listing

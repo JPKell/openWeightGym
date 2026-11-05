@@ -167,7 +167,7 @@ def test_catalogue_pills_and_node_settings_render_for_every_model_type(desk, tmp
         library.put(name,settings)
     sign_in(browser,'jordan')
     for kind, included, excluded in [('llm','language','picture'),('image','picture','song'),('audio','song','language')]:
-        page = browser.get('/models?kind='+kind)
+        page = browser.get('/models?kind='+kind+'&complete=1')
         assert page.status_code == 200
         table = page.text.split('<table id="models-table"')[1].split('</table>', 1)[0]
         assert included in table and excluded not in table

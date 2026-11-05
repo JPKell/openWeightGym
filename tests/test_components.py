@@ -1,6 +1,7 @@
 """System → Components: which services and engines each machine has, installed or not, and nothing changed to find out."""
 
 import asyncio
+import os
 import re
 import socket
 import time
@@ -206,8 +207,14 @@ def test_front_lists_itself_and_every_node_and_says_why_one_cannot_be_checked(tm
     users.db.close()
 
 
-def test_the_console_page_shows_every_machine_with_each_component_installed_or_not(desk, systemd):
+def test_the_console_page_shows_every_machine_with_each_component_installed_or_not(desk, systemd, tmp_path, monkeypatch):
     browser, switch, users = desk
+    # The desk's model runner names `llama-server`. Give it one, so the page does not depend on what this machine has installed.
+    program = tmp_path / "bin" / "llama-server"
+    program.parent.mkdir()
+    program.write_text("#!/bin/sh\n")
+    program.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{program.parent}{os.pathsep}{os.environ.get('PATH', '')}")
     systemd["user"] = told(**{"turnstile.service": ("loaded", "active", "running"), "loadcoach.service": ("loaded", "active", "running")})
     sign_in(browser, "pat")
     assert browser.get("/system/components").status_code == 403

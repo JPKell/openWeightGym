@@ -123,7 +123,7 @@ def test_context_range_saved_and_shown_on_model_pages(desk, tmp_path):
     for ctx, size in [(2000, 3000), (6000, 7000), (10000, 11000)]:
         kept.measured("ranged", at_context(settings, ctx), [size])
     page = browser.get("/models/ranged").text
-    assert 'name="min_context" class="form-control" value="2000"' in page
+    assert 'name="min_context" type="number" min="1" step="1" class="form-control" value="2000"' in page
     # The minimum and the maximum are said at the top of the page. The midpoint is not.
     assert "2.9 GB <small class=\"text-secondary\">at 2,000 tokens</small>" in page and "10.7 GB <small class=\"text-secondary\">at 10,000 tokens</small>" in page
     assert "6,000" not in page and "Measured at" not in page

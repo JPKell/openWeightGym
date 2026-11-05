@@ -50,17 +50,17 @@
         <tbody>
         {% for ours, model in service.models.items() %}
         <tr>
-          <td><input name="ours" class="form-control " value="{{ ours }}" aria-label="our name" autocapitalize="none" spellcheck="false"></td>
-          <td><input name="theirs" class="form-control " value="{{ model.theirs }}" aria-label="the service's name" autocapitalize="none" spellcheck="false"></td>
-          <td><input name="in" class="form-control " value="{{ model["in"] if model["in"] is defined else "" }}" aria-label="price in" inputmode="decimal"></td>
-          <td><input name="out" class="form-control " value="{{ model.out if model.out is defined else "" }}" aria-label="price out" inputmode="decimal"></td>
+          <td><input name="ours" class="form-control" value="{{ ours }}" aria-label="our name" autocapitalize="none" spellcheck="false"></td>
+          <td><input name="theirs" class="form-control" value="{{ model.theirs }}" aria-label="the service's name" autocapitalize="none" spellcheck="false"></td>
+          <td><input name="in" class="form-control" value="{{ model["in"] if model["in"] is defined else "" }}" aria-label="price in" inputmode="decimal"></td>
+          <td><input name="out" class="form-control" value="{{ model.out if model.out is defined else "" }}" aria-label="price out" inputmode="decimal"></td>
         </tr>
         {% endfor %}
         <tr>
-          <td><input name="ours" class="form-control " placeholder="another, such as gpt-big" aria-label="another model's name here" autocapitalize="none" spellcheck="false"></td>
-          <td><input name="theirs" class="form-control " placeholder="its name at the service" aria-label="its name at the service" autocapitalize="none" spellcheck="false"></td>
-          <td><input name="in" class="form-control " aria-label="its price in" inputmode="decimal"></td>
-          <td><input name="out" class="form-control " aria-label="its price out" inputmode="decimal"></td>
+          <td><input name="ours" class="form-control" placeholder="another, such as gpt-big" aria-label="another model's name here" autocapitalize="none" spellcheck="false"></td>
+          <td><input name="theirs" class="form-control" placeholder="its name at the service" aria-label="its name at the service" autocapitalize="none" spellcheck="false"></td>
+          <td><input name="in" class="form-control" aria-label="its price in" inputmode="decimal"></td>
+          <td><input name="out" class="form-control" aria-label="its price out" inputmode="decimal"></td>
         </tr>
         </tbody>
       </table>

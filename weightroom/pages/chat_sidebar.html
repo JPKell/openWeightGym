@@ -14,8 +14,8 @@
         </form>
       </div>
       <form method="post" action="/chat/{{ one.id }}" data-chat-rename class="d-flex gap-1" hidden>
-        <input type="hidden" name="do" value="rename"><input name="title" class="form-control " aria-label="Conversation name" value="{{ one.title }}" maxlength="120" required>
-        <button class="btn btn-primary " aria-label="Save conversation name">Save</button>
+        <input type="hidden" name="do" value="rename"><input name="title" class="form-control" aria-label="Conversation name" value="{{ one.title }}" maxlength="120" required>
+        <button class="btn btn-primary" aria-label="Save conversation name">Save</button>
       </form>
     </td></tr>
     {% else %}<tr><td class="small text-secondary">No conversations yet.</td></tr>{% endfor %}

@@ -233,7 +233,7 @@ def test_position_splits_are_micro_averages_and_visible_in_the_detail_page(cases
                   score=90,formula='accuracy',samples=[],messages=[],plan=None)
     env = Environment(loader=FileSystemLoader(Path(__file__).resolve().parents[1]/'weightroom/pages'),
                       autoescape=select_autoescape())
-    env.filters['clock'] = str
+    env.filters['clock'] = env.filters['timestamp'] = str
     page = env.get_template('benchmark_detail.html').render(detail=detail)
     assert 'Invented / absent' in page and '<th>Start</th>' in page and '<th>Middle</th>' in page and '<th>End</th>' in page
     assert '1 / 2 (50.0%)' in page and 'Combined fields may count in several positions' in page

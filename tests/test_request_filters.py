@@ -144,7 +144,7 @@ def test_requests_ui_uses_suite_catalogs_and_access_registry(desk, tmp_path, mon
     one = log.add('request', 'asked', 'pat', '198.51.100.42', 'historical-only-model')
     log.add('request', 'done', 'pat', '198.51.100.42', 'historical-only-model', of=one)
     sign_in(browser, 'jordan')
-    page = browser.get('/requests?limit=10')
+    page = browser.get('/requests?limit=10&complete=1')  # the list is loaded after the page
     assert page.status_code == 200
     assert 'name="request_min"' in page.text and 'name="date_max"' in page.text and 'name="duration_max"' in page.text
     assert '<option value="cleo"' in page.text  # configured user with no request history
@@ -152,13 +152,13 @@ def test_requests_ui_uses_suite_catalogs_and_access_registry(desk, tmp_path, mon
     assert '<option value="198.51.100.42"' in page.text
     assert '<option value="historical-only-model"' not in page.text
     assert 'Client access' in page.text
-    filtered = browser.get('/requests?ip=198.51.100.42&status=done&user=pat')
+    filtered = browser.get('/requests?ip=198.51.100.42&status=done&user=pat&complete=1')
     assert '1 results' in filtered.text and 'value="198.51.100.42" selected' in filtered.text
-    assert 'name="ip"' in browser.get('/requests?completed=1&ip=198.51.100.42').text
-    invalid = browser.get('/requests?duration_min=9&duration_max=2')
+    assert 'name="ip"' in browser.get('/requests?completed=1&ip=198.51.100.42&complete=1').text
+    invalid = browser.get('/requests?duration_min=9&duration_max=2&complete=1')
     assert 'Each minimum' in invalid.text and 'name="duration_min"' in invalid.text
     sign_in(browser, 'pat')
-    assert '<option value="cleo"' not in browser.get('/requests').text
+    assert '<option value="cleo"' not in browser.get('/requests?complete=1').text
     with TestClient(switch.front) as api:
         key = browser.cookies['weightroom']
         assert api.get('/loadcoach/requests?duration_min=nan', headers={'authorization': 'Bearer '+key}).status_code == 400

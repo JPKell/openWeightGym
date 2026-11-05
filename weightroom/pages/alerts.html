@@ -3,11 +3,11 @@
 {% from "parts.html" import card, page_header, section_title %}
 {% block title %}Alerts · openWeightGym{% endblock %}
 {% block main %}
-{% set _page_lead1 %}Checked every 30 seconds while openWeightGym runs. Acknowledgement records that someone has seen an episode; the condition stays open until recovery. Memory-kill incidents require a separate review. GPU threshold: {{ threshold }}°C; change it in <a href="/settings?open=weightroom">Settings</a>.{% endset %}
+{% set _page_lead1 %}Checked every 30 seconds while openWeightGym runs. Acknowledgement records that someone has seen an episode; the condition stays open until recovery. Memory-kill incidents require a separate review.{% endset %}
 {% call page_header("Operational alerts", lead=_page_lead1) %}<a href="/alerts" class="btn btn-outline-secondary btn-sm">Refresh</a>{% endcall %}
 {% call card("Sources", true) %}
 <div class="d-flex flex-wrap gap-3">{% for source in sources %}<div><b>{{ source.source }}</b><div class="small {{ 'text-secondary' if source.available else 'text-body fw-semibold' }}">{{ 'Available' if source.available else 'Unavailable; recovery unknown' }} · checked {{ source.checked_at|timestamp }}</div></div>{% else %}<div class="text-secondary">No readings yet.</div>{% endfor %}</div>
-<p class="small text-secondary mt-2 mb-0">Missing readings can mean compute is asleep, stopped or disconnected. They do not establish a service failure or recovery. Spending alerts use recorded 24-hour costs; in-flight and unknown costs are excluded.</p>
+<p class="small text-secondary mt-2 mb-0">Missing readings can mean compute is asleep, stopped or disconnected. They do not establish a service failure or recovery. Spending alerts use recorded 24-hour costs; in-flight and unknown costs are excluded. GPU threshold: {{ threshold }}°C; change it in <a href="/settings?open=weightroom">Settings</a>.</p>
 {% endcall %}
 {% call card("Active alerts", true) %}
 {% for alert in active %}

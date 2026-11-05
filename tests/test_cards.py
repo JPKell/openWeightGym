@@ -83,7 +83,7 @@ def test_cards_page_permissions_and_model_settings_round_trip(desk, tmp_path):
     saved = Models(str(tmp_path / "loadcoach.db")).stored("one")
     assert saved["gpus"] == "any" and saved["allow_split"] is True
     shown = browser.get("/models/one").text
-    assert "Allow model to split across GPUs" in shown and 'id="placement-cpu"' in shown and 'id="placement-gpu"' in shown and 'id="allow-split"' in shown
+    assert "Allow split across GPUs" in shown and 'id="placement-cpu"' in shown and 'id="placement-gpu"' in shown and 'id="allow-split"' in shown
     browser.post("/models/one", data={"do": "save", "file": str(file), "ctx": "2048", "placement_controls": "yes", "cpu": "yes"})
     assert Models(str(tmp_path / "loadcoach.db")).stored("one")["gpus"] == 0
     browser.post("/models/one", data={"do": "save", "file": str(file), "ctx": "2048", "placement_controls": "yes", "gpu": "yes"})

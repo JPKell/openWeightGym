@@ -714,20 +714,28 @@ def test_submission_feedback_preserves_values_blocks_duplicates_and_restores():
         def serve(route):
             if route.request.method == 'POST': pending.append(route)
             else: route.fulfill(content_type='text/html', body=markup)
+        def posted():
+            """The held POST. The button is disabled on submit, before the request reaches the route, so wait for the request itself."""
+            for _ in range(250):
+                if pending:
+                    return pending[0]
+                page.wait_for_timeout(20)  # route handlers run only while Playwright is being waited on
+            raise AssertionError('the form was never posted')
         page.route('http://feedback.test/**', serve)
         page.goto('http://feedback.test/')
         page.get_by_role('button', name='Deploy', exact=True).click()
         button = page.get_by_role('button', name='Working…', exact=True)
         playwright.expect(button).to_be_disabled()
-        assert pending[0].request.post_data == 'kept=original&action=deploy'
+        assert posted().request.post_data == 'kept=original&action=deploy'
         page.evaluate("document.querySelector('form').requestSubmit(document.querySelector('button'))")
+        page.wait_for_timeout(200)  # time for a duplicate request to arrive, if one were sent
         assert len(pending) == 1
         pending.pop().fulfill(content_type='text/html', body='Done')
         page.evaluate("dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
         playwright.expect(page.get_by_role('button', name='Deploy', exact=True)).to_be_enabled()
         page.get_by_role('button', name='Start run', exact=True).click()
         playwright.expect(page.get_by_role('button', name='Working…', exact=True)).to_be_disabled()
-        assert pending[0].request.post_data == 'action=start'
+        assert posted().request.post_data == 'action=start'
         pending.pop().fulfill(status=500, content_type='text/html', body='Try again')
         playwright.expect(page.get_by_role('button', name='Start run', exact=True)).to_be_enabled()
         assert not page.locator('form[aria-busy=true]').count()

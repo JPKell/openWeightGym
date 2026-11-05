@@ -44,9 +44,9 @@ def test_the_sort_order_is_set_on_a_models_page_and_every_list_follows_it(desk, 
     sign_in(browser, "jordan")
     form = {"file": str(tmp_path / "zebra.gguf"), "ctx": "2048", "cards": "1"}
     refused = browser.post("/models/zebra", data={**form, "order": "first"})
-    assert refused.status_code == 400 and "order is a whole number" in refused.text and 'name="order" class="form-control" value="first"' in refused.text
+    assert refused.status_code == 400 and "order is a whole number" in refused.text and 'name="order" type="number" step="1" class="form-control" value="first"' in refused.text
     saved = browser.post("/models/zebra", data={**form, "order": "0"})
-    assert "Saved." in saved.text and 'name="order" class="form-control" value="0"' in saved.text and kept.place("zebra") == 0
+    assert "Saved." in saved.text and 'name="order" type="number" step="1" class="form-control" value="0"' in saved.text and kept.place("zebra") == 0
     assert kept.stored("zebra") == {"gpus": 1, "flags": {"model": str(tmp_path / "zebra.gguf"), "ctx-size": 2048}}  # not among its settings
 
     listed = browser.get("/models?part=list").text
@@ -64,7 +64,7 @@ def test_the_sort_order_is_set_on_a_models_page_and_every_list_follows_it(desk, 
     assert start.index("zebra") < start.index("apple") < start.index("mango")
 
     emptied = browser.post("/models/zebra", data=form)  # the box left empty puts it back at 10, where every model starts
-    assert 'name="order" class="form-control" value="10"' in emptied.text and kept.place("zebra") == 10 and kept.names() == ["apple", "mango", "zebra"]
+    assert 'name="order" type="number" step="1" class="form-control" value="10"' in emptied.text and kept.place("zebra") == 10 and kept.names() == ["apple", "mango", "zebra"]
 
 
 def test_a_program_is_told_the_models_in_their_sort_order(fake_llama_server):  # noqa: F811

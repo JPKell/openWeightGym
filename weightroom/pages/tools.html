@@ -25,7 +25,7 @@
 <form method="post" action="/tools">
 <div class="table-responsive"><table class="sortable table table-sm"><thead><tr><th>Tool</th><th>Level</th></tr></thead><tbody>
 {% for tool in tool_info.tools %}{% set server_level = servers.get(tool.name.split('__')[0], {}).get('level', 'normal') %}
-<tr><td><label for="level-{{ loop.index }}"><code>{{ tool.name }}</code></label></td><td><select id="level-{{ loop.index }}" name="level:{{ tool.name }}" class="form-select ">
+<tr><td><label for="level-{{ loop.index }}"><code>{{ tool.name }}</code></label></td><td><select id="level-{{ loop.index }}" name="level:{{ tool.name }}" class="form-select">
 <option value="">as its server ({{ server_level }})</option>
 {% for level in ('normal', 'sensitive', 'restricted') %}<option {{ "selected" if levels.get(tool.name) == level }}>{{ level }}</option>{% endfor %}
 </select></td></tr>

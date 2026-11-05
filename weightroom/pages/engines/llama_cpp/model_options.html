@@ -1,4 +1,4 @@
-{% from "parts.html" import empty_row %}
+{% from "parts.html" import card, empty_row, form_section, section_title %}
 {% set preset_flags = ('temp', 'top-p', 'top-k', 'min-p', 'reasoning', 'reasoning-effort') %}
 {% call form_section('Generation defaults', 'All nodes', 'Sampling and reasoning defaults apply wherever this model is installed.') %}
 {% set preset_flags = ('temp', 'top-p', 'top-k', 'min-p', 'reasoning', 'reasoning-effort') %}
@@ -6,7 +6,9 @@
 {% for flag in preset_flags %}{% set value = showing.flags.get(flag, 'auto' if flag == 'reasoning' else '') %}
 <div class="col-md-6"><label for="generation-{{ flag }}" class="form-label">{{ labels[flag] }} <small class="text-secondary"><code>{{ flag }}</code></small></label><input type="hidden" name="flag" value="{{ flag }}">
 {% if flag in ('reasoning', 'reasoning-effort') %}<select id="generation-{{ flag }}" name="value" class="form-select" aria-label="value of {{ flag }}">
-{% set choices = ('on', 'off', 'auto') if flag == 'reasoning' else ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh') %}
+{% set choices = ['on', 'off', 'auto'] if flag == 'reasoning' else ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] %}
+{# Levels the running chat template reports are offered too, after the usual ones. #}
+{% if flag == 'reasoning-effort' %}{% set choices = choices + ((model.get('chat_template_caps') or {}).get('reasoning_effort_levels') or [])|reject('in', choices)|list %}{% endif %}
 {% if value not in choices %}<option selected value="{{ value }}">{{ value }}</option>{% endif %}
 {% for choice in choices %}<option value="{{ choice }}"{{ ' selected' if value == choice }}>{{ 'No reasoning' if choice == 'none' else choice|capitalize if choice else 'Runtime default' }}</option>{% endfor %}</select>
 {% else %}<input id="generation-{{ flag }}" type="number" step="{{ '1' if flag == 'top-k' else 'any' }}" min="{{ '-1' if flag == 'top-k' else '0' }}" name="value" class="form-control" value="{{ value|shown }}" aria-label="value of {{ flag }}" placeholder="Runtime default">{% endif %}</div>

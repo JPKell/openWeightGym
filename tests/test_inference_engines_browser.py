@@ -24,7 +24,7 @@ def test_engine_model_selection_and_pending_node_settings_in_browser(desk, tmp_p
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.set_viewport_size({"width": width, "height": 1000})
-        page.goto("http://console.test/models?node=compute")
+        page.goto("http://console.test/models?new=1&node=compute")  # as the Add a model button opens it
         playwright.expect(page.get_by_label("Engine", exact=True)).to_have_value("llama_cpp")
         page.locator("#name").fill("engine-example")
         page.locator("#file").select_option(index=1)
@@ -71,7 +71,7 @@ def test_strata_selection_renders_its_own_fields_and_node_settings(desk, tmp_pat
         page.set_viewport_size({"width": width, "height": 1000})
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
-        page.goto("http://console.test/models?node=compute")
+        page.goto("http://console.test/models?new=1&node=compute")  # as the Add a model button opens it
         page.get_by_label("Engine", exact=True).select_option("strata")
         playwright.expect(page.locator("#tokenizer")).to_be_visible()
         assert page.locator("#cards").count() == page.locator("#allow-split").count() == 0

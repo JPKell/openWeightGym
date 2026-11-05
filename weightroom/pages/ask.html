@@ -15,7 +15,7 @@
       <div class="flex-grow-1"><select id="ask-model" name="model" class="form-select" aria-label="Model" data-diagnostic-model>{% for model in models %}<option>{{ model }}</option>{% endfor %}</select></div>
       <button class="btn btn-primary">Ask</button>
     </div>
-    <div class="col-12"><p class="small text-secondary mb-0">Select a section of the log to send it to the AI. Otherwise the whole log is sent.</p><span class="small text-secondary" data-log-selection-note></span><button type="button" class="btn btn-link " data-whole-log hidden>Use whole log</button></div>
+    <div class="col-12"><p class="small text-secondary mb-0">Select a section of the log to send it to the AI. Otherwise the whole log is sent.</p><span class="small text-secondary" data-log-selection-note></span><button type="button" class="btn btn-link" data-whole-log hidden>Use whole log</button></div>
     <div class="col-12"><span id="asking" class="htmx-indicator text-secondary">Asking. The answer shows here when it is whole, which can take a minute or more.</span></div>
   </form>
   <div id="answer" class="mt-3"></div>
