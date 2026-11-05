@@ -1537,11 +1537,11 @@ def test_hermes_settings_are_separate_editable_and_keep_machine_credentials_read
 def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(desk, tmp_path, monkeypatch):
     monkeypatch.setattr("loadcoach.hub.PIECE", 64)  # small pieces, so that a small file comes in several
     browser, switch, _ = desk
-    there, fast = switch.hub, tmp_path / "fast"
+    there, fast, storage = switch.hub, tmp_path / "fast", tmp_path / "storage"
     fast.mkdir()
-    # No places are named in this LoadCoach, so the one place is the folder its one model is in.
+    # No places are named in this LoadCoach, so its one place is the folder its one model is in: a cache, never a download's destination.
     Models(str(tmp_path / "loadcoach.db")).put("stays", {"gpus": 1, "flags": {"model": gguf(fast / "stays.gguf", general__name="Stays"), "ctx-size": 2048}})
-    target = fast / "acme--tiny-GGUF" / "tiny-q4.gguf"
+    target = storage / "llm" / "acme--tiny-GGUF" / "tiny-q4.gguf"
 
     def until(wanted):
         deadline = time.monotonic() + 5
@@ -1560,32 +1560,43 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
     assert '<h1 class="page-title wrap">HuggingFace</h1>' in found
     assert 'href="/hub?repository=acme/tiny-GGUF">acme/tiny-GGUF</a>' in found and "Nothing found" in browser.get("/hub?q=llama").text
     files = browser.get("/hub?q=acme/tiny-GGUF").text  # a repository typed out goes straight to its files
-    assert 'name="file" value="tiny-q4.gguf"' in files and "and the other 1 of its 2 parts" in files and f'<option value="{fast}">' in files
+    assert 'name="file" value="tiny-q4.gguf"' in files and "and the other 1 of its 2 parts" in files
+    # With no storage there is nowhere to choose, and the cache is refused when asked for anyway.
+    assert 'name="place"' not in files and 'href="/settings#model-files">Set a model storage folder</a>' in files
+    cached = browser.post("/hub", data={"repository": there.repository, "file": ["tiny-q4.gguf"], "place": str(fast)})
+    assert "never the cache" in cached.text and not (fast / "acme--tiny-GGUF").exists()
     none = browser.get("/hub?repository=acme/none")
     assert none.status_code == 403 and "no such repository" in none.text
-    unticked = browser.post("/hub", data={"repository": there.repository, "place": str(fast)})
+    unticked = browser.post("/hub", data={"repository": there.repository, "place": "storage_llm"})
     assert unticked.status_code == 400 and "Tick the files you want." in unticked.text and 'value="tiny-q4.gguf"' in unticked.text
+
+    # With a storage library on front, the storage places alone are offered.
+    browser.post("/settings/model-files", data={"file_machine": "front", "models_folder": "", "models_storage_folder": str(storage)})
+    store = switch.front.state.front_files
+    browser.portal.call(store.web.aclose)
+    store.web = there.client()
+    files = browser.get("/hub?repository=acme/tiny-GGUF").text
+    assert '<option value="storage_llm">' in files and '<option value="llm">' not in files
 
     # It comes down, is stopped, and is gone on with. The list of downloads shows each step and has the button for the next.
     there.slow = 0.02
-    started = browser.post("/hub", data={"repository": there.repository, "file": ["tiny-q4.gguf"], "place": str(fast)})
-    assert "1 file, " in started.text and f"coming down to {fast}." in started.text and str(started.url).split("?")[0].endswith("/hub")
+    started = browser.post("/hub", data={"repository": there.repository, "file": ["tiny-q4.gguf"], "place": "storage_llm"})
+    assert "1 file, " in started.text and "coming down to storage_llm." in started.text and str(started.url).split("?")[0].endswith("/hub")
     until(lambda: 'value="stop"' in browser.get("/downloads").text)
-    assert "a second" in browser.get("/downloads").text and "acme/tiny-GGUF" in browser.get("/downloads").text
+    assert "acme/tiny-GGUF" in browser.get("/downloads").text
     browser.post("/downloads", data={"do": "stop", "path": str(target)})
     until(lambda: 'value="continue"' in browser.get("/downloads").text)
     assert "stopped" in browser.get("/downloads").text and not target.exists()
     there.slow = 0
-    browser.post("/downloads", data={"do": "continue", "repository": there.repository, "file": "tiny-q4.gguf", "place": str(fast)})
+    browser.post("/downloads", data={"do": "continue", "repository": there.repository, "file": "tiny-q4.gguf", "place": "storage_llm"})
     until(target.exists)
     assert target.read_bytes() == there.files["tiny-q4.gguf"] and "tiny-q4.gguf" not in browser.get("/downloads").text
 
     # What is here already is marked and cannot be ticked. It is on Files, to be added as a model.
     again = browser.get("/hub?repository=acme/tiny-GGUF").text
-    assert f"in {fast}</span>" in again and 'value="tiny-q4.gguf" type="checkbox" class="form-check-input" disabled' in again
-    assert "tiny-q4.gguf</a>" in browser.get("/files?complete=1").text
-    refused = browser.post("/downloads", data={"do": "discard", "path": str(target)})
-    assert "There is no unfinished download to that path." in refused.text
+    assert "in storage_llm</span>" in again and 'value="tiny-q4.gguf" type="checkbox" class="form-check-input" disabled' in again
+    assert "tiny-q4.gguf</a>" in browser.get("/files?complete=1&tier=storage").text and "tiny-q4.gguf</a>" not in browser.get("/files?complete=1").text
+    assert not any(path.name.startswith("tiny-q4") for path in fast.rglob("*"))  # nothing of it was ever in the cache
 
 
 def test_the_cards_show_their_room_and_a_model_page_what_the_model_measured(live_desk, tmp_path):

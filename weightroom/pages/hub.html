@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, swaps, section_title, empty_row %}
+{% from "parts.html" import said_box, swaps, section_title, empty_row, alert %}
 {% from "parts.html" import page_header, form_section %}
 {% block title %}HuggingFace · openWeightGym{% endblock %}
 {% block main %}
@@ -40,8 +40,10 @@
     </tbody>
   </table>
   </div>
+  {# Downloads are kept in storage alone; a model's file is promoted into the cache when it is used. #}
+  {% if found.places %}
   <div class="row g-2 align-items-center mt-2">
-    <div class="col-auto"><label for="place" class="col-form-label">Download to:</label></div>
+    <div class="col-auto"><label for="place" class="col-form-label">Download to storage:</label></div>
     <div class="col col-md-6 col-xl-5">
       <select id="place" name="place" class="form-select">
         {% for place in found.places %}<option value="{{ place.name }}">{{ place.name }}, {{ place.free|size }} free</option>{% endfor %}
@@ -49,6 +51,9 @@
     </div>
     <div class="col-12 col-md-auto"><button class="btn btn-primary">Bring the ticked files down</button></div>
   </div>
+  {% else %}
+  {% call alert('info', class_='mt-2') %}Downloads go into model storage, never the cache. <a href="/settings#model-files">Set a model storage folder</a> to download files.{% endcall %}
+  {% endif %}
 </form>
 {% endif %}</div>
 {% if words and found.found is defined %}

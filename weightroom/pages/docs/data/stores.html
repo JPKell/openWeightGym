@@ -21,5 +21,6 @@
 {% call doc_section('Files beside the stores', 'files') %}
 <p>Images and audio that people keep are files under front's <code>data/mirrorwall-assets/</code> and <code>data/soundroom-assets/</code>; their records are in <code>accounts.db</code>, and both are part of every recovery set.
   Temporary and unlogged images and audio are never written to a store, a file or a recovery set.</p>
-<p>Model files stay on the worker that owns them, in its model places, and are not part of a recovery set.</p>
+<p>Model files stay on the worker that owns them, in its model places, and are not part of a recovery set.
+  Files downloaded from Hugging Face or Civitai go into model storage only, never the cache. A model's file reaches the cache only as a copy promoted from storage for use, and cache cleanup removes it again once it is unused.</p>
 {% endcall %}

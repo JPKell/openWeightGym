@@ -76,8 +76,8 @@ def test_model_defaults_workflow_versions_and_civitai_destinations(desk,tmp_path
         playwright.expect(page.get_by_role('link',name='Model page',exact=True)).to_have_attribute('href','https://civitai.com/models/1')
         page.get_by_role('button',name='Choose file',exact=True).click()
         playwright.expect(page.get_by_label('Download destination',exact=True)).to_be_visible()
-        assert page.get_by_label('Download destination',exact=True).locator('option').all_text_contents()==['Image cache','Image storage','Encoder cache','Encoder storage']
-        playwright.expect(page.get_by_text('Image cache is the active image-model cache.',exact=False)).to_be_visible()
+        assert page.get_by_label('Download destination',exact=True).locator('option').all_text_contents()==['Image storage','Encoder storage']  # never a cache
+        playwright.expect(page.get_by_text('Downloads go into storage, never the cache.',exact=False)).to_be_visible()
         page.screenshot(path=str(folder/f'civitai-{width}.png'),full_page=True)
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         assert not errors
