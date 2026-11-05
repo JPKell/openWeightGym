@@ -1,10 +1,10 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, page_header, section_title %}
+{% from "parts.html" import card, page_header, section_title, alert, empty_row %}
 {% block title %}Restore preview · openWeightGym{% endblock %}
 {% block main %}
 {{ page_header("Restore preview", lead="Review the selected backup before restoring data.", back=("/backups", "Backups")) }}
 <p><code>{{ backup_id }}</code></p>
-{% if compute_error %}<div class="alert alert-warning py-2">{{ compute_error }}</div>{% endif %}
+{% if compute_error %}{% call alert('warning', class_='py-2') %}{{ compute_error }}{% endcall %}{% endif %}
 
 {% for label, part in [("Front machine", front), ("Compute machine", compute_part)] %}
 {% call card(label, true) %}
@@ -15,7 +15,7 @@
 </div>
 <p class="small text-secondary mb-1">A restore would replace these files with the exact versions in the archive:</p>
 <div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr><th>Destination</th><th>Contents</th><th>Size</th><th>SHA-256</th></tr></thead><tbody>
-{% for file in part.get("files", []) %}<tr><td><code>{{ file.source }}</code></td><td>{{ file.kind }}{% if file.contains_protected_identity %}<div class="small text-warning-emphasis">Contains protected account recovery data</div>{% endif %}</td><td>{{ file.size|size }}</td><td><code>{{ file.sha256[:12] }}…</code></td></tr>{% else %}<tr><td colspan="4" class="text-secondary">The file list is unavailable.</td></tr>{% endfor %}
+{% for file in part.get("files", []) %}<tr><td><code>{{ file.source }}</code></td><td>{{ file.kind }}{% if file.contains_protected_identity %}<div class="small text-warning-emphasis">Contains protected account recovery data</div>{% endif %}</td><td>{{ file.size|size }}</td><td><code>{{ file.sha256[:12] }}…</code></td></tr>{% else %}{% call empty_row(4) %}The file list is unavailable.{% endcall %}{% endfor %}
 </tbody></table></div>
 {% if part.get("verification", {}).get("counts") %}<div class="small"><span class="text-secondary">Isolated restore check:</span> {% for name, count in part.verification.counts.items() %}<span class="me-2">{{ name|replace("_", " ") }} <strong>{{ count }}</strong></span>{% endfor %}</div>{% endif %}
 {% if part.get("stores") %}
@@ -34,5 +34,5 @@
 {% endcall %}
 {% endfor %}
 
-<div class="alert alert-info">This page is a preview. Restore the archives during a maintenance window after stopping every service listed above. Raw keys must be recovered separately, then the restored services should be started and sign-in, model inventory, conversations and benchmark evidence checked.</div>
+{% call alert('info') %}This page is a preview. Restore the archives during a maintenance window after stopping every service listed above. Raw keys must be recovered separately, then the restored services should be started and sign-in, model inventory, conversations and benchmark evidence checked.{% endcall %}
 {% endblock %}

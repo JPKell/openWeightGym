@@ -99,7 +99,7 @@ from loadcoach.role_evidence import RoleEvidence
 from loadcoach.roles import Roles
 from weightroom import voice_settings, display
 from weightroom.navigation import navigation
-from weightroom.system_docs import BY_SLUG, TOPICS, WRITTEN_DOCS, source_reference
+from weightroom.system_docs import BY_SLUG as DOC_SECTIONS, MOVED as MOVED_DOCS, api_reference, source_files, source_reference, visible as visible_docs, written as written_doc
 from weightroom import doc_markdown
 from weightroom.alerts import Alerts, machine_conditions
 from weightroom.schedules import Schedules, ScheduleWorker
@@ -3899,19 +3899,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         asked = request.query_params
         tier = asked.get("tier", "cache")
         tier = tier if tier in ("cache", "storage") else "cache"
+        machine = asked.get("machine", "")
         said = asked.get("said", "")
         if initial_page(request):  # the downloads list asks for itself as soon as it is on the page
             return page(request, "files.html", person, deferred=True, fragment_url=fragment_url(request, "page"),
-                        said=said, downloads=[], downloads_later=True, tier=tier)
+                        said=said, downloads=[], downloads_later=True, tier=tier, machine=machine)
         part = asked.get("part") if asked.get("complete") != "1" else None
         found = await all_files(request, person)
         if isinstance(found, Response):
             return fragment_error(request, person, "files-content", "page", found) if part == "page" else found
         found = files_view(found)
+        selected_node = next((node for node in found.get("nodes", [])
+                              if node["name"] == machine and node["name"] != "front"), None)
+        if machine and selected_node is None:
+            return page(request, "refused.html", person, status=404, why=f"There is no compute node named {machine}.")
         template = {"list": "files_poll.html", "page": "files_content.html"}.get(part, "files.html")  # list: the pieces, asked for again
         downloads = await coming(person) if template == "files.html" else []
         return page(request, template, person, found=found, said=said, downloads=downloads,
-                    tier=tier, address=model_address, file_address=file_address)  # fmt: skip
+                    tier=tier, machine=machine, selected_node=selected_node, address=model_address, file_address=file_address)  # fmt: skip
 
     async def files_do(request: Request, person: Person) -> Response:
         """Validate and dispatch a model-file cleanup, copy or move operation."""
@@ -4141,31 +4146,40 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "telemetry_host.html", person, host=host, groups=groups, times=times, step=past["step"],
                     begin=past["begin"], end=past["end"], hours=hours, until=asked.get("until", ""))
 
-    async def user_guide(request: Request, person: Person) -> Response:
-        """Short usage help is available to every signed-in account; source Docs stay private."""
-        host = request.url.hostname or 'FRONT'
-        host = '[' + host + ']' if ':' in host else host
-        return page(request, 'guide.html', person, api_base=f'http://{host}:8442/v1')
-
     async def docs_page(request: Request, person: Person) -> Response:
-        """Serve the private system map and source-derived component documentation."""
-        if "manage-settings" not in person.can:
-            return Response("Your account may not view system documentation.", status_code=403)
-        slug = request.path_params.get("slug")
-        if slug is None:
-            return page(request, "docs_index.html", person, topics=TOPICS)
-        topic = BY_SLUG.get(slug)
-        if topic is None:
+        """A docs section's overview or one of its topics. Every account may read the Web app section; the rest needs manage-settings."""
+        name, part = request.path_params.get("section", "system"), request.path_params.get("topic")
+        query = "?" + request.url.query if request.url.query else ""
+        if part is None and (name in MOVED_DOCS or "section" in request.path_params and name == "system"):
+            return RedirectResponse(MOVED_DOCS.get(name, "/docs") + query, status_code=308)  # a page from before the docs had sections
+        section = DOC_SECTIONS.get(name)
+        topic = section["by_slug"].get(part) if section and part else None
+        if section is None or part and topic is None:
             return Response("Documentation page not found.", status_code=404)
+        if not section["public"] and "manage-settings" not in person.can:
+            if "section" not in request.path_params:
+                return go("/docs/web-app")  # the docs' front page is the system reference, which this account may not read
+            return Response("Your account may not view system documentation.", status_code=403)
+        reference = api = document = None
         try:
-            reference = await asyncio.to_thread(source_reference, slug, request.query_params.get('module', ''))
-            written = WRITTEN_DOCS.get(slug)
-            document = doc_markdown.document(await asyncio.to_thread((HERE.parent / written).read_text)) if written else None
+            if topic and topic["source"]:
+                reference = await asyncio.to_thread(source_reference, topic["source"], request.query_params.get("module", ""))
+            if topic and (name, part) == ("api", "custom"):
+                api = await asyncio.to_thread(lambda: api_reference(source_files("api")))
+            if topic:
+                document = await asyncio.to_thread(written_doc, topic)
         except ValueError:
             return Response("Documentation source not found.", status_code=404)
         except (OSError, SyntaxError):
             return Response("Source documentation is temporarily unavailable.", status_code=503)
-        return page(request, "docs_topic.html", person, topic=topic, reference=reference, document=document)
+        host = request.url.hostname or "FRONT"
+        host = "[" + host + "]" if ":" in host else host
+        return page(request, "docs_page.html", person, section=section, topic=topic, reference=reference, api=api,
+                    document=document, sections=visible_docs(person.can), api_base=f"http://{host}:8442/v1")
+
+    async def guide_moved(request: Request) -> Response:
+        """The user guide is now the Web app section of the docs; old links and bookmarks arrive there."""
+        return RedirectResponse("/docs/web-app", status_code=308)
 
     def deploy_plan() -> dict:
         """The [deploy] part as the settings file has it now, so a machine added from the page counts at once."""
@@ -4595,12 +4609,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route("/settings", settings_page),
             route('/settings/image', image_settings_page),
             route('/settings/image', image_settings_page, 'POST'),
-            route("/guide", user_guide),
+            Route("/guide", guide_moved),
             route("/docs", docs_page),
             route("/system/components", components_page),
             route("/deploy", deploy_page),
             route("/deploy", deploy_do, "POST"),
-            route("/docs/{slug}", docs_page),
+            route("/docs/{section}", docs_page),
+            route("/docs/{section}/{topic}", docs_page),
             Route("/backups", for_people(backups_page)),
             route("/backups/create", backup_create, "POST"),
             route("/backups/retention", backup_retention, "POST"),

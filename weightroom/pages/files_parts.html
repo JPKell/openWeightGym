@@ -1,17 +1,17 @@
-{% from "parts.html" import card, section_title , confirm_loss, confirm_two %}
+{% from "parts.html" import card, section_title , confirm_loss, confirm_two, alert, empty_row %}
 {# Storage summaries and the two file-manager views. #}
 
 {% macro cleanup_status(found) %}
-{% if found.cleanup %}<div class="alert {{ 'alert-info' if found.cleanup.state == 'running' else 'alert-success' if found.cleanup.state == 'complete' else 'alert-warning' }} py-2">
+{% if found.cleanup %}{% call alert('info' if found.cleanup.state == 'running' else 'success' if found.cleanup.state == 'complete' else 'warning', class_='py-2') %}
   {% if found.cleanup.mode == 'promote' and found.cleanup.state == 'running' %}Front cache consolidation is running. Used files missing from the cache are copied from Storage.
   {% elif found.cleanup.state == 'running' %}Front cache cleanup is running. Storage copies are verified before unused cache files are removed.
   {% elif found.cleanup.mode == 'promote' and found.cleanup.state == 'complete' %}Front cache consolidation finished: {{ found.cleanup.promoted }} files copied from storage into the cache.{% if found.cleanup.failures %} {{ found.cleanup.failures|length }} files could not be copied.{% endif %}
   {% elif found.cleanup.state == 'complete' %}Front cache cleanup finished: {{ found.cleanup.saved }} copied to storage; {{ found.cleanup.removed }} unused files removed ({{ found.cleanup.freed|size }}).{% if found.cleanup.protected %} {{ found.cleanup.protected }} files used by configured models across nodes were kept.{% endif %}{% if found.cleanup.failures %} {{ found.cleanup.failures|length }} files could not be handled.{% endif %}
   {% else %}Front cache cleanup failed: {{ found.cleanup.failure }}{% endif %}
-</div>{% endif %}
-{% for node in found.nodes if node.name != found.artifact_machine and node.cleanup %}<div class="alert {{ 'alert-info' if node.cleanup.state == 'running' else 'alert-success' if node.cleanup.state == 'complete' else 'alert-warning' }} py-2">
+{% endcall %}{% endif %}
+{% for node in found.nodes if node.name != found.artifact_machine and node.cleanup %}{% call alert('info' if node.cleanup.state == 'running' else 'success' if node.cleanup.state == 'complete' else 'warning', class_='py-2') %}
   {{ node.name }} cleanup {{ 'is running' if node.cleanup.state == 'running' else 'finished' if node.cleanup.state == 'complete' else 'failed' }}{% if node.cleanup.state == 'complete' %}: {{ node.cleanup.removed }} unused files removed ({{ node.cleanup.freed|size }}).{% elif node.cleanup.failure %}: {{ node.cleanup.failure }}{% else %}.{% endif %}
-</div>{% endfor %}
+{% endcall %}{% endfor %}
 {% endmacro %}
 
 {# A drive's size: as |size, but in TB from 1000 GB up, so a big drive fits a narrow card. #}
@@ -61,7 +61,7 @@
 {% endmacro %}
 
 {% macro places_block(found) %}
-{% if not found.store_available|default(true) %}<div class="alert alert-info" role="status">No model-file locations are available yet. <a href="/settings?file_machine=front#model-files">Set up optional front cache or storage</a>, or connect a compute node.</div>{% endif %}
+{% if not found.store_available|default(true) %}{% call alert('info', role='status') %}No model-file locations are available yet. <a href="/settings?file_machine=front#model-files">Set up optional front cache or storage</a>, or connect a compute node.{% endcall %}{% endif %}
 {% for node in found.nodes %}{% for problem in node.problems|default([]) %}<p class="text-warning-emphasis small mb-2">{{ problem }}</p>{% endfor %}{% endfor %}
 {% if found.nodes %}
 <div class="place-cards-frame"><div class="place-cards">
@@ -85,14 +85,14 @@
   <tbody>
   {% for file in found.files if file.tier != "storage" and (file.facts or {}).get("what", "model") == "model" %}
   <tr>
-    <td class="wrap"><a href="{{ file_address(file.path) }}">{{ file.relative }}</a>{% if file.moving %} <span class="badge text-bg-primary">{{ "copying" if file.moving.copy else "to" }} {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}</td>
+    <td class="wrap"><a href="{{ file_address(file.path) }}">{{ file.relative }}</a>{% if file.moving %} <span class="badge text-bg-primary">{{ "copying" if file.moving.get('copy') else "to" }} {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}{% if file.transfer_failure %}<span class="d-block text-danger" role="alert">Transfer failed: {{ file.transfer_failure }}</span>{% endif %}</td>
     <td data-value="{{ file.size }}">{{ file.size|size }}</td>
     <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ file.facts.name or "" }} <small class="text-secondary">{{ file.facts.size_label or "" }} {{ file.facts.kind if file.facts.kind and file.facts.kind != "model" else "" }}</small>{% endif %}</td>
     <td>{% for name in file.used_by_all %}<a href="{{ address(name) }}">{{ name }}</a>{{ ", " if not loop.last }}{% else %}<span class="text-secondary">no model</span>{% endfor %}</td>
     <td>{% for node in file.used_nodes %}{{ node }}{{ ", " if not loop.last }}{% else %}<span class="text-secondary">none</span>{% endfor %}</td>
     <td class="text-end">{% if not file.used_by and not file.unreadable %}<a class="btn btn-outline-primary btn-sm" href="/models?file={{ file.path|urlencode }}&trained={{ file.facts.trained_context or '' }}">Add</a>{% endif %}</td>
   </tr>
-  {% else %}<tr><td colspan="6" class="text-secondary">No cached model files found.</td></tr>{% endfor %}
+  {% else %}{% call empty_row(6) %}No cached model files found.{% endcall %}{% endfor %}
   </tbody>
 </table>
 </div>
@@ -105,19 +105,44 @@
   <tbody>
   {% for file in found.files if file.tier == "storage" %}
   <tr>
-    <td class="wrap"><a href="{{ file_address(file.path) }}">{{ file.relative }}</a>{% if file.moving %} <span class="badge text-bg-primary">copying to {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}</td>
+    <td class="wrap"><a href="{{ file_address(file.path) }}">{{ file.relative }}</a>{% if file.moving %} <span class="badge text-bg-primary">{{ 'copying' if file.moving.get('copy') else 'moving' }} to {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}{% if file.transfer_failure %}<span class="d-block text-danger" role="alert">Transfer failed: {{ file.transfer_failure }}</span>{% endif %}</td>
     <td data-value="{{ file.size }}">{{ file.size|size }}</td>
     <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ file.facts.name or "" }} <small class="text-secondary">{{ file.facts.size_label or "" }} · {{ file.facts.what or "model" }}</small>{% endif %}</td>
     <td><div class="d-flex justify-content-end gap-2">
-      {% if file.cache_place and not file.cached %}<form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="to" value="{{ file.cache_place }}"><input type="hidden" name="return" value="storage"><button class="btn btn-outline-primary btn-sm" name="do" value="copy">Promote to cache</button></form>
+      {% if file.moving %}<button class="btn btn-outline-primary btn-sm" disabled>{{ 'Copying…' if file.moving.get('copy') else 'Moving…' }}</button>
+      {% elif file.cache_place and not file.cached %}<form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="to" value="{{ file.cache_place }}"><input type="hidden" name="return" value="storage"><button class="btn btn-outline-primary btn-sm" name="do" value="copy">Promote to cache</button></form>
       {% elif file.cached %}<span class="badge text-bg-secondary align-self-center">In cache</span>{% endif %}
-      {% if not file.used_by %}<form method="post" action="/file" {{ confirm_two() }}><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="name" value="{{ file.path.rsplit('/', 1)[-1] }}"><input type="hidden" name="return" value="storage"><button  class="btn btn-outline-danger btn-sm" name="do" value="delete" {{ confirm_loss() }}>Delete</button></form>{% endif %}
+      {% if not file.used_by and not file.moving %}<form method="post" action="/file" {{ confirm_two() }}><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="name" value="{{ file.path.rsplit('/', 1)[-1] }}"><input type="hidden" name="return" value="storage"><button  class="btn btn-outline-danger btn-sm" name="do" value="delete" {{ confirm_loss() }}>Delete</button></form>{% endif %}
     </div></td>
   </tr>
-  {% else %}<tr><td colspan="4" class="text-secondary">No files are in storage.</td></tr>{% endfor %}
+  {% else %}{% call empty_row(4) %}No files are in storage.{% endcall %}{% endfor %}
   </tbody>
 </table>
 </div>
+{% endmacro %}
+
+{% macro node_files_table(node) %}
+{% if not node.answering %}
+<p class="text-secondary mb-0" role="status">This node is offline. Its files will be available when it reconnects.</p>
+{% else %}
+<div class="table-responsive">
+<table id="files-node-table" class="table table-hover align-middle sortable">
+  <thead><tr><th data-sort="text">File</th><th data-sort="value">Size</th><th data-sort="text">It says it is</th><th data-sort="text">Location</th><th data-sort="text">Used by</th></tr></thead>
+  <tbody>
+  {% for file in node.files %}
+  {% set facts = file.facts or {} %}
+  <tr>
+    <td class="wrap font-monospace">{{ file.path }}</td>
+    <td data-value="{{ file.size }}">{{ file.size|size }}</td>
+    <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ facts.name or "" }} <small class="text-secondary">{{ facts.size_label or "" }} · {{ facts.what or "model" }}</small>{% endif %}</td>
+    <td>{{ 'Storage' if file.tier == 'storage' else 'Cache' }} · {{ file.place }}</td>
+    <td>{% for name in file.used_by %}<a href="{{ address(name) }}?node={{ node.name|urlencode }}">{{ name }}</a>{{ ", " if not loop.last }}{% else %}<span class="text-secondary">no model</span>{% endfor %}</td>
+  </tr>
+  {% else %}{% call empty_row(5) %}No model files found on this node.{% endcall %}{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
 {% endmacro %}
 
 {% macro parts_table(found, what, word) %}
@@ -134,7 +159,7 @@
     <td data-value="{{ file.size }}">{{ file.size|size }}</td>
     <td class="text-end"><a class="btn btn-outline-primary btn-sm" href="{{ file_address(file.path) }}">Make a model</a></td>
   </tr>
-  {% else %}<tr><td colspan="7" class="text-secondary">No cached {{ word }} found.</td></tr>{% endfor %}
+  {% else %}{% call empty_row(7) %}No cached {{ word }} found.{% endcall %}{% endfor %}
   </tbody>
 </table>
 </div>

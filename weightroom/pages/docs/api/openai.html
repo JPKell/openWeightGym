@@ -1,0 +1,48 @@
+{% from "docs_parts.html" import doc_contents, doc_section, api_endpoints %}
+{{ doc_contents([('api-compatible', 'Implemented OpenAI endpoints'), ('api-unsupported', 'Not implemented')]) }}
+
+{% call doc_section("Implemented OpenAI endpoints", "api-compatible") %}
+  <p>“Inference” below means the local inference header group. Hosted and plugin models have narrower header contracts, described under <a href="/docs/api/headers">Headers</a>.
+    GET routes also support HTTP HEAD through Starlette unless noted otherwise.</p>
+  {{ api_endpoints('api-openai', 'Implemented OpenAI-compatible endpoints', [
+    ('GET', '/v1/models', 'Permitted local models, role names, hosted models and plugin aliases. openWeightGym adds capabilities and placement metadata; an inventory can be partial when a node is unavailable.', 'None'),
+    ('GET', '/v1/models/{name}', 'Retrieve an accessible configured model or alias. This does not download weights.', 'None'),
+    ('POST', '/v1/chat/completions', 'Local llama.cpp chat, SSE streaming and model-supported vision/tools/structured output; Strata exposes its supported chat subset. Hosted and plugin models use this address too.', 'Inference; Plugin sessions for plugin aliases'),
+    ('POST', '/v1/completions', 'Legacy text completion through a compatible llama.cpp backend. Not supported by Strata, image or audio engines.', 'Inference'),
+    ('POST', '/v1/embeddings', 'Embeddings through a llama.cpp embedding model configured for that purpose; not a chat model.', 'Inference'),
+    ('POST', '/v1/images/generations', 'Optional Mirror Wall/sdcpp generation; JSON input, base64 results and openWeightGym streaming extensions. Controls and supported sizes depend on the model.', 'Inference; X-MirrorWall-Job / X-MirrorWall-Line for internal batch capture'),
+    ('POST', '/v1/images/edits', 'Optional Mirror Wall/sdcpp editing. JSON or multipart form input is normalized at Turnstile; supported reference inputs depend on the model.', 'Inference; X-MirrorWall-Job / X-MirrorWall-Line for internal batch capture'),
+    ('POST', '/v1/audio/speech', 'Optional SoundRoom/audio.cpp speech and cloning. JSON input; selected model controls voices and supported options. The current openWeightGym audio adapter does not advertise streaming.', 'Inference'),
+    ('POST', '/v1/audio/transcriptions', 'Optional SoundRoom/audio.cpp transcription. JSON with inline audio or multipart upload; model-dependent language, timing and output support.', 'Inference'),
+    ('GET, POST', '/v1/files', 'Partial Files API: list your uploads or upload multipart purpose=batch files, at most 50 MiB. This is not a general OpenAI file store or the model cache/storage API.', 'None'),
+    ('GET, DELETE', '/v1/files/{number}', 'Retrieve owned batch-file metadata or delete an unused owned file. Ownership and active-use restrictions apply.', 'None'),
+    ('GET', '/v1/files/{number}/content', 'Download owned batch input/output/error JSONL.', 'None'),
+    ('GET, POST', '/v1/batches', 'List your batches or submit an owned input file. openWeightGym executes durable local work; OpenAI completion-window/SLA, pagination and expiry semantics are not promised.', 'None; inference headers belong to executed work, not this envelope'),
+    ('GET', '/v1/batches/{number}', 'Retrieve your batch state, request counts and retained output/error file IDs.', 'None'),
+    ('POST', '/v1/batches/{number}/cancel', 'Cancel remaining work in your batch; retain completed results.', 'None')
+  ]) }}
+  <p>openWeightGym batch endpoints are <code>/v1/chat/completions</code>, <code>/v1/completions</code>, <code>/v1/embeddings</code>,
+    <code>/v1/images/generations</code>, <code>/v1/images/edits</code> and the custom <code>/v1/audio/generations</code>.
+    Other OpenAI batch endpoint choices are not implemented. See the
+    <a href="https://developers.openai.com/api/reference/resources/batches/methods/create" target="_blank" rel="noopener noreferrer">official Batch API</a>
+    for the upstream contract; openWeightGym's narrower list above is authoritative here.</p>
+{% endcall %}
+
+{% call doc_section("Not implemented by openWeightGym", "api-unsupported") %}
+  <p>The worker registers a broad <code>POST /v1/{path}</code> inference proxy. A backend may accept an additional POST with a model field;
+    that is backend-dependent passthrough, not an openWeightGym implementation or a compatibility promise. Unknown requests need not return 404:
+    model validation or an engine refusal can happen first. Hosted forwarding likewise does not implement OpenAI resources locally.</p>
+  {{ api_endpoints('api-missing', 'OpenAI APIs without an openWeightGym implementation', [
+    ('POST, GET, DELETE, WS', '/v1/responses and subresources', 'No openWeightGym Responses lifecycle, retrieval, deletion, input-items, token-counting, cancellation, compaction or WebSocket implementation. Creation may only work as backend-specific passthrough.', 'No openWeightGym-specific endpoint contract'),
+    ('GET, POST, DELETE', '/v1/conversations and subresources', 'No OpenAI Conversations resource. openWeightGym conversations use their own application APIs.', 'No openWeightGym-specific endpoint contract'),
+    ('GET, POST, DELETE', '/v1/chat/completions/{id} and stored-completion listing', 'No OpenAI stored-chat retrieval, update, messages, deletion or listing. openWeightGym request records are separate.', 'No openWeightGym-specific endpoint contract'),
+    ('WS, POST', '/v1/realtime and subresources', 'No OpenAI Realtime protocol, client-secret or call/session implementation. openWeightGym Voice WebSockets use a different protocol.', 'No openWeightGym-specific endpoint contract'),
+    ('POST', '/v1/audio/translations', 'No translation adapter. Transcription does not imply this endpoint exists.', 'No openWeightGym-specific endpoint contract'),
+    ('GET, POST, DELETE', '/v1/audio/voices and /v1/audio/voice_consents', 'No OpenAI voice/consent resources. SoundRoom saved voices and sharing are openWeightGym-specific.', 'No openWeightGym-specific endpoint contract'),
+    ('POST', '/v1/images/variations', 'No image-variation adapter. Use a supported edit or generation request.', 'No openWeightGym-specific endpoint contract'),
+    ('POST', '/v1/moderations', 'No openWeightGym moderation implementation.', 'No openWeightGym-specific endpoint contract'),
+    ('DELETE', '/v1/models/{name}', 'No OpenAI model-deletion endpoint. openWeightGym configuration deletion uses DELETE /loadcoach/models/{name}; file deletion is separate.', 'No openWeightGym-specific endpoint contract'),
+    ('GET, POST, DELETE', '/v1/uploads, /v1/fine_tuning, /v1/vector_stores, /v1/assistants, /v1/threads', 'No multipart-upload lifecycle, fine-tuning, vector-store or Assistants resource implementation.', 'No openWeightGym-specific endpoint contract'),
+    ('Various', 'Other OpenAI resource families', 'No openWeightGym implementation of OpenAI Videos, Evals, Agents, Live, ChatKit, Containers, Skills, webhooks, safety/provenance resources, organization/project administration, usage or billing APIs. openWeightGym benchmarks, plugins, accounts and usage reports have separate contracts.', 'No openWeightGym-specific endpoint contract')
+  ]) }}
+{% endcall %}

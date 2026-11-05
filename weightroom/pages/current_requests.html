@@ -1,4 +1,4 @@
-{% from "parts.html" import card , confirm_two %}
+{% from "parts.html" import card , confirm_two, empty_row %}
 {% set seen = now or compute.status %}
 <div id="current-requests"{% if current_oob %} hx-swap-oob="outerHTML"{% endif %}>
 {% if seen %}
@@ -38,7 +38,7 @@
   </tr>
   {% endfor %}
   {% endfor %}
-  {% if not count %}<tr><td colspan="7" class="text-secondary">No requests right now.</td></tr>{% endif %}
+  {% if not count %}{% call empty_row(7) %}No requests right now.{% endcall %}{% endif %}
   </tbody>
 </table>
 </div>

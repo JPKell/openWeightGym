@@ -1,5 +1,5 @@
 {# What each machine has installed: one card per machine, listing every service and engine whether it is there or not. #}
-{% from "parts.html" import card, section_title, node_state %}
+{% from "parts.html" import card, section_title, node_state, alert %}
 {% from "icons.html" import icon %}
 
 {# Installed, not installed, or unknown when the machine did not answer or could not be asked. #}
@@ -59,7 +59,7 @@
     {% if receipt.topology %}<span>Installed as {{ {'all': 'front and compute', 'front': 'front', 'compute': 'compute'}.get(receipt.topology, receipt.topology) }}{% if receipt.mode %}, {{ receipt.mode }} mode{% endif %}{% if receipt.installed %}, {{ receipt.installed[:10] }}{% endif %}</span>
     {% elif node.answering %}<span>No install receipt</span>{% endif %}
   </div>
-  {% if not node.answering %}<div class="alert alert-warning py-2 small mb-2" role="status">{{ node.why }}</div>{% endif %}
+  {% if not node.answering %}{% call alert('warning', class_='py-2 small mb-2', role='status') %}{{ node.why }}{% endcall %}{% endif %}
   {{ listing(title, 'services', node.services if node.answering else found.services, node.answering, (receipt.services or '').split(',')) }}
   {{ listing(title, 'engines', node.engines if node.answering else found.engines, node.answering) }}
 {% endcall %}

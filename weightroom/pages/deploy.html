@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, page_header, card , confirm_two %}
+{% from "parts.html" import said_box, page_header, card , confirm_two, empty_row %}
 {% block title %}Deploy · openWeightGym{% endblock %}
 {% block scripts %}{% if busy %}<meta http-equiv="refresh" content="4">{% endif %}{% endblock %}
 {% block main %}
@@ -37,7 +37,7 @@
               <form method="post" action="/deploy" class="d-inline" {{ confirm_two() }}><input type="hidden" name="node" value="{{ name }}"><button  class="btn btn-outline-warning btn-sm" name="do" value="restart" {{ 'disabled' if busy }} {{ confirm_two() }}>Restart services</button></form>
             </td>
           </tr>
-        {% else %}<tr><td colspan="4" class="text-secondary">No machines configured. Add <code>[deploy.nodes.NAME]</code> parts to settings/weightroom.toml.</td></tr>{% endfor %}</tbody>
+        {% else %}{% call empty_row(4) %}No machines configured. Add <code>[deploy.nodes.NAME]</code> parts to settings/weightroom.toml.{% endcall %}{% endfor %}</tbody>
       </table>
     </div>
   {% endcall %}

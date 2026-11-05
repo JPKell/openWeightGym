@@ -1,3 +1,4 @@
+{% from "parts.html" import empty_row %}
 {% if observation_report %}
 {% if observation_report.error %}<p class="text-warning">{{ observation_report.error }}</p>{% endif %}
 <p class="small text-secondary">Measured within each service. Parallel stages overlap; host timestamps may differ. Response handoff does not prove receipt by the calling application.</p>
@@ -9,6 +10,6 @@
 <td>{% if span.finished %}{{ '%.4f'|format(span.seconds) }}{% else %}Unavailable{% endif %}</td>
 <td>{% if span.request_number %}<a href="/requests/{{ span.request_number }}">{{ span.request_number }}</a>{% endif %}</td>
 <td><code>{{ span.id }}</code><br><small class="text-secondary">{{ span.parent_id or 'Ingress' }}{% if span.parent_unavailable %} · external or unavailable{% endif %}</small></td>
-</tr>{% else %}<tr><td colspan="6" class="text-secondary">No retained observation metadata in this scope and window.</td></tr>{% endfor %}</tbody></table></div>
+</tr>{% else %}{% call empty_row(6) %}No retained observation metadata in this scope and window.{% endcall %}{% endfor %}</tbody></table></div>
 {% if observation_report.truncated %}<p class="small text-warning">Results are truncated. Narrow the window or use paginated API export.</p>{% endif %}
 {% endif %}

@@ -1,4 +1,4 @@
-{% from "parts.html" import section_title , confirm_loss %}
+{% from "parts.html" import section_title , confirm_loss, alert, empty_row %}
 {% call card('Named load-outs', true, id='named-loadouts') %}
 <p class="small text-secondary">Save this selection, then preview the complete change. Applying settings starts no inference. Requesting a set applies its reviewed settings and waits for every member to be ready, with a ten-minute renewable hold. Active work and ordinary holds stay protected.</p>
 {% if loadouts.why %}<p class="text-warning">{{ loadouts.why }}</p>{% else %}
@@ -19,7 +19,7 @@
   {% if saved.undo %}<button name="do" value="preview-undo" class="btn btn-sm btn-outline-secondary">Preview undo</button>{% endif %}
   <button  name="do" value="delete" class="btn btn-sm btn-outline-danger" {{ confirm_loss() }}>Delete saved set</button>
 </form></td></tr>
-{% else %}<tr><td colspan="3" class="text-secondary">No saved load-outs.</td></tr>{% endfor %}
+{% else %}{% call empty_row(3) %}No saved load-outs.{% endcall %}{% endfor %}
 </tbody></table></div>
 {% if loadouts.leases %}{{ section_title("Your set holds") }}<div class="table-responsive"><table class="table table-sm align-middle" aria-label="Your load-out holds"><thead><tr><th>Set</th><th>State</th><th>Seconds left</th><th>Actions</th></tr></thead><tbody>
 {% for lease in loadouts.leases %}<tr><th>{{ lease.name }}<small class="d-block text-secondary">version {{ lease.version }} · {{ lease.models|select|join(', ') }}</small></th><td>{{ lease.state }}</td><td>{{ lease.seconds_left }}</td><td><form method="post" action="/dry-fit" class="d-flex flex-wrap gap-2"><input type="hidden" name="lease" value="{{ lease.id }}">{% if lease.state == 'ready' %}<button class="btn btn-sm btn-outline-primary" name="do" value="renew">Renew 10 minutes</button>{% endif %}<button class="btn btn-sm btn-outline-secondary" name="do" value="release">Release set hold</button></form></td></tr>{% endfor %}
@@ -33,7 +33,7 @@
 {% set _section_title2 %}{{ review.name }} · version {{ review.version }}{{ ' · Undo' if review.undo }}{% endset %}
 {{ section_title(_section_title2) }}
 <p class="small text-secondary">Static checks and a scheduler snapshot. Real-model load, image and workload qualification remain pending. Review every change before applying.</p>
-{% if review.errors %}<div class="alert alert-danger"><ul class="mb-0">{% for error in review.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
+{% if review.errors %}{% call alert('danger') %}<ul class="mb-0">{% for error in review.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endcall %}{% endif %}
 {% for error in review.joint.errors %}<p class="text-warning">{{ error }}</p>{% endfor %}
 <p><strong>Joint placement:</strong> {{ 'fits in this snapshot' if review.joint.fits else 'not ready to load as a set' }}. {{ review.joint.note }}{% if review.joint.leaves %} Idle models that would leave: {{ review.joint.leaves|join(', ') }}.{% endif %}</p>
 {% for member in review.models %}
@@ -41,7 +41,7 @@
 {{ section_title(_section_title3, level=3) }}
 {% for warning in member.warnings %}<p class="small text-warning">{{ warning }}</p>{% endfor %}
 <div class="table-responsive"><table class="table table-sm" style="table-layout: fixed; min-width: 26rem" aria-label="{{ member.name }} load-out changes"><thead><tr><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>
-{% for change in member.changes %}<tr><th class="wrap">{{ change.field }}</th><td class="wrap"><code>{{ change.before|tojson }}</code></td><td class="wrap"><code>{{ change.after|tojson }}</code></td></tr>{% else %}<tr><td colspan="3">Configuration already matches.</td></tr>{% endfor %}
+{% for change in member.changes %}<tr><th class="wrap">{{ change.field }}</th><td class="wrap"><code>{{ change.before|tojson }}</code></td><td class="wrap"><code>{{ change.after|tojson }}</code></td></tr>{% else %}{% call empty_row(3, class_='') %}Configuration already matches.{% endcall %}{% endfor %}
 </tbody></table></div>
 {% if member.effective %}<details class="mb-3"><summary class="small">Files, effective flags and placement</summary><p class="small">{{ member.placement.state }} · {{ member.placement.cards|join(', ') or ('CPU' if member.effective.gpus == 0 else 'no devices admitted') }} · {{ member.placement.context }} tokens</p><pre class="small wrap" style="white-space: pre-wrap; overflow-wrap: anywhere">{{ member.effective|tojson(indent=2) }}</pre>{% for item in member.artifacts %}<p class="small wrap">{{ item.role }}: {{ item.path }} · {{ item.compatibility }}</p>{% endfor %}</details>{% endif %}
 {% endfor %}

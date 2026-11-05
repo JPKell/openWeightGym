@@ -127,7 +127,7 @@ def test_cards_survive_navigation_oob_refresh_accounts_and_sample_anchors(desk, 
         page.reload()
         playwright.expect(page.locator('#sample-1 .sample-section').first).to_have_attribute('open', '')
         top = page.locator('#sample-1').bounding_box()['y']
-        header = page.locator('header').bounding_box()['height']
+        header = page.get_by_role('banner').bounding_box()['height']
         assert top >= header
         images = Path('data/benchmark-previews'); images.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(images / 'sample.png'))

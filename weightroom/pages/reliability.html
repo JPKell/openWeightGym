@@ -1,12 +1,12 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, page_header, card %}
+{% from "parts.html" import said_box, page_header, card, alert, empty_row %}
 {% block title %}Reliability · openWeightGym{% endblock %}
 {% block page_class %}console-page{% endblock %}
 {% block scripts %}<script src="/static/echarts.min.js" defer></script><script src="/static/reliability.js?v=1" defer></script>{% endblock %}
 {% block main %}
 {{ page_header("Reliability", lead="Review answer quality, failures and model health.") }}
 {{ said_box(said, failed) }}
-{% if reliability.compute_unavailable %}<p class="alert alert-warning" role="status">Compute is not answering. Showing saved reliability evidence; live model state and recovery controls are unavailable.</p>{% endif %}
+{% if reliability.compute_unavailable %}{% call alert('warning', tag='p', role='status') %}Compute is not answering. Showing saved reliability evidence; live model state and recovery controls are unavailable.{% endcall %}{% endif %}
 {% include "reliability_report.html" %}
 {% call card("Answer quality", attrs={"aria-labelledby": "quality-heading"}, header_id="quality-heading") %}
     <p class="small text-secondary">Every good or bad rating ever given, kept beyond the seven-day reliability window, per model fingerprint across all roles. Score is the share rated good.</p>
@@ -17,7 +17,7 @@
           <tr><th scope="row">{{ row.model }}<small class="d-block text-secondary" title="{{ row.fingerprint }}">{{ row.fingerprint[:12] }} · {{ 'current' if row.current else 'historical' }}</small></th>
             <td>{{ row.good }}</td><td>{{ row.bad }}</td><td>{{ row.score }}%</td>
             <td>{% for one in row.explanations or [] %}<small class="d-block"><a href="/requests/{{ one.request }}">#{{ one.request }}</a> {{ 'good' if one.value > 0 else 'bad' }} · {{ one.rater }}: {{ one.explanation }}</small>{% else %}<small class="text-secondary">{{ 'No explanations' if row.explanations is defined else 'Reading explanations needs the ability to read everyone\'s log.' }}</small>{% endfor %}</td></tr>
-        {% else %}<tr><td colspan="5" class="text-secondary">No answers rated yet.</td></tr>{% endfor %}</tbody>
+        {% else %}{% call empty_row(5) %}No answers rated yet.{% endcall %}{% endfor %}</tbody>
       </table>
     </div>
   {% endcall %}

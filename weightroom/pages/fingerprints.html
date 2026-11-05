@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, section_title %}
+{% from "parts.html" import page_header, section_title, empty_row %}
 {% block title %}Fingerprints · openWeightGym{% endblock %}
 {% block main %}
 <nav class="mb-2"><a href="/models">Models</a></nav>
@@ -51,7 +51,7 @@
     <td data-value="{{ one.settings.flags["ctx-size"] }}">{{ one.settings.flags["ctx-size"] }}</td>
   </tr>
   {% else %}
-  <tr><td colspan="5" class="text-secondary">{{ "No fingerprint begins so." if start else "No fingerprint yet. One is made once a model's file has been read through." }}</td></tr>
+  {% call empty_row(5) %}{{ "No fingerprint begins so." if start else "No fingerprint yet. One is made once a model's file has been read through." }}{% endcall %}
   {% endfor %}
   </tbody>
 </table>

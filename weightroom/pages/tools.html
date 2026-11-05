@@ -1,11 +1,11 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, section_title %}
+{% from "parts.html" import card, said_box, section_title, empty_row %}
 {% from "parts.html" import page_header, form_section, more %}
 {% block title %}Tools · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/tools.js" defer></script>{% endblock %}
 {% block main %}
 {{ page_header('Tools', 'Manage available tools, access levels and connection checks.') }}
-<p><a href="/docs/toollocker">ToolLocker setup and adding tools</a>: requirements, front-machine installation, a Python tool example and troubleshooting.</p>
+<p><a href="/docs/modules/toollocker">ToolLocker setup and adding tools</a>: requirements, front-machine installation, a Python tool example and troubleshooting.</p>
 {{ said_box(said, failed) }}
 {% call card("Tool service", true) %}
 {% if tool_info.program %}
@@ -13,7 +13,7 @@
 {% else %}<p class="text-secondary">The tool service has not reported its configuration yet.</p>{% endif %}
 {{ section_title("Servers") }}
 <div class="table-responsive"><table class="sortable table table-sm"><thead><tr><th>Name</th><th>Description</th><th>Command or address</th><th>Sensitivity</th></tr></thead><tbody>
-{% for name, server in tool_config.get('servers', {}).items() %}<tr><td>{{ name }}</td><td>{{ server.description or '' }}</td><td><code>{{ server.url if server.url else server.command|join(' ') }}</code></td><td>{{ server.get('level', 'normal') }}</td></tr>{% else %}<tr><td colspan="4" class="text-secondary">No reported servers.</td></tr>{% endfor %}
+{% for name, server in tool_config.get('servers', {}).items() %}<tr><td>{{ name }}</td><td>{{ server.description or '' }}</td><td><code>{{ server.url if server.url else server.command|join(' ') }}</code></td><td>{{ server.get('level', 'normal') }}</td></tr>{% else %}{% call empty_row(4) %}No reported servers.{% endcall %}{% endfor %}
 </tbody></table></div>
 <p class="text-secondary small mb-0">Servers and their descriptions are set in <code>settings/toollocker.toml</code> on the gateway host (front for a front-owned ToolLocker), and change when the tool service restarts.</p>
 <a class="btn btn-outline-secondary btn-sm mt-3" href="/settings?open=toollocker">Tool service settings</a>
@@ -29,7 +29,7 @@
 <option value="">as its server ({{ server_level }})</option>
 {% for level in ('normal', 'sensitive', 'restricted') %}<option {{ "selected" if levels.get(tool.name) == level }}>{{ level }}</option>{% endfor %}
 </select></td></tr>
-{% else %}<tr><td colspan="2" class="text-secondary">No tool descriptions on record yet.</td></tr>{% endfor %}
+{% else %}{% call empty_row(2) %}No tool descriptions on record yet.{% endcall %}{% endfor %}
 </tbody></table></div>
 <button class="btn btn-primary" name="do" value="levels">Save levels</button>
 </form>

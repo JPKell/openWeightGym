@@ -1,15 +1,17 @@
 {# One model's figures on one benchmark, under a pill for every benchmark. A pill asks for this piece again with its
    benchmark chosen, and the answer takes this one's place: the page is not loaded again. #}
 {% from "benchmark_parts.html" import number, settings_note %}
+{% from "navigation_parts.html" import pills, pill_link %}
 <div id="benchmark" hx-target="this" hx-swap="outerHTML">
   {% if unscored %}
   <p class="text-secondary mb-0">The results could not be had. {{ unscored }}</p>
   {% else %}
-  <nav class="nav nav-pills mb-3">
+  {% set base = address(model.name) ~ ('&' if '?' in address(model.name) else '?') %}
+  {% call pills('Model benchmark', class_='mb-3') %}
     {% for bench in benchmarks %}
-    <a class="nav-link py-1{{ " active" if bench.id == chosen else " text-secondary" if bench.id not in results }}" href="{{ address(model.name) }}{{ '&' if '?' in address(model.name) else '?' }}benchmark={{ bench.id }}#benchmark" hx-get="{{ address(model.name) }}{{ '&' if '?' in address(model.name) else '?' }}part=benchmark&amp;benchmark={{ bench.id }}">{{ bench.name }}</a>
+    {{ pill_link(bench.name, base ~ 'benchmark=' ~ bench.id ~ '#benchmark', bench.id == chosen, class_='py-1' ~ (' text-secondary' if bench.id != chosen and bench.id not in results else ''), attrs={'hx-get': base ~ 'part=benchmark&benchmark=' ~ bench.id}) }}
     {% endfor %}
-  </nav>
+  {% endcall %}
   {% set bench = benchmarks|selectattr("id", "equalto", chosen)|first %}
   {% set result = results.get(chosen) %}
   {% if not result %}

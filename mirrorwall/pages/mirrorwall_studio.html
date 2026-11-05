@@ -1,11 +1,11 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, card, section_title , confirm_loss %}
+{% from "parts.html" import page_header, card, section_title , confirm_loss, alert %}
 {% block title %}Image generation · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/mirrorwall-static/images.css?v=3"><script src="/mirrorwall-static/images.js?v=4" defer></script>{% endblock %}
 {% block main %}
 <div id="mirrorwall" data-mode="studio">
   <div class="d-flex justify-content-between align-items-start gap-3 mb-3"><div>{{ page_header("Image generation", lead="Generate images, reuse workflows and compare your results.") }}</div><a class="btn btn-outline-secondary btn-sm" href="/models/images/workflows">Workflows</a></div>
-  <div id="mw-message" class="alert alert-danger" role="alert" hidden></div>
+  {% call alert('danger', role='alert', attrs={'id': 'mw-message', 'hidden': ''}) %}{% endcall %}
   <div class="mw-studio studio">
     {% call card("", tag="form", id="mw-form", class_="mw-settings studio-settings") %}
       <label class="form-label" for="mw-model">Image model</label><select id="mw-model" name="model" class="form-select mb-3" required></select>

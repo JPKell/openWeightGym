@@ -1,13 +1,14 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, form_section, more, hardware, card , empty_row %}
+{% from "parts.html" import page_header, form_section, more, hardware, card , empty_row, alert %}
 {% from "model_form.html" import number, choice %}
 {% block title %}Image models · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/mirrorwall-static/images.css?v=3"><script src="/static/model-settings.js?v=2" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/mirrorwall-static/models.js?v=5" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/mirrorwall-static/images.css?v=3"><script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/mirrorwall-static/models.js?v=7" defer></script>{% endblock %}
 {% block main %}
 <div id="mirrorwall-models">
+<template id="mw-family-warning">{% call alert('warning', class_='py-2 my-2') %}<span data-message></span> <button type="button" class="btn btn-sm btn-warning"></button>{% endcall %}</template>
 <p><a href="/models?kind=image">Image models</a></p>
 {% call page_header('Image model settings', 'Choose model files, hardware and image defaults for the selected node.') %}<a href="/chat/images" class="btn btn-outline-secondary btn-sm">Generate images</a>{% endcall %}
-<div id="mw-message" class="alert alert-danger" role="alert" hidden></div><div id="mw-runtime" class="alert alert-secondary" hidden></div>
+{% call alert('danger', role='alert', attrs={'id': 'mw-message', 'hidden': ''}) %}{% endcall %}{% call alert('secondary', attrs={'id': 'mw-runtime', 'hidden': ''}) %}{% endcall %}
 <form method="get" class="d-flex flex-wrap gap-2 align-items-center mb-3"><label for="mw-node">Compute node</label><select id="mw-node" name="node" class="form-select form-select-sm w-auto"><option value="">Default</option></select><button class="btn btn-outline-secondary btn-sm">Browse node files</button></form>
 <div class="mw-models"><aside><button id="mw-new" class="btn btn-outline-primary w-100 mb-3">Add image model</button><div id="mw-list" class="mw-model-list"></div></aside>
 {% call card("Add image model", tag="form", id="mw-model-form", header_id="mw-heading") %}

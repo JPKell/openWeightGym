@@ -1,11 +1,11 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header %}
+{% from "parts.html" import page_header, alert %}
 {% block title %}Audio · My account · openWeightGym{% endblock %}
 {% block scripts %}<script src="/soundroom-static/preferences.js?v=1" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom-preferences" style="max-width:36rem">
   {{ page_header("Audio", lead="Your own choices for the Music, Sounds and Speech pages.") }}
-  <div id="ap-message" class="alert" role="status" hidden></div>
+  {% call alert('', role='status', attrs={'id': 'ap-message', 'hidden': ''}) %}{% endcall %}
   <form id="ap-form">
     <label class="form-label" for="ap-format">Download format</label>
     <select id="ap-format" class="form-select mb-3"><option value="wav">WAV</option><option value="flac">FLAC</option><option value="mp3">MP3</option><option value="opus">Opus</option></select>

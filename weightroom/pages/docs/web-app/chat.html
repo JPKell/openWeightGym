@@ -1,0 +1,11 @@
+{% from "docs_parts.html" import doc_contents, doc_section %}
+{{ doc_contents([('chat', 'Start a conversation'), ('chat-options', 'Options and keys'), ('chat-list', 'Your conversations')]) }}
+{% call doc_section('Start a conversation', 'chat') %}
+<p><a href="/chat">Start a conversation</a>, choose the model beside Send, and type your message. The selected model stays visible. A model may need to load or its compute node may need to wake before it can answer.</p>
+{% endcall %}
+{% call doc_section('Options and keys', 'chat-options') %}
+<p>Open Options to change the system prompt, reasoning and sampling, add attachments, or compare two models in a new conversation. Saved conversation options carry into follow-ups. Enter sends on a desktop keyboard; Shift+Enter adds a line. On phones, Enter adds a line.</p>
+{% endcall %}
+{% call doc_section('Your conversations', 'chat-list') %}
+<p>Use the conversation list to reopen, find, rename or delete your own conversations. On phones, open Menu to reach the list. Stop interrupts a reply; Ask again retries the latest prompt. If no models are available, ask your administrator to grant model access.</p>
+{% endcall %}

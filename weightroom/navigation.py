@@ -1,12 +1,13 @@
 """Site categories and their pages, limited to the signed-in person's abilities."""
 
-from weightroom.system_docs import LINKS as DOC_LINKS
+from weightroom.system_docs import BY_SLUG as DOC_SECTIONS, visible as visible_docs
 
 
 def navigation(path: str, can: list[str], machine: bool) -> dict:
     """Choose the category and page for the current route.
 
     Detail pages keep their parent highlighted. Voice chat, its desktop app download and administration are local pages.
+    In Docs the links are its sections, and `children` holds the topics of the section being read, shown beneath it.
     """
     groups = [
         {"name": "Chat", "links": [("Conversations", "/chat"), ("Collections", "/collections"), ("Workflows", "/workflows"), ("Image generation", "/chat/images"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Speech", "/chat/speech")]},
@@ -29,7 +30,8 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
     if "manage-settings" in can:
         groups[5]["links"].extend([("Voice", "/system/voice"), ("Audio", "/system/audio"), ("Image", "/settings/image")])
         groups[2]["links"].append(("Manage", "/benchmarks/manage"))
-    groups.append({"name": "Docs", "links": [("User guide", "/guide"), *([("System reference", "/docs"), *DOC_LINKS] if "manage-settings" in can else [])]})
+    docs = visible_docs(can)
+    groups.append({"name": "Docs", "links": [(section["title"], section["url"]) for section in docs]})
     if "restart-services" in can:
         groups[3]["links"].append(("System logs", "/output"))
     groups[4]["links"].append(("Telemetry", "/telemetry"))
@@ -69,11 +71,17 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
         selected, active = groups[4], path
     if path.startswith('/settings/image'):
         selected, active = groups[5], '/settings/image'
-    if root in ('/docs', '/guide'):
+    children = {}
+    if root == '/docs':
         selected = next((group for group in groups if group['name'] == 'Docs'), None)
-        active = path.rstrip('/') or '/docs'
+        parts = path.strip('/').split('/')
+        active = '/docs' if parts[1:] in ([], ['system']) else '/' + '/'.join(parts)
+        section = DOC_SECTIONS.get(parts[1] if len(parts) > 1 else 'system')
+        if section in docs:
+            children = {section['url']: [(topic['title'], topic['url']) for topic in section['topics']]}
     if root == "/account":
         links = [("Account", "/account"), ("Appearance", "/account/appearance"), ("Audio", "/account/audio"), ("Logs", "/account/logs")]
         active = next((url for _, url in links[1:] if path.rstrip('/') == url), '/account')
-        return {"groups": [group for group in groups if group['links']], "section": "My account", "links": links, "active": active}
-    return {"groups": [group for group in groups if group["links"]], "section": selected["name"] if selected else "", "links": selected["links"] if selected else [], "active": active if selected else ""}
+        return {"groups": [group for group in groups if group['links']], "section": "My account", "links": links, "active": active, "children": {}}
+    return {"groups": [group for group in groups if group["links"]], "section": selected["name"] if selected else "", "links": selected["links"] if selected else [],
+            "active": active if selected else "", "children": children if selected else {}}

@@ -1,0 +1,30 @@
+{% from "parts.html" import swaps %}
+
+{# Links navigate; buttons switch a view in place and expose their pressed state. #}
+{% macro pills(label, class_='gap-1 mb-3', buttons=false, attrs={}) -%}
+<{{ 'div' if buttons else 'nav' }} class="nav nav-pills{{ ' ' ~ class_ if class_ }}" aria-label="{{ label }}"{% if buttons %} role="group"{% endif %}{{ attrs|xmlattr }}>{{ caller() }}</{{ 'div' if buttons else 'nav' }}>
+{%- endmacro %}
+
+{% macro pill_link(label, href, active=false, class_='', attrs={}, target=None, push=true) -%}
+<a class="nav-link{{ ' ' ~ class_ if class_ }}{{ ' active' if active }}" href="{{ href }}"{% if active %} aria-current="page"{% endif %}{{ attrs|xmlattr }}{% if target is not none %} {{ swaps(target, push) }}{% endif %}>{{ label }}</a>
+{%- endmacro %}
+
+{% macro pill_button(label, active=false, class_='', attrs={}) -%}
+<button type="button" class="nav-link{{ ' ' ~ class_ if class_ }}{{ ' active' if active }}" aria-pressed="{{ 'true' if active else 'false' }}"{{ attrs|xmlattr }}>{{ label }}</button>
+{%- endmacro %}
+
+{% macro pill_choices(label, name, options, selected, class_='gap-1 my-2') -%}
+<fieldset class="nav nav-pills {{ class_ }}"><legend class="visually-hidden">{{ label }}</legend>
+{% for value, text in options %}<label class="nav-link py-1{{ ' active' if selected == value }}"><input type="radio" name="{{ name }}" value="{{ value }}" class="visually-hidden"{% if selected == value %} checked{% endif %}>{{ text }}</label>{% endfor %}
+</fieldset>
+{%- endmacro %}
+
+{% macro pager(previous=None, next=None, summary='', label='Results pages', target=None) -%}
+<nav class="d-flex align-items-center justify-content-between gap-2 mt-2" aria-label="{{ label }}">
+  {% if summary %}<span class="small text-secondary">{{ summary }}</span>{% endif %}
+  <div class="d-flex gap-2">
+    {% if previous %}<a class="btn btn-outline-secondary btn-sm" href="{{ previous }}"{% if target is not none %} {{ swaps(target, true) }}{% endif %}>Previous</a>{% endif %}
+    {% if next %}<a class="btn btn-outline-secondary btn-sm" href="{{ next }}"{% if target is not none %} {{ swaps(target, true) }}{% endif %}>Next</a>{% endif %}
+  </div>
+</nav>
+{%- endmacro %}

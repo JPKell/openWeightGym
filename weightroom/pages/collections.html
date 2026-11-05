@@ -1,15 +1,15 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, page_header, card , confirm_check, confirm_loss, confirm_two %}
+{% from "parts.html" import said_box, page_header, card , confirm_check, confirm_loss, confirm_two, alert, empty_row %}
 {% block title %}Collections · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/collections.js?v=3" defer></script>{% endblock %}
 {% block main %}
-{% call page_header(collection.title if collection else 'Collections', lead="Keep private sources and compare grounded answers." if not collection else "", help="/guide#collections") %}<a class="btn btn-outline-secondary btn-sm" href="{{ '/collections/'+collection.id if collection else '/collections' }}">Refresh status</a>{% endcall %}
+{% call page_header(collection.title if collection else 'Collections', lead="Keep private sources and compare grounded answers." if not collection else "", help="/docs/web-app/collections") %}<a class="btn btn-outline-secondary btn-sm" href="{{ '/collections/'+collection.id if collection else '/collections' }}">Refresh status</a>{% endcall %}
 {{ said_box(said, true) }}
-{% if unavailable %}<div class="alert alert-warning">{{ unavailable }}</div>{% endif %}
+{% if unavailable %}{% call alert('warning') %}{{ unavailable }}{% endcall %}{% endif %}
 {% if not collection %}
 <p class="text-secondary">Collections make human evaluation across multiple models repeatable and easier to compare: ask each model the same questions using the same private source material. Sources are stored on front, and indexing and answers use your permitted local models. Other users, including administrators, cannot open your collections through this page.</p>
 <div class="table-responsive mb-3"><table class="table align-middle"><thead><tr><th>Collection</th><th>Sensitivity</th><th>Embedding model</th><th>Dimensions</th></tr></thead><tbody>
-{% for item in collections %}<tr><td><a href="/collections/{{ item.id }}">{{ item.title }}</a></td><td>{{ item.level }}</td><td>{{ item.model_label }}</td><td>{{ item.dimensions or 'Not indexed' }}</td></tr>{% else %}<tr><td colspan="4" class="text-secondary">No collections yet.</td></tr>{% endfor %}
+{% for item in collections %}<tr><td><a href="/collections/{{ item.id }}">{{ item.title }}</a></td><td>{{ item.level }}</td><td>{{ item.model_label }}</td><td>{{ item.dimensions or 'Not indexed' }}</td></tr>{% else %}{% call empty_row(4) %}No collections yet.{% endcall %}{% endfor %}
 </tbody></table></div>
 {% call card("New collection") %}<form  method="post" action="/collections"><input type="hidden" name="do" value="create">
 <div class="row g-2"><div class="col-md-5"><label class="form-label" for="collection-title">Name</label><input class="form-control" id="collection-title" name="title" required maxlength="120" value="{{ form.get('title','') }}"></div>
@@ -23,7 +23,7 @@
 <p class="small text-secondary" role="status" aria-live="polite" data-index-status></p>
 <div class="table-responsive"><table class="table table-sm align-middle" aria-label="Collection documents"><thead><tr><th>Source</th><th>Status</th><th>Chunks</th><th class="text-end">Actions</th></tr></thead><tbody>
 {% for doc in collection.documents %}<tr data-document-id="{{ doc.id }}" data-document-state="{{ doc.state }}"><td class="text-break"><a href="/collections/{{ collection.id }}/documents/{{ doc.id }}/download" download="{{ doc.name }}">{{ doc.name }}</a><div class="small text-secondary">{{ 'Selectable PDF' if doc.mime=='application/pdf' else 'UTF-8 text' }}</div></td><td data-document-status>{{ doc.state }}<div class="small text-secondary">{{ doc.status }}</div></td><td data-document-chunks>{{ doc.chunks }}</td><td><form method="post" action="/collections/{{ collection.id }}" class="d-flex flex-wrap justify-content-end gap-1"><input type="hidden" name="document" value="{{ doc.id }}">
-{% if doc.state=='indexing' %}<button  class="btn btn-outline-warning btn-sm" name="do" value="cancel" data-document-index {{ confirm_two() }}>Cancel</button>{% else %}<button class="btn btn-outline-primary btn-sm" name="do" value="index" data-document-index>{{ 'Reindex' if doc.state=='ready' else 'Index / retry' }}</button>{% endif %}<button  class="btn btn-outline-danger btn-sm" name="do" value="delete_document" aria-label="Delete {{ doc.name }}" {{ confirm_loss() }}>Delete</button></form></td></tr>{% else %}<tr><td colspan="4" class="text-secondary">Upload a source, then select Index / retry.</td></tr>{% endfor %}
+{% if doc.state=='indexing' %}<button  class="btn btn-outline-warning btn-sm" name="do" value="cancel" data-document-index {{ confirm_two() }}>Cancel</button>{% else %}<button class="btn btn-outline-primary btn-sm" name="do" value="index" data-document-index>{{ 'Reindex' if doc.state=='ready' else 'Index / retry' }}</button>{% endif %}<button  class="btn btn-outline-danger btn-sm" name="do" value="delete_document" aria-label="Delete {{ doc.name }}" {{ confirm_loss() }}>Delete</button></form></td></tr>{% else %}{% call empty_row(4) %}Upload a source, then select Index / retry.{% endcall %}{% endfor %}
 </tbody></table></div>
 <form method="post" action="/collections/{{ collection.id }}" data-collection-upload><input type="hidden" name="do" value="upload"><input type="hidden" name="name"><input type="hidden" name="data">
 <label class="form-label" for="collection-file"><strong>Upload</strong> <span class="small text-secondary">UTF-8 text up to 200 KiB, or selectable-text PDF up to 1 MiB / 40 pages. Up to twenty documents and 500 indexed chunks per collection.</span></label>

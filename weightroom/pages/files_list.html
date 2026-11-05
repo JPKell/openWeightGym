@@ -1,18 +1,22 @@
 {% from "parts.html" import card %}
-{% from "files_parts.html" import cleanup_status, places_block, models_table, storage_table, parts_table, distributions_table with context %}
+{% from "navigation_parts.html" import pills, pill_link %}
+{% from "files_parts.html" import cleanup_status, places_block, models_table, storage_table, parts_table, distributions_table, node_files_table with context %}
 {% from "mirrorwall_files.html" import image_files with context %}
-{% set companions = '#files-cleanup, #files-distributions, #files-places, #files-storage' if tier == 'storage' else '#files-cleanup, #files-distributions, #files-places, #files-models, #files-adapters, #files-projectors, #files-images' %}
-<div id="files" hx-get="/files?part=list&amp;tier={{ tier }}" hx-trigger="every 5s" hx-swap="none" data-refresh-companions="{{ companions }}"></div>
+{% set companions = '#files-cleanup, #files-distributions, #files-places, #files-node' if machine else '#files-cleanup, #files-distributions, #files-places, #files-storage' if tier == 'storage' else '#files-cleanup, #files-distributions, #files-places, #files-models, #files-adapters, #files-projectors, #files-images' %}
+<div id="files" hx-get="/files?part=list&amp;{{ 'machine=' ~ (machine|urlencode) if machine else 'tier=' ~ tier }}" hx-trigger="every 5s" hx-swap="none" data-refresh-companions="{{ companions }}"></div>
 <div id="files-cleanup">{{ cleanup_status(found) }}</div>
 <div id="files-distributions">{{ distributions_table(found) }}</div>
 {% call card("Model file locations", open=true, key="files-places", hint="What model files take on each drive, and what is still free.", body_attrs={"id": "files-places"}) %}{{ places_block(found) }}{% endcall %}
 
-<nav class="nav nav-pills gap-1 mb-3" aria-label="File location">
-  <a class="nav-link{{ ' active' if tier == 'cache' }}" href="/files?tier=cache"{% if tier == 'cache' %} aria-current="page"{% endif %}>Cache</a>
-  <a class="nav-link{{ ' active' if tier == 'storage' }}" href="/files?tier=storage"{% if tier == 'storage' %} aria-current="page"{% endif %}>Storage</a>
-</nav>
+{% call pills('File location') %}
+  {{ pill_link('Cache', '/files?tier=cache', not machine and tier == 'cache') }}
+  {{ pill_link('Storage', '/files?tier=storage', not machine and tier == 'storage') }}
+  {% for node in found.nodes if node.name != 'front' %}{{ pill_link('Compute' if node.name == 'compute' else node.name, '/files?machine=' ~ (node.name|urlencode), machine == node.name) }}{% endfor %}
+{% endcall %}
 
-{% if tier == "storage" %}
+{% if machine %}
+{% call card(selected_node.name ~ " files", open=true, body_attrs={"id": "files-node"}) %}{{ node_files_table(selected_node) }}{% endcall %}
+{% elif tier == "storage" %}
 {% call card("Storage", body_attrs={"id": "files-storage"}) %}{{ storage_table(found) }}{% endcall %}
 {% else %}
 {% call card("Models", open=true, body_attrs={"id": "files-models"}) %}{{ models_table(found) }}{% endcall %}

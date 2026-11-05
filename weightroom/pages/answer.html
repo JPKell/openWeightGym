@@ -1,7 +1,7 @@
-{% from "parts.html" import section_title %}
+{% from "parts.html" import section_title, alert %}
 {# What a model answered when asked about a log, or why it could not be asked. The piece that goes into the box under the Ask button. #}
 {% if why %}
-<div class="alert alert-danger said">{{ why }}</div>
+{% call alert('danger', class_='said') %}{{ why }}{% endcall %}
 {% else %}
 {% set _section_title1 %}{{ model }} answered{% if number %} <small>as <a href="/requests/{{ number }}">request {{ number }}</a></small>{% endif %}{% endset %}
 {{ section_title(_section_title1, class_="text-secondary") }}

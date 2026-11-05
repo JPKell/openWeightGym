@@ -42,6 +42,7 @@ class FrontFiles:
         self.roots, self.log = roots, log
         self.web = httpx.AsyncClient(timeout=30, follow_redirects=True)
         self.fetching, self.tasks = {}, set()
+        self.moving, self.transfer_failures = {}, {}
         self.cleanup, self.stopping = {}, threading.Event()
 
     def places(self):
@@ -84,7 +85,8 @@ class FrontFiles:
                     stat = path.stat()
                     entry = {'path': str(path), 'place': name, 'tier': place['tier'], 'size': stat.st_size,
                              'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                             'used_by': [], 'last_used': None, 'moving': None}
+                             'used_by': [], 'last_used': None, 'moving': self.moving.get(str(path)),
+                             'transfer_failure': self.transfer_failures.get(str(path))}
                     place['files'] += stat.st_size
                     try:
                         entry['facts'], _ = self.describe(path)
@@ -128,6 +130,8 @@ class FrontFiles:
                 path = self.path(asked.get('path', ''))
                 if not path.is_file():
                     raise ValueError('That file is no longer available on front.')
+                if str(path) in self.moving:
+                    return response({'error': {'message': 'That file is already being copied or moved.'}}, 409)
                 if action == 'files/delete':
                     if asked.get('name') != path.name:
                         raise ValueError('Type the file name to confirm its deletion.')
@@ -147,12 +151,7 @@ class FrontFiles:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if room(str(target.parent))['free'] < path.stat().st_size + SPARE:
                     return response({'error': {'message': 'The destination needs enough free space plus 1 GiB headroom.'}}, 409)
-                await asyncio.to_thread(carry, path, target, {'done': 0, 'of': path.stat().st_size})
-                if action == 'files/move':
-                    await asyncio.to_thread(path.unlink)
-                self.log.add('file', 'copied' if action.endswith('copy') else 'moved', user.name,
-                             machine='front', path=str(path), to=str(target))
-                return response({'path': str(target)}, 202)
+                return self.start_transfer(user, path, target, asked['to'], copy=action == 'files/copy')
             if method == 'GET' and action == 'downloads':
                 incomplete = {}
                 for place, folder in self.places().items():
@@ -206,6 +205,34 @@ class FrontFiles:
             return response({'error': {'message': str(problem)}}, problem.status)
         except (OSError, ValueError, TypeError, KeyError) as problem:
             return response({'error': {'message': str(problem)}}, 400)
+
+    def start_transfer(self, user, source, target, place, *, copy):
+        """Accept a copy or move immediately and publish progress outside the HTTP request."""
+        path = str(source)
+        progress = {'to': place, 'done': 0, 'of': source.stat().st_size, 'copy': copy}
+        self.moving[path] = progress
+        self.transfer_failures.pop(path, None)
+
+        async def run():
+            """Keep the source until publication succeeds and retain errors for the file listing."""
+            try:
+                await asyncio.to_thread(carry, source, target, progress)
+                if not copy:
+                    await asyncio.to_thread(source.unlink)
+                self.log.add('file', 'copied' if copy else 'moved', user.name,
+                             machine='front', path=path, to=str(target))
+            except (OSError, ValueError) as problem:
+                self.transfer_failures[path] = str(problem)
+                self.log.add('file', 'copy-failed' if copy else 'move-failed', user.name,
+                             machine='front', path=path, to=str(target), why=str(problem))
+            finally:
+                self.moving.pop(path, None)
+
+        task = asyncio.create_task(run())
+        self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+        return httpx.Response(202, json={'copying' if copy else 'moving': path, 'to': place,
+                                       'path': str(target), 'target': str(target), 'size': progress['of']})
 
     def start_cleanup(self, user, asked):
         """Consolidate cache or clear only files with a verified retained storage copy."""

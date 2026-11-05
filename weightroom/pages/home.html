@@ -1,12 +1,12 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, page_header %}
+{% from "parts.html" import card, said_box, page_header, alert %}
 {% block title %}Status · openWeightGym{% endblock %}
 {% block main %}
 {{ page_header("Status", lead="Monitor model availability, active requests and queued work.") }}
 {{ said_box(said, failed) }}
 
 {% if not now %}
-<div class="alert alert-danger said">Compute is off since {{ compute.since|timestamp }} on the primary compute node. Other nodes are shown below.</div>
+{% call alert('danger', class_='said') %}Compute is off since {{ compute.since|timestamp }} on the primary compute node. Other nodes are shown below.{% endcall %}
 {% if wake_button and "front-wake" in person.can %}
 <form method="post" action="/wake" class="mb-3">
   <button class="btn btn-primary">Wake compute</button>

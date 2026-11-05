@@ -1,10 +1,10 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, swaps, page_header, card, section_title , confirm_check, confirm_loss %}
+{% from "parts.html" import said_box, swaps, page_header, card, section_title , confirm_check, confirm_loss, alert %}
 {% block title %}{{ group.name }} · openWeightGym{% endblock %}
 {% block main %}
 {{ page_header(group.name, lead="Manage membership, permissions and limits for this group.") }}
 {{ said_box(said, failed) }}
-{% if group.why_not %}<div class="alert alert-secondary">{{ group.why_not }}</div>{% endif %}
+{% if group.why_not %}{% call alert('secondary') %}{{ group.why_not }}{% endcall %}{% endif %}
 
 {% call card("") %}
     {{ section_title("Members") }}

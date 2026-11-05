@@ -193,29 +193,17 @@ Tests: [forms](../tests/test_forms.py), [settings](../tests/test_settings.py), [
 
 ## Docs
 
-Apply the shared page checks to every topic row: map/breadcrumb/topic/module links, active selection, escaped source, signatures/line numbers, no execution/import of displayed code, restricted access and mobile readability. Source selections are views within a page, not extra routes to count.
+Apply the shared page checks to every section and its topics: map/breadcrumb/topic/module links, the open section and active topic in the menu, escaped source, signatures/line numbers, no execution/import of displayed code, restricted access and mobile readability. Source selections are views within a page, not extra routes to count.
 
 | Page / manual checklist | Specific agent comparison | Modes |
 |---|---|---|
-| [User guide](../app-walkthrough.md#docs-user-guide) | Ordinary-account access, task help anchors, current terminology/actions and configured connection addresses. | L/R |
-| [System reference](../app-walkthrough.md#docs-system-reference) | Ownership map, front/worker boundaries and topic directory links. | L/R |
-| [API reference](../app-walkthrough.md#docs-api-reference) | Implemented methods/paths/headers, unsupported APIs, handler links and credential-free examples. | L/R |
-| [WeightRoom](../app-walkthrough.md#docs-weightroom) | Console/chat/admin/appearance modules and current page structure. | L/R |
-| [Turnstile](../app-walkthrough.md#docs-turnstile) | Authentication, routing, placement and readiness ownership. | L/R |
-| [LoadCoach](../app-walkthrough.md#docs-loadcoach) | Admission, residency and inference lifecycle sources. | L/R |
-| [ToolLocker](../app-walkthrough.md#docs-toollocker) | Discovery/MCP/permissions/execution references. | L/R |
-| [Voice](../app-walkthrough.md#docs-voice) | Gateway, worker, client and administration source coverage. | L/R |
-| [Spotter](../app-walkthrough.md#docs-spotter) | Health/telemetry/alert/power references; inspect rather than execute power actions. | L/R |
-| [Hosted providers](../app-walkthrough.md#docs-hosted-providers) | Routing/credential/cost/limit contracts; no real key in examples. | L/R |
-| [Plugins](../app-walkthrough.md#docs-plugins) | Adapter install/runtime/activity/recovery source links. | L/R |
-| [Logs](../app-walkthrough.md#docs-logs) | Capture scope, tracing, diagnostics and reliability references. | L/R |
-| [Models](../app-walkthrough.md#docs-models) | File/preset/role/projector/embedder source links. | L/R |
-| [Mirror Wall (images)](../app-walkthrough.md#docs-mirror-wall-images) | Supported families/components, reference/mask/memory limits versus current editors. | L/R |
-| [Benchmarks](../app-walkthrough.md#docs-benchmarks) | Versioned suites/scoring/run/schedule contracts. | L/R |
-| [Data and backups](../app-walkthrough.md#docs-data-and-backups) | Store ownership, retention/export/restore/migration procedures. | L/R |
-| [Accounts and groups](../app-walkthrough.md#docs-accounts-and-groups) | Identity/session/permission/sensitivity/portability contracts. | L/R |
-| [Collections and workflows](../app-walkthrough.md#docs-collections-and-workflows) | Retrieval, prompt versions and durable state sources. | L/R |
-| [Deployment and operations](../app-walkthrough.md#docs-deployment-and-operations) | Active topology/source pins and documented recovery interfaces; don't run them as link checks. | L/R |
+| [System reference](../app-walkthrough.md#docs-system-reference) | `/docs`, the Docs default: ownership map, front/worker boundaries and section directory; topics Models, Accounts and groups, Logs and Hosted providers with their code references. | L/R |
+| [API reference](../app-walkthrough.md#docs-api-reference) | Overview plus OpenAI compatibility, Custom endpoints, Headers and Code reference topics: implemented methods/paths/headers, unsupported APIs, handler links and credential-free examples. | L/R |
+| [Web app](../app-walkthrough.md#docs-web-app) | Every account: console categories, then Chat, Collections, Workflows, Voice and media, Tools and API keys; page Help buttons land on these topics and `/guide` redirects here. | L/R |
+| [Modules](../app-walkthrough.md#docs-modules) | Where each module runs, then WeightRoom, Turnstile, LoadCoach, ToolLocker, Voice, Spotter, Plugins, Mirror Wall and SoundRoom, each with its guide (where written) and code reference. | L/R |
+| [Benchmarks](../app-walkthrough.md#docs-benchmarks) | How a run works, what is measured, scores and results, and operation, from `benchmarks/README.md`; versioned suites/scoring/run/schedule contracts. | L/R |
+| [Data and backups](../app-walkthrough.md#docs-data-and-backups) | Store ownership, recovery sets, identity portability and engine migration procedures. | L/R |
+| [Deployment and operations](../app-walkthrough.md#docs-deployment-and-operations) | Installation, topology, settings and deploying from front, from the repository guides; don't run documented recovery interfaces as link checks. | L/R |
 
 Tests: [source parsing/privacy](../tests/test_source_docs.py), [Docs browser](../tests/test_docs_browser.py), [documentation links](../tests/test_documentation.py).
 

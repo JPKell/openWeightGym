@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, page_header, section_title %}
+{% from "parts.html" import card, said_box, page_header, section_title, alert, empty_row %}
 {% block title %}Backups · openWeightGym{% endblock %}
 {% block main %}
 {{ page_header("Backup and restore", lead="Create backups and preview recovery before restoring data.") }}
@@ -45,26 +45,26 @@
     <td>{{ backup.archive_size|size }} <span class="text-secondary">archive</span><div class="small text-secondary">{{ backup.payload_size|size }} data before compression</div></td>
     <td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/backups/{{ backup.id }}">Restore preview</a></td>
   </tr>
-  {% else %}<tr><td colspan="6" class="text-secondary">No backups have been made.</td></tr>{% endfor %}
+  {% else %}{% call empty_row(6) %}No backups have been made.{% endcall %}{% endfor %}
   </tbody>
 </table></div>
 {% endcall %}
 
 {% call card("Recovery inventory", false) %}
-{% if compute_error %}<div class="alert alert-warning py-2">{{ compute_error }}</div>{% endif %}
+{% if compute_error %}{% call alert('warning', class_='py-2') %}{{ compute_error }}{% endcall %}{% endif %}
 {% for machine, rows, root in [("Front", front_inventory, front_root), ("Compute", compute_inventory, compute_root)] %}
 {{ section_title(machine) }}
 {% if root %}<div class="small text-secondary mb-1">Archives: <code>{{ root }}</code></div>{% endif %}
 <div class="table-responsive"><table class="table table-sm align-middle mb-2">
   <thead><tr><th>Data</th><th>Source</th><th>Status</th><th>Size</th></tr></thead>
-  <tbody>{% for row in rows %}<tr><td>{{ row.kind }}{% if row.engine %}<div class="small text-secondary">{{ row.engine }}{% if row.bindings %} · {{ row.bindings|join(", ") }}{% endif %}</div>{% endif %}</td><td><code>{{ row.source }}</code></td><td>{{ row.status }}{% if row.reason or row.error %}<div class="small text-secondary">{{ row.reason or row.error }}</div>{% endif %}</td><td>{{ row.size|size if row.status == "included" else "—" }}</td></tr>{% else %}<tr><td colspan="4" class="text-secondary">Inventory unavailable.</td></tr>{% endfor %}</tbody>
+  <tbody>{% for row in rows %}<tr><td>{{ row.kind }}{% if row.engine %}<div class="small text-secondary">{{ row.engine }}{% if row.bindings %} · {{ row.bindings|join(", ") }}{% endif %}</div>{% endif %}</td><td><code>{{ row.source }}</code></td><td>{{ row.status }}{% if row.reason or row.error %}<div class="small text-secondary">{{ row.reason or row.error }}</div>{% endif %}</td><td>{{ row.size|size if row.status == "included" else "—" }}</td></tr>{% else %}{% call empty_row(4) %}Inventory unavailable.{% endcall %}{% endfor %}</tbody>
 </table></div>
 {% endfor %}
 {% endcall %}
 
 {% call card("Keep identities through a clean reinstall", false) %}
 <p class="mb-2">Use <code>suite-identity</code> in a terminal on each host to export a passphrase-encrypted bundle of accounts, permissions, service credentials and configuration. Request and conversation histories are excluded.</p>
-<p class="mb-0">Stop participating services before exporting or applying an import. Imports preview changes first and refuse different existing accounts. <a href="/docs/accounts?module=loadcoach/identity_bundle.py">Identity export/import reference</a></p>
+<p class="mb-0">Stop participating services before exporting or applying an import. Imports preview changes first and refuse different existing accounts. <a href="/docs/system/accounts?module=loadcoach/identity_bundle.py#source-title">Identity export/import reference</a></p>
 {% endcall %}
 
 {% call card("Key and archive protection", false) %}

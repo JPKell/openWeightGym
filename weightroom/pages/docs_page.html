@@ -1,0 +1,20 @@
+{% extends "frame.html" %}
+{% from "docs_parts.html" import doc_header, doc_document, doc_section, doc_directory, doc_source %}
+{# Every docs page: a section's overview, which ends with its topics, or one topic. What is written for a page
+   is pages/docs/SECTION.html or pages/docs/SECTION/TOPIC.html, a Markdown document from the repository, or both,
+   and a topic with modules ends with their code reference. #}
+{% block title %}{{ topic.title ~ ' · ' if topic }}{{ section.title }} · Docs · openWeightGym{% endblock %}
+{% block main %}
+<div class="docs-page">
+  {% if topic %}
+    {{ doc_header(topic.title, back=(section.title, section.url), lead=topic.summary) }}
+    {% include "docs/" ~ section.slug ~ "/" ~ topic.slug ~ ".html" ignore missing %}
+    {% if document %}{{ doc_document(document, more=[('source', 'Code reference')] if topic.source else []) }}{% endif %}
+    {% if topic.source %}{{ doc_source(reference, section.title if topic.slug == 'source' else topic.title) }}{% endif %}
+  {% else %}
+    {{ doc_header(section.title, lead=section.summary) }}
+    {% include "docs/" ~ section.slug ~ ".html" ignore missing %}
+    {% call doc_section("In this section", "topics") %}{{ doc_directory(section.topics) }}{% endcall %}
+  {% endif %}
+</div>
+{% endblock %}

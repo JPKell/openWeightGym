@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+  :root { color-scheme: light dark; --line: color-mix(in srgb, currentColor 25%, transparent); }
+  body { font: 15px/1.45 system-ui, sans-serif; max-width: 62rem; margin: 1.5rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 .2rem; }
+  p.note { margin: 0 0 1rem; opacity: .7; }
+  label { display: block; font-weight: 600; margin: .9rem 0 .25rem; }
+  label small { font-weight: 400; opacity: .7; }
+  input, select, textarea, button { font: inherit; }
+  input, select, textarea { box-sizing: border-box; width: 100%; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
+  /* A list that drops down is drawn by the browser, not the page. Without colours of its own it
+     takes the page's text colour but not its background, which in a dark theme is white on white. */
+  select, option { background-color: Canvas; color: CanvasText; }
+  textarea, pre { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .row { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .row > div { flex: 1 1 14rem; }
+  .row > div.narrow { flex: 0 0 var(--narrow-width, 9rem); }
+  .actions { display: flex; gap: .6rem; align-items: center; margin: 1rem 0; flex-wrap: wrap; }
+  button { padding: .45rem 1.1rem; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { font-weight: 600; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: .3rem 0 1rem; padding: .7rem; border: 1px solid var(--line); border-radius: 6px; min-height: 1.45em; }
+  summary { cursor: pointer; font-weight: 600; }
+{% block style %}{% endblock %}
+</style>
+</head>
+<body>
+<main>
+<h1>{{ title }}</h1>
+<p class="note">{% block introduction %}{% endblock %}</p>
+{% block main %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

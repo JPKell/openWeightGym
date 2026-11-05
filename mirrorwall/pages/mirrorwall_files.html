@@ -1,8 +1,9 @@
+{% from "parts.html" import empty_row %}
 {% macro image_files(found) %}
 <div class="table-responsive"><table class="table table-hover align-middle sortable"><thead><tr><th>Image component</th><th>Role</th><th>Size</th><th>Used by</th><th>Nodes</th><th></th></tr></thead><tbody>
 {% for file in found.files if file.tier != 'storage' and (file.facts or {}).get('what') == 'image' %}
 <tr><td class="wrap"><a href="{{ file_address(file.path) }}">{{file.relative}}</a></td><td>{{file.facts.kind}}</td><td>{{file.size|size}}</td><td>{% for name in file.used_by_all %}<a href="/models/images?model={{name|urlencode}}">{{name}}</a>{{ ', ' if not loop.last }}{% else %}<span class="text-secondary">Unused</span>{% endfor %}</td><td>{{file.used_nodes|join(', ')}}</td><td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/models/images?file={{file.path|urlencode}}">Configure</a></td></tr>
-{% else %}<tr><td colspan="6" class="text-secondary">No cached image components found.</td></tr>{% endfor %}
+{% else %}{% call empty_row(6) %}No cached image components found.{% endcall %}{% endfor %}
 {% for node in found.nodes if node.name != found.artifact_machine %}{% for file in node.files if (file.facts or {}).get('what') == 'image' %}
 <tr><td class="wrap"><span class="badge text-bg-secondary">{{node.name}}</span> {{file.path}}</td><td>{{file.facts.kind}}</td><td>{{file.size|size}}</td><td>{{file.used_by|join(', ') or 'Unused'}}</td><td>{{node.name}}</td><td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/models/images?node={{node.name|urlencode}}&amp;file={{file.path|urlencode}}">Configure</a></td></tr>
 {% endfor %}{% endfor %}

@@ -1,0 +1,13 @@
+{% from "docs_parts.html" import doc_contents, doc_section %}
+{{ doc_contents([('api-connection', 'Connection and scope'), ('topics', 'In this section')]) }}
+{% call doc_section("Connection and scope", "api-connection") %}
+  <p>Use Turnstile's model listener, normally <code>http://FRONT:8442/v1</code>, as an OpenAI client's base URL.
+    Send <code>Authorization: Bearer API_KEY</code> using your openWeightGym account key. A configured model or role name replaces an OpenAI model name.
+    Model permissions, engine capabilities, installed runtimes and node availability still apply.</p>
+  <p>This reference describes the current source, not a guarantee that every model or backend supports every request field.
+    The <a href="/docs/api/custom">custom endpoint inventory</a> reads route declarations without running services. Browser console forms and static assets are outside it.
+    Worker model APIs should be reached through Turnstile: workers validate its signed caller statements.</p>
+  <p class="small text-secondary">Compatibility terminology checked against the
+    <a href="https://developers.openai.com/api/reference/overview" target="_blank" rel="noopener noreferrer">official OpenAI API reference</a>
+    on 2026-10-26. openWeightGym support is established by the <a href="/docs/api/source">code reference</a>.</p>
+{% endcall %}

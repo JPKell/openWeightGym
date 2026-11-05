@@ -1,11 +1,11 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, form_section, card %}
+{% from "parts.html" import page_header, form_section, card, alert %}
 {% block title %}Image workflows · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/mirrorwall-static/images.css?v=3"><script src="/mirrorwall-static/images.js?v=4" defer></script>{% endblock %}
 {% block main %}
 <div id="mirrorwall" data-mode="workflows">
 {% call page_header('Image workflows', 'Save and reuse image settings while keeping every previous version.') %}<a href="/chat/images" class="btn btn-outline-secondary btn-sm">Generate images</a>{% endcall %}
 <template id="mw-workflow-form">{% call card('Workflow', tag='form') %}{% endcall %}</template>
-<div id="mw-message" class="alert alert-danger" role="alert" hidden></div><div class="row g-3">{% call form_section('Workflow settings', 'All nodes') %}<div class="col-12" id="mw-workflow-list"></div>{% endcall %}</div>
+{% call alert('danger', role='alert', attrs={'id': 'mw-message', 'hidden': ''}) %}{% endcall %}<div class="row g-3">{% call form_section('Workflow settings', 'All nodes') %}<div class="col-12" id="mw-workflow-list"></div>{% endcall %}</div>
 </div>
 {% endblock %}

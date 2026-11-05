@@ -1,4 +1,5 @@
 {% extends "frame.html" %}
+{% from "navigation_parts.html" import pills, pill_link %}
 {% from "parts.html" import card, said_box, section_title %}
 {% from "parts.html" import page_header, form_section, more, node_state %}
 {% block title %}Models · openWeightGym{% endblock %}
@@ -7,9 +8,9 @@
 {% call page_header('Models', 'Choose a model type to manage its files, settings and availability.') %}<a class="btn btn-primary" href="{{ '/models?new=1&node=' ~ (selected_node|urlencode) ~ '#add-model' if kind == 'llm' else '/models/images?new=1' if kind == 'image' else '/models/audio?new=1' }}">Add a model</a>{% endcall %}
 {{ said_box(said, failed) }}
 
-<nav class="nav nav-pills gap-2 mb-3" aria-label="Model type">
-{% for value, label in [('llm','LLM'),('image','Image'),('audio','Audio')] %}<a class="nav-link{{ ' active' if kind == value }}" href="/models?kind={{ value }}"{{ ' aria-current=page' if kind == value }}>{{ label }}</a>{% endfor %}
-</nav>
+{% call pills('Model type', class_='gap-2 mb-3') %}
+{% for value, label in [('llm','LLM'),('image','Image'),('audio','Audio')] %}{{ pill_link(label, '/models?kind=' ~ value, kind == value) }}{% endfor %}
+{% endcall %}
 {% if deferred %}{% from 'deferred.html' import loading %}{{ loading('models', list_url, 'Loading models…') }}{% else %}{% include 'models_list.html' %}{% endif %}
 {% if kind == 'llm' %}
 

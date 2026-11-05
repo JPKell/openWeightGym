@@ -1,0 +1,14 @@
+{% from "docs_parts.html" import doc_contents, doc_section %}
+{{ doc_contents([('operations', 'Installing and updating'), ('trouble', 'When something goes wrong'), ('topics', 'In this section')]) }}
+{% call doc_section('Installing and updating', 'operations') %}
+<p>Start with <a href="/docs/operations/installation">Installation</a>: one installer sets up the console, a one-time pairing code adds each GPU node to it,
+  and the <code>owg</code> command looks after an installation afterwards. <a href="/docs/operations/topology">Where things run</a> says which programs belong on which machine,
+  and <a href="/docs/operations/settings">Settings</a> where their settings come from.</p>
+<p>Once installed, superusers update every machine from <a href="/deploy">System → Deploy</a>, described in <a href="/docs/operations/deploying">Deploying from front</a>.
+  <a href="/system/components">System → Components</a> shows what each machine has installed. Editing a checkout alone may not change a running installation.</p>
+{% endcall %}
+{% call doc_section('When something goes wrong', 'trouble') %}
+<p>For a failed reply, start at <a href="/requests">Logs → Requests</a>, then follow its diagnostics, trace and system-log links. <a href="/status">Status</a> shows the queue and which models are loaded,
+  <a href="/telemetry">Telemetry</a> shows each machine's resources and <a href="/alerts">Alerts</a> lists incidents. A reading that is unavailable is not proof that something has recovered.
+  Restarting a service can interrupt requests and calls under way.</p>
+{% endcall %}

@@ -1,0 +1,21 @@
+{% from "docs_parts.html" import doc_contents, doc_section, doc_table %}
+{{ doc_contents([('modules', 'Where each one runs'), ('topics', 'In this section')]) }}
+{% call doc_section('Where each one runs', 'modules') %}
+<p>The console machine, front, runs WeightRoom, Turnstile, ToolLocker and, when it is used, the voice gateway. Each GPU or CPU worker runs LoadCoach and Spotter.
+  On a single machine they all run side by side. Front owns accounts and retained history; workers own model files and their own runtime state.</p>
+{% call doc_table('Modules and where they run') %}
+<thead><tr><th scope="col">Module</th><th scope="col">Runs on</th><th scope="col">What it does</th></tr></thead>
+<tbody>
+  <tr><td><a href="/docs/modules/weightroom">WeightRoom</a></td><td>Front</td><td>The web console: pages, chat, collections and workflows, and the benchmark worker.</td></tr>
+  <tr><td><a href="/docs/modules/turnstile">Turnstile</a></td><td>Front</td><td>Authentication, model and role placement, hosted calls, and signed routing to workers.</td></tr>
+  <tr><td><a href="/docs/modules/toollocker">ToolLocker</a></td><td>Front</td><td>The MCP gateway. File tools run on the hosts that own the files.</td></tr>
+  <tr><td><a href="/docs/modules/voice">Voice</a></td><td>Front and compute</td><td>The gateway on front takes browser, desktop and telephone connections; the voice service on compute does speech recognition and synthesis.</td></tr>
+  <tr><td><a href="/docs/modules/loadcoach">LoadCoach</a></td><td>Each worker</td><td>Model processes, measured admission, inference and scheduling.</td></tr>
+  <tr><td><a href="/docs/modules/spotter">Spotter</a></td><td>Each host</td><td>Telemetry, and the service and power controls it allows.</td></tr>
+  <tr><td><a href="/docs/modules/plugins">Plugins</a></td><td>Front</td><td>Adapters that offer external agents and services as models.</td></tr>
+  <tr><td><a href="/docs/modules/mirrorwall">Mirror Wall</a></td><td>Front and compute</td><td>Image requests and each person's image library on front; generation with stable-diffusion.cpp on compute.</td></tr>
+  <tr><td><a href="/docs/modules/soundroom">SoundRoom</a></td><td>Front and compute</td><td>Each person's audio library on front; music, sounds, speech and transcription with audio models on compute.</td></tr>
+</tbody>
+{% endcall %}
+<p>Model servers listen on private loopback ports; clients reach them through front. How the pieces connect is drawn on the <a href="/docs#system-map">system map</a>.</p>
+{% endcall %}

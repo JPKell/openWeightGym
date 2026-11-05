@@ -1,35 +1,8 @@
-<!doctype html>
-<html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ToolLocker test page</title>
-<style>
-  :root { color-scheme: light dark; --line: color-mix(in srgb, currentColor 25%, transparent); }
-  body { font: 15px/1.45 system-ui, sans-serif; max-width: 62rem; margin: 1.5rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.25rem; margin: 0 0 .2rem; }
-  p.note { margin: 0 0 1rem; opacity: .7; }
-  label { display: block; font-weight: 600; margin: .9rem 0 .25rem; }
-  label small { font-weight: 400; opacity: .7; }
-  input, select, button { font: inherit; }
-  input, select { box-sizing: border-box; width: 100%; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
-  /* A list that drops down is drawn by the browser, not the page. Without colours of its own it
-     takes the page's text colour but not its background, which in a dark theme is white on white. */
-  select, option { background-color: Canvas; color: CanvasText; }
-  pre { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .row { display: flex; gap: .6rem; flex-wrap: wrap; }
-  .row > div { flex: 1 1 14rem; }
-  .row > div.narrow { flex: 0 0 9rem; }
-  .actions { display: flex; gap: .6rem; align-items: center; margin: 1rem 0; flex-wrap: wrap; }
-  button { padding: .45rem 1.1rem; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
-  button:disabled { opacity: .45; cursor: default; }
-  #status { font-weight: 600; }
-  pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: .3rem 0 1rem; padding: .7rem; border: 1px solid var(--line); border-radius: 6px; min-height: 1.45em; }
-  summary { cursor: pointer; font-weight: 600; }
-</style>
-
-<h1>ToolLocker test page</h1>
-<p class="note">Lists the tools this key may use and calls one, exactly as a harness would. Ctrl+Enter calls.
-  Models are tested on the <a id="other">LoadCoach test page</a>.</p>
+{% extends "diagnostic_frame.html" %}
+{% set title = "ToolLocker test page" %}
+{% block introduction %}Lists the tools this key may use and calls one, exactly as a harness would. Ctrl+Enter calls.
+  Models are tested on the <a id="other">LoadCoach test page</a>.{% endblock %}
+{% block main %}
 <div class="actions">
   <button id="connect">Connect</button>
   <span id="state" class="note" style="margin: 0"></span>
@@ -63,8 +36,8 @@
 <details><summary>Message sent</summary><pre id="sent"></pre></details>
 <details open><summary>Response</summary><pre id="raw"></pre></details>
 
-<script>
-const $ = id => document.getElementById(id);
+{% endblock %}
+{% block scripts %}<script>const $ = id => document.getElementById(id);
 
 // LoadCoach's own test page, on the same machine. 8442 is its port unless you changed it.
 $("other").href = location.protocol + "//" + location.hostname + ":8442/";
@@ -170,4 +143,4 @@ $("call").onclick = call;
 document.onkeydown = event => { if (event.ctrlKey && event.key === "Enter" && !$("call").disabled) call(); };
 if ($("key").value) connect(); else $("state").textContent = "Enter an API key to see the tools.";
 </script>
-</html>
+{% endblock %}

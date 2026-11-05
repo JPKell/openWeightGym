@@ -1,13 +1,13 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, swaps, page_header %}
+{% from "parts.html" import said_box, swaps, page_header, alert %}
 {% block title %}System logs · openWeightGym{% endblock %}
 {% block page_class %}console-page{% endblock %}
 {% block main %}
 {{ page_header("System logs", lead="Inspect program output and system diagnostics.") }}
 {{ said_box(said, true) }}
-{% if offline %}<div class="alert alert-warning" role="status" id="journal-offline">
+{% if offline %}{% call alert('warning', role='status', attrs={'id': 'journal-offline'}) %}
 Compute is unavailable.{% if fetched %} Showing logs last fetched {{ fetched|timestamp }}. These lines may be out of date.{% else %} No logs have been fetched for these filters yet.{% endif %}
-</div>{% endif %}
+{% endcall %}{% endif %}
 
 {# Show puts the page in again without loading it: the form, the lines, and what may be asked about them. #}
 <form method="get" action="/output" class="row g-2 align-items-end mb-3" {{ swaps("page-content", true) }} data-auto-submit>

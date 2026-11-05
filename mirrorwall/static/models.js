@@ -50,9 +50,10 @@
     box.append(head);
     if (found.detected_family && !found.family_matches && !selected) { setFamily(found.detected_family); return; }  // a new model takes the family its weights say
     if (found.detected_family && !found.family_matches) {
-      const wrong = element('div', 'These weights are ' + FAMILIES[found.detected_family] + ', but the family above says ' + FAMILIES[$('family').value] + '. ', 'alert alert-warning py-2 my-2');
-      const fix = element('button', 'Use ' + FAMILIES[found.detected_family], 'btn btn-sm btn-warning'); fix.type = 'button';
-      fix.onclick = () => setFamily(found.detected_family); wrong.append(fix); box.append(wrong);
+      const wrong = $('family-warning').content.firstElementChild.cloneNode(true);
+      wrong.querySelector('[data-message]').textContent = 'These weights are ' + FAMILIES[found.detected_family] + ', but the family above says ' + FAMILIES[$('family').value] + '.';
+      const fix = wrong.querySelector('button'); fix.textContent = 'Use ' + FAMILIES[found.detected_family];
+      fix.onclick = () => setFamily(found.detected_family); box.append(wrong);
     }
     for (const slot of found.slots) {
       const input = $(slot.slot), says = $('says-' + slot.slot), need = $('need-' + slot.slot);
@@ -133,7 +134,7 @@
     const engines = value.engines.engines || [];
     const runtime = engines.find(one => one.id === 'sdcpp');
     $('runtime').hidden = Boolean(runtime?.available);
-    $('runtime').textContent = runtime?.why || 'Optional runtime: install with scripts/install-sdcpp.sh on this compute node. Manual directions are in Docs → Installation.';
+    $('runtime').textContent = runtime?.why || 'Optional runtime: install with scripts/install-sdcpp.sh on this compute node. Manual directions are in Docs → Deployment and operations → Installation.';
   }
   async function files() {
     const response = await fetch('/model-files', {cache:'no-store'});

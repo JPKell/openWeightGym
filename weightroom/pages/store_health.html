@@ -1,6 +1,6 @@
-{% from "parts.html" import card %}
+{% from "parts.html" import card, alert, empty_row %}
 {% call card("Store health and backup age", true) %}
-{% if store_health_error %}<div class="alert alert-warning py-2">{{ store_health_error }}</div>{% endif %}
+{% if store_health_error %}{% call alert('warning', class_='py-2') %}{{ store_health_error }}{% endcall %}{% endif %}
 <div class="table-responsive"><table class="table table-sm align-middle mb-0 store-health-table table-stack">
   <thead><tr><th>Machine / named store</th><th>Engine / services</th><th>Store probe</th><th>Last verified local backup</th></tr></thead>
   <tbody>
@@ -21,7 +21,7 @@
       {% else %}<div class="small text-secondary">No matching verified archive is recorded.</div>{% endif %}
     </td>
   </tr>
-  {% else %}<tr><td colspan="4" class="text-secondary">No store status is available.</td></tr>{% endfor %}
+  {% else %}{% call empty_row(4) %}No store status is available.{% endcall %}{% endfor %}
   </tbody>
 </table></div>
 <p class="small text-secondary mt-2 mb-0">Probes check reachability and read access, not write access or a full integrity check. Backup age uses the last recorded verified local archive matching the current store; more than 24 hours is stale. This does not reverify an archive or establish a complete paired recovery set. <a href="/backups">Review recovery sets</a>.</p>

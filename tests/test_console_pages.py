@@ -13,6 +13,7 @@ from loadcoach.app import build_app as build_loadcoach
 from loadcoach.config import Config
 from loadcoach.settings import said
 from weightroom.navigation import navigation
+from weightroom.system_docs import SECTIONS
 from weightroom.app import Settings, Person, build_app, current_batch_jobs
 from benchmarks.store import Benchmarks
 from test_weightroom import GROUPS, Switch, desk, desk_with_machine, sign_in  # noqa: F401
@@ -40,11 +41,20 @@ def test_navigation_orders_and_detail_parents():
     assert navigation('/output', can, True)['section'] == 'Logs'
     assert navigation('/', [], False)['section'] == 'System'
     assert navigation('/status', [], False)['links'] == [('Status', '/status'), ('Telemetry', '/telemetry')]
-    docs = navigation('/docs/voice', can, True)
-    assert docs['section'] == 'Docs' and docs['active'] == '/docs/voice'
-    assert docs['links'][0] == ('User guide', '/guide')
-    assert ('System reference', '/docs') in docs['links']
-    assert next(group for group in navigation('/status', [], False)['groups'] if group['name'] == 'Docs')['links'] == [('User guide', '/guide')]
+    docs = navigation('/docs/modules/voice', can, True)
+    assert docs['section'] == 'Docs' and docs['active'] == '/docs/modules/voice'
+    assert [name for name, _ in docs['links']] == ['System reference', 'API reference', 'Web app', 'Modules', 'Benchmarks',
+                                                   'Data and backups', 'Deployment and operations']
+    assert docs['links'][0] == ('System reference', '/docs')
+    # The section being read opens beneath its link; the others stay closed.
+    assert list(docs['children']) == ['/docs/modules'] and ('Voice', '/docs/modules/voice') in docs['children']['/docs/modules']
+    front = navigation('/docs', can, True)
+    assert front['active'] == '/docs' and list(front['children']) == ['/docs'] and front['children']['/docs'][0] == ('Models', '/docs/system/models')
+    assert navigation('/docs/api', can, True)['children']['/docs/api'][0] == ('OpenAI compatibility', '/docs/api/openai')
+    assert navigation('/status', can, True)['children'] == {}
+    # Everyone else reads the Web app section only, and never sees the topics of a section they may not read.
+    assert next(group for group in navigation('/status', [], False)['groups'] if group['name'] == 'Docs')['links'] == [('Web app', '/docs/web-app')]
+    assert navigation('/docs/api', [], False)['children'] == {}
     account = navigation('/account/appearance', can, True)
     assert account['section'] == 'My account' and account['active'] == '/account/appearance'
     assert account['links'] == [('Account', '/account'), ('Appearance', '/account/appearance'), ('Audio', '/account/audio'), ('Logs', '/account/logs')]
@@ -98,26 +108,36 @@ def test_system_logs_remain_live_when_only_the_model_service_is_off(desk_with_ma
 def test_admin_docs_map_and_component_outlines(desk):
     browser, _, _ = desk
     sign_in(browser, 'pat')
-    assert browser.get('/docs').status_code == 403
-    assert browser.get('/docs/voice').status_code == 403
+    assert browser.get('/docs/api').status_code == 403
+    assert browser.get('/docs/modules/voice').status_code == 403
+    assert browser.get('/docs', follow_redirects=False).headers['location'] == '/docs/web-app'  # the front page is not theirs to read
     sign_in(browser, 'jordan')
     overview = browser.get('/docs')
     assert overview.status_code == 200
     assert '<title id="map-title">openWeightGym component map</title>' in overview.text
-    for component in ('loadcoach', 'toollocker', 'weightroom', 'turnstile', 'voice', 'spotter',
-                      'hosted-providers', 'plugins', 'logs', 'models', 'benchmarks', 'data',
-                      'accounts', 'collections', 'operations', 'mirrorwall'):
-        assert f'href="/docs/{component}"' in overview.text
-        page = browser.get('/docs/' + component)
-        assert page.status_code == 200 and '<h2 ' in page.text
-    voice = browser.get('/docs/voice').text
-    assert '<h1 class="page-title wrap">' in voice and 'aria-label="Source modules"' in voice
+    for url in ('/docs/modules/loadcoach', '/docs/modules/toollocker', '/docs/modules/weightroom', '/docs/modules/turnstile',
+                '/docs/modules/voice', '/docs/modules/spotter', '/docs/system/hosted-providers', '/docs/modules/plugins',
+                '/docs/system/logs', '/docs/system/models', '/docs/data'):
+        assert f'href="{url}"' in overview.text  # every component on the map leads to its page
+    for section in SECTIONS:
+        assert f'href="{section["url"]}"' in overview.text
+        page = browser.get(section['url'])
+        assert page.status_code == 200 and '<h1 class="page-title wrap">' in page.text and 'id="topics"' in page.text
+        for topic in section['topics']:
+            assert f'href="{topic["url"]}"' in page.text  # the overview lists its topics, and the menu opens beneath it
+            page = browser.get(topic['url'])
+            assert page.status_code == 200 and '<h2 ' in page.text, topic['url']
+            assert f'aria-current="page">{topic["title"]}</a>' in page.text
+            assert ('aria-label="Source modules"' in page.text) == bool(topic['source']), topic['url']
+    voice = browser.get('/docs/modules/voice').text
     assert 'gateway.py' in voice and 'desktop.py' in voice
-    assert browser.get('/docs/not-a-topic').status_code == 404
-    images = browser.get('/docs/mirrorwall').text
+    assert browser.get('/docs/not-a-topic').status_code == 404 and browser.get('/docs/modules/not-a-topic').status_code == 404
+    assert browser.get('/docs/system', follow_redirects=False).headers['location'] == '/docs'
+    assert browser.get('/docs/mirrorwall', follow_redirects=False).headers['location'] == '/docs/modules/mirrorwall'
+    images = browser.get('/docs/modules/mirrorwall').text
     assert '<title id="flow-title">Image generation workflow</title>' in images and 'id="models"' in images
     assert all(name in images for name in ('Flux 2 klein 9B', 'Flux 2 Dev', 'SDXL checkpoint', 'Qwen3 8B', 'Mistral Small 3.2 24B'))
-    assert 'id="flow-title"' not in browser.get('/docs/voice').text  # only the topic with its own guide shows one
+    assert 'id="flow-title"' not in voice  # only the topic with its own guide shows one
 
 
 def test_current_batch_jobs_includes_one_running_benchmark_without_duplicate_probe():
@@ -314,8 +334,8 @@ def test_request_pages_and_group_time_log_filters(desk, tmp_path, monkeypatch):
     controls_tag = home[home.index('<div id="status-controls"'):].split('>', 1)[0]
     assert 'hx-preserve' in controls_tag
     assert 'Time requested' in home and 'Current requests (0)' in home
-    assert 'stopped' in browser.get('/requests?limit=1&page=2').text
+    assert 'stopped' in browser.get('/requests?limit=1&page=2&complete=1').text
     assert 'Stop this request' not in browser.get(f'/requests/{first}').text
-    usage = browser.get('/usage?start=2026-10-01&end=2026-10-01&group=plain').text
+    usage = browser.get('/usage?start=2026-10-01&end=2026-10-01&group=plain&complete=1').text
     assert usage.index('id="usage-filters"') < usage.index('data-usage-total') < usage.index('Mock input rate / M tokens')
     assert 'fallback_input_tokens' in usage and 'Date range' in usage and 'data-users-groups' in usage

@@ -1,4 +1,4 @@
-{% from "parts.html" import swaps %}
+{% from "parts.html" import swaps, empty_row %}
 <div id="account-events">
 <form method="get" action="/account/logs" class="d-flex align-items-center gap-2 mb-2" {{ swaps('account-events', true) }} data-auto-submit>
   <input type="hidden" name="days" value="{{ days }}">
@@ -13,7 +13,7 @@
     {% for event in events %}
     <tr><td class="when">{{ event.at|timestamp }}</td><td>{% if event.kind == "request" %}<a href="/requests/{{ event.of or event.source or event.id }}">request {{ event.of or event.source or event.id }}</a> {{ event.what }}{% else %}{{ event.kind }} {{ event.what }}{% endif %}</td><td>{{ event.model or "" }}</td><td>{{ event.status or "" }}</td></tr>
     {% else %}
-    <tr><td colspan="4" class="text-secondary">No account activity recorded.</td></tr>
+    {% call empty_row(4) %}No account activity recorded.{% endcall %}
     {% endfor %}
     </tbody>
   </table>

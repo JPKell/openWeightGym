@@ -17,7 +17,7 @@
   {% elif meta.control == 'switch' or holds is boolean %}
   <input type="hidden" name="value-{{ setting.name }}" value="false"><div class="form-check form-switch"><input id="{{ id }}" name="value-{{ setting.name }}" value="true" type="checkbox" class="form-check-input"{{ ' checked' if typed == 'true' }} aria-label="{{ meta.label }}"></div>
   {% elif holds is mapping or (holds is sequence and holds is not string) %}
-  <details class="more"><summary>Advanced · {{ meta.label }}</summary><textarea id="{{ id }}" name="value-{{ setting.name }}" class="form-control font-monospace mt-2" rows="4" aria-label="{{ setting.name }}" spellcheck="false">{{ typed }}</textarea></details>
+  {% call more('Advanced · ' ~ meta.label) %}<textarea id="{{ id }}" name="value-{{ setting.name }}" class="form-control font-monospace mt-2" rows="4" aria-label="{{ setting.name }}" spellcheck="false">{{ typed }}</textarea>{% endcall %}
   {% elif setting.multiline|default(false) %}
   <textarea id="{{ id }}" name="value-{{ setting.name }}" class="form-control" rows="3" aria-label="{{ setting.label|default(meta.label) }}">{{ typed }}</textarea>
   {% else %}

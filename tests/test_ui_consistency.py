@@ -17,11 +17,12 @@ from test_weightroom import desk, desk_with_machine, gguf, sign_in  # noqa: F401
 from test_workflow_pages import seed
 
 ROOT = Path(__file__).resolve().parents[1]
+from weightroom.system_docs import SECTIONS
 TEMPLATE_ROOTS = tuple(ROOT / name / 'pages' for name in ('weightroom', 'mirrorwall', 'soundroom'))
 HOST = '5855323a162516e680c785a3dd60f563bfc44129d809af71eb8674ff7316901d'
 # Explicit routes keep this check portable: it does not depend on ignored audit artifacts.
 PAGES = (
-    '/', '/guide', '/chat', '/collections', '/workflows', '/chat/images', '/chat/music',
+    '/', '/chat', '/collections', '/workflows', '/chat/images', '/chat/music',
     '/chat/sounds', '/chat/speech', '/voice', '/voice/desktop', '/models',
     '/models/images/workflows', '/models/audio', '/dry-fit', '/roles', '/files',
     '/hub', '/civitai', '/fingerprints', '/cloud-apis', '/benchmarks', '/benchmarks/runs',
@@ -30,17 +31,16 @@ PAGES = (
     '/plugins/activity', '/output', '/status', '/system/voice', '/system/audio',
     '/telemetry', '/alerts', '/schedules', '/compute-nodes', '/users', '/groups',
     '/tools', '/plugins', '/backups', '/databases', '/settings', '/deploy', '/docs',
-    *(f'/docs/{topic}' for topic in (
-        'weightroom', 'turnstile', 'loadcoach', 'toollocker', 'voice', 'spotter',
-        'hosted-providers', 'plugins', 'logs', 'models', 'mirrorwall', 'benchmarks',
-        'data', 'accounts', 'collections', 'operations')),
+    *(url for section in SECTIONS for url in (section['url'], *(topic['url'] for topic in section['topics'])) if url != '/docs'),
     '/account', '/account/appearance', '/account/audio', '/account/logs', '/sign-in',
-    '/docs/weightroom?module=weightroom%2Fapp.py', '/groups/admin',
+    '/docs/modules/weightroom?module=weightroom%2Fapp.py', '/groups/admin',
     '/models/sample', '/plugins/hermes', f'/telemetry/{HOST}', '/users/pat',
     '/users/jordan', '/plugins/hermes/instances/jeeves',
     '/backups/20261014T144500Z-39f0240e98ec64b9a76dd384', '/models/images',
     '/models/picture', '/benchmarks/node-measurements', '/system/voice/status',
     '/settings/image', '/models/images?model=picture',
+    '/files?tier=storage', '/files?machine=compute', '/models?kind=image', '/models?kind=audio',
+    '/benchmarks/node-measurements?kind=image', '/benchmarks/node-measurements?kind=audio',
 )
 
 MEASURE = r"""() => {
@@ -107,7 +107,7 @@ MEASURE = r"""() => {
 
 
 def test_templates_use_shared_components():
-    """New pages cannot silently introduce another title/card/section implementation."""
+    """Pages and fragments must reuse the components indexed in AGENTS.md."""
     for root in TEMPLATE_ROOTS:
         for path in root.rglob('*.html'):
             source = path.read_text()
@@ -117,6 +117,41 @@ def test_templates_use_shared_components():
             assert not re.search(r'<h[1-6]\b', source), path
             assert not re.search(r'<\w+\b[^>]*class=["\'][^"\']*\bcard-header\b', source), path
             assert not re.search(r'<\w+\b[^>]*class=["\'](?:card[\s"\']|[^"\']*\scard[\s"\'])', source), path
+            # Mask Jinja before checking class tokens, including conditional attributes.
+            markup = re.sub(r'{{.*?}}|{%.*?%}|{#.*?#}', 'template', source, flags=re.S)
+            classes = re.findall(r'<[^>]+\bclass=["\']([^"\']*)["\']', markup)
+            assert not any('alert' in value.split() for value in classes), path
+            assert not re.search(r'<details\b[^>]*class=["\']more["\']', markup), path
+            if path.name != 'navigation_parts.html':
+                assert not any('nav-pills' in value.split() for value in classes), path
+            # A spanning row with only a message belongs in empty_row; group headings use th.
+            assert not re.search(r'<tr\b[^>]*>\s*<td\b[^>]*\bcolspan=[^>]+>'
+                                 r'(?:(?!</?t[drh]\b).)*</td>\s*</tr>', markup, re.S), path
+
+
+@pytest.mark.parametrize('service,title', [('loadcoach', 'LoadCoach'), ('toollocker', 'ToolLocker')])
+def test_standalone_diagnostics_keep_controls_and_fit(service, title):
+    from loadcoach.web import diagnostic_page
+    from test_console_browser import playwright
+
+    markup = diagnostic_page(ROOT / service / 'test.html').body
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(headless=True, args=['--disable-gpu'])
+        page = browser.new_page()
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.route('http://diagnostic.test/**', lambda route: route.fulfill(
+            content_type='text/html' if route.request.url == 'http://diagnostic.test/' else 'application/json',
+            body=markup if route.request.url == 'http://diagnostic.test/' else '{"data":[]}'))
+        page.goto('http://diagnostic.test/')
+        playwright.expect(page.get_by_role('heading', level=1)).to_have_text(title + ' test page')
+        page.get_by_label('API key', exact=False).fill('test-key')
+        playwright.expect(page.get_by_label('API key', exact=False)).to_have_value('test-key')
+        for width in (1440, 390):
+            page.set_viewport_size({'width': width, 'height': 1000})
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not errors
+        browser.close()
 
 
 @pytest.fixture
@@ -209,6 +244,7 @@ def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, them
             if response.status != 200:
                 failures.append(f'{path}: HTTP {response.status}')
                 continue
+            page.wait_for_function('''!document.querySelector('[data-deferred-loader][hx-trigger="load"][aria-busy="true"], .htmx-settling')''')
             result = page.evaluate(MEASURE)
             measurements.append({'path': path, **result})
             problems = []
@@ -423,6 +459,42 @@ def test_dynamic_image_cards_use_shared_templates(ui_console):
         browser.close()
 
 
+def test_dynamic_warning_and_empty_rows_keep_their_actions(ui_console):
+    from test_console_browser import browser_context, playwright
+
+    server, _ = ui_console
+    sign_in(server, 'jordan')
+
+    def capture(route, path):
+        if path.startswith('/mirrorwall-models/check'):
+            matches = route.request.post_data_json['settings']['sdcpp']['family'] == 'sdxl'
+            route.fulfill(content_type='application/json', body=json.dumps({
+                'ready': matches, 'detected_family': 'sdxl', 'family_matches': matches,
+                'slots': [{'slot': 'diffusion', 'status': 'ok', 'need': 'required', 'message': 'Present'}],
+                'loras': [], 'get_diffusion': [],
+            }))
+            return True
+
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture)
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/models/images?model=picture')
+        playwright.expect(page.locator('#mw-name')).to_have_value('picture')
+        page.locator('#mw-family').select_option('flux2-klein')
+        playwright.expect(page.locator('#mw-check').get_by_role('alert')).to_contain_text('These weights are SDXL')
+        page.get_by_role('button', name='Use SDXL', exact=True).click()
+        playwright.expect(page.locator('#mw-family')).to_have_value('sdxl')
+        playwright.expect(page.locator('#mw-check').get_by_role('alert')).to_have_count(0)
+        page.goto('http://console.test/usage?model=absent')
+        page.locator('#usage-group-by').select_option('model')
+        empty = page.locator('#usage-breakdown tbody [data-empty-row]')
+        playwright.expect(empty).to_have_text('No usage in this range.')
+        playwright.expect(empty.locator('td')).to_have_attribute('colspan', '10')
+        assert not errors
+        browser.close()
+
+
 def test_errors_keep_console_status_identity_and_safe_details(desk, monkeypatch):
     """404/403/500 differ, keep the right navigation and never expose exception details."""
     from starlette.routing import Route
@@ -436,14 +508,14 @@ def test_errors_keep_console_status_identity_and_safe_details(desk, monkeypatch)
     assert 'href="/status"' in unknown.text and 'Not here' not in unknown.text
     sign_in(server, 'pat')
     for path, explanation in [('/settings', 'settings'), ('/models', 'models'),
-                              ('/users', 'users'), ('/deploy', 'superuser'), ('/docs', 'documentation')]:
+                              ('/users', 'users'), ('/deploy', 'superuser'), ('/docs/api', 'documentation')]:
         refused = server.get(path)
         assert refused.status_code == 403
         assert 'Access denied' in refused.text and explanation in refused.text
         assert 'Ask your administrator' in refused.text
         assert 'said-box' not in refused.text
-        assert ('nav-link active' in refused.text) == (path == '/docs')
-        assert ('sidebar-toggle' in refused.text) == (path == '/docs')
+        assert ('nav-link active' in refused.text) == (path == '/docs/api')
+        assert ('sidebar-toggle' in refused.text) == (path == '/docs/api')
     sign_in(server, 'jordan')
     for path, explanation in [('/models/no-such-model', 'no-such-model'),
                               ('/requests/999999', 'request'), ('/benchmarks/run/nope', 'run'),
@@ -740,7 +812,7 @@ def test_user_facing_product_name_does_not_rename_runtime_identity(desk):
     server, _, _ = desk
     sign_in(server, 'pat')
     home = server.get('/')
-    assert '<span>openWeightGym</span>' in home.text and '· openWeightGym</title>' in home.text
+    assert '<span>weightRoom</span>' in home.text and '· openWeightGym</title>' in home.text
     assert 'weightroom' in server.cookies
     manifest = server.get('/static/site.webmanifest').json()
     assert manifest['name'] == manifest['short_name'] == 'openWeightGym'
@@ -871,15 +943,20 @@ def test_status_is_the_landing_page_without_home_navigation(ui_console):
 
 def test_every_account_has_usage_help_but_source_reference_stays_private(desk):
     server,_,_=desk;sign_in(server,'pat')
-    guide=server.get('/guide')
-    assert guide.status_code == 200 and 'API keys and model API' in guide.text
-    assert 'http://testserver:8442/v1' in guide.text
-    assert '/guide#chat' in server.get('/chat').text
-    assert '/guide#collections' in server.get('/collections').text
-    assert '/guide#workflows' in server.get('/workflows').text
-    assert server.get('/docs').status_code == 403
+    guide=server.get('/docs/web-app/api-keys')
+    assert guide.status_code == 200 and 'Create a key' in guide.text
+    assert 'http://testserver:8442/v1' in guide.text and 'href="/docs/api"' not in guide.text
+    assert server.get('/docs/web-app').status_code == 200
+    assert 'href="/docs/web-app/chat"' in server.get('/chat').text
+    assert 'href="/docs/web-app/collections"' in server.get('/collections').text
+    assert 'href="/docs/web-app/workflows"' in server.get('/workflows').text
+    assert 'href="/docs/web-app/api-keys"' in server.get('/account').text
+    assert server.get('/docs').url.path == '/docs/web-app'
+    assert server.get('/docs/api').status_code == 403
+    moved=server.get('/guide',follow_redirects=False)
+    assert moved.status_code == 308 and moved.headers['location'] == '/docs/web-app'
     server.cookies.clear()
-    assert server.get('/guide',follow_redirects=False).status_code == 303
+    assert server.get('/docs/web-app',follow_redirects=False).status_code == 303
 
 
 def test_failed_polls_show_connection_loss_until_each_region_recovers(desk):

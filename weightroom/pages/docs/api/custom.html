@@ -1,0 +1,46 @@
+{% from "docs_parts.html" import doc_section, api_endpoints %}
+{% call doc_section("Custom endpoints", "api-custom") %}
+  <p>Benchmark submissions accept explicit <code>targets: [{model, machine}]</code> for quality and resource runs.
+    Recurring schedules also accept <code>machine</code>; kind <code>outstanding</code> uses optional
+    <code>model_ids</code>/<code>benchmarks</code> scopes and freezes one missing/stale pair per occurrence.
+    Scoped schedule inspection/dispatch use <code>X-Suite-Schedule</code> and recheck the owner's permissions.
+    Unknown node availability defers selection; accepted tasks retain their exact node and identity.</p>
+  <p>Every row inherits the <a href="/docs/api/headers">Common headers</a> where its listener supports them. “None” means no additional route-specific request header.
+    Authorization is still required: account abilities, resource ownership, scoped tokens and machine signatures are enforced by each handler.
+    Path placeholders describe parameters; <code>:int</code> and <code>:path</code> are route constraints, not literal URL text.</p>
+  {{ api_endpoints('api-custom-inference', 'openWeightGym inference and plugin extensions', [
+    ('POST', '/v1/audio/generations', 'openWeightGym music, sound and scripted-speech generation. Optional audio.cpp; not an OpenAI endpoint.', 'Inference; X-SoundRoom-Job / X-SoundRoom-Line for internal batch capture'),
+    ('POST', '/v1/audio/diarizations', 'openWeightGym speaker diarization with a configured capable audio model. JSON or multipart input.', 'Inference'),
+    ('GET', '/turnstile/plugins/status', 'Optional plugin instance health, intercepted on the model listener.', 'None'),
+    ('GET', '/turnstile/plugins/activity', 'Optional caller-scoped adapter activity.', 'None'),
+    ('GET', '/turnstile/plugins/runs/{plugin}/{instance}/{run}', 'Optional caller-scoped adapter run receipt.', 'None')
+  ]) }}
+  <p>The tables below come from explicit source route declarations, including fixed route comprehensions. Conditional features may be unavailable.
+    The broad inference proxy is described under <a href="/docs/api/openai#api-unsupported">OpenAI compatibility</a>; it is not enumerated as implemented endpoints. <code>/loadcoach/task</code>
+    is a durable batch line marker, not a separately registered HTTP route.</p>
+  <p><strong>Listeners:</strong> Turnstile/model operations normally use front port 8442; MCP uses the configured ToolLocker listener (normally 8443).
+    Spotter routes use the configured telemetry/control listener. Voice gateway browser/admin routes are private (normally 8446), desktop streaming uses 8447,
+    and its public listener exposes only the telephone allowlist. Compute voice normally uses 8445: HTTP uses signed callers, while its audio socket and deletion use the per-session bearer token.
+    Direct <code>/adapter/v1/</code> routes belong to the configured plugin adapter listener and use its pairing key; these are internal management APIs, not general account-key endpoints.
+    Front-internal <code>/turnstile/accounts</code>, <code>/turnstile/pick</code>, <code>/turnstile/log</code>, <code>/turnstile/log-facts</code> and
+    <code>/turnstile/power</code> require machine signatures. <code>/loadcoach/front-probes</code> and its interrupt route are internal dispatch only and are refused on the public front path.
+    Schedule dispatch uses its scoped grant. Worker file PUT uses the short-lived preparation token in the path.</p>
+  {% for group in api %}
+    <details class="docs-disclosure">
+      <summary><code class="text-break">{{ group.path }}</code> <span class="text-secondary small">· {{ group.rows|length }} operations</span></summary>
+      <div class="docs-disclosure-body">
+        <p><a href="/docs/api/source?module={{ group.path|urlencode }}#source-title">Read handler documentation and parameters</a></p>
+        <div class="table-responsive docs-table-frame" tabindex="0" role="region" aria-label="{{ group.path }} endpoints">
+          <table class="table table-sm docs-table api-endpoints">
+            <caption class="visually-hidden">{{ group.path }} custom endpoints</caption>
+            <thead><tr><th scope="col">Method</th><th scope="col">Endpoint</th><th scope="col">Purpose</th><th scope="col">Request headers beyond Common</th></tr></thead>
+            <tbody>{% for row in group.rows %}
+              <tr><td>{{ row.method }}</td><td><code class="text-break">{{ row.path }}</code></td><td>{{ row.summary or 'See the handler documentation.' }}</td>
+                <td>{% for header in row.headers %}<code class="text-break">{{ header }}</code>{% if not loop.last %}<br>{% endif %}{% else %}None{% endfor %}</td></tr>
+            {% endfor %}</tbody>
+          </table>
+        </div>
+      </div>
+    </details>
+  {% endfor %}
+{% endcall %}

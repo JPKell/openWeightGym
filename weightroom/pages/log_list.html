@@ -1,6 +1,6 @@
 {# The table of log entries, newest first. Showing the latest, it asks for itself again every 5 seconds.
    Gone back to older ones, it stays as it is, so that what is being read does not move. #}
-{% from "parts.html" import swaps %}
+{% from "parts.html" import swaps, empty_row %}
 <div id="log" {% if not going_back %}hx-get="/log?part=list{{ "&" ~ narrowed if narrowed }}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
 <div class="table-responsive">
 <table id="log-table" class="table table-sm table-hover align-middle sortable">
@@ -17,7 +17,7 @@
     <td class="wrap log-more">{% for name, value in (event|rest).items() %}<span class="text-secondary">{{ name }}</span> {{ value|shown }}{{ " · " if not loop.last }}{% endfor %}</td>
   </tr>
   {% else %}
-  <tr><td colspan="6" class="text-secondary">Nothing on record{{ " that fits" if narrowed }}.</td></tr>
+  {% call empty_row(6) %}Nothing on record{{ " that fits" if narrowed }}.{% endcall %}
   {% endfor %}
   </tbody>
 </table>

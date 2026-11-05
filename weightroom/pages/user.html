@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, section_title , confirm_check, confirm_loss, confirm_two %}
+{% from "parts.html" import card, said_box, swaps, page_header, section_title , confirm_check, confirm_loss, confirm_two, alert, empty_row %}
 {% block title %}{{ user.name }} · openWeightGym{% endblock %}
 {% block main %}
 {# Every form names this address itself: the page is also shown at /users, straight after the account is added. #}
@@ -27,7 +27,7 @@
 </dl>
 
 {% if user.why_not %}
-<div class="alert alert-secondary">{{ user.why_not }}{% if user.name == person.name %} Your password and your keys are on <a href="/account">My account</a>.{% endif %}</div>
+{% call alert('secondary') %}{{ user.why_not }}{% if user.name == person.name %} Your password and your keys are on <a href="/account">My account</a>.{% endif %}{% endcall %}
 {% endif %}
 
 <div class="row g-3 mb-4">
@@ -81,7 +81,7 @@
             <td class="text-end"><form method="post" action="{{ here }}" class="m-0" {{ swaps() }}><input type="hidden" name="key" value="{{ key.id }}"><button  class="btn btn-outline-danger btn-sm" name="do" value="keys-remove" {{ confirm_loss() }}>Remove</button></form></td>
           </tr>
           {% else %}
-          <tr><td colspan="4" class="text-secondary">No keys.</td></tr>
+          {% call empty_row(4) %}No keys.{% endcall %}
           {% endfor %}
           </tbody>
         </table>

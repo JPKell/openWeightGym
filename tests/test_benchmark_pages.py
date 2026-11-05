@@ -324,7 +324,7 @@ def test_a_model_page_has_a_card_with_its_result_on_each_benchmark(desk, tmp_pat
     whole = browser.get("/models/scored-model").text
     card = whole.split('<span class="card-heading">Benchmark results</span>')[1].split("</details>")[0]
     assert whole.index('class="card-heading">Settings</span>') < whole.index('class="card-heading">Benchmark results</span>') and card.count('class="nav-link') == len([bench for bench in store.definitions() if not bench.get('embedding')])
-    assert '<a class="nav-link py-1 active" href="/models/scored-model?benchmark=load#benchmark" hx-get="/models/scored-model?part=benchmark&amp;benchmark=load">' in card
+    assert '<a class="nav-link py-1 active" href="/models/scored-model?benchmark=load#benchmark" aria-current="page" hx-get="/models/scored-model?part=benchmark&amp;benchmark=load">' in card
     # Its figures, two to a row: the score, then what was measured. They lead to the run they came from.
     assert "Score <small>1/s</small></th>" in card and '<td class="w-25">0.5<' in card and "Load time <small>s</small></th>" in card and ">2.0</td>" in card
     assert f"/benchmarks/run/{number}" in card

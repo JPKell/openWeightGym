@@ -1,13 +1,13 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, form_section, more , confirm_loss %}
+{% from "parts.html" import card, said_box, swaps, page_header, form_section, more , confirm_loss, alert %}
 {% block title %}Compute nodes · openWeightGym{% endblock %}
 {% block main %}
 <div class="settings-page">
 {{ page_header('Compute nodes', 'Manage hardware policy and runtime settings for the selected node.') }}
 {% if machine_choices|length > 1 %}<form method="get" action="/compute-nodes" class="d-flex flex-wrap align-items-center gap-2 mb-3"><label for="settings-machine">Compute node</label><select id="settings-machine" name="machine" class="form-select form-select-sm w-auto">{% for host in machine_choices %}<option value="{{ host.name }}"{% if host.name == selected_machine %} selected{% endif %}>{{ host.name }} · {{ host.state }}</option>{% endfor %}</select><button class="btn btn-outline-secondary btn-sm">Show node</button></form>{% endif %}
 {{ said_box(said, failed) }}
-{% if node_settings_error %}<p class="alert alert-warning" role="status">Saved file locations could not be applied: {{ node_settings_error }}</p>
-{% elif node_settings_pending %}<p class="alert alert-info" role="status">File locations are saved on front. They will be delivered when this node reconnects and apply after its compute service restarts.</p>{% endif %}
+{% if node_settings_error %}{% call alert('warning', tag='p', role='status') %}Saved file locations could not be applied: {{ node_settings_error }}{% endcall %}
+{% elif node_settings_pending %}{% call alert('info', tag='p', role='status') %}File locations are saved on front. They will be delivered when this node reconnects and apply after its compute service restarts.{% endcall %}{% endif %}
 {% if may_pair %}{% call card("Add a GPU node", id="add-node") %}
 {% if pairing_code %}
 <p class="mb-2">On the GPU machine, run:</p>
@@ -21,7 +21,7 @@
 {% if machine_key %}{% call card("Machine key", id="machine-key") %}
 <p class="mb-2">Last rotated {{ machine_key.changed|timestamp }}.</p>
 <p class="text-secondary small mb-3">The gateway sends the replacement key to {{ selected_machine }} first, sealed with the current key. The old key remains valid for ten minutes. If the two sides fall out of step, run <code>loadcoach --replace-key</code> on that node.</p>
-{% if machine_key.last_error %}<div class="alert alert-warning">Scheduled rotation: {{ machine_key.last_error }}</div>{% endif %}
+{% if machine_key.last_error %}{% call alert('warning') %}Scheduled rotation: {{ machine_key.last_error }}{% endcall %}{% endif %}
 <form method="post" action="/compute-nodes/machine-key/schedule" class="row g-3 align-items-end mb-3">
 <input type="hidden" name="machine" value="{{ selected_machine }}">
 <div class="col-sm-6 col-lg-4"><label class="form-label" for="rotation-days">Rotate every</label><div class="input-group"><input id="rotation-days" name="rotation_days" type="number" min="0" max="3650" value="{{ machine_key.rotation_days }}" class="form-control" required><span class="input-group-text">days</span></div></div>

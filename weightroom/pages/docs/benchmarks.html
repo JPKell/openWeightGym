@@ -1,0 +1,13 @@
+{% from "docs_parts.html" import doc_contents, doc_section %}
+{{ doc_contents([('benchmarks', 'How benchmarking is put together'), ('benchmark-pages', 'Where to find it'), ('topics', 'In this section')]) }}
+{% call doc_section('How benchmarking is put together', 'benchmarks') %}
+<p>Benchmarks run inside WeightRoom on front and use LoadCoach over HTTP. The <code>benchmarks/</code> package owns plans, the queue, results and scoring;
+  it has no service, command or port of its own. LoadCoach owns authentication, durable batches, model processes and GPU access, and the benchmark package
+  never opens its database or starts a model itself. Each benchmark lives under <code>benchmarks/suites/</code>, in its own Python file or folder.</p>
+<p>Saved definitions, runs and results stay readable while LoadCoach is unavailable; starting a run and comparing live model state wait until a compute node answers.
+  Restarting WeightRoom interrupts the probe under way, and the missing samples are resumed when it starts again.</p>
+{% endcall %}
+{% call doc_section('Where to find it', 'benchmark-pages') %}
+<p><a href="/benchmarks/runs">Benchmark → Runs</a> starts a run and follows it; Results, Node measurements, Embedders and Compare show what runs have found.
+  <a href="/schedules">System → Schedules</a> reruns benchmarks on a schedule, or runs one missing or outdated benchmark at a time.</p>
+{% endcall %}
