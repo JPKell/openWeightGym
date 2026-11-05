@@ -37,6 +37,11 @@ max_estimated_wait = 0
 # models share a card, and makes it likelier that a load runs out of memory and is tried again.
 card_margin = 1024
 
+# Per-engine GPU assignments, edited under System → Compute nodes. An omitted engine may
+# use every compatible enabled card; an empty list permits no GPU work for that engine.
+# For example: { llama_cpp = ["CUDA0"], sdcpp = ["CUDA1"], audiocpp = ["CUDA1"] }
+engine_gpus = {}
+
 # Optional minutes an idle model is protected from replacement after its last request.
 # 0 keeps models resident while room is available, but lets a new request replace them
 # immediately when it needs their memory. This is not an automatic unload timer.

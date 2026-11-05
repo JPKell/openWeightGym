@@ -1704,7 +1704,7 @@ def test_config_refuses_what_would_fail_later(tmp_path, monkeypatch):
     refused(cards + f'[models.m]\nmodel = "{gguf}"\nctx-size = 1\n', "flags go in")  # the old shape
     refused(cards + "[models.m]\ngpus = 3\n" + flags, "gpus must be")
     refused(cards + '[models.m]\ngpus = ["A", "C"]\n' + flags, "gpus must be")
-    monkeypatch.setattr("loadcoach.config.detect", lambda _server: [{"id": "A"}, {"id": "B"}])
+    monkeypatch.setattr("loadcoach.config.discover", lambda _server, **kwargs: [{"id": "A"}, {"id": "B"}])
     path.write_text(flags)
     assert load_config(path).gpus == ("A", "B")  # omitted cards are discovered at startup
     path.write_text("[models.m]\ngpus = 0\n" + flags)

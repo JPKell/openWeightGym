@@ -38,7 +38,7 @@ def preview(name, candidate, library, runner):
                 "before_set": key in before["settings"], "after_set": key in settings}
                for key in sorted(before["settings"].keys() | settings.keys()) if before["settings"].get(key) != settings.get(key)]
     token = digest([library.identity(name), library.file_revision(name), before, candidate, stamps,
-                    runner.config.engines, runner.config.gpus, runner.cards])
+                    runner.config.engines, runner.config.gpus, runner.engine_cards(settings)])
     return {"candidate": candidate, "before": before, "errors": [], "warnings": [], "effective": settings,
             "artifacts": artifacts, "changes": changes, "placement": placement, "command": "",
             "idle_minutes": runner.config.model_idle_minutes, "token": token,

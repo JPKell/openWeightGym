@@ -152,7 +152,7 @@ def preview(name: str, candidate: dict, library, runner, supported: list[dict], 
     # a deferred GPU placement as a CPU launch. The port is assigned only when loading.
     command = shlex.join(engine_for(launch).launch(runner.config, 0, launch, tuple(cards)).command) if reusable or fitted else ""
     token = digest([library.identity(name), library.file_revision(name), before, candidate, library.defaults,
-                    runner.config.gpus, runner.cards, engine_stamp(engine_for(effective).installation(runner.config).executable), supported, stamps])
+                    runner.config.gpus, runner.engine_cards(effective), engine_stamp(engine_for(effective).installation(runner.config).executable), supported, stamps])
     def fields(stored):
         """Describe the changed model fields for the setup preview."""
         return {**{key: value for key, value in stored.items() if key != "flags"},

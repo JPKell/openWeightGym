@@ -1740,6 +1740,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if engine_schema is None and enabled_engines:
             said, failed = "Choose an engine available on the selected node.", True
             chosen_engine, engine_schema = enabled_engines[0]["id"], enabled_engines[0]["schema"]
+        chosen = next((row for row in engine_choices if row['id'] == chosen_engine), {})
+        if 'cards' in chosen:
+            known['cards'] = chosen['cards']
         available = await ask("GET", "/turnstile/models/files", person.key) if kind == 'llm' else None
         file_nodes = available.json().get("nodes", []) if available and available.is_success else []
         file_choices = [{**file, "machine": node["name"]} for node in sorted(file_nodes, key=lambda row: row['name'] != selected_node)
@@ -1938,6 +1941,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         address=lambda label: node_model_address(request,label), file_address=file_address, **scores)
         # What the form shows: what was just typed if saving it failed, otherwise what is kept.
         showing = typed_in or {key: model[key] for key in ("engine", "flags", "strata", "gpus", "alone", "allow_split", "adapters", "min_context", "order") if key in model}
+        if 'engine_cards' in known:
+            known['cards'] = known['engine_cards'].get(model.get('engine', 'llama_cpp'), known['cards'])
         # What the file says about itself, or why it could not be read.
         read_it = await model_api(request, person, "GET", "/loadcoach/file", params={"path": model["flags"]["model"]})
         told, unread = (read_it.json(), "") if read_it.status_code == 200 else (None, read_it.json()["error"]["message"])
@@ -2863,7 +2868,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if settings_answer.status_code not in (200, 503):
             return page(request, "refused.html", person, status=settings_answer.status_code, why=settings_answer.json()["error"]["message"])
         found = settings_answer.json() if settings_answer.is_success else {"programs": []}
-        hidden = {"engines", "llama_server", "disabled_gpus", "gpus", "models", "hub_token_file", "front_tasks", "front_toollocker"}
+        hidden = {"engines", "llama_server", "disabled_gpus", "engine_gpus", "gpus", "models", "hub_token_file", "front_tasks", "front_toollocker"}
         resources = {}
         engine_setting = next((setting for program in found["programs"] if program["program"] == "loadcoach"
                                for setting in program["settings"] if setting["name"] == "engines"), None)
@@ -3100,12 +3105,22 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if isinstance(found, Response):
             return found
         excluded = list(dict.fromkeys(form.get("disabled", []) + found["missing_disabled"]))
-        answer = await ask("POST", base + "/cards", person.key, json={"disabled_gpus": excluded})
+        policy = dict(found.get('engine_gpus', {}))
+        detected = {key for card in found['cards'] for key in (card['id'], card.get('key', card['id']))}
+        for engine in found.get('engines', []):
+            engine_id = engine['id']
+            if engine_id in form.get('gpu-engine-present', []):
+                policy[engine_id] = list(dict.fromkeys(form.get('gpu-engine-' + engine_id, []) +
+                    [card for card in policy.get(engine_id, []) if card not in detected]))
+        payload = {'disabled_gpus': excluded}
+        if form.get('gpu-engine-present'):
+            payload['engine_gpus'] = policy
+        answer = await ask("POST", base + "/cards", person.key, json=payload)
         if answer.status_code != 200:
             return await compute_nodes_page(request, person, answer.json()["error"]["message"], failed=True,
-                                            typed_in={"machine": machine}, gpu_disabled=form.get("disabled", []))
+                                            typed_in={"machine": machine, 'gpu_engines': policy}, gpu_disabled=form.get("disabled", []))
         return go("/compute-nodes?machine=" + quote(machine, safe="") + "&said=" + quote(
-            "Saved. Disabled cards will not be used by the suite.") + '#manage-gpus')
+            "Saved. GPU assignments apply to all models and benchmarks on this node.") + '#manage-gpus')
 
     async def change_settings(request: Request, person: Person) -> Response:
         """Save what was typed for one program's settings, or take one change away. Only what differs from what holds now is sent."""

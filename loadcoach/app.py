@@ -75,7 +75,7 @@ from loadcoach.reliability import ANSWERED, OUTCOME, answer_outcome
 from loadcoach.role_evidence import RoleEvidence
 from loadcoach.schedule_grants import ScheduleGrants
 from loadcoach.schedule_time import is_due, occurrence_ids
-from engines import engine_for, catalogue as engine_catalogue
+from engines import engine_for, engine_ids, catalogue as engine_catalogue
 from loadcoach.models import request_context, Models, check_model, check_order, effective, files_of, lora_field
 from loadcoach import waiting as waits
 from loadcoach.loadouts import Conflict as LoadoutConflict, Loadouts
@@ -391,7 +391,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             why_not = "its file is missing" if not Path(flags["model"]).is_file() else None
             if settings and not why_not:
                 need = runner.needs(settings)
-                impossible = not set(need) <= set(runner.cards) if isinstance(need, list) else need > len(runner.cards)
+                pool = runner.engine_cards(settings)
+                impossible = not set(need) <= set(pool) if isinstance(need, list) else need > len(pool)
                 if impossible:
                     why_not = "too few enabled cards for its configured GPU placement"
                 elif settings.get('gpus') == 'any' and all(runner.impossible_layout(name, layout) for layout in runner.layouts(settings)):
@@ -1272,7 +1273,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if any(one["fingerprint"] is None for one in listed):
             hashing.set()  # a file not read yet, such as one a model was given from the command line
         run = {key: value for key, value in measuring.items() if key != "task"} or None
-        return JSONResponse({"defaults": config.model_defaults, "cards": list(runner.cards), "build": await runner.version(), "models": listed,
+        return JSONResponse({"defaults": config.model_defaults, "cards": list(runner.cards),
+                             'engine_cards': {engine: list(runner.engine_cards(engine)) for engine in engine_ids()},
+                             "build": await runner.version(), "models": listed,
                              "to_measure": unmeasured(), "measuring": run})  # fmt: skip
 
     def model_files() -> dict[str, list[str]]:
@@ -1847,6 +1850,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return error(403, "Engine settings require manage-models or manage-settings.")
         listed = engine_catalogue(config)
         for engine in listed:
+            engine['cards'] = list(runner.engine_cards(engine['id']))
             engine["build"] = runner.known_version({"engine": engine["id"]})
         return JSONResponse({"engines": listed}, headers={"cache-control": "no-store"})
 
@@ -2467,7 +2471,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     def report() -> None:
         """Keep what LoadCoach itself runs with, so that the page can show it: by the names its file uses."""
-        simple = ("host", "port", "engines", "llama_server", "load_timeout", "max_wait", "card_margin", "model_idle_minutes", "host_ram_headroom_mib", "host_ram_limit_mib", "cpu_idle_minutes", "disable_ram_offload", "models_folder", "models_storage_folder", "keep_days", "keep_text", "unlogged", "database", "places", "model_defaults", "disabled_gpus")
+        simple = ("host", "port", "engines", "llama_server", "load_timeout", "max_wait", "card_margin", "model_idle_minutes", "host_ram_headroom_mib", "host_ram_limit_mib", "cpu_idle_minutes", "disable_ram_offload", "models_folder", "models_storage_folder", "keep_days", "keep_text", "unlogged", "database", "places", "model_defaults", "disabled_gpus", "engine_gpus")
         running = {**config.file, **{name: getattr(config, name) for name in simple}, "gpus": list(config.gpus)}
         reported = said(running, config.file, config.says)
         reported["disable_ram_offload"].update(
@@ -2516,12 +2520,17 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """Every discovered card, its description, exclusion and loaded models."""
         if denied := lacks(user, "manage-settings"):
             return denied
-        details = {card["id"]: card["description"] for card in config.gpu_details}
-        return JSONResponse({"cards": [{"id": card, "description": details.get(card, ""),
-                                        "disabled": card in config.disabled_gpus,
+        from loadcoach.devices import compatible, disabled, identity
+        details = {card['id']: card for card in config.gpu_details}
+        engines = [{'id': engine['id'], 'label': engine['label']} for engine in engine_catalogue(config)]
+        return JSONResponse({"cards": [{**details.get(card, {}), "id": card, "description": details.get(card, {}).get('description', ''),
+                                        'key': identity(config, card), 'disabled': disabled(config, card),
+                                        'compatible_engines': [engine['id'] for engine in engines if compatible(config, engine['id'], card)],
                                         "models": [server.model for server in runner.servers.values() if card in server.cards]}
                                        for card in config.gpus],
-                             "missing_disabled": [card for card in config.disabled_gpus if card not in config.gpus]})
+                             'engines': engines, 'engine_gpus': config.engine_gpus,
+                             "missing_disabled": [card for card in config.disabled_gpus if card not in
+                                 set(config.gpus) | {identity(config, one) for one in config.gpus}]})
 
     async def settings_change(request: Request, user: User) -> Response:
         """Change settings of one program. The body gives each by name, with its new value, or null to take a change away."""
@@ -2535,7 +2544,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         known = next((one for one in changes.everything() if one["program"] == program), None)
         if known is None:
             return error(404, f"{program} has not said what it runs with. It is not a program of this suite, or has not run since this was built.")
-        allowed = {"disabled_gpus"} if request.url.path == "/loadcoach/cards" else set(CHANGEABLE[program]) | {setting["name"] for setting in known["settings"]}
+        allowed = {"disabled_gpus", 'engine_gpus'} if request.url.path == "/loadcoach/cards" else set(CHANGEABLE[program]) | {setting["name"] for setting in known["settings"]}
         asked = await read_json(request, allowed)
         if isinstance(asked, Response):
             return asked
@@ -2563,12 +2572,14 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 candidate = checked(replace(config, **{name: tuple(value) if name == "gpus" else value for name, value in wanted.items()}), "settings")
             except (SystemExit, TypeError) as problem:
                 return error(400, str(problem).removeprefix("settings: "))
-            excluded = set(candidate.disabled_gpus) - set(config.disabled_gpus)
-            if excluded and runner.holder():
+            from loadcoach.devices import allowed as allowed_cards
+            revoked = {engine: set(allowed_cards(config, engine)) - set(allowed_cards(candidate, engine))
+                       for engine in engine_ids()}
+            if any(revoked.values()) and runner.holder():
                 return error(409, "The cards are locked, possibly for an isolated probe. Wait for the lock to finish, then save again.")
-            affected = [server for server in runner.servers.values() if excluded & set(server.cards)]
+            affected = [server for server in runner.servers.values() if revoked[engine_for(server.settings).id] & set(server.cards)]
             if any(not server.ready or runner.busy(server) or runner.pinned(server) for server in affected):
-                return error(409, "A card you disabled is loading, answering or held. Wait for it to finish, then save again.")
+                return error(409, "A card whose assignment you changed is loading, answering or held. Wait for it to finish, then save again.")
             for name in asked:
                 if CHANGEABLE[program][name] == NOW:
                     setattr(config, name, getattr(candidate, name))

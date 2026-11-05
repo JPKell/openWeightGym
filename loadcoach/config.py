@@ -14,7 +14,7 @@ from pathlib import Path
 
 from db import DatabaseConfigurationError, DatabaseRegistry, DatabaseSource
 from loadcoach.models import check_model, check_order, effective
-from loadcoach.cards import detect
+from loadcoach.devices import discover
 from engines import checked_installations
 from loadcoach.settings import changed_for, comments, laid_over
 
@@ -38,8 +38,9 @@ class Config:
     models_storage_folder: str = ""  # optional complete library root; empty leaves this tier disabled
     hub_token_file: str = ""  # the file that holds the token of an account at Hugging Face, for repositories not open to all. Empty for none
     civitai_token_file: str = ""  # optional private Civitai download token; server-side file, never browser content
-    gpus: tuple[str, ...] = ()  # the cards LoadCoach hands out, by llama-server's device names
+    gpus: tuple[str, ...] = ()  # the node's physical GPU inventory; independent of engine installation
     disabled_gpus: list[str] = field(default_factory=list)  # detected cards excluded under Compute nodes
+    engine_gpus: dict[str, list[str]] = field(default_factory=dict)  # absent engine: all compatible enabled cards; []: CPU only
     gpu_details: list[dict] = field(default_factory=list)  # descriptions from device discovery
     machine_key_file: str = ""  # the key compute shares with front: turnstile signs what it sends on with it. Empty: only this machine may ask, as anyone
     machine_name: str = "compute"  # the stable name this instance uses when it sends logs and asks front for accounts
@@ -176,7 +177,7 @@ def config_from(path: Path, data: dict, file: dict) -> Config:
             raise ValueError("llama_server conflicts with engines.llama_cpp.executable; keep one path or matching values")
         data["llama_server"] = selected
         automatic = data.get("gpus", "auto") == "auto"
-        detected = detect(selected) if automatic and options.get("enabled", True) else []
+        detected = discover(selected if options.get("enabled", True) else '', nvidia_smi=data.get('nvidia_smi', 'nvidia-smi')) if automatic else []
         config = Config(
             **{
                 **data,
@@ -252,6 +253,16 @@ def checked(config: Config, path) -> Config:
         raise SystemExit(f"{path}: model_defaults is a table of flags, and gpus a list of the cards' names")
     if not isinstance(config.disabled_gpus, list) or not all(isinstance(card, str) for card in config.disabled_gpus) or len(set(config.disabled_gpus)) != len(config.disabled_gpus):
         raise SystemExit(f"{path}: disabled_gpus is a list of distinct card names")
+    if not isinstance(config.engine_gpus, dict):
+        raise SystemExit(f"{path}: engine_gpus is a table of engine IDs and card lists")
+    from engines import engine_for
+    for engine, cards in config.engine_gpus.items():
+        try:
+            engine_for(engine)
+        except ValueError as problem:
+            raise SystemExit(f'{path}: {problem}') from None
+        if not isinstance(cards, list) or not all(isinstance(card, str) and card for card in cards) or len(cards) != len(set(cards)):
+            raise SystemExit(f'{path}: engine_gpus.{engine} is a list of distinct card names')
     if type(config.keep_text) is not int or config.keep_text < 0:
         raise SystemExit(f"{path}: keep_text is a whole number of requests, 0 or more")
     for name in ("host_ram_headroom_mib", "host_ram_limit_mib"):

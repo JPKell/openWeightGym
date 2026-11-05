@@ -499,7 +499,7 @@ def create_app(job,native=None):
             """Own generation, sampling and cleanup until the entire request ends."""
             nonlocal busy,profile
             completed=False
-            meter=Meter(job['cards'])
+            meter=Meter(job.get('monitor_cards', job['cards']))
             sampling=asyncio.create_task(meter.run())
             qualifying=envelope(checked_request(asked,job['settings']),job['settings']) and not (profile and profile.get('qualified'))
             sequence=workflow(job,asked,native,None if qualifying else cache,request.headers.get('x-loadcoach-image-owner'))

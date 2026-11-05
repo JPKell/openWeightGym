@@ -349,7 +349,7 @@ class Native:
         await self.start()
         done = False
         peak = {}
-        watcher = asyncio.create_task(gpu_peak(self.job["cards"][0], peak)) if self.job["cards"] else None
+        watcher = asyncio.create_task(gpu_peak(self.job.get('monitor_cards', self.job['cards'])[0], peak)) if self.job["cards"] else None
         try:
             answer = await self.client.post("/v1/tasks/run", json={"model": NATIVE_ID, "request": request})
             try:

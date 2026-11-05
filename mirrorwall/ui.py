@@ -67,6 +67,7 @@ def routes(for_people, page, ask, model_api):
         if answer.is_error:
             return Response(answer.content, answer.status_code, media_type="application/json")
         value = answer.json()
+        value['cards'] = value.get('engine_cards', {}).get('sdcpp', value.get('cards', []))
         value["models"] = [one for one in value["models"] if one.get("engine") == "sdcpp"]
         selected_node=request.query_params.get('node') or 'compute'
         engines = await ask('GET','/turnstile/machines/'+quote(selected_node,safe='')+'/engines',person.key)

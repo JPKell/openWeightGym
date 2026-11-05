@@ -8,6 +8,11 @@ DEFAULT = "llama_cpp"
 _ENGINES = {DEFAULT: LlamaCpp(), "strata": Strata(), "sdcpp": SDCpp(), "audiocpp": AudioCpp()}
 
 
+def engine_ids():
+    """List registered engines without inspecting their installed runtimes."""
+    return tuple(_ENGINES)
+
+
 def engine_for(settings=None):
     """Resolve the configured engine, preserving the default llama.cpp selection."""
     name = settings.get("engine", DEFAULT) if isinstance(settings, dict) else settings or DEFAULT

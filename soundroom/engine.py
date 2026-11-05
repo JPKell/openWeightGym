@@ -11,6 +11,7 @@ import tempfile
 
 from engines.contracts import Installation, Launch
 from loadcoach.engine_memory import delegated_parent
+from loadcoach.devices import cuda_environment, identity
 from soundroom import model
 from soundroom.requests import GENERATION_FIELDS, SCRIPT_FIELDS, SPEECH_FIELDS, TRANSCRIPTION_FIELDS
 
@@ -96,11 +97,11 @@ class AudioCpp:
         try:
             token = secrets.token_urlsafe(32)
             path = Path(directory.name) / "launch.json"
-            path.write_text(json.dumps({"port": port, "token": token, "settings": settings, "installation": options, "cards": list(cards)}))
+            path.write_text(json.dumps({"port": port, "token": token, "settings": settings, "installation": options, "cards": list(cards),
+                                        'monitor_cards': [identity(config, card) if identity(config, card).startswith('GPU-') else card for card in cards]}))
             path.chmod(0o600)
             # A CPU profile sees no card at all, so it cannot fall back onto one either.
-            around = {**os.environ, "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
-                      "CUDA_VISIBLE_DEVICES": ",".join(str(int(card.removeprefix("CUDA"))) for card in cards),
+            around = {**cuda_environment(config, cards),
                       "GGML_CUDA_ENABLE_UNIFIED_MEMORY": "0", "OMP_NUM_THREADS": str(settings["audiocpp"].get("threads", 4))}
             executable = Path(shutil.which(options["executable"])).resolve()
             with executable.open("rb") as stream:
@@ -170,7 +171,7 @@ class AudioCpp:
         """Validate typed audio settings using the same contract as execution."""
         errors = []
         try:
-            model.check_model(name, candidate, tuple(runner.cards))
+            model.check_model(name, candidate, runner.engine_cards(candidate))
         except (ValueError, TypeError) as problem:
             errors.append(str(problem))
         if engine_error:

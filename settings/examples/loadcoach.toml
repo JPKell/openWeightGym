@@ -94,9 +94,10 @@ llama_server = "/home/you/.local/bin/llama-server"
 # This line goes above [places], or it would be read as a place.
 # hub_token_file = "../keys/huggingface.token"
 
-# Cards are detected automatically with `llama-server --list-devices`; no setting is needed.
-# Disable individual cards under System → Compute nodes. An explicit `gpus` list remains
-# accepted only for compatibility with installations that cannot use discovery.
+# NVIDIA, AMD and Intel cards are detected from PCI hardware and driver metadata, even
+# without llama.cpp. Disable cards or assign them to engines under System → Compute nodes.
+# An explicit `gpus` list remains accepted for compatibility. Detection does not imply an
+# engine build supports that vendor. See docs/loadcoach.md, Card discovery and automatic splitting.
 
 # C09 engine namespace (source-prepared; qualify before deployment). This belongs to this
 # node, not a global preset. Leave the legacy path above out, or keep matching values.
