@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+import sys
 
 import pytest
 
@@ -258,6 +259,85 @@ def test_firewalld_that_keeps_the_port_closed_gets_the_command_that_opens_it(tmp
     open_range = bash(tmp_path, 'firewall_steps 8440 8442\necho "${#FIREWALL_STEPS[@]}"',
                       env={"PATH": path, "PORTS": "1025-65535/tcp 1025-65535/udp"})
     assert open_range.stdout.strip() == "0"
+
+
+@pytest.fixture
+def firewall_installation(tmp_path):
+    root = tmp_path / 'installation'
+    for folder in ('scripts/lib', 'settings', '.venv/bin'):
+        (root / folder).mkdir(parents=True, exist_ok=True)
+    for name in ('install-suite-support.py', 'owg', 'lib/ui.sh', 'lib/detect.sh', 'lib/receipt.sh'):
+        (root / 'scripts' / name).symlink_to(ROOT / 'scripts' / name)
+    # Copy owg: its entry point resolves symlinks to choose its installation root.
+    (root / 'scripts/owg').unlink()
+    (root / 'scripts/owg').write_bytes((ROOT / 'scripts/owg').read_bytes())
+    (root / 'scripts/owg').chmod(0o755)
+    (root / '.venv/bin/python').symlink_to(sys.executable)
+    for name, port in [('loadcoach', 18442), ('spotter', 18444)]:
+        (root / f'settings/{name}.toml').write_text(f'host = "192.0.2.84"\nport = {port}\n')
+    (root / '.install-receipt').write_text('mode=user\nservices=loadcoach,spotter\n')
+    return root
+
+
+@pytest.mark.parametrize('services,missing', [('loadcoach,spotter', True), ('loadcoach', False)])
+def test_compute_install_checks_the_file_receiver_even_without_systemd(tmp_path, firewall_installation, services, missing):
+    firewall = '#!/bin/sh\ncase "$1" in --state) echo running ;; --list-ports) echo 18442/tcp ;; esac\n'
+    path = fake_programs(tmp_path, 'firewall-cmd', script=firewall)
+    source = one_function('install.sh', 'spotting') + '''
+TOPOLOGY=compute HOST_ADDRESS=192.0.2.84
+can_start() { return 1; }
+as_owner() { "$@"; }
+spotting
+ui_attention_box
+'''
+    answer = bash(tmp_path, source, env={'DIR': str(firewall_installation), 'SERVICES': services, 'PATH': path})
+    assert answer.returncode == 0, answer.stderr
+    if missing:
+        assert '18444' in answer.stdout and '--add-port=18444/tcp' in answer.stdout
+    else:
+        assert 'allow rules for required TCP ports: 18442' in answer.stdout and '--add-port' not in answer.stdout
+
+
+@pytest.mark.parametrize('ports,expected', [('18442/tcp', 1), ('18442/tcp 18444/tcp', 0)])
+def test_owg_doctor_reports_firewall_status_and_suggests_repairs(tmp_path, firewall_installation, ports, expected):
+    path = fake_programs(tmp_path, 'firewall-cmd', script='#!/bin/sh\ncase "$1" in --state) echo running ;; --list-ports) echo "$PORTS" ;; esac\n')
+    fake_programs(tmp_path, 'systemctl', script='#!/bin/sh\necho active\n')
+    fake_programs(tmp_path, 'loginctl', script='#!/bin/sh\necho yes\n')
+    fake_programs(tmp_path, 'df', script='#!/bin/sh\nprintf "Filesystem Blocks Used Available\\nfixture 102400 0 102400\\n"\n')
+    answer = bash(tmp_path, shlex.quote(str(firewall_installation / 'scripts/owg')) + ' doctor',
+                  env={'PATH': path, 'PORTS': ports})
+    assert answer.returncode == expected, answer.stdout + answer.stderr
+    if expected:
+        assert '18444' in answer.stdout + answer.stderr
+        assert 'sudo firewall-cmd --permanent --add-port=18444/tcp' in answer.stdout + answer.stderr
+    else:
+        assert 'allow rules for required TCP ports: 18442 18444' in answer.stdout
+        assert '--add-port' not in answer.stdout
+
+
+@pytest.mark.parametrize('status,exit_code,state,missing', [
+    ('Status: active\n8442/tcp ALLOW IN Anywhere\n', 0, 'blocked', '8444'),
+    ('Status: active\n8442/tcp ALLOW IN Anywhere\n8444/tcp ALLOW IN 192.0.2.42\n', 0, 'clear', ''),
+    ('Status: inactive\n', 0, 'inactive', ''),
+    ('', 1, 'unknown', '8442 8444'),
+])
+def test_ufw_checks_print_missing_port_commands_and_distinguish_unreadable_rules(tmp_path, status, exit_code, state, missing):
+    path = fake_programs(tmp_path, 'ufw', script='#!/bin/sh\nprintf "%s" "$UFW_STATUS"\nexit "$UFW_EXIT"\n')
+    fake_programs(tmp_path, 'sudo', 'firewall-cmd', script='#!/bin/sh\nexit 1\n')
+    # An unreadable firewall in the fixture must not fall back to this machine's real rules.
+    source = '''grep() { return 1; }
+firewall_steps 8442 8444
+printf '%s\\n' "$FIREWALL_STATUS" "$FIREWALL_CLOSED" "${FIREWALL_STEPS[@]}"
+'''
+    answer = bash(tmp_path, source, env={'PATH': path, 'UFW_STATUS': status, 'UFW_EXIT': str(exit_code)})
+    assert answer.returncode == 0, answer.stderr
+    assert answer.stdout.splitlines()[:2] == [state, missing]
+    if state in ('blocked', 'unknown'):
+        assert 'sudo ufw allow 8444/tcp' in answer.stdout
+    else:
+        assert 'sudo ufw allow' not in answer.stdout
+    if state == 'unknown':
+        assert 'sudo ufw status' in answer.stdout
 
 
 def llama_fixture() -> str:

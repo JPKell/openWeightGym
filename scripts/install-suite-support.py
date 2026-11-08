@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import ipaddress
 import json
 import os
 import re
@@ -39,6 +40,49 @@ SERVICE_CONFIG = {
     "turnstile": "weightroom.toml",
     "voice-gateway": "voice-gateway.toml",
 }
+
+
+def firewall_ports(root: Path, services: list[str]) -> list[int]:
+    """Read configured external TCP listeners without starting services or opening credential files."""
+    defaults = {'weightroom': 8440, 'loadcoach': 8442, 'toollocker': 8443, 'spotter': 8444, 'voice': 8445,
+                'voice-gateway': 8446}
+    ports = set()
+
+    def add(host, port):
+        """Exclude loopback listeners and reject invalid network settings."""
+        if not isinstance(host, str) or type(port) is not int or not 1 <= port <= 65535:
+            raise ValueError('Each listener needs a host and a TCP port from 1 through 65535.')
+        if host.lower() == 'localhost':
+            return
+        try:
+            if ipaddress.ip_address(host.strip('[]')).is_loopback:
+                return
+        except ValueError:
+            pass
+        ports.add(port)
+
+    for service in services:
+        filename = SERVICE_CONFIG[service]
+        path = root / 'settings' / filename
+        settings = {}
+        for source in (path.parent / 'defaults' / filename, path):
+            if source != path and not source.exists():
+                continue
+            with source.open('rb') as file:
+                values = tomllib.load(file)
+            for key, value in values.items():
+                settings[key] = {**settings.get(key, {}), **value} if isinstance(value, dict) else value
+        if service == 'turnstile':
+            gateway = settings.get('turnstile', {})
+            for port in gateway.get('ports', [8442, 8443, 8444]):
+                add(gateway.get('host', '127.0.0.1'), port)
+        else:
+            add(settings.get('host', '127.0.0.1'), settings.get('port', defaults[service]))
+            if service == 'voice-gateway':
+                for name, host in [('desktop', '127.0.0.1'), ('public', '0.0.0.0')]:
+                    if settings.get(name + '_port'):
+                        add(settings.get(name + '_host', host), settings[name + '_port'])
+    return sorted(ports)
 
 
 def repair_postgresql(root: Path) -> int:
@@ -686,6 +730,9 @@ def main() -> int:
     state = subparsers.add_parser("state")
     state.add_argument("--root", type=Path, required=True)
     state.add_argument("--services", required=True)
+    ports = subparsers.add_parser("firewall-ports")
+    ports.add_argument("--root", type=Path, required=True)
+    ports.add_argument("--services", required=True)
     rendering = subparsers.add_parser("render")
     rendering.add_argument("--example", type=Path, required=True)
     rendering.add_argument("--target", type=Path, required=True)
@@ -719,13 +766,21 @@ def main() -> int:
             args.example.stem, args.topology, root, args.address, args.front, args.compute, args.llama_server,
             args.machine_name, args.voice, args.voice_model)
         return render(args.example, args.target, root, args.home, values)
-    if args.command in {"audit", "state"}:
+    if args.command in {"audit", "state", "firewall-ports"}:
         services = [item for item in args.services.split(",") if item]
         unknown = set(services) - SERVICE_CONFIG.keys()
         if unknown:
             parser.error(f"unknown services: {', '.join(sorted(unknown))}")
         if args.command == "audit":
             return audit(args.root.resolve(), services, args.require_pg_tools)
+        if args.command == "firewall-ports":
+            try:
+                for port in firewall_ports(args.root.resolve(), services):
+                    print(port)
+            except (OSError, ValueError, TypeError, AttributeError) as problem:
+                print(f"Cannot read listener settings: {problem}", file=sys.stderr)
+                return 2
+            return 0
         engine, populated = database_state(args.root.resolve(), services)
         print(f"{engine} {'populated' if populated else 'empty'}")
         return 0

@@ -308,20 +308,16 @@ doctor() {
     [[ $code =~ ^[23] ]] && ui_ok "The console answers" "port ${port:-8440}" || problem "The console does not answer on port ${port:-8440}" "owg logs weightroom"
   fi
 
-  # Other machines reach the console on 8440 and the API (or this compute node) on 8442.
-  local reached=()
-  programs | grep -qx weightroom && reached+=(8440)
-  programs | grep -qxE 'loadcoach|turnstile' && reached+=(8442)
-  detect_address
-  if ((${#reached[@]})) && [[ $HOST_ADDRESS != 127.0.0.1 ]]; then
-    firewall_steps "${reached[@]}"
-    if ((${#FIREWALL_STEPS[@]})); then
-      local said="The firewall here ($FIREWALL_NAME) keeps other machines from port ${FIREWALL_CLOSED// / and }"
-      local fix
-      fix=$(printf '%s; ' "${FIREWALL_STEPS[@]}"); fix=${fix%; }
-      if ((FIREWALL_SURE)); then problem "$said" "$fix"; else warning "${said/keeps/may keep}" "$fix"; fi
-    fi
-  fi
+  ui_section "Firewall"
+  local service_list fix
+  service_list=$(programs | tr '\n' ',')
+  firewall_installation "$ROOT" "$service_list" "$ROOT/.venv/bin/python" as_owner
+  fix=$(printf '%s; ' "${FIREWALL_STEPS[@]}"); fix=${fix%; }
+  case "$FIREWALL_STATUS" in
+    blocked) problem "$FIREWALL_MESSAGE" "$fix" ;;
+    unknown) warning "$FIREWALL_MESSAGE" "$fix" ;;
+    *) ui_ok "$FIREWALL_MESSAGE" ;;
+  esac
 
   detect_disk "$ROOT"
   ((DISK_FREE_MB > 5000)) && ui_ok "$((DISK_FREE_MB / 1024)) GB free" || warning "Only $((DISK_FREE_MB / 1024)) GB free" "models need room"

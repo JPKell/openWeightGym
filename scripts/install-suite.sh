@@ -1109,6 +1109,10 @@ else
 fi
 
 if ((!EMBEDDED)); then
+  if ((!DRY_RUN)); then
+    ui_section 'Firewall'
+    firewall_check "$ROOT" "$SELECTED_CSV" "$PY"
+  fi
   ui_section 'Done' 'Installation complete.'
   ui_attention_box
   ui_note "Run '$ROOT/scripts/install-suite.sh --check --services $SELECTED_CSV' to repeat the compatibility audit."
