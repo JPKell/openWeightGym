@@ -53,7 +53,7 @@ The app opens on **System → Status**. Pages and controls depend on your accoun
 | Models | Configure language/image/audio models, image workflows and roles; install audio packages; manage Files, Hugging Face/Civitai downloads and cloud providers. |
 | Benchmark | Start at Runs; filter Results by LLM/Image/Audio, compare Node measurements or embedders and inspect saved evidence. |
 | Logs | Inspect usage/costs, requests and traces, batches, reliability, plugin activity and system output. |
-| System | Inspect status, telemetry, alerts, schedules, databases, backups and deployment. |
+| System | Inspect status, telemetry, alerts, schedules, databases and backups. |
 | Settings | Manage compute nodes, users, groups, tools, plugins, voice, audio, image policy and general settings. |
 | Docs | Open the administrative system map and source references. |
 | My account | Manage your password/API keys, appearance, audio choices and account activity. |

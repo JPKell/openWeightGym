@@ -52,6 +52,8 @@ def test_navigation_orders_and_detail_parents():
     assert front['active'] == '/docs' and list(front['children']) == ['/docs'] and front['children']['/docs'][0] == ('Models', '/docs/system/models')
     assert navigation('/docs/api', can, True)['children']['/docs/api'][0] == ('OpenAI compatibility', '/docs/api/openai')
     assert navigation('/status', can, True)['children'] == {}
+    assert all(url != '/deploy' for group in navigation('/status', [*can, 'superuser'], True)['groups']
+               for _, url in group['links'])
     # Everyone else reads the Web app section only, and never sees the topics of a section they may not read.
     assert next(group for group in navigation('/status', [], False)['groups'] if group['name'] == 'Docs')['links'] == [('Web app', '/docs/web-app')]
     assert navigation('/docs/api', [], False)['children'] == {}

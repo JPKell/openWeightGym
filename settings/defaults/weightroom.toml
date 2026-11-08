@@ -199,21 +199,3 @@ files_every = 10
 # Days the event log is kept on this machine: compute's requests and what was done here to the
 # accounts and roles. Older entries are removed once a day. 0 keeps everything.
 keep_days = 90
-
-# The Deploy page (superusers only). Front keeps a git checkout of the suite and pulls it from
-# GitHub; Deploy copies that code to a machine over ssh, installs it and restarts its services in
-# order. Settings, keys and data there are never touched. "local" is front itself. Each machine
-# needs front's ssh key in its authorized_keys. See weightroom/deploy.py.
-# [deploy]
-# source = "~/openWeightGym-source"
-# branch = "main"
-# [deploy.nodes.front]
-# ssh = "local"
-# folder = "weightroom"
-# extras = "voice-gateway,benchmarks,postgresql,knowledge"
-# services = ["toollocker", "loadcoach-front-cpu", "spotter-front-cpu", "turnstile", "voice-gateway", "weightroom"]
-# [deploy.nodes.compute]
-# ssh = "compute.lan"
-# folder = "suite-deployed"
-# extras = "voice,postgresql"
-# services = ["loadcoach", "spotter", "voice"]

@@ -325,6 +325,10 @@ def test_the_settings_file_names_where_the_key_is(tmp_path):
     # So is turnstile's inventory of further compute machines: a front that lists them must still start.
     file.write_text('compute = "http://c:1"\nkey_file = "weightroom.key"\nmachines_poll_seconds = 5\n[machines.cpu]\ncompute = "http://127.0.0.1:9442"\nmachine_key_file = "cpu.key"\n')
     assert load_settings(file).compute == "http://c:1"
+    # Removed deployment-page settings must not prevent an existing installation from starting.
+    with file.open('a') as legacy:
+        legacy.write('\n[deploy.nodes.old]\nssh = "obsolete host"\n')
+    assert 'deploy' not in load_settings(file).file
 
     for wrong in ('compute = "http://x"\n', 'compute = "http://x"\nkey_file = "nowhere"\n', 'key_file = "weightroom.key"\n', 'compute = "x"\nkey_file = "weightroom.key"\ncolour = 1\n', 'compute = "http://x"\nkey_file = "weightroom.key"\nmock_input_rate = -1\n', 'compute = "http://x"\nkey_file = "weightroom.key"\nthird_party_services = ["docker", "other"]\n'):
         file.write_text(wrong)

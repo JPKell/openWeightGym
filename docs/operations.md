@@ -1122,62 +1122,20 @@ copies, row comparisons and completion receipts are under
 `~/.local/share/suite-db-audits/2026-10-16-db1-cutover/` on front. Independent compute snapshots
 remain under `~/.local/share/suite-retired/2026-10-16/db1-post-cutover/`.
 
-## Deploying from front
+## Node installation and updates
 
-WeightRoom's **System → Deploy** page (superusers only) deploys the suite from front. Front keeps
-a git checkout of the repository at `[deploy] source` and pulls `branch` from GitHub with
-**Pull main from GitHub** (fetch, then fast-forward only). Push from your development machine
-first; front never receives a working tree.
+The app's node installation entry point is **Settings → Compute nodes → Make a pairing code**
+(superusers only). Run its generated installer command on the GPU machine; the one-time code
+joins it to the console. See [Adding a GPU node](installation.md#adding-a-gpu-node).
 
-Each `[deploy.nodes.NAME]` names how front reaches a machine (`ssh`, or `local` for front
-itself), the code's `folder` under the home folder there, the pyproject `extras` it installs and
-the `services` restarted after it, in order. **Deploy** runs `scripts/deploy-node.sh` from the
-checkout as a transient `systemd-run --user` unit, so it survives the weightroom restart it may
-cause; its output is kept in `data/deploys/` and shown on the page. It copies the code packages,
-plugins (keeping their settings), scripts, units, `settings/defaults` and `settings/examples`,
-installs into the folder's `.venv`, records the commit in `FOLDER/DEPLOYED` and restarts the
-services. `settings/*.toml`, `keys/`, `data/` and `.env` are never read, copied or removed.
-**Restart services** restarts them only. One job runs at a time. The page shows each machine's
-deployed commit against the source and whether each service is active.
+Use [`owg update` or `owg repair`](installation.md#looking-after-it-owg) on each installed
+machine for updates and repairs. Finish active requests, calls and benchmark work before
+restarting services. Check [runtime source overrides](#runtime-source-overrides) when a
+service runs code from a separate release folder.
 
-Set up once:
-
-1. On front: `git clone REPOSITORY_URL ~/openWeightGym-source`; replace `REPOSITORY_URL` with your openWeightGym remote. Configure front's existing deploy key for that repository.
-2. Add front's `~/.ssh/id_ed25519.pub` to each other machine's `authorized_keys` and accept its
-   host key once from front (`ssh HOST true`).
-3. Add `[deploy]` to front's `settings/weightroom.toml` (the example file shows front and
-   compute) and restart weightroom.
-4. A compute machine deploys into its own folder, so a development checkout is never touched.
-   Its units keep reading settings, keys and data from the existing installation; only the
-   program comes from the deploy folder. After the first deploy has installed the folder, point
-   each unit at it with a drop-in and restart, for example for LoadCoach:
-
-   ```ini
-   # ~/.config/systemd/user/loadcoach.service.d/deployed.conf
-   [Service]
-   ExecStart=
-   ExecStart=%h/suite-deployed/.venv/bin/loadcoach --config %h/ai/suite/settings/loadcoach.toml
-   ```
-
-   then `systemctl --user daemon-reload` and restart it from the Deploy page. Do the same for
-   spotter, voice and toollocker.
-
-**Set up a new machine** installs the suite on a fresh compute machine from the page. Give it a
-name, the ssh destination, a folder under the home folder and the services (any of loadcoach,
-spotter, toollocker and voice). The machine needs Python 3.13 or newer, rsync, systemd for the
-user and front's ssh key in its `authorized_keys`, with its host key accepted from front once.
-The page appends a `[deploy.nodes.NAME]` part to front's `settings/weightroom.toml` and runs
-`scripts/deploy-node.sh --setup`, which refuses a folder that already exists or a service whose
-unit is already installed there, copies the code and runs `scripts/install-suite.sh --services
-… --database sqlite --non-interactive --yes`. That makes the `.venv`, renders settings from the
-examples and installs and enables the units. New settings are not started: on the machine, set
-front's address, `machine_name` and the machine key, add the machine to `[machines]` on front,
-then use **Restart services**. A configured machine that answers but has nothing deployed also
-shows **Set up**. If lingering is off there, the log says how to turn it on so the services
-keep running after logout.
-
-`scripts/deploy-front.sh` and `scripts/deploy.sh`, run from compute, remain for a first install
-and for the one-time data moves `deploy.sh` performs.
+Older `[deploy]` settings are ignored and can be removed. The manual maintenance scripts
+`scripts/deploy-front.sh` and `scripts/deploy.sh` remain available for developer updates and
+the one-time data moves `deploy.sh` performs.
 
 ## Console over HTTPS on the LAN
 

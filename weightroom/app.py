@@ -78,7 +78,6 @@ from loadcoach.backups import (
 from loadcoach.database_admin import catalogs as database_catalogs, configured_sources, dump_tools, make_sql_dump, safe_filename
 from db.health import stores_health
 from weightroom.conversations import build_app as build_conversations
-from weightroom import deploy as deploying
 from weightroom import pairing
 from weightroom.plugin_pages import build_routes as plugin_routes
 from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, model_kind as benchmark_model_kind
@@ -152,7 +151,6 @@ class Settings:
     third_party_services: tuple[str, ...] = ("ollama", "docker")  # optional system services shown on Machine and in System Logs
     backup_retention: int = 10  # verified recovery sets kept on each machine; zero keeps all
     databases: dict = field(default_factory=dict)  # named local/server stores and service bindings
-    deploy: dict = field(default_factory=dict)  # front's source checkout and the machines it deploys to; see weightroom/deploy.py
     alert_gpu_temperature: float = 85  # degrees Celsius; live threshold for operational alerts
     observation_error_percent: float = 0.0  # zero disables the measured-window error-rate alert
     observation_p95_seconds: float = 0.0  # zero disables the approximate histogram latency alert
@@ -184,6 +182,7 @@ def load_settings(path: Path) -> Settings:
     told.pop("machines", None)  # turnstile's inventory of compute machines, in this same file
     told.pop("machines_poll_seconds", None)
     told.pop("voice_url", None)  # retired: the Voice page here is the browser voice chat now
+    told.pop("deploy", None)  # retired SSH deployment page; node installation uses pairing
     # turnstile's part. weightroom reaches compute only through it, at the address it listens on.
     turnstile = told.pop("turnstile", {})
     host = turnstile.get("host", "127.0.0.1")
@@ -217,7 +216,6 @@ def load_settings(path: Path) -> Settings:
             from loadcoach.observation_store import check_policy
             check_policy(loaded.observation_keep_days, loaded.observation_success_percent, loaded.observation_max_spans,
                          loaded.observation_quiet_routes)
-            deploying.checked(loaded.deploy)  # a wrong [deploy] part stops startup here, with its message
             return replace(loaded, third_party_services=tuple(selected))
         except (KeyError, OSError, TypeError, ValueError) as problem:
             why = problem
@@ -4228,10 +4226,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """The user guide is now the Web app section of the docs; old links and bookmarks arrive there."""
         return RedirectResponse("/docs/web-app", status_code=308)
 
-    def deploy_plan() -> dict:
-        """The [deploy] part as the settings file has it now, so a machine added from the page counts at once."""
-        return deploying.checked(read_settings(Path(settings.path)).get("deploy", {}) if settings.path else settings.deploy)
-
     async def components_page(request: Request, person: Person) -> Response:
         """Every service and engine on front and on each compute node, installed or not. Changes nothing and wakes nothing."""
         if "manage-settings" not in person.can:
@@ -4256,53 +4250,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     if row["id"] == "weightroom" and not row["installed"]:
                         row.update(installed=True, state="running", detail="running without a systemd unit")
         return page(request, "components_content.html" if part else "components.html", person, found=found, deferred=False)
-
-    async def deploy_page(request: Request, person: Person) -> Response:
-        """Front's source checkout, every machine's deployed commit and services, and the deploy jobs."""
-        if "superuser" not in person.can:
-            return page(request, "refused.html", person, status=403, why="Deploying requires the superuser ability.")
-        plan, logs = deploy_plan(), Path(settings.data) / "deploys"
-        listed = await asyncio.to_thread(deploying.jobs, logs)
-        wanted = request.query_params.get("job") or (listed[0]["job"] if listed else "")
-        try:
-            output = await asyncio.to_thread(deploying.read_job, logs, wanted) if wanted else ""
-        except ValueError:
-            wanted, output = "", ""
-        source, nodes = await asyncio.gather(asyncio.to_thread(deploying.source_state, plan), asyncio.to_thread(deploying.nodes_state, plan))
-        busy = any(not one["done"] for one in listed)
-        return page(request, "deploy.html", person, plan=plan, source=source, nodes=nodes, jobs=listed, job=wanted, output=output,
-                    setup_services=deploying.SETUP_SERVICES,
-                    busy=busy, said=request.query_params.get("said", ""), failed=request.query_params.get("failed") == "1")
-
-    async def deploy_do(request: Request, person: Person) -> Response:
-        """Pull front's checkout from GitHub, or start a deploy or restart of one machine."""
-        if "superuser" not in person.can:
-            return page(request, "refused.html", person, status=403, why="Deploying requires the superuser ability.")
-        lists, plan = await typed_lists(request), deploy_plan()
-        form = {key: values[-1] for key, values in lists.items()}
-        action, name = form.get("do", ""), form.get("node", "")
-        if action == "add":
-            name = form.get("name", "").strip()
-            try:
-                if not settings.path:
-                    raise ValueError("weightroom was started without a settings file to add the machine to.")
-                deploying.add_node(Path(settings.path), name, form.get("ssh", "").strip(), form.get("folder", "").strip(),
-                                   lists.get("services", []))
-            except ValueError as problem:
-                return go("/deploy?failed=1&said=" + quote(str(problem)))
-            plan, action = deploy_plan(), "setup"
-        if action == "pull":
-            problem = await asyncio.to_thread(deploying.pull, plan)
-            return go("/deploy?" + ("failed=1&" if problem else "") + "said=" + quote(problem or "Source updated from GitHub."))
-        if action not in ("deploy", "restart", "setup") or name not in plan["nodes"]:
-            return go("/deploy?failed=1&said=" + quote("Choose deploy, restart or setup for a configured machine."))
-        if await asyncio.to_thread(deploying.running):
-            return go("/deploy?failed=1&said=" + quote("A deploy or restart is still running. Wait for it to finish."))
-        try:
-            job = await asyncio.to_thread(deploying.start, plan, Path(settings.data) / "deploys", name, action, person.name)
-        except ValueError as problem:
-            return go("/deploy?failed=1&said=" + quote(str(problem)))
-        return go(f"/deploy?job={job}&said=" + quote(f"{action.capitalize()} of {name} started."))
 
     async def machine(request: Request, person: Person) -> Response:
         """The machine: its telemetry over a stretch of time as small charts, and its services."""
@@ -4663,8 +4610,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             Route("/guide", guide_moved),
             route("/docs", docs_page),
             route("/system/components", components_page),
-            route("/deploy", deploy_page),
-            route("/deploy", deploy_do, "POST"),
             route("/docs/{section}", docs_page),
             route("/docs/{section}/{topic}", docs_page),
             Route("/backups", for_people(backups_page)),
