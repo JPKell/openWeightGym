@@ -2,18 +2,26 @@
 # owg: look after an openWeightGym installation from the terminal. install.sh links it into
 # ~/.local/bin (or /usr/local/bin for a system installation).
 #
+#   owg [--plain] [--yes] [COMMAND]
 #   owg                    what is running, then a menu of what to do
 #   owg status             what is running and where to reach it
-#   owg start|stop|restart [PROGRAM...]
-#   owg restart --host USER@HOST [PROGRAM...]   restart services over SSH
-#   owg logs [PROGRAM] [-f]
-#   owg update             fetch the latest openWeightGym and reinstall, keeping settings and data
-#   owg repair             reinstall packages and services as they are
+#   owg start|stop|restart [PROGRAM...]          all installed programs by default
+#   owg restart --host USER@HOST [PROGRAM...]    restart services on another machine over SSH
+#   owg logs [PROGRAM] [-f|--follow] [-n LINES]  the latest 80 lines unless -n says otherwise
+#   owg update [--yes] [--plain]                 fetch the latest openWeightGym and reinstall,
+#                                                keeping settings and data
+#   owg repair [--yes] [--plain]                 reinstall packages and services as they are
 #   owg doctor             check the installation and say what to fix
-#   owg pair               let a GPU node join this console, with a one-time code
-#   owg uninstall          remove openWeightGym, choosing what to keep
+#   owg pair [--minutes N] let a GPU node join this console, with a one-time code
+#   owg uninstall [--yes] [--everything] [--no-backup] [--plain]
+#                          remove openWeightGym, choosing what to keep; --yes keeps settings,
+#                          keys, data and models; --everything removes them after a backup
 #   owg version
-
+#   owg help
+#
+# Options before the command: --plain for no colour or animation, --yes to take every default
+# without asking. PROGRAM is one of: loadcoach toollocker spotter voice weightroom turnstile
+# voice-gateway.
 set -Eeuo pipefail
 
 SELF=$(readlink -f -- "${BASH_SOURCE[0]}")
@@ -28,10 +36,17 @@ source "$ROOT/scripts/lib/receipt.sh"
 ALL_PROGRAMS=(loadcoach toollocker spotter voice weightroom turnstile voice-gateway)
 
 usage() {
-  sed -n '2,16s/^# \{0,1\}//p' "$SELF"
+  sed -n '2,/^$/{/^#/!q;s/^# \{0,1\}//p}' "$SELF"
 }
 
 main() {
+  while (($#)); do
+    case "$1" in
+      --plain) export OWG_PLAIN=1; shift ;;
+      --yes) export OWG_DEFAULTS=1; shift ;;
+      *) break ;;
+    esac
+  done
   ui_init
   : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/owg-$(date +%Y%m%d-%H%M%S).log}"
   ui_log_init 2>/dev/null || OWG_LOG=/dev/null
@@ -44,10 +59,10 @@ main() {
     while (($#)); do
       case "$1" in
         --host|--host=*)
-          ((remote == 0)) || ui_die "Name --host only once."
+          ((remote == 0)) || ui_die "Name --host only once." "Use: owg restart [--host USER@HOST] [PROGRAM...]"
           remote=1
           if [[ $1 == --host ]]; then
-            (($# >= 2)) || ui_die "--host needs an SSH destination, such as user@compute."
+            (($# >= 2)) || ui_die "--host needs an SSH destination, such as user@compute." "Use: owg restart [--host USER@HOST] [PROGRAM...]"
             target=$2; shift 2
           else target=${1#--host=}; shift; fi ;;
         -*) ui_die "Unknown restart option: $1" "Use: owg restart [--host USER@HOST] [PROGRAM...]" ;;
@@ -176,7 +191,7 @@ control() {
 remote_restart() {
   local target=$1 program command
   shift
-  [[ $target =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.@:-]*$ ]] || ui_die "Name a plain SSH destination, such as user@compute."
+  [[ $target =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.@:-]*$ ]] || ui_die "Name a plain SSH destination, such as user@compute." "Use: owg restart [--host USER@HOST] [PROGRAM...]"
   for program in "$@"; do
     [[ $program =~ ^[a-z][a-z-]*$ ]] || ui_die "$program is not a program name." "The programs are: ${ALL_PROGRAMS[*]}"
   done
@@ -195,14 +210,26 @@ exec "$remote_owg" restart'
 }
 
 logs() {
-  local follow=() program='' argument
-  for argument in "$@"; do
-    case "$argument" in -f|--follow) follow=(-f) ;; *) program=$argument ;; esac
+  local follow=() program='' lines=80
+  while (($#)); do
+    case "$1" in
+      -f|--follow) follow=(-f); shift ;;
+      -n|--lines)
+        [[ ${2:-} =~ ^[0-9]+$ ]] || ui_die "$1 needs a number of lines, such as -n 200." "Use: owg logs [PROGRAM] [-f] [-n LINES]"
+        lines=$2; shift 2 ;;
+      -n[0-9]*|--lines=*) lines=${1#-n}; lines=${lines#--lines=}
+        [[ $lines =~ ^[0-9]+$ ]] || ui_die "$1 needs a number of lines, such as -n 200." "Use: owg logs [PROGRAM] [-f] [-n LINES]"
+        shift ;;
+      -*) ui_die "Unknown logs option: $1" "Use: owg logs [PROGRAM] [-f] [-n LINES]" ;;
+      *) [[ -z $program ]] || ui_die "Name one program, or none for all of them." "Use: owg logs [PROGRAM] [-f] [-n LINES]"
+         program=$1; shift ;;
+    esac
   done
   local -a units=()
+  local argument
   if [[ -n $program ]]; then units=(--user-unit "$program.service")
   else while read -r argument; do units+=(--user-unit "$argument.service"); done < <(programs); fi
-  owg_journalctl "${units[@]}" -n 80 --no-pager "${follow[@]}"
+  owg_journalctl "${units[@]}" -n "$lines" --no-pager "${follow[@]}"
 }
 
 pair() {
@@ -313,7 +340,9 @@ menu() {
   ((UI_ASK)) || { usage; return 0; }
   local choice=0 console=0
   programs | grep -qx weightroom && console=1
-  local -a actions=(update repair doctor logs) labels=(
+  local -a actions=(restart remote update repair doctor logs) labels=(
+    "Restart services|choose which programs to restart"
+    "Restart another machine|restart a GPU node's services over SSH"
     "Update|fetch the latest openWeightGym and reinstall"
     "Repair|reinstall packages and services as they are"
     "Doctor|check everything and say what to fix"
@@ -324,6 +353,8 @@ menu() {
   ui_choose choice "What would you like to do?" 0 "${labels[@]}"
   case "${actions[choice]}" in
     quit) return 0 ;;
+    restart) restart_menu ;;
+    remote) remote_menu ;;
     logs) logs ;;
     doctor) doctor ;;
     pair) pair ;;
@@ -331,4 +362,33 @@ menu() {
   esac
 }
 
+# Restart the programs ticked in a checklist, every one of them ticked to begin with.
+restart_menu() {
+  local -a names=() options=() chosen=()
+  local program state ticked index
+  mapfile -t names < <(programs)
+  ((${#names[@]})) || { ui_warn "No programs found" "is this an openWeightGym installation?"; return 0; }
+  for program in "${names[@]}"; do
+    state=$(owg_systemctl is-active "$program.service" 2>/dev/null || true)
+    options+=("$program|${state:-not running}|on")
+  done
+  ui_checklist ticked "Which programs should restart?" "${options[@]}"
+  for index in $ticked; do chosen+=("${names[index]}"); done
+  ((${#chosen[@]})) || { ui_info "Nothing was restarted."; return 0; }
+  control restart "${chosen[@]}"
+}
+
+ssh_destination_or_empty() {
+  [[ -z $1 || $1 =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.@:-]*$ ]] && return 0
+  ui_fail "Name a plain SSH destination, such as user@compute." 2>&1
+  return 1
+}
+
+# Restart every program on another machine, which needs SSH keys and owg installed there.
+remote_menu() {
+  local target
+  ui_input target "Which machine? (USER@HOST, empty to go back)" "" ssh_destination_or_empty
+  [[ -n $target ]] || { ui_info "Nothing was restarted."; return 0; }
+  remote_restart "$target"
+}
 main "$@"

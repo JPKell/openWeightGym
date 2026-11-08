@@ -163,16 +163,20 @@ the `pg_hba.conf` lines to add.
 
 | Command | Does |
 |---|---|
-| `owg` | shows what is running, then a menu |
+| `owg` | shows what is running, then a menu: restart services (choosing which), restart another machine's services over SSH, update, repair, doctor, logs, add a GPU node, uninstall |
 | `owg status` | programs, addresses, the llama.cpp build and the models' size |
 | `owg start`, `stop`, `restart [PROGRAM…]` | controls the services, all of them by default |
 | `owg restart --host USER@HOST [PROGRAM…]` | restarts services over SSH using that host's OWG installation; all installed services by default |
-| `owg logs [PROGRAM] [-f]` | the latest from the programs' journals |
-| `owg update` | fetches the latest openWeightGym and reinstalls, keeping settings and data |
-| `owg repair` | reinstalls packages and services as they are |
+| `owg logs [PROGRAM] [-f] [-n LINES]` | the latest from the programs' journals (80 lines unless `-n` says otherwise); `-f` follows them |
+| `owg update [--yes] [--plain]` | fetches the latest openWeightGym and reinstalls, keeping settings and data |
+| `owg repair [--yes] [--plain]` | reinstalls packages and services as they are |
 | `owg doctor` | checks the environment, services, settings, llama.cpp, key permissions, linger, the console and disk space, and says what to fix |
-| `owg pair` | makes a pairing code for a GPU node (on a console) |
-| `owg uninstall` | removes openWeightGym, choosing what to keep |
+| `owg pair [--minutes N]` | makes a pairing code for a GPU node (on a console), good for N minutes |
+| `owg uninstall [--yes] [--everything] [--no-backup] [--plain]` | removes openWeightGym, choosing what to keep; `--yes` keeps settings, keys, data and models without asking, `--everything` removes them too after a backup, which `--no-backup` skips |
+| `owg version`, `owg help` | the installed version and commit; every command and option |
+
+Before any command, `--plain` turns off colour and animation and `--yes` takes every default
+without asking.
 
 Updates refuse to run over changes of your own to the code; commit or stash them first. Settings
 files are kept; enabling voice adds its missing gateway port and pairing updates node addresses,

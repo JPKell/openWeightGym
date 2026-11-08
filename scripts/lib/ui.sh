@@ -14,8 +14,8 @@
 OWG_UI_LOADED=1
 shopt -s extglob
 
-# The console's palettes, left to right: Sunflower, Clay, Rose, Orchid, Indigo, Carbon Cyan.
-UI_STOPS=(f4d75e eeb08d f0a4c2 c8a6ed b4b3ff 6dd9e8)
+# The gradient, from left to right: red, through purple, to blue at the middle, and back to red.
+UI_STOPS=(ff4d5e b462e8 4d7cff b462e8 ff4d5e)
 OWG_TAGLINE=${OWG_TAGLINE:-"local models · heavy lifting"}
 
 ui_init() {
