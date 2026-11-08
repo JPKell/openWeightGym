@@ -48,6 +48,7 @@ from starlette.routing import Route
 
 from loadcoach.config import CLI, data_folder, kept_by_loadcoach, model_places, read_settings, said_in
 from loadcoach.files import SPARE
+from loadcoach.file_index import NODE_INDEX, FileIndex
 from loadcoach.log import Log
 from loadcoach import statement, observability as observation
 from loadcoach.groups import ABILITIES
@@ -97,6 +98,8 @@ class Settings:
     disks: tuple[str, ...] = ("/",)  # folders whose drives are watched for room
     turnstile_notice: str = ""  # turnstile's /turnstile/power URL, empty disables the notice. Signed with the machine key
     places: dict[str, str] = field(default_factory=dict)  # LoadCoach's allowed model-file destinations
+    files_every: float = 10  # minutes between looks through the places for the Files page's index. 0 means only when asked
+    file_index: str = ""  # that index, in LoadCoach's data folder; empty keeps none
 
 
 def load_settings(path: Path) -> Settings:
@@ -130,6 +133,7 @@ def settings_from(path: Path, told: dict, file: dict | None = None) -> Settings:
                 "machine_key_file": str(path.parent / main["machine_key_file"]) if main.get("machine_key_file") else "",
                 "compute": f"http://{'127.0.0.1' if here in ('0.0.0.0', '::') else here}:{main.get('port', 8442)}",
                 "places": dict(model_places(main.get("models_folder", ""), main.get("places", {}), main.get("models_storage_folder", ""))),
+                "file_index": str(data_folder(path.parent / told.get("loadcoach", "loadcoach.toml"), main) / NODE_INDEX),
                 "token_file": token_file,
                 "database": database,
                 "history": str(data_folder(path, told) / f"{path.stem}.db"),  # in the data folder: spotter.toml gives spotter.db
@@ -141,7 +145,7 @@ def settings_from(path: Path, told: dict, file: dict | None = None) -> Settings:
         )
     except (TypeError, ValueError) as problem:
         raise SystemExit(f"{path}: {problem}") from None
-    if settings.sample_every < 1 or min(settings.keep_days, settings.sleep_after, settings.busy_gpu, settings.busy_processor) < 0:
+    if settings.sample_every < 1 or min(settings.keep_days, settings.sleep_after, settings.busy_gpu, settings.busy_processor, settings.files_every) < 0:
         raise SystemExit(f"{path}: sample_every is a second or more, and no number is less than nothing")
     for name, unit in [*settings.services.items(), *settings.system_services.items()]:
         if not isinstance(unit, str) or not unit.endswith(".service") or "/" in unit or " " in unit:
@@ -293,7 +297,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
             return
         settings, refused = taken("spotter", settings, changed, settings_from)
         in_force["changed"] = changed
-        named = ("host", "port", "sample_every", "keep_days", "sleep_after", "busy_gpu", "busy_processor", "services", "system_services")
+        named = ("host", "port", "sample_every", "keep_days", "sleep_after", "busy_gpu", "busy_processor", "files_every", "services", "system_services")
         running = {**settings.file, **{name: getattr(settings, name) for name in named}, "disks": list(settings.disks)}
         changes.seen("spotter", said(running, settings.file, settings.says), refused)
     reading_now = asyncio.Lock()  # so that two askers at once share one reading
@@ -399,6 +403,26 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
             if settings.sleep_after and not pending and time.time() - used["at"] >= settings.sleep_after * 60:
                 begin("sleep", "spotter", "", force=False, unasked=True)
             await asyncio.sleep(settings.sample_every)
+
+    async def keep_files() -> None:
+        """Look through LoadCoach's places every `files_every` minutes, so the Files page answers from the index.
+
+        Only files that are new or have changed since the last look are read. A look that fails is
+        tried again at the next one.
+        """
+        index = FileIndex(settings.file_index or None)
+        while True:
+            await gate.wait()
+            in_step()
+            every = settings.files_every * 60
+            if every and settings.places and settings.file_index:
+                kept = index.read()
+                if kept is None or kept.get("places") != settings.places or kept.get("stale") or time.time() - kept.get("checked", 0) >= every:
+                    try:
+                        await asyncio.to_thread(index.scan, settings.places)
+                    except OSError as problem:
+                        print(f"spotter: the model files could not be looked through: {problem}", file=sys.stderr, flush=True)
+            await asyncio.sleep(min(every or 60, 60))  # a change to files_every is taken on within a minute
 
     async def systemctl(*arguments: str, own: bool = True) -> tuple[int, str]:
         """Run systemctl and return how it ended and what it said. `own` is for this account's services, otherwise root's.
@@ -708,6 +732,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
             part.unlink()
             log.add("file", "received", transfer["by"], transfer["caller"], path=str(target), size=received,
                     sha256=transfer["sha256"])
+            if settings.file_index:
+                await asyncio.to_thread(FileIndex(settings.file_index).update, [target], settings.places)
             return JSONResponse({"path": str(target), "size": received, "sha256": transfer["sha256"]}, status_code=201)
         except (OSError, ValueError) as problem:
             part.unlink(missing_ok=True)
@@ -720,12 +746,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
     @asynccontextmanager
     async def lifespan(_: Starlette):
         """Start background workers and release service resources on shutdown."""
-        watching = asyncio.create_task(keep_watch())
+        watching, filing = asyncio.create_task(keep_watch()), asyncio.create_task(keep_files())
         log.add("spotter", "started", services=list(units), sleep_after=settings.sleep_after)
         yield
-        for task in [watching, *going]:
+        for task in [watching, filing, *going]:
             task.cancel()
-        await asyncio.wait({watching, *going})
+        await asyncio.wait({watching, filing, *going})
         await loadcoach.aclose()
         log.add("spotter", "stopped")
 

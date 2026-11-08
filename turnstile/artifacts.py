@@ -13,6 +13,7 @@ import httpx
 from loadcoach import hub
 from loadcoach.config import NO_STORAGE, model_places, storage_places
 from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
+from loadcoach.file_index import FileIndex, tier_of
 from loadcoach.gguf import facts, read_metadata
 from mirrorwall.assets import supported, image_asset, facts as image_facts
 from soundroom.model import audio_asset, facts as audio_facts
@@ -37,9 +38,14 @@ def checked_roots(values):
 class FrontFiles:
     """Use the shared file formats and copy/download helpers without starting an engine."""
 
-    def __init__(self, roots, log):
-        """Read current front-owned roots on each operation and retain active downloads."""
-        self.roots, self.log = roots, log
+    def __init__(self, roots, log, index=None, every=lambda: 0):
+        """Read current front-owned roots on each operation and retain active downloads.
+
+        `index` is where the list of front's files is kept between looks (none: in memory), and
+        `every` how many seconds a look is good for, 0 meaning until a Refresh asks again.
+        """
+        self.roots, self.log, self.every = roots, log, every
+        self.index = FileIndex(index, describe=lambda path: self.describe(path)[0], accept=self.path)
         self.web = httpx.AsyncClient(timeout=30, follow_redirects=True)
         self.fetching, self.tasks = {}, set()
         self.moving, self.transfer_failures = {}, {}
@@ -69,33 +75,35 @@ class FrontFiles:
         metadata = read_metadata(str(path))
         return facts(metadata), metadata
 
-    def inventory(self):
-        """List front's available folders and files, reporting inaccessible locations inline."""
+    def inventory(self, refresh=False):
+        """List front's available folders and files from the kept index, reporting inaccessible locations inline."""
+        spots = self.places()
         places, files, problems = [], [], []
-        for name, folder in self.places().items():
+        for name, folder in spots.items():
+            if not Path(folder).is_dir():
+                problems.append(f'{folder} is not available. Check the folder or mount on front.')
+                continue
             try:
-                if not Path(folder).is_dir():
-                    problems.append(f'{folder} is not available. Check the folder or mount on front.')
-                    continue
-                place = {'name': name, 'folder': folder, 'tier': 'storage' if name.startswith('storage_') else 'cache',
-                         **room(folder), 'files': 0}
-                places.append(place)
-                for path in model_files_in(folder):
-                    self.path(str(path))
-                    stat = path.stat()
-                    entry = {'path': str(path), 'place': name, 'tier': place['tier'], 'size': stat.st_size,
-                             'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                             'used_by': [], 'last_used': None, 'moving': self.moving.get(str(path)),
-                             'transfer_failure': self.transfer_failures.get(str(path))}
-                    place['files'] += stat.st_size
-                    try:
-                        entry['facts'], _ = self.describe(path)
-                    except (OSError, ValueError) as problem:
-                        entry['unreadable'] = str(problem)
-                    files.append(entry)
-            except (OSError, ValueError) as problem:
+                places.append({'name': name, 'folder': folder, 'tier': tier_of(name), **room(folder), 'files': 0})
+            except OSError as problem:
                 problems.append(f'{folder}: {problem}')
-        return {'places': places, 'files': files, 'cleanup': dict(self.cleanup), 'problems': problems}
+        index = self.index.current({place['name']: place['folder'] for place in places}, refresh=refresh, every=self.every())
+        problems += index.get('problems', [])
+        for place in places:
+            for kept in index['files'].values():
+                if kept['place'] != place['name']:
+                    continue
+                place['files'] += kept['size']
+                files.append({**{key: value for key, value in kept.items() if key != 'mtime'},
+                              'used_by': [], 'last_used': None, 'moving': self.moving.get(kept['path']),
+                              'transfer_failure': self.transfer_failures.get(kept['path'])})
+        return {'places': places, 'files': files, 'cleanup': dict(self.cleanup), 'problems': problems,
+                'checked': FileIndex.checked(index)}
+
+    def changed(self, *paths):
+        """Put the kept list right for files front has just made, changed or removed."""
+        spots = {name: folder for name, folder in self.places().items() if Path(folder).is_dir()}
+        self.index.update(list(paths), spots)
 
     async def request(self, user, method, address, body=b''):
         """Serve the existing artifact contract locally under the caller's model permission."""
@@ -113,7 +121,7 @@ class FrontFiles:
             if not isinstance(asked, dict):
                 raise ValueError('Send a settings object.')
             if method == 'GET' and action == 'files':
-                return response(await asyncio.to_thread(self.inventory))
+                return response(await asyncio.to_thread(self.inventory, query.get('refresh') == '1'))
             if method == 'GET' and action == 'models':
                 return response({'models': []})
             if method == 'GET' and action in ('file', 'files/hash'):
@@ -138,6 +146,7 @@ class FrontFiles:
                     size = path.stat().st_size
                     await asyncio.to_thread(path.unlink)
                     self.log.add('file', 'deleted', user.name, machine='front', path=str(path))
+                    await asyncio.to_thread(self.changed, path)
                     return response({'deleted': str(path), 'freed': size})
                 folder = self.places().get(asked.get('to'))
                 if folder is None:
@@ -221,6 +230,7 @@ class FrontFiles:
                     await asyncio.to_thread(source.unlink)
                 self.log.add('file', 'copied' if copy else 'moved', user.name,
                              machine='front', path=path, to=str(target))
+                await asyncio.to_thread(self.changed, source, target)
             except (OSError, ValueError) as problem:
                 self.transfer_failures[path] = str(problem)
                 self.log.add('file', 'copy-failed' if copy else 'move-failed', user.name,
@@ -305,6 +315,8 @@ class FrontFiles:
                 raise
             except (OSError, ValueError) as problem:
                 self.cleanup.update(state='failed', failure=str(problem))
+            finally:
+                await asyncio.to_thread(self.index.stale)
 
         task = asyncio.create_task(run())
         self.tasks.add(task)
@@ -344,6 +356,7 @@ class FrontFiles:
                     await hub.fetch(self.web, repository, entry, target, '', progress)
                     self.fetching.pop(str(target), None)
                     self.log.add('file', 'downloaded', user.name, machine='front', path=str(target))
+                    await asyncio.to_thread(self.changed, target)
                 except asyncio.CancelledError:
                     progress.update(state='stopped')
                     raise

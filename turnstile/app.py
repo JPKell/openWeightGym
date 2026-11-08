@@ -67,6 +67,7 @@ from turnstile.batches import FrontBatches
 from turnstile.tasks import FrontTasks
 from turnstile.settings import FrontSettings
 from turnstile.artifacts import FrontFiles, checked_roots
+from loadcoach.file_index import FRONT_INDEX
 from turnstile.hosted import Hosted
 from turnstile.machines import Machines, PassiveReads, logical_catalogue, placement_order
 from turnstile.model_locations import ModelLocations
@@ -115,6 +116,7 @@ class Settings:
     models_folder: str = ""  # optional model cache on front; no inference service is required
     models_storage_folder: str = ""  # optional model library on front; empty disables this tier
     image_adult_previews: bool = False  # permit individual users to opt in to adult Civitai previews
+    files_every: float = 10  # minutes between looks through front's own model folders for the Files page. 0: only when asked
     compute_offset: int = 0  # how far compute's ports sit from `ports`, from the port in compute's URL. 0 unless both run on one machine
 
     def upstream(self, port: int) -> str:
@@ -163,6 +165,8 @@ def load_settings(path: Path) -> Settings:
                 raise TypeError("front_settings must be a boolean")
             if type(settings.image_adult_previews) is not bool:
                 raise TypeError("image_adult_previews must be a boolean")
+            if type(settings.files_every) not in (int, float) or settings.files_every < 0:
+                raise TypeError("files_every is a number of minutes, 0 or more")
             if not isinstance(settings.toollocker_url, str):
                 raise TypeError("toollocker_url must be a service base URL")
             if settings.toollocker_url:
@@ -204,7 +208,7 @@ def say_what_runs(path: Path, settings: Settings) -> None:
     running = {**file, "host": settings.host, "ports": list(settings.ports), "wait": settings.wait,
                "voice_port": settings.voice_port, "artifact_machine": artifact_machine,
                "models_folder": settings.models_folder, "models_storage_folder": settings.models_storage_folder,
-               "image_adult_previews": settings.image_adult_previews}
+               "image_adult_previews": settings.image_adult_previews, "files_every": settings.files_every}
     (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))))
 
 
@@ -772,7 +776,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         changed = front_settings.changes.of('turnstile')
         return {name: changed.get(name, value) for name, value in configured_file_roots.items()}
 
-    front_files = FrontFiles(front_file_roots, log)
+    def front_files_every() -> float:
+        """Seconds between looks through front's own folders, as saved on the site now."""
+        minutes = front_settings.changes.of('turnstile').get('files_every', settings.files_every)
+        return float(minutes) * 60 if type(minutes) in (int, float) and minutes >= 0 else settings.files_every * 60
+
+    front_files = FrontFiles(front_file_roots, log, index=Path(settings.data) / FRONT_INDEX, every=front_files_every)
 
     def file_store():
         """Prefer an explicitly selected store, then optional front storage, then legacy workers."""
@@ -1281,14 +1290,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     configuration_lock = asyncio.Lock()
     installation_reservations = {}
 
-    async def model_file_inventory(user):
-        """Read all managed files without requiring the artifact host to be the source."""
-        answers = await asyncio.gather(*(ask_machine(user, "GET", "/loadcoach/files", machine=name, timeout=5)
+    async def model_file_inventory(user, refresh=False):
+        """Read all managed files without requiring the artifact host to be the source. `refresh` looks through every folder again first."""
+        listing = "/loadcoach/files" + ("?refresh=1" if refresh else "")
+        answers = await asyncio.gather(*(ask_machine(user, "GET", listing, machine=name, timeout=30 if refresh else 5)
                                          for name in machines.names))
         nodes = [{"name": name, "answering": answer is not None and answer.status_code == 200,
                  **(answer.json() if answer is not None and answer.status_code == 200 else {"files": [], "places": []})}
                 for name, answer in zip(machines.names, answers)]
-        return [*nodes, {'name': 'front', 'answering': True, **await asyncio.to_thread(front_files.inventory)}]
+        return [*nodes, {'name': 'front', 'answering': True, **await asyncio.to_thread(front_files.inventory, refresh)}]
 
     async def model_files_available(request):
         """The complete cache/storage picker, including preflight capacity warnings."""
@@ -1472,7 +1482,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 selected = json.loads(body).get('path')
             except (ValueError, AttributeError):
                 return error(400, 'Choose a model file.')
-            nodes = await model_file_inventory(user)
+            nodes = await model_file_inventory(user, refresh=True)  # whether the file is in use is decided on what is there now
             unavailable = [node['name'] for node in nodes if not node['answering']]
             if unavailable:
                 return error(409, 'Cannot verify whether this file is in use while these nodes are offline: ' + ', '.join(unavailable) + '.')
@@ -1484,34 +1494,42 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(503, f"Model files on {file_store()} are unavailable. Configure front cache and storage in Settings → General, or connect that node.")
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
 
-    async def artifact_files(request: Request) -> Response:
-        """Front-owned files plus available storage at every configured compute node."""
-        user = caller(key_of(request))
-        if user is None:
-            return error(401, "Missing or wrong API key.")
-        if not user.can("manage-models"):
-            return error(403, "Your account may not manage model files.")
+    async def file_inventory(user, refresh: bool = False) -> dict:
+        """Front-owned files plus available storage at every configured compute node, from each one's kept
+        index. `refresh` has every node and front look through their folders again first."""
         names, store = ['front', *machines.names], file_store()
-        answers = list(await asyncio.gather(*(ask_machine(user, "GET", "/loadcoach/files", machine=name, timeout=5) for name in names)))
+        listing = "/loadcoach/files" + ("?refresh=1" if refresh else "")
+        wait = 30 if refresh else 5  # a look through every folder can take a while; a kept index answers at once
+        answers = list(await asyncio.gather(*(ask_machine(user, "GET", listing, machine=name, timeout=wait) for name in names)))
         if store != 'front' and store in names and answers[names.index(store)] is None:
             # Listing files can outlive the short deadline that keeps an unavailable node from delaying
             # the page. The designated store is required, so it alone gets one normal bounded retry.
-            answers[names.index(store)] = await ask_machine(user, "GET", "/loadcoach/files", machine=store, timeout=30)
+            answers[names.index(store)] = await ask_machine(user, "GET", listing, machine=store, timeout=30)
         reports = {one["name"]: one for one in machines.report()}
         nodes = []
         for name, answer in zip(names, answers):
             answering = answer is not None and answer.status_code == 200
             found = answer.json() if answering else {}
             nodes.append({"name": name, "state": 'ready' if name == 'front' else reports.get(name, {}).get("state", "unknown"),
-                          "answering": answering,
+                          "answering": answering, "checked": found.get("checked"),
                           "places": found.get("places", []), "files": found.get("files", []),
                           "problems": found.get('problems', []), "cleanup": found.get("cleanup", {})})
         source = next(node for node in nodes if node['name'] == file_store())
-        return JSONResponse({"artifact_machine": file_store(), "places": source["places"], "files": source["files"],
-                             "front_enabled": any(front_file_roots().values()),
-                             "store_available": bool(source['places']),
-                             "cleanup": source.get("cleanup", {}),
-                             "nodes": nodes, "distributions": list(distributions.values())}, headers={"cache-control": "no-store"})
+        return {"artifact_machine": file_store(), "places": source["places"], "files": source["files"],
+                "front_enabled": any(front_file_roots().values()),
+                "store_available": bool(source['places']),
+                "cleanup": source.get("cleanup", {}),
+                "nodes": nodes, "distributions": list(distributions.values())}
+
+    async def artifact_files(request: Request) -> Response:
+        """Front-owned files plus available storage at every configured compute node. `refresh=1` looks again first."""
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, "Missing or wrong API key.")
+        if not user.can("manage-models"):
+            return error(403, "Your account may not manage model files.")
+        found = await file_inventory(user, refresh=request.query_params.get("refresh") == "1")
+        return JSONResponse(found, headers={"cache-control": "no-store"})
 
     async def artifact_cleanup(request: Request) -> Response:
         """Clear front's active cache safely, or remove unused files from answering compute nodes."""
@@ -1522,10 +1540,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(403, "Your account may not manage model files.")
         action = request.path_params.get("action", request.url.path.rsplit("/", 1)[-1])
         if action in ("clear-cache", "consolidate-cache"):
-            inventory = await artifact_files(request)
-            if inventory.status_code != 200:
-                return inventory
-            listed = json.loads(inventory.body)
+            # What is kept and what is copied is decided on what is in the folders now, not on a kept list.
+            listed = await file_inventory(user, refresh=True)
             unavailable = [node["name"] for node in listed["nodes"] if not node.get("answering")]
             if unavailable:
                 return error(409, "Cache cleanup cannot safely determine every configured model while these nodes are unavailable: "

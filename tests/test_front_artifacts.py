@@ -94,7 +94,7 @@ def test_file_categories_filter_full_pages_and_polling(categorized_files, tier, 
     if tier == 'storage':
         assert 'In cache' in listing.text  # filtering retains knowledge of the matching cached copy
     else:
-        assert poll.text.count('hx-swap-oob="true"') == 4
+        assert poll.text.count('hx-swap-oob="true"') == 5  # with when the files were last checked
 
 
 def test_file_category_keeps_location_totals_and_storage_actions(categorized_files, desk):
