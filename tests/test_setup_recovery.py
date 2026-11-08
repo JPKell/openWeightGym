@@ -56,6 +56,36 @@ def support_module():
     return module
 
 
+def test_firewall_ports_follow_custom_ports_and_all_gateway_listeners(tmp_path):
+    settings = tmp_path / 'settings'
+    settings.mkdir()
+    (settings / 'weightroom.toml').write_text('host = "0.0.0.0"\nport = 18440\n[turnstile]\nhost = "::"\nports = [18442,18443,18444,18445]\n')
+    (settings / 'toollocker.toml').write_text('host = "127.0.0.1"\nport = 19443\n')
+    for name, port in [('loadcoach', 18442), ('spotter', 18444), ('voice', 18445)]:
+        (settings / f'{name}.toml').write_text(f'host = "192.0.2.84"\nport = {port}\n')
+    (settings / 'voice-gateway.toml').write_text('host = "::1"\nport = 8446\ndesktop_host = "192.0.2.42"\ndesktop_port = 18447\npublic_port = 8081\n')
+    support = support_module()
+    assert support.firewall_ports(tmp_path, list(support.SERVICE_CONFIG)) == [8081, 18440, 18442, 18443, 18444, 18445, 18447]
+
+
+@pytest.mark.parametrize('host,expected', [('127.0.0.1', []), ('127.0.1.2', []), ('::1', []), ('localhost', []),
+                                          ('0.0.0.0', [18444]), ('::', [18444]), ('192.0.2.84', [18444])])
+def test_firewall_ports_merge_defaults_and_skip_loopback_listeners(tmp_path, host, expected):
+    settings = tmp_path / 'settings'
+    (settings / 'defaults').mkdir(parents=True)
+    (settings / 'defaults/spotter.toml').write_text('host = "0.0.0.0"\nport = 18444\n')
+    (settings / 'spotter.toml').write_text(f'host = "{host}"\n')
+    assert support_module().firewall_ports(tmp_path, ['spotter']) == expected
+
+
+@pytest.mark.parametrize('port', ['true', '0', '65536', '"8444"'])
+def test_firewall_ports_refuse_invalid_ports_without_suggesting_rules(tmp_path, port):
+    (tmp_path / 'settings').mkdir()
+    (tmp_path / 'settings/spotter.toml').write_text(f'host = "0.0.0.0"\nport = {port}\n')
+    with pytest.raises(ValueError, match='TCP port'):
+        support_module().firewall_ports(tmp_path, ['spotter'])
+
+
 @pytest.mark.parametrize('topology,expected', [
     ('all', {'loadcoach', 'spotter', 'weightroom', 'turnstile', 'toollocker'}),
     ('front', {'weightroom', 'turnstile', 'toollocker'}),

@@ -1310,6 +1310,7 @@ services_from_receipt() {
 
 spotting() {
   ui_section "Spotting" "Checking it all works"
+  firewall_check "$DIR" "${SERVICES:-}" "$DIR/.venv/bin/python" as_owner
   can_start || { ui_info "systemd is not running here, so nothing was started"; return 0; }
   check_services
   local key
@@ -1327,28 +1328,17 @@ spotting() {
             "See why: owg logs turnstile; owg logs loadcoach" "Put that right, then: owg restart turnstile loadcoach"
         fi
       fi
-      firewall_check 8440 8442 ;;
+      ;;
     compute)
       if running loadcoach && ! ui_step "LoadCoach answers on $HOST_ADDRESS" -- wait_http "http://$HOST_ADDRESS:8442/v1/models" 60; then
         ui_attention "LoadCoach is running but does not answer on http://$HOST_ADDRESS:8442, so the console cannot use this node" \
           "See why: owg logs loadcoach" "Put that right, then: owg restart loadcoach"
       fi
-      firewall_check 8442 ;;
+      ;;
   esac
 }
 
 running() { owg_systemctl is-active --quiet "$1.service" 2>/dev/null; }
-
-# Other machines reach this one on these ports: a firewall that keeps them out is worth saying.
-firewall_check() {  # firewall_check PORT...
-  [[ $HOST_ADDRESS == 127.0.0.1 ]] && return 0
-  firewall_steps "$@"
-  ((${#FIREWALL_STEPS[@]})) || return 0
-  local who="other devices" keeps=keeps
-  [[ $TOPOLOGY == compute ]] && who="the console machine"
-  ((FIREWALL_SURE)) || keeps="may keep"
-  ui_attention "The firewall here ($FIREWALL_NAME) $keeps $who from reaching port ${FIREWALL_CLOSED// / and }" "${FIREWALL_STEPS[@]}"
-}
 
 # ---- the finish -----------------------------------------------------------------------------
 

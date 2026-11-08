@@ -169,16 +169,21 @@ ufw_rules_ports() {
 # install; Ubuntu leaves ufw off unless someone turns it on.
 firewall_steps() {  # firewall_steps 8440 8442
   FIREWALL_STEPS=() FIREWALL_NAME='' FIREWALL_CLOSED='' FIREWALL_SURE=1
-  local port listing='' known=1 closed=() rules=()
+  FIREWALL_STATUS=inactive FIREWALL_MESSAGE='No active UFW or firewalld firewall detected.'
+  local port listing='' status='' known=1 closed=() rules=()
+  (($#)) || { FIREWALL_STATUS=local; FIREWALL_MESSAGE='No externally bound TCP ports need firewall rules.'; return 0; }
   if command -v firewall-cmd >/dev/null && [[ $(firewall-cmd --state 2>/dev/null) == running ]]; then
     FIREWALL_NAME=firewalld
     listing=$(firewall-cmd --list-ports 2>/dev/null || sudo -n firewall-cmd --list-ports 2>/dev/null) || known=0
-  elif command -v ufw >/dev/null && grep -qs '^ENABLED=yes' /etc/ufw/ufw.conf; then
+  elif command -v ufw >/dev/null; then
     FIREWALL_NAME=ufw
     # A rule allowing everything from somewhere (Anywhere ALLOW 192.168.1.0/24) lets these in too.
-    if sudo -n true 2>/dev/null; then
-      listing=$(sudo -n ufw status 2>/dev/null | awk '$2 ~ /^(ALLOW|LIMIT)$/ || $3 ~ /^(ALLOW|LIMIT)$/ {print ($1 == "Anywhere" ? "1-65535" : $1)}') || known=0
-    elif [[ -r /etc/ufw/user.rules ]]; then
+    if status=$(LC_ALL=C ufw status 2>/dev/null || LC_ALL=C sudo -n ufw status 2>/dev/null); then
+      [[ $status == *'Status: active'* ]] || return 0
+      listing=$(awk '$2 ~ /^(ALLOW|LIMIT)$/ || $3 ~ /^(ALLOW|LIMIT)$/ {print ($1 == "Anywhere" ? "1-65535" : $1)}' <<<"$status")
+    elif grep -qs '^ENABLED=no' /etc/ufw/ufw.conf; then
+      return 0
+    elif grep -qs '^ENABLED=yes' /etc/ufw/ufw.conf && [[ -r /etc/ufw/user.rules ]]; then
       listing=$(ufw_rules_ports) || known=0
     else
       known=0
@@ -190,18 +195,50 @@ firewall_steps() {  # firewall_steps 8440 8442
     if ((known)) && port_listed "$port" "$listing"; then continue; fi
     closed+=("$port")
   done
-  ((${#closed[@]})) || return 0
+  if ((${#closed[@]} == 0)); then
+    FIREWALL_STATUS=clear
+    FIREWALL_MESSAGE="Firewall ($FIREWALL_NAME) has allow rules for required TCP ports: $*."
+    return 0
+  fi
   FIREWALL_CLOSED=${closed[*]} FIREWALL_SURE=$known
+  FIREWALL_STATUS=blocked
+  FIREWALL_MESSAGE="Firewall ($FIREWALL_NAME) needs allow rules for required TCP ports: $FIREWALL_CLOSED."
+  if ((!known)); then
+    FIREWALL_STATUS=unknown
+    FIREWALL_MESSAGE="Firewall ($FIREWALL_NAME) rules could not be read; check required TCP ports: $FIREWALL_CLOSED."
+  fi
   case "$FIREWALL_NAME" in
     firewalld)
       for port in "${closed[@]}"; do rules+=("--add-port=$port/tcp"); done
-      FIREWALL_STEPS=("Open $( ((${#closed[@]} > 1)) && echo them || echo it) for good: sudo firewall-cmd --permanent ${rules[*]} && sudo firewall-cmd --reload") ;;
+      ((known)) || FIREWALL_STEPS=("Inspect its active rules: sudo firewall-cmd --list-all")
+      FIREWALL_STEPS+=("Open $( ((${#closed[@]} > 1)) && echo them || echo it) for good: sudo firewall-cmd --permanent ${rules[*]} && sudo firewall-cmd --reload") ;;
     ufw)
       for port in "${closed[@]}"; do rules+=("sudo ufw allow $port/tcp"); done
       ((known)) || FIREWALL_STEPS=("See whether it does: sudo ufw status")
       FIREWALL_STEPS+=("Open $( ((${#closed[@]} > 1)) && echo them || echo it): $(printf '%s && ' "${rules[@]}" | sed 's/ && $//')") ;;
   esac
   return 0
+}
+
+# Shared by the guided installer, direct installer and owg doctor. Only port numbers leave the settings reader.
+firewall_installation() {  # ROOT SERVICE,... PYTHON [COMMAND-PREFIX...]
+  local root=$1 services=$2 python=$3 ports
+  shift 3
+  if ! ports=$("$@" "$python" "$root/scripts/install-suite-support.py" firewall-ports --root "$root" --services "$services"); then
+    FIREWALL_STATUS=unknown FIREWALL_SURE=0
+    FIREWALL_MESSAGE='Firewall check could not read the configured service listeners.'
+    FIREWALL_STEPS=("Fix the settings errors above, then run: owg doctor")
+    return 0
+  fi
+  local -a required=()
+  if [[ -n $ports ]]; then mapfile -t required <<<"$ports"; fi
+  firewall_steps "${required[@]}"
+}
+
+firewall_check() {  # ROOT SERVICE,... PYTHON [COMMAND-PREFIX...]
+  firewall_installation "$@"
+  if ((${#FIREWALL_STEPS[@]})); then ui_attention "$FIREWALL_MESSAGE" "${FIREWALL_STEPS[@]}"
+  else ui_ok "$FIREWALL_MESSAGE"; fi
 }
 
 # HOST_ADDRESS: this machine's address on its network, the one others reach it by.

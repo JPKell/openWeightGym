@@ -244,8 +244,8 @@ def test_multimedia_probe_uses_runner_load_and_cleanup_only(engine):
         asyncio.run(probes.load_sample(task,{'context':128,'inputs':64,'outputs':1}))
 
 
-@pytest.mark.parametrize('tamper', [False, True])
-def test_cross_node_install_streams_into_the_verified_atomic_receiver(tmp_path, tamper):
+@pytest.mark.parametrize('failure', [None, 'sha256', 'receiver'])
+def test_cross_node_install_streams_into_the_verified_atomic_receiver(tmp_path, failure):
     import hashlib
     from starlette.responses import Response
     from spotter.app import Settings as SpotterSettings, build_app as build_spotter
@@ -274,7 +274,7 @@ def test_cross_node_install_streams_into_the_verified_atomic_receiver(tmp_path, 
                 return JSONResponse({'sha256':hashlib.sha256(file.read_bytes()).hexdigest()})
             if request.url.path == '/loadcoach/files/content':
                 assert request.query_params['path']==str(source/'weights.gguf')
-                return Response(b'corrupt model bytes' if tamper else content,media_type='application/octet-stream')
+                return Response(b'corrupt model bytes' if failure == 'sha256' else content,media_type='application/octet-stream')
             if request.url.path == '/loadcoach/models/copied':
                 settings=json.loads(await request.body())
                 assert Path(settings['flags']['model']).read_bytes()==content
@@ -288,6 +288,8 @@ def test_cross_node_install_streams_into_the_verified_atomic_receiver(tmp_path, 
         wires = {8442:httpx.ASGITransport(app=worker('compute',source,primary_key)),
                  9442:httpx.ASGITransport(app=worker('rig',destination,rig_key)),9444:httpx.ASGITransport(app=receiver)}
         async def handle_async_request(self,request):
+            if request.url.port == 9444 and failure == 'receiver':
+                raise httpx.ConnectTimeout('Spotter port blocked', request=request)
             return await self.wires[request.url.port].handle_async_request(request)
     settings=Settings(compute='compute',data=str(tmp_path),machine_key_file=primary_key,ports=(8442,8443,8444),
         machines={'rig':{'compute':'http://compute:9442','spotter':'http://compute:9444','machine_key_file':rig_key}})
@@ -300,10 +302,13 @@ def test_cross_node_install_streams_into_the_verified_atomic_receiver(tmp_path, 
             job=front.get('/turnstile/artifacts/distributions',headers=headers).json()['distributions'][-1]
             if job['state'] in ('failed','complete'):break
             time.sleep(.05)
-        assert job['state']==('failed' if tamper else 'complete'),job
-        assert bool(created) is not tamper
+        assert job['state']==('failed' if failure else 'complete'),job
+        assert bool(created) is (failure is None)
+        if failure == 'receiver':
+            assert job['done'] == 0 and 'Spotter at http://compute:9444' in job['why'] and 'firewall' in job['why']
+            assert front.get('/turnstile/machines/rig/model-api/models', headers=headers).status_code == 200
         if created:
             assert created[0]['flags']['temp'] == .9 and created[0]['flags']['ctx-size'] == 2048 and created[0]['gpus'] == 0
-        assert (destination/'weights.gguf').exists() is not tamper
+        assert (destination/'weights.gguf').exists() is (failure is None)
         assert not list(destination.glob('*.part'))
         assert (source/'weights.gguf').read_bytes()==content

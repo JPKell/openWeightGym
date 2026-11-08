@@ -1332,7 +1332,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                "size": step["file"]["size"], "sha256": digest}).encode()
         answer = await ask_machine(user, "POST", "/spotter/files/prepare", prepared, spotter=True, machine=step["node"])
         if answer is None or answer.status_code != 201:
-            raise ValueError(answer.json()["error"]["message"] if answer is not None else "The destination is not answering.")
+            raise ValueError(answer.json()["error"]["message"] if answer is not None else spotter_failure(step["node"]))
         source = step["source"]
         if source == 'front':
             path = front_files.path(step['file']['path'])
@@ -1576,6 +1576,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return settings.upstream(settings.ports[2])
         return settings.machines[name].get("spotter", "").rstrip("/")
 
+    def spotter_failure(name: str) -> str:
+        """Identify the file receiver separately from the node's model runner."""
+        return (f"File transfer to {name} could not reach or authenticate Spotter at {spotter_base(name)}. "
+                "Check the Spotter service, its machine key and firewall access from front to this port.")
+
     async def distribute_one(user: User, source: Path, relative: str, digest: str, node: dict, job: dict) -> None:
         """Stream one validated front artifact to the selected compute location."""
         name = node["name"]
@@ -1584,7 +1589,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         prepared = json.dumps({"place": target["name"], "relative": relative, "size": job["size"], "sha256": digest}).encode()
         answer = await ask_machine(user, "POST", "/spotter/files/prepare", prepared, spotter=True, machine=name, timeout=30)
         if answer is None or answer.status_code != 201:
-            state.update(state="failed", why=(answer.json()["error"]["message"] if answer is not None else "Spotter is not answering."))
+            state.update(state="failed", why=(answer.json()["error"]["message"] if answer is not None else spotter_failure(name)))
             return
         upload = answer.json()["upload"]
 

@@ -80,7 +80,14 @@ elsewhere. The installer does not open ports itself: it checks them, and when th
 other machines out it says so at the end, with the command that opens them, such as
 `sudo firewall-cmd --permanent --add-port=8442/tcp && sudo firewall-cmd --reload` or
 `sudo ufw allow 8442/tcp`. `owg doctor` checks the same. A GPU node whose port 8442 is closed
-installs and runs, but the console cannot reach it.
+installs and runs, but the console cannot reach it. With Spotter installed, allow its TCP port
+8444 from the console machine too: telemetry and model-file transfers use that port. A node
+can appear ready on 8442 while model transfers fail at zero bytes because 8444 is blocked.
+Both installers and `owg doctor` read the selected services' configured ports, including custom
+ports, gateway listeners and optional voice listeners. Loopback-only listeners are excluded.
+Checks report allowed ports, missing rules, inactive firewalls or rules they cannot read, and
+print UFW or firewalld inspection and repair commands. These inspect local rules; remote network
+firewalls still need their own checks.
 
 ## ToolLocker on the console machine
 
@@ -338,7 +345,7 @@ the final service checks finish successfully. Passwords and consumed pairing cod
 | Components says llama.cpp is missing after installation, with no engine steps in the log | Older installers could silently skip the engine when uv's `~/.local/bin/env` shadows the system program. Update the installer; repair the existing runtime with `cd ~/openWeightGym && scripts/install-llamacpp.sh --from-source`, which installs missing build requirements as described above. |
 | *llama-server needs: libgomp.so.1* | let the installer add the package it names, or install it and run `scripts/install-llamacpp.sh` |
 | *This prebuilt llama.cpp needs GLIBC_2.38, newer than this system's C library* | the prebuilt builds are made on a recent Ubuntu: install the build tools it names and run `scripts/install-llamacpp.sh --from-source` |
-| *The firewall here (firewalld) keeps the console machine from reaching port 8442* | run the command it gives, on that machine |
+| *Firewall (ufw/firewalld) needs allow rules for required TCP ports* | run the suggested commands on that machine, then repeat `owg doctor` |
 | *It lists no graphics devices* | the driver is missing or too old for the build: update it, or run `scripts/install-llamacpp.sh --backend vulkan` |
 | Other devices cannot open the console | open port 8440 (and 8442 for the API) in the console machine's firewall |
 | *The console did not accept the code* | the code was used, mistyped or more than ten minutes old: make a new one |
