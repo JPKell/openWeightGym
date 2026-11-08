@@ -3172,10 +3172,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 continue
             holds = setting["changed"]["value"] if setting["changed"] else setting["value"]
             typed_value = form.get("value-" + setting["name"])
-            if setting["when"] == "file" or typed_value is None or typed_value.strip() == written(holds).strip():
+            plain_text = setting_labels.describe(setting)["editor"] == "text"
+            unchanged = typed_value == holds if plain_text else typed_value is not None and typed_value.strip() == written(holds).strip()
+            if setting["when"] == "file" or typed_value is None or unchanged:
                 continue
             try:
-                asked[setting["name"]] = read_value(typed_value, isinstance(holds, dict))
+                asked[setting["name"]] = typed_value if plain_text else read_value(typed_value, isinstance(holds, dict))
             except ValueError as why:
                 return await render_settings(request, person, f"{setting['name']}: {why}", failed=True, typed_in=form, opened=program)
         if not asked:
@@ -4213,7 +4215,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return fragment_error(request, person, "components-report", "page", answer)
             return page(request, "refused.html", person, status=answer.status_code, why=answer.json()["error"]["message"])
         found = answer.json()
+        from loadcoach.components import SERVICES
+        service_order = {name: index for index, (name, _, _) in enumerate(SERVICES)}
         for node in found["nodes"]:
+            # Keep reports from older nodes in the console's current service order.
+            node.get("services", []).sort(key=lambda row: service_order.get(row["id"], len(service_order)))
             # The console showing this page is running, on front's machine when it is the one that answered, unit or not.
             if node["name"] == "front" and node.get("hostname") == socket.gethostname():
                 for row in node["services"]:

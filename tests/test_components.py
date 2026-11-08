@@ -209,6 +209,14 @@ def test_front_lists_itself_and_every_node_and_says_why_one_cannot_be_checked(tm
 
 def test_the_console_page_shows_every_machine_with_each_component_installed_or_not(desk, systemd, tmp_path, monkeypatch):
     browser, switch, users = desk
+    here = components.here
+
+    async def older_order(*args, **kwargs):
+        found = await here(*args, **kwargs)
+        found['services'].reverse()
+        return found
+
+    monkeypatch.setattr(components, 'here', older_order)
     # The desk's model runner names `llama-server`. Give it one, so the page does not depend on what this machine has installed.
     program = tmp_path / "bin" / "llama-server"
     program.parent.mkdir()

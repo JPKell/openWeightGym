@@ -1,6 +1,6 @@
 {% set meta = setting_label(setting) %}
 {% set holds = setting.changed.value if setting.changed else setting.value %}
-{% set typed = typed_in['value-' ~ setting.name] if opened == program.program and typed_in['value-' ~ setting.name] is defined else (holds if setting.editor|default('') == 'text' else holds|written) %}
+{% set typed = typed_in['value-' ~ setting.name] if opened == program.program and typed_in['value-' ~ setting.name] is defined else (holds if meta.editor == 'text' else holds|written) %}
 {% set choices = setting.choices|default(meta.choices|default([])) %}
 {% set id = 'setting-' ~ program.program ~ '-' ~ setting.name %}
 <div class="col-md-6 settings-row">
