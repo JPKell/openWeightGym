@@ -27,6 +27,7 @@ import re
 import secrets
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from collections import deque
@@ -67,6 +68,7 @@ from loadcoach.capture import answer_text, request_text, said_wrong
 from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings, storage_places
 from loadcoach.settings import CHANGEABLE, NOW, Changes, front_programs, program_name, said, wrong_kind
 from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
+from loadcoach.file_index import NODE_INDEX, FileIndex, tier_of
 from loadcoach.gguf import facts, goes_with, read_metadata
 from loadcoach.log import Log, token_counts
 from loadcoach.diagnostics import Timeline
@@ -187,6 +189,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     # What model files said about themselves when last read, by path. A file is read again only
     # if its size or its date has changed.
     read_before: dict[str, tuple[tuple, dict]] = {}
+    # The files of the places, with their descriptions, kept between looks. spotter looks again every
+    # so often; LoadCoach answers from it and puts it right after each change it makes (loadcoach/file_index.py).
+    file_index = FileIndex(data_folder(Path(config.path), {"data": config.data}) / NODE_INDEX if config.path else None)
     # Files being carried from one place to another right now, by the path they are leaving:
     # {"to": the place, "done": bytes so far, "of": bytes in all}.
     moving: dict[str, dict] = {}
@@ -1308,49 +1313,32 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """Every model file in every place, each with what it is, which models use it and when it was last used.
 
         A file no model uses is one that was downloaded and not added yet. Also the places
-        themselves, with how much room is left on the drive under each.
+        themselves, with how much room is left on the drive under each. The files come from the
+        kept index; `refresh=1` looks through the places again first.
         """
         if denied := lacks(user, "manage-models"):
             return denied
         # Everything the database is asked is asked here, before the other thread starts. The
         # connection to it is used from one thread at a time.
         await paced()
-        used, last_used, spots, found, where = model_files(), pace["of"]["last_used"], places(), [], []
-
-        def look() -> None:  # on another thread: reading thirty files' descriptions takes a second or two the first time
-            """Scan configured model locations and collect file metadata outside the event loop."""
-            for place, folder in spots.items():
-                if not Path(folder).is_dir():
-                    continue  # a place whose folder is not there holds nothing
-                here = {"name": place, "folder": folder, "tier": "storage" if place.startswith("storage_") else "cache", **room(folder), "files": 0}
-                where.append(here)
-                for file in model_files_in(folder):
-                    try:
-                        seen = file.stat()
-                    except OSError:
-                        continue  # it went between being listed and being looked at, as a file just moved does
-                    here["files"] += seen.st_size
-                    models = used.get(os.path.realpath(file), [])
-                    entry = {
-                        "path": str(file),
-                        "place": place,
-                        "tier": here["tier"],
-                        "size": seen.st_size,
-                        "modified": datetime.fromtimestamp(seen.st_mtime).isoformat(timespec="seconds"),
-                        "used_by": models,
-                        # When any model that uses it was last asked for, as far back as the log goes.
-                        "last_used": max((last_used[name] for name in models if name in last_used), default=None),
-                        "moving": moving.get(str(file)),
-                    }
-                    try:
-                        from mirrorwall.assets import image_asset,facts as image_facts
-                        from soundroom.model import audio_asset, facts as audio_facts
-                        entry["facts"] = audio_facts(file) if audio_asset(file) else image_facts(file) if image_asset(file) else facts(said_by(str(file)))
-                    except (OSError, ValueError) as problem:
-                        entry["unreadable"] = str(problem)
-                    found.append(entry)
-
-        await asyncio.to_thread(look)
+        used, last_used, spots = model_files(), pace["of"]["last_used"], places()
+        index = await asyncio.to_thread(file_index.current, spots, refresh=request.query_params.get("refresh") == "1")
+        found, where = [], []
+        for place, folder in spots.items():
+            if not Path(folder).is_dir():
+                continue  # a place whose folder is not there holds nothing
+            here = {"name": place, "folder": folder, "tier": tier_of(place), **room(folder), "files": 0}
+            where.append(here)
+            for kept in index["files"].values():
+                if kept["place"] != place:
+                    continue
+                here["files"] += kept["size"]
+                models = used.get(os.path.realpath(kept["path"]), [])
+                entry = {key: value for key, value in kept.items() if key != "mtime"}
+                entry.update(used_by=models, moving=moving.get(kept["path"]),
+                             # When any model that uses it was last asked for, as far back as the log goes.
+                             last_used=max((last_used[name] for name in models if name in last_used), default=None))
+                found.append(entry)
         # A part, which is an adapter or a projector, is listed with the model files here that it says it was made for, and the models that use each of those.
         whole = [file for file in found if file.get("facts", {}).get("what") == "model"]
         for part in found:
@@ -1358,7 +1346,15 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 part["goes_with"] = [{"path": file["path"], "models": file["used_by"]} for file in whole if goes_with(part["facts"], file["facts"])]
         # A finished cleanup is reported for ten minutes, then drops off the Files page.
         shown = cleanup if cleanup.get("state") == "running" or time.time() - cleanup.get("ended", 0) < 600 else {}
-        return JSONResponse({"places": where, "files": found, "cleanup": shown})
+        return JSONResponse({"places": where, "files": found, "cleanup": shown, "checked": FileIndex.checked(index),
+                             "problems": index.get("problems", [])})
+
+    def files_changed(*paths: str | Path) -> None:
+        """Put the index right for files LoadCoach has just made, changed or removed."""
+        try:
+            file_index.update(list(paths), places())
+        except OSError as problem:  # the next look puts it right
+            print(f"loadcoach: the file index could not be updated: {problem}", file=sys.stderr, flush=True)
 
     def in_a_place(path: str) -> bool:
         """True for a .gguf file that is there, in one of the places. Only such a file may be moved or deleted."""
@@ -1440,6 +1436,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             if known := library.file_hash(str(source)):
                 library.keep_hash(str(target), known, target.stat().st_size, target.stat().st_mtime)
             log.add("file", "copied", by, caller, path=str(target), source=str(source), seconds=round(time.monotonic() - began, 1))
+            await asyncio.to_thread(files_changed, target)
         except Exception as problem:
             log.add("file", "copy-failed", by, caller, path=str(source), why=f"{type(problem).__name__}: {problem}")
         finally:
@@ -1482,6 +1479,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             os.unlink(source)
             read_before.pop(str(source), None)
             log.add("file", "moved", by, caller, path=str(target), was=str(source), seconds=round(time.monotonic() - began, 1))
+            await asyncio.to_thread(files_changed, source, target)
             runner.wake.set()
         except Exception as problem:  # the original is untouched, and so are the models
             log.add("file", "move-failed", by, caller, path=str(source), why=f"{type(problem).__name__}: {problem}")
@@ -1508,6 +1506,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         os.unlink(path)
         read_before.pop(path, None)
         log.add("file", "deleted", user.name, address(request), path=path, size=size)
+        await asyncio.to_thread(files_changed, path)
         return JSONResponse({"deleted": path, "freed": size})
 
     async def files_cleanup(request: Request, user: User) -> Response:
@@ -1624,6 +1623,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                         user.name, address(request), **result)
             except (OSError, InterruptedError) as problem:
                 cleanup.update(state="failed", ended=time.time(), failure=f"{type(problem).__name__}: {problem}")
+            finally:
+                await asyncio.to_thread(file_index.stale)
 
         task = asyncio.create_task(work())
         carrying.add(task)
@@ -1798,6 +1799,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 library.keep_hash(str(target), entry["sha256"], target.stat().st_size, target.stat().st_mtime)
             log.add("file", "downloaded", by, caller, path=str(target), repository=repository, size=entry["size"], seconds=round(time.monotonic() - began, 1))
             del fetching[str(target)]
+            await asyncio.to_thread(files_changed, target)
         except asyncio.CancelledError:  # stopped by someone, or LoadCoach is stopping. What came stays, as a `.part` file
             del fetching[str(target)]
             raise

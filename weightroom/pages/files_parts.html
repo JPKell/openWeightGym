@@ -14,6 +14,12 @@
 {% endcall %}{% endfor %}
 {% endmacro %}
 
+{# When each machine's list of files was last checked: the page shows the kept lists, which Refresh files checks again. #}
+{% macro checked_note(found) %}
+{% set answering = found.nodes|selectattr('answering')|selectattr('checked')|list %}
+{% if answering %}<p class="small text-secondary mb-3">Files last checked: {% for node in answering %}{{ 'Front' if node.name == 'front' else node.name }} {{ node.checked|timestamp }}{{ ' · ' if not loop.last }}{% endfor %}.</p>{% endif %}
+{% endmacro %}
+
 {# A drive's size: as |size, but in TB from 1000 GB up, so a big drive fits a narrow card. #}
 {% macro drive_size(count) %}{{ '%.1f TB'|format(count / 2**40) if count >= 1000 * 2**30 else count|size }}{% endmacro %}
 

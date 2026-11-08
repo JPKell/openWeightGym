@@ -191,6 +191,11 @@ artifact_machine = ""
 # Allow each user to opt in to adult Civitai previews. Off hides the user control and
 # enforces safe previews for every account. Changes apply immediately.
 image_adult_previews = false
+# Minutes between looks through front's own model cache and storage for the Files page. Between
+# looks the page answers from the list kept in the data folder; its Refresh button looks again at
+# once, and the files the page moves, copies, deletes or downloads are put right straight away.
+# Only files that are new or have changed are read. 0 means only when asked. Changes apply immediately.
+files_every = 10
 # Days the event log is kept on this machine: compute's requests and what was done here to the
 # accounts and roles. Older entries are removed once a day. 0 keeps everything.
 keep_days = 90

@@ -3910,6 +3910,20 @@ See the [storage setup and offline delivery contract](operations.md#model-file-s
 Each refresh gives unavailable nodes a short deadline; an absent store produces an inline setup
 or offline state rather than a generic error page. An existing worker can still own the file store.
 
+The page answers from a kept list of each machine's files ([loadcoach/file_index.py](../loadcoach/file_index.py)),
+not by reading every file on each visit. On a compute node spotter looks through LoadCoach's
+places every `files_every` minutes (System → Compute nodes, 10 by default, 0 for only when
+asked) and keeps the list as `files-index.json` in LoadCoach's data folder; front's own cache
+and storage keep `front-files-index.json` in turnstile's, with turnstile's `files_every`. A look
+reads only files that are new or have changed size or time. Moves, copies, deletes, downloads
+and received files put their own lines right at once, and a cleanup has the next listing look
+again. **Refresh files** at the top of the page looks through every folder on front and every
+node now, and names any node that did not answer. Which models use a file, when it was last
+used and transfer progress are never kept: they are asked on each listing. Clear cache,
+Consolidate cache and the in-use check before a front move or delete always look again first, so
+they decide on what is in the folders, not on the kept list. The page shows when each list was
+last checked.
+
 Hugging Face discovery is its own **HuggingFace** item in the Models navigation. Downloads remain
 visible there and on Files while they are active.
 

@@ -3923,9 +3923,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         file_type = file_type if file_type in dict(file_types) else ""
         machine = asked.get("machine", "")
         said = asked.get("said", "")
+        # Where Refresh comes back to: this view, without what was said on it.
+        here = "/files?" + urlencode({"machine": machine} if machine else {"tier": tier} | ({"type": file_type} if file_type else {}))
         if initial_page(request):  # the downloads list asks for itself as soon as it is on the page
             return page(request, "files.html", person, deferred=True, fragment_url=fragment_url(request, "page"),
-                        said=said, downloads=[], downloads_later=True, tier=tier, machine=machine)
+                        said=said, downloads=[], downloads_later=True, tier=tier, machine=machine, here=here)
         part = asked.get("part") if asked.get("complete") != "1" else None
         found = await all_files(request, person)
         if isinstance(found, Response):
@@ -3944,7 +3946,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, "refused.html", person, status=404, why=f"There is no compute node named {machine}.")
         template = {"list": "files_poll.html", "page": "files_content.html"}.get(part, "files.html")  # list: the pieces, asked for again
         downloads = await coming(person) if template == "files.html" else []
-        return page(request, template, person, found=found, said=said, downloads=downloads,
+        return page(request, template, person, found=found, said=said, downloads=downloads, here=here,
                     tier=tier, machine=machine, selected_node=selected_node, file_type=file_type, file_types=file_types,
                     address=model_address, file_address=file_address)  # fmt: skip
 
@@ -3952,6 +3954,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Validate and dispatch a model-file cleanup, copy or move operation."""
         form = await typed(request)
         action = form.get("do", "")
+        if action == "refresh-files":
+            return await refresh_files(person, form.get("back", ""))
         if action not in ("clear-cache", "consolidate-cache", "cleanup-nodes"):
             return Response("That file maintenance action is not available.", status_code=400)
         answer = await ask("POST", f"/turnstile/artifacts/files/{action}", person.key)
@@ -3969,6 +3973,17 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if result.get("unavailable"):
                 message += " Not completed on: " + ", ".join(result["unavailable"]) + "."
         return go("/files?said=" + quote(message))
+
+    async def refresh_files(person: Person, back: str) -> Response:
+        """Have front and every node look through their model folders again now, then show the view Refresh was pressed on."""
+        back = back if back.startswith("/files?") and "//" not in back and "said=" not in back else "/files?"
+        # Each node has thirty seconds to look through its folders; the page waits for the slowest.
+        answer = await ask("GET", "/turnstile/artifacts/files", person.key, params={"refresh": "1"}, timeout=httpx.Timeout(75, connect=2))
+        if answer.status_code != 200:
+            return go(back + "&said=" + quote(answer.json()["error"]["message"]))
+        silent = [node["name"] for node in answer.json().get("nodes", []) if not node.get("answering")]
+        said = "Looked through every model folder again." + (" Not answering, so not looked at: " + ", ".join(silent) + "." if silent else "")
+        return go(back + "&said=" + quote(said))
 
     async def file_page(request: Request, person: Person, said: str = "", failed: bool = False, path: str = "") -> Response:
         """The one page for a file: what it is, what it says about itself, and moving or deleting it."""
