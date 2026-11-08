@@ -19,8 +19,8 @@ SERVICES = (
     ("weightroom", "Web console", "front"),
     ("turnstile", "API gateway", "front"),
     ("voice-gateway", "Voice gateway", "front"),
+    ("toollocker", "Tools", "front"),
     ("loadcoach", "Model runner", "compute"),
-    ("toollocker", "Tools", "compute"),
     ("spotter", "Monitor", "compute"),
     ("voice", "Voice", "compute"),
 )

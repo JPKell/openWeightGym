@@ -166,6 +166,7 @@ the `pg_hba.conf` lines to add.
 | `owg` | shows what is running, then a menu |
 | `owg status` | programs, addresses, the llama.cpp build and the models' size |
 | `owg start`, `stop`, `restart [PROGRAM…]` | controls the services, all of them by default |
+| `owg restart --host USER@HOST [PROGRAM…]` | restarts services over SSH using that host's OWG installation; all installed services by default |
 | `owg logs [PROGRAM] [-f]` | the latest from the programs' journals |
 | `owg update` | fetches the latest openWeightGym and reinstalls, keeping settings and data |
 | `owg repair` | reinstalls packages and services as they are |
@@ -178,6 +179,9 @@ files are kept; enabling voice adds its missing gateway port and pairing updates
 with private backups before those changes. Replaced service units are backed up beside their
 originals as `NAME.service.before-suite-install-TIME`, including local edits to generated units.
 Service control commands return a nonzero status if any requested service fails.
+Remote restarts need working SSH key authentication and `owg` installed on the destination.
+For example, `owg restart --host jpk@compute loadcoach spotter` restarts those two services.
+The remote installation handles its service account and any sudo prompt in an interactive terminal.
 
 ## The engine: llama.cpp
 

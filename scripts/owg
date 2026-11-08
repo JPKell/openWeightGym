@@ -5,6 +5,7 @@
 #   owg                    what is running, then a menu of what to do
 #   owg status             what is running and where to reach it
 #   owg start|stop|restart [PROGRAM...]
+#   owg restart --host USER@HOST [PROGRAM...]   restart services over SSH
 #   owg logs [PROGRAM] [-f]
 #   owg update             fetch the latest openWeightGym and reinstall, keeping settings and data
 #   owg repair             reinstall packages and services as they are
@@ -27,7 +28,7 @@ source "$ROOT/scripts/lib/receipt.sh"
 ALL_PROGRAMS=(loadcoach toollocker spotter voice weightroom turnstile voice-gateway)
 
 usage() {
-  sed -n '2,15s/^# \{0,1\}//p' "$SELF"
+  sed -n '2,16s/^# \{0,1\}//p' "$SELF"
 }
 
 main() {
@@ -35,9 +36,28 @@ main() {
   : "${OWG_LOG:=${XDG_STATE_HOME:-$HOME/.local/state}/openweightgym/owg-$(date +%Y%m%d-%H%M%S).log}"
   ui_log_init 2>/dev/null || OWG_LOG=/dev/null
   export OWG_LOG
-  receipt_load "$ROOT"
   local command=${1:-}
   [[ $# -gt 0 ]] && shift
+  if [[ $command == restart ]]; then
+    local remote=0 target=''
+    local -a chosen=()
+    while (($#)); do
+      case "$1" in
+        --host|--host=*)
+          ((remote == 0)) || ui_die "Name --host only once."
+          remote=1
+          if [[ $1 == --host ]]; then
+            (($# >= 2)) || ui_die "--host needs an SSH destination, such as user@compute."
+            target=$2; shift 2
+          else target=${1#--host=}; shift; fi ;;
+        -*) ui_die "Unknown restart option: $1" "Use: owg restart [--host USER@HOST] [PROGRAM...]" ;;
+        *) chosen+=("$1"); shift ;;
+      esac
+    done
+    if ((remote)); then remote_restart "$target" "${chosen[@]}"; return; fi
+    set -- "${chosen[@]}"
+  fi
+  receipt_load "$ROOT"
   # A system installation's programs belong to its service account: ask for sudo once, in the open.
   local owner
   owner=$(receipt_get service_user)
@@ -151,6 +171,27 @@ control() {
     ui_step "${action^} $program" -- owg_systemctl "$action" "$program.service" || failed=1
   done
   return "$failed"
+}
+
+remote_restart() {
+  local target=$1 program command
+  shift
+  [[ $target =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.@:-]*$ ]] || ui_die "Name a plain SSH destination, such as user@compute."
+  for program in "$@"; do
+    [[ $program =~ ^[a-z][a-z-]*$ ]] || ui_die "$program is not a program name." "The programs are: ${ALL_PROGRAMS[*]}"
+  done
+  command='remote_owg=$(command -v owg || true)
+if [ -z "$remote_owg" ]; then
+  for candidate in "$HOME/.local/bin/owg" /usr/local/bin/owg; do
+    if [ -x "$candidate" ]; then remote_owg=$candidate; break; fi
+  done
+fi
+if [ -z "$remote_owg" ]; then echo "owg is not installed on this host. Run install.sh there first." >&2; exit 127; fi
+exec "$remote_owg" restart'
+  for program in "$@"; do command+=" $program"; done  # names above contain no shell syntax
+  local -a terminal=()
+  if ((UI_IN_TTY && UI_OUT_TTY)); then terminal=(-t); fi
+  ssh "${terminal[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$target" "$command"
 }
 
 logs() {

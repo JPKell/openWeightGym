@@ -10,6 +10,7 @@ import struct
 import sys
 import threading
 import time
+from html import unescape
 from pathlib import Path
 
 import httpx
@@ -1054,6 +1055,23 @@ def test_model_file_locations_are_selected_and_saved_per_machine(live_desk, tmp_
     locations = browser.post("/settings/model-files", data={"file_machine": "compute", "models_folder": str(tmp_path / "cache"),
                                                               "models_storage_folder": str(tmp_path / "storage")})
     assert "Saved. Restart LoadCoach on that machine" in locations.text
+    cache, storage = str(tmp_path / "cache"), str(tmp_path / "storage")
+    compute_page = browser.get('/compute-nodes').text
+    for name, value in (('models_folder', cache), ('models_storage_folder', storage)):
+        assert f'name="value-{name}" class="form-control font-monospace" value="{value}"' in compute_page
+    unchanged = browser.post('/settings/loadcoach', data={
+        'machine': 'compute', 'value-models_folder': cache, 'value-models_storage_folder': storage})
+    assert "Nothing was changed." in unchanged.text
+    cache = str(tmp_path / 'active & "quoted" models')
+    saved = browser.post('/settings/loadcoach', data={
+        'machine': 'compute', 'value-models_folder': cache, 'value-models_storage_folder': ''})
+    assert saved.status_code == 200 and 'Saved.' in saved.text
+    cache_field = re.search(r'name="value-models_folder"[^>]* value="([^"]*)"', saved.text)
+    assert cache_field and unescape(cache_field[1]) == cache
+    assert 'name="value-models_storage_folder" class="form-control font-monospace" value=""' in saved.text
+    from loadcoach.settings import Changes
+    assert Changes(str(tmp_path / 'loadcoach.db')).of('loadcoach') == {
+        'models_folder': cache, 'models_storage_folder': ''}
 
 
 def test_the_settings_page_shows_every_program_and_changes_what_may_be_changed(live_desk, tmp_path):

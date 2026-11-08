@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -361,6 +362,52 @@ owg_systemctl() { printf '%s\\n' "$*" >>"$ATTEMPTS"; [[ $2 != loadcoach.service 
                    env={"ATTEMPTS": str(tmp_path / "attempts")})
     assert answer.returncode == 1
     assert (tmp_path / "attempts").read_text().splitlines() == ["restart loadcoach.service", "restart weightroom.service"]
+
+
+@pytest.fixture
+def remote_owg(tmp_path):
+    local_bin, remote_bin = tmp_path / 'bin', tmp_path / 'remote-bin'
+    local_bin.mkdir()
+    remote_bin.mkdir()
+    ssh = local_bin / 'ssh'
+    ssh.write_text('#!/bin/bash\nprintf "%s\\n" "$@" >"$SSH_ATTEMPTS"\n'
+                   'PATH="$REMOTE_BIN:/usr/bin:/bin" bash -c "${!#}"\n')
+    remote = remote_bin / 'owg'
+    remote.write_text('#!/bin/bash\nprintf "%s\\n" "$@" >"$REMOTE_ATTEMPTS"\nexit "${REMOTE_EXIT:-0}"\n')
+    local_control = local_bin / 'systemctl'
+    local_control.write_text('#!/bin/bash\nprintf "%s\\n" "$@" >"$LOCAL_ATTEMPTS"\nexit 99\n')
+    for program in (ssh, remote, local_control):
+        program.chmod(0o755)
+    return {'PATH': f'{local_bin}:/usr/bin:/bin', 'REMOTE_BIN': str(remote_bin),
+            'SSH_ATTEMPTS': str(tmp_path / 'ssh-attempts'), 'REMOTE_ATTEMPTS': str(tmp_path / 'remote-attempts'),
+            'LOCAL_ATTEMPTS': str(tmp_path / 'local-attempts')}
+
+
+@pytest.mark.parametrize('arguments,expected,exit_code', [
+    (['--host', 'fixture@compute', 'loadcoach', 'spotter'], ['restart', 'loadcoach', 'spotter'], 0),
+    (['--host=fixture@compute'], ['restart'], 0),
+    (['loadcoach', '--host', 'fixture@compute'], ['restart', 'loadcoach'], 17),
+])
+def test_owg_restarts_remote_services_and_returns_the_remote_status(tmp_path, remote_owg, arguments, expected, exit_code):
+    answer = shell(tmp_path, '"$TEST_REPO/scripts/owg" restart ' + shlex.join(arguments),
+                   env={**remote_owg, 'REMOTE_EXIT': str(exit_code)})
+    assert answer.returncode == exit_code, answer.stdout + answer.stderr
+    assert Path(remote_owg['SSH_ATTEMPTS']).read_text().splitlines()[:5] == [
+        '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'fixture@compute']
+    assert Path(remote_owg['REMOTE_ATTEMPTS']).read_text().splitlines() == expected
+    assert not Path(remote_owg['LOCAL_ATTEMPTS']).exists()
+
+
+@pytest.mark.parametrize('arguments', [
+    ['--host'], ['--host='], ['--host', '-oProxyCommand=anything'],
+    ['--host', 'host;anything'], ['--host', 'compute', '--host', 'other'],
+    ['loadcoach', '--host', 'compute', 'spotter;anything'],
+])
+def test_owg_rejects_invalid_remote_restarts_before_controlling_any_service(tmp_path, remote_owg, arguments):
+    answer = shell(tmp_path, '"$TEST_REPO/scripts/owg" restart ' + shlex.join(arguments), env=remote_owg)
+    assert answer.returncode != 0
+    assert not Path(remote_owg['SSH_ATTEMPTS']).exists()
+    assert not Path(remote_owg['LOCAL_ATTEMPTS']).exists()
 
 
 def test_unit_updates_back_up_customizations_and_skip_identical_copies(tmp_path):
