@@ -1,7 +1,7 @@
-{% from "files_parts.html" import cleanup_status, places_block, models_table, storage_table, parts_table, distributions_table, node_files_table with context %}
+{% from "files_parts.html" import cleanup_status, places_block, cache_tables, storage_table, distributions_table, node_files_table with context %}
 <div id="files-cleanup" hx-swap-oob="true">{{ cleanup_status(found) }}</div>
 <div id="files-distributions" hx-swap-oob="true">{{ distributions_table(found) }}</div>
 <div class="card-body" id="files-places" hx-swap-oob="true">{{ places_block(found) }}</div>
 {% if machine %}<div class="card-body" id="files-node" hx-swap-oob="true">{{ node_files_table(selected_node) }}</div>
 {% elif tier == "storage" %}<div class="card-body" id="files-storage" hx-swap-oob="true">{{ storage_table(found) }}</div>
-{% else %}{% from "mirrorwall_files.html" import image_files with context %}<div class="card-body" id="files-images" hx-swap-oob="true">{{ image_files(found) }}</div><div class="card-body" id="files-models" hx-swap-oob="true">{{ models_table(found) }}</div><div class="card-body" id="files-adapters" hx-swap-oob="true">{{ parts_table(found, "adapter", "adapters") }}</div><div class="card-body" id="files-projectors" hx-swap-oob="true">{{ parts_table(found, "projector", "projectors") }}</div>{% endif %}
+{% else %}{{ cache_tables(found, file_type, poll=true) }}{% endif %}

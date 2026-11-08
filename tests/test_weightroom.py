@@ -676,7 +676,7 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     assert "Fresh &lt;b&gt;Download&lt;/b&gt;" in files  # what a file says of itself is text like any other, never HTML
     part = browser.get("/files?part=list").text
     # The pieces alone, each to be put in the place of the one with its id, so that a part of the page someone closed stays closed.
-    assert "<html" not in part and part.count('hx-swap-oob="true"') == 7 and "<details" not in part and "Fresh-Download.Q8.gguf" in part
+    assert "<html" not in part and part.count('hx-swap-oob="true"') == 8 and "<details" not in part and "Fresh-Download.Q8.gguf" in part
     assert 'id="files-distributions" hx-swap-oob="true"' in part
     assert 'data-refresh-companions="#files-cleanup, #files-distributions, #files-places' in files
     assert 'hx-get="/files?part=list&amp;tier=cache"' in files and files.count("<details") >= 3

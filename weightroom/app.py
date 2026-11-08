@@ -3849,6 +3849,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     # ---- files ------------------------------------------------------------------------------
 
+    file_types = (("", "All files"), ("model", "Models"), ("image", "Images"), ("audio", "Audio"),
+                  ("adapter", "Adapters"), ("projector", "Projectors"))
+
     def file_address(path: str) -> str:
         """Build the selected node's model-file management address."""
         return "/file?path=" + quote(path, safe="/")
@@ -3916,6 +3919,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         asked = request.query_params
         tier = asked.get("tier", "cache")
         tier = tier if tier in ("cache", "storage") else "cache"
+        file_type = asked.get("type", "")
+        file_type = file_type if file_type in dict(file_types) else ""
         machine = asked.get("machine", "")
         said = asked.get("said", "")
         if initial_page(request):  # the downloads list asks for itself as soon as it is on the page
@@ -3926,6 +3931,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if isinstance(found, Response):
             return fragment_error(request, person, "files-content", "page", found) if part == "page" else found
         found = files_view(found)
+        if file_type:
+            def matching(files):
+                """Filter rows after resolving model usage, cache copies and location totals."""
+                return [file for file in files if (file.get("facts") or {}).get("what", "model") == file_type]
+
+            found = {**found, "files": matching(found.get("files", [])),
+                     "nodes": [{**node, "files": matching(node.get("files", []))} for node in found.get("nodes", [])]}
         selected_node = next((node for node in found.get("nodes", [])
                               if node["name"] == machine and node["name"] != "front"), None)
         if machine and selected_node is None:
@@ -3933,7 +3945,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         template = {"list": "files_poll.html", "page": "files_content.html"}.get(part, "files.html")  # list: the pieces, asked for again
         downloads = await coming(person) if template == "files.html" else []
         return page(request, template, person, found=found, said=said, downloads=downloads,
-                    tier=tier, machine=machine, selected_node=selected_node, address=model_address, file_address=file_address)  # fmt: skip
+                    tier=tier, machine=machine, selected_node=selected_node, file_type=file_type, file_types=file_types,
+                    address=model_address, file_address=file_address)  # fmt: skip
 
     async def files_do(request: Request, person: Person) -> Response:
         """Validate and dispatch a model-file cleanup, copy or move operation."""
@@ -4026,8 +4039,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             done = f"Deleted {name}. {size(answer.json().get('freed'))} freed." if answer.status_code == 200 else ""
         if answer.status_code not in (200, 202):
             return await file_page(request, person, answer.json()["error"]["message"], failed=True, path=path)
-        destination = "/files?tier=storage&said=" if form.get("return") == "storage" else "/files?said="
-        return go(destination + quote(done))
+        destination = {"tier": "storage"} if form.get("return") == "storage" else {}
+        if form.get("file_type") in dict(file_types) and form["file_type"]:
+            destination["type"] = form["file_type"]
+        return go("/files?" + urlencode({**destination, "said": done}))
 
     # ---- Hugging Face: finding a model file and bringing it down ------------------------------
 
