@@ -15,6 +15,7 @@ from starlette.testclient import TestClient
 from turnstile.app import load_settings as turnstile_settings
 from weightroom import pairing
 from weightroom.app import Settings, build_app
+from test_weightroom import desk, sign_in  # noqa: F401
 
 FRONT_ONLY = '''compute = "http://127.0.0.1:9442"
 spotter = ""
@@ -103,6 +104,20 @@ def test_node_names_are_safe_and_never_the_main_one():
     assert pairing.valid_address("10.0.0.5") and pairing.valid_address("fe80::1") and pairing.valid_address("gpu.lan")
     assert not pairing.valid_address("bad host; rm") and not pairing.valid_address("")
     assert pairing.command("http://10.0.0.1:8440", "ABCD-EF23").endswith("--join http://10.0.0.1:8440 --code ABCD-EF23")
+
+
+def test_compute_nodes_generates_installer_command_and_old_deploy_routes_are_removed(desk):
+    browser, _, _ = desk
+    sign_in(browser, 'sam')
+    assert browser.get('/deploy').status_code == 404
+    for action in ('pull', 'deploy', 'restart', 'setup', 'add'):
+        assert browser.post('/deploy', data={'do': action, 'node': 'compute'}).status_code == 404
+    page = browser.get('/compute-nodes')
+    assert page.status_code == 200 and 'href="/deploy"' not in page.text
+    assert 'action="/compute-nodes/pair"' in page.text
+    generated = browser.post('/compute-nodes/pair')
+    assert generated.status_code == 200
+    assert 'id="pairing-command"' in generated.text and '--join http://testserver:8440 --code ' in generated.text
 
 
 def test_pairing_over_http_gives_the_key_once_and_turns_away_guessing(console, monkeypatch):

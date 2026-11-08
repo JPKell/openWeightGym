@@ -41,12 +41,12 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
         groups[4]["links"].append(("Alerts", "/alerts"))
         groups[4]["links"].append(("Schedules", "/schedules"))
         groups[5]["links"].insert(0, ("Compute nodes", "/compute-nodes"))
-    for ability, label, url in [("manage-users", "Users", "/users"), ("manage-groups", "Groups", "/groups"), ("manage-settings", "Tools", "/tools"), ("front-manage-plugins", "Plugins", "/plugins"), ("manage-settings", "Backups", "/backups"), ("manage-settings", "DB", "/databases"), ("manage-settings", "General", "/settings"), ("superuser", "Deploy", "/deploy")]:
+    for ability, label, url in [("manage-users", "Users", "/users"), ("manage-groups", "Groups", "/groups"), ("manage-settings", "Tools", "/tools"), ("front-manage-plugins", "Plugins", "/plugins"), ("manage-settings", "Backups", "/backups"), ("manage-settings", "DB", "/databases"), ("manage-settings", "General", "/settings")]:
         if ability in can:
-            groups[4 if url in ('/backups', '/databases', '/deploy') else 5]["links"].append((label, url))
+            groups[4 if url in ('/backups', '/databases') else 5]["links"].append((label, url))
     settings_order = ['Compute nodes', 'Users', 'Groups', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
     groups[5]['links'].sort(key=lambda link: settings_order.index(link[0]))
-    groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Components', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups', 'Deploy'].index(link[0]))
+    groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Components', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups'].index(link[0]))
     root = "/" + path.strip("/").split("/")[0]
     active = {"/": "/status", "/file": "/files", "/downloads": "/hub", "/measure-models": "/models", "/outside": "/cloud-apis",
               "/control": "/status", "/ask": "/log", "/machine": "/telemetry", "/machines": "/telemetry"}.get(root, root)

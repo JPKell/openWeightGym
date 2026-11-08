@@ -200,23 +200,5 @@ toollocker_url = "http://127.0.0.1:9443"
 # With voice installed, include 8445 in ports above. Readiness probes never wake compute.
 # voice_port = 8445
 
-# The Deploy page (superusers only). Front keeps a git checkout of the suite and pulls it from
-# GitHub; Deploy copies that code to a machine over ssh, installs it and restarts its services in
-# order. Settings, keys and data there are never touched. "local" is front itself. Each machine
-# needs front's ssh key in its authorized_keys. See weightroom/deploy.py.
-# [deploy]
-# source = "~/openWeightGym-source"
-# branch = "main"
-# [deploy.nodes.front]
-# ssh = "local"
-# folder = "weightroom"
-# extras = "voice-gateway,benchmarks,postgresql,knowledge"
-# services = ["toollocker", "loadcoach-front-cpu", "spotter-front-cpu", "turnstile", "voice-gateway", "weightroom"]
-# [deploy.nodes.compute]
-# ssh = "compute.lan"
-# folder = "suite-deployed"
-# extras = "voice,postgresql"
-# services = ["loadcoach", "spotter", "voice"]
-
 # Set this once weightroom is served over HTTPS. The browser then sends its cookie only that way.
 # secure = true

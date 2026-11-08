@@ -166,9 +166,8 @@ Tests: [usage](../tests/test_usage.py), [allowances](../tests/test_allowances.py
 | [Database migration preview](../app-walkthrough.md#system-database-migration-preview) | POST-rendered preflight/report, source/target bindings, tools/space and chain/artifact/recovery checks. | L using isolated profiles; live preview may probe resources; migration/cutover M. |
 | [Backups](../app-walkthrough.md#system-backups) | Verified versus partial/missing recovery sets, front/compute parts, sizes, retention and exact restore-preview links. | L/R; actual backup/identity bundle creation isn't needed for page coverage; live restore/import M. |
 | [Restore preview](../app-walkthrough.md#system-restore-preview) | Selected manifest/parts/files/exclusions, owning services, restore order and missing-half refusal. | L/R; never execute restore as part of preview verification. |
-| [Deploy](../app-walkthrough.md#system-deploy) | Superuser visibility, checkout versus active pin, node reachability and retained job states/output. | L/R; Pull/Set up/Deploy/Restart/Add host under M, not browsing. |
 
-Tests: [status](../tests/test_status_nodes.py), [telemetry](../tests/test_machine_telemetry.py), [alerts](../tests/test_alerts.py), [schedules](../tests/test_schedules.py), [DB administration](../tests/test_database_admin.py), [migration](../tests/test_database_migration.py), [backups](../tests/test_backups.py), [deployment](../tests/test_deploy.py). PostgreSQL-specific checks need an isolated test DSN; missing it is Blocked, not a live engine-change request.
+Tests: [status](../tests/test_status_nodes.py), [telemetry](../tests/test_machine_telemetry.py), [alerts](../tests/test_alerts.py), [schedules](../tests/test_schedules.py), [DB administration](../tests/test_database_admin.py), [migration](../tests/test_database_migration.py), [backups](../tests/test_backups.py). PostgreSQL-specific checks need an isolated test DSN; missing it is Blocked, not a live engine-change request.
 
 ## Settings
 
@@ -203,7 +202,7 @@ Apply the shared page checks to every section and its topics: map/breadcrumb/top
 | [Modules](../app-walkthrough.md#docs-modules) | Where each module runs, then WeightRoom, Turnstile, LoadCoach, ToolLocker, Voice, Spotter, Plugins, Mirror Wall and SoundRoom, each with its guide (where written) and code reference. | L/R |
 | [Benchmarks](../app-walkthrough.md#docs-benchmarks) | How a run works, what is measured, scores and results, and operation, from `benchmarks/README.md`; versioned suites/scoring/run/schedule contracts. | L/R |
 | [Data and backups](../app-walkthrough.md#docs-data-and-backups) | Store ownership, recovery sets, identity portability and engine migration procedures. | L/R |
-| [Deployment and operations](../app-walkthrough.md#docs-deployment-and-operations) | Installation, topology, settings and deploying from front, from the repository guides; don't run documented recovery interfaces as link checks. | L/R |
+| [Deployment and operations](../app-walkthrough.md#docs-deployment-and-operations) | Installation, topology, settings, node pairing and terminal updates, from the repository guides; don't run documented recovery interfaces as link checks. | L/R |
 
 Tests: [source parsing/privacy](../tests/test_source_docs.py), [Docs browser](../tests/test_docs_browser.py), [documentation links](../tests/test_documentation.py).
 

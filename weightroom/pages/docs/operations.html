@@ -4,7 +4,8 @@
 <p>Start with <a href="/docs/operations/installation">Installation</a>: one installer sets up the console, a one-time pairing code adds each GPU node to it,
   and the <code>owg</code> command looks after an installation afterwards. <a href="/docs/operations/topology">Where things run</a> says which programs belong on which machine,
   and <a href="/docs/operations/settings">Settings</a> where their settings come from.</p>
-<p>Once installed, superusers update every machine from <a href="/deploy">System → Deploy</a>, described in <a href="/docs/operations/deploying">Deploying from front</a>.
+<p>To install a node from the app, generate its one-time installer command under <a href="/compute-nodes#add-node">Settings → Compute nodes</a>.
+  Use <code>owg update</code> on an installed machine to update it; see <a href="/docs/operations/deploying">Node installation and updates</a>.
   <a href="/system/components">System → Components</a> shows what each machine has installed. Editing a checkout alone may not change a running installation.</p>
 {% endcall %}
 {% call doc_section('When something goes wrong', 'trouble') %}

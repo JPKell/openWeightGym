@@ -82,12 +82,12 @@ SECTIONS = (
         _topic("engines", "SQLite and PostgreSQL", "The two database engines, and moving a store from one to the other."),
         _topic("source", "Code reference", "The shared storage layer, backups and database administration.", source="data"),
     )),
-    _section("operations", "Deployment and operations", "Installing openWeightGym, where each part runs, its settings, and deploying updates from front.", (
+    _section("operations", "Deployment and operations", "Installing openWeightGym, where each part runs, its settings, pairing nodes and updating installations.", (
         _topic("installation", "Installation", "The installer, one machine or several, adding a GPU node, the owg command, and uninstalling.", doc="docs/installation.md"),
         _topic("topology", "Where things run", "Which programs run on front and which on each worker, and what happens while a worker is away.", doc="docs/README.md", parts=("Where things run",)),
         _topic("settings", "Settings", "Where settings come from, model file places, and what is kept private.", doc="docs/README.md", parts=("Settings, data and privacy",)),
-        _topic("deploying", "Deploying from front", "Deploying from front's checkout to every machine, and serving the console over HTTPS on the LAN.", doc="docs/operations.md",
-               parts=("Deploying from front", "Console over HTTPS on the LAN")),
+        _topic("deploying", "Node installation and updates", "Pairing nodes from Compute nodes, terminal updates, and serving the console over HTTPS on the LAN.", doc="docs/operations.md",
+               parts=("Node installation and updates", "Console over HTTPS on the LAN")),
         _topic("source", "Code reference", "Install and deploy scripts, and the settings code.", source="operations"),
     )),
 )
@@ -157,7 +157,7 @@ SOURCES = {
     "mirrorwall": ("mirrorwall", "engines/sdcpp"),
     "models": ("engines", "mirrorwall", "soundroom", "loadcoach/models.py", "loadcoach/model_setup.py", "loadcoach/roles.py", "loadcoach/files.py", "loadcoach/hub.py"),
     "accounts": ("loadcoach/identity_bundle.py", "loadcoach/users.py", "loadcoach/groups.py", "loadcoach/statement.py", "turnstile/accounts.py"),
-    "operations": ("scripts", "weightroom/deploy.py", "loadcoach/config.py", "loadcoach/settings.py"),
+    "operations": ("scripts", "weightroom/pairing.py", "loadcoach/config.py", "loadcoach/settings.py"),
 }
 
 

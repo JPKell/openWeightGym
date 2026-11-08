@@ -30,7 +30,7 @@ PAGES = (
     '/benchmarks/manage', '/usage', '/allowances', '/requests', '/batches', '/log', '/reliability',
     '/plugins/activity', '/output', '/status', '/system/voice', '/system/audio',
     '/telemetry', '/alerts', '/schedules', '/compute-nodes', '/users', '/groups',
-    '/tools', '/plugins', '/backups', '/databases', '/settings', '/deploy', '/docs',
+    '/tools', '/plugins', '/backups', '/databases', '/settings', '/docs',
     *(url for section in SECTIONS for url in (section['url'], *(topic['url'] for topic in section['topics'])) if url != '/docs'),
     '/account', '/account/appearance', '/account/audio', '/account/logs', '/sign-in',
     '/docs/modules/weightroom?module=weightroom%2Fapp.py', '/groups/admin',
@@ -171,8 +171,6 @@ def ui_host(monkeypatch):
 def ui_console(ui_host, desk_with_machine, tmp_path):
     server, _, _, users, _ = desk_with_machine
     users.change('jordan', own={'add': ['front-voice']})
-    users.add('sam', 'superuser')
-    users.change('sam', password='correct horse')
     registry = server.app.state.plugins
     shutil.copytree(ROOT / 'plugins/hermes', registry.root / 'hermes',
                     ignore=shutil.ignore_patterns('__pycache__', 'settings.json', '.settings.lock'))
@@ -239,7 +237,7 @@ def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, them
         })();''' % json.dumps({'mode': theme, 'palette': palette}))
         page.on('pageerror', lambda error: errors.append(str(error)))
         for path in paths:
-            sign_in(server, 'sam' if path == '/deploy' else 'jordan')
+            sign_in(server, 'jordan')
             response = page.goto('http://console.test' + path)
             if response.status != 200:
                 failures.append(f'{path}: HTTP {response.status}')
@@ -288,7 +286,7 @@ def test_all_console_pages_share_outer_layout_when_resized(ui_console, tmp_path,
     server, paths = ui_console
     widths = (1440, 320, 390, 575, 576, 767, 768, 900, 992, 1024, 1920, 2560)
     failures = []
-    cases = [(path, 'sam' if path == '/deploy' else 'jordan', 200) for path in paths]
+    cases = [(path, 'jordan', 200) for path in paths]
     cases.extend([('/no-such-page', 'jordan', 404), ('/settings', 'pat', 403),
                   ('/models/no-such-model', 'jordan', 404)])
     with playwright.sync_playwright() as engine:
@@ -508,7 +506,7 @@ def test_errors_keep_console_status_identity_and_safe_details(desk, monkeypatch)
     assert 'href="/status"' in unknown.text and 'Not here' not in unknown.text
     sign_in(server, 'pat')
     for path, explanation in [('/settings', 'settings'), ('/models', 'models'),
-                              ('/users', 'users'), ('/deploy', 'superuser'), ('/docs/api', 'documentation')]:
+                              ('/users', 'users'), ('/compute-nodes', 'settings'), ('/docs/api', 'documentation')]:
         refused = server.get(path)
         assert refused.status_code == 403
         assert 'Access denied' in refused.text and explanation in refused.text
@@ -599,7 +597,7 @@ def test_error_pages_are_readable_and_navigable(desk, monkeypatch, width, theme)
             ('pat', '/settings', 403, 'Access denied', None),
             ('pat', '/models', 403, 'Access denied', None),
             ('pat', '/users', 403, 'Access denied', None),
-            ('pat', '/deploy', 403, 'Access denied', None),
+            ('pat', '/deploy', 404, 'Page not found', None),
             ('pat', '/?simulate_error=1', 500, 'Something went wrong', 'System'),
             ('', '/no-such-page', 404, 'Page not found', None),
         ]:
@@ -637,7 +635,7 @@ def test_destructive_submitters_have_shared_confirmation(ui_console):
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         for path in paths:
-            sign_in(server, 'sam' if path == '/deploy' else 'jordan')
+            sign_in(server, 'jordan')
             page.goto('http://console.test' + path)
             unsafe = page.evaluate(r"""() => [...document.querySelectorAll('form button')].filter(b => {
               if (b.type !== 'submit' || b.closest('dialog')) return false;
