@@ -78,21 +78,39 @@
 {% if found.distributions %}<div class="table-responsive mb-4"><table class="table table-sm align-middle"><thead><tr><th>Distribution</th><th>From</th><th>Nodes</th><th>State</th></tr></thead><tbody>{% for job in found.distributions %}<tr><td>{{ job.file }}{% if job.staging %}<small class="d-block text-secondary">cache: {{ job.staging.done|size }} of {{ job.staging.of|size }}</small>{% endif %}</td><td>{{ job.source|default(job.machine) }}</td><td>{% if job.kind|default('') == 'model-install' %}<a href="/models?install={{ job.id|urlencode }}">{{ job.name }} on {{ job.machine }}</a>{% if job.why %} · {{ job.why }}{% endif %}{% else %}{% for machine, target in job.targets.items() %}{{ machine }}: {{ target.done|size }} of {{ target.of|size }}{% if target.why %} <span class="text-danger">{{ target.why }}</span>{% endif %}{{ "; " if not loop.last }}{% else %}preparing{% endfor %}{% endif %}</td><td>{{ job.state }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 {% endmacro %}
 
-{% macro models_table(found) %}
+{% macro cache_tables(found, file_type='', poll=false) %}
+{% for what, title, id, hint in [
+  ('model', 'Models', 'files-models', ''),
+  ('image', 'Image components', 'files-images', ''),
+  ('audio', 'Audio', 'files-audio', ''),
+  ('adapter', 'Adapters', 'files-adapters', 'Small files that change how one model behaves.'),
+  ('projector', 'Projectors', 'files-projectors', 'Files that let one model see pictures.')
+] if not file_type or file_type == what %}
+{% set content %}
+  {% if what == 'image' %}{% from "mirrorwall_files.html" import image_files with context %}{{ image_files(found) }}
+  {% elif what in ('model', 'audio') %}{{ models_table(found, what) }}
+  {% else %}{{ parts_table(found, what, title|lower) }}{% endif %}
+{% endset %}
+{% if poll %}<div class="card-body" id="{{ id }}" hx-swap-oob="true">{{ content }}</div>
+{% else %}{% call card(title, open=true, hint=hint, body_attrs={'id': id}) %}{{ content }}{% endcall %}{% endif %}
+{% endfor %}
+{% endmacro %}
+
+{% macro models_table(found, what='model') %}
 <div class="table-responsive">
-<table id="files-table" class="table table-hover align-middle sortable">
+<table id="{{ 'files-audio-table' if what == 'audio' else 'files-table' }}" class="table table-hover align-middle sortable">
   <thead><tr><th data-sort="text">File</th><th data-sort="value">Size</th><th data-sort="text">It says it is</th><th data-sort="text">Used by</th><th data-sort="text">Used on nodes</th><th></th></tr></thead>
   <tbody>
-  {% for file in found.files if file.tier != "storage" and (file.facts or {}).get("what", "model") == "model" %}
+  {% for file in found.files if file.tier != "storage" and (file.facts or {}).get("what", "model") == what %}
   <tr>
     <td class="wrap"><a href="{{ file_address(file.path) }}">{{ file.relative }}</a>{% if file.moving %} <span class="badge text-bg-primary">{{ "copying" if file.moving.get('copy') else "to" }} {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}{% if file.transfer_failure %}<span class="d-block text-danger" role="alert">Transfer failed: {{ file.transfer_failure }}</span>{% endif %}</td>
     <td data-value="{{ file.size }}">{{ file.size|size }}</td>
     <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ file.facts.name or "" }} <small class="text-secondary">{{ file.facts.size_label or "" }} {{ file.facts.kind if file.facts.kind and file.facts.kind != "model" else "" }}</small>{% endif %}</td>
     <td>{% for name in file.used_by_all %}<a href="{{ address(name) }}">{{ name }}</a>{{ ", " if not loop.last }}{% else %}<span class="text-secondary">no model</span>{% endfor %}</td>
     <td>{% for node in file.used_nodes %}{{ node }}{{ ", " if not loop.last }}{% else %}<span class="text-secondary">none</span>{% endfor %}</td>
-    <td class="text-end">{% if not file.used_by and not file.unreadable %}<a class="btn btn-outline-primary btn-sm" href="/models?file={{ file.path|urlencode }}&trained={{ file.facts.trained_context or '' }}">Add</a>{% endif %}</td>
+    <td class="text-end">{% if what == 'audio' %}<a class="btn btn-outline-secondary btn-sm" href="/models/audio">Configure</a>{% elif not file.used_by and not file.unreadable %}<a class="btn btn-outline-primary btn-sm" href="/models?file={{ file.path|urlencode }}&trained={{ file.facts.trained_context or '' }}">Add</a>{% endif %}</td>
   </tr>
-  {% else %}{% call empty_row(6) %}No cached model files found.{% endcall %}{% endfor %}
+  {% else %}{% call empty_row(6) %}No cached {{ 'audio' if what == 'audio' else 'model' }} files found.{% endcall %}{% endfor %}
   </tbody>
 </table>
 </div>
@@ -110,12 +128,12 @@
     <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ file.facts.name or "" }} <small class="text-secondary">{{ file.facts.size_label or "" }} · {{ file.facts.what or "model" }}</small>{% endif %}</td>
     <td><div class="d-flex justify-content-end gap-2">
       {% if file.moving %}<button class="btn btn-outline-primary btn-sm" disabled>{{ 'Copying…' if file.moving.get('copy') else 'Moving…' }}</button>
-      {% elif file.cache_place and not file.cached %}<form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="to" value="{{ file.cache_place }}"><input type="hidden" name="return" value="storage"><button class="btn btn-outline-primary btn-sm" name="do" value="copy">Promote to cache</button></form>
+      {% elif file.cache_place and not file.cached %}<form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="to" value="{{ file.cache_place }}"><input type="hidden" name="return" value="storage"><input type="hidden" name="file_type" value="{{ file_type|default('') }}"><button class="btn btn-outline-primary btn-sm" name="do" value="copy">Promote to cache</button></form>
       {% elif file.cached %}<span class="badge text-bg-secondary align-self-center">In cache</span>{% endif %}
-      {% if not file.used_by and not file.moving %}<form method="post" action="/file" {{ confirm_two() }}><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="name" value="{{ file.path.rsplit('/', 1)[-1] }}"><input type="hidden" name="return" value="storage"><button  class="btn btn-outline-danger btn-sm" name="do" value="delete" {{ confirm_loss() }}>Delete</button></form>{% endif %}
+      {% if not file.used_by and not file.moving %}<form method="post" action="/file" {{ confirm_two() }}><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="name" value="{{ file.path.rsplit('/', 1)[-1] }}"><input type="hidden" name="return" value="storage"><input type="hidden" name="file_type" value="{{ file_type|default('') }}"><button  class="btn btn-outline-danger btn-sm" name="do" value="delete" {{ confirm_loss() }}>Delete</button></form>{% endif %}
     </div></td>
   </tr>
-  {% else %}{% call empty_row(4) %}No files are in storage.{% endcall %}{% endfor %}
+  {% else %}{% call empty_row(4) %}No {{ 'matching ' if file_type|default('') }}files are in storage.{% endcall %}{% endfor %}
   </tbody>
 </table>
 </div>

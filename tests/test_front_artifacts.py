@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+import re
 import threading
 import time
 
@@ -52,6 +53,95 @@ def test_front_locations_work_without_compute_and_persist(desk, tmp_path):
     sign_in(browser, 'pat')
     assert browser.get('/files').status_code == 403
     assert browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '/tmp/forbidden'}).status_code == 403
+
+
+@pytest.fixture
+def categorized_files(desk, tmp_path):
+    server, compute, _ = desk
+    compute.off = True
+    sign_in(server, 'jordan')
+    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
+    server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
+                                             'models_storage_folder': str(storage)})
+    files = {}
+    for kind, folder in [('model', 'llm'), ('image', 'image'), ('audio', 'audio'),
+                         ('adapter', 'adapters'), ('projector', 'projectors')]:
+        filename = f'category-{kind}.safetensors' if kind == 'image' else f'category-{kind}.gguf'
+        for tier, root in [('cache', cache), ('storage', storage)]:
+            path = root / folder / filename
+            if kind == 'image':
+                path.write_bytes(b'\x00' * 8)
+            else:
+                gguf(path, general__name=kind, general__type=kind if kind in ('adapter', 'projector') else 'model')
+            files[tier, kind] = path
+    return server, files
+
+
+@pytest.mark.parametrize('tier', ['cache', 'storage'])
+@pytest.mark.parametrize('kind', ['model', 'image', 'audio', 'adapter', 'projector'])
+def test_file_categories_filter_full_pages_and_polling(categorized_files, tier, kind):
+    server, files = categorized_files
+    listing = server.get('/files', params={'tier': tier, 'type': kind, 'complete': '1'})
+    assert listing.status_code == 200
+    assert f'hx-get="/files?part=list&amp;tier={tier}&amp;type={kind}"' in listing.text
+    assert f'href="/files?tier=storage&amp;type={kind}"' in listing.text
+    assert f'href="/files?tier=cache&amp;type={kind}"' in listing.text
+    poll = server.get('/files', params={'tier': tier, 'type': kind, 'part': 'list'})
+    assert poll.status_code == 200
+    for body in (listing.text, poll.text):
+        assert files[tier, kind].name in body
+        assert all(path.name not in body for (location, other), path in files.items() if location == tier and other != kind)
+    if tier == 'storage':
+        assert 'In cache' in listing.text  # filtering retains knowledge of the matching cached copy
+    else:
+        assert poll.text.count('hx-swap-oob="true"') == 4
+
+
+def test_file_category_keeps_location_totals_and_storage_actions(categorized_files, desk):
+    server, files = categorized_files
+    original = server.get('/files?tier=storage&complete=1').text
+    filtered = server.get('/files?tier=storage&type=audio&complete=1').text
+    model_bytes = lambda text: re.findall(r'<span class="text-secondary">Models</span> <b>([^<]+)</b>', text)
+    assert model_bytes(original) == model_bytes(filtered)
+    assert 'name="file_type" value="audio"' in filtered
+    desk[1].off = False  # deleting a library file requires every node to verify it is unused
+    path = files['storage', 'audio']
+    deleted = server.post('/file', data={'do': 'delete', 'path': str(path), 'name': path.name,
+                                        'return': 'storage', 'file_type': 'audio'})
+    assert deleted.status_code == 200, re.findall(r'role="alert"[^>]*>(.*?)</div>', deleted.text, re.S)
+    assert deleted.url.params['type'] == 'audio'
+    empty = server.get(str(deleted.url) + '&complete=1')
+    assert 'No matching files are in storage.' in empty.text
+    assert all(path.exists() for (tier, kind), path in files.items() if tier == 'storage' and kind != 'audio')
+
+
+def test_file_category_survives_location_changes_refresh_and_reload(categorized_files):
+    server, files = categorized_files
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        try:
+            page.goto('http://console.test/files')
+            page.locator('nav[aria-label="File type"]').get_by_role('link', name='Audio', exact=True).click()
+            playwright.expect(page.locator('#files-audio-table')).to_contain_text(files['cache', 'audio'].name)
+            playwright.expect(page.locator('#files-models')).to_have_count(0)
+            page.locator('nav[aria-label="File location"]').get_by_role('link', name='Storage', exact=True).click()
+            selected = page.locator('nav[aria-label="File type"] [aria-current="page"]')
+            playwright.expect(selected).to_have_text('Audio')
+            playwright.expect(page.locator('#files-storage-table')).to_contain_text(files['storage', 'audio'].name)
+            page.evaluate('window.priorFiles = document.querySelector("#files-storage")')
+            page.wait_for_function('document.querySelector("#files-storage") !== window.priorFiles', timeout=10000)
+            assert 'category-model.gguf' not in page.locator('#files-storage-table').inner_text()
+            page.reload()
+            playwright.expect(selected).to_have_text('Audio')
+            page.set_viewport_size({'width': 390, 'height': 1000})
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.locator('nav[aria-label="File type"]').get_by_role('link', name='All files', exact=True).click()
+            playwright.expect(page.locator('#files-storage-table')).to_contain_text(files['storage', 'model'].name)
+            assert not errors
+        finally:
+            browser.close()
 
 
 def test_compute_node_pill_lists_its_files_and_preserves_selection(desk, tmp_path):
