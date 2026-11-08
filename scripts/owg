@@ -127,7 +127,10 @@ PY
 
 status() {
   detect_address
-  printf '\n  %s%s%s  %s%s · %s%s\n' "$C_BOLD" "$(ui_gradient openWeightGym)" "$C_RESET" "$C_MUTED" "$(version)" "$(commit)" "$C_RESET"
+  # The menu has drawn the logo, with the name and version, already.
+  if ((!${STATUS_UNDER_LOGO:-0})); then
+    printf '\n  %s%s%s  %s%s · %s%s\n' "$C_BOLD" "$(ui_gradient openWeightGym)" "$C_RESET" "$C_MUTED" "$(version)" "$(commit)" "$C_RESET"
+  fi
   ui_note "$(receipt_mode_label) · ${ROOT/#$HOME/\~}"
   ui_section "Programs"
   local program state since any=0
@@ -336,7 +339,9 @@ doctor() {
 # ---- the menu -------------------------------------------------------------------------------
 
 menu() {
-  status
+  ui_banner "$(version)"
+  ui_note "$(commit)"
+  STATUS_UNDER_LOGO=1 status
   ((UI_ASK)) || { usage; return 0; }
   local choice=0 console=0
   programs | grep -qx weightroom && console=1
