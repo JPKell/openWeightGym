@@ -65,7 +65,7 @@ from loadcoach.database_admin import catalogs as database_catalogs, dump_tools, 
 from db.health import stores_health
 from loadcoach.tasks import Tasks
 from loadcoach.capture import answer_text, request_text, said_wrong
-from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings, storage_places
+from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings, shared_places, storage_places
 from loadcoach.settings import CHANGEABLE, NOW, Changes, front_programs, program_name, said, wrong_kind
 from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
 from loadcoach.file_index import NODE_INDEX, FileIndex, tier_of
@@ -1323,11 +1323,12 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         await paced()
         used, last_used, spots = model_files(), pace["of"]["last_used"], places()
         index = await asyncio.to_thread(file_index.current, spots, refresh=request.query_params.get("refresh") == "1")
-        found, where = [], []
+        found, where, shared = [], [], shared_places(spots)
         for place, folder in spots.items():
             if not Path(folder).is_dir():
                 continue  # a place whose folder is not there holds nothing
-            here = {"name": place, "folder": folder, "tier": tier_of(place), **room(folder), "files": 0}
+            # shared: the cache and storage are one folder, so its files are in both at once
+            here = {"name": place, "folder": folder, "tier": tier_of(place), "shared": place in shared, **room(folder), "files": 0}
             where.append(here)
             for kept in index["files"].values():
                 if kept["place"] != place:
@@ -1335,7 +1336,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 here["files"] += kept["size"]
                 models = used.get(os.path.realpath(kept["path"]), [])
                 entry = {key: value for key, value in kept.items() if key != "mtime"}
-                entry.update(used_by=models, moving=moving.get(kept["path"]),
+                entry.update(used_by=models, moving=moving.get(kept["path"]), shared=place in shared,
                              # When any model that uses it was last asked for, as far back as the log goes.
                              last_used=max((last_used[name] for name in models if name in last_used), default=None))
                 found.append(entry)
@@ -1524,10 +1525,13 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if moving:
             return error(409, "Wait for current file copies or moves to finish before cleaning up.")
         configured, used = places(), set(model_files())
+        # A folder that is the cache and storage at once is left alone: its files are the storage copies themselves.
+        configured = {name: folder for name, folder in configured.items() if name not in shared_places(configured)}
         cache_places = {name: Path(folder) for name, folder in configured.items() if not name.startswith("storage_")}
         storage_places = {name.removeprefix("storage_"): Path(folder) for name, folder in configured.items() if name.startswith("storage_")}
         if mode == "clear-cache" and not storage_places:
-            return error(409, "Configure a model storage library before clearing the cache.")
+            return error(409, "The cache and storage are one folder: there is no separate cache to clear." if shared_places(places())
+                         else "Configure a model storage library before clearing the cache.")
         keep = asked.get("keep", [])
         if not isinstance(keep, list) or any(not isinstance(path, str) for path in keep):
             return error(400, "keep must be a list of cache file paths.")

@@ -743,10 +743,14 @@ def test_files_separates_cache_and_storage_and_promotes_or_two_click_deletes(tmp
 
         storage_page = browser.get("/files?tier=storage&complete=1").text
         table = storage_page.split('id="files-storage-table"', 1)[1].split("</table>", 1)[0]
-        assert all(heading in table for heading in ("File", "Size", "It says it is", "Buttons"))
-        assert "Used by" not in table and "Last used" not in table and "Place" not in table
-        assert table.count("Promote to cache") == 1 and "In cache" in table
-        assert table.count("data-confirm-two") == 2
+        head = table.split("</thead>", 1)[0]
+        assert all(heading in head for heading in ("File", "Size", "It says it is", "Storage", "Cache"))
+        assert "Used by" not in head and "Last used" not in table and "Place" not in head
+        # Storage keeps both; the cached copy a model uses stays, and the other can be ticked into the cache.
+        assert table.count('in Storage: In storage. Delete it from storage on the file&#39;s own page." checked disabled') == 2
+        assert 'aria-label="kept.gguf in Cache: Used by mine. Change that model first." checked disabled' in table
+        assert 'aria-label="new.gguf in Cache">' in table and "in use" in table
+        assert storage_page.count("Apply changes") == 1 and "data-confirm-two>Apply changes" in storage_page
 
         promoted = browser.post("/file", data={"path": stored, "to": "llm", "return": "storage", "do": "copy"})
         assert promoted.url.path == "/files" and promoted.url.params["tier"] == "storage", re.findall(r'<div[^>]*class="[^"]*alert[^>]*>(.*?)</div>', promoted.text, re.S)

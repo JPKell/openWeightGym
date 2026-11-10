@@ -130,6 +130,8 @@ class FileIndex:
                     continue  # said by whoever lists the places, which looks at them each time
                 try:
                     for file in model_files_in(folder):
+                        if str(file) in files:
+                            continue  # cache and storage set to one folder: listed once, under the cache place, which comes first
                         if self.accept is not None:
                             self.accept(str(file))
                         try:
@@ -159,6 +161,7 @@ class FileIndex:
             index = self.read()
             if index is None or index.get("places") != dict(spots):
                 return
+            # The deepest folder holding the file names its place; between two places on one folder, the first, as a look does.
             roots = sorted(((name, Path(folder).resolve()) for name, folder in spots.items()), key=lambda one: -len(one[1].parts))
             for path in map(Path, paths):
                 old = index["files"].pop(str(path), None)

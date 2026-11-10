@@ -41,5 +41,9 @@ For UI changes, run the component audit in [test_ui_consistency.py](tests/test_u
 and the affected feature tests. Shared component changes also require the all-page browser
 checks there, including narrow layouts, empty/error states and dynamic replacements.
 
+A form whose unsent changes must survive a polling refresh of its fragment carries
+`data-hold-refresh`; [pieces.js](weightroom/static/pieces.js) then defers the swap, as it does
+for selected text.
+
 Keep this index current when introducing or moving shared components. Record UI conventions
 here; Claude's entry point imports this file.

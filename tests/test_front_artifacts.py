@@ -92,7 +92,8 @@ def test_file_categories_filter_full_pages_and_polling(categorized_files, tier, 
         assert files[tier, kind].name in body
         assert all(path.name not in body for (location, other), path in files.items() if location == tier and other != kind)
     if tier == 'storage':
-        assert 'In cache' in listing.text  # filtering retains knowledge of the matching cached copy
+        # filtering retains knowledge of the matching cached copy: its Cache box is ticked
+        assert f'aria-label="{files[tier, kind].name} in Cache" checked' in listing.text
     else:
         assert poll.text.count('hx-swap-oob="true"') == 5  # with when the files were last checked
 
@@ -110,8 +111,9 @@ def test_file_category_keeps_location_totals_and_storage_actions(categorized_fil
                                         'return': 'storage', 'file_type': 'audio'})
     assert deleted.status_code == 200, re.findall(r'role="alert"[^>]*>(.*?)</div>', deleted.text, re.S)
     assert deleted.url.params['type'] == 'audio'
-    empty = server.get(str(deleted.url) + '&complete=1')
-    assert 'No matching files are in storage.' in empty.text
+    left = server.get(str(deleted.url) + '&complete=1')
+    # The cache still holds a copy, so the file is listed as not in storage, with its Storage box ready to tick.
+    assert 'not in storage' in left.text and f'aria-label="{path.name} in Storage">' in left.text
     assert all(path.exists() for (tier, kind), path in files.items() if tier == 'storage' and kind != 'audio')
 
 
@@ -230,8 +232,7 @@ def test_front_paths_validate_before_creating_or_saving_folders(desk, tmp_path):
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, 'jordan')
-    for cache, storage in (('relative', ''), (str(tmp_path / 'same'), str(tmp_path / 'same')),
-                           (str(tmp_path / 'nested'), str(tmp_path / 'nested' / 'llm'))):
+    for cache, storage in (('relative', ''), (str(tmp_path / 'nested'), str(tmp_path / 'nested' / 'llm'))):
         response = browser.post('/settings/model-files', data={
             'file_machine': 'front', 'models_folder': cache, 'models_storage_folder': storage})
         assert response.status_code == 400
@@ -296,7 +297,7 @@ def test_front_promotion_returns_before_copy_finishes_and_prevents_conflicting_a
             assert response.status_code == 303 and 'tier=storage' in response.headers['location']
             inventory = browser.get('/files?tier=storage&complete=1').text
             assert ('copying' if action == 'copy' else 'moving') + ' to llm' in inventory
-            assert 'Promote to cache' not in inventory
+            assert f'aria-label="{source.name} in Cache: It is being copied or moved now." disabled' in inventory
             assert not (cache / 'llm' / source.name).exists() and source.is_file()
             repeated = browser.post('/file', data=form)
             assert repeated.status_code == 400 and 'already being copied or moved' in repeated.text
@@ -313,10 +314,10 @@ def test_front_promotion_returns_before_copy_finishes_and_prevents_conflicting_a
     assert source.exists() == (action == 'copy')
     if action == 'copy':
         assert source.read_bytes() == original
-        assert 'In cache' in browser.get('/files?tier=storage&complete=1').text
+        assert f'aria-label="{source.name} in Cache" checked' in browser.get('/files?tier=storage&complete=1').text
 
 
-def test_storage_promote_button_shows_progress_then_cached(desk, tmp_path, monkeypatch):
+def test_storage_cache_box_copies_in_bulk_and_shows_progress(desk, tmp_path, monkeypatch):
     from turnstile.artifacts import carry
     server, compute, _ = desk
     compute.off = True
@@ -339,12 +340,20 @@ def test_storage_promote_button_shows_progress_then_cached(desk, tmp_path, monke
         page.on('pageerror', lambda error: errors.append(str(error)))
         try:
             page.goto('http://console.test/files?tier=storage')
-            page.get_by_role('button', name='Promote to cache', exact=True).click()
-            playwright.expect(page.get_by_role('button', name='Copying…', exact=True)).to_be_disabled()
+            page.get_by_role('checkbox', name=f'{source.name} in Cache', exact=True).check()
+            playwright.expect(page.locator('[data-file-boxes-summary]')).to_have_text('1 copy to make. The storage copy always stays.')
+            page.get_by_role('button', name='Apply changes', exact=True).click()
+            page.get_by_role('button', name='Are you sure? Apply changes', exact=True).click()  # two steps, as for the other file changes
+            playwright.expect(page.locator('#files-distributions')).to_contain_text('Bulk change running')
+            waiting = page.get_by_role('checkbox', name=f'{source.name} in Cache: Waiting for the bulk change running now.', exact=True)
+            playwright.expect(waiting).to_be_disabled()
+            playwright.expect(page.get_by_role('button', name='Apply changes', exact=True)).to_be_disabled()
             assert 'The form could not be submitted' not in page.content()
             assert source.is_file() and not (cache / 'llm' / source.name).exists()
             release.set()
-            playwright.expect(page.locator('#files-storage-table')).to_contain_text('In cache', timeout=10000)
+            done = page.get_by_role('checkbox', name=f'{source.name} in Cache', exact=True)
+            playwright.expect(done).to_be_checked(timeout=15000)
+            playwright.expect(page.locator('#files-distributions')).to_contain_text('Bulk change finished: 1 of 1 done.')
             assert source.read_bytes() == (cache / 'llm' / source.name).read_bytes()
             assert not errors
         finally:
@@ -371,7 +380,7 @@ def test_front_promotion_failure_is_visible_and_can_be_retried(desk, tmp_path, m
     while compute.front.state.front_files.tasks and time.monotonic() < deadline:
         time.sleep(.01)
     listing = browser.get('/files?tier=storage&complete=1').text
-    assert 'Cache drive refused the copy.' in listing and 'Promote to cache' in listing
+    assert 'Cache drive refused the copy.' in listing and f'aria-label="{source.name} in Cache">' in listing
     assert source.is_file() and not (cache / 'llm' / source.name).exists()
     assert 'Cache drive refused the copy.' in browser.get('/file', params={'path': str(source)}).text
     monkeypatch.setattr('turnstile.artifacts.carry', carry)
@@ -380,7 +389,7 @@ def test_front_promotion_failure_is_visible_and_can_be_retried(desk, tmp_path, m
     while compute.front.state.front_files.tasks and time.monotonic() < deadline:
         time.sleep(.01)
     listing = browser.get('/files?tier=storage&complete=1').text
-    assert 'In cache' in listing and 'Cache drive refused the copy.' not in listing
+    assert f'aria-label="{source.name} in Cache" checked' in listing and 'Cache drive refused the copy.' not in listing
     assert (cache / 'llm' / source.name).read_bytes() == source.read_bytes()
 
 

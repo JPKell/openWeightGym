@@ -1,5 +1,5 @@
 {% from "parts.html" import card, section_title , confirm_loss, confirm_two, alert, empty_row %}
-{# Storage summaries and the two file-manager views. #}
+{# Storage summaries and the file-manager views: the cache's tables, the Storage view with a box for each place a file can be, and a node's files. #}
 
 {% macro cleanup_status(found) %}
 {% if found.cleanup %}{% call alert('info' if found.cleanup.state == 'running' else 'success' if found.cleanup.state == 'complete' else 'warning', class_='py-2') %}
@@ -34,7 +34,7 @@
 {% set used = ns.total - ns.free %}
 {% set models_share = ([100 * ns.files / ns.total, 100]|min) if ns.total else 0 %}
 {% set other_share = ([100 * (used - ns.files) / ns.total, 100 - models_share]|min) if ns.total and used > ns.files else 0 %}
-{% set title = 'Storage' if group.tier == 'storage' else 'Front cache' if node.name == 'front' else node.name %}
+{% set title = 'Storage' if group.tier == 'storage' else 'Storage and cache' if group.tier == 'shared' and node.name == found.artifact_machine else 'Front cache' if node.name == 'front' else node.name %}
 {% call card(tag='article', class_='place-card', attrs={'aria-label': title}) %}
     <div class="d-flex align-items-center gap-2 min-w-0">
       {{ section_title(title, level=3, class_='place-card-title text-truncate', wrapper_class='place-card-heading', attrs={'title': title}) }}
@@ -72,7 +72,7 @@
 {% if found.nodes %}
 <div class="place-cards-frame"><div class="place-cards">
   {% for node in found.nodes %}
-    {% for group in node.place_groups %}{% if group.tier == "cache" or node.name == found.artifact_machine %}{{ place_card(group, node, found) }}{% endif %}{% else %}{{ place_note(node) }}{% endfor %}
+    {% for group in node.place_groups %}{% if group.tier != "storage" or node.name == found.artifact_machine %}{{ place_card(group, node, found) }}{% endif %}{% else %}{{ place_note(node) }}{% endfor %}
   {% endfor %}
 </div></div>
 {% else %}
@@ -81,7 +81,22 @@
 {% endmacro %}
 
 {% macro distributions_table(found) %}
-{% if found.distributions %}<div class="table-responsive mb-4"><table class="table table-sm align-middle"><thead><tr><th>Distribution</th><th>From</th><th>Nodes</th><th>State</th></tr></thead><tbody>{% for job in found.distributions %}<tr><td>{{ job.file }}{% if job.staging %}<small class="d-block text-secondary">cache: {{ job.staging.done|size }} of {{ job.staging.of|size }}</small>{% endif %}</td><td>{{ job.source|default(job.machine) }}</td><td>{% if job.kind|default('') == 'model-install' %}<a href="/models?install={{ job.id|urlencode }}">{{ job.name }} on {{ job.machine }}</a>{% if job.why %} · {{ job.why }}{% endif %}{% else %}{% for machine, target in job.targets.items() %}{{ machine }}: {{ target.done|size }} of {{ target.of|size }}{% if target.why %} <span class="text-danger">{{ target.why }}</span>{% endif %}{{ "; " if not loop.last }}{% else %}preparing{% endfor %}{% endif %}</td><td>{{ job.state }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% for job in found.distributions if job.kind|default('') == 'arrange' %}{{ arrangement(job) }}{% endfor %}
+{% set distributions = found.distributions|rejectattr('kind', 'equalto', 'arrange')|list %}
+{% if distributions %}<div class="table-responsive mb-4"><table class="table table-sm align-middle"><thead><tr><th>Distribution</th><th>From</th><th>Nodes</th><th>State</th></tr></thead><tbody>{% for job in distributions %}<tr><td>{{ job.file }}{% if job.staging %}<small class="d-block text-secondary">cache: {{ job.staging.done|size }} of {{ job.staging.of|size }}</small>{% endif %}</td><td>{{ job.source|default(job.machine) }}</td><td>{% if job.kind|default('') == 'model-install' %}<a href="/models?install={{ job.id|urlencode }}">{{ job.name }} on {{ job.machine }}</a>{% if job.why %} · {{ job.why }}{% endif %}{% else %}{% for machine, target in job.targets.items() %}{{ machine }}: {{ target.done|size }} of {{ target.of|size }}{% if target.why %} <span class="text-danger">{{ target.why }}</span>{% endif %}{{ "; " if not loop.last }}{% else %}preparing{% endfor %}{% endif %}</td><td>{{ job.state }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% endmacro %}
+
+{# A bulk change from the Storage view: how far it has got, and each step that failed with why. #}
+{% macro arrangement(job) %}
+{% set done = job.steps|selectattr('state', 'equalto', 'done')|list|length %}
+{% set failed = job.steps|selectattr('state', 'equalto', 'failed')|list %}
+{% call alert('info' if job.state == 'running' else 'warning' if failed else 'success', class_='py-2', role='status') %}
+  Bulk change {{ 'running' if job.state == 'running' else 'finished' }}: {{ done }} of {{ job.steps|length }} done{% if failed %}, {{ failed|length }} failed{% endif %}.
+  {% for step in job.steps if step.state in ('checking', 'copying', 'removing') %}
+    {{ {'checking': 'Checking', 'copying': 'Copying', 'removing': 'Removing'}[step.state] }} {{ step.file }} {{ 'from' if step.action == 'remove' else 'to' }} {{ step.label }}{% if step.state == 'copying' and step.of %}, {{ (100 * step.done / step.of)|int }}%{% endif %}.
+  {% endfor %}
+  {% if failed %}<ul class="small mb-0 mt-1">{% for step in failed %}<li>{{ step.file }} {{ 'from' if step.action == 'remove' else 'to' }} {{ step.label }}: {{ step.why }}</li>{% endfor %}</ul>{% endif %}
+{% endcall %}
 {% endmacro %}
 
 {% macro cache_tables(found, file_type='', poll=false) %}
@@ -122,27 +137,49 @@
 </div>
 {% endmacro %}
 
-{% macro storage_table(found) %}
+{# The Storage view: storage keeps every model file, and the cache and each node hold copies of some.
+   A box for each place a file can be; ticking one copies the file there and clearing one removes that
+   copy. The form says, for each file, which boxes were ticked when it was drawn, so only the boxes
+   changed are sent, and turnstile checks each against the folders again. See turnstile/library.py. #}
+{% macro storage_table(found, file_type='') %}
+{% set columns = found.library_columns|default([]) %}
+{% if not columns|selectattr('name', 'equalto', 'storage')|list %}{% call alert('info', role='status', class_='mb-3') %}No storage folder is set up. <a href="/settings?file_machine={{ found.artifact_machine|urlencode }}#model-files">Set one</a> to keep every model file there; the cache and nodes then hold copies of some of them.{% endcall %}{% endif %}
+<form method="post" action="/files" data-hold-refresh data-file-boxes>
+<input type="hidden" name="do" value="arrange"><input type="hidden" name="file_type" value="{{ file_type }}">
+{% for column in columns %}<input type="hidden" name="column" value="{{ column.name }}">{% endfor %}
 <div class="table-responsive">
 <table id="files-storage-table" class="table table-hover align-middle sortable">
-  <thead><tr><th data-sort="text">File</th><th data-sort="value">Size</th><th data-sort="text">It says it is</th><th class="text-end">Buttons</th></tr></thead>
+  <thead><tr><th data-sort="text">File</th><th data-sort="value">Size</th><th data-sort="text">It says it is</th>
+    {% for column in columns %}<th class="text-center text-nowrap"{% if column.why %} title="{{ column.why }}"{% endif %}>{{ column.label }}<input type="checkbox" class="form-check-input d-block mx-auto mt-1" data-check-column="{{ loop.index0 }}" aria-label="Tick every {{ column.label }} box"{% if column.why %} disabled{% endif %}></th>{% endfor %}
+  </tr></thead>
   <tbody>
-  {% for file in found.files if file.tier == "storage" %}
+  {% for row in found.library|default([]) %}
   <tr>
-    <td class="wrap"><a href="{{ file_address(file.path) }}">{{ file.relative }}</a>{% if file.moving %} <span class="badge text-bg-primary">{{ 'copying' if file.moving.get('copy') else 'moving' }} to {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}{% if file.transfer_failure %}<span class="d-block text-danger" role="alert">Transfer failed: {{ file.transfer_failure }}</span>{% endif %}</td>
-    <td data-value="{{ file.size }}">{{ file.size|size }}</td>
-    <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ file.facts.name or "" }} <small class="text-secondary">{{ file.facts.size_label or "" }} · {{ file.facts.what or "model" }}</small>{% endif %}</td>
-    <td><div class="d-flex justify-content-end gap-2">
-      {% if file.moving %}<button class="btn btn-outline-primary btn-sm" disabled>{{ 'Copying…' if file.moving.get('copy') else 'Moving…' }}</button>
-      {% elif file.cache_place and not file.cached %}<form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="to" value="{{ file.cache_place }}"><input type="hidden" name="return" value="storage"><input type="hidden" name="file_type" value="{{ file_type|default('') }}"><button class="btn btn-outline-primary btn-sm" name="do" value="copy">Promote to cache</button></form>
-      {% elif file.cached %}<span class="badge text-bg-secondary align-self-center">In cache</span>{% endif %}
-      {% if not file.used_by and not file.moving %}<form method="post" action="/file" {{ confirm_two() }}><input type="hidden" name="path" value="{{ file.path }}"><input type="hidden" name="name" value="{{ file.path.rsplit('/', 1)[-1] }}"><input type="hidden" name="return" value="storage"><input type="hidden" name="file_type" value="{{ file_type|default('') }}"><button  class="btn btn-outline-danger btn-sm" name="do" value="delete" {{ confirm_loss() }}>Delete</button></form>{% endif %}
-    </div></td>
+    <td class="wrap">{% if row.machine == found.artifact_machine %}<a href="{{ file_address(row.path) }}">{{ row.relative }}</a>{% else %}{{ row.relative }}{% endif %}{% if not row.stored %} <span class="badge text-bg-warning">not in storage</span>{% endif %}
+      {% set seen = namespace(paths=[]) %}{# a file in a folder that is the cache and storage is listed at both #}
+      {% for copies in row.copies.values() %}{% for copy in copies %}{% set key = copy.machine ~ ':' ~ copy.path %}{% if key not in seen.paths %}{% set seen.paths = seen.paths + [key] %}{% if copy.moving %} <span class="badge text-bg-primary">{{ 'copying' if copy.moving.get('copy') else 'moving' }} to {{ copy.moving.to }}, {{ (100 * copy.moving.done / copy.moving.of)|int if copy.moving.of else 100 }}%</span>{% endif %}{% if copy.transfer_failure %}<span class="d-block text-danger" role="alert">Transfer failed: {{ copy.transfer_failure }}</span>{% endif %}{% endif %}{% endfor %}{% endfor %}
+      <input type="hidden" name="boxes" value="{{ row.id }}:{% for column in columns %}{% set box = row.cells[column.name] %}{{ '-' if box.why else 1 if box.present else 0 }}{% endfor %}"></td>
+    <td data-value="{{ row.size }}">{{ row.size|size }}</td>
+    <td>{% if row.unreadable %}<span class="text-danger">{{ row.unreadable }}</span>{% else %}{{ row.facts.name or "" }} <small class="text-secondary">{{ row.facts.size_label or "" }} · {{ row.what }}</small>{% endif %}</td>
+    {% for column in columns %}{% set box = row.cells[column.name] %}
+    <td class="text-center"{% if box.why %} title="{{ box.why }}"{% endif %}>
+      <input type="checkbox" class="form-check-input" name="want" value="{{ row.id }}:{{ loop.index0 }}" data-column="{{ loop.index0 }}" aria-label="{{ row.name }} in {{ column.label }}{% if box.why %}: {{ box.why }}{% endif %}"{% if box.present %} checked{% endif %}{% if box.why %} disabled{% endif %}>
+      {% if box.step %}<small class="d-block text-primary">{{ {'queued': 'waiting', 'checking': 'checking', 'copying': 'copying', 'removing': 'removing'}.get(box.step.state, box.step.state) }}{% if box.step.state == 'copying' and box.step.of %} {{ (100 * box.step.done / box.step.of)|int }}%{% endif %}</small>
+      {% elif box.used %}<small class="d-block text-secondary">in use</small>{% endif %}
+    </td>
+    {% endfor %}
   </tr>
-  {% else %}{% call empty_row(4) %}No {{ 'matching ' if file_type|default('') }}files are in storage.{% endcall %}{% endfor %}
+  {% else %}{% call empty_row(3 + columns|length) %}No {{ 'matching ' if file_type else '' }}files are in storage.{% endcall %}{% endfor %}
   </tbody>
 </table>
 </div>
+{% if found.library|default([]) %}
+<div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+  <button class="btn btn-primary btn-sm" {{ confirm_two() }}{% if found.arranging %} disabled title="A bulk change is running. Wait for it to finish."{% endif %}>Apply changes</button>
+  <span class="small text-secondary" data-file-boxes-summary aria-live="polite">Tick a box to copy a file there; clear one to remove that copy. The storage copy always stays.</span>
+</div>
+{% endif %}
+</form>
 {% endmacro %}
 
 {% macro node_files_table(node) %}

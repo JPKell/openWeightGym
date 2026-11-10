@@ -22,7 +22,7 @@
 {% if machine %}
 {% call card(selected_node.name ~ " files", open=true, body_attrs={"id": "files-node"}) %}{{ node_files_table(selected_node) }}{% endcall %}
 {% elif tier == "storage" %}
-{% call card("Storage", body_attrs={"id": "files-storage"}) %}{{ storage_table(found) }}{% endcall %}
+{% call card("Storage", hint="Every model file, and where else a copy of each is.", body_attrs={"id": "files-storage"}) %}{{ storage_table(found, file_type) }}{% endcall %}
 {% else %}
 {{ cache_tables(found, file_type) }}
 {% endif %}
