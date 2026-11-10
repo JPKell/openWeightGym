@@ -433,7 +433,10 @@ Choose a compute node in the same location editor to save its paths while offlin
 the change and delivers it without waking that node when it reconnects, rechecking the saving
 account's permission. The node applies the paths after its compute service restarts. Changing
 folders does not move model weights or rewrite configured model paths; retain old copies until
-models have been updated and verified. Paths must be separate absolute folders.
+models have been updated and verified. Paths must be absolute. The cache and storage may be the
+same folder, which then holds every file once and counts as both; two different folders must not
+hold one another. Storage keeps every model file: place copies in the cache and on nodes in bulk
+from the Storage view on Files.
 
 Multi-node Status requires matching Turnstile/WeightRoom on front and existing LoadCoach status/
 Spotter readings; no new service, store, key or port is required. For upgrades or added nodes,

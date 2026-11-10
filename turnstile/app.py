@@ -74,6 +74,7 @@ from turnstile.model_locations import ModelLocations
 from engines import engine_for
 from turnstile.model_configuration import configuration, generation, with_generation
 from turnstile.model_install import plan as installation_plan, execute as install_files
+from turnstile import library
 from turnstile.accounts import LOOPBACK, key_of, signed_in
 from turnstile.reporting import ReportTimeout, run as run_report
 
@@ -1316,8 +1317,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             raise ValueError(f"Could not verify {path} on {machine}.")
         return answer.json()["sha256"]
 
-    async def promote_model_file(user, step):
-        """Use Files' atomic copy and wait for a complete promoted copy."""
+    async def promote_model_file(user, step, progress=None, *, stopped="The cache promotion stopped; the model was not added."):
+        """Use Files' atomic copy between two places of one machine and wait for the complete copy.
+        `progress`, if given, follows how far it has got."""
         body = json.dumps({"path": step["file"]["path"], "to": step["place"]["name"], "relative": step["relative"]}).encode()
         answer = await ask_machine(user, "POST", "/loadcoach/files/copy", body, machine=step["node"], timeout=30)
         if answer is None or answer.status_code != 202:
@@ -1327,14 +1329,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             await asyncio.sleep(.5)
             answer = await ask_machine(user, "GET", "/loadcoach/files", machine=step["node"], timeout=30)
             if answer is None or answer.status_code != 200:
-                raise ValueError("The cache promotion could not be verified; the model was not added.")
+                raise ValueError("The copy could not be verified." if progress is not None else "The cache promotion could not be verified; the model was not added.")
             files = answer.json()["files"]
             if any(file["path"] == step["path"] for file in files):
                 return
             source = next((file for file in files if file["path"] == step["file"]["path"]), {})
+            if progress is not None and source.get("moving"):
+                progress["done"] = source["moving"].get("done", 0)
             missing = 0 if source.get("moving") else missing + 1
             if missing >= 3:
-                raise ValueError("The cache promotion stopped; the model was not added.")
+                raise ValueError(source.get("transfer_failure") or stopped)
 
     async def transfer_model_file(user, step, digest, job):
         """Stream a signed source response to the existing hash-verifying Spotter receiver."""
@@ -1359,13 +1363,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if received.status_code != 201:
                 raise ValueError(received.json()['error']['message'])
             return
-        other = settings.machines.get(source, {}) if source != "compute" else {}
-        base = other["compute"].rstrip("/") if other else settings.upstream(settings.ports[0])
-        path = "/loadcoach/files/content?" + urlencode({"path": step["file"]["path"]})
-        headers, nonce = signed_headers(user, "GET", path, b"", [], key_file=other.get("machine_key_file", ""))
-        async with internal.stream("GET", base + path, headers=headers, timeout=None) as upstream:
-            if upstream.status_code != 200 or not proven(upstream, nonce, other.get("machine_key_file", "")):
-                raise ValueError("The source file stream could not be authenticated.")
+        async with node_content(user, source, step["file"]["path"]) as upstream:
             async def pieces():
                 """Stream verified source bytes while reporting transfer progress."""
                 async for piece in upstream.aiter_bytes(PIECE):
@@ -1374,6 +1372,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             received = await internal.put(spotter_base(step["node"]) + answer.json()["upload"], content=pieces(), timeout=None)
             if received.status_code != 201:
                 raise ValueError(received.json()["error"]["message"])
+
+    @asynccontextmanager
+    async def node_content(user, machine, path):
+        """A compute node's model file as a stream, asked for in `user`'s name and proven to come from that node."""
+        other = settings.machines.get(machine, {}) if machine != "compute" else {}
+        base = other["compute"].rstrip("/") if other else settings.upstream(settings.ports[0])
+        where = "/loadcoach/files/content?" + urlencode({"path": path})
+        headers, nonce = signed_headers(user, "GET", where, b"", [], key_file=other.get("machine_key_file", ""))
+        async with internal.stream("GET", base + where, headers=headers, timeout=None) as upstream:
+            if upstream.status_code != 200 or not proven(upstream, nonce, other.get("machine_key_file", "")):
+                raise ValueError("The source file stream could not be authenticated.")
+            yield upstream
 
     async def install_model(request):
         """Preflight a complete model bundle before queueing verified file placement and creation."""
@@ -1519,7 +1529,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 "front_enabled": any(front_file_roots().values()),
                 "store_available": bool(source['places']),
                 "cleanup": source.get("cleanup", {}),
-                "nodes": nodes, "distributions": list(distributions.values())}
+                "nodes": nodes, "distributions": shown_jobs()}
 
     async def artifact_files(request: Request) -> Response:
         """Front-owned files plus available storage at every configured compute node. `refresh=1` looks again first."""
@@ -1539,6 +1549,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if not user.can("manage-models"):
             return error(403, "Your account may not manage model files.")
         action = request.path_params.get("action", request.url.path.rsplit("/", 1)[-1])
+        if arranging():
+            return error(409, "Wait for the bulk change of files to finish before cleaning up.")
         if action in ("clear-cache", "consolidate-cache"):
             # What is kept and what is copied is decided on what is in the folders now, not on a kept list.
             listed = await file_inventory(user, refresh=True)
@@ -1721,6 +1733,114 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if not user.can("manage-models"):
             return error(403, "Your account may not manage model files.")
         return JSONResponse({"distributions": list(distributions.values())}, headers={"cache-control": "no-store"})
+
+    def arranging() -> dict | None:
+        """The bulk change of files running now. There is one at a time."""
+        return next((job for job in distributions.values() if job.get("kind") == "arrange" and job["state"] == "running"), None)
+
+    def shown_jobs() -> list[dict]:
+        """Distributions, and bulk changes until ten minutes after they end."""
+        return [job for job in distributions.values()
+                if job.get("kind") != "arrange" or job["state"] == "running" or time.time() - job.get("ended", 0) < 600]
+
+    async def arrange(request: Request) -> Response:
+        """Make the files in the cache and on each node what the Files page's boxes say, in one background job.
+
+        The body is {"changes": [{"row", "at", "keep"}]}, a change for each box that was changed. They
+        are checked against a fresh look through every folder; if one cannot be made, none is.
+        """
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, "Missing or wrong API key.")
+        if not user.can("manage-models"):
+            return error(403, "Your account may not manage model files.")
+        try:
+            changes = json.loads(await request.body())["changes"]
+            if not isinstance(changes, list) or not all(isinstance(one, dict) for one in changes):
+                raise TypeError
+        except (ValueError, TypeError, KeyError):
+            return error(400, "Send the changed boxes as a list of changes.")
+        if arranging():
+            return error(409, "Another bulk change is still running. Wait for it to finish; Files shows how far it has got.")
+        found = await file_inventory(user, refresh=True)  # what is copied and removed is decided on what is there now
+        busy = [node["name"] for node in found["nodes"] if (node.get("cleanup") or {}).get("state") == "running"]
+        if busy:
+            return error(409, "Wait for the cleanup on " + ", ".join(busy) + " to finish.")
+        try:
+            steps = library.plan(found, changes)
+        except ValueError as problem:
+            return error(409, str(problem))
+        if not steps:
+            return JSONResponse({"steps": []})
+        if arranging():  # asked twice at once: the look through the folders took a while
+            return error(409, "Another bulk change is still running. Wait for it to finish; Files shows how far it has got.")
+        number = secrets.token_urlsafe(8)
+        job = distributions[number] = {"id": number, "kind": "arrange", "state": "running", "by": user.name, "started": time.time(),
+                                       "steps": [{**step, "state": "queued", "done": 0, "of": step["size"]} for step in steps]}
+        task = asyncio.create_task(run_arrangement(user, job))
+        distribution_tasks.add(task)
+        task.add_done_callback(distribution_tasks.discard)
+        log.add("file", "arrange-started", user.name, request.client.host if request.client else "?",
+                copies=sum(step["action"] == "copy" for step in steps), removals=sum(step["action"] == "remove" for step in steps))
+        return JSONResponse(job, status_code=202)
+
+    async def run_arrangement(user: User, job: dict) -> None:
+        """Take away the copies asked to go, then make the new ones, a machine at a time each, all machines at once."""
+        async def remove(step):
+            """Delete each copy of the file at that place. LoadCoach refuses a file a model uses."""
+            for path in step["paths"]:
+                body = json.dumps({"path": path, "name": Path(path).name}).encode()
+                answer = await ask_machine(user, "POST", "/loadcoach/files/delete", body, machine=step["machine"], timeout=60)
+                if answer is None or answer.status_code != 200:
+                    raise ValueError(answer.json()["error"]["message"] if answer is not None else f"{step['machine']} is not answering.")
+
+        async def copy(step):
+            """Copy within one machine through its own Files copy, or between machines checked by SHA-256."""
+            if step["source"] == step["machine"]:
+                await promote_model_file(user, {"file": step["source_file"], "place": step["place"], "relative": step["relative"],
+                                                "node": step["machine"], "path": step["path"]}, step, stopped="The copy stopped before it was complete.")
+                return
+            step["state"] = "checking"
+            digest = await managed_digest(user, step["source"], step["source_file"]["path"])
+            step["state"] = "copying"
+            if step["machine"] == "front":
+                async with node_content(user, step["source"], step["source_file"]["path"]) as upstream:
+                    await front_files.receive(user, step["place"]["name"], step["relative"], upstream.aiter_bytes(PIECE),
+                                              step["size"], digest, step, source=step["source"])
+                return
+            await transfer_model_file(user, {"node": step["machine"], "place": step["place"], "relative": step["relative"],
+                                             "file": step["source_file"], "source": step["source"]}, digest, step)
+
+        async def one(step):
+            """Do one step and keep how it went, so one failure leaves the others to run."""
+            step["state"] = "copying" if step["action"] == "copy" else "removing"
+            try:
+                await (copy if step["action"] == "copy" else remove)(step)
+                step.update(state="done", done=step["of"])
+            except (ValueError, OSError, KeyError, httpx.HTTPError) as problem:
+                step.update(state="failed", why=str(problem) or type(problem).__name__)
+
+        async def lane(steps):
+            """The copies to one machine, one after another, so its drive writes one file at a time."""
+            for step in steps:
+                await one(step)
+
+        try:
+            for step in job["steps"]:
+                if step["action"] == "remove":
+                    await one(step)
+            lanes: dict[str, list] = {}
+            for step in job["steps"]:
+                if step["action"] == "copy":
+                    lanes.setdefault(step["machine"], []).append(step)
+            await asyncio.gather(*(lane(steps) for steps in lanes.values()))
+        finally:
+            for step in job["steps"]:
+                if step["state"] not in ("done", "failed"):
+                    step.update(state="failed", why="Stopped before it was done.")
+            failed = [step for step in job["steps"] if step["state"] == "failed"]
+            job.update(state="failed" if failed else "complete", ended=time.time())
+            log.add("file", "arranged", user.name, done=sum(step["state"] == "done" for step in job["steps"]), failed=len(failed))
 
     async def batch_start(request: Request, user: User) -> Response:
         """Create a front-owned durable batch through the existing scoped APIs."""
@@ -2265,6 +2385,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                               for action in ("clear-cache", "consolidate-cache", "cleanup-nodes")],
                             Route("/turnstile/artifacts/distribute", distribute, methods=["POST"]),
                             Route("/turnstile/artifacts/distributions", distribution_list),
+                            Route("/turnstile/artifacts/arrange", arrange, methods=["POST"]),
                             Route("/turnstile/artifacts/{suffix:path}", artifact_proxy, methods=["GET", "POST"]),
                             Route("/turnstile/models", logical_models),
                             Route("/turnstile/models/files", model_files_available),

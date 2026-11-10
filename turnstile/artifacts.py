@@ -1,7 +1,9 @@
 """Optional model-file storage on front, independent of inference workers."""
 
 import asyncio
+import hashlib
 import json
+import os
 import threading
 import time
 from datetime import datetime
@@ -11,7 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 
 from loadcoach import hub
-from loadcoach.config import NO_STORAGE, model_places, storage_places
+from loadcoach.config import NO_STORAGE, model_places, shared_places, storage_places
 from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
 from loadcoach.file_index import FileIndex, tier_of
 from loadcoach.gguf import facts, read_metadata
@@ -28,10 +30,12 @@ def checked_roots(values):
         raise ValueError('Cache and storage locations must be full paths, or empty to disable them.')
     if all(roots.values()):
         cache, storage = (Path(value).resolve() for value in roots.values())
+        if cache == storage:
+            return roots  # one folder for both: every file in it is in the cache and in storage at once
         cache_places = [Path(folder) for folder in model_places(str(cache), {}).values()]
         storage_places = [Path(folder) for folder in model_places('', {}, str(storage)).values()]
         if any(a == b or a in b.parents or b in a.parents for a in cache_places for b in storage_places):
-            raise ValueError('Cache and storage model subfolders must not overlap.')
+            raise ValueError('Cache and storage must be one folder, or two folders that do not hold one another.')
     return roots
 
 
@@ -47,7 +51,7 @@ class FrontFiles:
         self.roots, self.log, self.every = roots, log, every
         self.index = FileIndex(index, describe=lambda path: self.describe(path)[0], accept=self.path)
         self.web = httpx.AsyncClient(timeout=30, follow_redirects=True)
-        self.fetching, self.tasks = {}, set()
+        self.fetching, self.tasks, self.receiving = {}, set(), set()
         self.moving, self.transfer_failures = {}, {}
         self.cleanup, self.stopping = {}, threading.Event()
 
@@ -78,13 +82,13 @@ class FrontFiles:
     def inventory(self, refresh=False):
         """List front's available folders and files from the kept index, reporting inaccessible locations inline."""
         spots = self.places()
-        places, files, problems = [], [], []
+        places, files, problems, shared = [], [], [], shared_places(spots)
         for name, folder in spots.items():
             if not Path(folder).is_dir():
                 problems.append(f'{folder} is not available. Check the folder or mount on front.')
                 continue
             try:
-                places.append({'name': name, 'folder': folder, 'tier': tier_of(name), **room(folder), 'files': 0})
+                places.append({'name': name, 'folder': folder, 'tier': tier_of(name), 'shared': name in shared, **room(folder), 'files': 0})
             except OSError as problem:
                 problems.append(f'{folder}: {problem}')
         index = self.index.current({place['name']: place['folder'] for place in places}, refresh=refresh, every=self.every())
@@ -95,7 +99,7 @@ class FrontFiles:
                     continue
                 place['files'] += kept['size']
                 files.append({**{key: value for key, value in kept.items() if key != 'mtime'},
-                              'used_by': [], 'last_used': None, 'moving': self.moving.get(kept['path']),
+                              'used_by': [], 'last_used': None, 'moving': self.moving.get(kept['path']), 'shared': place['name'] in shared,
                               'transfer_failure': self.transfer_failures.get(kept['path'])})
         return {'places': places, 'files': files, 'cleanup': dict(self.cleanup), 'problems': problems,
                 'checked': FileIndex.checked(index)}
@@ -246,16 +250,19 @@ class FrontFiles:
 
     def start_cleanup(self, user, asked):
         """Consolidate cache or clear only files with a verified retained storage copy."""
-        if self.tasks:
+        if self.tasks or self.receiving:
             return httpx.Response(409, json={'error': {'message': 'Wait for active front file transfers to finish.'}})
         mode = asked.get('mode')
         if mode not in ('clear-cache', 'promote'):
             raise ValueError('Choose cache consolidation or verified cache cleanup.')
         spots = self.places()
+        # A folder that is the cache and storage at once is left alone: its files are the storage copies themselves.
+        spots = {name: folder for name, folder in spots.items() if name not in shared_places(spots)}
         cached = {name: Path(folder) for name, folder in spots.items() if not name.startswith('storage_')}
         stored = {name.removeprefix('storage_'): Path(folder) for name, folder in spots.items() if name.startswith('storage_')}
         if mode == 'clear-cache' and not stored:
-            raise ValueError('Configure a storage library before clearing the cache.')
+            raise ValueError('The cache and storage are one folder: there is no separate cache to clear.' if shared_places(self.places())
+                             else 'Configure a storage library before clearing the cache.')
         keep, promote = asked.get('keep', []), asked.get('promote', [])
         if not isinstance(keep, list) or not isinstance(promote, list):
             raise ValueError('Keep and promote must be lists of model-file paths.')
@@ -322,6 +329,51 @@ class FrontFiles:
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
         return httpx.Response(202, json=dict(self.cleanup))
+
+    async def receive(self, user, place, relative, pieces, size, digest, progress, source=''):
+        """Write a file sent from a compute node into a front place, and publish it only once its size and SHA-256 match.
+
+        `pieces` yields its bytes. Until then it is a hidden file beside where it goes, which no listing
+        shows; a failed or interrupted copy leaves nothing behind.
+        """
+        if self.cleanup.get('state') == 'running':
+            raise ValueError('Wait for cache maintenance to finish before copying files to front.')
+        folder = self.places().get(place)
+        if folder is None or not Path(folder).is_dir():
+            raise ValueError(f'Front has no folder for {place}. Set its locations in Settings.')
+        parts = Path(relative).parts
+        if not parts or Path(relative).is_absolute() or len(parts) > 6 or any(part in ('.', '..') for part in parts):
+            raise ValueError('The destination must stay inside the selected folder.')
+        target = self.path(str(Path(folder).joinpath(*parts)))
+        if target.exists() or str(target) in self.receiving:
+            raise ValueError(f'{place} already has {relative}. No file was overwritten.')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if room(str(target.parent))['free'] < size + SPARE:
+            raise ValueError(f'{place} on front needs room for the file plus 1 GiB to spare.')
+        self.receiving.add(str(target))
+        part = target.with_name(f'.{target.name}.receiving')
+        try:
+            hashed, done = hashlib.sha256(), 0
+            with open(part, 'wb') as file:
+                async for piece in pieces:
+                    done += len(piece)
+                    if done > size:
+                        raise ValueError(f'{target.name} is larger than it was said to be.')
+                    hashed.update(piece)
+                    await asyncio.to_thread(file.write, piece)
+                    progress['done'] = done
+                await asyncio.to_thread(os.fsync, file.fileno())
+            if done != size or hashed.hexdigest() != digest:
+                raise ValueError(f'{target.name} did not arrive whole: its size or SHA-256 differs from the original.')
+            if target.exists():
+                raise ValueError(f'{place} already has {relative}. No file was overwritten.')
+            os.replace(part, target)
+            self.log.add('file', 'received', user.name, machine='front', path=str(target), source=source)
+            await asyncio.to_thread(self.changed, target)
+            return target
+        finally:
+            part.unlink(missing_ok=True)
+            self.receiving.discard(str(target))
 
     async def download(self, user, asked):
         """Download verified public repository files into front storage; the cache is never a destination."""

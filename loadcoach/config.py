@@ -6,6 +6,7 @@ Everything else is handed a `Config` and never reads the file itself.
 from __future__ import annotations
 
 import math
+import os
 import re
 import sys
 import tomllib
@@ -226,6 +227,16 @@ def storage_places(places: dict[str, str]) -> dict[str, str]:
     return {name: folder for name, folder in places.items() if name.startswith("storage_")}
 
 
+def shared_places(places: dict[str, str]) -> set[str]:
+    """The places whose folder is both a cache place and a storage place, as when models_folder and
+    models_storage_folder are set to one folder. A file there is in the cache and in storage at once,
+    so it is listed once, and nothing may take it for a second copy of itself, to save or to remove."""
+    real = {name: os.path.realpath(folder) for name, folder in places.items()}
+    cache = {folder for name, folder in real.items() if not name.startswith("storage_")}
+    storage = {folder for name, folder in real.items() if name.startswith("storage_")}
+    return {name for name, folder in real.items() if folder in cache & storage}
+
+
 def checked(config: Config, path) -> Config:
     """The same settings, if they make sense together. If not, SystemExit with a message that names the cause.
 
@@ -278,8 +289,6 @@ def checked(config: Config, path) -> Config:
         raise SystemExit(f"{path}: models_folder must be a full path, or empty")
     if not isinstance(config.models_storage_folder, str) or config.models_storage_folder and not config.models_storage_folder.startswith("/"):
         raise SystemExit(f"{path}: models_storage_folder must be a full path, or empty")
-    if config.models_folder and config.models_storage_folder and Path(config.models_folder) == Path(config.models_storage_folder):
-        raise SystemExit(f"{path}: models_folder and models_storage_folder must be different")
     if not isinstance(config.places, dict) or not all(isinstance(folder, str) and folder.startswith("/") for folder in config.places.values()):
         raise SystemExit(f'{path}: [places] is a list of name = "/a/folder", each a full path')
     try:

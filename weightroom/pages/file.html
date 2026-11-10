@@ -85,6 +85,8 @@
   {% if destinations %}<button class="btn btn-primary" name="do" value="distribute">Distribute</button>{% endif %}
 </form>
 
+{# A place on the same folder as this one (cache and storage set to one folder) is not somewhere else to go. #}
+{% set here_folder = places|selectattr('name', 'equalto', file.place)|map(attribute='folder')|first %}
 {{ section_title("Move") }}
 {% if file.moving %}
 <p>It is being {{ 'copied' if file.moving.get('copy') else 'moved' }} to {{ file.moving.to }} now.</p>
@@ -93,7 +95,7 @@
 <form method="post" action="/file" class="d-flex flex-wrap gap-2 mb-2">
   <input type="hidden" name="path" value="{{ file.path }}">
   <input type="hidden" name="do" value="move">
-  {% for place in places if place.name != file.place %}
+  {% for place in places if place.name != file.place and place.folder != here_folder %}
   <button class="btn btn-primary" name="to" value="{{ place.name }}" title="{{ place.free|size }} free there">{{ place.name }}</button>
   {% else %}
   <span class="text-secondary">There is only one place. A second is named under [places] in loadcoach.toml.</span>
@@ -109,7 +111,7 @@
 <form method="post" action="/file" class="d-flex flex-wrap gap-2 mb-2">
   <input type="hidden" name="path" value="{{ file.path }}">
   <input type="hidden" name="do" value="copy">
-  {% for place in places if place.name != file.place %}
+  {% for place in places if place.name != file.place and place.folder != here_folder %}
   <button class="btn btn-outline-primary" name="to" value="{{ place.name }}" title="{{ place.free|size }} free there">{{ place.name }}</button>
   {% else %}<span class="text-secondary">There is no other configured place.</span>{% endfor %}
 </form>

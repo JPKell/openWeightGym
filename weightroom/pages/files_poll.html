@@ -4,5 +4,5 @@
 <div id="files-distributions" hx-swap-oob="true">{{ distributions_table(found) }}</div>
 <div class="card-body" id="files-places" hx-swap-oob="true">{{ places_block(found) }}</div>
 {% if machine %}<div class="card-body" id="files-node" hx-swap-oob="true">{{ node_files_table(selected_node) }}</div>
-{% elif tier == "storage" %}<div class="card-body" id="files-storage" hx-swap-oob="true">{{ storage_table(found) }}</div>
+{% elif tier == "storage" %}<div class="card-body" id="files-storage" hx-swap-oob="true">{{ storage_table(found, file_type) }}</div>
 {% else %}{{ cache_tables(found, file_type, poll=true) }}{% endif %}

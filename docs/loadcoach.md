@@ -3901,10 +3901,50 @@ absolute root beside its heading. Each bar shows free space, model-file space an
 
 Below are Cache and Storage pills. Cache retains separate model, adapter and projector tables.
 Its model table omits place and last-used columns, combines model use across answering nodes,
-and names those nodes separately. Storage has one compact File, Size, It says it is and Buttons
-table. A file missing from its matching cache can be promoted without removing the library copy;
-Delete uses the shared two-click confirmation and LoadCoach still refuses an in-use file. The
-page refreshes itself every five seconds, so copy and move progress remains current.
+and names those nodes separately. The page refreshes itself every five seconds, so copy and move
+progress remains current.
+
+**Storage is the complete library, and its view is where files are placed in bulk.** It has a row
+for every file in storage, then a row for each file found only in front's cache or on a node,
+marked *not in storage*. Beside File, Size and It says it is there is a box for Storage, one for
+the Cache and one for each compute node, ticked where a copy of the file is. Two copies are the
+same file when name, size and description match, as elsewhere on Files. Ticking a box copies the
+file there; clearing one removes that copy. **Apply changes** (two clicks) sends every changed
+box at once, and the line beside it counts the copies to make and remove. A box in a column's
+heading ticks or clears every box in that column that can be changed.
+
+The rules, in [turnstile/library.py](../turnstile/library.py), are the same for the boxes the page
+offers and the changes turnstile accepts (`POST /turnstile/artifacts/arrange`):
+
+- A storage copy is never removed here; delete it on the file's own page.
+- A copy is only removed when the file is in storage, so a file *not in storage* must be ticked
+  into Storage first. Its copies elsewhere are kept until then.
+- A copy a model uses on that node is kept, with *in use* under its box; change the model first.
+- A node that is not answering or has no model folders has no boxes to change.
+- New copies go into the destination's cache folder of the same kind (`llm`, `adapters`, `image`…),
+  at the same relative path. On front they are made from the nearest copy: the other tier on the
+  same machine, a hard link when it is the same drive. To a node they are streamed from front's
+  cache or storage, or another node, through that node's Spotter, which checks the SHA-256 before
+  publishing the file. A node's file kept in storage comes the other way: front streams it from
+  the node, checks size and SHA-256 against the node's own hash, and only then names it.
+- Every change is checked against a fresh look through every folder, as Refresh files does. Only
+  boxes changed since the page was drawn are sent, so a copy that arrived since is not removed.
+  If any change cannot be made, the page says why for each and none is made, including when the
+  destinations lack room for the new copies plus 1 GiB (copies removed from the same node count).
+
+The change runs in the background: removals first, then copies, one at a time to each machine
+and to all machines at once. One bulk change runs at a time, and cleanups wait for it. Files
+shows how far it has got and every failed step with why, until ten minutes after it ends; the
+boxes being changed say *waiting*, *checking* or *copying*. While a box on the page has been
+changed and not applied, the five-second refresh leaves the table alone (`data-hold-refresh` in
+`static/pieces.js`).
+
+**Cache and storage may be one folder.** Give `models_folder` and `models_storage_folder` the same
+path, on front or a node, to keep a single folder. Each file there is in the cache and in storage
+at once: the index lists it once, under the cache place; Files shows one *Storage and cache*
+card; Storage has no Cache column; and the file's page offers no move to its own folder. Clear
+cache, Consolidate cache and Cleanup nodes leave such a folder alone, since its files are the
+storage copies themselves. Two different folders must still not hold one another.
 Front storage is optional and can be configured under Settings → General without compute.
 See the [storage setup and offline delivery contract](operations.md#model-file-storage).
 Each refresh gives unavailable nodes a short deadline; an absent store produces an inline setup
@@ -3952,7 +3992,8 @@ their older meaning. Spotter derives the same effective places, including a save
 so uploads cannot escape the selected root.
 
 `models_storage_folder` optionally adds a complete library as `storage_llm`, `storage_adapters`,
-and `storage_projectors`. Downloads go only to these places. `POST /loadcoach/files/copy` takes the same
+and `storage_projectors`. Downloads go only to these places. It may be the same path as
+`models_folder`; see the Files pages above. `POST /loadcoach/files/copy` takes the same
 `path` and `to` fields as move and retains the source and existing model bindings. Same-drive
 copies use a hard link; cross-drive copies check byte size, without an independent destination
 hash check. This promotes a stored file into the active cache. The setting defaults empty.

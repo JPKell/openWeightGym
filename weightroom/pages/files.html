@@ -2,12 +2,13 @@
 {% from "parts.html" import said_box , confirm_two %}
 {% from "parts.html" import page_header, form_section, more %}
 {% block title %}Files · openWeightGym{% endblock %}
+{% block scripts %}<script src="/static/files.js?v=1" defer></script>{% endblock %}
 {% block main %}
 {% call page_header('Files', 'Manage model files in cache, storage and compute locations.') %}
   <form method="post" action="/files"><input type="hidden" name="back" value="{{ here }}"><button class="btn btn-outline-secondary btn-sm" name="do" value="refresh-files" title="Look through every model folder again now, instead of waiting for the next check">Refresh files</button></form>
 {% endcall %}
-{{ said_box(said) }}
-{% call more('About these files') %}<p class="text-secondary">Front can optionally keep a model cache and storage library. Set their locations in <a href="/settings#model-files">General settings</a>, or keep files on your compute nodes. Downloads prefer storage; promote a model to cache before distributing it. Available folders are shown below.</p>{% endcall %}
+{{ said_box(said, failed|default(false)) }}
+{% call more('About these files') %}<p class="text-secondary">Storage keeps every model file; downloads go there. The cache and each compute node hold copies of some of them. On <a href="/files?tier=storage">Storage</a>, tick a box to copy a file to the cache or a node, or clear one to remove that copy, then apply the changes together. Set the folders in <a href="/settings#model-files">General settings</a>; to keep one folder for both, give the cache and storage the same path.</p>{% endcall %}
 
 {% call more('Optional maintenance') %}<div class="row g-3">{% call form_section('Cache maintenance') %}<div class="col-12"><div class="d-flex flex-wrap gap-2 mb-3" aria-label="File maintenance">
   <form method="post" action="/files" {{ confirm_two() }}><button  class="btn btn-outline-warning btn-sm" name="do" value="clear-cache" {{ confirm_two() }}>Clear cache</button></form>

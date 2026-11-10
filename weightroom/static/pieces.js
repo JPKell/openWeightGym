@@ -21,9 +21,10 @@
   document.addEventListener("htmx:oobAfterSwap", event => arm(event.detail?.target));
 })();
 
-// Polling must not replace selected text. Check before the request and again before the
-// swap, since a selection may start while the response is in flight. Companion fragments
-// share the same refresh request, including polls whose entire response is out of band.
+// Polling must not replace selected text, nor a form marked data-hold-refresh that has changes
+// not yet sent. Check before the request and again before the swap, since a selection may start
+// while the response is in flight. Companion fragments share the same refresh request,
+// including polls whose entire response is out of band.
 (() => {
   /** Check whether a live text selection overlaps the fragment being refreshed. */
   const selected = target => {
@@ -34,15 +35,26 @@
     }
     return false;
   };
-  /** Delay a polling replacement while the reader is selecting its current text. */
+  /** Check whether a fragment holds a form marked data-hold-refresh whose fields differ from how it was drawn. */
+  const edited = target => {
+    if (!target?.querySelectorAll) return false;
+    const forms = [...target.querySelectorAll('form[data-hold-refresh]')];
+    if (target.matches('form[data-hold-refresh]')) forms.push(target);
+    return forms.some(form => [...form.elements].some(field =>
+      field.type === 'checkbox' || field.type === 'radio' ? field.checked !== field.defaultChecked :
+      field.type !== 'hidden' && 'defaultValue' in field && field.value !== field.defaultValue));
+  };
+  /** Keep a fragment while its text is being selected or its form has unsent changes. */
+  const busy = target => selected(target) || edited(target);
+  /** Delay a polling replacement while the reader is selecting its current text or changing its form. */
   const defer = detail => {
     const request = detail.requestConfig, source = request?.elt;
     if (request?.verb !== 'get' || !source?.getAttribute ||
         !/(?:^|,)\s*every\s/.test(source.getAttribute('hx-trigger') || '') ||
         request.triggeringEvent?.type) return false; // explicit clicks/submissions still apply
     const companions = source.getAttribute('data-refresh-companions');
-    if (selected(detail.target) || (companions &&
-      [...document.querySelectorAll(companions)].some(selected))) return true;
+    if (busy(detail.target) || (companions &&
+      [...document.querySelectorAll(companions)].some(busy))) return true;
     // Also inspect the response: a new out-of-band target may not have been declared
     // on the poller, or the selection may have started after the request was sent.
     const selection = window.getSelection();
