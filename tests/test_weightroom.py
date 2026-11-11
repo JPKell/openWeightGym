@@ -676,7 +676,8 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     assert f"{folder}" in files and "</b> free" in files and 'class="progress-bar"' in files  # the place, and the room on its drive
     # One compact location table and library matrix; polling replaces their fragments.
     assert "Library &amp; distribution" in files and 'id="files-places"' in files and 'aria-label="Model file locations"' in files
-    assert "Fresh-Download.Q8.gguf" in files and "In-Use.Q4.gguf" in files and 'href="/models/mine">mine</a>' in files
+    assert "Fresh-Download.Q8.gguf" in files and "In-Use.Q4.gguf" in files and 'in use</small>' in files
+    assert 'href="/models/mine">mine</a>' not in files
     assert "Fresh &lt;b&gt;Download&lt;/b&gt;" in files  # what a file says of itself is text like any other, never HTML
     part = browser.get("/files?part=list").text
     # The pieces alone, each to be put in the place of the one with its id, so that a part of the page someone closed stays closed.
@@ -739,7 +740,8 @@ def test_files_separates_cache_and_storage_and_promotes_or_two_click_deletes(tmp
         assert places_html.count('<tr aria-label=') == 2 and 'aria-label="Storage"' in places_html
         assert places_html.count('<td title="llm">llm</td>') == 2 and places_html.count("</b> free") == 2 and "drives" not in places_html
         assert "Last used" not in cache_page and "All locations" in cache_page
-        assert 'href="/models/mine">mine</a>' in cache_page and "compute" in cache_page
+        assert 'in use</small>' in cache_page and "compute" in cache_page
+        assert 'href="/models/mine">mine</a>' not in cache_page
 
         storage_page = browser.get("/files?tier=storage&complete=1").text
         table = storage_page.split('id="files-storage-table"', 1)[1].split("</table>", 1)[0]

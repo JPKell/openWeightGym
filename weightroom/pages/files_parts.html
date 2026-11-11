@@ -172,7 +172,7 @@
     <td class="text-center"{% if box.why %} title="{{ box.why }}"{% endif %}>
       <input type="checkbox" class="form-check-input" name="want" value="{{ row.id }}:{{ loop.index0 }}" data-column="{{ loop.index0 }}" aria-label="{{ row.name }} in {{ column.label }}{% if box.why %}: {{ box.why }}{% endif %}"{% if box.present %} checked{% endif %}{% if box.why %} disabled{% endif %}>
       {% if box.step %}<small class="d-block text-primary">{{ {'queued': 'waiting', 'checking': 'checking', 'copying': 'copying', 'removing': 'removing'}.get(box.step.state, box.step.state) }}{% if box.step.state == 'copying' and box.step.of %} {{ (100 * box.step.done / box.step.of)|int }}%{% endif %}</small>
-      {% elif box.used %}<small class="d-block text-secondary">in use</small>{% for name in box.used %}<a class="small" href="{{ address(name) }}">{{ name }}</a>{{ ', ' if not loop.last }}{% endfor %}{% endif %}
+      {% elif box.used %}<small class="d-block text-secondary">in use</small>{% endif %}
     </td>
     {% endfor %}
   </tr>
