@@ -62,6 +62,12 @@ def store_sources(stores, folder: str | Path, owners: dict[str, str]) -> dict[st
     for store in stores:
         target = store.database
         path = target.path
+        # Registry defaults remain after their bindings move to another store. Only
+        # an existing regular SQLite file is a discovery; unused configuration is not.
+        if not store.bindings:
+            if path is None or not path.is_file() or path.is_symlink():
+                continue
+            path = path.resolve()
         identifier = path.name if path is not None and SAFE_ID.fullmatch(path.name) else store.name
         if identifier in answer:
             identifier = store.name

@@ -6,8 +6,8 @@ from starlette.testclient import TestClient
 
 from loadcoach.app import build_app
 from loadcoach.config import Config
-from loadcoach.database_admin import DatabaseSource, catalogs, make_sql_dump, sqlite_sources
-from db import Database
+from loadcoach.database_admin import DatabaseSource, catalogs, configured_sources, make_sql_dump, sqlite_sources
+from db import Database, DatabaseRegistry
 from db.health import backup_signal, stores_health
 from db.recovery import RecoveryStore
 
@@ -112,6 +112,42 @@ def test_discovery_ignores_links_and_database_endpoint_exports_sql(tmp_path):
     assert dumped.status_code == 200 and "CREATE TABLE models" in dumped.text
     assert dumped.headers["content-disposition"].endswith('filename="loadcoach-models.sql"')
     assert missing.status_code == 404
+
+
+def test_postgresql_binding_does_not_discover_a_nonexistent_sqlite_fallback(tmp_path):
+    settings = tmp_path / 'settings'
+    settings.mkdir()
+    data = tmp_path / 'data'
+    data.mkdir()
+    fallback = settings / '../data/accounts.db'
+    registry = DatabaseRegistry.from_config({
+        'stores': {'accounts': {'engine': 'postgresql', 'dsn_file': 'accounts.dsn'}},
+        'bindings': {'weightroom.accounts': 'accounts'},
+    }, settings, {'weightroom.accounts': fallback})
+
+    sources = configured_sources(registry, data, {'accounts.db': 'Accounts'})
+    assert set(sources) == {'accounts'}
+    assert sources['accounts'].expected and sources['accounts'].database.engine == 'postgresql'
+    assert not fallback.exists()
+
+    # A real leftover remains available for explicit inspection/export.
+    sample(data / 'accounts.db')
+    sources = configured_sources(registry, data, {'accounts.db': 'Accounts'})
+    assert set(sources) == {'accounts', 'accounts.db'}
+    assert not sources['accounts.db'].expected
+    assert sources['accounts.db'].path == (data / 'accounts.db').resolve()
+
+
+def test_unused_store_settings_are_not_discovered_files_but_active_missing_stores_remain(tmp_path):
+    missing = tmp_path / 'missing.db'
+    registry = DatabaseRegistry.from_config({'stores': {
+        'unused_sqlite': {'engine': 'sqlite', 'path': 'not-created.db'},
+        'unused_postgresql': {'engine': 'postgresql', 'dsn_file': 'unused.dsn'},
+    }}, tmp_path, {'weightroom.chat': missing})
+    sources = configured_sources(registry, tmp_path, {})
+    assert set(sources) == {'missing.db'}
+    assert sources['missing.db'].expected
+    assert not missing.exists()
 
 
 def test_health_is_read_only_and_keeps_missing_and_corrupt_stores_visible(tmp_path):
