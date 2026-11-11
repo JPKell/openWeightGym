@@ -668,24 +668,24 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     assert 'href="/files"' in browser.get("/models?complete=1").text  # Files belongs to the Models category's rail.
 
     files = browser.get("/files?complete=1").text
-    assert 'value="clear-cache"' in files and 'value="consolidate-cache"' in files and 'value="cleanup-nodes"' in files
+    assert 'value="clear-cache"' in files and 'value="consolidate-cache"' in files and 'value="clean-unused"' in files
     assert "Large libraries can take an hour or more" in files and "continues in the background" in files
     refused_cleanup = browser.post("/files", data={"do": "clear-cache"})
     assert "Configure a model storage library before clearing the cache." in refused_cleanup.text
     assert "The form could not be submitted" not in refused_cleanup.text
     assert f"{folder}" in files and "</b> free" in files and 'class="progress-bar"' in files  # the place, and the room on its drive
-    # The locations are cards in one collapsible card; the 5-second refresh replaces only its body, so it stays as left.
-    assert ">Model file locations<" in files and '<div class="card-body" id="files-places">' in files and 'class="card mb-3 place-card"' in files
-    assert "Fresh-Download.Q8.gguf" in files and "In-Use.Q4.gguf" in files and '<a href="/models/mine">mine</a>' in files
+    # One compact location table and library matrix; polling replaces their fragments.
+    assert "Library &amp; distribution" in files and 'id="files-places"' in files and 'aria-label="Model file locations"' in files
+    assert "Fresh-Download.Q8.gguf" in files and "In-Use.Q4.gguf" in files and 'href="/models/mine">mine</a>' in files
     assert "Fresh &lt;b&gt;Download&lt;/b&gt;" in files  # what a file says of itself is text like any other, never HTML
     part = browser.get("/files?part=list").text
     # The pieces alone, each to be put in the place of the one with its id, so that a part of the page someone closed stays closed.
-    assert "<html" not in part and part.count('hx-swap-oob="true"') == 9 and "<details" not in part and "Fresh-Download.Q8.gguf" in part
+    assert "<html" not in part and part.count('hx-swap-oob="true"') == 7 and "Fresh-Download.Q8.gguf" in part
     assert 'id="files-distributions" hx-swap-oob="true"' in part
     assert 'id="files-checked" hx-swap-oob="true"' in part  # when each list of files was last checked
     assert 'data-refresh-companions="#files-checked, #files-cleanup, #files-distributions, #files-places' in files
-    assert 'hx-get="/files?part=list&amp;tier=cache"' in files and files.count("<details") >= 3
-    assert '>Cache</a>' in files and '>Storage</a>' in files
+    assert 'hx-get="/files?part=list&amp;tier=storage"' in files and 'data-file-matrix' in files
+    assert 'All locations</option>' in files and 'Select all visible files' in files
     assert "Last used" not in files and "<th data-sort=\"text\">Place</th>" not in files
 
     # "Add" beside a file no model uses opens the Add form with the file in it and a name made from the file's own.
@@ -736,10 +736,10 @@ def test_files_separates_cache_and_storage_and_promotes_or_two_click_deletes(tmp
         places_html = cache_page.split('id="files-places"', 1)[1].split('<nav class="nav nav-pills', 1)[0].replace("<wbr>", "")
         assert places_html.count(str(cache)) == 1 and places_html.count(str(storage)) == 1
         # A card each for front (nothing set up), the cache and storage; each lists its subfolders, and a drive counts once.
-        assert places_html.count('class="card mb-3 place-card"') == 3 and 'aria-label="Storage"' in places_html
+        assert places_html.count('<tr aria-label=') == 2 and 'aria-label="Storage"' in places_html
         assert places_html.count('<td title="llm">llm</td>') == 2 and places_html.count("</b> free") == 2 and "drives" not in places_html
-        assert "Last used" not in cache_page and "Used on nodes" in cache_page
-        assert '<a href="/models/mine">mine</a>' in cache_page and "compute" in cache_page
+        assert "Last used" not in cache_page and "All locations" in cache_page
+        assert 'href="/models/mine">mine</a>' in cache_page and "compute" in cache_page
 
         storage_page = browser.get("/files?tier=storage&complete=1").text
         table = storage_page.split('id="files-storage-table"', 1)[1].split("</table>", 1)[0]
@@ -1622,7 +1622,7 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
     # What is here already is marked and cannot be ticked. It is on Files, to be added as a model.
     again = browser.get("/hub?repository=acme/tiny-GGUF").text
     assert "in storage_llm</span>" in again and 'value="tiny-q4.gguf" type="checkbox" class="form-check-input" disabled' in again
-    assert "tiny-q4.gguf</a>" in browser.get("/files?complete=1&tier=storage").text and "tiny-q4.gguf</a>" not in browser.get("/files?complete=1").text
+    assert "tiny-q4.gguf</a>" in browser.get("/files?complete=1&tier=storage").text and "tiny-q4.gguf</a>" in browser.get("/files?complete=1").text
     assert not any(path.name.startswith("tiny-q4") for path in fast.rglob("*"))  # nothing of it was ever in the cache
 
 

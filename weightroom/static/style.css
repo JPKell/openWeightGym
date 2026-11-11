@@ -48,6 +48,10 @@ input.form-control, select.form-select:not([multiple]):not([size]) { height: var
 /* The cards on the sign-in page and its like: one narrow column in the middle. */
 .entry { max-width: 44rem; }
 
+/* Compact file matrices scroll inside the panel rather than crushing filenames on phones. */
+.files-matrix #files-storage-table { min-width: 48rem; }
+.files-matrix #files-places > .table-responsive > table { min-width: 36rem; }
+
 /* A key or a secret, shown once: set apart, easy to select whole, and never running off the page. */
 pre.secret { padding: .7rem; border: 1px dashed var(--bs-border-color); border-radius: var(--bs-border-radius); overflow-wrap: anywhere; white-space: pre-wrap; user-select: all; }
 

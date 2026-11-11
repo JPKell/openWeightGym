@@ -1755,7 +1755,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if not user.can("manage-models"):
             return error(403, "Your account may not manage model files.")
         try:
-            changes = json.loads(await request.body())["changes"]
+            asked = json.loads(await request.body())
+            if not isinstance(asked, dict):
+                raise TypeError
+            transfer = asked.get("transfer")
+            cleaning = asked.get("cleanup") is True
+            changes = asked.get("changes", [])
+            if transfer is not None and not isinstance(transfer, dict):
+                raise TypeError
             if not isinstance(changes, list) or not all(isinstance(one, dict) for one in changes):
                 raise TypeError
         except (ValueError, TypeError, KeyError):
@@ -1767,7 +1774,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if busy:
             return error(409, "Wait for the cleanup on " + ", ".join(busy) + " to finish.")
         try:
-            steps = library.plan(found, changes)
+            if transfer is not None:
+                changes = library.transfer_changes(found, transfer)
+            elif cleaning:
+                changes = library.cleanup_changes(found)
+            steps = library.plan(found, changes, copy_first=transfer is not None)
         except ValueError as problem:
             return error(409, str(problem))
         if not steps:
@@ -1776,6 +1787,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(409, "Another bulk change is still running. Wait for it to finish; Files shows how far it has got.")
         number = secrets.token_urlsafe(8)
         job = distributions[number] = {"id": number, "kind": "arrange", "state": "running", "by": user.name, "started": time.time(),
+                                       "copy_first": transfer is not None,
                                        "steps": [{**step, "state": "queued", "done": 0, "of": step["size"]} for step in steps]}
         task = asyncio.create_task(run_arrangement(user, job))
         distribution_tasks.add(task)
@@ -1785,7 +1797,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return JSONResponse(job, status_code=202)
 
     async def run_arrangement(user: User, job: dict) -> None:
-        """Take away the copies asked to go, then make the new ones, a machine at a time each, all machines at once."""
+        """Run machine copy lanes; transfers remove each source only after its destination succeeds."""
         async def remove(step):
             """Delete each copy of the file at that place. LoadCoach refuses a file a model uses."""
             for path in step["paths"]:
@@ -1827,13 +1839,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
         try:
             for step in job["steps"]:
-                if step["action"] == "remove":
+                if step["action"] == "remove" and not job.get("copy_first"):
                     await one(step)
             lanes: dict[str, list] = {}
             for step in job["steps"]:
                 if step["action"] == "copy":
                     lanes.setdefault(step["machine"], []).append(step)
             await asyncio.gather(*(lane(steps) for steps in lanes.values()))
+            if job.get("copy_first"):
+                failed_rows = {step['row'] for step in job['steps'] if step['state'] == 'failed'}
+                for step in job['steps']:
+                    if step['action'] == 'remove':
+                        if step['row'] in failed_rows:
+                            step.update(state='failed', why='Source copy kept because the destination copy failed.')
+                        else:
+                            await one(step)
         finally:
             for step in job["steps"]:
                 if step["state"] not in ("done", "failed"):

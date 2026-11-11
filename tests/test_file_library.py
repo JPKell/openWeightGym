@@ -290,3 +290,118 @@ def test_a_node_with_one_folder_keeps_unused_files_through_cleanup(tmp_path):
         while front.get("/loadcoach/files", headers=headers).json()["cleanup"].get("state") == "running" and time.monotonic() < deadline:
             time.sleep(.05)
     assert model.is_file()
+
+
+def test_transfer_plan_preserves_storage_and_requires_source_and_space_before_removal():
+    found = listing(front=[file('/f/storage/llm/a.gguf'), file('/f/cache/llm/a.gguf')], rig=[])
+    row, = library.rows(found)
+    transfer = {'rows': [row['id']], 'source': 'cache', 'destination': 'rig', 'mode': 'move'}
+    changes = library.transfer_changes(found, transfer)
+    assert [step['action'] for step in library.plan(found, changes, copy_first=True)] == ['copy', 'remove']
+    for bad in ({'source': 'storage'}, {'source': 'rig', 'destination': 'cache'}, {'destination': 'cache'}, {'rows': ['gone']}):
+        with pytest.raises(ValueError):
+            library.transfer_changes(found, {**transfer, **bad})
+    # An exchange cannot claim the disk space from a deletion that must wait for the copy.
+    big = int(2.5 * SPARE)
+    crowded = listing(front=[file('/f/storage/llm/old.gguf', size=big), file('/f/storage/llm/new.gguf', size=big)],
+                      rig=[file('/rig/llm/old.gguf', size=big)])
+    rows = {row['name']: row['id'] for row in library.rows(crowded)}
+    with pytest.raises(ValueError, match='rig has 3.0 GiB free'):
+        library.plan(crowded, [{'row': rows['old.gguf'], 'at': 'rig', 'keep': False},
+                              {'row': rows['new.gguf'], 'at': 'rig', 'keep': True}], copy_first=True)
+
+
+def test_cleanup_preserves_unique_shared_and_in_use_files():
+    found = listing(front=[file('/f/storage/llm/a.gguf'), file('/f/cache/llm/a.gguf'),
+                           file('/f/storage/llm/b.gguf'), file('/f/cache/llm/b.gguf')],
+                    rig=[file('/rig/llm/a.gguf', used_by=['chat']), file('/rig/llm/b.gguf'), file('/rig/llm/unique.gguf')])
+    rows = {row['name']: row['id'] for row in library.rows(found)}
+    assert library.cleanup_changes(found) == [{'row': rows['b.gguf'], 'at': 'cache', 'keep': False},
+                                              {'row': rows['b.gguf'], 'at': 'rig', 'keep': False}]
+    found['nodes'][1]['files'][1]['shared'] = True
+    assert library.cleanup_changes(found) == [{'row': rows['b.gguf'], 'at': 'cache', 'keep': False}]
+    found['nodes'].append({'name': 'offline', 'answering': False, 'places': [], 'files': []})
+    assert library.cleanup_changes(found) == []
+
+
+def test_bulk_move_keeps_source_when_destination_fails(library_desk):
+    browser, compute, cache, storage, node = library_desk
+    for name in ('a', 'b'):
+        original = Path(gguf(storage / 'llm' / f'{name}.gguf', general__name=name, general__architecture='tiny'))
+        (cache / 'llm' / original.name).write_bytes(original.read_bytes())
+    # A different file at the requested destination must not be overwritten.
+    conflict = Path(gguf(node / 'llm' / 'a.gguf', general__name='Different', general__architecture='tiny'))
+    before = conflict.read_bytes()
+    browser.post('/files', data={'do': 'refresh-files'})
+    page = browser.get('/files?complete=1').text
+    selected = re.findall(r'name="selected" value="([^"]+)"', page)[:2]
+    answer = browser.post('/files', data={'do': 'transfer', 'selected': selected, 'source': 'cache', 'destination': 'compute', 'operation': 'move'})
+    assert 'Transfer started' in answer.text, str(answer.url)
+    result = finished(browser)
+    assert 'Source copy kept because the destination copy failed.' in result
+    assert (cache / 'llm' / 'a.gguf').exists() and conflict.read_bytes() == before
+    assert not (cache / 'llm' / 'b.gguf').exists()
+    assert (node / 'llm' / 'b.gguf').read_bytes() == (storage / 'llm' / 'b.gguf').read_bytes()
+    assert (storage / 'llm' / 'a.gguf').exists()
+
+
+def test_one_button_cleanup_only_removes_safe_working_copies(library_desk):
+    browser, compute, cache, storage, node = library_desk
+    original = Path(gguf(storage / 'llm' / 'spare.gguf', general__name='Spare', general__architecture='tiny'))
+    for root in (cache, node):
+        (root / 'llm' / original.name).write_bytes(original.read_bytes())
+    unique = Path(gguf(node / 'llm' / 'unique.gguf', general__name='Unique', general__architecture='tiny'))
+    browser.post('/files', data={'do': 'refresh-files'})
+    answer = browser.post('/files', data={'do': 'clean-unused'})
+    assert 'Unused-copy cleanup started' in answer.text
+    finished(browser)
+    assert original.exists() and unique.exists()
+    assert not (cache / 'llm' / original.name).exists() and not (node / 'llm' / original.name).exists()
+
+
+def test_files_matrix_browser_selection_transfer_and_polling(library_desk, tmp_path):
+    from test_console_browser import browser_context, playwright
+    browser, compute, cache, storage, node = library_desk
+    for name in ('alpha', 'beta'):
+        gguf(storage / 'llm' / f'{name}.gguf', general__name=name.title(), general__architecture='tiny')
+    browser.post('/files', data={'do': 'refresh-files'})
+    with playwright.sync_playwright() as engine:
+        chrome, page = browser_context(engine, browser)
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/files')
+        playwright.expect(page.locator('[data-file-row]')).to_have_count(2)
+        playwright.expect(page.get_by_text('Every file in storage. Working copies where you need them.')).to_have_count(0)
+        playwright.expect(page.locator('[data-matrix-changes]')).to_be_hidden()
+        page.screenshot(path=str(tmp_path / 'files-matrix.png'), full_page=True)
+        page.get_by_label('From', exact=True).select_option('cache')
+        playwright.expect(page.locator('[data-file-empty]')).to_be_visible()
+        page.get_by_label('From', exact=True).select_option('storage')
+        page.get_by_label('Search files', exact=True).fill('alpha')
+        page.get_by_label('Select all visible files', exact=True).check()
+        playwright.expect(page.get_by_label('Select alpha.gguf', exact=True)).to_be_checked()
+        playwright.expect(page.get_by_label('Select beta.gguf', exact=True)).not_to_be_checked()
+        # Let a real scheduled refresh run: unsent selection, search, and source must survive.
+        page.wait_for_timeout(5300)
+        playwright.expect(page.get_by_label('Select alpha.gguf', exact=True)).to_be_checked()
+        playwright.expect(page.get_by_label('Search files', exact=True)).to_have_value('alpha')
+        playwright.expect(page.get_by_label('From', exact=True)).to_have_value('storage')
+        playwright.expect(page.locator('[data-file-operation] option[value="move"]')).to_be_disabled()
+        page.get_by_label('To', exact=True).select_option('cache')
+        page.locator('[data-transfer-files]').click()
+        page.locator('[data-transfer-files]').click()
+        finished(browser)
+        assert (cache / 'llm' / 'alpha.gguf').exists() and not (cache / 'llm' / 'beta.gguf').exists()
+        page.goto('http://console.test/files')
+        playwright.expect(page.locator('[data-file-row]')).to_have_count(2)
+        # The refreshed form is initialized too, including direct matrix edits.
+        page.get_by_label('beta.gguf in Cache', exact=True).check()
+        page.get_by_label('Select beta.gguf', exact=True).check()
+        playwright.expect(page.locator('[data-transfer-files]')).to_be_disabled()
+        playwright.expect(page.locator('[data-transfer-note]')).to_contain_text('Apply or undo')
+        playwright.expect(page.locator('[data-matrix-changes]')).to_be_visible()
+        page.set_viewport_size({'width': 390, 'height': 1000})
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.screenshot(path=str(tmp_path / 'files-matrix-narrow.png'), full_page=True)
+        assert not errors
+        chrome.close()

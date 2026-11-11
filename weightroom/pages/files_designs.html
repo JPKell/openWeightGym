@@ -1,0 +1,107 @@
+{# Standalone design review. Shared console primitives, local sample data, no backend calls. #}
+{% from 'parts.html' import page_header, card, empty_row %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Files · Three design proposals · openWeightGym</title>
+<style>{{ css|safe }}</style>
+<script>{{ theme_javascript|safe }}</script>
+</head>
+<body>
+{# Reuse the console theme controller without account preferences or a second palette definition. #}
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to files</a>
+<div class="review-bar d-flex flex-wrap align-items-center justify-content-between gap-3 px-4 py-3 border-bottom">
+  <div><strong>openWeightGym</strong><span class="text-secondary ms-3">Files / design review</span></div>
+  <div class="d-flex align-items-center gap-2"><span class="badge bg-blue-lt">Interactive sample</span><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div>
+</div>
+<main class="design-page">
+  {% call pills('Design options', buttons=true, class_='design-options gap-2 mb-3') %}
+    {{ pill_button('01 / Location ledger', true, attrs={'data-design': 'ledger'}) }}
+    {{ pill_button('02 / Library matrix', attrs={'data-design': 'matrix'}) }}
+    {{ pill_button('03 / Transfer desk', attrs={'data-design': 'desk'}) }}
+  {% endcall %}
+  <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
+    <p class="text-secondary mb-0" id="design-description"></p>
+    <label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="shared"><span class="form-check-label">Try shared storage + cache</span></label>
+  </div>
+  <div id="workspace" data-layout="ledger">
+    {% call page_header('Files', pretitle='MODEL LIBRARY') %}
+      <button class="btn btn-outline-secondary" id="overview">All locations</button>
+      <button class="btn btn-primary" id="cleanup">Clean unused copies <span id="cleanup-amount" class="ms-2"></span></button>
+    {% endcall %}
+    <p id="shared-note" class="small text-secondary" hidden>Storage and cache share one directory. Cache cleanup is disabled; unused compute copies can still be cleaned.</p>
+    <div id="status" role="status" aria-live="polite" class="small mb-3"></div>
+    {% call card(class_='files-workspace', body=false) %}
+      <div class="workspace-top d-flex flex-wrap align-items-center justify-content-between gap-3 p-3 border-bottom">
+        <div><strong id="workspace-title">Your locations</strong><span class="text-secondary ms-2" id="workspace-subtitle">One library, four places</span></div>
+        <span class="badge bg-green-lt">Storage keeps every file</span>
+      </div>
+      <div class="workspace-grid">
+        <section id="locations-panel" aria-label="Locations">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 locations-table" aria-label="Storage locations">
+              <thead><tr><th>Location</th><th class="location-detail">Files</th><th class="location-detail">Used / capacity</th><th>Room left</th><th class="location-detail">Reclaimable</th><th class="location-detail"><span class="visually-hidden">Actions</span></th></tr></thead>
+              <tbody id="locations"></tbody>
+            </table>
+          </div>
+          <p class="small text-secondary px-3 pt-3" id="locations-hint">Choose a location to browse its files in this window.</p>
+        </section>
+        <section id="browser-panel" aria-label="File browser" hidden>
+          <div class="p-3 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div><button class="btn btn-outline-secondary btn-sm" id="back">← Locations</button><strong class="ms-2" id="browser-title">Storage</strong></div>
+            <span class="font-monospace small text-secondary" id="browser-path"></span>
+          </div>
+          <div class="d-flex flex-wrap gap-2 p-3 border-bottom">
+            <input type="search" class="form-control flex-fill" id="search" aria-label="Search files" placeholder="Search files…">
+            <select class="form-select" id="usage" aria-label="Filter files by usage"><option value="all">All files</option><option value="unused">Unused copies</option><option value="used">In use</option></select>
+            <span id="file-count" class="small text-secondary align-self-center"></span>
+          </div>
+          <div class="table-responsive file-scroll">
+            <table class="table table-hover align-middle mb-0" aria-label="Model files">
+              <thead><tr><th><input type="checkbox" id="select-all" class="form-check-input" aria-label="Select all visible files"></th><th>File</th><th>Size</th><th>Usage</th><th class="copies-column">Copies</th><th class="matrix-column">Storage</th><th class="matrix-column">Cache</th><th class="matrix-column">Atlas</th><th class="matrix-column">Nova</th></tr></thead>
+              <tbody id="file-rows"></tbody>
+            </table>
+          </div>
+          <div class="transfer-toolbar p-3 border-top" id="transfer-toolbar">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3"><strong id="selection">Select files to transfer</strong><button class="btn btn-outline-secondary btn-sm" id="clear-selection" disabled>Clear selection</button></div>
+            <div class="d-flex flex-wrap align-items-end gap-2">
+              <div class="transfer-field"><label for="source" class="form-label">From</label><select id="source" class="form-select"></select></div>
+              <span class="text-secondary pb-2" aria-hidden="true">→</span>
+              <div class="transfer-field"><label for="destination" class="form-label">To</label><select id="destination" class="form-select"></select></div>
+              <div class="transfer-field"><label for="operation" class="form-label">Action</label><select id="operation" class="form-select"><option value="copy">Copy</option><option value="move">Move</option></select></div>
+              <button class="btn btn-primary" id="transfer" disabled>Copy selected</button>
+            </div>
+            <p class="small text-secondary mt-3 mb-0" id="transfer-note">The original storage copy always stays.</p>
+          </div>
+        </section>
+      </div>
+      <div class="d-flex flex-wrap justify-content-between gap-2 px-3 py-3 border-top small text-secondary"><span id="library-total"></span><span>Copy → verify → remove eligible source copies</span></div>
+    {% endcall %}
+    <p class="small text-secondary mt-3">Design preview · sample files only · transfers and cleanup are simulated.</p>
+  </div>
+</main>
+<template id="location-row">
+  <tr>
+    <td><button class="btn btn-link p-0 text-start" data-open></button><span class="d-block small text-secondary" data-role></span></td>
+    <td class="location-detail" data-count></td>
+    <td class="location-detail"><span class="small text-secondary" data-used></span><div class="progress progress-sm mt-2" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar"></div></div></td>
+    <td><strong class="free-amount" data-free></strong><span class="d-block small text-secondary">free</span></td>
+    <td class="location-detail" data-reclaim></td>
+    <td class="location-detail text-end"><button class="btn btn-outline-secondary btn-sm" data-clean>Clean unused</button><span class="small text-secondary" data-protected hidden>Library protected</span></td>
+  </tr>
+</template>
+<template id="file-row">
+  <tr>
+    <td><input type="checkbox" class="form-check-input" data-select></td>
+    <td><strong class="d-block file-name" data-name></strong><span class="small text-secondary" data-kind></span></td>
+    <td class="text-nowrap" data-size></td><td><span class="badge" data-usage></span></td>
+    <td class="copies-column small text-secondary" data-copies></td>
+    {% for place in ['storage', 'cache', 'atlas', 'nova'] %}<td class="matrix-column text-center" data-presence="{{ place }}"></td>{% endfor %}
+  </tr>
+</template>
+<template id="empty-files">{{ empty_row(9, 'No files match. Try another location or clear the filters.') }}</template>
+<script>{{ javascript|safe }}</script>
+</body></html>

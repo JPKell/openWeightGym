@@ -1,0 +1,42 @@
+/* Scoped layouts for the standalone Files design review. Console tokens stay authoritative. */
+.design-page { max-width: 1320px; margin: 0 auto; padding: 2rem var(--suite-page-gutter); }
+.review-bar { background: var(--bs-body-bg); }
+.design-options .nav-link { border: 1px solid var(--bs-border-color); padding: .8rem 1.2rem; }
+.design-options .nav-link.active { box-shadow: 0 3px 10px #00000012; }
+.files-workspace { overflow: hidden; box-shadow: 0 6px 30px #00000008; }
+.workspace-top { background: var(--tblr-bg-surface-secondary); }
+.locations-table th, #file-rows td { padding-block: .55rem; }
+.locations-table td { padding: 1.4rem 1rem; }
+.locations-table .progress { width: 150px; }
+.locations-table [data-open] { font-weight: 600; font-size: .95rem; min-height: auto; }
+.free-amount { font-size: 1.15rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.file-name { min-width: 14rem; }
+.file-scroll { max-height: 430px; }
+.file-scroll thead { position: sticky; top: 0; background: var(--tblr-bg-surface); z-index: 1; }
+.transfer-toolbar { background: var(--tblr-bg-surface-secondary); }
+.transfer-field { flex: 1 1 140px; }
+#search { width: auto; min-width: 10rem; }
+#usage { width: auto; }
+.matrix-column { display: none; }
+[data-layout="matrix"] .matrix-column { display: table-cell; }
+[data-layout="matrix"] .copies-column { display: none; }
+[data-layout="matrix"] .locations-table td { padding-block: .45rem; }
+[data-layout="matrix"] #locations-hint { display: none; }
+[data-layout="desk"] .workspace-grid { display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+[data-layout="desk"] #locations-panel { border-right: 1px solid var(--bs-border-color); background: var(--tblr-bg-surface-secondary); }
+[data-layout="desk"] .location-detail { display: none; }
+[data-layout="desk"] .locations-table td { padding: 1.2rem .75rem; }
+[data-layout="desk"] .free-amount { font-size: .95rem; }
+[data-layout="desk"] #browser-panel { display: flex; flex-direction: column; min-width: 0; }
+[data-layout="desk"] .transfer-toolbar { order: -1; }
+[data-layout="desk"] #back { display: none; }
+[data-active="true"] { background: var(--suite-accent-bg); }
+@media (max-width: 767px) {
+  .design-page { padding-top: 1rem; }
+  .design-options .nav-link { flex: 1 1 100%; text-align: left; }
+  [data-layout="desk"] .workspace-grid { grid-template-columns: minmax(0, 1fr); }
+  [data-layout="desk"] #locations-panel { border-right: 0; border-bottom: 1px solid var(--bs-border-color); }
+  .locations-table { min-width: 760px; }
+  [data-layout="desk"] .locations-table { min-width: 0; }
+  .file-name { min-width: 12rem; }
+}
