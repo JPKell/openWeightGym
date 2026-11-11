@@ -3196,7 +3196,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, "refused.html", person, status=settings_answer.status_code, why=settings_answer.json()["error"]["message"])
         found = settings_answer.json() if settings_answer.is_success else {"programs": []}
         hidden = {"engines", "llama_server", "disabled_gpus", "engine_gpus", "gpus", "models", "hub_token_file", "front_tasks", "front_toollocker"}
-        resources = {}
+        resources, llama_settings = {}, []
         engine_setting = next((setting for program in found["programs"] if program["program"] == "loadcoach"
                                for setting in program["settings"] if setting["name"] == "engines"), None)
         pending_engines = engine_setting["changed"]["value"] if engine_setting and engine_setting.get("changed") else None
@@ -3214,10 +3214,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         for program in found["programs"]:
             if program["program"] == "loadcoach":
                 for setting in program["settings"]:
-                    if setting["name"] in ("disable_ram_offload", "host_ram_headroom_mib", "host_ram_limit_mib"):
+                    if setting["name"] in ("card_margin", "disable_ram_offload", "host_ram_headroom_mib", "host_ram_limit_mib"):
                         resources[setting["name"]] = setting
+                    elif setting['name'] == 'model_defaults':
+                        llama_settings.append(setting)
                 program["settings"] = [setting for setting in program["settings"]
-                                       if setting["name"] not in hidden | set(resources)]
+                                       if setting["name"] not in hidden | set(resources) | {'model_defaults'}]
         gpu_inventory, gpu_error = {}, ""
         cards = await ask("GET", base + "/cards", person.key)
         if cards.is_success:
@@ -3231,7 +3233,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     programs=found["programs"], said=said or asked.get("said", ""), failed=failed,
                     typed_in=form, opened=opened or asked.get("open", ""), selected_machine=selected,
                     machine_choices=choices, selected_node=selected_node, gpu_inventory=gpu_inventory, gpu_error=gpu_error,
-                    gpu_disabled=gpu_disabled, machine_key=machine_key, resource_settings=resources,
+                    gpu_disabled=gpu_disabled, machine_key=machine_key, resource_settings=resources, llama_settings=llama_settings,
                     may_pair="superuser" in person.can, pairing_code=pairing_code,
                     node_settings_pending=found.get('pending', False), node_settings_error=found.get('pending_error', ''),
                     engine_choices=engine_choices, engine_error="" if engine_answer.is_success else "Engine controls require a matching LoadCoach update.")  # fmt: skip

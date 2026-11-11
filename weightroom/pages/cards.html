@@ -21,9 +21,9 @@
 {% endif %}
 {% if resource_settings %}
 <form method="post" action="/settings/loadcoach" class="row g-3 mt-3" data-node-draft data-hold-refresh {{ swaps() }}><input type="hidden" name="machine" value="{{ selected_machine }}">
-{% call form_section('RAM policy', 'This node') %}
+{% call form_section('GPU & RAM policy', 'This node') %}
 {% set program = {'program': 'loadcoach'} %}
-{% for name in ('disable_ram_offload', 'host_ram_headroom_mib', 'host_ram_limit_mib') %}{% set setting = resource_settings.get(name) %}{% if setting %}{% include 'setting_row.html' %}{% endif %}{% endfor %}
+{% for name in ('card_margin', 'host_ram_headroom_mib', 'host_ram_limit_mib', 'disable_ram_offload') %}{% set setting = resource_settings.get(name) %}{% if setting %}{% include 'setting_row.html' %}{% endif %}{% endfor %}
 {% endcall %}
 <div class="col-12"><button class="btn btn-primary">Save GPU and RAM policy</button></div></form>
 {% endif %}
