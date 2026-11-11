@@ -1,9 +1,9 @@
 {% extends 'frame.html' %}
-{% from 'parts.html' import page_header, said_box, swaps, card, section_title, more, alert, confirm_check, confirm_loss %}
+{% from 'parts.html' import page_header, said_box, swaps, card, section_title, more, alert, confirm_two %}
 {% from 'navigation_parts.html' import pills %}
 {% from 'role_parts.html' import request_path, role_link, candidate %}
 {% block title %}Roles · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/roles.css?v=2"><script src="/static/role-preferences.js?v=2" defer></script><script src="/static/role-studio.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/roles.css?v=3"><script src="/static/role-preferences.js?v=2" defer></script><script src="/static/role-studio.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div class="role-studio" data-role-studio data-role="{{ role.name if role else '' }}" data-role-settings="{{ (role or {})|tojson|forceescape }}">
 {% call page_header('Roles') %}<a href="#create-role" class="btn btn-primary" data-create-role>+ Create role</a>{% endcall %}
@@ -30,13 +30,14 @@
   </aside>
 
   <div class="role-editor">
-    <div id="role-identity" class="d-flex flex-wrap align-items-end gap-3 mb-3">
-      <div class="flex-fill min-w-0"><label class="form-label" for="role-name">Role name:</label><input id="role-name" name="name" form="role-editor" class="form-control" value="{{ role.name }}" readonly aria-describedby="role-name-hint"><p id="role-name-hint" class="form-hint mb-0">Use this name in your app’s model field.</p></div>
-      <form method="post" action="/roles" id="role-removal" class="d-flex flex-wrap align-items-center gap-2" {{ swaps() }}>
+    <div id="role-identity" class="mb-3">
+      <label class="form-label mb-0" for="role-name">Role name:</label>
+      <input id="role-name" name="name" form="role-editor" class="form-control" value="{{ role.name }}" readonly aria-describedby="role-name-hint">
+      <form method="post" action="/roles" id="role-removal" {{ swaps() }}>
         <input type="hidden" name="name" value="{{ role.name }}">
-        {% set confirmation_label %}Yes, remove the role {{ role.name }}. Its models stay{% endset %}{{ confirm_check(confirmation_label, 'sure-role', framed=false) }}
-        <button class="btn btn-outline-danger" name="do" value="remove" {{ confirm_loss() }}>Remove the role</button>
+        <button class="btn btn-outline-danger" name="do" value="remove" {{ confirm_two() }}>Remove the role</button>
       </form>
+      <p id="role-name-hint" class="form-hint mb-0">Use this name in your app’s model field.</p>
     </div>
     <form method="post" action="/roles" id="role-editor" data-role-editor data-hold-refresh {{ swaps() }}>
       {% call card('Which models can answer?', id='role-models') %}
