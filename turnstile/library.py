@@ -125,6 +125,8 @@ def cell(row: dict, column: dict, found: dict) -> dict:
         why = "Not in storage, so this may be the only copy. Keep it in storage before removing it here."
     elif present and column["name"] == CACHE and all(copy.get("shared") for copy in copies):
         why = "The cache and storage are one folder here, so this is the storage copy."
+    elif present and column['name'] != STORAGE and any(copy.get('shared') or copy.get('tier') == STORAGE for copy in copies):
+        why = 'This location includes a storage copy, which must stay.'
     elif present and used:
         why = f"Used by {', '.join(used)}. Change {'that model' if len(used) == 1 else 'those models'} first."
     elif not present:
@@ -156,8 +158,52 @@ def relative(copy: dict, found: dict) -> str:
     return str(Path(copy["path"]).relative_to(folder))
 
 
-def plan(found: dict, changes: list[dict]) -> list[dict]:
-    """The steps for the asked changes, removals first, checked against `found`, a fresh look.
+def transfer_changes(found: dict, asked: dict) -> list[dict]:
+    """Validate a bulk transfer against the current inventory; storage originals always stay."""
+    selected, origin, destination, mode = (asked.get(key) for key in ('rows', 'source', 'destination', 'mode'))
+    columns_by_name = {column['name']: column for column in columns(found)}
+    listed = {row['id']: row for row in rows(found)}
+    if (not isinstance(selected, list) or not selected or any(not isinstance(key, str) or key not in listed for key in selected)
+            or not isinstance(origin, str) or origin and origin not in columns_by_name
+            or not isinstance(destination, str) or destination not in columns_by_name or origin == destination
+            or mode not in ('copy', 'move') or mode == 'move' and origin in ('', STORAGE)):
+        raise ValueError('Choose files, a different destination, and a working-copy source for moves. Storage originals stay.')
+    if origin and columns_by_name[origin]['why']:
+        raise ValueError(columns_by_name[origin]['why'])
+    if columns_by_name[destination]['why']:
+        raise ValueError(columns_by_name[destination]['why'])
+    changes = []
+    for key in dict.fromkeys(selected):
+        row = listed[key]
+        if origin and origin not in row['copies']:
+            raise ValueError(f"{row['name']} is no longer at the selected source. Refresh and try again.")
+        changes.append({'row': key, 'at': destination, 'keep': True})
+        if mode == 'move':
+            changes.append({'row': key, 'at': origin, 'keep': False})
+    return changes
+
+
+def cleanup_changes(found: dict) -> list[dict]:
+    """Clean only unused, removable working copies with a retained storage original."""
+    changes = []
+    available = columns(found)
+    unavailable = any(not node.get('answering') for node in found.get('nodes', []))
+    for row in rows(found):
+        used_anywhere = any(copy.get('used_by') for copies in row['copies'].values() for copy in copies)
+        for column in available:
+            box = cell(row, column, found)
+            if column['name'] == STORAGE or column['name'] == CACHE and (used_anywhere or unavailable):
+                continue
+            # A node may also share its own storage and cache directory.
+            if any(copy.get('shared') or copy.get('tier') == STORAGE for copy in row['copies'].get(column['name'], [])):
+                continue
+            if box['present'] and not box['why']:
+                changes.append({'row': row['id'], 'at': column['name'], 'keep': False})
+    return changes
+
+
+def plan(found: dict, changes: list[dict], *, copy_first: bool = False) -> list[dict]:
+    """Validate steps against a fresh inventory; transfers copy before removing source copies.
 
     Each change is {"row": id, "at": column, "keep": bool}. A change to what is already so is left
     out. If any change cannot be made, ValueError says why for every one of them, and nothing is done.
@@ -185,7 +231,7 @@ def plan(found: dict, changes: list[dict]) -> list[dict]:
     nodes = {node["name"]: node for node in found.get("nodes", [])}
     removed = {(step["machine"], path) for step in removals for path in step["paths"]}
     room: dict[tuple, dict] = {}
-    for step in removals:  # a copy taken off a node leaves room there; one in front's cache may be a second name for its storage copy
+    for step in ([] if copy_first else removals):  # transfers cannot count space that is freed only after a successful copy
         if step["at"] not in (STORAGE, CACHE):
             for copy in listed[step["row"]]["copies"][step["at"]]:
                 place = next((one for one in nodes[copy["machine"]]["places"] if one["name"] == copy.get("place")), {})
@@ -216,4 +262,4 @@ def plan(found: dict, changes: list[dict]) -> list[dict]:
                            f"{drive['bytes'] / 2**30:.1f} GiB plus 1 GiB to spare.")
     if refused:
         raise ValueError(" ".join(dict.fromkeys(refused)) + " No files were changed.")
-    return removals + steps
+    return steps + removals if copy_first else removals + steps

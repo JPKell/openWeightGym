@@ -3911,6 +3911,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         steps = {(step["row"], step["at"]): step for job in found.get("distributions", []) if job.get("kind") == "arrange"
                  and job["state"] == "running" for step in job["steps"] if step["state"] not in ("done", "failed")}
         found["library_columns"] = library.columns(found)
+        found["can_clean_cache"] = any(column['name'] == 'cache' for column in found['library_columns']) and any(
+            column['name'] == 'storage' for column in found['library_columns'])
+        found["cleanable"] = len(library.cleanup_changes(found))
         found["arranging"] = any(job.get("kind") == "arrange" and job["state"] == "running" for job in found.get("distributions", []))
         found["library"] = []
         for row in library.rows(found):
@@ -3933,8 +3936,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if "manage-models" not in person.can:  # asked here too, so the page that comes first is refused like its files
             return page(request, "refused.html", person, status=403, why="Your account may not manage model files.")
         asked = request.query_params
-        tier = asked.get("tier", "cache")
-        tier = tier if tier in ("cache", "storage") else "cache"
+        tier = asked.get("tier", "storage")
+        tier = tier if tier in ("cache", "storage") else "storage"
         file_type = asked.get("type", "")
         file_type = file_type if file_type in dict(file_types) else ""
         machine = asked.get("machine", "")
@@ -3976,6 +3979,17 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await refresh_files(person, form.get("back", ""))
         if action == "arrange":
             return await arrange_files(person, fields)
+        if action in ("transfer", "clean-unused"):
+            body = {"cleanup": True} if action == "clean-unused" else {"transfer": {
+                "rows": fields.get("selected", []), "source": form.get("source", ""),
+                "destination": form.get("destination", ""), "mode": form.get("operation", "copy")}}
+            answer = await ask("POST", "/turnstile/artifacts/arrange", person.key, json=body, timeout=httpx.Timeout(75, connect=2))
+            if answer.status_code not in (200, 202):
+                return go("/files?failed=1&said=" + quote(answer.json()["error"]["message"]))
+            steps = answer.json().get("steps", [])
+            message = ("Unused-copy cleanup started. Storage originals and in-use copies stay." if action == "clean-unused"
+                       else "Transfer started. Source copies stay until destination copies succeed.") if steps else "Nothing to change. Files are already in place or protected."
+            return go("/files?said=" + quote(message))
         if action not in ("clear-cache", "consolidate-cache", "cleanup-nodes"):
             return Response("That file maintenance action is not available.", status_code=400)
         answer = await ask("POST", f"/turnstile/artifacts/files/{action}", person.key)

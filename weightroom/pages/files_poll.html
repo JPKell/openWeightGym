@@ -1,8 +1,8 @@
-{% from "files_parts.html" import checked_note, cleanup_status, places_block, cache_tables, storage_table, distributions_table, node_files_table with context %}
+{% from "files_parts.html" import checked_note, cleanup_status, places_block, storage_table, distributions_table, maintenance, maintenance_details with context %}
 <div id="files-checked" hx-swap-oob="true">{{ checked_note(found) }}</div>
 <div id="files-cleanup" hx-swap-oob="true">{{ cleanup_status(found) }}</div>
 <div id="files-distributions" hx-swap-oob="true">{{ distributions_table(found) }}</div>
-<div class="card-body" id="files-places" hx-swap-oob="true">{{ places_block(found) }}</div>
-{% if machine %}<div class="card-body" id="files-node" hx-swap-oob="true">{{ node_files_table(selected_node) }}</div>
-{% elif tier == "storage" %}<div class="card-body" id="files-storage" hx-swap-oob="true">{{ storage_table(found, file_type) }}</div>
-{% else %}{{ cache_tables(found, file_type, poll=true) }}{% endif %}
+<div id="files-places" hx-swap-oob="true">{{ places_block(found) }}</div>
+<div id="files-storage" hx-swap-oob="true">{{ storage_table(found, file_type) }}</div>
+<div id="files-maintenance" hx-swap-oob="true">{{ maintenance(found, here) }}</div>
+<div id="files-maintenance-details" hx-swap-oob="true">{{ maintenance_details(found) }}</div>
