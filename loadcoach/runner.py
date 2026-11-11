@@ -40,7 +40,7 @@ LOOK_EVERY = 5  # seconds that what nvidia-smi said is believed, before it is as
 
 
 # Compatibility exports for existing callers; implementations live with the engine.
-from engines import engine_for
+from engines import engine_for, engine_ids
 from engines.llama_cpp.adapter import (
     command_line as command_line, server_environment as server_environment, engine_stamp,
 )
@@ -1208,6 +1208,8 @@ class Runner:
         now = time.monotonic()
         lock = self.holder()
         self.held()
+        model_cards = {card for engine in engine_ids() if engine_for(engine).installation(self.config).enabled
+                       for card in self.engine_cards(engine)}
 
         def describe(tickets: list[Ticket]) -> list[dict]:
             """Describe a server's current readiness and retained resource reservation."""
@@ -1232,6 +1234,7 @@ class Runner:
                       for identity, lease in self.loadout_leases.items() for mid in lease['models']
                       if (name := self.models.name_for(mid) or (lease['_servers'][mid].model if mid in lease['_servers'] else None))],
             "cards": list(self.cards),  # enabled cards only; exclusions are listed under Compute nodes
+            "model_cards": [card for card in self.cards if card in model_cards],
             # Each card's room in MiB as of the last look: all of it, what other programs use, and what one more model could have. None for a card that cannot be measured.
             "memory": {
                 card: self.known(card) and {"total": self.known(card)["total"], "others": self.others(card), "free": max(0, self.free(card))}

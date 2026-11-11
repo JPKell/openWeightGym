@@ -1209,6 +1209,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         for status_field in ("running", "waiting", "holds", "loaded", "active_batches"):
             combined[status_field] = []
         combined["memory"] = {}
+        combined["model_cards"] = []
         for name, result in found.items():
             for status_field in ("running", "waiting", "holds", "loaded", "active_batches"):
                 for entry in result.get(status_field, []):
@@ -1217,6 +1218,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                         row["id"] = public_number(name, row["id"])
                     combined[status_field].append(row)
             combined["memory"].update({f"{name}:{card}": value for card, value in result.get("memory", {}).items()})
+            combined["model_cards"].extend(f"{name}:{card}" for card in
+                                           result.get("model_cards", result.get("cards", result.get("memory", {}))))
         for status_field in ("others_running", "others_waiting", "others_holds", "batches"):
             combined[status_field] = sum(result.get(status_field, 0) for result in found.values())
         outside = hosted.status(user)

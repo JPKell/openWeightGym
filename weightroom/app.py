@@ -322,7 +322,11 @@ def status_nodes(inventory: dict, poll_seconds: float, now: dict | None = None) 
     if now:
         for key, room in (now.get("memory") or {}).items():
             machine, card = key.split(":", 1) if ":" in key else ("compute", key)
-            current.setdefault(machine, {"cards": [], "loaded": []})["cards"].append(
+            # Keep an empty service entry so excluded devices do not return from cached inventory.
+            current.setdefault(machine, {"cards": [], "loaded": []})
+            if "model_cards" in now and key not in now["model_cards"]:
+                continue
+            current[machine]["cards"].append(
                 {"card": card, "total": (room or {}).get("total"), "free": (room or {}).get("free"),
                  "others": (room or {}).get("others")})
         for model in now.get("loaded", []):

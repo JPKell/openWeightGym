@@ -58,7 +58,7 @@ def test_live_dispatch_layout_filter_refresh_and_narrow_screens(desk,monkeypatch
     original = Runner.status
     def sample(runner):
         data = original(runner)
-        data.update(memory={'CUDA0':{'total':24576,'free':8192,'others':1024}},
+        data.update(memory={'CUDA0':{'total':24576,'free':8192,'others':1024}, 'Intel@0000:00:02.0':None}, model_cards=['CUDA0'],
                     loaded=[{'model':'Qwen3 14B','state':'ready','gpus':['CUDA0'],'mib':[15360],'rss_mib':2048,'locked':False}],
                     running=[{'id':41,'model':'Qwen3 14B','user':'jordan','caller':'chat','seconds':42,'priority':'normal'}],
                     waiting=[{'id':42,'model':'Qwen3 14B','user':'jordan','caller':'api','seconds':9,'priority':'normal'}])
@@ -77,6 +77,9 @@ def test_live_dispatch_layout_filter_refresh_and_narrow_screens(desk,monkeypatch
         assert 'CPU load' not in page.locator('#status-capacity').inner_text()
         assert '1 processing · 1 queued' in page.locator('.status-node-counts').first.inner_text()
         assert '15.0 GiB VRAM' in page.locator('#status-capacity').inner_text()
+        capacity_card = page.locator('#status-capacity > .card').first
+        assert 'CUDA0' in capacity_card.inner_text() and 'Intel@' not in capacity_card.inner_text()
+        assert capacity_card.locator('.badge.text-bg-secondary').count() == 0
         requests=page.locator('#current-requests').bounding_box(); capacity=page.locator('#status-capacity').bounding_box()
         assert capacity['y'] > requests['y'] + requests['height']
         page.locator('#status-search').fill('42')
