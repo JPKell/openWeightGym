@@ -1,0 +1,185 @@
+{# Standalone sample proposals for Settings › Users and an account's page. users.html is the production page (01). #}
+{% from 'parts.html' import page_header, card, section_title, alert, more, empty_row %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'user_design_parts.html' import user_choice, user_row, group_lane, user_card, ability_category, ability_row, key_row, model_choice, secret_row %}
+{% from 'user_parts.html' import account_avatar, account_status %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Users · Three design proposals · openWeightGym</title>
+<style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script>
+</head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to users</a>
+<div class="user-review-bar border-bottom d-flex align-items-center justify-content-between gap-3 px-4 py-2">
+  <div class="d-flex align-items-center gap-3"><strong>openWeightGym<span class="text-primary"> /</span></strong><span class="text-secondary small">Settings · Users design review</span></div>
+  <div class="d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div>
+</div>
+<main class="user-review usage-page" id="workspace" data-layout="directory" data-view="profile" data-section="activity">
+  <div class="proposal-toolbar">
+    {% call pills('Design options', buttons=true, class_='design-options mb-0') %}
+    {{ pill_button('01 / Account directory', true, attrs={'data-design': 'directory'}) }}
+    {{ pill_button('02 / Access ledger', attrs={'data-design': 'ledger'}) }}
+    {{ pill_button('03 / Group lanes', attrs={'data-design': 'lanes'}) }}
+    {% endcall %}
+    <span class="small text-secondary">Interactive sample data · no live changes</span>
+  </div>
+  <p class="small text-secondary mb-3" id="design-description"></p>
+
+  {% call page_header('Users', pretitle='SETTINGS / ACCESS') %}
+    <a class="btn btn-outline-secondary" href="#groups" data-inert>Groups</a>
+    <button type="button" class="btn btn-primary" id="add-account" aria-expanded="false" aria-controls="add-panel">+ Add account</button>
+  {% endcall %}
+
+  <div class="user-kpis" aria-label="Accounts summary">
+    <div><span class="usage-label">Accounts</span><strong id="kpi-accounts"></strong><small class="text-secondary" id="kpi-accounts-sub"></small></div>
+    <div><span class="usage-label">Signed in now</span><strong id="kpi-sessions"></strong><small class="text-secondary">browser sessions</small></div>
+    <div><span class="usage-label">API keys</span><strong id="kpi-keys"></strong><small class="text-secondary" id="kpi-keys-sub"></small></div>
+    <div><span class="usage-label">Requests · 7 days</span><strong id="kpi-requests"></strong><small class="text-secondary">all accounts</small></div>
+    <div class="kpi-attention"><span class="usage-label">Needs attention</span><strong id="kpi-attention"></strong><button type="button" class="btn btn-link btn-sm p-0" id="show-attention">Show them</button></div>
+  </div>
+
+  {% set add_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" id="close-add">Close</button>{% endset %}
+  {% call card('Add an account', id='add-panel', actions=add_actions, attrs={'hidden': ''}, class_='add-panel', hint='For a person, or for a program that needs a key of its own. What it may do comes from its group.') %}
+    <form id="add-form" class="add-layout" novalidate>
+      <div class="add-kind" role="radiogroup" aria-label="Kind of account">
+        <label class="add-kind-choice"><input type="radio" name="kind" value="person" class="form-check-input" checked><span><strong>A person</strong><small class="d-block text-secondary">Signs in with a temporary password, then chooses their own.</small></span></label>
+        <label class="add-kind-choice"><input type="radio" name="kind" value="program" class="form-check-input"><span><strong>A program</strong><small class="d-block text-secondary">Calls the API with a key. No password to sign in.</small></span></label>
+      </div>
+      <div class="row g-3">
+        <div class="col-sm-6"><label for="add-name" class="form-label">Name</label><input id="add-name" name="name" class="form-control" required maxlength="64" pattern="[a-z0-9][a-z0-9._\-]{0,63}" autocapitalize="none" spellcheck="false" autocomplete="off" aria-describedby="add-name-hint"><small class="form-hint" id="add-name-hint">Lowercase letters, digits, dot, dash or underscore.</small></div>
+        <div class="col-sm-6"><label for="add-group" class="form-label">Group</label><select id="add-group" name="group" class="form-select" required><option value="" disabled selected>Choose a group</option></select><small class="form-hint" id="add-group-hint">Choose deliberately: none is given by default.</small></div>
+        <div class="col-sm-6"><label class="form-check"><input type="checkbox" class="form-check-input" id="add-password" name="password" checked><span class="form-check-label">Make a temporary password</span></label></div>
+        <div class="col-sm-6"><label class="form-check"><input type="checkbox" class="form-check-input" id="add-key" name="key"><span class="form-check-label">Make an API key</span></label><label for="add-key-label" class="visually-hidden">A label for the key</label><input id="add-key-label" name="label" class="form-control form-control-sm mt-2" maxlength="60" placeholder="Key label: what it is for"></div>
+        <div class="col-12 d-flex flex-wrap align-items-center gap-2"><button class="btn btn-primary" id="add-submit">Add account</button><span class="small text-secondary">Each secret is shown once, straight afterwards.</span><span class="small text-danger" id="add-error" role="alert"></span></div>
+      </div>
+    </form>
+  {% endcall %}
+
+  <div id="feedback" role="status" aria-live="polite" class="small text-primary mb-2"></div>
+
+  <div class="user-layout">
+    <aside class="user-directory" aria-label="Accounts">
+      <div class="directory-tools">
+        <label class="visually-hidden" for="user-search">Find an account</label><input id="user-search" type="search" class="form-control form-control-sm" placeholder="Find an account, group or key…" autocomplete="off" autocapitalize="none" spellcheck="false">
+        <select id="user-filter" class="form-select form-select-sm" aria-label="Show accounts"><option value="all">All accounts</option><option value="person">People</option><option value="program">Programs</option><option value="attention">Needs attention</option><option value="custom">Differs from its group</option><option value="disabled">Disabled</option></select>
+      </div>
+      <div class="directory-label eyebrow">ACCOUNTS <span data-match-count></span></div>
+      <div id="user-list" class="user-list"></div>
+      <div class="ledger-table table-responsive"><table class="table table-sm table-hover align-middle mb-0" aria-label="Accounts"><thead><tr><th>Account</th><th>Group</th><th>Sign-in</th><th class="text-end">Keys</th><th class="text-end">Sessions</th><th>Requests · 14 days</th><th>Status</th></tr></thead><tbody id="user-rows"></tbody></table></div>
+      <div id="user-lanes" class="user-lanes"></div>
+      <p id="no-users" class="small text-secondary p-3 mb-0" hidden>No matching accounts. Clear the search or choose All accounts.</p>
+      <p class="directory-note small text-secondary mb-0">Choose an account to manage it. Unsaved changes stay with each account while you switch.</p>
+    </aside>
+
+    <section class="user-inspector" aria-label="Selected account">
+      <button type="button" class="btn btn-link px-0 mb-2" id="back-to-overview">← All accounts</button>
+      <div class="account-heading">
+        <div class="d-flex align-items-center gap-3 min-w-0">{{ account_avatar(class_='account-avatar-lg') }}<div class="min-w-0">{{ section_title('', id='selected-name', wrapper_class='mb-0') }}<span id="selected-sub" class="small text-secondary"></span></div>{{ account_status() }}</div>
+        <div class="d-flex flex-wrap align-items-center gap-2"><span class="small text-secondary" id="selected-facts"></span><button type="button" class="btn btn-outline-warning btn-sm" id="toggle-enabled">Disable…</button></div>
+      </div>
+      {% call alert('warning', class_='py-2 small mb-3', attrs={'id': 'attention-notice', 'hidden': ''}) %}<span id="attention-text"></span>{% endcall %}
+      {% call alert('secondary', class_='py-2 small mb-3', attrs={'id': 'self-notice', 'hidden': ''}) %}This is your own account. Another manager changes your group and permissions; your password and keys are on <span class="text-decoration-underline">My account</span>.{% endcall %}
+      {% set secret_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" id="dismiss-secrets">I have copied them</button>{% endset %}
+      {% call card('Copy now: shown once', id='secret-panel', actions=secret_actions, attrs={'hidden': ''}, class_='secret-panel', hint='Sample secrets · they cannot sign in or call anything.') %}<div id="secret-rows" class="d-grid gap-2"></div>{% endcall %}
+
+      {% call pills('Account sections', buttons=true, class_='section-tabs gap-1 mb-3') %}
+      {% for key, label in [('activity', 'Overview'), ('access', 'Sign-in & group'), ('keys', 'API keys'), ('permissions', 'Permissions'), ('limits', 'Limits & tools')] %}
+      {{ pill_button(label, key == 'activity', attrs={'data-section': key}) }}
+      {% endfor %}
+      {% endcall %}
+
+      <form id="user-editor" aria-label="Account settings" data-hold-refresh novalidate>
+        <div class="user-panels">
+          {% call card('Activity', id='activity-panel', class_='user-panel', hint='Requests by this account. The full report is on Usage.', attrs={'data-panel': 'activity'}) %}
+            <div class="activity-figures">
+              <div data-figure="requests"><span class="usage-label">Last 24 hours</span><strong class="usage-value usage-value-sm" id="usage-day"></strong><span class="usage-sub">requests</span></div>
+              <div data-figure="requests"><span class="usage-label">Last 7 days</span><strong class="usage-value usage-value-sm" id="usage-week"></strong><span class="usage-sub" id="usage-week-trend"></span></div>
+              <div data-figure="input_tokens"><span class="usage-label">Tokens · 28 days</span><strong class="usage-value usage-value-sm" id="usage-tokens"></strong><span class="usage-sub" id="usage-tokens-split"></span></div>
+              <div data-figure="output_tokens"><span class="usage-label">Spend · 24 hours</span><strong class="usage-value usage-value-sm" id="usage-spend"></strong><span class="usage-sub" id="usage-allowance"></span><div class="usage-composition usage-composition-thin mt-2" id="allowance-bar" aria-hidden="true"><span class="usage-segment" data-source="recorded"></span></div></div>
+            </div>
+            <div data-figure="requests"><svg class="usage-spark usage-spark-wide" id="usage-spark" viewBox="0 0 120 32" preserveAspectRatio="none" role="img" aria-label="Requests per day over 28 days"></svg></div>
+            <div class="d-flex flex-wrap justify-content-between gap-2 small mt-2"><span class="text-secondary" id="usage-range">28 days · retained log</span><span class="d-flex gap-3"><a href="#usage" data-inert>Open in Usage</a><a href="#log" data-inert>Event log</a></span></div>
+          {% endcall %}
+
+          {% call card('Sign-in & group', id='access-panel', class_='user-panel', attrs={'data-panel': 'access'}) %}
+            <dl class="sign-in-facts">
+              <div><dt>Password</dt><dd id="fact-password"></dd></div>
+              <div><dt>Authenticator</dt><dd id="fact-code"></dd></div>
+              <div><dt>Signed in now</dt><dd id="fact-sessions"></dd></div>
+            </dl>
+            <div class="d-flex flex-wrap gap-2 mb-3"><button type="button" class="btn btn-outline-primary btn-sm" id="make-password">Make a temporary password</button><button type="button" class="btn btn-outline-danger btn-sm" id="forget-code">Forget authenticator…</button></div>
+            <div class="row g-2 mb-1">
+              <div class="col-sm-6"><label for="user-group" class="form-label">Group</label><select id="user-group" name="group" class="form-select" data-field="group"></select></div>
+              <div class="col-sm-6"><label for="rename" class="form-label">Name</label><div class="input-group"><input id="rename" class="form-control" maxlength="64" pattern="[a-z0-9][a-z0-9._\-]{0,63}" autocapitalize="none" spellcheck="false" autocomplete="off" required><button type="button" class="btn btn-outline-secondary" id="rename-button">Rename</button></div></div>
+            </div>
+            <p class="form-hint mb-0" id="group-summary"></p>
+            <div class="lifecycle border-top pt-3 mt-3" id="lifecycle">
+              <strong class="small d-block mb-1">Remove account</strong>
+              <p class="form-hint">Its keys stop working at once. Its history stays in the log under its name.</p>
+              <button type="button" class="btn btn-outline-danger btn-sm" id="remove-account">Remove…</button>
+            </div>
+          {% endcall %}
+
+          {% call card('API keys', id='keys-panel', class_='user-panel', attrs={'data-panel': 'keys'}, hint='For programs. A key acts with this account’s access.') %}
+            <div class="table-responsive"><table class="table table-sm align-middle mb-3" aria-label="API keys"><thead><tr><th>Label</th><th>Made</th><th>Id</th><th><span class="visually-hidden">Actions</span></th></tr></thead><tbody id="key-rows"></tbody></table></div>
+            <div class="input-group"><label for="new-key-label" class="visually-hidden">Label for a new key</label><input id="new-key-label" class="form-control" maxlength="60" placeholder="Label, e.g. ci-runner"><button type="button" class="btn btn-primary" id="make-key">Make a key</button></div>
+          {% endcall %}
+
+          {% call card('Permissions', id='permissions-panel', class_='user-panel', attrs={'data-panel': 'permissions'}) %}
+            <div class="permission-tools">
+              <div class="permission-legend small" id="permission-counts"></div>
+              <label class="form-check form-switch mb-0"><input type="checkbox" class="form-check-input" id="changed-only"><span class="form-check-label small">Only what differs from the group</span></label>
+            </div>
+            <div id="ability-groups" class="ability-groups"></div>
+            <p class="small text-secondary mb-0 mt-2" id="no-changes" hidden>Nothing differs from the group. Untick an ability to take it away, or tick one to give it.</p>
+            {% call more('How permissions combine') %}A tick that differs from the group is kept as this account’s own. <code>superuser</code> stands for every ability except those meant for a program’s own key. You can only hand out what you may do yourself.{% endcall %}
+          {% endcall %}
+
+          {% call card('Limits & tools', id='limits-panel', class_='user-panel', attrs={'data-panel': 'limits'}, hint='Limits only narrow what the group allows. Priority can go either way. Empty means as its group.') %}
+            <div class="row g-2 mb-3">
+              <div class="col-sm-6"><label for="max-requests" class="form-label">Requests at once</label><input id="max-requests" type="number" min="1" max="1000" step="1" class="form-control" data-field="max_requests"></div>
+              <div class="col-sm-6"><label for="max-sensitivity" class="form-label">Highest level</label><select id="max-sensitivity" class="form-select" data-field="max_sensitivity"></select></div>
+              <div class="col-sm-6"><label for="priority" class="form-label">Priority</label><select id="priority" class="form-select" data-field="priority"></select></div>
+            </div>
+            <label class="form-check form-switch"><input type="checkbox" class="form-check-input" id="fewer-models" data-field="fewer"><span class="form-check-label">Only these models, of those its group allows</span></label>
+            <div id="model-choices" class="model-grid mb-3"></div>
+            <div class="row g-2">
+              <div class="col-sm-6"><label for="add-tools" class="form-label">Tools also shown</label><textarea id="add-tools" rows="3" class="form-control font-monospace" data-field="add_tools" spellcheck="false"></textarea></div>
+              <div class="col-sm-6"><label for="remove-tools" class="form-label">Tools hidden</label><textarea id="remove-tools" rows="3" class="form-control font-monospace" data-field="remove_tools" spellcheck="false"></textarea></div>
+            </div>
+            <p class="form-hint mb-0 mt-1" id="tools-hint"></p>
+          {% endcall %}
+        </div>
+        <div class="save-bar"><span class="small text-secondary" id="save-state" aria-live="polite">No unsaved changes</span><div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" id="discard">Discard</button><button type="submit" class="btn btn-primary btn-sm" id="save">Save</button></div></div>
+      </form>
+    </section>
+  </div>
+  <p class="small text-secondary mt-3 mb-0" id="design-note"></p>
+</main>
+
+<dialog id="action-dialog" aria-labelledby="action-title">
+  {% call card('Confirm', header_id='action-title', class_='mb-0') %}
+  <form method="dialog" id="action-form"><p id="action-impact"></p>
+    <label class="form-check" id="action-check-row"><input type="checkbox" class="form-check-input" id="action-check"><span class="form-check-label" id="action-check-label"></span></label>
+    <p class="small text-secondary">Preview only · this changes sample data in this browser.</p>
+    <div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary btn-sm" value="cancel" formnovalidate>Cancel</button><button class="btn btn-danger btn-sm" id="confirm-action" value="confirm">Confirm</button></div></form>
+  {% endcall %}
+</dialog>
+<template id="user-choice-template">{{ user_choice() }}</template>
+<template id="user-row-template">{{ user_row() }}</template>
+<template id="group-lane-template">{{ group_lane() }}</template>
+<template id="user-card-template">{{ user_card() }}</template>
+<template id="ability-category-template">{{ ability_category() }}</template>
+<template id="ability-row-template">{{ ability_row() }}</template>
+<template id="key-row-template">{{ key_row() }}</template>
+<template id="key-empty-template">{{ empty_row(4, 'No keys. A person signs in with a password; a program needs a key.') }}</template>
+<template id="model-choice-template">{{ model_choice() }}</template>
+<template id="secret-row-template">{{ secret_row() }}</template>
+<script id="sample-data" type="application/json">{{ sample|tojson }}</script>
+<noscript>{% call alert('warning') %}Enable JavaScript to try these interactive design previews.{% endcall %}</noscript>
+<script>{{ javascript|safe }}</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{# An account's last 30 days and its 24-hour spending, loaded after its page (deferred.html), for someone who may read the log. #}
+<div id="account-trend" class="account-trend">
+  <div data-figure="requests">
+    <div class="d-flex justify-content-between gap-2 small text-secondary"><span>Requests per day · last 30 days</span><span>{{ "{:,}".format(trend.total) }} in all</span></div>
+    <svg class="usage-spark usage-spark-wide" viewBox="0 0 120 32" preserveAspectRatio="none" role="img" aria-label="Requests per day over the last 30 days: {{ '{:,}'.format(trend.total) }} in all, at most {{ '{:,}'.format(trend.most) }} in a day">
+      <path class="usage-spark-area" d="{{ trend.area }}"></path><path class="usage-spark-line" d="{{ trend.line }}"></path>
+    </svg>
+  </div>
+  {% if spend %}
+  <div class="account-spend{{ ' is-near' if spend.near }}" data-figure="output_tokens">
+    <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+      <span class="usage-label mb-0">Spend · 24 hours</span>
+      <span class="small"><strong>${{ "%.2f"|format(spend.recorded) }}</strong>{% if spend.allowance %} <span class="text-secondary">of a ${{ "%.2f"|format(spend.allowance) }} allowance</span>{% else %} <span class="text-secondary">· no allowance set</span>{% endif %}{% if spend.manage %} · <a href="/allowances">{{ "Change" if spend.allowance else "Set one" }}</a>{% endif %}</span>
+    </div>
+    {% if spend.allowance %}<div class="usage-composition usage-composition-thin mt-1" aria-hidden="true"><span class="usage-segment" data-source="recorded" style="--account-share: {{ spend.share }}%"></span></div>{% endif %}
+    {% if spend.near %}<p class="small text-warning-emphasis mb-0 mt-1">At {{ spend.share|round|int }}% of its 24-hour allowance. Allowances are advisory: nothing is refused.</p>{% endif %}
+  </div>
+  {% endif %}
+</div>

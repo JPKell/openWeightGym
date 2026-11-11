@@ -1,0 +1,42 @@
+{% from 'navigation_parts.html' import pill_link %}
+{# The Users directory and its account page (users.html), and the sample proposals (users_designs.html), share these pieces.
+   An account here is a row of LoadCoach's /loadcoach/users with what account_facts in app.py adds: kind, state, attention, custom. #}
+
+{# How the account page groups the abilities. One missing here is shown under Other. #}
+{% set ability_categories = [
+  ('Models & requests', ['load', 'hold', 'unload', 'lock', 'break-lock', 'high', 'hosted', 'unlogged', 'benchmark', 'rate-answers', 'front-voice', 'front-plugins']),
+  ('Visibility', ['see-all', 'see-log', 'see-summaries', 'see-capture']),
+  ('Operations', ['clear-line', 'drain', 'stop', 'restart-services', 'power', 'front-wake']),
+  ('Administration', ['superuser', 'manage-users', 'manage-groups', 'manage-models', 'manage-hosted', 'manage-settings', 'front-manage-plugins']),
+  ('A program’s own key', ['app-sign-in', 'follow-settings', 'mirror-users', 'sign-in']),
+] %}
+
+{% set account_states = {'active': 'Active', 'invited': 'Invited', 'disabled': 'Disabled'} %}
+
+{# Initials. A person is round; a program, which has keys and no password, is square and monospaced. #}
+{% macro account_avatar(account=None, class_='') -%}
+<span class="account-avatar{{ ' ' ~ class_ if class_ }}" aria-hidden="true" data-avatar{% if account %} data-kind="{{ account.kind }}"{% endif %}>{{ account.initials if account }}</span>
+{%- endmacro %}
+
+{% macro account_status(account=None) -%}
+<span class="account-status" data-account-status{% if account %} data-state="{{ account.state }}"{% endif %}>{{ account_states[account.state] if account }}</span>
+{%- endmacro %}
+
+{# A row of the directory: a link that swaps in the account's page. Without an account it is the button the sample proposals clone. #}
+{% macro account_choice(account=None, selected='') %}
+{% set label %}
+  {{ account_avatar(account) }}
+  <span class="min-w-0 flex-grow-1"><strong data-user-name>{{ account.name if account }}</strong><small class="d-block text-secondary" data-user-sub>{% if account %}{{ account.group }} · {{ account.kind }}{% if account.state != 'active' %} · {{ account.state }}{% endif %}{% endif %}</small></span>
+  <span class="attention-mark" data-attention-mark{% if not account or not account.attention %} hidden{% endif %} title="Needs attention"></span>
+  <span class="draft-mark" data-draft-mark hidden aria-label="Unsaved changes"></span>
+{% endset %}
+{% if account %}
+{{ pill_link(label, '/users/' ~ account.name|urlencode, account.name == selected, class_='account-choice', target='page-content',
+             attrs={'aria-label': account.name ~ ' · ' ~ account.group ~ ' · ' ~ account_states[account.state] ~ (' · needs attention' if account.attention else ''),
+                    'data-user-choice': account.name, 'data-user-kind': account.kind, 'data-user-state': account.state,
+                    'data-user-attention': 'yes' if account.attention else '', 'data-user-custom': 'yes' if account.custom else '',
+                    'data-user-search': [account.name, account.group, account.kind, account['keys']|map(attribute='label')|join(' ')]|join(' ')}) }}
+{% else %}
+<button type="button" class="account-choice" data-user-choice aria-pressed="false">{{ label }}</button>
+{% endif %}
+{% endmacro %}
