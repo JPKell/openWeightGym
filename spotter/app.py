@@ -168,7 +168,7 @@ def number(text: str) -> float | None:
         return None
 
 
-async def cards() -> list[dict]:
+async def cards(include_integrated=False) -> list[dict]:
     """Each GPU as nvidia-smi reports it, in nvidia-smi's own order. None at all if it cannot be asked."""
     wanted = "index,name,temperature.gpu,fan.speed,power.draw,utilization.gpu,memory.used,memory.total,power.limit"
     try:
@@ -179,8 +179,11 @@ async def cards() -> list[dict]:
     except (OSError, TimeoutError):
         return []
     found = []
+    from loadcoach.gpu_type import is_integrated
     for line in printed.decode().splitlines():
         index, name, temperature, fan, power, load, used, total, limit = (part.strip() for part in line.split(","))
+        if not include_integrated and is_integrated({'model': name}):
+            continue
         megabytes = lambda text: None if number(text) is None else number(text) * 2**20  # noqa: E731
         found.append({"card": int(index), "model": name, "temperature": number(temperature), "fan": number(fan), "power": number(power),
                       "load": number(load), "memory_used": megabytes(used), "memory_total": megabytes(total), "power_limit": number(limit)})  # fmt: skip
@@ -336,10 +339,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
             busy, everything = processor_times()
             before = last.get("times")
             load = round(100 * (busy - before[0]) / max(everything - before[1], 1), 1) if before else None
+            from loadcoach.gpu_type import is_integrated
+            inventory = await cards(include_integrated=True)
             reading = {
                 "at": time.time(),
                 "up_for": float(Path("/proc/uptime").read_text().split()[0]),
-                "cards": await cards(),
+                "cards": [card for card in inventory if not is_integrated(card)],
+                "excluded_gpu_ids": [card['card'] for card in inventory if is_integrated(card)],
                 "processor": {"load": load, "temperature": processor_temperature()},
                 "memory": memory(),
                 "disks": [room(path) for path in settings.disks if Path(path).is_dir()],

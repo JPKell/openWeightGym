@@ -355,44 +355,56 @@ detect_systemd() {
 # prebuilt llama.cpp to use here (cuda-13.4, cuda-12.8, rocm, vulkan or cpu).
 detect_gpu() {
   GPU_KIND=none GPU_NAME='' GPU_COUNT=0 GPU_VRAM_MB=0 GPU_CUDA='' LLAMA_BACKEND=cpu
-  local line name memory
+  local line name memory kind_helper
+  kind_helper=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/loadcoach/gpu_type.py
   if command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null 2>&1; then
     GPU_KIND=nvidia
     while IFS=, read -r name memory; do
       [[ -n $name ]] || continue
+      if [[ -r $kind_helper ]] && command -v python3 >/dev/null &&
+        [[ $(python3 "$kind_helper" --name "$name" 2>/dev/null) == integrated ]]; then continue; fi
       GPU_COUNT=$((GPU_COUNT + 1))
       [[ -z $GPU_NAME ]] && GPU_NAME=${name# }
       memory=${memory//[!0-9]/}
       ((${memory:-0} > GPU_VRAM_MB)) && GPU_VRAM_MB=$memory
     done < <(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null)
-    # Drivers from 610 on say "CUDA UMD Version"; older ones "CUDA Version".
-    GPU_CUDA=$(nvidia-smi 2>/dev/null | sed -nE 's/.*CUDA (UMD )?Version: *([0-9][0-9.]*).*/\2/p' | head -1)
-    local major=${GPU_CUDA%%.*} minor=${GPU_CUDA#*.}
-    minor=${minor%%.*}
-    if ((${major:-0} >= 13)); then LLAMA_BACKEND=cuda-13.4
-    elif ((${major:-0} == 12 && ${minor:-0} >= 8)); then LLAMA_BACKEND=cuda-12.8
-    else LLAMA_BACKEND=vulkan
+    if ((GPU_COUNT > 0)); then
+      # Drivers from 610 on say "CUDA UMD Version"; older ones "CUDA Version".
+      GPU_CUDA=$(nvidia-smi 2>/dev/null | sed -nE 's/.*CUDA (UMD )?Version: *([0-9][0-9.]*).*/\2/p' | head -1)
+      local major=${GPU_CUDA%%.*} minor=${GPU_CUDA#*.}
+      minor=${minor%%.*}
+      if ((${major:-0} >= 13)); then LLAMA_BACKEND=cuda-13.4
+      elif ((${major:-0} == 12 && ${minor:-0} >= 8)); then LLAMA_BACKEND=cuda-12.8
+      else LLAMA_BACKEND=vulkan
+      fi
+      return 0
     fi
-    return 0
+    GPU_KIND=none
   fi
-  # Other cards, by the PCI vendor of each display device.
-  local vendor
-  for line in /sys/class/drm/card[0-9]*/device/vendor; do
+  # Use the same integrated/discrete classification as the worker, before Python setup.
+  local vendor device first_pci=''
+  for line in "${1:-/sys/class/drm}"/card[0-9]*/device/vendor; do
     [[ -r $line ]] || continue
     vendor=$(<"$line")
+    device=${line%/vendor}
+    if [[ -r $device/device && $vendor == 0x1002 && $(<"$device/device") == 0x164e ]]; then continue; fi
+    if [[ -r $kind_helper ]] && command -v python3 >/dev/null &&
+      [[ $(python3 "$kind_helper" "$device" 2>/dev/null) == integrated ]]; then continue; fi
     case "$vendor" in
-      0x1002) [[ $GPU_KIND == none ]] && GPU_KIND=amd; GPU_COUNT=$((GPU_COUNT + 1)) ;;
+      0x1002) [[ $GPU_KIND == none ]] && GPU_KIND=amd ;;
       0x8086) [[ $GPU_KIND == none ]] && GPU_KIND=intel ;;
+      *) continue ;;
     esac
+    GPU_COUNT=$((GPU_COUNT + 1))
+    [[ -n $first_pci ]] || first_pci=$(basename -- "$(readlink -f -- "$device")")
   done
   if [[ $GPU_KIND != none ]] && command -v lspci >/dev/null; then
-    GPU_NAME=$(lspci 2>/dev/null | grep -iE 'vga|3d|display' | grep -iE "$([[ $GPU_KIND == amd ]] && echo 'amd|ati|radeon' || echo intel)" | head -1 | sed 's/^[^:]*: //')
+    GPU_NAME=$(lspci -s "$first_pci" 2>/dev/null | sed 's/^[^ ]* [^:]*: //')
   fi
   case "$GPU_KIND" in
     amd) if [[ -d /opt/rocm ]]; then LLAMA_BACKEND=rocm; else LLAMA_BACKEND=vulkan; fi ;;
     intel) LLAMA_BACKEND=vulkan ;;
   esac
-  [[ $GPU_KIND == intel ]] && GPU_COUNT=1
   return 0
 }
 

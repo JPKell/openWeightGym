@@ -4,6 +4,8 @@ import math
 import re
 from urllib.parse import quote
 
+from loadcoach.gpu_type import is_integrated
+
 
 def number(value):
     """Accept finite sensor numbers, including zero, but never manufacture missing data."""
@@ -29,7 +31,7 @@ def hosts_view(hosts, poll):
         cards = [{**gpu, 'card': gpu['card'], 'model': gpu.get('model') or 'GPU',
                   **{key: current(gpu.get(key)) for key in ('load', 'memory_used', 'temperature', 'power', 'fan')},
                   'memory_total': number(gpu.get('memory_total')), 'power_limit': number(gpu.get('power_limit'))}
-                 for gpu in snapshot.get('cards', []) if isinstance(gpu.get('card'), int)]
+                 for gpu in snapshot.get('cards', []) if isinstance(gpu.get('card'), int) and not is_integrated(gpu)]
         disks = []
         for disk in snapshot.get('disks', []):
             total, free = number(disk.get('total')), number(disk.get('free'))
@@ -41,6 +43,8 @@ def hosts_view(hosts, poll):
         identity = source.get('fingerprint') or 'unidentified:' + ','.join(source.get('machines', []))
         host.update(identity=identity, fresh=fresh, age=age, has_inventory=bool(snapshot),
                     gpu_inventory_known=isinstance(snapshot.get('cards'), list), gpus=cards, disks=disks,
+                    excluded_gpu_ids=[*snapshot.get('excluded_gpu_ids', []),
+                                      *(gpu['card'] for gpu in snapshot.get('cards', []) if is_integrated(gpu))],
                     cpu=current(processor.get('load')), temperature=current(processor.get('temperature')),
                     ram=current(memory.get('used')), ram_total=number(memory.get('total')),
                     disk_percent=percentage(used, capacity),
@@ -65,8 +69,9 @@ def fleet_summary(hosts):
 def history_groups(host, past, chart):
     """Offer every device/metric, retaining gaps and the existing green-to-red thresholds."""
     series = past.get('series') or {}
-    gpu_ids = {gpu['card'] for gpu in host['gpus']}
-    gpu_ids.update(int(match[1]) for name in series if (match := re.match(r'^GPU (\d+) ', name)))
+    excluded = set(host.get('excluded_gpu_ids', []))
+    gpu_ids = {gpu['card'] for gpu in host['gpus']} - excluded
+    gpu_ids.update(int(match[1]) for name in series if (match := re.match(r'^GPU (\d+) ', name)) and int(match[1]) not in excluded)
     by_id = {gpu['card']: gpu for gpu in host['gpus']}
     for gpu_id in sorted(gpu_ids - by_id.keys()):
         gpu = dict(card=gpu_id, model='Retained device', memory_total=None, power_limit=None,

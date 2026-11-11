@@ -30,7 +30,7 @@ from loadcoach.waiting import estimate
 from loadcoach.host_memory import memory_snapshot, resident_mib
 from loadcoach.processes import ProcessGroup, adopt_orphans
 from loadcoach.engine_memory import MemoryGroup
-from loadcoach.devices import allowed, disabled, telemetry_index
+from loadcoach.devices import allowed, disabled, inventory, telemetry_index
 
 # A place in line is decided by rank first, then by arrival. A request to take the lock
 # outranks everything; the other three are chosen by the caller.
@@ -295,7 +295,7 @@ class Runner:
     @property
     def cards(self) -> tuple[str, ...]:
         """Only enabled devices may be handed to a model, including probes and reloads."""
-        return tuple(card for card in self.config.gpus if not disabled(self.config, card))
+        return tuple(card for card in inventory(self.config) if not disabled(self.config, card))
 
     def engine_cards(self, settings) -> tuple[str, ...]:
         """Intersect the node policy with this engine's supported devices."""
@@ -1248,7 +1248,7 @@ class Runner:
             # Each card's room in MiB as of the last look: all of it, what other programs use, and what one more model could have. None for a card that cannot be measured.
             "memory": {
                 card: self.known(card) and {"total": self.known(card)["total"], "others": self.others(card), "free": max(0, self.free(card))}
-                for card in self.config.gpus
+                for card in inventory(self.config)
             },
             "system_memory": self.host_memory(),
             "stopping": [{"model": server.model, "gpus": list(server.cards),
