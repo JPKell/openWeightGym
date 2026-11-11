@@ -1,0 +1,286 @@
+{# Standalone sample-data review of three model settings layouts. The live page stays model.html. #}
+{% from 'parts.html' import page_header, card, section_title, empty_row, alert, more, confirm_check %}
+{% from 'navigation_parts.html' import pills, pill_button, pill_choices %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model settings · Three design proposals · openWeightGym</title>
+<style>{{ css|safe }}</style>
+<script>{{ theme_javascript|safe }}</script>
+</head>
+<body>
+{# Reuse the console theme controller without account preferences or a second palette definition. #}
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to model settings</a>
+<div class="review-bar d-flex flex-wrap align-items-center justify-content-between gap-3 px-4 py-3 border-bottom">
+  <div><strong>openWeightGym</strong><span class="text-secondary ms-3">Models / design review</span></div>
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <span class="badge bg-blue-lt">Interactive sample</span>
+    <select id="sample" class="form-select form-select-sm w-auto" aria-label="Sample model"><option value="llama_cpp">llama.cpp model</option><option value="strata">Strata model</option></select>
+    <button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button>
+  </div>
+</div>
+<main class="design-page">
+  {% call pills('Design options', buttons=true, class_='design-options gap-2 mb-3') %}
+    {{ pill_button('01 / Priority sheet', true, attrs={'data-design': 'sheet'}) }}
+    {{ pill_button('02 / Summary cards', attrs={'data-design': 'summary'}) }}
+    {{ pill_button('03 / Node matrix', attrs={'data-design': 'matrix'}) }}
+  {% endcall %}
+  <p class="text-secondary mb-4" id="design-description"></p>
+
+  <div id="workspace" data-design="sheet">
+    {% call page_header('qwen3-32b', pretitle='MODELS', back=('#workspace', 'Models'), id='model-header') %}
+      <button class="btn btn-outline-secondary" id="open-presets">Presets</button>
+      <button class="btn btn-primary" id="open-transfer">Copy or move…</button>
+    {% endcall %}
+    <div id="model-state" class="model-state d-flex flex-wrap align-items-center gap-2 gap-md-3 small mb-3"></div>
+    <div id="said" role="status" aria-live="polite"></div>
+
+    {# Which nodes the per-node settings change. Shared settings ignore it and say so. #}
+    {% call card(tag='section', id='scope', class_='scope-bar', attrs={'aria-labelledby': 'scope-title'}, body_class='py-2 d-flex flex-wrap align-items-center gap-2') %}
+        <strong id="scope-title" class="small me-1">Editing on</strong>
+        <div class="form-selectgroup gap-1" id="scope-nodes" role="group" aria-labelledby="scope-title"></div>
+        <button type="button" class="btn btn-link btn-sm px-1" id="scope-all">All nodes</button>
+        <span class="small text-secondary ms-md-auto" id="scope-note"></span>
+    {% endcall %}
+
+    <div class="settings-layout">
+      <nav id="section-index" class="section-index" aria-label="Settings sections"></nav>
+      <form id="editor" class="settings-editor" novalidate aria-label="Model settings"></form>
+    </div>
+
+    <section id="matrix-panel" aria-label="Settings by node" hidden>
+      {% call card(class_='matrix-card', body=false) %}
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 border-bottom">
+          <span class="small text-secondary" id="matrix-note">Tick node columns to edit them together. Highlighted cells differ from the other nodes.</span>
+          <div class="d-flex flex-wrap align-items-center gap-3"><label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="matrix-differences"><span class="form-check-label">Only rows that differ</span></label><button type="button" class="btn btn-outline-primary btn-sm" data-transfer-from="">Add to node</button></div>
+        </div>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0 matrix-table" aria-label="Settings by node"><thead id="matrix-head"></thead><tbody id="matrix-body"></tbody></table></div>
+      {% endcall %}
+    </section>
+
+    <div class="secondary-grid">
+      {% call card('Compute nodes', id='locations-card', hint='Where this model is installed. Disabling a node keeps its settings and file.', actions='<button type="button" class="btn btn-outline-secondary btn-sm" data-transfer-from="">Add to node</button>'|safe, body=false) %}
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0" aria-label="Compute nodes for this model">
+          <thead><tr><th>Node</th><th class="location-detail">Device · context · parallel</th><th>Offered</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+          <tbody id="locations"></tbody>
+        </table></div>
+      {% endcall %}
+      {% call card('Presets', id='presets-card', hint='Named snapshots shared by every quant of this model.', body=false) %}
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0" aria-label="Model presets">
+          <thead><tr><th>Preset</th><th>Context</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+          <tbody id="presets"></tbody>
+        </table></div>
+        <div class="p-3 border-top small d-flex flex-wrap align-items-center justify-content-between gap-2"><span class="text-secondary" id="undo-note">No reviewed change to undo yet.</span><button type="button" class="btn btn-outline-secondary btn-sm" id="undo" disabled>Undo last change</button></div>
+      {% endcall %}
+    </div>
+
+    {% call card('Benchmarks and file facts', false, id='facts') %}
+      <div class="table-responsive mb-3"><table class="table table-sm mb-0" aria-label="Benchmark results"><thead><tr><th>Node</th><th>Prompt</th><th>Generation</th><th>Measured</th></tr></thead><tbody id="benchmarks"></tbody></table></div>
+      <dl class="row facts small mb-0">
+        <dt class="col-md-3">Fingerprint</dt><dd class="col-md-9 wrap"><a href="#facts"><code data-fact="fingerprint"></code></a></dd>
+        <dt class="col-md-3">File SHA-256</dt><dd class="col-md-9 wrap"><code data-fact="sha"></code></dd>
+        <dt class="col-md-3" data-fact="runtime-label">llama-server</dt><dd class="col-md-9" data-fact="runtime"></dd>
+      </dl>
+    {% endcall %}
+
+    {% call card('Danger zone', class_='border-danger-subtle') %}
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        <button type="button" class="btn btn-outline-danger btn-sm" id="forget">Forget measurements</button>
+        <p class="text-secondary small mb-0 flex-fill">Removing stops offering it at once. Requests already answering or waiting finish, then it unloads. Files stay where they are.</p>
+      </div>
+      <div class="row g-2 align-items-center mt-2">
+        <div class="col-md-8">{{ confirm_check('Yes, remove qwen3-32b from every node', 'remove-sure') }}</div>
+        <div class="col-md-4"><button type="button" class="btn btn-danger" id="remove">Remove</button></div>
+      </div>
+    {% endcall %}
+
+    <div class="sticky-actions save-bar" id="save-bar">
+      <button type="button" class="btn btn-primary" id="preview" disabled>Preview and save</button>
+      <button type="button" class="btn btn-outline-secondary" id="discard" disabled>Discard</button>
+      <span class="small text-secondary" id="change-count" aria-live="polite">No unsaved changes.</span>
+    </div>
+    <p class="small text-secondary mt-3">Design preview · sample model and nodes · saving, copying and moving are simulated.</p>
+  </div>
+</main>
+
+{# Configuration preview: what Preview and save shows before anything is written. #}
+<dialog id="review" class="design-dialog" aria-labelledby="review-title">
+{% call card('Review changes', class_='mb-0', header_id='review-title', actions='<button type="button" class="btn-close" data-close aria-label="Close"></button>'|safe) %}
+  <p id="review-summary" class="mb-2"></p>
+  <div id="review-errors"></div><div id="review-warnings"></div>
+  <div class="table-responsive"><table class="table table-sm align-top" aria-label="Configuration changes"><thead><tr><th>Setting</th><th>Node</th><th>Before</th><th>After</th></tr></thead><tbody id="review-changes"></tbody></table></div>
+  <dl class="row small mb-2" id="review-placement"></dl>
+  {% call more('Effective launch flags') %}<pre class="small wrap mb-0" id="review-command"></pre>{% endcall %}
+  <div class="form-check mt-3" id="review-acknowledge-row" hidden><input id="review-acknowledge" class="form-check-input" type="checkbox"><label class="form-check-label" for="review-acknowledge">I have reviewed these warnings.</label></div>
+  <div class="d-flex flex-wrap align-items-end gap-2 mt-3 pt-3 border-top">
+    <button type="button" class="btn btn-primary" id="apply">Apply reviewed configuration</button>
+    <div class="input-group w-auto flex-fill review-preset"><input id="preset-name" class="form-control" maxlength="80" placeholder="Preset name, e.g. Daily 16K" aria-label="Preset name"><button type="button" class="btn btn-outline-primary" id="save-preset">Save as preset</button></div>
+    <label class="form-check mb-0"><input id="replace-preset" type="checkbox" class="form-check-input"><span class="form-check-label">Replace existing preset</span></label>
+  </div>
+{% endcall %}
+</dialog>
+
+{# Copy or move the model bundle to other nodes. Loading choices belong to the destination. #}
+<dialog id="transfer" class="design-dialog" aria-labelledby="transfer-title">
+{% call card('Copy or move this model', class_='mb-0', header_id='transfer-title', actions='<button type="button" class="btn-close" data-close aria-label="Close"></button>'|safe) %}
+  <form id="transfer-form" class="row g-3" novalidate>
+    <div class="col-md-6"><label for="transfer-source" class="form-label">From</label><select id="transfer-source" class="form-select"></select></div>
+    <div class="col-md-6"><span class="form-label d-block" id="transfer-action-label">Action</span>{{ pill_choices('Action', 'transfer-action', [('copy', 'Copy'), ('move', 'Move')], 'copy', class_='gap-1 transfer-action') }}</div>
+    <fieldset class="col-12"><legend class="form-label">To</legend><div class="form-selectgroup gap-1" id="transfer-targets"></div><p class="form-hint mb-0" id="transfer-target-hint"></p></fieldset>
+    <div class="col-md-6"><label for="transfer-device" class="form-label">Device on destination</label><select id="transfer-device" class="form-select"><option value="gpu">GPU · automatic</option><option value="cpu">CPU</option></select></div>
+    <div class="col-md-6 small text-secondary align-self-end" id="transfer-carries"></div>
+    <div class="col-12"><ul class="list-unstyled small mb-0 transfer-plan" id="transfer-plan"></ul></div>
+    <div class="col-12 d-flex flex-wrap align-items-center gap-2 border-top pt-3"><button class="btn btn-primary" id="transfer-submit" disabled>Copy</button><span class="small text-secondary" id="transfer-progress" role="status" aria-live="polite"></span></div>
+  </form>
+{% endcall %}
+</dialog>
+
+{# --- Templates for JavaScript-built pieces. One per element; each layout reuses them. --- #}
+<template id="tpl-section">
+  {% call card(tag='section', class_='settings-section mb-0', attrs={'data-group': ''}) %}
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">{{ section_title('', scope='All nodes', wrapper_class='mb-0') }}<button type="button" class="btn btn-link btn-sm p-0" data-collapse aria-expanded="true" hidden></button></div>
+      <p class="form-hint mb-3" data-group-hint hidden></p>
+      <div class="row g-3" data-fields></div>
+  {% endcall %}
+</template>
+<template id="tpl-summary">
+  {% call card(tag='article', class_='summary-card mb-0', attrs={'data-group': ''}) %}
+      <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+        <div class="min-w-0">{{ section_title('', scope='All nodes', wrapper_class='mb-0') }}</div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-edit aria-expanded="false">Edit</button>
+      </div>
+      <dl class="summary-lines small mb-0" data-summary></dl>
+      <div class="row g-3 mt-1" data-fields hidden></div>
+  {% endcall %}
+</template>
+<template id="tpl-index-link"><a class="section-link" href="#"><span data-label></span><span class="change-dot" data-dot hidden aria-label="changed"></span></a></template>
+<template id="tpl-scope-node"><label class="form-selectgroup-item"><input type="checkbox" class="form-selectgroup-input" data-scope-node><span class="form-selectgroup-label py-1 px-2"><span data-name></span> <small class="text-secondary" data-state></small></span></label></template>
+<template id="tpl-target-node"><label class="form-selectgroup-item"><input type="checkbox" class="form-selectgroup-input" data-target-node><span class="form-selectgroup-label py-1 px-2"><span data-name></span> <small class="text-secondary" data-state></small></span></label></template>
+
+<template id="tpl-field-number">
+  <div class="col-md-6 field" data-field>
+    <label class="form-label"><span data-label></span> <code class="small text-secondary" data-code></code></label>
+    <div class="input-group input-group-flat"><input type="number" class="form-control" data-input><span class="input-group-text" data-unit></span></div>
+    <div class="form-hint" data-hint></div><div class="field-mixed small" data-mixed hidden></div>
+  </div>
+</template>
+<template id="tpl-field-text">
+  <div class="col-md-6 field" data-field>
+    <label class="form-label"><span data-label></span> <code class="small text-secondary" data-code></code></label>
+    <div class="input-group"><input class="form-control" autocapitalize="none" spellcheck="false" data-input></div>
+    <div class="form-hint" data-hint></div><div class="field-mixed small" data-mixed hidden></div>
+  </div>
+</template>
+<template id="tpl-field-select">
+  <div class="col-md-6 field" data-field>
+    <label class="form-label"><span data-label></span> <code class="small text-secondary" data-code></code></label>
+    <select class="form-select" data-input></select>
+    <div class="form-hint" data-hint></div><div class="field-mixed small" data-mixed hidden></div>
+  </div>
+</template>
+<template id="tpl-field-switch">
+  <div class="col-md-6 field" data-field>
+    <div class="form-check form-switch mb-0"><input type="checkbox" class="form-check-input" data-input><label class="form-check-label" data-label></label></div>
+    <div class="form-hint" data-hint></div><div class="field-mixed small" data-mixed hidden></div>
+  </div>
+</template>
+<template id="tpl-field-range">
+  <div class="col-12 field" data-field>
+    <label class="form-label"><span data-label></span> <small class="text-secondary" data-code></small></label>
+    <div class="input-group input-group-flat">
+      <span class="input-group-text">min</span><input type="number" min="1" step="1" class="form-control" inputmode="numeric" data-input="min_context" aria-label="minimum context">
+      <span class="input-group-text">max</span><input type="number" min="1" step="1" class="form-control" inputmode="numeric" data-input="ctx" aria-label="maximum context" required>
+      <span class="input-group-text">tokens</span>
+    </div>
+    <div class="form-hint" data-hint></div><div class="field-mixed small" data-mixed hidden></div>
+  </div>
+</template>
+<template id="tpl-field-choice">
+  <div class="col-12 field" data-field>
+    <span class="form-label d-block" data-label></span>
+    <div class="form-selectgroup gap-1" role="radiogroup" data-choices></div>
+    <div class="form-hint" data-hint></div><div class="field-mixed small" data-mixed hidden></div>
+  </div>
+</template>
+<template id="tpl-choice"><label class="form-selectgroup-item"><input type="radio" class="form-selectgroup-input"><span class="form-selectgroup-label py-1 px-2"></span></label></template>
+<template id="tpl-field-pins">
+  <fieldset class="col-12 field" data-field>
+    <legend class="form-label" data-label></legend>
+    <div class="pin-groups" data-pins></div>
+    <div class="form-hint" data-hint></div><div class="field-mixed small" data-mixed hidden></div>
+  </fieldset>
+</template>
+<template id="tpl-pin-group"><div class="pin-group"><strong class="small d-block mb-1" data-node></strong><div class="d-flex flex-wrap gap-3" data-cards></div></div></template>
+<template id="tpl-pin"><label class="form-check mb-0"><input class="form-check-input" data-pin><span class="form-check-label"></span></label></template>
+<template id="tpl-field-rename">
+  <div class="col-md-6 field" data-field>
+    <label class="form-label" data-label></label>
+    <div class="input-group"><input class="form-control" autocapitalize="none" spellcheck="false" data-input><button type="button" class="btn btn-outline-primary" data-rename>Rename</button></div>
+    <div class="form-hint" data-hint></div>
+  </div>
+</template>
+<template id="tpl-field-readonly">
+  <div class="col-md-6 field" data-field><span class="form-label d-block" data-label></span><span class="badge bg-secondary-lt" data-value></span><div class="form-hint" data-hint></div></div>
+</template>
+<template id="tpl-field-meter">
+  <div class="col-12 field" data-field><span class="form-label d-block" data-label></span><div class="fit-meters" data-meters></div><div class="form-hint" data-hint></div></div>
+</template>
+<template id="tpl-meter"><div class="fit-meter small"><div class="d-flex justify-content-between gap-2"><span data-node></span><span class="text-secondary" data-amount></span></div><div class="progress progress-sm mt-1" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar"></div></div></div></template>
+<template id="tpl-field-note"><div class="col-12 field" data-field><p class="small text-secondary mb-0" data-label></p></div></template>
+
+<template id="tpl-field-adapters">
+  <div class="col-12 field" data-field>
+    <div class="table-responsive"><table class="table table-sm mb-2" aria-label="Adapters"><thead><tr><th>Name</th><th>File</th><th class="adapter-scale">Strength</th><th><span class="visually-hidden">Remove</span></th></tr></thead><tbody data-adapter-rows></tbody></table></div>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-add-adapter>Add adapter</button>
+  </div>
+</template>
+<template id="tpl-adapter-row"><tr><td><input class="form-control form-control-sm" data-adapter="name" aria-label="adapter name" placeholder="Adapter name"></td><td><select class="form-select form-select-sm" data-adapter="file" aria-label="adapter file"></select></td><td class="adapter-scale"><input type="number" step="any" class="form-control form-control-sm" data-adapter="scale" placeholder="1" aria-label="adapter strength"></td><td><button type="button" class="btn btn-ghost-secondary btn-sm" data-remove-adapter aria-label="Remove adapter">×</button></td></tr></template>
+<template id="tpl-empty-adapters">{{ empty_row(4, 'No adapters. Select Add adapter to configure one.') }}</template>
+
+<template id="tpl-field-flags">
+  <div class="col-12 field" data-field>
+    <div class="row g-2" data-flag-rows></div>
+    <div class="d-flex flex-wrap gap-2 mt-2"><div class="input-group input-group-sm flag add-flag"><input class="form-control" list="flag-names" placeholder="another flag" aria-label="another flag" data-new-flag autocapitalize="none" spellcheck="false"><input class="form-control" placeholder="its value" aria-label="its value" data-new-value autocapitalize="none" spellcheck="false"><button type="button" class="btn btn-outline-secondary" data-add-flag>Add flag</button></div></div>
+    <div class="mt-3" data-suggestions></div>
+    <details class="more mt-3"><summary>Every flag this llama-server knows</summary>
+      <div class="d-flex align-items-center gap-2 my-2"><input type="search" class="form-control form-control-sm" placeholder="Find a flag: a name or a word of what it does" aria-label="Find a flag" data-flag-search><small class="text-secondary text-nowrap" data-flag-count></small></div>
+      <div class="table-responsive flag-reference"><table class="table table-sm align-top mb-0" aria-label="Every llama-server flag"><thead><tr><th>Flag</th><th>Takes</th><th>What llama-server says it does</th></tr></thead><tbody data-flag-reference></tbody></table></div>
+    </details>
+    <p class="small text-warning-emphasis mt-2 mb-0" data-flag-message role="status"></p>
+    <p class="small text-secondary mt-2 mb-0" data-flag-defaults></p>
+  </div>
+</template>
+<template id="tpl-flag-row"><div class="col-md-6"><div class="input-group input-group-sm flag"><input class="form-control" readonly aria-readonly="true" data-flag-name aria-label="flag"><input class="form-control" data-flag-value autocapitalize="none" spellcheck="false"><button type="button" class="btn btn-outline-secondary" data-remove-flag aria-label="Remove flag">×</button></div></div></template>
+<template id="tpl-suggestion"><div class="form-check"><input class="form-check-input" type="checkbox" data-suggest><label class="form-check-label"><code data-flag></code> <span class="text-secondary" data-why></span></label></div></template>
+<template id="tpl-reference-row"><tr><td><code data-flag></code></td><td data-takes></td><td data-says></td></tr></template>
+
+<template id="tpl-location-row"><tr>
+  <td><strong data-node></strong> <span class="badge ms-1" data-state></span><small class="d-block text-secondary" data-local></small></td>
+  <td class="location-detail small" data-summary></td>
+  <td><span class="badge" data-enabled></span></td>
+  <td class="text-end text-nowrap"><button type="button" class="btn btn-outline-secondary btn-sm" data-edit-node>Edit</button> <button type="button" class="btn btn-outline-secondary btn-sm" data-transfer-from>Copy or move</button> <button type="button" class="btn btn-outline-danger btn-sm" data-toggle-location></button></td>
+</tr></template>
+<template id="tpl-preset-row"><tr><th class="wrap fw-normal"><span data-name></span><small class="d-block text-secondary" data-scope></small></th><td data-context></td><td class="text-end text-nowrap"><button type="button" class="btn btn-outline-primary btn-sm" data-load-preset>Load</button> <button type="button" class="btn btn-outline-danger btn-sm" data-delete-preset>Delete</button></td></tr></template>
+<template id="tpl-empty-presets">{{ empty_row(3, 'No saved presets. Preview your settings, then save a named snapshot.') }}</template>
+<template id="tpl-benchmark-row"><tr><th class="fw-normal" data-node></th><td data-prompt></td><td data-generation></td><td class="text-secondary" data-when></td></tr></template>
+<template id="tpl-state-chip"><span class="state-chip"><strong data-node></strong> <span class="badge" data-badge></span><span data-detail></span></span></template>
+<template id="tpl-revert"><button type="button" class="btn btn-link btn-sm p-0 field-revert" data-revert>Revert</button></template>
+<template id="tpl-change-row"><tr><th data-setting></th><td data-node></td><td class="wrap" data-before></td><td class="wrap" data-after></td></tr></template>
+<template id="tpl-empty-changes">{{ empty_row(4, 'No configuration changes. You can still save these settings as a preset.') }}</template>
+<template id="tpl-alert-danger">{{ alert('danger', class_='py-2 small') }}</template>
+<template id="tpl-alert-warning">{{ alert('warning', class_='py-2 small') }}</template>
+<template id="tpl-said">{{ alert('success', class_='said py-2 small') }}</template>
+
+<template id="tpl-matrix-head"><tr><th class="matrix-label">Setting</th></tr></template>
+<template id="tpl-matrix-node"><th class="matrix-node"><label class="form-check mb-1"><input type="checkbox" class="form-check-input" data-matrix-pick><span class="form-check-label fw-semibold" data-node></span></label><span class="badge" data-state></span><div class="d-flex flex-wrap gap-1 mt-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-transfer-from>Copy or move</button><button type="button" class="btn btn-outline-danger btn-sm" data-toggle-location></button></div></th></template>
+<template id="tpl-matrix-group"><tr class="matrix-group"><th data-colspan><button type="button" class="btn btn-link btn-sm p-0 fw-semibold" data-toggle-group aria-expanded="true"></button> <span class="scope-badge badge" data-scope></span></th></tr></template>
+<template id="tpl-matrix-row"><tr class="matrix-row"><th class="matrix-label fw-normal"><span data-label></span><code class="matrix-flag" data-code></code></th></tr></template>
+<template id="tpl-matrix-shared"><tr class="matrix-row matrix-shared-row" data-shared><td class="matrix-cell" data-colspan><div class="matrix-shared" data-items></div></td></tr></template>
+<template id="tpl-matrix-shared-item"><div class="matrix-shared-item"><div class="matrix-item-label"><span data-label></span><code class="matrix-flag" data-code></code></div><div class="min-w-0" data-control></div></div></template>
+<template id="tpl-matrix-cell"><td class="matrix-cell"></td></template>
+
+<datalist id="flag-names"></datalist>
+<script>{{ javascript|safe }}</script>
+</body></html>

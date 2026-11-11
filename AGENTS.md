@@ -26,11 +26,13 @@ within their own layouts.
 | Chat options, model choices and prompt navigation | [chat_main.html](weightroom/pages/chat_main.html), [chat_navigation.html](weightroom/pages/chat_navigation.html) |
 | Deferred loading and retry | [deferred.html](weightroom/pages/deferred.html), [deferred_error.html](weightroom/pages/deferred_error.html) |
 | Model fields and engine-specific controls | [model_form.html](weightroom/pages/model_form.html), [engines/](weightroom/pages/engines/) |
+| A model's settings by node (node matrix: node columns, groups, cells, shared rows) | [model_matrix_parts.html](weightroom/pages/model_matrix_parts.html), each engine's `engines/<id>/model_matrix.html`, [model-matrix.js](weightroom/static/model-matrix.js) |
 | File lists and locations | [files_parts.html](weightroom/pages/files_parts.html) |
 | Standalone Files design previews (sample data) | [files_designs.html](weightroom/pages/files_designs.html), rendered with `scripts/preview-files-designs.py` |
 | Standalone Status/Telemetry design previews (sample data) | [operations_designs.html](weightroom/pages/operations_designs.html), rendered with `scripts/preview-operations-designs.py` |
 | Status request and capacity design previews (sample data) | [status_designs.html](weightroom/pages/status_designs.html), rendered with `scripts/preview-operations-designs.py --status` |
 | Selected Telemetry workspace preview (sample data) | [telemetry_design.html](weightroom/pages/telemetry_design.html), rendered with `scripts/preview-operations-designs.py --telemetry` |
+| Standalone model settings design previews (sample data) | [model_designs.html](weightroom/pages/model_designs.html), rendered with `scripts/preview-model-designs.py` |
 | Live Status lanes, capacity ledger and request rows | [status.html](weightroom/pages/status.html), [status_nodes.html](weightroom/pages/status_nodes.html), [status_parts.html](weightroom/pages/status_parts.html), [current_requests.html](weightroom/pages/current_requests.html) |
 | Physical-host Telemetry workspace, device tables and graphs | [telemetry_workspace.html](weightroom/pages/telemetry_workspace.html), [telemetry_parts.html](weightroom/pages/telemetry_parts.html), [telemetry-workspace.js](weightroom/static/telemetry-workspace.js) |
 | Node GPU assignments and RAM policy | [cards.html](weightroom/pages/cards.html) |

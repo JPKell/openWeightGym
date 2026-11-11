@@ -21,6 +21,7 @@ from loadcoach import observability as observation
 
 import asyncio
 import json
+from copy import deepcopy
 import re
 import math
 import os
@@ -82,7 +83,8 @@ from weightroom import pairing
 from weightroom.plugin_pages import build_routes as plugin_routes
 from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, model_kind as benchmark_model_kind
 from benchmarks.identity import variant
-from turnstile.model_configuration import configuration as model_configuration, generation as generation_settings, GLOBAL_FLAGS, PROFILE_GLOBALS
+from turnstile.model_configuration import (configuration as model_configuration, generation as generation_settings, comparable, shared as shared_values,
+                                           translate, GLOBAL_FLAGS, PROFILE_GLOBALS)
 from turnstile import library
 from plugins._registry import Registry as PluginRegistry
 from plugins._controller import Controller as PluginController
@@ -408,6 +410,28 @@ def read(text: str):
     except ValueError:
         return text
     return text if value is None or isinstance(value, dict) else value
+
+
+SHOWN_SETTINGS = ("engine", "flags", "strata", "gpus", "alone", "allow_split", "adapters", "min_context", "order")
+# Fields of a model's form that every node's copy shares. They appear once, unprefixed.
+SHARED_FIELDS = ("engine", "projector", "adapter", "adapter_file", "adapter_scale", "order")
+
+
+def node_form(form: dict[str, list[str]], machine: str) -> dict[str, list[str]]:
+    """One other node's fields of the node matrix, as the single-node form would send them.
+
+    Its own fields are named n:<node>:<field>. The shared ones, and the generation flags among the
+    unprefixed flag rows, are added to them; a generation flag comes last so the shared value wins."""
+    prefix = f"n:{machine}:"
+    own = {key.removeprefix(prefix): values for key, values in form.items() if key.startswith(prefix)}
+    pairs = [(flag, value) for flag, value in zip(own.get("flag", []), own.get("value", []))]
+    pairs += [(flag, value) for flag, value in zip(form.get("flag", []), form.get("value", [])) if flag.strip().lstrip("-") in GLOBAL_FLAGS]
+    return own | {key: form[key] for key in SHARED_FIELDS if key in form} | {"flag": [flag for flag, _ in pairs], "value": [value for _, value in pairs]}
+
+
+def matrix_nodes(form: dict[str, list[str]]) -> list[str]:
+    """The other nodes whose columns the node matrix sent, in the order they appear."""
+    return list(dict.fromkeys(key[2:].rpartition(":")[0] for key in form if key.startswith("n:") and key[2:].rpartition(":")[0]))
 
 
 def suggested(settings: dict, defaults: dict, cards: list[str]) -> list[dict]:
@@ -1371,6 +1395,33 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         node = request.query_params.get("node", "")
         return model_address(name) + ("?node=" + quote(node, safe="") if node else "")
 
+    def matrix_columns(name: str, model: dict, selected: str, showing: dict, known: dict, nodes: dict,
+                       choices: list[dict], typed: dict, trained: int | None) -> list[dict]:
+        """One column of the node matrix for each node holding a copy of the model. The selected
+        node's column keeps the single-node form's names and ids; another's are prefixed."""
+        copies = model.get("locations") or []
+        if not any(copy["machine"] == selected for copy in copies):
+            copies = [{**model, "machine": selected, "enabled": True}, *copies]
+        states = {node["name"]: node.get("state", "unknown") for node in choices}
+        llama = model.get("engine", "llama_cpp") == "llama_cpp"
+        columns = []
+        for index, copy in enumerate(copies):
+            machine, here = copy["machine"], copy["machine"] == selected
+            facts = nodes.get(machine) or {}
+            defaults = known["defaults"] if here else facts.get("defaults") or {}
+            cards = known["cards"] if here else facts.get("cards") or []
+            settings = showing if here else typed.get(machine) or {key: copy[key] for key in SHOWN_SETTINGS if key in copy}
+            local = copy.get("name", name)
+            columns.append({"machine": machine, "selected": here, "name": local, "logical": name,
+                            "model_id": copy.get("model_id"), "enabled": copy.get("enabled", True),
+                            "state": states.get(machine, "unknown"), "showing": settings, "cards": cards,
+                            "prefix": "" if here else f"n:{machine}:", "idp": "" if here else f"node{index}-",
+                            "on": f" on {machine}" if len(copies) > 1 else "",
+                            "link": model_address(local) + "?node=" + quote(machine, safe=""),
+                            "parallel": parallel_fields({**defaults, **settings.get("flags", {})}, trained) if llama else {},
+                            "suggestions": suggested(settings, defaults, cards) if llama else []})
+        return columns
+
     async def model_api(request: Request, person: Person, method: str, path: str, **more):
         """Send a management request to the explicitly selected compute node."""
         source_machine = more.pop("source_machine", "")
@@ -1930,8 +1981,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await models_page(request, person, why, failed=True, form={key: values[-1] for key, values in form.items()})
         return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(f"Added {name}. It can be asked for from now on."))
 
-    async def model_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None, review: dict | None = None, review_source: dict | None = None) -> Response:
-        """Render one model's configuration, locations and retained benchmark evidence."""
+    async def model_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None, review: dict | None = None, review_source: dict | None = None,
+                         typed_nodes: dict | None = None, reviews: list | None = None) -> Response:
+        """Render one model's settings on every node that has a copy, and its retained benchmark evidence.
+
+        `typed_nodes` holds what was typed for the other nodes when saving failed; `reviews` the
+        previews of several nodes' changes, applied together."""
         known = await all_models(request, person)
         if isinstance(known, Response):
             return known
@@ -1943,6 +1998,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if not request.query_params.get("node") and model.get("locations") and model["locations"][0]["machine"] != "compute":
             location = model["locations"][0]
             return go(model_address(location["name"]) + "?node=" + quote(location["machine"]))
+        logical_nodes = known.get("nodes") or {}  # each node's defaults and cards, when the catalogue is the logical one
         if request.query_params.get("node"):
             logical = await ask("GET", "/turnstile/models", person.key)
             if logical.is_success:
@@ -1950,6 +2006,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     loc["machine"] == selected_node and loc.get("model_id") == model.get("model_id")
                     for loc in row.get("locations", []))), [])
                 model["locations"] = copies
+                logical_nodes = logical.json().get("nodes") or {}
         nodes = await ask("GET", "/turnstile/machines", person.key)
         node_choices = nodes.json().get("machines", []) if nodes.is_success else []
         if request.query_params.get("part") == "state":  # the top of the page asking for itself again
@@ -1980,7 +2037,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         said=said or request.query_params.get('said',''), failed=failed, status=400 if failed else 200,
                         address=lambda label: node_model_address(request,label), file_address=file_address, **scores)
         # What the form shows: what was just typed if saving it failed, otherwise what is kept.
-        showing = typed_in or {key: model[key] for key in ("engine", "flags", "strata", "gpus", "alone", "allow_split", "adapters", "min_context", "order") if key in model}
+        showing = typed_in or {key: model[key] for key in SHOWN_SETTINGS if key in model}
         if 'engine_cards' in known:
             known['cards'] = known['engine_cards'].get(model.get('engine', 'llama_cpp'), known['cards'])
         # What the file says about itself, or why it could not be read.
@@ -2000,7 +2057,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         every["flags"] = usable_model_flags(every["flags"])
         setups = await model_api(request, person, "GET", "/loadcoach/model-setup", params={"name": name})
         setup = setups.json() if setups.status_code == 200 else {"presets": [], "undo": None, "can_undo": False, "why": setups.json().get("error", {}).get("message", "")}
-        return page(request, "model.html", person, status=400 if failed else 200, model=model, build=known.get("build"), parts=parts, showing=showing, known=known, told=told, every=every,
+        columns = matrix_columns(name, model, selected_node, showing, known, logical_nodes, node_choices, typed_nodes or {},
+                                 (told or {}).get("facts", {}).get("trained_context"))
+        return page(request, "model.html", person, columns=columns, reviews=reviews,
+                    apply_changes=[{"machine": one["machine"], "name": one["name"], "configuration": one["review"]["candidate"],
+                                    "token": one["review"]["token"]} for one in reviews or [] if not one["review"].get("errors")],
+                    targets=[node for node in node_choices if node["name"] not in {column["machine"] for column in columns}], status=400 if failed else 200, model=model, build=known.get("build"), parts=parts, showing=showing, known=known, told=told, every=every,
                     selected_node=selected_node, node_choices=node_choices, global_flags=GLOBAL_FLAGS, engine_schema=engine_for(model).schema(),
                     setup=setup, review=review, review_source=review_source or {},
                     **scores,
@@ -2008,6 +2070,60 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     parallel=parallel_fields({**known["defaults"], **showing["flags"]}, (told or {}).get("facts", {}).get("trained_context")),
                     unusable_flags=UNUSABLE_MODEL_FLAGS,
                     unread=unread, said=said or request.query_params.get("said", ""), failed=failed, address=lambda label: node_model_address(request, label), file_address=file_address)  # fmt: skip
+
+    async def preview_nodes(person: Person, form: dict[str, list[str]], name: str, made: dict, others: list[str], here: str) -> tuple[list, dict, str, bool]:
+        """Preview the node matrix's other columns, each on its own node: the reviews, what was typed
+        for each node, why it could not be done, and whether the shared settings change on any copy
+        (then every copy is saved). Shared files are named as each node keeps them."""
+        found = await ask("GET", "/turnstile/models", person.key)
+        if not found.is_success:
+            return [], {}, found.json()["error"]["message"], False
+        copies = next((row["locations"] for row in found.json()["models"]
+                       if any(copy["machine"] == here and copy["name"] == name for copy in row.get("locations", []))), [])
+        kept = lambda copy: comparable(shared_values(model_configuration(copy)))  # noqa: E731
+        ours = comparable(shared_values(made))
+        reviews, typed, problems, inventory = [], {}, [], None
+        drifted = any(kept(copy) != ours for copy in copies)
+        for machine in others:
+            copy = next((one for one in copies if one["machine"] == machine), None)
+            if copy is None:
+                problems.append(f"{machine} no longer has a copy of this model.")
+                continue
+            fields = node_form(form, machine)
+            try:
+                theirs = settings_from(fields)
+            except ValueError as problem:
+                problems.append(f"{machine}: {problem}")
+                continue
+            theirs["order"] = made["order"]
+            if fields.get("parallel_controls"):
+                defaults = (found.json().get("nodes", {}).get(machine) or {}).get("defaults") or {}
+                suppressed = ("no-kv-unified",) if fields.get("parallel_enabled") else PARALLEL_FLAGS
+                theirs["flags"].update({flag: None for flag in suppressed if flag in defaults})
+            typed[machine] = theirs
+            settings = deepcopy(theirs)
+            parts = [settings["flags"].get("mmproj"), *(adapter["file"] for adapter in settings.get("adapters", {}).values())]
+            if any(parts):
+                if inventory is None:
+                    listed = await ask("GET", "/turnstile/models/files", person.key)
+                    inventory = listed.json().get("nodes", []) if listed.is_success else []
+                missing = [path for path in parts if path and translate(path, here, machine, inventory) is None]
+                if missing:
+                    problems.append(f"{machine} has no copy of {', '.join(missing)}. Copy it there in Files first.")
+                    continue
+                if settings["flags"].get("mmproj"):
+                    settings["flags"]["mmproj"] = translate(settings["flags"]["mmproj"], here, machine, inventory)
+                for adapter in settings.get("adapters", {}).values():
+                    adapter["file"] = translate(adapter["file"], here, machine, inventory)
+            order = settings.pop("order")
+            answer = await ask("POST", "/turnstile/machines/" + quote(machine, safe="") + "/model-api/model-setup", person.key,
+                               json={"name": copy["name"], "action": "preview",
+                                     "configuration": {"settings": settings, "order": 10 if order is None else order}})
+            if answer.status_code != 200:
+                problems.append(f"{machine}: {answer.json()['error']['message']}")
+                continue
+            reviews.append({"machine": machine, "name": copy["name"], "review": answer.json()})
+        return reviews, typed, " ".join(problems), drifted
 
     async def change_model(request: Request, person: Person) -> Response:
         """Validate and submit one engine-specific model configuration update."""
@@ -2023,7 +2139,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return await model_page(request, person, "The source model is no longer available.", True)
             candidate = model_configuration(model)
             if action == "location-add":
-                destination = form.get('machine', [''])[-1]
+                destinations = list(dict.fromkeys(one for one in form.get('machine', []) if one))
+                move = form.get('transfer', ['copy'])[-1] == 'move'
+                if not destinations:
+                    return await model_page(request, person, "Choose a node to copy the model to.", True)
+                if move and len(destinations) != 1:
+                    return await model_page(request, person, "A move takes the model to one node. Choose one, or copy it instead.", True)
                 # Loading choices belong to the destination. Start with portable defaults.
                 engine = candidate.get('engine', 'llama_cpp')
                 candidate['gpus'] = 0 if form.get('device', ['gpu'])[-1] == 'cpu' else 'any' if engine == 'llama_cpp' else 1
@@ -2034,13 +2155,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     for key in ('layer_weights', 'vram_limit_gib'):
                         candidate['sdcpp'].pop(key, None)
                 answer = await ask('POST', '/turnstile/models/install', person.key, json={
-                    'name': name, 'machine': destination, 'settings': candidate,
-                    'source_model_id': model.get('model_id'),
+                    'name': name, 'settings': candidate, 'source_model_id': model.get('model_id'),
+                    **({'machines': destinations} if len(destinations) > 1 else {'machine': destinations[0]}),
+                    **({'move': True} if move else {}),
                     'generation': generation_settings(engine_for(model).model.effective(model_configuration(model), known.get('defaults') or {})),
                     'source_machine': request.query_params.get('node') or (model.get('locations') or [{'machine':'compute'}])[0]['machine']}, timeout=None)
                 if answer.status_code == 202:
                     kind = {'sdcpp':'image','audiocpp':'audio'}.get(engine,'llm')
-                    return go('/models?kind=' + kind + '&install=' + quote(answer.json()['id']))
+                    jobs = answer.json().get('jobs') or [answer.json()]
+                    return go('/models?' + urlencode([('kind', kind), *(('install', job['id']) for job in jobs)]))
             else:
                 try:
                     engine = candidate['engine']
@@ -2057,6 +2180,20 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 if answer.is_success:
                     return go(node_model_address(request, name) + ('&' if request.query_params.get('node') else '?') + 'said=Saved.')
             return await model_page(request, person, answer.json()['error']['message'], True)
+        if action == "apply-reviewed-nodes":
+            try:
+                changes = json.loads(form.get("changes", [""])[-1])
+                if not isinstance(changes, list) or not changes:
+                    raise ValueError("Invalid review")
+            except (ValueError, TypeError):
+                return await model_page(request, person, "Preview the configuration again.", failed=True)
+            answer = await ask("POST", "/turnstile/models/configure", person.key, timeout=None,
+                               json={"changes": changes, "acknowledge": bool(form.get("acknowledge"))})
+            if answer.status_code != 200:
+                return await model_page(request, person, answer.json()["error"]["message"], failed=True)
+            applied = answer.json()["applied"]
+            where = applied[0] if len(applied) == 1 else ", ".join(applied[:-1]) + " and " + applied[-1]
+            return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(f"Configuration applied on {where}."))
         if action in ("location-enable", "location-disable"):
             machine = form.get("machine", [""])[-1]
             model_id = form.get("model_id", [""])[-1]
@@ -2141,7 +2278,20 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             answer = await model_api(request, person, "POST", "/loadcoach/model-setup", json={"name": name, "action": "preview", **source})
             if answer.status_code != 200:
                 return await model_page(request, person, answer.json()["error"]["message"], failed=True, typed_in=made)
-            return await model_page(request, person, typed_in=made, review=answer.json(), review_source=source)
+            others = matrix_nodes(form)
+            if not others:
+                return await model_page(request, person, typed_in=made, review=answer.json(), review_source=source)
+            here = request.query_params.get("node") or "compute"
+            reviewed, typed_nodes, problem, drifted = await preview_nodes(person, form, name, made, others, here)
+            if problem:
+                return await model_page(request, person, problem, failed=True, typed_in=made, typed_nodes=typed_nodes)
+            reviews = [{"machine": here, "name": name, "review": answer.json()}, *reviewed]
+            changed = [one for one in reviews if one["review"].get("changes") or one["review"].get("errors")]
+            if not any(one["machine"] != here for one in changed):  # only this node changed: its own review, as before
+                return await model_page(request, person, typed_in=made, review=answer.json(), review_source=source, typed_nodes=typed_nodes)
+            if drifted:  # a shared setting changes, so every copy is saved with it, changed or not
+                changed = reviews
+            return await model_page(request, person, typed_in=made, reviews=changed, typed_nodes=typed_nodes)
         answer = await model_api(request, person, "POST", where, json=made)
         if answer.status_code != 200:
             return await model_page(request, person, answer.json()["error"]["message"], failed=True, typed_in=made)

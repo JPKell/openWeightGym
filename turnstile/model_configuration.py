@@ -1,5 +1,9 @@
-"""Generation defaults shared by a logical model; all loading settings stay local."""
+"""Settings a logical model shares across its copies (generation defaults, projector, adapters, list
+position); every loading setting stays local to its node."""
 from copy import deepcopy
+from pathlib import Path
+
+from engines.llama_cpp.model import FIRST_PLACE
 
 GLOBAL_FLAGS = frozenset({
     "temp", "temperature", "top-k", "top-p", "min-p", "typical", "typical-p",
@@ -40,6 +44,58 @@ def with_generation(target, shared):
         if profile in result:
             result[profile] = {key: value for key, value in result[profile].items() if key not in keys} | shared.get(profile, {})
     return result
+
+
+def shared(settings, order=None):
+    """What every copy of a logical model keeps the same: generation defaults, the projector,
+    the adapters and the list position. File paths are as the copy being read keeps them."""
+    adapters = {name: dict(adapter) for name, adapter in (settings.get("adapters") or {}).items()}
+    order = settings.get("order") if order is None else order
+    return {"generation": generation(settings), "projector": settings.get("flags", {}).get("mmproj"),
+            "adapters": adapters, "order": FIRST_PLACE if order is None else order}
+
+
+def with_shared(target, values, translate):
+    """Give a copy the shared settings while keeping its own loading options and model file.
+    `translate(path)` names the same file on the copy's node; it raises when that node lacks it."""
+    result = with_generation(target, values["generation"])
+    if values["projector"]:
+        result["flags"]["mmproj"] = translate(values["projector"])
+    else:
+        result["flags"].pop("mmproj", None)
+    adapters = {name: {**adapter, "file": translate(adapter["file"])} for name, adapter in values["adapters"].items()}
+    if adapters:
+        result["adapters"] = adapters
+    else:
+        result.pop("adapters", None)
+    result["order"] = values["order"]
+    return result
+
+
+def comparable(values):
+    """Shared settings with each file named by its place-relative name, so copies can be compared."""
+    name = lambda path: Path(path).name if path else path  # noqa: E731
+    return {**values, "projector": name(values["projector"]),
+            "adapters": {key: {**adapter, "file": name(adapter["file"])} for key, adapter in values["adapters"].items()}}
+
+
+def translate(path, source, target, nodes):
+    """The same managed file on another node: the same place name and relative path, as an
+    installation places it, or the very same path. None when the target has no such file."""
+    if source == target:
+        return path
+    found = {node["name"]: node for node in nodes}
+    origin, destination = found.get(source, {}), found.get(target, {})
+    present = {file["path"] for file in destination.get("files", [])}
+    file = next((one for one in origin.get("files", []) if one["path"] == path), None)
+    if file is not None:
+        root = next((place["folder"] for place in origin.get("places", []) if place["name"] == file["place"]), None)
+        folder = next((place["folder"] for place in destination.get("places", []) if place["name"] == file["place"]), None)
+        if root and folder:
+            moved = str(Path(folder) / Path(file["path"]).relative_to(root))
+            if moved in present:
+                return moved
+    return path if path in present else None
 
 
 def relocate(settings, paths):

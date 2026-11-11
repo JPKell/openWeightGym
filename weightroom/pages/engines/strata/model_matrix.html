@@ -1,0 +1,37 @@
+{# One Strata model's settings as a matrix: settings down, the nodes that have a copy across. The selected node's
+   column keeps the single-node form's names and ids; another node's fields are named n:<node>:<field>. #}
+{% from "model_matrix_parts.html" import group, cell, shared_item, shared_row, node_head %}
+{% set width = columns|length %}
+{% set lead = columns|selectattr("selected")|first %}
+<div class="table-responsive model-matrix-scroll">
+<table class="table table-sm align-middle mb-0 model-matrix{{ ' is-single' if width == 1 }}" aria-label="Settings by node" data-model-matrix>
+  <thead><tr><th class="matrix-label" scope="col">Setting</th>{% for column in columns %}{{ node_head(column, loop.index, width) }}{% endfor %}</tr></thead>
+
+  {% call group('context', 'Context', width) %}
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}ctx">Context tokens</label><small class="matrix-hint">512 qualified</small></th>
+    {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}ctx" name="{{ column.prefix }}ctx" type="number" min="256" max="8192" class="form-control form-control-sm" value="{{ column.showing.flags['ctx-size'] }}" required aria-label="context tokens{{ column.on }}">{% endcall %}{% endfor %}</tr>
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}min-context">Minimum context</label><small class="matrix-hint">blank keeps the maximum fixed</small></th>
+    {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}min-context" name="{{ column.prefix }}min_context" type="number" min="256" max="8192" class="form-control form-control-sm" value="{{ column.showing.min_context|default('') }}" aria-label="minimum context{{ column.on }}">{% endcall %}{% endfor %}</tr>
+  {% endcall %}
+
+  {% call group('hardware', 'Hardware', width) %}
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}strata-gpu">GPU</label></th>
+    {% for column in columns %}{% call cell(column) %}<select id="{{ column.idp }}strata-gpu" name="{{ column.prefix }}gpu_card" class="form-select form-select-sm" aria-label="GPU{{ column.on }}"><option value="">Any single enabled GPU</option>{% for card in column.cards %}<option value="{{ card }}"{{ ' selected' if column.showing.gpus == [card] }}>{{ card }}</option>{% endfor %}</select>{% endcall %}{% endfor %}</tr>
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row">Keep GPUs to itself</th>
+    {% for column in columns %}{% call cell(column) %}<div class="form-check form-switch mb-0"><input id="{{ column.idp }}alone" name="{{ column.prefix }}alone" value="yes" type="checkbox" class="form-check-input"{{ ' checked' if column.showing.alone }}><label for="{{ column.idp }}alone" class="form-check-label">Keep GPUs to itself<span class="visually-hidden">{{ column.on }}</span></label></div>{% endcall %}{% endfor %}</tr>
+  {% endcall %}
+
+  {% call group('model', 'Model', width, shared=true) %}
+  {% call shared_row(width) %}<div class="matrix-shared">
+    {% call shared_item('Name', 'to') %}<div class="input-group"><input id="to" name="to" form="rename" class="form-control" value="{{ model.name }}" autocapitalize="none" spellcheck="false" required><button form="rename" class="btn btn-outline-primary" name="do" value="rename">Rename</button></div>{% endcall %}
+    {% call shared_item('List position', 'order') %}<input id="order" name="order" type="number" step="1" class="form-control" value="{{ '' if showing.order is undefined or showing.order is none else showing.order }}" aria-describedby="order-help"><div id="order-help" class="form-hint">Lower numbers appear first; matching positions sort by name.</div>{% endcall %}
+    {% call shared_item('Engine') %}<span class="badge bg-secondary-lt">{{ engine_schema.label }}</span>{% endcall %}
+  </div>{% endcall %}
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}file">Prepared GGUF weights</label><small class="matrix-hint">each node's own copy</small></th>
+    {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}file" name="{{ column.prefix }}file" class="form-control form-control-sm font-monospace" value="{{ column.showing.flags.model }}" required aria-label="prepared GGUF weights{{ column.on }}">{% endcall %}{% endfor %}</tr>
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}tokenizer">Prepared tokenizer directory</label></th>
+    {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}tokenizer" name="{{ column.prefix }}tokenizer" class="form-control form-control-sm font-monospace" value="{{ column.showing.strata.tokenizer }}" required aria-label="prepared tokenizer directory{{ column.on }}">{% endcall %}{% endfor %}</tr>
+  {% endcall %}
+</table>
+</div>
+<p class="small text-secondary mt-3 mb-0">Strata uses one GPU and its explicitly configured hybrid host RAM budget. Text chat and streaming only; tools, images, adapters, GPU splitting, reasoning and native benchmarks are unsupported. No llama.cpp flags are inherited.</p>

@@ -8,7 +8,7 @@
     const fallback = box.querySelector('[data-hardware-fallback]');
     if (fallback) fallback.hidden = true;
     pins.hidden = mode !== 'pin'; pins.disabled = mode !== 'pin';
-    const cpu = box.querySelector('[name="cpu"]'), gpu = box.querySelector('[name="gpu"]');
+    const cpu = box.querySelector('[data-placement-device="cpu"]'), gpu = box.querySelector('[data-placement-device="gpu"]');
     if (cpu) cpu.checked = mode === 'cpu';
     if (gpu) gpu.checked = mode !== 'cpu';
     if (changed) {
@@ -51,16 +51,22 @@
       return Number(box.dataset.automaticGpus) || automatic;
     }
   };
+  // Each node column of the matrix has its own parallel controls; data-prefix names its fields.
   function updateParallel() {
     document.querySelectorAll('[data-parallel-switch]').forEach(box => {
-      const fields = document.getElementById(box.getAttribute('aria-controls'));
-      if (fields) fields.disabled = !box.checked;
-      const form = box.form, summary = form?.querySelector('[data-context-summary]');
-      if (!summary) return;
-      const count = box.checked ? Math.max(1, Number(form.elements.parallel_count.value)) : 1;
-      const total = Math.max(1, Number(form.elements.ctx.value));
-      const shared = form.elements.parallel_shared.checked;
-      const limit = box.checked ? Math.min(total, Math.max(1, Number(form.elements.parallel_context.value)), shared ? total : Math.floor(total / count)) : total;
+      (box.getAttribute('aria-controls') || '').split(/\s+/).forEach(id => {
+        const field = id && document.getElementById(id);
+        if (field && field !== box) field.disabled = !box.checked;
+      });
+    });
+    document.querySelectorAll('[data-context-summary]').forEach(summary => {
+      const form = summary.closest('form'), prefix = summary.dataset.prefix || '', field = name => form?.elements[prefix + name];
+      const box = field('parallel_enabled');
+      if (!box || !field('ctx')) return;
+      const count = box.checked ? Math.max(1, Number(field('parallel_count').value)) : 1;
+      const total = Math.max(1, Number(field('ctx').value));
+      const shared = field('parallel_shared').checked;
+      const limit = box.checked ? Math.min(total, Math.max(1, Number(field('parallel_context').value)), shared ? total : Math.floor(total / count)) : total;
       summary.textContent = `${count.toLocaleString()} request${count === 1 ? '' : 's'}, up to ${limit.toLocaleString()} tokens each`;
     });
   }
@@ -80,7 +86,9 @@
     const form = button.closest('form'), name = button.dataset.addRow;
     const row = form.querySelector(`[data-row-template="${name}"]`).content.cloneNode(true);
     const first = row.querySelector('input');
-    form.querySelector(`[data-${name}-rows]`).append(row); first?.focus();
+    const rows = form.querySelector(`[data-${name}-rows]`), anchor = rows.querySelector(':scope > [data-row-anchor]');
+    if (anchor) anchor.before(row); else rows.append(row);
+    first?.focus();
   });
   const update = () => { document.querySelectorAll('[data-hardware]').forEach(box => updateHardware(box)); updateParallel(); };
   document.addEventListener('htmx:afterSwap', update);

@@ -73,7 +73,7 @@ from turnstile.hosted import Hosted
 from turnstile.machines import Machines, PassiveReads, logical_catalogue, placement_order
 from turnstile.model_locations import ModelLocations
 from engines import engine_for
-from turnstile.model_configuration import configuration, generation, with_generation
+from turnstile.model_configuration import comparable, configuration, generation, shared, translate, with_generation, with_shared
 from turnstile.model_install import plan as installation_plan, execute as install_files
 from turnstile import library
 from turnstile.accounts import LOOPBACK, key_of, signed_in
@@ -1442,6 +1442,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             destinations = list(dict.fromkeys(asked["machines"] if several else [asked["machine"]]))
             if not isinstance(name, str) or not name or not destinations or not all(isinstance(one, str) for one in destinations):
                 raise ValueError("Choose a model name and compute node.")
+            if asked.get("move") and (len(destinations) != 1 or not asked.get("source_model_id")
+                                      or asked.get("source_machine", "") in ("", destinations[0])):
+                raise ValueError("A move takes the model from one node to one other node.")
             for destination in destinations:
                 if destination not in machines.names:
                     raise ValueError("Choose a model name and compute node.")
@@ -1533,9 +1536,19 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                                json.dumps(placed).encode(), machine=destination, timeout=30)
                 if answer is None or answer.status_code != 201:
                     raise ValueError(answer.json()["error"]["message"] if answer is not None else "The destination stopped answering; verify its model list before retrying.")
+                if asked.get("move"):
+                    # The copy is verified and offered; only now does the source give up its own.
+                    # It stops being offered at once, and finishes the requests it already has.
+                    source = asked["source_machine"]
+                    job.update(state="removing", machine=source)
+                    removed = await ask_machine(user, "DELETE", "/loadcoach/models/" + quote(row["name"], safe=""), machine=source, timeout=30)
+                    if removed is None or not removed.is_success:
+                        why = removed.json()["error"]["message"] if removed is not None else "it stopped answering"
+                        raise ValueError(f"Copied to {destination}, but {source} kept its copy: {why}")
+                    job.update(machine=destination, moved_from=source)
                 job.update(state="complete", path=placed["flags"]["model"])
                 facts_seen.clear()
-                log.add("model", "installed", user.name, "console", name, machine=destination)
+                log.add("model", "moved" if asked.get("move") else "installed", user.name, "console", name, machine=destination)
             except (ValueError, OSError, httpx.HTTPError) as problem:
                 job.update(state="failed", why=str(problem))
             finally:
@@ -2320,52 +2333,80 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             facts_seen.clear()
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
 
+    async def logical_copies(user, machine, local_name, before):
+        """Every verified copy of one node's model, by node: (inventories, locations), or an error.
+        A shared-setting change must see every node, so an unreachable one refuses it."""
+        inventories = await asyncio.gather(*(ask_machine(user, "GET", "/loadcoach/models", machine=node, timeout=5)
+                                              for node in machines.names))
+        unavailable = [node for node, answer in zip(machines.names, inventories) if answer is None or answer.status_code != 200]
+        if unavailable:
+            return error(409, "Shared model settings were not saved: these nodes cannot be checked: " + ", ".join(unavailable) + ".")
+        digest = before.get("sha256")
+        if not digest and len(machines.names) > 1:
+            return error(409, "Wait for the selected model's files to finish hashing before changing shared model settings.")
+        found = {node: {"data": [{"id": row["name"], "owned_by": "loadcoach", "content_sha256": row.get("sha256"),
+                                  "engine_id": row.get("engine", "llama_cpp")} for row in answer.json()["models"]]}
+                 for node, answer in zip(machines.names, inventories)}
+        logical = next((row for row in logical_catalogue(found) if any(
+            loc["machine"] == machine and loc["id"] == local_name for loc in row["locations"])), {}) if digest else {}
+        return ({node: answer.json() for node, answer in zip(machines.names, inventories)},
+                logical.get("locations") or [{"machine": machine, "id": local_name}])
+
+    async def shared_for_peers(user, machine, values, locations, inventories, skip=()):
+        """Each other copy's saved settings and the same settings carrying `values`, with the
+        projector and adapter paths that copy's node keeps; an error when a node lacks a file."""
+        nodes = await model_file_inventory(user) if values["projector"] or values["adapters"] else []
+        peers, missing = [], []
+        for location in locations:
+            node = location["machine"]
+            if node == machine or node in skip:
+                continue
+            inventory = inventories[node]
+            row = next(row for row in inventory["models"] if row["name"] == location["id"])
+            def moved(path, node=node):
+                """The shared file's path on this copy's node."""
+                there = translate(path, machine, node, nodes)
+                if there is None:
+                    missing.append(f"{Path(path).name} on {node}")
+                return there or path
+            saved = configuration(row)
+            applied = with_shared(saved, values, moved)
+            for flag in generation({"flags": inventory.get("defaults") or {}})["flags"]:
+                applied["flags"].setdefault(flag, None)
+            peers.append((node, row["name"], saved, applied))
+        if missing:
+            return error(409, "Shared model settings were not saved: " + ", ".join(missing) + " is missing. Copy it there in Files first.")
+        return peers
+
     async def configure_model(user, machine, suffix, path, raw, body):
-        """Apply local loading settings and synchronize generation defaults across verified copies."""
+        """Apply local loading settings and keep the shared settings the same on every verified copy."""
         local_name = suffix.removeprefix("models/") if suffix.startswith("models/") else body.get("name")
         current = await ask_machine(user, "GET", "/loadcoach/models", machine=machine, timeout=5)
         if current is None or current.status_code != 200:
             return error(503, f"LoadCoach {machine} is not answering.")
         before = next((row for row in current.json()["models"] if row["name"] == local_name), None)
-        candidate = body if suffix.startswith("models/") else (body.get("configuration") or {}).get("settings")
+        configured = body if suffix.startswith("models/") else body.get("configuration") or {}
+        candidate = configured if suffix.startswith("models/") else configured.get("settings")
+        order = configured.get("order") if suffix.startswith("models/") or "order" in configured else None
         # Resolve preset/undo through the same read-only preview the worker will validate on apply.
         if before and candidate is None:
             preview = await ask_machine(user, "POST", "/loadcoach/model-setup",
                                         json.dumps({**body, "action": "preview"}).encode(), machine=machine)
             if preview is None or preview.status_code != 200:
                 return error(409, "The model configuration could not be previewed.")
-            candidate = preview.json()["candidate"]["settings"]
+            candidate, order = preview.json()["candidate"]["settings"], preview.json()["candidate"]["order"]
         selected = engine_for(before or candidate or {})
         defaults = current.json().get("defaults") or {}
-        shared = generation(selected.model.effective(candidate, defaults)) if isinstance(candidate, dict) and "flags" in candidate else None
-        changed = before and shared is not None and generation(selected.model.effective(configuration(before), defaults)) != shared
+        values = shared(selected.model.effective(candidate, defaults), order) if isinstance(candidate, dict) and "flags" in candidate else None
+        changed = before and values is not None and shared(selected.model.effective(configuration(before), defaults)) != values
         peers = []
         if changed:
-            inventories = await asyncio.gather(*(ask_machine(user, "GET", "/loadcoach/models", machine=node, timeout=5)
-                                                  for node in machines.names))
-            unavailable = [node for node, answer in zip(machines.names, inventories) if answer is None or answer.status_code != 200]
-            if unavailable:
-                return error(409, "Global generation settings were not saved: these nodes cannot be checked: " + ", ".join(unavailable) + ".")
-            digest = before.get("sha256")
-            if not digest and len(machines.names) > 1:
-                return error(409, "Wait for the selected model's files to finish hashing before changing global generation settings.")
-            if digest:
-                found = {node: {"data": [{"id": row["name"], "owned_by": "loadcoach", "content_sha256": row.get("sha256"),
-                                          "engine_id": row.get("engine", "llama_cpp")} for row in answer.json()["models"]]}
-                         for node, answer in zip(machines.names, inventories)}
-                logical = next((row for row in logical_catalogue(found) if any(
-                    loc["machine"] == machine and loc["id"] == local_name for loc in row["locations"])), {})
-                for location in logical.get("locations", []):
-                    node = location["machine"]
-                    if node == machine:
-                        continue
-                    inventory = inventories[machines.names.index(node)].json()
-                    row = next(row for row in inventory["models"] if row["name"] == location["id"])
-                    saved = configuration(row)
-                    applied = with_generation(saved, shared)
-                    for flag in generation({"flags": inventory.get("defaults") or {}})["flags"]:
-                        applied["flags"].setdefault(flag, None)
-                    peers.append((node, row["name"], saved, applied))
+            copies = await logical_copies(user, machine, local_name, before)
+            if isinstance(copies, Response):
+                return copies
+            peers = await shared_for_peers(user, machine, values, copies[1], copies[0])
+            if isinstance(peers, Response):
+                return peers
         answer = await ask_machine(user, "POST", path, raw, machine=machine, timeout=30)
         if answer is None or not answer.is_success:
             return answer
@@ -2381,9 +2422,74 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                                  json.dumps(restore).encode(), machine=restore_node)
                     if restored is None or not restored.is_success:
                         failures.append(restore_node)
-                return error(409, "Global generation settings could not be saved. " +
+                return error(409, "Shared model settings could not be saved. " +
                              ("Verify configuration on: " + ", ".join(failures) + "." if failures else "The previous settings were restored."))
         return answer
+
+    async def configure_models(request: Request) -> Response:
+        """Apply reviewed configurations to several copies of one model together, or to none.
+
+        Each change is one node's previewed configuration and its review token. Shared settings
+        must agree, and a change to them must include every copy. A failure restores the copies
+        already changed, so a node is never left with only part of a reviewed change."""
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, "Missing or wrong API key.")
+        if not user.can("manage-models"):
+            return error(403, "Model configuration requires manage-models.")
+        try:
+            asked = json.loads(await request.body())
+            changes = asked["changes"]
+            if not isinstance(changes, list) or not changes or not all(
+                    isinstance(one, dict) and one.get("machine") in machines.names and isinstance(one.get("name"), str)
+                    and isinstance(one.get("configuration"), dict) and isinstance(one.get("token"), str) for one in changes):
+                raise ValueError("Send each change as a node, a model name, a configuration and its review token.")
+            if len({one["machine"] for one in changes}) != len(changes):
+                raise ValueError("Send one change for each node.")
+        except (ValueError, KeyError, TypeError) as problem:
+            return error(400, str(problem) if isinstance(problem, ValueError) and str(problem).startswith("Send") else "Send a list of reviewed changes.")
+        async with configuration_lock:
+            rows, values = [], []
+            for one in changes:
+                current = await ask_machine(user, "GET", "/loadcoach/models", machine=one["machine"], timeout=5)
+                if current is None or current.status_code != 200:
+                    return error(503, f"LoadCoach {one['machine']} is not answering. Nothing was changed.")
+                before = next((row for row in current.json()["models"] if row["name"] == one["name"]), None)
+                settings = one["configuration"].get("settings")
+                if before is None or not isinstance(settings, dict) or "flags" not in settings:
+                    return error(404, f"{one['name']} is not on {one['machine']}. Nothing was changed.")
+                selected, defaults = engine_for(before), current.json().get("defaults") or {}
+                rows.append(before)
+                values.append((shared(selected.model.effective(configuration(before), defaults)),
+                               shared(selected.model.effective(settings, defaults), one["configuration"].get("order"))))
+            if any(comparable(after) != comparable(values[0][1]) for _, after in values):
+                return error(400, "The copies disagree on shared settings. Preview them again. Nothing was changed.")
+            if any(before != after for before, after in values):
+                copies = await logical_copies(user, changes[0]["machine"], changes[0]["name"], rows[0])
+                if isinstance(copies, Response):
+                    return copies
+                left = sorted({loc["machine"] for loc in copies[1]} - {one["machine"] for one in changes})
+                if left:
+                    return error(409, "Shared settings change on every copy; include " + ", ".join(left) + ". Nothing was changed.")
+            applied = []
+            for one, before in zip(changes, rows):
+                # Include a timed-out write in rollback: it may have reached its worker.
+                applied.append((one["machine"], one["name"], configuration(before)))
+                answer = await ask_machine(user, "POST", "/loadcoach/model-setup", json.dumps({
+                    "name": one["name"], "action": "apply", "configuration": one["configuration"], "token": one["token"],
+                    "acknowledge": asked.get("acknowledge") is True}).encode(), machine=one["machine"], timeout=30)
+                if answer is None or not answer.is_success:
+                    why = answer.json().get("error", {}).get("message", "It refused the change.") if answer is not None else "It stopped answering."
+                    failures = []
+                    for node, label, restore in reversed(applied[:-1] if answer is not None else applied):
+                        restored = await ask_machine(user, "POST", "/loadcoach/models/" + quote(label, safe=""),
+                                                     json.dumps(restore).encode(), machine=node)
+                        if restored is None or not restored.is_success:
+                            failures.append(node)
+                    return error(409, f"{one['machine']}: {why} " + ("Verify configuration on: " + ", ".join(failures) + "." if failures
+                                                                        else "Nothing was changed."))
+            facts_seen.clear()
+        return JSONResponse({"applied": [one["machine"] for one in changes]})
 
     async def machine_cards(request: Request) -> Response:
         """Read or change one node's detected-card exclusions without host fallback."""
@@ -2528,6 +2634,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/models/files", model_files_available),
                             Route("/turnstile/models/install", install_model, methods=["POST"]),
                             Route("/turnstile/models/location", model_location, methods=["POST"]),
+                            Route("/turnstile/models/configure", configure_models, methods=["POST"]),
                             Route("/turnstile/machines/{name}/settings", machine_settings),
                             Route("/turnstile/machines/{name}/settings/{program}", machine_settings, methods=["POST"]),
                             Route("/turnstile/components", components_list),

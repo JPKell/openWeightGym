@@ -84,8 +84,8 @@ def test_parallel_model_fields_save_validate_and_remove_the_server_flags(desk, t
     file = gguf(tmp_path / "parallel.gguf", general__architecture="tiny", tiny__context_length=4000)
     browser.post("/models", data={"name": "one", "file": file, "ctx": "8000", "cards": "1"})
     shown = browser.get("/models/one").text
-    assert 'id="parallel-fields" class="row g-3 mt-0" disabled' in shown
-    assert 'name="parallel_context" type="number" min="1" step="1" class="form-control" value="4000"' in shown
+    assert 'aria-label="requests at once" data-parallel-field disabled' in shown
+    assert 'name="parallel_context" type="number" min="1" step="1" class="form-control form-control-sm" value="4000"' in shown
     form = {"do": "save", "file": file, "ctx": "8000", "cards": "1", "parallel_controls": "yes",
             "parallel_enabled": "yes", "parallel_count": "2", "parallel_shared": "yes", "parallel_context": "4000"}
     saved = browser.post("/models/one", data=form)
@@ -123,7 +123,7 @@ def test_disabling_parallel_also_suppresses_inherited_model_defaults(desk, tmp_p
     browser.post("/models", data={"name": "inherited", "file": file, "ctx": "8000", "cards": "1"})
     assert 'data-parallel-switch checked' in browser.get("/models/inherited").text
     saved = browser.post("/models/inherited", data={"do": "save", "file": file, "ctx": "8000", "cards": "1", "parallel_controls": "yes"})
-    assert saved.status_code == 200 and 'id="parallel-fields" class="row g-3 mt-0" disabled' in saved.text
+    assert saved.status_code == 200 and 'aria-label="requests at once" data-parallel-field disabled' in saved.text
     effective = Models(str(tmp_path / "loadcoach.db"), defaults).get("inherited")
     assert not set(PARALLEL_FLAGS) & effective["flags"].keys()
     assert not {"--" + flag for flag in PARALLEL_FLAGS} & set(command_line("llama-server", 9999, effective["flags"], ("A",)))

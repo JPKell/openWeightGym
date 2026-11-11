@@ -92,10 +92,18 @@ other compatible weights through **Files → Hugging Face**, then select their r
 Families come from the installed audio.cpp release or the file's embedded contract; a model
 need not appear in a preselected download catalogue. The runtime must implement its architecture.
 
-On a model's page, **Compute locations → Add model to node** copies an existing model to
-another configured node. Choose a location to edit its CPU/GPU distribution, context,
-parallel requests and loading flags. Generation defaults, including reasoning and sampling,
-apply across the model's nodes; all configured nodes must answer before those defaults change.
+A language model's **Settings** show one column for each node holding a copy. Context,
+parallel requests, hardware placement, the model file and loading flags belong to each node;
+tick several node columns to edit them together. Generation defaults (sampling and reasoning),
+the projector, adapters and list position are shared: they appear once and are kept the same on
+every copy, with each file named as its own node keeps it. A shared file a node lacks must be
+copied there in Files first. **Preview and save** reviews each changed node; several are applied
+together or not at all, and all configured nodes must answer before shared settings change.
+
+**Copy or move** below the settings copies the complete model to one or more other nodes. A move
+takes one destination: the copy is verified there before the original is removed, and if the
+removal fails the original stays. Image and audio models keep **Compute locations → Add model
+to node**.
 Image/audio engines serve one request at a time and expose no measurable token context.
 Their benchmark choice is **Load time**; quality and throughput benchmarks are refused.
 

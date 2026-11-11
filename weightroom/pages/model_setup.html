@@ -1,20 +1,6 @@
-{% from "parts.html" import card, section_title , confirm_loss, alert, empty_row %}
-{% call card("Model presets", true) %}
-  {% set preset_group = setup.preset_group or {} %}
-  <p class="small text-secondary mb-1">Save and reuse settings across compatible versions of this model.</p>
-  {% call more() %}  <p class="small text-secondary">Shared presets for {{ preset_group.name or model.name }}. Models with the same GGUF name, architecture and parameter size share these settings across quants; incomplete metadata shares only the same file. The target keeps its model file, projector and adapters. Replacing or deleting a shared preset affects every model in this group. Presets marked Same file only or This entry only keep that narrower scope. Preview checks each target again before apply.</p>{% endcall %}
-  {% if setup.why %}<p class="text-warning">{{ setup.why }}</p>{% endif %}
-  <div class="table-responsive"><table class="sortable table table-sm align-middle" aria-label="Model presets"><thead><tr><th>Preset</th><th>Context</th><th>Actions</th></tr></thead><tbody>
-    {% for preset in setup.presets %}<tr><th class="wrap">{{ preset.name }}{% if preset.scope and preset.scope != preset_group.key %}<small class="d-block text-secondary">{{ 'This entry only' if preset.scope.startswith('entry:') else 'Same file only' }}</small>{% endif %}</th><td>{{ preset.configuration.settings.flags["ctx-size"] }}</td><td><form method="post" action="{{ address(model.name) }}#configuration-preview" class="btn-group btn-group-sm"><input type="hidden" name="preset" value="{{ preset.name }}"><button class="btn btn-outline-primary btn-sm" name="do" value="preview-preset">Preview preset</button><button  class="btn btn-outline-danger btn-sm" name="do" value="delete-preset" {{ confirm_loss() }}>Delete preset</button></form></td></tr>
-    {% else %}{% call empty_row(3, class_='') %}No saved presets. Preview the settings below, then save a named snapshot.{% endcall %}{% endfor %}
-  </tbody></table></div>
-  {% if setup.can_undo %}<form method="post" action="{{ address(model.name) }}#configuration-preview"><input type="hidden" name="undo" value="{{ setup.undo.receipt }}"><button class="btn btn-outline-secondary" name="do" value="preview-undo">Preview undo of last configuration change</button></form>
-  {% elif setup.undo %}<p class="text-secondary small mb-0">The model was edited after the last reviewed change. Its old undo cannot overwrite these settings.</p>{% endif %}
-{% endcall %}
-
-{% if review %}
-{% call card("Configuration preview", id="configuration-preview", attrs={"tabindex": "-1", "aria-labelledby": "configuration-preview-heading"}, header_id="configuration-preview-heading") %}
-  <p>{{ review.qualification or "Correct the errors below and preview again." }}</p>
+{% from "parts.html" import card, section_title , confirm_loss, alert, empty_row, more %}
+{# What a preview found for one node: its errors and warnings, changes, files, launch flags and placement. #}
+{% macro review_details(review) %}
   {% if review.errors %}{% call alert('danger') %}<ul class="mb-0">{% for message in review.errors %}<li>{{ message }}</li>{% endfor %}</ul>{% endcall %}{% endif %}
   {% if review.warnings %}{% call alert('warning') %}<ul class="mb-0">{% for message in review.warnings %}<li>{{ message }}</li>{% endfor %}</ul>{% endcall %}{% endif %}
   {% if review.effective %}
@@ -45,6 +31,25 @@
   <p class="small text-secondary">{{ review.placement.note }}</p>
   {% if review.command %}<p class="small">Candidate launch command (port <code>0</code> stands for a port assigned at load):</p><pre class="small wrap" style="white-space: pre-wrap; overflow-wrap: anywhere">{{ review.command }}</pre>{% endif %}
   {% endif %}
+{% endmacro %}
+
+{% call card("Model presets", true) %}
+  {% set preset_group = setup.preset_group or {} %}
+  <p class="small text-secondary mb-1">Save and reuse settings across compatible versions of this model.</p>
+  {% call more() %}  <p class="small text-secondary">Shared presets for {{ preset_group.name or model.name }}. Models with the same GGUF name, architecture and parameter size share these settings across quants; incomplete metadata shares only the same file. The target keeps its model file, projector and adapters. Replacing or deleting a shared preset affects every model in this group. Presets marked Same file only or This entry only keep that narrower scope. Preview checks each target again before apply.</p>{% endcall %}
+  {% if setup.why %}<p class="text-warning">{{ setup.why }}</p>{% endif %}
+  <div class="table-responsive"><table class="sortable table table-sm align-middle" aria-label="Model presets"><thead><tr><th>Preset</th><th>Context</th><th>Actions</th></tr></thead><tbody>
+    {% for preset in setup.presets %}<tr><th class="wrap">{{ preset.name }}{% if preset.scope and preset.scope != preset_group.key %}<small class="d-block text-secondary">{{ 'This entry only' if preset.scope.startswith('entry:') else 'Same file only' }}</small>{% endif %}</th><td>{{ preset.configuration.settings.flags["ctx-size"] }}</td><td><form method="post" action="{{ address(model.name) }}#configuration-preview" class="btn-group btn-group-sm"><input type="hidden" name="preset" value="{{ preset.name }}"><button class="btn btn-outline-primary btn-sm" name="do" value="preview-preset">Preview preset</button><button  class="btn btn-outline-danger btn-sm" name="do" value="delete-preset" {{ confirm_loss() }}>Delete preset</button></form></td></tr>
+    {% else %}{% call empty_row(3, class_='') %}No saved presets. Preview the settings below, then save a named snapshot.{% endcall %}{% endfor %}
+  </tbody></table></div>
+  {% if setup.can_undo %}<form method="post" action="{{ address(model.name) }}#configuration-preview"><input type="hidden" name="undo" value="{{ setup.undo.receipt }}"><button class="btn btn-outline-secondary" name="do" value="preview-undo">Preview undo of last configuration change</button></form>
+  {% elif setup.undo %}<p class="text-secondary small mb-0">The model was edited after the last reviewed change. Its old undo cannot overwrite these settings.</p>{% endif %}
+{% endcall %}
+
+{% if review %}
+{% call card("Configuration preview", id="configuration-preview", attrs={"tabindex": "-1", "aria-labelledby": "configuration-preview-heading"}, header_id="configuration-preview-heading") %}
+  <p>{{ review.qualification or "Correct the errors below and preview again." }}</p>
+  {{ review_details(review) }}
   {% if not review.errors %}
   <form method="post" action="{{ address(model.name) }}" class="row g-3" id="model-review">
     <input type="hidden" name="review_source" value="{{ review_source|tojson|forceescape }}">
@@ -57,4 +62,24 @@
   </form>
   {% endif %}
   {% endcall %}
+{% endif %}
+
+{% if reviews %}
+{% call card("Configuration preview", id="configuration-preview", attrs={"tabindex": "-1", "aria-labelledby": "configuration-preview-heading"}, header_id="configuration-preview-heading") %}
+  {% set blocked = reviews|selectattr("review.errors")|list %}
+  <p>{{ "Correct the errors below and preview again." if blocked else "Each changed node was checked on its own. Apply saves them all together, or none of them." }}</p>
+  {% for one in reviews %}
+  <details class="review-node mb-3"{% if loop.first or one.review.errors or one.review.warnings %} open{% endif %}>
+    <summary><strong>{{ one.machine }}</strong>{% if one.name != model.name %} <code>{{ one.name }}</code>{% endif %} <span class="scope-badge badge bg-azure-lt">{{ one.review.changes|length }} change{{ "" if one.review.changes|length == 1 else "s" }}</span></summary>
+    <div class="mt-2">{% if one.review.qualification %}<p class="small">{{ one.review.qualification }}</p>{% endif %}{{ review_details(one.review) }}</div>
+  </details>
+  {% endfor %}
+  {% if not blocked %}
+  <form method="post" action="{{ address(model.name) }}" class="row g-3" id="model-review" data-apply-nodes>
+    <input type="hidden" name="changes" value="{{ apply_changes|tojson|forceescape }}">
+    {% if reviews|selectattr("review.warnings")|list %}<div class="col-12 form-check ms-2"><input id="setup-acknowledge" class="form-check-input" type="checkbox" name="acknowledge" required><label class="form-check-label" for="setup-acknowledge">I have reviewed these warnings and the pending real-model qualification.</label></div>{% endif %}
+    <div class="col-12"><button class="btn btn-primary" name="do" value="apply-reviewed-nodes">Apply to {{ reviews[0].machine if reviews|length == 1 else reviews|length ~ " nodes" }}</button></div>
+  </form>
+  {% endif %}
+{% endcall %}
 {% endif %}

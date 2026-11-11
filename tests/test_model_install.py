@@ -174,7 +174,7 @@ def test_catalogue_pills_and_node_settings_render_for_every_model_type(desk, tmp
         assert page.text.index('Add a model') < page.text.index('<table id="models-table"')
         detail = browser.get('/models/'+included)
         assert detail.status_code == 200, detail.text
-        assert 'Add model to node' in detail.text
+        assert ('id="copy-model"' if kind == 'llm' else 'Add model to node') in detail.text
         if kind != 'llm':
             assert 'Generation defaults' in detail.text and 'Load-time measurements only.' in detail.text
 

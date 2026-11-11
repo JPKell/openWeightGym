@@ -1,0 +1,43 @@
+{# The node matrix on a model's page: settings down, the nodes holding a copy across. Each engine's
+   engines/<id>/model_matrix.html lays out its rows with these. static/model-matrix.js adds editing
+   ticked columns together, the differences filter and collapsing a group. #}
+{% from "parts.html" import node_state, confirm_two %}
+
+{# A node's column heading. Its enable/disable button belongs to the form location-<index>, which the page puts outside
+   the settings form, so the settings form never sends it. #}
+{% macro node_head(column, index, width) %}
+<th scope="col" class="matrix-node{{ ' is-selected' if column.selected }}" data-node="{{ column.machine }}">
+  <div class="d-flex align-items-center gap-2">
+    {% if width > 1 %}<input type="checkbox" class="form-check-input m-0" data-matrix-pick value="{{ column.machine }}" aria-label="Edit {{ column.machine }} together with the other ticked nodes">{% endif %}
+    <a href="{{ column.link }}" class="fw-semibold text-reset"{% if column.selected %} aria-current="true"{% endif %}>{{ column.machine }}</a>
+  </div>
+  {% if column.name != column.logical %}<code class="matrix-hint">{{ column.name }}</code>{% endif %}
+  <span class="matrix-hint">{{ node_state(column.state) }} · {{ 'enabled' if column.enabled else 'disabled' }}</span>
+  {% if column.model_id %}<button form="location-{{ index }}" class="btn btn-outline-{{ 'danger' if column.enabled else 'success' }} btn-sm mt-1" name="do" value="{{ 'location-disable' if column.enabled else 'location-enable' }}" {{ confirm_two() }}>{{ 'Disable' if column.enabled else 'Enable' }}<span class="visually-hidden"> on {{ column.machine }}</span></button>{% endif %}
+</th>
+{% endmacro %}
+
+{# A group of rows with a heading that says whether its settings belong to each node or to all of them. #}
+{% macro group(key, title, width, shared=false, rows='') %}
+<tbody class="matrix-group" data-matrix-group="{{ key }}"{% if rows %} data-{{ rows }}-rows{% endif %}>
+  <tr class="matrix-group-head"><th colspan="{{ width + 1 }}" scope="rowgroup"><span class="matrix-group-title">
+    <button type="button" class="btn btn-link btn-sm p-0 fw-semibold text-reset" data-matrix-toggle aria-expanded="true">{{ title }}</button>
+    <span class="scope-badge badge bg-{{ 'azure' if shared else 'secondary' }}-lt ms-2">{{ 'All nodes' if shared else 'Each node' }}</span>
+  </span></th></tr>
+  {{ caller() }}
+</tbody>
+{% endmacro %}
+
+{# One node's value of a setting. #}
+{% macro cell(column) %}<td class="matrix-cell{{ ' is-selected' if column.selected }}" data-node="{{ column.machine }}">{{ caller() }}</td>{% endmacro %}
+
+{# A shared setting: two to a row. `flag` is the llama.cpp flag it sets, shown under the label; other settings have none. #}
+{% macro shared_item(label, for_id='', flag='', wide=false) %}
+<div class="matrix-shared-item{{ ' is-wide' if wide }}">
+  <div class="matrix-item-label">{% if for_id %}<label for="{{ for_id }}" class="mb-0">{{ label }}</label>{% else %}<span>{{ label }}</span>{% endif %}{% if flag %}<code class="matrix-flag">{{ flag }}</code>{% endif %}</div>
+  <div class="min-w-0">{{ caller() }}</div>
+</div>
+{% endmacro %}
+
+{# A row of settings every copy shares: they span the node columns, two to a row. Not a message, so not empty_row. #}
+{% macro shared_row(width) %}<tr class="matrix-row" data-matrix-shared><td class="matrix-cell" colspan="{{ width + 1 }}">{{ caller() }}</td></tr>{% endmacro %}

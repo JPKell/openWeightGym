@@ -124,8 +124,9 @@ def test_templates_use_shared_components():
             assert not re.search(r'<details\b[^>]*class=["\']more["\']', markup), path
             if path.name != 'navigation_parts.html':
                 assert not any('nav-pills' in value.split() for value in classes), path
-            # A spanning row with only a message belongs in empty_row; group headings use th.
-            assert not re.search(r'<tr\b[^>]*>\s*<td\b[^>]*\bcolspan=[^>]+>'
+            # A spanning row with only a message belongs in empty_row; group headings use th. The node
+            # matrix's rows of shared settings (data-matrix-shared) span its node columns with controls.
+            assert not re.search(r'<tr\b(?![^>]*data-matrix-shared)[^>]*>\s*<td\b[^>]*\bcolspan=[^>]+>'
                                  r'(?:(?!</?t[drh]\b).)*</td>\s*</tr>', markup, re.S), path
 
 
