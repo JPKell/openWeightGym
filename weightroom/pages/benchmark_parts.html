@@ -31,3 +31,43 @@
 {% macro flags(run) -%}
 {{ settings_note(run, true) }}{% if run and run.rerun %}<span class="benchmark-flag {{ 'flag-version' if run.version != run.latest_version else 'flag-environment' }}" title="Rerun recommended: {{ run.rerun|join(', ') }}" aria-label="Rerun recommended: {{ run.rerun|join(', ') }}">*</span>{% endif %}
 {%- endmacro %}
+
+{% macro node_badge(node) -%}
+<span class="badge bg-{{ 'green' if node.state == 'ready' else 'orange' if node.state == 'unknown' else 'secondary' }}-lt">{{ {'ready':'Ready', 'unknown':'Status unknown', 'unavailable':'Unreachable', 'disabled':'Disabled', 'front':'Front host'}[node.state] }}</span>
+{%- endmacro %}
+
+{% macro run_controls(run) %}
+{% from 'parts.html' import confirm_two %}
+{% from 'icons.html' import icon %}
+{% if run.may_control %}<form method="post" action="/benchmarks/control" class="d-flex gap-1"><input type="hidden" name="run" value="{{ run.id }}">{% if run.state != 'creating' %}<button name="action" value="{{ 'resume' if run.state == 'paused' else 'pause' }}" class="btn btn-outline-secondary btn-sm benchmark-icon" title="{{ 'Resume' if run.state == 'paused' else 'Pause' }}" aria-label="{{ 'Resume' if run.state == 'paused' else 'Pause' }} {{ run.model }} at {{ run.location or 'compute' }}">{{ icon('play' if run.state == 'paused' else 'pause') }}</button>{% endif %}<button name="action" value="stop" class="btn btn-outline-danger btn-sm benchmark-icon" title="Stop" aria-label="Stop {{ run.model }} at {{ run.location or 'compute' }}" {{ confirm_two() }}>{{ icon('stop') }}</button></form>{% endif %}
+{% endmacro %}
+
+{% macro node_summary(node) %}
+{% from 'parts.html' import card %}
+{% call card(class_='mb-0', body_class='p-3', attrs={'data-benchmark-node': node.name}) %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2"><strong>{{ node.name }}</strong>{{ node_badge(node) }}</div>
+<div class="small text-secondary mt-2">{% if node.hostname and node.hostname != node.name %}{{ node.hostname }} · {% endif %}{{ node.choices|length }} compatible model{{ '' if node.choices|length == 1 else 's' }}</div>
+<div class="small mt-1">{{ node.running }} running · {{ node.queued }} queued</div>
+{% endcall %}
+{% endmacro %}
+
+{% macro target_choice(choice, node, selected_target) %}
+<label class="benchmark-target d-inline-flex align-items-center gap-1 rounded" data-target-choice data-search="{{ choice.id|lower }}" title="{{ node.name }} · {{ choice.reason or ('Settings or environment changed' if choice.result and choice.missing else 'Missing evidence' if choice.missing else 'Current evidence') }}{% if choice.context %} · {{ choice.context }} context{% endif %}">
+<input type="checkbox" class="form-check-input m-0" name="run-target" form="start-benchmark" value="{{ choice.target|tojson|forceescape }}" data-node="{{ node.name }}" data-missing="{{ 'true' if choice.missing else 'false' }}" aria-label="Select {{ choice.id }} at {{ node.name }}"{% if choice.reason %} disabled{% elif selected_target == (choice.id, node.name) %} checked{% endif %}>
+<span class="small wrap">{{ node.name }}</span>
+{% if choice.result %}<a class="small" href="/benchmarks/run/{{ choice.result.id }}" aria-label="{{ choice.id }} at {{ node.name }}: saved score {{ number(choice.result.score) }}">{{ number(choice.result.score) }}</a>{{ flags(choice.result) }}<span class="visually-hidden">Saved {{ choice.result.ended|timestamp }}</span>{% elif not choice.reason %}<small class="text-secondary">· Not run</small>{% endif %}
+{% if choice.reason %}<small class="text-secondary">· {{ 'Active' if choice.active else 'Disabled' if 'disabled' in choice.reason|lower else 'View only' if choice.reason == 'Benchmark ability required' else 'Unavailable' }}</small><span class="visually-hidden">{{ choice.reason }}</span>{% elif choice.missing and choice.result %}<span class="visually-hidden">Settings or environment changed</span>{% endif %}
+</label>
+{% endmacro %}
+
+{% macro node_bulk_choice(node) %}
+<label class="benchmark-node-choice d-flex align-items-center gap-2 rounded small" data-machine-lane="{{ node.name }}" title="{{ node.state|title }} · {{ node.selectable }} eligible models">
+<input type="checkbox" class="form-check-input m-0" data-select-node="{{ node.name }}" aria-label="Select all models on {{ node.name }}"{% if not node.selectable %} disabled{% endif %}><span class="wrap">{{ node.name }}</span><small class="text-secondary" data-node-count>{{ node.selectable }}</small></label>
+{% endmacro %}
+
+{% macro model_row(model, selected_target) %}
+<tr data-model-row="{{ model.id }}" data-search="{{ model.id|lower }}">
+<th scope="row"><label class="d-flex align-items-center gap-2 fw-normal min-w-0"><input type="checkbox" class="form-check-input m-0" data-select-model aria-label="Select eligible nodes for {{ model.id }}"{% if not model.selectable %} disabled{% endif %}><span class="min-w-0"><strong class="d-block text-truncate" title="{{ model.id }}">{{ model.id }}</strong><small class="d-block text-secondary text-truncate" title="{{ model.engines|join(', ') }}">{{ 'LLM' if model.kind == 'llm' else model.kind|title }}{% if model.engines %} · {{ model.engines|join(', ') }}{% endif %}</small></span></label></th>
+<td><div class="d-flex flex-wrap gap-1">{% for target in model.targets %}{{ target_choice(target.choice, target.node, selected_target) }}{% endfor %}</div></td>
+</tr>
+{% endmacro %}

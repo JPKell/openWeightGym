@@ -1,4 +1,22 @@
 {% from "parts.html" import card %}
+{% if section == 'runs' %}
+{% from 'parts.html' import alert %}
+{% from 'benchmark_parts.html' import run_controls %}
+{% set actions %}<span class="badge bg-blue-lt">{{ live_runs|length }} active</span>{% endset %}
+{% call card('Running now', id='benchmark-active', key='benchmark-running', attrs={'hx-swap-oob': 'outerHTML' if oob else none}, actions=actions) %}
+<div class="benchmark-running-grid">
+{% for item in live_runs %}
+<article aria-label="{{ item.run.model }} at {{ item.run.location or 'compute' }}">
+<div class="d-flex flex-wrap justify-content-between gap-2 mb-2"><a href="/benchmarks/run/{{ item.run.id }}"><strong>{{ item.run.model }}</strong></a><span class="badge bg-blue-lt">{{ item.run.location or 'compute' }}</span></div>
+<p class="small text-secondary">{{ item.run.benchmark }} · v{{ item.run.version }} · {{ item.run.state }}</p>
+<div class="mb-3">{{ run_controls(item.run) }}</div>
+{% if item.detail %}{% with live=item.detail %}{% include 'benchmark_active.html' %}{% endwith %}{% else %}{{ alert('warning', 'Live details could not be refreshed. Last known run is retained; retrying shortly.', class_='small py-2') }}{% endif %}
+</article>
+{% else %}<p class="small text-secondary mb-0">No benchmark is running.</p>{% endfor %}
+</div>
+{% endcall %}
+{% else %}
 {% set _card_title1 %}Running · {% if live %}{{ live.benchmark }} · {{ live.model }}{% else %}Idle{% endif %}{% endset %}
 {% set _card_actions1 %}{% if live %}<span class="badge text-bg-secondary">{{ live.state }}</span>{% endif %}{% endset %}
 {% call card(_card_title1, open=true, id="benchmark-active", key="benchmark-running", attrs={"hx-swap-oob": 'outerHTML' if oob else none}, actions=_card_actions1) %}{% include "benchmark_active.html" %}{% endcall %}
+{% endif %}

@@ -1,0 +1,79 @@
+/* Local benchmark proposals use the console's component and palette tokens. */
+.benchmark-design-page { max-width: 1660px; margin: auto; padding: 1.5rem var(--suite-page-gutter); }
+.review-bar { background: var(--tblr-bg-surface); }
+.fleet-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; }
+.node-tile { padding: 1rem; background: var(--tblr-bg-surface); border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius-lg); }
+.node-tile[data-status="offline"] { border-style: dashed; }
+.runs-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.runs-workspace > .card { margin-bottom: 0 !important; min-width: 0; }
+.live-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.live-run { padding: 1.25rem; min-width: 0; }
+.live-run + .live-run { border-left: 1px solid var(--bs-border-color); }
+.run-progress { display: block; width: 100%; height: 7px; accent-color: var(--bs-primary); }
+.live-run pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.live-run dl { display: grid; grid-template-columns: 1fr 1fr; }
+.setup-toolbar { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(150px, 1fr) auto; gap: 1rem; align-items: end; }
+.target-area { padding: 0 1rem 1rem; }
+.target-table { width: 100%; table-layout: fixed; }
+.target-table th:first-child { width: 22%; }
+.target-table td, .target-table th { padding: .8rem .5rem; vertical-align: middle; overflow-wrap: anywhere; }
+.target-table th { font-size: .8rem; }
+.target-table .node-select { font-size: .7rem; font-weight: normal; }
+.target-choice { display: flex; align-items: flex-start; gap: .5rem; cursor: pointer; padding: .65rem; border: 1px solid transparent; border-radius: var(--bs-border-radius); min-height: 66px; }
+.target-choice strong { font-size: .8rem; font-weight: 500; }
+.target-choice small { font-size: .72rem; }
+.target-choice input { flex-shrink: 0; margin-top: .15rem; }
+.target-choice:has(input:checked) { border-color: var(--bs-primary); background: var(--suite-accent-bg); }
+.target-choice:has(input:disabled) { cursor: default; background: var(--tblr-bg-surface-secondary); }
+.target-choice:focus-within { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
+.setup-review { display: flex; justify-content: space-between; align-items: center; gap: 1rem; background: var(--tblr-bg-surface-secondary); border-radius: 0 0 var(--bs-border-radius) var(--bs-border-radius); }
+#history-search { min-width: 150px; width: auto; }
+#queue-panel table { min-width: 720px; }
+#history-panel table { min-width: 840px; }
+.benchmark-dialog { width: min(780px, calc(100% - 2rem)); padding: 0; max-height: 90vh; color: var(--bs-body-color); background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius-lg); }
+.benchmark-dialog::backdrop { background: #0008; }
+.detail-grid { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: .6rem; overflow-wrap: anywhere; }
+.node-targets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; }
+.node-group .card-body { min-width: 0; }
+.node-options { display: grid; gap: .5rem; }
+[data-layout="lanes"] #running-panel { order: 0; }
+[data-layout="lanes"] #composer { order: 2; }
+[data-layout="lanes"] #queue-panel { order: 1; }
+[data-layout="lanes"] #history-panel { order: 3; }
+[data-layout="studio"] .runs-workspace { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); grid-template-rows: min-content 1fr auto; align-items: start; }
+[data-layout="studio"] #composer { grid-column: 1; grid-row: 1 / span 2; }
+[data-layout="studio"] #running-panel { grid-column: 2; }
+[data-layout="studio"] #queue-panel { grid-column: 2; }
+[data-layout="studio"] #queue-panel table { min-width: 0; table-layout: fixed; }
+[data-layout="studio"] #queue-panel td, [data-layout="studio"] #queue-panel th { overflow-wrap: anywhere; padding-inline: .6rem; }
+[data-layout="studio"] #queue-panel td:last-child > div { flex-wrap: wrap; }
+[data-layout="studio"] #history-panel { grid-column: 1 / -1; }
+[data-layout="studio"] .live-grid { grid-template-columns: 1fr; }
+[data-layout="studio"] .live-run + .live-run { border-left: 0; border-top: 1px solid var(--bs-border-color); }
+[data-layout="studio"] .setup-toolbar { grid-template-columns: 1fr; }
+[data-layout="studio"] .target-table, [data-layout="studio"] .target-table tbody { display: block; }
+[data-layout="studio"] .target-table thead { display: none; }
+[data-layout="studio"] .target-table tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding-block: .6rem; border-bottom: 1px solid var(--bs-border-color); }
+[data-layout="studio"] .target-table th:first-child { grid-column: 1 / -1; width: auto; }
+[data-layout="studio"] .target-table td::before { content: attr(data-label); display: block; font-size: .7rem; color: var(--bs-secondary-color); }
+@media (max-width: 1100px) {
+  .setup-toolbar { grid-template-columns: 1fr 1fr; }
+  .node-targets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  [data-layout="studio"] .runs-workspace { grid-template-columns: 1fr; grid-template-rows: auto; }
+  [data-layout="studio"] #composer, [data-layout="studio"] #running-panel, [data-layout="studio"] #queue-panel, [data-layout="studio"] #history-panel { grid-column: auto; grid-row: auto; }
+}
+@media (max-width: 767px) {
+  .benchmark-design-page { padding: 1rem; }
+  .fleet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .live-grid, .node-targets, .setup-toolbar { grid-template-columns: 1fr; }
+  .live-run + .live-run { border-left: 0; border-top: 1px solid var(--bs-border-color); }
+  .target-table, .target-table tbody { display: block; }
+  .target-table thead { display: none; }
+  .target-table tr, [data-layout="studio"] .target-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-block: .6rem; border-bottom: 1px solid var(--bs-border-color); }
+  .target-table th:first-child { grid-column: 1 / -1; width: auto; }
+  .target-table td::before { content: attr(data-label); display: block; font-size: .7rem; color: var(--bs-secondary-color); }
+  .target-choice { padding: .5rem .2rem; }
+  .setup-review { align-items: stretch; flex-direction: column; }
+  .node-tile { padding: .75rem; }
+  .node-tile > .d-flex { flex-wrap: wrap; }
+}

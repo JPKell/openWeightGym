@@ -1,0 +1,36 @@
+{# Shared sample components, cloned for all three layouts and dynamic replacements. #}
+{% from 'parts.html' import card, empty_row %}
+
+{% macro templates() %}
+<template id="node-template">
+<article class="node-tile" data-node>
+  <div class="d-flex justify-content-between gap-2"><strong data-name></strong><span class="badge" data-state></span></div>
+  <div class="small text-secondary mt-2" data-hardware></div>
+  <div class="small mt-1" data-work></div>
+</article>
+</template>
+<template id="target-template">
+<label class="target-choice"><input type="checkbox" name="run-target" class="form-check-input" data-target><span><strong class="d-block" data-target-title></strong><small class="text-secondary" data-target-note></small></span></label>
+</template>
+<template id="model-row-template"><tr><th scope="row"><strong data-name></strong><small class="d-block text-secondary" data-meta></small></th></tr></template>
+<template id="node-group-template">
+{% call card('', body_class='p-3', class_='node-group') %}
+<div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><strong data-name></strong><button type="button" class="btn btn-outline-secondary btn-sm" data-select-node>Select eligible</button></div>
+<p class="small text-secondary" data-meta></p><div class="node-options" data-options></div>
+{% endcall %}
+</template>
+<template id="running-template">
+<article class="live-run">
+<div class="d-flex flex-wrap justify-content-between gap-2 mb-2"><strong data-model></strong><span class="badge bg-blue-lt" data-node></span></div>
+<p class="small text-secondary mb-3" data-benchmark></p>
+<div class="d-flex justify-content-between gap-2 small mb-2"><span data-samples></span><strong data-percent></strong></div>
+<progress class="run-progress" max="100" data-progress></progress>
+<div class="d-flex justify-content-between flex-wrap gap-2 small mt-2"><span class="text-secondary" data-elapsed></span><span data-eta></span></div>
+<details class="mt-3 small"><summary>Live measurements & log</summary><dl class="mt-2 mb-2" data-metrics></dl><pre class="frame p-2 mb-0" data-log></pre></details>
+</article>
+</template>
+<template id="queue-row-template"><tr><th scope="row"><span data-model></span><small class="d-block text-secondary" data-id></small></th><td data-node></td><td data-benchmark></td><td><span class="badge" data-state></span><small class="d-block text-secondary mt-1" data-reason></small></td><td><div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-pause></button><button type="button" class="btn btn-link btn-sm text-secondary" data-remove>Remove</button></div></td></tr></template>
+<template id="history-row-template"><tr><th scope="row"><button type="button" class="btn btn-link p-0 text-start" data-detail></button><small class="d-block text-secondary" data-meta></small></th><td data-node></td><td data-benchmark></td><td><strong data-score></strong><small class="d-block text-secondary" data-freshness></small></td><td><span class="badge" data-state></span><small class="d-block text-secondary mt-1" data-ended></small></td><td><button type="button" class="btn btn-outline-secondary btn-sm" data-rerun>Set up again</button></td></tr></template>
+<template id="review-row-template"><tr><th scope="row" data-model></th><td data-node></td><td data-benchmark></td></tr></template>
+<template id="empty-template">{{ empty_row(6) }}</template>
+{% endmacro %}

@@ -1,4 +1,4 @@
 {% from "parts.html" import card , confirm_two %}
 {% set _card_title1 %}Benchmark queue{% if paused %} · Paused{% endif %}{% endset %}
 {% set _card_actions1 %}{% if may_run and 'stop' in person.can %}<form method="post" action="/benchmarks/control" class="d-flex gap-2 ms-auto"><button name="action" value="{{ 'resume' if paused else 'pause' }}" class="btn btn-outline-secondary btn-sm">{{ 'Resume all' if paused else 'Pause all' }}</button><button  name="action" value="clear" class="btn btn-outline-danger btn-sm" {{ confirm_two() }}>Clear queue</button></form>{% endif %}{% endset %}
-{% call card(_card_title1, open=true, id="benchmark-queue", key="benchmark-queue", attrs={"hx-swap-oob": 'outerHTML' if oob else none}, actions=_card_actions1) %}{% include "benchmark_queue.html" %}{% endcall %}
+{% call card(_card_title1, open=none if section == 'runs' else true, id="benchmark-queue", key="benchmark-queue", attrs={"hx-swap-oob": 'outerHTML' if oob else none}, actions=_card_actions1) %}{% include "benchmark_queue.html" %}{% endcall %}

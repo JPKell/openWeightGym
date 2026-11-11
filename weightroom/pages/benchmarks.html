@@ -2,7 +2,7 @@
 {% from "navigation_parts.html" import pills, pill_link %}
 {% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
 {% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}{% if section in ('results','node-measurements','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}<script src="/static/benchmarks.js?v=5" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if section in ('results','node-measurements','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}{% if section == 'runs' %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=7" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
 {% block page_class %}benchmark-page{% endblock %}
 {% from "parts.html" import card, said_box, page_header, alert %}
 {% block main %}
@@ -34,10 +34,15 @@
 {% include "benchmark_resources.html" %}
 <a href="/benchmarks/compare?family=embedding">Compare embedders</a>
 {% elif section == 'runs' %}
-<div hx-get="/benchmarks/runs?part=live&amp;per_page={{ pagination.size }}&amp;page={{ pagination.page }}" hx-trigger="every 2s" hx-swap="none" data-refresh-companions="#benchmark-active, #benchmark-queue, #benchmark-history"></div>
-{% include "benchmark_running_card.html" %}
+<div hx-get="/benchmarks/runs?{{ live_query }}" hx-trigger="every 2s" hx-swap="none" data-benchmark-poller data-refresh-companions="#benchmark-nodes, #benchmark-active, #benchmark-queue, #benchmark-history"></div>
+{% include 'benchmark_nodes.html' %}
+<div class="benchmark-studio">
 {% include "benchmark_start.html" %}
+<aside class="benchmark-monitor" aria-label="Running benchmarks and queue">
+{% include "benchmark_running_card.html" %}
 {% include "benchmark_queue_card.html" %}
+</aside>
+</div>
 {% include "benchmark_history.html" %}
 {% elif section == 'compare' %}
 {% include "benchmark_compare.html" %}

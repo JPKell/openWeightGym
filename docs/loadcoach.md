@@ -3606,6 +3606,11 @@ show the latest saved result with a settings-changed label and recorded context,
 hiding measurements after a context edit. This is the same choice the Scores table makes. The benchmark shown first is
 the first this model has run.
 
+Benchmark → Runs uses Run studio with an all-node overview, a compact model picker beside
+running work and the queue, and filtered history. See the [benchmark UI and batch contract](../benchmarks/README.md)
+for selection, partial submission and task-acknowledgement recovery. The worker remains serial;
+the UI's **Pause all** includes running work.
+
 On Benchmark → Runs, **Queue outstanding benchmarks** takes one logical model and queues every
 enabled benchmark without current completed evidence. Evidence becomes outstanding when the
 model fingerprint, benchmark version or implementation, server reuse mode, inference engine or

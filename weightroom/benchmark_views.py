@@ -61,6 +61,84 @@ def history_page(runs, query):
     if size not in (10, 25, 50, 100):
         size = 25
     terminal = [run for run in runs if run['state'] in ('completed', 'failed', 'cancelled')]
+    all_total = len(terminal)
+    search = query.get('q', '').strip()[:200]
+    node = query.get('history_node', '')
+    outcome = query.get('outcome', '')
+    if outcome not in ('completed', 'failed', 'cancelled'):
+        outcome = ''
+    terminal = [run for run in terminal if (not node or (run.get('location') or 'compute') == node)
+                and (not outcome or run['state'] == outcome)
+                and (not search or search.casefold() in ' '.join(str(run.get(key) or '') for key in
+                     ('id', 'model', 'benchmark', 'location', 'reason')).casefold())]
     pages = max(1, (len(terminal) + size - 1) // size)
     page = max(1, min(integer('page', 1), pages))
-    return {'items': terminal[(page-1)*size:page*size], 'page': page, 'pages': pages, 'size': size, 'total': len(terminal)}
+    return {'items': terminal[(page-1)*size:page*size], 'page': page, 'pages': pages, 'size': size, 'total': len(terminal),
+            'all_total': all_total, 'search': search, 'node': node, 'outcome': outcome}
+
+
+def run_lanes(catalogue, inventory, models, definition, runs, location_latest, latest, may_run):
+    """Use configured nodes for visibility, and only the caller's catalogue for choices."""
+    from benchmarks.eligibility import compatible
+
+    configured = {item['name']: item for item in inventory.get('machines', [])}
+    available = set(catalogue.get('available_machines', []))
+    unavailable = set(catalogue.get('unavailable_machines', []))
+    # Front's host is visible even when it has no registered inference service.
+    names = dict.fromkeys(['front', *configured, *sorted(available | unavailable)])
+    candidates = {}
+    for model in models:
+        for place in model.get('locations') or [{'machine': 'compute'}]:
+            name = place['machine']
+            names.setdefault(name, None)
+            local = {**model, **place, 'id': model['id']}
+            if compatible(local, definition):
+                candidates.setdefault(name, []).append((model, place, local))
+    for run in runs:
+        names.setdefault(run.get('location') or 'compute', None)
+    nodes = []
+    for name in names:
+        report = configured.get(name, {})
+        service = name != 'front' or name in configured or name in available or name in candidates
+        disabled = report.get('accepting_work') is False or report.get('lifecycle') in ('disabled', 'retired')
+        known = name in available or ('available_machines' not in catalogue and name in candidates and name not in unavailable)
+        state = 'disabled' if disabled else 'unavailable' if name in unavailable else 'ready' if known else 'unknown'
+        if not service:
+            state = 'front'
+        active = [run for run in runs if (run.get('location') or 'compute') == name and run['state'] == 'running']
+        waiting = [run for run in runs if (run.get('location') or 'compute') == name and run['state'] not in ('running', 'completed', 'failed', 'cancelled')]
+        choices = []
+        for model, place, local in candidates.get(name, []):
+            result = location_latest.get((model['id'], name, definition['id']))
+            if not model.get('locations') and name == 'compute':
+                result = result or latest.get(model['id'], {}).get(definition['id'])
+            matching = next((run for run in runs if run['model'] == model['id'] and
+                             (run.get('location') or 'compute') == name and run['benchmark'] == definition['id']
+                             and run['state'] not in ('completed', 'failed', 'cancelled')), None)
+            reason = ('Node disabled' if disabled else 'Inventory unavailable' if state != 'ready' else
+                      'Model disabled here' if not place.get('enabled', True) else
+                      'Already queued or running' if matching else 'Benchmark disabled' if not definition['enabled'] else
+                      'Benchmark ability required' if not may_run else '')
+            choices.append({'id': model['id'], 'target': {'model': model['id'], 'machine': name}, 'result': result,
+                            'reason': reason, 'active': matching,
+                            'missing': not result or not result.get('current_fingerprint') or bool(result.get('rerun')),
+                            'context': local.get('context_size'), 'engine': local.get('engine_id') or local.get('engine') or '',
+                            'kind': 'embedding' if local.get('embedding') else model_kind(local)})
+        nodes.append({'name': name, 'state': state, 'service': service, 'choices': choices,
+                      'running': len(active), 'queued': len(waiting), 'hostname': report.get('hostname', ''),
+                      'selectable': sum(not item['reason'] for item in choices)})
+    return nodes
+
+
+def run_model_rows(nodes):
+    """Show each authorized model once, keeping its exact node targets and evidence."""
+    rows = {}
+    for node in nodes:
+        for choice in node['choices']:
+            row = rows.setdefault(choice['id'], {'id': choice['id'], 'kind': choice['kind'],
+                                                'engines': [], 'targets': [], 'selectable': 0})
+            if choice['engine'] and choice['engine'] not in row['engines']:
+                row['engines'].append(choice['engine'])
+            row['targets'].append({'node': node, 'choice': choice})
+            row['selectable'] += not choice['reason']
+    return list(rows.values())
