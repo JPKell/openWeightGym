@@ -194,3 +194,16 @@ def test_browser_saves_engine_assignments_and_image_editor_only_offers_its_card(
         playwright.expect(page.locator('[data-hardware-cards] [data-gpu-card]')).to_have_count(1)
         playwright.expect(page.locator('[data-hardware-cards] [data-gpu-card]')).to_have_value('B')
         browser.close()
+
+
+def test_status_model_cards_exclude_unsupported_and_disabled_devices():
+    config = Config(gpus=('CUDA0', 'CUDA1', 'AMD@0000:65:00.0'), disabled_gpus=['CUDA1'],
+                    gpu_details=[{'id':'CUDA0','vendor':'NVIDIA','cuda_index':0},
+                                 {'id':'CUDA1','vendor':'NVIDIA','cuda_index':1},
+                                 {'id':'AMD@0000:65:00.0','vendor':'AMD'}])
+    runner = Runner(config, None, models=Models(':memory:'))
+    status = runner.status()
+    assert status['model_cards'] == ['CUDA0']
+    assert set(status['memory']) == set(config.gpus)  # hardware reporting remains complete
+    config.engines = {'llama_cpp': {'enabled':False}}
+    assert runner.status()['model_cards'] == []

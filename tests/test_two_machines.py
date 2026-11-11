@@ -436,6 +436,7 @@ def test_warm_machine_is_chosen_then_a_lost_machine_is_replaced_before_output(tm
         assert front.post("/turnstile/machines/rig/control/clear").status_code == 401
         status = front.get("/loadcoach/status", headers=headers).json()
         assert set(status["memory"]) == {"compute:CUDA0", "rig:CUDA0"}
+        assert set(status["model_cards"]) == {"compute:CUDA0", "rig:CUDA0"}
         assert status["running"][0]["id"] == public_number("rig", 7)
         stopped = front.post(f"/loadcoach/stop/{public_number('rig', 7)}", headers=headers)
         assert stopped.status_code == 200 and stopped.json() == {"machine": "rig", "path": "/loadcoach/stop/7"}

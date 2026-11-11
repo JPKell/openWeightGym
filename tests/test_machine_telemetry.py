@@ -147,3 +147,13 @@ def test_host_wake_controls_are_node_specific_and_explain_missing_configuration(
     assert '<form' not in template.render(host=host, person=SimpleNamespace(can=set()))
     assert '{% include "host_wake.html" %}' in (pages / 'telemetry_workspace.html').read_text()
     assert "extends 'machines.html'" in (pages / 'telemetry_host.html').read_text()
+
+
+def test_node_capacity_keeps_an_explicit_empty_model_device_policy():
+    async def ask(name, path):
+        return {'data': []} if path == '/v1/models' else {
+            'cards':['Intel@0000:00:02.0'], 'model_cards':[],
+            'memory':{'Intel@0000:00:02.0':None}, 'loaded':[]}
+    machines = Machines(['compute'], ask)
+    asyncio.run(machines.poll())
+    assert machines.report()[0]['cards'] == []

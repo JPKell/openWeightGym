@@ -169,7 +169,7 @@ class Machines:
                             "cards": [{"card": card, "total": (memory.get(card) or {}).get("total"),
                                        "free": (memory.get(card) or {}).get("free"),
                                        "others": (memory.get(card) or {}).get("others")}
-                                      for card in (status.get("cards") or memory)],
+                                      for card in status.get("model_cards", status.get("cards", memory))],
                             "loaded": [{"model": one["model"], "state": one["state"], "cards": one["gpus"],
                                         **{field: one[field] for field in ("locked", "mib", "rss_mib", "rss_peak_mib") if field in one}}
                                        for one in status.get("loaded", [])],

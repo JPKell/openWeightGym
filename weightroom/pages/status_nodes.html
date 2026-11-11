@@ -28,17 +28,15 @@
               {% if outside %}<div class="progress-bar bg-secondary" title="Other programs: {{ outside|memory_mib }}" style="width: {{ (100 * outside / card.total)|round(1) }}%"></div>{% endif %}
             </div>
             {% endif %}
-            <div class="small">{% for model in here %}<span class="badge text-bg-secondary me-1">{{ model.model }}</span>{% else %}<span class="text-secondary">empty</span>{% endfor %}{% if card.others %}<span class="text-secondary">other programs {{ card.others|memory_mib }}</span>{% endif %}</div>
+            {% if card.others %}<div class="small text-secondary">other programs {{ card.others|memory_mib }}</div>{% endif %}
           </div>
           {% endfor %}
-          {% set cpu_models = [] %}{% for model in node.loaded if not model.cards %}{% set _ = cpu_models.append(model) %}{% endfor %}
           {% set recent = node.telemetry_age is not none and node.telemetry_age <= poll_seconds * 3 %}
           {% set ram = (node.telemetry or {}).get('memory') if recent else none %}
           <div class="mb-1">
             <div class="d-flex justify-content-between gap-2"><b>Host RAM</b><span>{% if ram and ram.total %}{{ (ram.total - ram.used)|memory_size }} available / {{ ram.total|memory_size }} RAM{% else %}RAM unavailable{% endif %}</span></div>
             {% if ram and ram.total %}<div class="progress my-1" role="progressbar" aria-label="{{ node.name }} system RAM used, including openWeightGym" aria-valuenow="{{ (100 * ram.used / ram.total)|round|int }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-secondary" title="System RAM used, including openWeightGym: {{ ram.used|memory_size }}" style="width: {{ (100 * ram.used / ram.total)|round(1) }}%"></div></div>{% endif %}
             {% if node.system_memory %}<div class="small text-secondary">Admission {{ node.system_memory.free|memory_mib }} free · {{ node.system_memory.headroom|memory_mib }} host reserve{% if node.system_memory.service_limit is not none %} · {{ node.system_memory.service_limit|memory_mib }} service ceiling{% endif %}</div>{% endif %}
-            <div class="small">{% for model in cpu_models %}<span class="badge text-bg-secondary me-1">{{ model.model }}</span>{% else %}{% endfor %}</div>
           </div>
         {% else %}<span class="text-secondary small">Capacity and loaded models are unavailable while this compute node is not answering.</span>{% endif %}
       </section>

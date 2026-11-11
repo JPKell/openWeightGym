@@ -58,6 +58,8 @@ def test_status_shows_gpu_cpu_and_unavailable_loadcoaches_with_scoped_locks():
     html = pages.get_template("status_nodes.html").render(
         nodes=nodes, poll_seconds=10, now={}, seen=None,
         person=SimpleNamespace(can={"unload", "manage-models"}), address=lambda name: "/models/" + name)
+    capacity = html.split('Loaded models</h2>', 1)[0]
+    assert 'badge text-bg-secondary me-1' not in capacity
     assert 'compute capacity' in html and 'front_cpu capacity' in html and 'remote capacity' in html
     assert 'CUDA0' in html and 'gpu-model' in html and '5.9 GiB free for a model' in html
     assert 'Other programs: 1000 MiB' in html and 'other programs 1000 MiB' in html
@@ -91,3 +93,17 @@ def test_status_unknown_ram_fields_remain_unavailable():
     assert "RAM unavailable" in html and "RSS unavailable" in html
     assert "Admission unavailable free" in html and "unavailable host reserve" in html
     assert "0 MiB" not in html
+
+
+def test_status_capacity_honors_model_devices_and_preserves_unknown_memory():
+    memory = {'compute:CUDA0': None, 'compute:AMD@0000:65:00.0': None,
+              'worker:Intel@0000:00:02.0': None}
+    inventory = {'machines': [
+        {'name':'compute', 'state':'ready', 'status_live':True},
+        {'name':'worker', 'state':'ready', 'status_live':True,
+         'cards':[{'card':'Intel@0000:00:02.0'}]}]}
+    nodes = status_nodes(inventory, 10, {'memory':memory, 'model_cards':['compute:CUDA0']})
+    assert nodes[0]['cards'] == [{'card':'CUDA0','total':None,'free':None,'others':None}]
+    assert nodes[1]['cards'] == []
+    # Older workers without policy metadata retain their unknown-memory devices.
+    assert len(status_nodes({},10,{'memory':memory})[0]['cards']) == 2
