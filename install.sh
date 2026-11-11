@@ -39,6 +39,14 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --system                install for the whole machine, run by its own account (needs sudo)
   --topology NAME         all (one machine), front (console only) or compute (GPU node)
   --yes                   take the defaults without asking
+  --components            add omitted components to an existing installation
+  --services LIST         components: add comma-separated service names
+  --strata install|skip|keep     optional Strata CUDA runtime (default: keep)
+  --strata-host-ram-mib N        Strata host RAM budget (default: 22528 MiB)
+  --sdcpp install|skip|keep      optional stable-diffusion.cpp runtime
+  --sdcpp-backend cuda|vulkan|cpu  image backend (default: cuda)
+  --audiocpp install|skip|keep   optional audio.cpp runtime
+  --audiocpp-backend cuda|vulkan|cpu  audio backend (default: cuda)
   --admin NAME            the first account (its password from OWG_ADMIN_PASSWORD, or asked)
   --front-url URL         GPU node: the console's turnstile, such as http://192.168.1.10:8442
   --machine-key-file F    GPU node: a copy of the console's keys/machine.key
@@ -96,6 +104,11 @@ main() {
   warm_up
   if [[ $(receipt_get state) == pending && $RECOVERY_ACTION != restart ]]; then
     resume_settings
+    if [[ $(receipt_get operation) == components ]]; then
+      SERVICES=$(receipt_get services)
+      apply_components
+      return 0
+    fi
     RESUMING_INSTALL=1
     ui_info "Resuming the confirmed installation plan" "settings and existing accounts are kept"
   elif [[ $RECOVERY_ACTION != restart ]] && is_installed "$DIR"; then
@@ -103,6 +116,7 @@ main() {
     case "$ACTION" in
       update) update ;;
       repair) reinstall ;;
+      components) install_components ;;
       *) installed_menu ;;
     esac
     return 0
@@ -166,13 +180,19 @@ parse_arguments() {
   COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
   ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
   VOICE_KEY_FILE='' VOICE_KEY=''
+  ADD_SERVICES='' STRATA_ACTION=keep STRATA_HOST_RAM_MIB=22528
+  SDCPP_ACTION=keep SDCPP_BACKEND=cuda AUDIOCPP_ACTION=keep AUDIOCPP_BACKEND=cuda
+  OPERATION=install
   RESUMING_INSTALL=0
   # A mistake in the options is told once the screen is set up (main), as loudly as any other stop.
   ARGUMENT_ERROR='' ARGUMENT_STEPS=()
   declare -gA PLAN_GIVEN=()
   local -A takes=([--dir]='a folder' [--topology]='all, front or compute' [--admin]='a name' [--front-url]='a URL'
     [--machine-key-file]='a file' [--compute-url]='a URL' [--join]='the console address' [--code]='the pairing code'
-    [--llama]='a choice' [--database]='sqlite or postgresql' [--voice-key-file]='a file' [--ref]='a branch')
+    [--llama]='a choice' [--database]='sqlite or postgresql' [--voice-key-file]='a file' [--ref]='a branch'
+    [--services]='service names' [--strata]='install, skip or keep' [--strata-host-ram-mib]='a positive MiB budget'
+    [--sdcpp]='install, skip or keep' [--sdcpp-backend]='cuda, vulkan or cpu'
+    [--audiocpp]='install, skip or keep' [--audiocpp-backend]='cuda, vulkan or cpu')
   [[ -n $DIR ]] && DIR_GIVEN=1
   while (($#)); do
     if [[ -v takes[$1] ]] && { (($# < 2)) || [[ -z $2 ]]; }; then
@@ -202,6 +222,14 @@ parse_arguments() {
       --plain) export OWG_PLAIN=1; PASSTHROUGH+=(--plain); shift ;;
       --update) ACTION=update; shift ;;
       --repair) ACTION=repair; shift ;;
+      --components) ACTION=components; shift ;;
+      --services) ADD_SERVICES=$2; shift 2 ;;
+      --strata) STRATA_ACTION=$2; PLAN_GIVEN[STRATA_ACTION]=1; shift 2 ;;
+      --strata-host-ram-mib) STRATA_HOST_RAM_MIB=$2; PLAN_GIVEN[STRATA_HOST_RAM_MIB]=1; shift 2 ;;
+      --sdcpp) SDCPP_ACTION=$2; PLAN_GIVEN[SDCPP_ACTION]=1; shift 2 ;;
+      --sdcpp-backend) SDCPP_BACKEND=$2; PLAN_GIVEN[SDCPP_BACKEND]=1; shift 2 ;;
+      --audiocpp) AUDIOCPP_ACTION=$2; PLAN_GIVEN[AUDIOCPP_ACTION]=1; shift 2 ;;
+      --audiocpp-backend) AUDIOCPP_BACKEND=$2; PLAN_GIVEN[AUDIOCPP_BACKEND]=1; shift 2 ;;
       --uninstall) ACTION=uninstall; shift ;;
       --everything|--no-backup) PASSTHROUGH+=("$1"); shift ;;
       -h|--help) usage; exit 0 ;;
@@ -216,6 +244,18 @@ parse_arguments() {
     ARGUMENT_ERROR='A system installation keeps its data in SQLite for now.'
     ARGUMENT_STEPS=('Leave out --database postgresql, and move to PostgreSQL afterwards: docs/database-storage.md'
                     'Or install for yourself, without --system, to use PostgreSQL from the start')
+  fi
+  local variable
+  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION; do
+    [[ ${!variable} =~ ^(install|skip|keep)$ ]] || ARGUMENT_ERROR="${variable%_ACTION} must be install, skip or keep."
+  done
+  for variable in SDCPP_BACKEND AUDIOCPP_BACKEND; do
+    [[ ${!variable} =~ ^(cuda|vulkan|cpu)$ ]] || ARGUMENT_ERROR="$variable must be cuda, vulkan or cpu."
+  done
+  [[ $STRATA_HOST_RAM_MIB =~ ^[1-9][0-9]{0,8}$ ]] || ARGUMENT_ERROR='--strata-host-ram-mib needs a positive whole number of MiB.'
+  [[ -z $ADD_SERVICES || $ACTION == components ]] || ARGUMENT_ERROR='--services requires --components.'
+  if [[ $TOPOLOGY == front && ( $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install ) ]]; then
+    ARGUMENT_ERROR='Engines need a model runner: choose --topology all or compute.'
   fi
   ((ASSUME_YES)) && export OWG_DEFAULTS=1
   return 0
@@ -327,7 +367,8 @@ resume_settings() {
   local pair variable key value
   for pair in TOPOLOGY:topology ADMIN:admin DATABASE:database LLAMA:llama VOICE:voice \
     LINGER_WANTED:linger_wanted POWER_RULE:power_rule FRONT_URL:front_url COMPUTE_URL:compute_url \
-    MACHINE_NAME:machine_name JOIN_URL:join_url; do
+    MACHINE_NAME:machine_name JOIN_URL:join_url STRATA_ACTION:strata STRATA_HOST_RAM_MIB:strata_host_ram_mib \
+    SDCPP_ACTION:sdcpp SDCPP_BACKEND:sdcpp_backend AUDIOCPP_ACTION:audiocpp AUDIOCPP_BACKEND:audiocpp_backend; do
     variable=${pair%%:*} key=${pair#*:}
     value=$(receipt_get "$key")
     [[ -z $value || -n ${PLAN_GIVEN[$variable]:-} ]] || printf -v "$variable" '%s' "$value"
@@ -481,9 +522,10 @@ interrupted_menu() {
 installed_menu() {
   ui_section "Welcome back" "openWeightGym is installed in ${DIR/#$HOME/\~}"
   local choice=0
-  local -a actions=(update repair) labels=(
+  local -a actions=(update repair components) labels=(
     "Update|fetch the latest openWeightGym and reinstall, keeping settings and data"
-    "Repair|reinstall packages and services as they are")
+    "Repair|reinstall packages and services as they are"
+    "Install components|add services or model engines skipped earlier")
   if [[ ,$(receipt_get services), == *,weightroom,* ]]; then
     actions+=(pair)
     labels+=("Add a GPU node|make a one-time code another machine joins with")
@@ -494,6 +536,7 @@ installed_menu() {
   case "${actions[choice]}" in
     update) update ;;
     repair) reinstall ;;
+    components) install_components ;;
     pair) as_owner "$DIR/.venv/bin/weightroom" --config "$DIR/settings/weightroom.toml" pair ;;
     uninstall) run_uninstaller ;;
     *) ui_info "Nothing changed." ;;
@@ -595,6 +638,187 @@ console_account_ready() {
 
 # ---- the game plan --------------------------------------------------------------------------
 
+runtime_options() {
+  RUNTIME_OPTIONS=(--strata "$STRATA_ACTION" --strata-host-ram-mib "$STRATA_HOST_RAM_MIB"
+    --sdcpp "$SDCPP_ACTION" --sdcpp-backend "$SDCPP_BACKEND"
+    --audiocpp "$AUDIOCPP_ACTION" --audiocpp-backend "$AUDIOCPP_BACKEND")
+}
+
+positive_mib() { [[ $1 =~ ^[1-9][0-9]{0,8}$ ]] || { ui_warn 'Enter a positive whole number of MiB'; return 1; }; }
+
+choose_runtimes() {
+  ((ASSUME_YES)) && return 0
+  local variable label default choice backend
+  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION; do
+    case "$variable" in
+      STRATA_ACTION) label='Strata (CUDA text models with host RAM)' ;;
+      SDCPP_ACTION) label='stable-diffusion.cpp (images)' ;;
+      AUDIOCPP_ACTION) label='audio.cpp (music, sounds and speech)' ;;
+    esac
+    if [[ -z ${PLAN_GIVEN[$variable]:-} ]]; then
+      default=n; [[ ${!variable} != install ]] || default=y
+      if ui_confirm "Install $label? Existing installations are kept if declined." "$default"; then
+        printf -v "$variable" install
+      else printf -v "$variable" keep; fi
+    fi
+    [[ ${!variable} == install ]] || continue
+    if [[ $variable == STRATA_ACTION ]]; then
+      if [[ -z ${PLAN_GIVEN[STRATA_HOST_RAM_MIB]:-} ]]; then
+        ui_input STRATA_HOST_RAM_MIB 'Strata may use host RAM: maximum MiB (within the worker memory limit)' "$STRATA_HOST_RAM_MIB" positive_mib
+      fi
+    else
+      backend=${variable%_ACTION}_BACKEND
+      [[ -z ${PLAN_GIVEN[$backend]:-} ]] || continue
+      case "${!backend}" in cuda) default=0 ;; vulkan) default=1 ;; cpu) default=2 ;; esac
+      ui_choose choice "Backend for $label" "$default" 'CUDA|NVIDIA; requires the CUDA toolkit' \
+        'Vulkan|requires Vulkan build tools' 'CPU|processor only'
+      local -a backends=(cuda vulkan cpu)
+      printf -v "$backend" '%s' "${backends[choice]}"
+    fi
+  done
+}
+
+install_components() {
+  # Restore the machine's role, but do not repeat engines selected during its first install.
+  local COMPONENT_GIVEN="${!PLAN_GIVEN[*]}"
+  local variable old_services service ticked index
+  for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND; do
+    PLAN_GIVEN[$variable]=1
+  done
+  [[ -n ${PLAN_GIVEN[LLAMA]:-} ]] || LLAMA=skip
+  PLAN_GIVEN[LLAMA]=1
+  resume_settings
+  services_from_receipt
+  old_services=$SERVICES
+  # Older receipts may omit the addresses needed to render newly added services.
+  if [[ -x $DIR/.venv/bin/python ]]; then
+    local value recovered
+    recovered=$(as_owner "$DIR/.venv/bin/python" - "$DIR" <<'PYTHON'
+from pathlib import Path
+import sys, tomllib
+root = Path(sys.argv[1]) / 'settings'
+for variable, name, key in (('FRONT_URL', 'loadcoach', 'front'), ('COMPUTE_URL', 'weightroom', 'compute'),
+                            ('MACHINE_NAME', 'loadcoach', 'machine_name')):
+    path = root / (name + '.toml')
+    if path.is_file():
+        value = tomllib.loads(path.read_text()).get(key, '')
+        if isinstance(value, str) and value and not any(c in value for c in '\n\r\t'):
+            print(variable + '\t' + value)
+PYTHON
+    ) || ui_die 'Could not read existing node addresses.' 'Fix settings/loadcoach.toml and settings/weightroom.toml before adding components'
+    while IFS=$'\t' read -r variable value; do
+      [[ -n $variable ]] || continue
+      [[ -n ${!variable} ]] || printf -v "$variable" '%s' "$value"
+    done <<<"$recovered"
+  fi
+  if [[ -z $TOPOLOGY ]]; then
+    if [[ ,$SERVICES, == *,loadcoach,* ]]; then
+      if [[ ,$SERVICES, == *,weightroom,* ]]; then TOPOLOGY=all; else TOPOLOGY=compute; fi
+    else TOPOLOGY=front; fi
+  fi
+  local -a available=() missing=() rows=() requested=()
+  case "$TOPOLOGY" in
+    all) available=(loadcoach spotter weightroom turnstile toollocker voice voice-gateway) ;;
+    compute) available=(loadcoach spotter voice) ;;
+    front) available=(weightroom turnstile toollocker voice-gateway) ;;
+  esac
+  ui_section 'Install components' 'Existing services, settings and data are kept'
+  for service in "${available[@]}"; do
+    [[ ,$SERVICES, != *,"$service",* ]] || continue
+    missing+=("$service")
+    rows+=("$service|$(component_description "$service")|off")
+  done
+  if [[ -n $ADD_SERVICES ]]; then
+    IFS=, read -ra requested <<<"$ADD_SERVICES"
+  elif ((!ASSUME_YES)) && ((${#missing[@]})); then
+    ui_checklist ticked 'Which additional programs should be installed?' "${rows[@]}"
+    for index in $ticked; do requested+=("${missing[index]}"); done
+  fi
+  if [[ -n ${PLAN_GIVEN[VOICE]:-} ]]; then
+    if [[ $TOPOLOGY == front ]]; then requested+=(voice-gateway); else requested+=(voice); fi
+  fi
+  for service in "${requested[@]}"; do
+    [[ " ${available[*]} " == *" $service "* ]] || ui_die "Cannot add $service to this $TOPOLOGY installation." \
+      "Choose from: ${available[*]}"
+    [[ ,$SERVICES, == *,"$service",* ]] || SERVICES+=${SERVICES:+,}$service
+  done
+  if [[ ,$SERVICES, == *,voice,* && $TOPOLOGY == all && ,$SERVICES, != *,voice-gateway,* ]]; then SERVICES+=,voice-gateway; fi
+  if [[ ,$SERVICES, == *,voice,* || ,$SERVICES, == *,voice-gateway,* ]]; then VOICE=1; fi
+  if [[ $TOPOLOGY != front ]]; then
+    if ((!ASSUME_YES)) && [[ $LLAMA == skip && " $COMPONENT_GIVEN " != *" LLAMA "* ]]; then
+      ui_confirm 'Install llama.cpp too?' n && LLAMA=auto
+    fi
+    # Explicit CLI choices remain fixed; other engines are offered interactively.
+    for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND; do
+      [[ " $COMPONENT_GIVEN " == *" $variable "* ]] || unset 'PLAN_GIVEN[$variable]'
+    done
+    choose_runtimes
+    if [[ $LLAMA != skip || $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install ]]; then
+      [[ ,$SERVICES, == *,loadcoach,* ]] || SERVICES+=${SERVICES:+,}loadcoach
+    fi
+  elif [[ $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install ]]; then
+    ui_die 'Model engines belong on a machine running loadcoach.' 'Run owg install on your GPU node'
+  fi
+  if [[ $SERVICES == "$old_services" && $LLAMA == skip && $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install ]]; then
+    ui_info 'No additional components selected.'; return 0
+  fi
+  ui_kv Programs "$SERVICES"
+  ui_kv Engines "llama.cpp: $LLAMA; Strata: $STRATA_ACTION; stable-diffusion.cpp: $SDCPP_ACTION; audio.cpp: $AUDIOCPP_ACTION"
+  if ((!ASSUME_YES)); then ui_confirm 'Install these components?' y || return 0; fi
+  apply_components
+}
+
+component_description() {
+  case "$1" in
+    loadcoach) printf 'model runner' ;; spotter) printf 'hardware monitor' ;;
+    weightroom) printf 'web console' ;; turnstile) printf 'API gateway' ;;
+    toollocker) printf 'tool gateway' ;; voice) printf 'speech recognition and voices' ;;
+    voice-gateway) printf 'browser and phone voice' ;;
+  esac
+}
+
+apply_components() {
+  OPERATION=components DATABASE=keep
+  write_receipt pending
+  if [[ $TOPOLOGY == compute && ,$SERVICES, == *,voice,* ]] && ! as_owner test -s "$DIR/keys/voice-service.key"; then
+    if [[ -z $VOICE_KEY_FILE ]]; then
+      if [[ -z $JOIN_URL ]] && ((!ASSUME_YES)); then
+        local host=''
+        ui_input host 'Console address for a new pairing code (needed to add voice)' '' valid_console
+        JOIN_URL=$(console_url "$host")
+      fi
+      ask_console
+      [[ -z $JOIN_URL ]] || redeem
+    fi
+    save_machine_key
+    write_receipt pending
+  fi
+  find_uv
+  LLAMA_SERVER=''
+  [[ $LLAMA == skip || $TOPOLOGY == front ]] || engine
+  local options=(--root "$DIR" --embedded --non-interactive --yes --services "$SERVICES"
+    --database keep --topology "$TOPOLOGY" --address "$HOST_ADDRESS" --start-new --keep-existing-units --uv "$UV")
+  runtime_options
+  options+=("${RUNTIME_OPTIONS[@]}")
+  [[ -z $FRONT_URL ]] || options+=(--front-url "$FRONT_URL")
+  [[ -z $COMPUTE_URL ]] || options+=(--compute-url "$COMPUTE_URL")
+  [[ -z $MACHINE_NAME ]] || options+=(--machine-name "$MACHINE_NAME")
+  [[ -z $LLAMA_SERVER ]] || options+=(--llama-server "$LLAMA_SERVER")
+  local rc=0
+  as_owner "$DIR/scripts/install-suite.sh" "${options[@]}" || rc=$?
+  ((rc == 0)) || ui_child_failed "$rc" 'Installing components did not finish.' 'Run the installer again to continue the saved selection'
+  if [[ ,$SERVICES, == *,weightroom,* ]] && ! console_account_ready; then
+    account
+    finishing
+  fi
+  link_owg
+  write_receipt complete
+  receipt_load "$DIR"
+  check_services
+  ui_finale 'Components installed'
+  ui_attention_box
+}
+
 game_plan() {
   ui_section "Game plan" "How this machine fits in"
   if [[ -z $TOPOLOGY ]]; then
@@ -612,6 +836,10 @@ game_plan() {
     ui_input node "A GPU node's address, if you have one already (Enter to add one later)" "" valid_host_or_empty
     [[ -z $node ]] || COMPUTE_URL=http://$node:8442
   fi
+  if [[ $TOPOLOGY == front ]]; then
+    [[ $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install ]] ||
+      ui_die 'Model engines need a model runner on this machine.' 'Choose everything on this machine or install the engine on your GPU node'
+  else choose_runtimes; fi
 
   while true; do
     show_plan
@@ -773,6 +1001,7 @@ show_plan() {
   lines+=("${C_MUTED}Data         ${C_RESET}$([[ $DATABASE == keep ]] && printf 'keep existing stores' || { [[ $DATABASE == sqlite ]] && printf 'SQLite, on this machine' || printf 'PostgreSQL, on this machine'; })")
   if [[ $TOPOLOGY != front ]]; then
     lines+=("${C_MUTED}Engine       ${C_RESET}llama.cpp · $(backend_label "$engine")")
+    lines+=("${C_MUTED}Optional     ${C_RESET}Strata: $STRATA_ACTION · stable-diffusion.cpp: $SDCPP_ACTION · audio.cpp: $AUDIOCPP_ACTION")
     ((POWER_RULE)) && lines+=("${C_MUTED}Power        ${C_RESET}the console may sleep, restart or switch off this machine")
   fi
   ui_box "Your setup" "${lines[@]}"
@@ -823,6 +1052,7 @@ customize() {
       3) LLAMA=source ;;
       4) LLAMA=skip ;;
     esac
+    choose_runtimes
     ui_confirm "Let the console put this machine to sleep, restart it or switch it off?" n && POWER_RULE=1 || POWER_RULE=0
   fi
   if ((SYSTEMD_USER && !SYSTEM)); then
@@ -1100,6 +1330,8 @@ setting_up() {
   save_machine_key
   local options=(--root "$DIR" --embedded --non-interactive --yes --services "$SERVICES" --topology "$TOPOLOGY"
                  --address "$HOST_ADDRESS" --start-new --uv "$UV" --database "$DATABASE")
+  runtime_options
+  options+=("${RUNTIME_OPTIONS[@]}")
   [[ -n $FRONT_URL ]] && options+=(--front-url "$FRONT_URL")
   [[ -n $COMPUTE_URL ]] && options+=(--compute-url "$COMPUTE_URL")
   [[ -n ${LLAMA_SERVER:-} ]] && options+=(--llama-server "$LLAMA_SERVER")
@@ -1221,6 +1453,7 @@ write_receipt() {
     echo "# What install.sh made here, read by the uninstaller. Only what is listed is removed."
     echo "version=2"
     echo "state=$state"
+    echo "operation=${OPERATION:-install}"
     echo "installed=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "mode=$( ((SYSTEM)) && printf system || printf user)"
     echo "dir=$DIR"
@@ -1239,6 +1472,12 @@ write_receipt() {
     echo "database=$DATABASE"
     echo "llama=$LLAMA"
     echo "voice=$VOICE"
+    echo "strata=${STRATA_ACTION:-keep}"
+    echo "strata_host_ram_mib=${STRATA_HOST_RAM_MIB:-22528}"
+    echo "sdcpp=${SDCPP_ACTION:-keep}"
+    echo "sdcpp_backend=${SDCPP_BACKEND:-cuda}"
+    echo "audiocpp=${AUDIOCPP_ACTION:-keep}"
+    echo "audiocpp_backend=${AUDIOCPP_BACKEND:-cuda}"
     echo "linger_wanted=$LINGER_WANTED"
     echo "power_rule=$POWER_RULE"
     echo "front_url=$FRONT_URL"

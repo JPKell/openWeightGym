@@ -11,6 +11,8 @@
 #   owg update [--yes] [--plain]                 fetch the latest openWeightGym and reinstall,
 #                                                keeping settings and data
 #   owg repair [--yes] [--plain]                 reinstall packages and services as they are
+#   owg install [--yes] [OPTIONS]                add omitted services and model engines
+#                                                options: install.sh --help
 #   owg doctor             check the installation and say what to fix
 #   owg pair [--minutes N] let a GPU node join this console, with a one-time code
 #   owg uninstall [--yes] [--everything] [--no-backup] [--plain]
@@ -86,6 +88,7 @@ main() {
     logs|log) logs "$@" ;;
     update) exec "$ROOT/install.sh" --update --dir "$ROOT" "$@" ;;
     repair) exec "$ROOT/install.sh" --repair --dir "$ROOT" "$@" ;;
+    install) exec "$ROOT/install.sh" --components --dir "$ROOT" "$@" ;;
     doctor) doctor ;;
     pair) pair "$@" ;;
     uninstall) exec "$ROOT/uninstall.sh" --dir "$ROOT" "$@" ;;
@@ -341,13 +344,14 @@ menu() {
   ((UI_ASK)) || { usage; return 0; }
   local choice=0 console=0
   programs | grep -qx weightroom && console=1
-  local -a actions=(restart remote update repair doctor logs) labels=(
+  local -a actions=(restart remote update repair doctor logs install) labels=(
     "Restart services|choose which programs to restart"
     "Restart another machine|restart a GPU node's services over SSH"
     "Update|fetch the latest openWeightGym and reinstall"
     "Repair|reinstall packages and services as they are"
     "Doctor|check everything and say what to fix"
-    "Logs|the latest from every program")
+    "Logs|the latest from every program"
+    "Install components|add services or model engines skipped earlier")
   if ((console)); then actions+=(pair); labels+=("Add a GPU node|make a one-time code for another machine"); fi
   actions+=(uninstall quit)
   labels+=("Uninstall|remove openWeightGym, choosing what to keep" "Quit|do nothing")
