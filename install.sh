@@ -607,7 +607,7 @@ update() {
     ui_die "$DIR is not a Git checkout, so its code cannot be updated with git pull." \
       'Use an openWeightGym Git checkout for code updates'
   fi
-  ui_info 'Code update complete. Restart running services when ready: owg restart'
+  ui_info "${C_ERR}Code update complete. Restart running services when ready: owg restart${C_RESET}"
   if [[ $(receipt_get state) == pending ]]; then
     ui_note 'The unfinished installation is still saved. Run install.sh separately when you want to continue it.'
   fi
