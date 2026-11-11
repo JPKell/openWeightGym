@@ -444,9 +444,10 @@ def test_private_acceptance_integrity_includes_referenced_secret_files(tmp_path)
 
 
 @pytest.mark.parametrize("accept_target", [True, False])
-def test_coordinator_with_real_stores_backups_configs_and_validation(tmp_path, monkeypatch, accept_target):
+def test_coordinator_with_real_stores_backups_configs_and_validation(tmp_path, monkeypatch, accept_target, backup_keys):
+    backup_keys.configure(tmp_path / 'data/backups')
     (tmp_path / "settings").mkdir()
-    (tmp_path / "data").mkdir()
+    (tmp_path / "data").mkdir(exist_ok=True)
     source, key = seeded(tmp_path / "data/loadcoach.db", tmp_path)
     original_bytes = source.path.read_bytes()
     history = Database.sqlite(tmp_path / "data/spotter.db")

@@ -22,6 +22,7 @@ voice-gateway = ["pywebrtc-audio==0.2.0", "websockets>=15,<17", "audioop-lts; py
 
 [project.scripts]
 suite-identity = "loadcoach.identity_bundle:main"
+suite-backup-verify = "loadcoach.backup_restore:main"
 loadcoach = "loadcoach.cli:main"
 toollocker = "toollocker.door:main"
 weightroom = "weightroom.app:main"

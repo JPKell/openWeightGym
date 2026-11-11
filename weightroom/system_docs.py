@@ -150,7 +150,7 @@ SOURCES = {
     "weightroom": ("weightroom",), "turnstile": ("turnstile",), "soundroom": ("soundroom",),
     "loadcoach": ("loadcoach",), "toollocker": ("toollocker",),
     "voice": ("voice",), "spotter": ("spotter",), "plugins": ("plugins",),
-    "benchmarks": ("benchmarks",), "data": ("db", "loadcoach/backups.py", "loadcoach/database_admin.py"),
+    "benchmarks": ("benchmarks",), "data": ("db", "loadcoach/backups.py", "loadcoach/backup_crypto.py", "loadcoach/backup_restore.py", "loadcoach/database_admin.py"),
     "hosted-providers": ("loadcoach/outside.py", "turnstile/hosted.py", "turnstile/allowances.py"),
     "logs": ("loadcoach/log.py", "loadcoach/capture.py", "loadcoach/diagnostics.py", "loadcoach/reliability.py", "turnstile/events.py",
              "loadcoach/observability.py", "loadcoach/observation_store.py", "turnstile/observations.py"),

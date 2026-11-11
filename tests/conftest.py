@@ -9,6 +9,9 @@ test_fake_cards_in_process.py checks that both ways give the same rows.
 """
 
 from pathlib import Path
+import shutil
+import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +19,27 @@ import fake_nvidia_smi
 from loadcoach.runner import Runner
 
 REAL_SMI = Runner.smi
+
+
+@pytest.fixture
+def backup_keys(tmp_path):
+    """Real age encryption in backup tests; private recovery identities never enter host archives."""
+    if not shutil.which('age') or not shutil.which('age-keygen'):
+        pytest.fail('Backup security tests require the age package (age and age-keygen).')
+    identity = tmp_path / 'test-recovery.key'
+    subprocess.run(['age-keygen', '-o', str(identity)], check=True, capture_output=True)
+    identity.chmod(0o600)
+    recipient = subprocess.run(['age-keygen', '-y', str(identity)], check=True, capture_output=True).stdout
+
+    def configure(root):
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        root.chmod(0o700)
+        path = root / 'recipients.txt'
+        path.write_bytes(recipient)
+        path.chmod(0o600)
+        return root
+
+    return SimpleNamespace(identity=identity, recipient=recipient.decode().strip(), configure=configure)
 
 
 @pytest.fixture(autouse=True)

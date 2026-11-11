@@ -186,7 +186,7 @@ def postgres():
     return database
 
 
-def test_postgresql_operational_health_and_backup_identity(postgres, tmp_path):
+def test_postgresql_operational_health_and_backup_identity(postgres, tmp_path, backup_keys):
     from db.health import stores_health
     from loadcoach.backups import manifests
 
@@ -200,6 +200,7 @@ def test_postgresql_operational_health_and_backup_identity(postgres, tmp_path):
     assert row["facts"]["autovacuum"] and not row["facts"]["read_only"]
     assert row["services"] == ["loadcoach", "toollocker"]
     root = tmp_path / "backups"
+    backup_keys.configure(root)
     create_backup(root, new_id(), "compute", [], [], [], [], 0, stores=[store])
     evidence = manifests(root)
     assert stores_health([store], "compute", evidence)[0]["backup"]["state"] == "fresh"
@@ -401,7 +402,8 @@ def test_loadcoach_application_starts_and_serves_from_postgresql(postgres, tmp_p
         assert client.get("/loadcoach/users", headers=headers).json()["users"][0]["name"] == "owner"
 
 
-def test_postgresql_backup_is_listed_restored_and_exported_without_credentials(postgres, tmp_path):
+def test_postgresql_backup_is_listed_restored_and_exported_without_credentials(postgres, tmp_path, backup_keys):
+    backup_keys.configure(tmp_path / 'backups')
     changes = Changes(postgres)
     changes.put("weightroom", "timezone", "UTC", "owner")
     with postgres.transaction() as connection:
@@ -432,6 +434,12 @@ def test_postgresql_backup_is_listed_restored_and_exported_without_credentials(p
     assert recorded["verification"]["counts"]["public.settings_changed"] == 1
     assert recorded["verification"]["schema_versions"] == recorded["schema_versions"]
     assert recorded["verification"]["restore_list_entries"] > 0
+    from loadcoach.backup_crypto import ARCHIVE
+    from loadcoach.backup_restore import verify
+    recovered = verify(tmp_path / 'backups' / backup_id / ARCHIVE, backup_keys.identity,
+                       output=tmp_path / 'staged-recovery')
+    assert recovered['authenticated'] and recovered['recovery_key_tested']
+    assert recovered['postgresql_restore_required'] and not recovered['live_data_changed']
     serialized = json.dumps(made)
     assert "suite_p2_test" not in serialized and "postgresql://" not in serialized
 
@@ -547,7 +555,7 @@ def test_retired_compute_transfers_across_engines_without_recreating_front_table
 
 
 @pytest.mark.parametrize('outcome', ['accepted', 'failed', 'interrupted'])
-def test_postgresql_private_migration_acceptance_rollback_and_recovery(postgres, tmp_path, monkeypatch, outcome):
+def test_postgresql_private_migration_acceptance_rollback_and_recovery(postgres, tmp_path, monkeypatch, outcome, backup_keys):
     """Real engines/configuration/recovery; six repository-backed smoke fixtures."""
     import dataclasses
     from types import SimpleNamespace
@@ -557,6 +565,7 @@ def test_postgresql_private_migration_acceptance_rollback_and_recovery(postgres,
 
     (tmp_path / 'settings').mkdir()
     (tmp_path / 'data').mkdir()
+    backup_keys.configure(tmp_path / 'data/backups')
     source, key = seeded(tmp_path / 'data/loadcoach.db', tmp_path)
     with source.connection() as connection:
         migrate(source, connection, 'toollocker.tools', TOOL_SCHEMAS)

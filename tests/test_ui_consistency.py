@@ -169,7 +169,7 @@ def ui_host(monkeypatch):
 
 
 @pytest.fixture
-def ui_console(ui_host, desk_with_machine, tmp_path):
+def ui_console(ui_host, desk_with_machine, tmp_path, backup_keys):
     server, _, _, users, _ = desk_with_machine
     users.change('jordan', own={'add': ['front-voice']})
     registry = server.app.state.plugins
@@ -179,6 +179,7 @@ def ui_console(ui_host, desk_with_machine, tmp_path):
     from loadcoach.backups import BackupFile, create_backup
     saved = tmp_path / 'fixture.toml'
     saved.write_text('value = 1\n')
+    backup_keys.configure(tmp_path / 'data/backups')
     create_backup(tmp_path / 'data/backups', '20261014T144500Z-39f0240e98ec64b9a76dd384', 'front',
                   [BackupFile(saved, 'settings/fixture.toml', 'settings')], [], [], [], 0)
     workflow = seed(server, users)
