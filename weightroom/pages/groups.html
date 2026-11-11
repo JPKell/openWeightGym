@@ -1,49 +1,208 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps %}
-{% from "parts.html" import page_header, form_section, more %}
-{% block title %}Groups · openWeightGym{% endblock %}
+{% from "parts.html" import card, said_box, swaps, page_header, section_title, more, alert, confirm_check, confirm_loss %}
+{% from "navigation_parts.html" import pills %}
+{% from "deferred.html" import loading %}
+{% from "user_parts.html" import group_choice, account_avatar, account_status, ability_categories %}
+{% block title %}{{ group.name ~ " · " if group }}Groups · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=1"><link rel="stylesheet" href="/static/users.css?v=3"><script src="/static/users.js?v=2" defer></script>{% endblock %}
 {% block main %}
-{{ page_header('Groups', 'Define shared permissions and limits for accounts.') }}
+{# The directory of groups beside the chosen one, laid out as Users is. /groups chooses the first.
+   Every form names its group's address itself: the page is also shown at /groups, when adding a group was refused. #}
+{% set here = "/groups/" ~ group.name|urlencode if group else "/groups" %}
+{% set adding = form or opened == 'add' %}
+<div class="settings-page users-workspace usage-page" data-directory="group" data-group="{{ group.name if group }}">
+{% call page_header('Groups') %}
+  {% if "manage-users" in person.can %}<a class="btn btn-outline-secondary btn-sm" href="/users">Users</a>{% endif %}
+  {% if "manage-groups" in person.can %}<form method="get" action="{{ here }}" class="m-0"><input type="hidden" name="open" value="add"><button class="btn btn-primary btn-sm" data-toggle-add aria-expanded="{{ 'true' if adding else 'false' }}" aria-controls="add-group">+ Add group</button></form>{% endif %}
+{% endcall %}
+{% set locked = groups|selectattr('state', 'equalto', 'read-only')|list|length %}
+<div class="users-summary small text-secondary mb-3" aria-label="Groups summary">
+  <span><strong class="text-body">{{ groups|length }}</strong> {{ 'group' if groups|length == 1 else 'groups' }}</span>
+  <span><strong class="text-body">{{ groups|map(attribute='members')|map('length')|sum }}</strong> members in all</span>
+  <span><strong class="text-body">{{ groups|selectattr('superuser')|list|length }}</strong> with superuser</span>
+  {% if locked %}<span><strong class="text-body">{{ locked }}</strong> read only to you</span>{% endif %}
+</div>
 {{ said_box(said, failed) }}
 
-{% call card("Add a group", form) %}
-  <p class="text-secondary">A new group allows nothing. What its members may do is set on its own page, which comes next.</p>
+{% if "manage-groups" in person.can %}
+{% set add_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" data-close-add>Close</button>{% endset %}
+{% call card('Add a group', id='add-group', actions=add_actions, attrs={'data-add-panel': ''} if adding else {'data-add-panel': '', 'hidden': ''}, class_='users-add', hint='A new group allows nothing. Tick what its members may do on its page, which comes next, and save.') %}
   <form method="post" action="/groups" class="row g-3 align-items-end">
-    <div class="col-md-6">
-      <label for="name" class="form-label">Name <small class="text-secondary">lowercase letters, digits, dot, dash or underscore</small></label>
-      <input id="name" name="name" class="form-control" value="{{ form.name or '' }}" autocapitalize="none" spellcheck="false" autocomplete="off" required>
+    <div class="col-sm-8 col-lg-6">
+      <label for="add-group-name" class="form-label">Name</label>
+      <input id="add-group-name" name="name" class="form-control" value="{{ form.name or '' }}" maxlength="64" autocapitalize="none" spellcheck="false" autocomplete="off" required aria-describedby="add-group-name-hint">
+      <small class="form-hint" id="add-group-name-hint">Lowercase letters, digits, dot, dash or underscore.</small>
     </div>
-    <div class="col-md-6"><button class="btn btn-primary">Add</button></div>
+    <div class="col-sm-4 col-lg-6 pb-sm-4"><button class="btn btn-primary">Add group</button></div>
   </form>
 {% endcall %}
+{% endif %}
 
-{% call card("Groups", true, "groups-list") %}
-<div id="groups-list">
-<form method="get" action="/groups" class="d-flex align-items-center gap-2 mb-2" {{ swaps('groups-list', true) }} data-auto-submit>
-  <label for="groups-limit" class="form-label mb-0">Groups per page</label>
-  <select id="groups-limit" name="limit" class="form-select form-select-sm w-auto">{% for n in paging.sizes %}<option value="{{ n }}" {{ 'selected' if n == paging.limit }}>{{ n }}</option>{% endfor %}</select>
-  <noscript><button class="btn btn-primary btn-sm">Show</button></noscript>
-</form>
-<div class="table-responsive">
-<table id="groups-table" class="table table-hover align-middle sortable">
-  <thead><tr><th data-sort="text">Group</th><th data-sort="value">Members</th><th data-sort="value">Abilities</th><th data-sort="text">Models</th><th data-sort="text">Priority</th><th data-sort="value">Requests at once</th><th data-sort="text">Highest level</th></tr></thead>
-  <tbody>
-  {% for group in known.groups %}
-  <tr>
-    <td><a href="/groups/{{ group.name }}">{{ group.name }}</a></td>
-    <td data-value="{{ group.members|length }}">{{ group.members|length or "" }}</td>
-    {# "superuser" sorts above any count of abilities. #}
-    <td data-value="{{ 999 if "superuser" in group.can else group.can|length }}">{{ "everything" if "superuser" in group.can else group.can|length }}</td>
-    <td>{{ "every model" if group.models == "*" else group.models|join(", ") or "none" }}</td>
-    <td>{{ group.priority }}</td>
-    <td data-value="{{ group.max_requests }}">{{ group.max_requests or "no limit" }}</td>
-    <td>{{ group.max_sensitivity }}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
+<div class="users-layout">
+<aside class="users-directory" aria-label="Groups">
+  <div class="users-directory-tools">
+    <label class="visually-hidden" for="group-search">Find a group</label><input id="group-search" type="search" class="form-control form-control-sm" placeholder="Find a group or member…" autocomplete="off" autocapitalize="none" spellcheck="false">
+    <select id="group-filter" class="form-select form-select-sm" aria-label="Show groups">
+      {% for value, words in [('all', 'All groups'), ('members', 'With members'), ('empty', 'Without members'), ('superuser', 'Superuser'), ('editable', 'You may change'), ('read-only', 'Read only'), ('second-step', 'Needs an authenticator')] %}<option value="{{ value }}">{{ words }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="eyebrow d-flex justify-content-between mt-3 mb-2 px-2">GROUPS <span data-group-count role="status" aria-live="polite">{{ groups|length }}</span></div>
+  {% call pills('Groups', class_='users-list gap-1 mb-0') %}{% for one in groups %}{{ group_choice(one, group.name if group) }}{% endfor %}{% endcall %}
+  <p class="small text-secondary mt-3 px-2" data-group-empty hidden>No matching groups. Clear the search or choose All groups.</p>
+  <p class="small text-secondary mt-3 px-2 mb-0">Choose a group to manage it. Unsaved changes stay with each group while you switch.</p>
+</aside>
+
+<section class="users-inspector" aria-label="Selected group">
+{% if group %}
+  <div class="account-heading">
+    <div class="d-flex align-items-center gap-3 min-w-0">
+      {{ account_avatar(group, 'account-avatar-lg') }}
+      <div class="min-w-0">{{ section_title(group.name, id='selected-group', class_='wrap', wrapper_class='account-title') }}<span class="small text-secondary">{{ group.members|length }} member{{ "" if group.members|length == 1 else "s" }} · {{ "superuser" if group.superuser else "%d %s"|format(group.can|length, "ability" if group.can|length == 1 else "abilities") }}</span></div>
+      {{ account_status(group) }}
+    </div>
+    <span class="small text-secondary">{{ group.priority or "normal" }} priority · up to {{ group.max_sensitivity or "every level" }}{{ " · authenticator needed" if group.second_step }}</span>
+  </div>
+  {% if group.why_not %}{% call alert('secondary', class_='py-2 small') %}{{ group.why_not }}{% endcall %}{% endif %}
+
+  <div class="account-panels group-panels">
+    {% call card('Overview', id='group-overview', class_='account-panel', attrs={'data-panel': 'activity'}, hint='What the group allows its members. The full report is on Usage.') %}
+      <div class="account-figures">
+        <div data-figure="requests"><span class="usage-label">Members</span><strong class="usage-value usage-value-sm">{{ group.members|length }}</strong><span class="usage-sub">{{ "nobody yet" if not group.members else "account" if group.members|length == 1 else "accounts" }}</span></div>
+        <div data-figure="input_tokens"><span class="usage-label">Abilities</span><strong class="usage-value usage-value-sm">{{ "All" if group.superuser else group.can|length }}</strong><span class="usage-sub">{{ "superuser" if group.superuser else "ticked" }}</span></div>
+        <div data-figure="output_tokens"><span class="usage-label">Models</span><strong class="usage-value usage-value-sm">{{ "All" if group.models == "*" else group.models|length }}</strong><span class="usage-sub">{{ "also those added later" if group.models == "*" else "chosen" }}</span></div>
+        <div data-figure="requests"><span class="usage-label">At once</span><strong class="usage-value usage-value-sm">{{ group.max_requests or "∞" }}</strong><span class="usage-sub">{{ "requests a member" if group.max_requests else "no limit" }}</span></div>
+      </div>
+      {% if "see-log" in person.can %}{{ loading('account-trend', trend_url, 'Loading the last 30 days…') }}
+      <div class="d-flex flex-wrap justify-content-end gap-3 small mt-2"><a href="/usage?group={{ group.name|urlencode }}">Open in Usage</a></div>{% endif %}
+    {% endcall %}
+
+    {% call card('Members', id='group-members', class_='account-panel', attrs={'data-panel': 'members'}, hint='Each takes the group’s permissions and limits, and may be given or refused more on their own page.') %}
+      <ul class="group-member-list list-unstyled mb-0">
+        {% for member in members %}
+        <li>
+          {% if member.kind %}{{ account_avatar(member, 'account-avatar-sm') }}{% endif %}
+          <span class="min-w-0 flex-grow-1">{% if "manage-users" in person.can %}<a href="/users/{{ member.name }}">{{ member.name }}</a>{% else %}{{ member.name }}{% endif %}{% if member.kind %}<small class="d-block text-secondary">{{ member.kind }}{{ " · differs from the group" if member.custom }}</small>{% endif %}</span>
+          {% if member.state %}{{ account_status(member) }}{% endif %}
+        </li>
+        {% else %}
+        <li class="text-secondary small">This group has no members.</li>
+        {% endfor %}
+      </ul>
+      <fieldset class="account-remove" {{ "disabled" if group.why_not }}>
+        <legend class="small fw-semibold">Remove the group</legend>
+        {% if group.members %}
+        <p class="form-hint">Only a group without members can be removed. Move them all to another group first.</p>
+        <form method="post" action="{{ here }}" class="mb-2" {{ swaps() }}>
+          <label for="move-group" class="visually-hidden">Move all members to</label>
+          <div class="input-group input-group-sm">
+            <select id="move-group" name="group" class="form-select form-select-sm" required>
+              <option value="" selected disabled>Move all members to…</option>
+              {% for other in groups %}{% if other.name != group.name %}<option value="{{ other.name }}">{{ other.name }}</option>{% endif %}{% endfor %}
+            </select>
+            <button class="btn btn-outline-primary" name="do" value="move-members">Move</button>
+          </div>
+        </form>
+        {% else %}
+        <p class="form-hint">Nobody is in it, so nothing else changes.</p>
+        {% endif %}
+        <form method="post" action="{{ here }}" class="d-flex flex-wrap align-items-center gap-2">
+          {% set confirmation_label %}Yes, remove {{ group.name }}{% endset %}{{ confirm_check(confirmation_label, "sure") }}
+          <button class="btn btn-outline-danger btn-sm" name="do" value="remove" {{ confirm_loss() }}>Remove</button>
+        </form>
+      </fieldset>
+    {% endcall %}
+
+    {# Permissions, limits, models and tools are saved together. The form gives its cards to the grid around it (display: contents),
+       and static/users.js keeps what is typed in it for each group while another is looked at.
+       What the compute service would refuse is shown and cannot be sent: a browser greys everything inside a disabled fieldset. #}
+    <form method="post" action="{{ here }}" class="account-policy" data-account-draft {{ swaps() }}>
+    <fieldset class="account-policy-fields" {{ "disabled" if group.why_not }}>
+      {% call card('What members may do', id='group-permissions', class_='account-panel', attrs={'data-panel': 'permissions'}) %}
+        <div class="account-permission-tools">
+          <div class="account-permission-counts small"><span><strong>{{ ticks|selectattr('ticked')|list|length }}</strong> of {{ ticks|length }} ticked</span>{% if ticks|selectattr('greyed')|first %}<span><strong>{{ ticks|selectattr('greyed')|list|length }}</strong> not yours to give</span>{% endif %}</div>
+        </div>
+        {% include "abilities.html" %}
+        {% call more('How permissions work') %}What is ticked is what every member may do, unless their own page gives or takes away more. A greyed one you may not do yourself, so it is not yours to hand out. <code>superuser</code> stands for all the others, except those for a program’s own key: untick it to choose them one by one.{% endcall %}
+      {% endcall %}
+
+      {% call card('Limits and signing in', id='group-limits', class_='account-panel', attrs={'data-panel': 'limits'}, hint='For each member. An account can be held to less on its own page.') %}
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-6">
+            <label for="priority" class="form-label">Priority <small class="text-secondary">unless a request asks</small></label>
+            <select id="priority" name="priority" class="form-select form-select-sm">
+              {% for priority in ("high", "normal", "low") %}<option {{ "selected" if showing.priority == priority }}>{{ priority }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-6">
+            <label for="max_sensitivity" class="form-label">Highest level of work</label>
+            <select id="max_sensitivity" name="max_sensitivity" class="form-select form-select-sm">
+              {% for level in known.levels %}<option {{ "selected" if showing.max_sensitivity == level }}>{{ level }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-6">
+            <label for="max_requests" class="form-label">Requests at once <small class="text-secondary">0 none</small></label>
+            <input id="max_requests" name="max_requests" type="number" min="0" class="form-control form-control-sm" value="{{ showing.max_requests }}">
+          </div>
+          <div class="col-sm-6">
+            <label for="max_hosted_spend" class="form-label">Hosted spend <small class="text-secondary">$ a day · 0 none</small></label>
+            <input id="max_hosted_spend" name="max_hosted_spend" type="number" min="0" step="any" class="form-control form-control-sm" value="{{ showing.max_hosted_spend }}">
+          </div>
+          <div class="col-sm-6">
+            <label for="max_lock" class="form-label">Longest lock</label>
+            <input id="max_lock" name="max_lock" type="number" min="0" step="any" class="form-control form-control-sm" value="{{ showing.max_lock }}">
+          </div>
+          <div class="col-sm-6">
+            <label for="max_hold" class="form-label">Longest model hold</label>
+            <input id="max_hold" name="max_hold" type="number" min="1" max="86400" class="form-control form-control-sm" value="{{ showing.max_hold|default(120) }}">
+          </div>
+          <div class="col-sm-6">
+            <label for="session_hours" class="form-label">Signed-in session <small class="text-secondary">hours</small></label>
+            <input id="session_hours" name="session_hours" type="number" min="0" step="any" class="form-control form-control-sm" value="{{ showing.session_hours }}">
+          </div>
+          <div class="col-sm-6 d-flex align-items-end">
+            <div class="form-check form-switch mb-1">
+              <input id="second_step" name="second_step" type="checkbox" class="form-check-input" {{ "checked" if showing.second_step }}>
+              <label for="second_step" class="form-check-label">Signing in also needs an authenticator code</label>
+            </div>
+          </div>
+        </div>
+      {% endcall %}
+
+      {% call card('Models and tools', id='group-models', class_='account-panel', attrs={'data-panel': 'models'}) %}
+        <div class="form-check form-switch">
+          <input id="every" name="every" type="checkbox" class="form-check-input" {{ "checked" if showing.models == "*" }}>
+          <label for="every" class="form-check-label">Every model, also those added later <small class="text-secondary">off, only the ones ticked below</small></label>
+        </div>
+        <div class="account-models mb-3">
+          {% for model in models %}
+          <div class="form-check mb-0">
+            <input id="model-{{ loop.index }}" name="model" value="{{ model }}" type="checkbox" class="form-check-input" {{ "checked" if showing.models != "*" and model in showing.models }}>
+            <label for="model-{{ loop.index }}" class="form-check-label">{{ model }}</label>
+          </div>
+          {% endfor %}
+        </div>
+        {{ section_title("Tools members are shown", level=3) }}
+        <p class="form-hint">Tools, by the name a harness sees, one to a line. <code>*</code> stands for anything:
+          <code>nas__*</code> is every tool of the server <code>nas</code>. A tool is also hidden from anyone whose level is below its own.</p>
+        <div class="form-check form-switch mb-2">
+          <input id="every_tool" name="every_tool" type="checkbox" class="form-check-input" {{ "checked" if showing.tools|default("*") == "*" }}>
+          <label for="every_tool" class="form-check-label">Every tool, also those added later <small class="text-secondary">off, only those listed below</small></label>
+        </div>
+        <label for="tools" class="form-label visually-hidden">Tools</label>
+        <textarea id="tools" name="tools" rows="3" class="form-control form-control-sm font-monospace" placeholder="nas__*&#10;code__search">{{ (showing.tools if showing.tools is not string else [])|join("\n") }}</textarea>
+      {% endcall %}
+
+      <div class="account-save-bar">
+        <span class="small text-secondary" data-group-draft-status role="status" aria-live="polite">No unsaved changes</span>
+        <div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-discard-draft hidden>Discard</button><button class="btn btn-primary btn-sm" name="do" value="save">Save {{ group.name }}</button></div>
+      </div>
+    </fieldset>
+    </form>
+  </div>
+{% else %}
+  {% call card('No groups yet') %}<p class="text-secondary mb-0">Add a group to give accounts permissions and limits together.</p>{% endcall %}
+{% endif %}
+</section>
 </div>
-{% with target='groups-list' %}{% include 'pagination.html' %}{% endwith %}
 </div>
-{% endcall %}
 {% endblock %}

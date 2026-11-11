@@ -4,14 +4,14 @@
 {% from "deferred.html" import loading %}
 {% from "user_parts.html" import account_choice, account_avatar, account_status, ability_categories %}
 {% block title %}{{ user.name }} · Users · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=1"><link rel="stylesheet" href="/static/users.css?v=2"><script src="/static/users.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=1"><link rel="stylesheet" href="/static/users.css?v=3"><script src="/static/users.js?v=2" defer></script>{% endblock %}
 {% block main %}
 {# The directory of accounts beside the chosen one, as Compute nodes lays out its machines. /users chooses the first.
    Every form names its account's address itself: the page is also shown at /users, straight after an account is added. #}
 {% set here = "/users/" ~ user.name %}
 {% set adding = form or opened == 'add' %}
 {% set group = (known.groups|selectattr("name", "equalto", user.group)|first) or {} %}
-<div class="settings-page users-workspace usage-page" data-users data-user="{{ user.name }}">
+<div class="settings-page users-workspace usage-page" data-users data-directory="user" data-user="{{ user.name }}">
 {% call page_header('Users') %}
   {% if "manage-groups" in person.can %}<a class="btn btn-outline-secondary btn-sm" href="/groups">Groups</a>{% endif %}
   <form method="get" action="{{ here }}" class="m-0"><input type="hidden" name="open" value="add"><button class="btn btn-primary btn-sm" data-toggle-add aria-expanded="{{ 'true' if adding else 'false' }}" aria-controls="add-account">+ Add account</button></form>
@@ -27,7 +27,7 @@
 {{ said_box(said, failed) }}
 
 {% set add_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" data-close-add>Close</button>{% endset %}
-{% call card('Add an account', id='add-account', actions=add_actions, attrs={} if adding else {'hidden': ''}, class_='users-add', hint='For a person, or for a program that is to have a key of its own. What it may do comes from its group, and can be changed on its page afterwards.') %}
+{% call card('Add an account', id='add-account', actions=add_actions, attrs={'data-add-panel': ''} if adding else {'data-add-panel': '', 'hidden': ''}, class_='users-add', hint='For a person, or for a program that is to have a key of its own. What it may do comes from its group, and can be changed on its page afterwards.') %}
   <form method="post" action="/users" class="users-add-layout">
     <fieldset class="users-add-kind">
       <legend class="visually-hidden">Kind of account</legend>

@@ -369,13 +369,13 @@ def test_the_users_page_adds_an_account_and_its_own_page_changes_it(desk):
     assert [name for _, name in directory] == sorted(users.listing()[i]["name"] for i in range(len(users.listing())))
     assert [name for active, name in directory if active] == [directory[0][1]] and 'data-user-choice="cleo"' in listed
     assert 'data-user-kind="person"' in listed and 'data-user-search="cleo careful person' in listed and 'id="user-filter"' in listed
-    assert 'id="add-account"' in listed and re.search(r'<section class="card mb-3 users-add" id="add-account" hidden', listed)
+    assert 'id="add-account"' in listed and re.search(r'<section class="card mb-3 users-add" id="add-account" data-add-panel="" hidden', listed)
     assert re.search(r'<a class="nav-link account-choice active" href="/users/pat"', browser.get("/users/pat").text)
 
     # Added for a person: a temporary password and no key, shown this once on the account's own page.
     wrong = browser.post("/users", data={"name": "Ada L", "group": "plain", "password": "on"})
     assert wrong.status_code == 400 and "a user name is lowercase letters" in wrong.text and 'value="Ada L"' in wrong.text
-    assert re.search(r'<section class="card mb-3 users-add" id="add-account">', wrong.text)  # refused, the form stays open with what was typed
+    assert re.search(r'<section class="card mb-3 users-add" id="add-account" data-add-panel="">', wrong.text)  # refused, the form stays open with what was typed
     added = browser.post("/users", data={"name": "ada", "group": "plain", "password": "on"})
     secret = re.findall(r'<pre class="secret">(.+?)</pre>', added.text)
     assert "Added ada." in added.text and "Temporary password." in added.text and len(secret) == 1 and "API key." not in added.text
@@ -466,15 +466,11 @@ def test_the_groups_page_adds_a_group_and_its_own_page_changes_it(desk):
     sign_in(browser, 'jordan')
     assert 'href="/groups"' in browser.get('/groups').text
     listed = browser.get("/groups").text
-    assert '<a href="/groups/plain">plain</a>' in listed and "everything" in listed and "every model" in listed
-    first = browser.get("/groups?limit=2&page=1").text
-    second = browser.get("/groups?limit=2&page=2").text
-    first_names = re.findall(r'<a href="/groups/([^"/]+)">', first)
-    second_names = re.findall(r'<a href="/groups/([^"/]+)">', second)
-    assert len(first_names) == len(second_names) == 2 and set(first_names).isdisjoint(second_names)
-    assert 'id="groups-limit"' in first and '<option value="2" selected>2</option>' in first
-    assert "6 results · Page 1 of 3" in first and 'href="/groups?limit=2&amp;page=2"' in first
-    assert "6 results · Page 3 of 3" in browser.get("/groups?limit=2&page=999").text
+    # A directory of every group beside the first one's page.
+    directory = re.findall(r'href="/groups/([^"/]+)"[^>]*data-group-choice="\1"', listed)
+    assert len(directory) == 6 and "plain" in directory and 'aria-current="page"' in listed and 'id="selected-group"' in listed
+    assert "6</strong> groups" in listed and 'data-group-filters="editable members' in listed and "superuser" in listed
+    assert browser.get("/groups?open=add").text.count('data-add-panel=""') == 1 and 'data-add-panel="" hidden' in listed
 
     wrong = browser.post("/groups", data={"name": "Read ers"})
     assert wrong.status_code == 400 and "A group name is lowercase letters" in wrong.text and 'value="Read ers"' in wrong.text
@@ -489,13 +485,17 @@ def test_the_groups_page_adds_a_group_and_its_own_page_changes_it(desk):
     assert "Saved." in saved.text and users.groups.stored("readers") == {
         "can": ["load", "lock"], "models": ["small", "big"], "priority": "low", "max_sensitivity": "sensitive", "max_requests": 2, "max_lock": 60,
         "max_hosted_spend": 1.5, "session_hours": 8, "second_step": True}  # fmt: skip
-    assert 'name="max_hosted_spend" type="number" min="0" step="any" class="form-control" value="1.5"' in saved.text and 'value="big" type="checkbox" class="form-check-input" checked' in saved.text
+    assert 'name="max_hosted_spend" type="number" min="0" step="any" class="form-control form-control-sm" value="1.5"' in saved.text and 'value="big" type="checkbox" class="form-check-input" checked' in saved.text
     page = browser.get("/groups/readers").text
     assert '<summary class="card-header fw-semibold">' not in page
-    assert page.index(">Members</h2>") < page.index(">Limits and signing in</h2>") < page.index(">What members may do</h2>")
-    assert page.count('class="col-md-6 col-xl-3') == 8 and 'name="do" value="limits"' in page and 'name="do" value="abilities"' in page
+    assert page.index(">Overview</h2>") < page.index(">Members</h2>") < page.index(">What members may do</h2>") < page.index(">Limits and signing in</h2>") < page.index(">Models and tools</h2>")
+    assert page.count('data-ability-category') >= 4 and 'name="do" value="save"' in page and 'id="tools"' in page
     assert "in seconds" not in page and "for each member, in line or being answered" not in page
-    assert 'id="move-group"' in page and 'name="do" value="move-members"' in page
+    assert 'id="move-group"' not in page and 'name="do" value="remove"' in page  # nobody to move yet
+    # The whole page is saved together, its tools with it.
+    tooled = browser.post("/groups/readers", data={**form, "tools": "nas__*"})
+    assert "Saved." in tooled.text and users.groups.stored("readers")["tools"] == ["nas__*"]
+    browser.post("/groups/readers", data=form)
 
     # Each of the two Save buttons changes its own section and preserves the other one.
     limits = browser.post("/groups/readers", data={"do": "limits", "priority": "high", "max_sensitivity": "normal", "max_lock": "30", "max_hold": "90",
@@ -513,11 +513,14 @@ def test_the_groups_page_adds_a_group_and_its_own_page_changes_it(desk):
 
     # One's own group, and one that allows more, are shown and cannot be changed.
     mine, above = browser.get("/groups/admin").text, browser.get("/groups/superuser").text
-    assert DISABLED in mine and "Nobody changes the group they are in" in mine and '<a href="/users/jordan">jordan</a>' in mine
-    assert DISABLED in above and "allows more than you may" in above and DISABLED not in browser.get("/groups/readers").text
+    locked = '<fieldset class="account-policy-fields" disabled>'
+    assert locked in mine and "Nobody changes the group they are in" in mine and '<a href="/users/jordan">jordan</a>' in mine
+    assert locked in above and "allows more than you may" in above and "disabled>" not in browser.get("/groups/readers").text.split('data-panel="members"')[1].split("</form>")[0]
+    assert '<fieldset class="account-policy-fields" >' in browser.get("/groups/readers").text
 
     # Every member can be moved together, after which the empty group can be removed.
     users.add("ada", "readers")
+    assert 'id="move-group"' in browser.get("/groups/readers").text
     in_use = browser.post("/groups/readers", data={"do": "remove"})
     assert in_use.status_code == 400 and "Move them to another group first" in in_use.text
     users.add("bob", "readers")

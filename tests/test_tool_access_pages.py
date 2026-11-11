@@ -43,7 +43,7 @@ def test_a_group_and_an_account_are_shown_the_tools_typed_on_their_pages(desk): 
     sign_in(browser, "jordan")
     browser.post("/groups", data={"name": "readers"})
     page = browser.get("/groups/readers").text
-    assert ">Tools members are shown</h2>" in page and 'id="every_tool" name="every_tool" type="checkbox" class="form-check-input" checked' in page
+    assert ">Tools members are shown</h3>" in page and 'id="every_tool" name="every_tool" type="checkbox" class="form-check-input" checked' in page
 
     browser.post("/groups/readers", data={"do": "tools", "tools": "nas__*\ncode__search, files__read_file"})
     assert users.groups.stored("readers")["tools"] == ["nas__*", "code__search", "files__read_file"]

@@ -1,7 +1,8 @@
-/* Settings › Users: the account directory beside the chosen account (users.html), laid out as Compute nodes is.
+/* Settings › Users and Settings › Groups: the directory beside the chosen account (users.html) or group (groups.html), laid out as Compute nodes is.
    The account pieces (avatar, status, directory row, marks) are shared with the sample proposals (users_designs.html). */
 .account-avatar { display: grid; place-items: center; width: 2rem; height: 2rem; flex: none; border-radius: 50%; border: 1px solid var(--bs-border-color); background: var(--tblr-bg-surface-secondary); color: var(--bs-secondary-color); font-size: .7rem; font-weight: 650; letter-spacing: .02em; }
 .account-avatar[data-kind=program] { border-radius: var(--bs-border-radius); font-family: var(--bs-font-monospace); }
+.account-avatar[data-kind=group] { border-radius: 30%; }
 .account-avatar-sm { width: 1.6rem; height: 1.6rem; font-size: .6rem; }
 .account-avatar-lg { width: 2.75rem; height: 2.75rem; font-size: .9rem; background: var(--suite-accent-bg); color: var(--suite-accent); border-color: transparent; }
 .account-status { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; font-size: .7rem; border-radius: 4px; padding: .2rem .45rem; background: var(--tblr-bg-surface-secondary); color: var(--bs-secondary-color); }
@@ -9,6 +10,8 @@
 .account-status[data-state=active] { color: var(--bs-success); }
 .account-status[data-state=invited] { color: var(--bs-primary); }
 .account-status[data-state=disabled] { color: var(--bs-warning-text-emphasis); }
+.account-status[data-state=editable] { color: var(--bs-success); }
+.account-status[data-state=read-only] { color: var(--bs-secondary-color); }
 .draft-mark, .attention-mark { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; flex: none; }
 .draft-mark { background: var(--suite-accent); }
 .attention-mark { background: var(--bs-warning); }
@@ -56,6 +59,14 @@
 .account-panels > [data-panel=keys] { grid-area: keys; }
 .account-policy-fields > [data-panel=permissions] { grid-area: permissions; }
 .account-policy-fields > [data-panel=limits] { grid-area: limits; }
+/* A group's page: its members beside what they may do. */
+.group-panels { grid-template-areas: "activity activity" "members permissions" "limits permissions" "models permissions" "rest permissions" "save save"; }
+.account-panels > [data-panel=members] { grid-area: members; }
+.account-policy-fields > [data-panel=models] { grid-area: models; }
+.group-member-list { display: grid; gap: .1rem; max-height: 22rem; overflow-y: auto; }
+.group-member-list li { display: flex; align-items: center; gap: .6rem; padding: .35rem 0; font-size: .8rem; }
+.group-member-list li + li { border-top: 1px solid var(--bs-border-color-translucent); }
+.group-member-list small { font-size: .7rem; }
 .account-panels .account-panel { margin-bottom: 0 !important; }
 .account-panel .card-body { padding: .85rem 1rem; }
 .account-panel .card-hint { font-size: .75rem !important; }
@@ -70,7 +81,9 @@
 .account-days .form-control { inline-size: 5.5rem; }
 .account-trend { display: grid; gap: .75rem; margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--bs-border-color); }
 .account-trend .usage-spark { margin-top: .35rem; }
-.account-spend .usage-segment { inline-size: var(--account-share); }
+.account-spend .usage-segment, .account-busiest .usage-segment { inline-size: var(--account-share); }
+.account-busiest { display: grid; gap: .3rem; }
+.account-busiest-row { display: grid; grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) auto; align-items: center; gap: .75rem; font-size: .75rem; }
 .account-spend.is-near .usage-segment { --usage-color: var(--bs-warning); }
 .account-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-bottom: .9rem; }
 .account-facts dt { font-size: .68rem; font-weight: 500; color: var(--bs-secondary-color); text-transform: uppercase; letter-spacing: .05em; }
@@ -99,6 +112,7 @@
 .account-save-bar.is-dirty [data-user-draft-status] { color: var(--suite-accent) !important; font-weight: 600; }
 @media (max-width: 1250px) {
   .account-panels { grid-template-columns: minmax(0, 1fr); grid-template-areas: "activity" "access" "keys" "permissions" "limits" "save"; }
+  .group-panels { grid-template-areas: "activity" "members" "permissions" "limits" "models" "save"; }
   .account-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {

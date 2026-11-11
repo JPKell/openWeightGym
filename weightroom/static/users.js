@@ -1,29 +1,45 @@
-// Settings › Users. The directory is filtered in the page; what is typed into an account's permissions, limits and tools
-// is kept in this page's memory while another account is looked at, and put back when it is chosen again.
+// Settings › Users and Settings › Groups. Each is a directory beside the one chosen (data-directory="user" or "group", with the
+// chosen name in data-user or data-group). The directory is filtered in the page; what is typed into the chosen one's settings
+// (form[data-account-draft]) is kept in this page's memory while another is looked at, and put back when it is chosen again.
 (() => {
   'use strict';
-  const drafts = new Map();          // account name → [{index, name, type, value, checked}] that differ from what was saved
+  const drafts = new Map();          // "user:cleo" or "group:readers" → [{index, name, type, value, checked}] that differ from what was saved
   const baselines = new WeakMap();   // field → what the page came with
-  let search = '', filter = 'all', addOpen = null, initialized = null, saving = '';
-  const root = () => document.querySelector('[data-users]');
+  const views = {};                  // kind → {search, filter, addOpen}: kept across swaps
+  let initialized = null, saving = '';
+  const root = () => document.querySelector('[data-directory]');
+  const kindOf = page => page.dataset.directory;
+  const chosen = page => page.dataset[kindOf(page)];
+  const key = (page, name = chosen(page)) => `${kindOf(page)}:${name}`;
+  const view = page => (views[kindOf(page)] ||= {search: '', filter: 'all', addOpen: null});
+  const find = (page, part) => page.querySelector(`[data-${kindOf(page)}-${part}]`);
+  const choices = page => [...page.querySelectorAll(`[data-${kindOf(page)}-choice]`)];
   const draftForm = page => page.querySelector('form[data-account-draft]');
   const controls = form => [...form.elements].filter(field => field.name && !['hidden', 'submit', 'button', 'reset'].includes(field.type));
   const now = field => JSON.stringify({value: field.value, checked: field.checked});
+  // What each filter of a directory keeps. A group's row lists the words it matches; an account's says them one by one.
+  const matches = {
+    user: (facts, filter) => filter === facts.userKind || (filter === 'disabled' && facts.userState === 'disabled') ||
+      (filter === 'attention' && facts.userAttention) || (filter === 'custom' && facts.userCustom),
+    group: (facts, filter) => (facts.groupFilters || '').split(' ').includes(filter),
+  };
 
   function remember(page) {
     const form = draftForm(page);
     if (!form) return;
     const edits = controls(form).map((field, index) => ({field, index})).filter(({field}) => now(field) !== baselines.get(field))
       .map(({field, index}) => ({index, name: field.name, type: field.type, value: field.value, checked: field.checked}));
-    if (edits.length) drafts.set(page.dataset.user, edits); else drafts.delete(page.dataset.user);
+    if (edits.length) drafts.set(key(page), edits); else drafts.delete(key(page));
   }
   function showDrafts(page) {
-    for (const choice of page.querySelectorAll('[data-user-choice]')) choice.querySelector('[data-draft-mark]').hidden = !drafts.has(choice.dataset.userChoice);
-    const count = drafts.get(page.dataset.user)?.length || 0, others = [...drafts.keys()].filter(name => name !== page.dataset.user).length;
-    const status = page.querySelector('[data-user-draft-status]');
+    const kind = kindOf(page), noun = kind === 'user' ? 'account' : kind;
+    for (const choice of choices(page)) choice.querySelector('[data-draft-mark]').hidden = !drafts.has(key(page, choice.dataset[`${kind}Choice`]));
+    const count = drafts.get(key(page))?.length || 0;
+    const others = [...drafts.keys()].filter(name => name.startsWith(`${kind}:`) && name !== key(page)).length;
+    const status = find(page, 'draft-status');
     if (!status) return;
     status.textContent = (count ? `Unsaved changes: ${count} field${count === 1 ? '' : 's'}` : 'No unsaved changes') +
-      (others ? ` · ${others} other account${others === 1 ? '' : 's'} with unsaved changes` : '');
+      (others ? ` · ${others} other ${noun}${others === 1 ? '' : 's'} with unsaved changes` : '');
     status.closest('.account-save-bar').classList.toggle('is-dirty', Boolean(count));
     page.querySelector('[data-discard-draft]').hidden = !count;
   }
@@ -38,23 +54,22 @@
     const none = page.querySelector('[data-no-changes]');
     if (none) none.hidden = !(only && !shown);
   }
-  function filterAccounts(page) {
-    const words = search.trim().toLowerCase(), choices = [...page.querySelectorAll('[data-user-choice]')];
-    for (const choice of choices) {
+  function filterChoices(page) {
+    const {search, filter} = view(page), words = search.trim().toLowerCase(), kind = kindOf(page), listed = choices(page);
+    for (const choice of listed) {
       const facts = choice.dataset;
-      const matches = filter === 'all' || filter === facts.userKind || (filter === 'disabled' && facts.userState === 'disabled') ||
-        (filter === 'attention' && facts.userAttention) || (filter === 'custom' && facts.userCustom);
-      choice.hidden = !matches || !facts.userSearch.toLowerCase().includes(words);
+      choice.hidden = !(filter === 'all' || matches[kind](facts, filter)) || !facts[`${kind}Search`].toLowerCase().includes(words);
     }
-    const count = choices.filter(choice => !choice.hidden).length;
-    page.querySelector('[data-user-count]').textContent = count;
-    page.querySelector('[data-user-empty]').hidden = count > 0;
+    const count = listed.filter(choice => !choice.hidden).length;
+    find(page, 'count').textContent = count;
+    find(page, 'empty').hidden = count > 0;
   }
   function showAdd(page, open, focus = false) {
-    const panel = page.querySelector('#add-account');
-    addOpen = open; panel.hidden = !open;
-    page.querySelector('[data-toggle-add]').setAttribute('aria-expanded', String(open));
-    if (focus) (open ? panel.querySelector('[name=name]') : page.querySelector('[data-toggle-add]')).focus();
+    const panel = page.querySelector('[data-add-panel]'), toggle = page.querySelector('[data-toggle-add]');
+    if (!panel || !toggle) return;
+    view(page).addOpen = open; panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    if (focus) (open ? panel.querySelector('[name=name]') : toggle).focus();
   }
 
   function setup() {
@@ -63,35 +78,36 @@
     initialized = page;
     const failed = page.querySelector('.said-box.alert-danger');
     // A save that went through leaves nothing unsaved; one that was refused keeps what was typed.
-    if (saving === page.dataset.user && !failed) drafts.delete(saving);
+    if (saving === key(page) && !failed) drafts.delete(saving);
     saving = '';
     const form = draftForm(page);
     if (form) {
       const fields = controls(form);
       fields.forEach(field => baselines.set(field, now(field)));
-      for (const edit of drafts.get(page.dataset.user) || []) {
+      for (const edit of drafts.get(key(page)) || []) {
         const field = fields[edit.index];
         if (!field || field.name !== edit.name || field.type !== edit.type) continue;
         if (['checkbox', 'radio'].includes(field.type)) field.checked = edit.checked; else field.value = edit.value;
       }
     }
-    page.querySelector('#user-search').value = search;
-    page.querySelector('#user-filter').value = filter;
-    const panel = page.querySelector('#add-account');
-    showAdd(page, addOpen === null || !panel.hidden ? !panel.hidden : addOpen);
-    filterAccounts(page); showDrafts(page); showOnlyChanges(page);
+    const kind = kindOf(page), {search, filter, addOpen} = view(page);
+    page.querySelector(`#${kind}-search`).value = search;
+    page.querySelector(`#${kind}-filter`).value = filter;
+    const panel = page.querySelector('[data-add-panel]');
+    if (panel) showAdd(page, addOpen === null || !panel.hidden ? !panel.hidden : addOpen);
+    filterChoices(page); showDrafts(page); showOnlyChanges(page);
   }
 
   document.addEventListener('input', event => {
     const page = root();
     if (!page || !page.contains(event.target)) return;
-    if (event.target.id === 'user-search') { search = event.target.value; return filterAccounts(page); }
+    if (event.target.id === `${kindOf(page)}-search`) { view(page).search = event.target.value; return filterChoices(page); }
     if (event.target.closest('form[data-account-draft]')) { remember(page); showDrafts(page); }
   });
   document.addEventListener('change', event => {
     const page = root();
     if (!page || !page.contains(event.target)) return;
-    if (event.target.id === 'user-filter') { filter = event.target.value; filterAccounts(page); }
+    if (event.target.id === `${kindOf(page)}-filter`) { view(page).filter = event.target.value; filterChoices(page); }
     if (event.target.matches('[data-changed-only]')) showOnlyChanges(page);
     if (event.target.matches('#add-account [name=kind]')) {
       const person = event.target.value === 'person';
@@ -102,11 +118,12 @@
   document.addEventListener('click', event => {
     const page = root();
     if (!page || !page.contains(event.target)) return;
-    if (event.target.closest('[data-toggle-add]')) { event.preventDefault(); showAdd(page, page.querySelector('#add-account').hidden, true); }
+    if (event.target.closest('[data-toggle-add]')) { event.preventDefault(); showAdd(page, page.querySelector('[data-add-panel]').hidden, true); }
     if (event.target.closest('[data-close-add]')) showAdd(page, false, true);
     if (event.target.closest('[data-show-attention]')) {
-      filter = 'attention'; page.querySelector('#user-filter').value = filter; filterAccounts(page);
-      page.querySelector('#user-filter').focus();
+      const select = page.querySelector(`#${kindOf(page)}-filter`);
+      view(page).filter = select.value = 'attention'; filterChoices(page);
+      select.focus();
     }
     if (event.target.closest('[data-discard-draft]')) {
       const form = draftForm(page);
@@ -114,18 +131,19 @@
         const was = JSON.parse(baselines.get(field));
         if (['checkbox', 'radio'].includes(field.type)) field.checked = was.checked; else field.value = was.value;
       }
-      drafts.delete(page.dataset.user); showDrafts(page);
+      drafts.delete(key(page)); showDrafts(page);
       form.querySelector('[name=do][value=save]').focus();
     }
   });
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && root() && addOpen && !document.querySelector('dialog[open]')) showAdd(root(), false, true);
+    const page = root();
+    if (event.key === 'Escape' && page && view(page).addOpen && !document.querySelector('dialog[open]')) showAdd(page, false, true);
   });
   document.addEventListener('htmx:beforeRequest', event => {
     const page = root();
-    if (page && event.detail.elt?.closest?.('form[data-account-draft]')) saving = page.dataset.user;
+    if (page && event.detail.elt?.closest?.('form[data-account-draft]')) saving = key(page);
   });
-  // Before another account replaces this one, keep what was typed here.
+  // Before another account or group replaces this one, keep what was typed here.
   document.addEventListener('htmx:beforeSwap', event => {
     const page = root();
     if (page && event.detail.target?.id === 'page-content') remember(page);
