@@ -749,9 +749,21 @@ def main() -> int:
     voice = subparsers.add_parser("voice")
     voice.add_argument("--root", type=Path, required=True)
     voice.add_argument("--services", required=True)
+    llama = subparsers.add_parser("llama-server")
+    llama.add_argument("--root", type=Path, required=True)
+    llama.add_argument("--executable", required=True)
     repairing = subparsers.add_parser("repair-postgresql")
     repairing.add_argument("--root", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == "llama-server":
+        executable = Path(args.executable)
+        if not executable.is_file() or not os.access(executable, os.X_OK):
+            parser.error("llama-server must be an executable file")
+        config = args.root / "settings/loadcoach.toml"
+        text = config.read_text()
+        if tomllib.loads(text).get("llama_server") != str(executable):
+            save_settings(config, set_toml_value(text, "llama_server", str(executable)), "llama-install")
+        return 0
     if args.command == "repair-postgresql":
         try:
             return repair_postgresql(args.root.resolve())

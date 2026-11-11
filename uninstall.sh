@@ -390,6 +390,9 @@ remove() {
     for service in $(receipt_get services | tr , ' '); do
       owg_systemctl disable --quiet "$service.service" >>"$OWG_LOG" 2>&1 || true
       as_root rm -f -- "$unit_dir/$service.service"
+      if [[ $service == loadcoach ]] && as_root cmp -s "$unit_dir/loadcoach.service.d/50-owg-strata.conf" "$DIR/services/loadcoach-strata.conf"; then
+        as_root rm -f -- "$unit_dir/loadcoach.service.d/50-owg-strata.conf"
+      fi
     done
     owg_systemctl daemon-reload >>"$OWG_LOG" 2>&1 || true
     ui_ok "Removed the services"

@@ -8,8 +8,8 @@ curl -fsSL https://raw.githubusercontent.com/JPKell/openWeightGym/main/install.s
 ```
 
 From a checkout, `./install.sh` does the same and the checkout becomes the installation. Running
-the installer again on an installed machine offers **Update**, **Repair**, **Add a GPU node** (on a
-console) and **Uninstall**.
+the installer again offers **Update**, **Repair**, **Install components**, **Add a GPU node**
+(on a console) and **Uninstall**.
 
 Release-by-release delivery notes, runtime pins and recovery procedures for this project's own
 deployment are in the [operations log](operations.md).
@@ -170,13 +170,14 @@ the `pg_hba.conf` lines to add.
 
 | Command | Does |
 |---|---|
-| `owg` | shows what is running, then a menu: restart services (choosing which), restart another machine's services over SSH, update, repair, doctor, logs, add a GPU node, uninstall |
+| `owg` | shows what is running, then a menu: restart services (choosing which), restart another machine's services over SSH, update, repair, install components, doctor, logs, add a GPU node, uninstall |
 | `owg status` | programs, addresses, the llama.cpp build and the models' size |
 | `owg start`, `stop`, `restart [PROGRAM…]` | controls the services, all of them by default |
 | `owg restart --host USER@HOST [PROGRAM…]` | restarts services over SSH using that host's OWG installation; all installed services by default |
 | `owg logs [PROGRAM] [-f] [-n LINES]` | the latest from the programs' journals (80 lines unless `-n` says otherwise); `-f` follows them |
 | `owg update [--yes] [--plain]` | fetches the latest openWeightGym and reinstalls, keeping settings and data |
 | `owg repair [--yes] [--plain]` | reinstalls packages and services as they are |
+| `owg install [OPTIONS]` | adds omitted services and model engines; equivalent to `install.sh --components` |
 | `owg doctor` | checks the environment, services, settings, llama.cpp, key permissions, linger, the console and disk space, and says what to fix |
 | `owg pair [--minutes N]` | makes a pairing code for a GPU node (on a console), good for N minutes |
 | `owg uninstall [--yes] [--everything] [--no-backup] [--plain]` | removes openWeightGym, choosing what to keep; `--yes` keeps settings, keys, data and models without asking, `--everything` removes them too after a backup, which `--no-backup` skips |
@@ -229,10 +230,38 @@ at the one in use, which is what LoadCoach's `llama_server` setting names. Nothi
 models loaded from then on use the new build. To use a llama-server you already have, choose
 **One I already have** in Customize, or pass `--llama /path/to/llama-server`.
 
-The optional image engine (stable-diffusion.cpp) and audio engine (audio.cpp) are built from source
-by `scripts/install-suite.sh --sdcpp install` and `--audiocpp install` on a GPU node. They need
-git, cmake and a C++ compiler, and the CUDA toolkit for CUDA builds; see the
-[operations log](operations.md#optional-image-generation-runtime) for their details.
+## Adding components and optional engines
+
+The node installer offers **Strata**, **stable-diffusion.cpp** (images) and **audio.cpp**
+(music, sounds and speech). They are optional; unattended installs keep them unchanged unless
+selected explicitly. Image and audio builds offer CUDA, Vulkan or CPU; Strata uses CUDA.
+These source builds require git, cmake and a C++ compiler, plus the CUDA toolkit for CUDA or
+Vulkan development tools for Vulkan. Model weights are separate.
+
+Run **owg → Install components**, or `owg install`, to add services omitted earlier, including
+voice, monitoring and tool services appropriate to this machine's role, or any of the engines
+(including llama.cpp). Existing services stay selected internally; their settings, unit
+customizations and data are kept. Selected services restart after installation. An interrupted
+addition saves its selection: rerun the installer to continue.
+
+```bash
+owg install --yes --sdcpp install --sdcpp-backend cuda --audiocpp install
+owg install --yes --strata install --strata-host-ram-mib 22528
+owg install --yes --services spotter
+owg install --yes --llama auto
+```
+
+These engine flags also work with `install.sh` during initial setup and with
+`scripts/install-suite.sh`. `skip` and `keep` leave existing engines installed.
+Adding voice to a remote node needs the console's voice-service key: the installer can request
+a new pairing code, or accept `--voice-key-file FILE` (and `--services voice`).
+
+Strata builds the [reviewed source revision](https://github.com/Niko1221/Strata/tree/477ac13cbe8e582c20484871ce459d20d82df09d)
+in `runtimes/strata`, with a private Python environment. Selecting it permits hybrid host RAM use
+up to `--strata-host-ram-mib` (22528 MiB by default). Its systemd drop-in delegates memory without
+raising the worker's existing limits; the budget must fit within `MemoryMax`, with
+`MemorySwapMax=0`. The adapter still requires supported text models and prepared tokenizer files.
+Use `scripts/install-strata.sh --check` to verify the installed runtime without loading a model.
 
 ## Uninstalling
 
@@ -283,6 +312,10 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 | `--topology all\|front\|compute` | one machine, console only, or GPU node |
 | `--system` | install for the whole machine |
 | `--dir PATH` | where to install (also `OWG_HOME`) |
+| `--components`, `--services LIST` | add omitted components; optionally name comma-separated services |
+| `--strata install\|skip\|keep`, `--strata-host-ram-mib N` | optional CUDA Strata runtime and host RAM budget |
+| `--sdcpp install\|skip\|keep`, `--audiocpp install\|skip\|keep` | optional image and audio runtimes |
+| `--sdcpp-backend cuda\|vulkan\|cpu`, `--audiocpp-backend cuda\|vulkan\|cpu` | explicitly select each native backend (default CUDA) |
 | `--admin NAME` | the first account; its password from `OWG_ADMIN_PASSWORD`, or a temporary one is shown |
 | `--join URL --code CODE` | join a console as a GPU node |
 | `--front-url URL`, `--machine-key-file FILE` | join by hand instead |

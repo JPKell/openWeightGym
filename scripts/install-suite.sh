@@ -32,6 +32,9 @@ SDCPP_EXPLICIT=0
 AUDIOCPP_ACTION=keep
 AUDIOCPP_BACKEND=cuda
 AUDIOCPP_EXPLICIT=0
+STRATA_ACTION=keep
+STRATA_EXPLICIT=0
+STRATA_HOST_RAM_MIB=22528
 TOPOLOGY=keep
 ADDRESS=
 FRONT_URL=
@@ -40,6 +43,7 @@ LLAMA_SERVER=
 MACHINE_NAME=
 VOICE_MODEL=
 START_NEW=0
+KEEP_EXISTING_UNITS=0
 UV=
 EMBEDDED=0
 declare -A DSNS=()
@@ -65,6 +69,8 @@ change both the service set and database engine before anything is installed.
   --install-postgresql       install PostgreSQL server and client packages
   --provision-postgresql     create local openWeightGym roles/databases and DSN files
   --pgvector                 install the pgvector package (implies PostgreSQL)
+  --strata install|skip|keep  optional Strata CUDA runtime (default: keep)
+  --strata-host-ram-mib N     explicit host RAM budget (default: 22528 MiB)
   --sdcpp install|skip|keep   optional image runtime (fresh unattended: skip)
   --sdcpp-backend cuda|vulkan|cpu
                              explicit native backend; default cuda, no CPU fallback
@@ -83,6 +89,7 @@ change both the service set and database engine before anything is installed.
   --machine-name NAME        the name the console knows this GPU node by (default: compute)
   --voice-model NAME         conversation model for newly written voice settings (default: the voice defaults')
   --start-new                also start services whose settings were just written
+  --keep-existing-units      preserve existing unit customizations when adding components
   --uv PATH                  make the environment and install packages with uv
   --embedded                 leave headings and the summary to the program calling this
   --non-interactive          require all choices on the command line
@@ -194,6 +201,8 @@ while (($#)); do
     --install-postgresql) INSTALL_POSTGRESQL=1; shift ;;
     --provision-postgresql) PROVISION_POSTGRESQL=1; INSTALL_POSTGRESQL=1; shift ;;
     --pgvector) INSTALL_PGVECTOR=1; INSTALL_POSTGRESQL=1; shift ;;
+    --strata) (($# >= 2)) || usage_error '--strata needs install, skip or keep'; STRATA_ACTION=$2; STRATA_EXPLICIT=1; shift 2 ;;
+    --strata-host-ram-mib) (($# >= 2)) || usage_error '--strata-host-ram-mib needs a positive MiB budget'; STRATA_HOST_RAM_MIB=$2; shift 2 ;;
     --sdcpp) (($# >= 2)) || usage_error '--sdcpp needs install, skip or keep'; SDCPP_ACTION=$2; SDCPP_EXPLICIT=1; shift 2 ;;
     --sdcpp-backend) (($# >= 2)) || usage_error '--sdcpp-backend needs cuda, vulkan or cpu'; SDCPP_BACKEND=$2; shift 2 ;;
     --audiocpp) (($# >= 2)) || usage_error '--audiocpp needs install, skip or keep'; AUDIOCPP_ACTION=$2; AUDIOCPP_EXPLICIT=1; shift 2 ;;
@@ -207,6 +216,7 @@ while (($#)); do
     --machine-name) (($# >= 2)) || usage_error '--machine-name needs a name'; MACHINE_NAME=$2; shift 2 ;;
     --voice-model) (($# >= 2)) || usage_error '--voice-model needs a model'; VOICE_MODEL=$2; shift 2 ;;
     --start-new) START_NEW=1; shift ;;
+    --keep-existing-units) KEEP_EXISTING_UNITS=1; shift ;;
     --uv) (($# >= 2)) || usage_error '--uv needs a path'; UV=$2; shift 2 ;;
     --embedded) EMBEDDED=1; shift ;;
     --non-interactive) NON_INTERACTIVE=1; shift ;;
@@ -246,6 +256,8 @@ if [[ $TOPOLOGY != keep && -z $ADDRESS ]]; then
 fi
 [[ $DATABASE =~ ^(auto|keep|sqlite|postgresql)$ ]] || usage_error 'database must be keep, sqlite, or postgresql'
 [[ -z $PRESET || $PRESET =~ ^(compute|front|all)$ ]] || usage_error 'preset must be compute, front, or all'
+[[ $STRATA_ACTION =~ ^(install|skip|keep)$ ]] || usage_error 'strata must be install, skip, or keep'
+[[ $STRATA_HOST_RAM_MIB =~ ^[1-9][0-9]{0,8}$ ]] || usage_error 'strata host RAM budget must be a positive whole number of MiB'
 [[ $SDCPP_ACTION =~ ^(install|skip|keep)$ ]] || usage_error 'sdcpp must be install, skip, or keep'
 [[ $SDCPP_BACKEND =~ ^(cuda|vulkan|cpu)$ ]] || usage_error 'sdcpp backend must be cuda, vulkan, or cpu'
 [[ $AUDIOCPP_ACTION =~ ^(install|skip|keep)$ ]] || usage_error 'audiocpp must be install, skip, or keep'
@@ -486,6 +498,11 @@ if ((CHECK_ONLY)); then
 fi
 
 if has_service loadcoach; then
+  if ((!NON_INTERACTIVE && !STRATA_EXPLICIT)); then
+    if ask_yes_no "Install Strata (CUDA text models; allows up to $STRATA_HOST_RAM_MIB MiB host RAM)? Existing support is kept if declined." n; then
+      STRATA_ACTION=install
+    fi
+  fi
   if ((!NON_INTERACTIVE && !SDCPP_EXPLICIT)); then
     if ask_yes_no 'Install optional sdcpp image-generation support? Existing support is kept if declined.' n; then
       SDCPP_ACTION=install
@@ -496,6 +513,8 @@ if has_service loadcoach; then
       AUDIOCPP_ACTION=install
     fi
   fi
+elif [[ $STRATA_ACTION == install ]]; then
+  die 'Strata requires loadcoach on this machine.' 'Install loadcoach too (--services compute), or leave out --strata install'
 elif [[ $SDCPP_ACTION == install ]]; then
   die 'The image runtime (sdcpp) runs beside loadcoach, on a GPU node, and loadcoach is not being installed here.' \
     'Install loadcoach too (--services compute), or leave out --sdcpp install'
@@ -789,6 +808,7 @@ if ((!EMBEDDED)); then
   ui_kv Services "${SELECTED[*]}"
   ui_kv Database "$DATABASE"
   [[ $TOPOLOGY != keep ]] && ui_kv 'This machine' "$TOPOLOGY ($ADDRESS)"
+  has_service loadcoach && ui_kv Strata "$STRATA_ACTION (CUDA; host RAM: $STRATA_HOST_RAM_MIB MiB)"
   has_service loadcoach && ui_kv Images "sdcpp $SDCPP_ACTION (backend: $SDCPP_BACKEND; weights downloaded separately)"
   has_service loadcoach && ui_kv Audio "audio.cpp $AUDIOCPP_ACTION (backend: $AUDIOCPP_BACKEND; weights downloaded separately)"
   ((INSTALL_POSTGRESQL)) && ui_kv Packages 'PostgreSQL server/client'
@@ -900,6 +920,11 @@ if { has_service spotter || { has_service toollocker && ((!TOOLLOCKER_FRONT)); }
   install_example_config loadcoach
 fi
 
+if has_service loadcoach && [[ -n $LLAMA_SERVER ]]; then
+  run "$PY" "$ROOT/scripts/install-suite-support.py" llama-server --root "$ROOT" --executable "$LLAMA_SERVER" ||
+    die 'Could not select the installed llama-server.' 'Check its executable path and settings/loadcoach.toml'
+fi
+
 restore_configs() {
   local config backup
   for config in "${!CONFIG_BACKUPS[@]}"; do
@@ -1004,8 +1029,14 @@ if has_service voice || has_service voice-gateway; then
   fi
 fi
 
+if has_service loadcoach && [[ $STRATA_ACTION == install ]]; then
+  if ! run "$PY" "$ROOT/engines/strata/install.py" --root "$ROOT" --host-ram-mib "$STRATA_HOST_RAM_MIB" --unit-dir "$UNIT_DIR"; then
+    die 'Strata did not install. Existing engine settings were kept until verification succeeded.' \
+      'Put right the build or memory-limit error above, then run owg install --strata install'
+  fi
+fi
 if has_service loadcoach && [[ $SDCPP_ACTION == install ]]; then
-  if ! run "$ROOT/scripts/install-sdcpp.sh" --root "$ROOT" --backend "$SDCPP_BACKEND"; then
+  if ! run "$PY" "$ROOT/scripts/install-sdcpp.py" --root "$ROOT" --backend "$SDCPP_BACKEND"; then
     die "The image runtime (sdcpp) did not install. openWeightGym itself is set up, and any working release was kept." \
       "The lines above, from the log, say why: put that right" \
       "Then install it on its own: $(shell_path "$ROOT/scripts/install-sdcpp.sh") --root $(shell_path "$ROOT") --backend $SDCPP_BACKEND" \
@@ -1013,7 +1044,7 @@ if has_service loadcoach && [[ $SDCPP_ACTION == install ]]; then
   fi
 fi
 if has_service loadcoach && [[ $AUDIOCPP_ACTION == install ]]; then
-  if ! run "$ROOT/scripts/install-audiocpp.sh" --root "$ROOT" --backend "$AUDIOCPP_BACKEND"; then
+  if ! run "$PY" "$ROOT/soundroom/install.py" --root "$ROOT" --backend "$AUDIOCPP_BACKEND"; then
     die "The audio runtime (audio.cpp) did not install. openWeightGym itself is set up, and any working release was kept." \
       "The lines above, from the log, say why: put that right" \
       "Then install it on its own: $(shell_path "$ROOT/scripts/install-audiocpp.sh") --root $(shell_path "$ROOT") --backend $AUDIOCPP_BACKEND" \
@@ -1029,6 +1060,7 @@ try_step 'Recording component versions' "$PY" -m loadcoach.component_versions --
 render_unit() {
   local service=$1
   local source=$ROOT/services/$service.service target=$UNIT_DIR/$service.service
+  if ((${KEEP_EXISTING_UNITS:-0})) && [[ -f $target ]]; then return 0; fi
   [[ -f $source ]] || die "The service file $(shell_path "$source") is missing: this copy of openWeightGym is incomplete." \
     "Put the file back: git -C $(shell_path "$ROOT") checkout -- services/$service.service" "Or repair the installation: owg repair"
   if ((DRY_RUN)); then
