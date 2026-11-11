@@ -36,6 +36,7 @@ def test_usage_headers_and_field_groups_follow_the_saved_theme(desk, width):
                 page.select_option('#theme-mode', mode)
                 page.get_by_role('button', name='Save theme', exact=True).click()
                 page.goto('http://console.test/usage')
+                page.locator('#usage-breakdown thead th').first.wait_for()  # the report arrives after the page
                 colors = page.evaluate('''() => {
                     const color = selector => {
                         const style = getComputedStyle(document.querySelector(selector));

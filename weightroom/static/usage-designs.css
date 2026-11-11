@@ -1,0 +1,80 @@
+/* Standalone Usage proposals. The dashboard pieces they share with the live page are static/usage.css; these rules
+   are only the proposals' own arrangements: the review bar, the briefing toolbar, the analyst tiles and the spend bento. */
+.usage-design-page { max-width: 1680px; margin: auto; padding: clamp(1rem, 2.5vw, 2rem); }
+.usage-review-bar { background: var(--tblr-bg-surface); }
+.usage-preview-status:not(:empty) { margin-bottom: 1rem; padding: .5rem .75rem; border-radius: var(--suite-frame-radius); background: var(--tblr-blue-lt); color: var(--tblr-blue); }
+/* The workspace stands in for the live page's report: a proposal without the rail is as wide as its report column. */
+#workspace { container: usage-report usage-main / inline-size; }
+
+/* The range beside the title. */
+.usage-range-chip { display: inline-flex; align-items: center; gap: .45rem; min-height: var(--suite-control-height); padding: 0 .8rem; border: 1px solid var(--tblr-border-color);
+  border-radius: var(--suite-frame-radius); background: var(--tblr-bg-surface); color: var(--tblr-secondary); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.usage-range-chip::before { content: ""; inline-size: .45rem; block-size: .45rem; border-radius: 50%; background: var(--tblr-success); flex-shrink: 0; }
+.usage-tile-tokens .usage-spark { color: var(--usage-input); }
+
+/* 01 · Briefing toolbar and the spend drawer: dates and people need two columns' room, until one row holds everything. */
+.usage-toolbar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .75rem 1rem; align-items: end; padding: .875rem 1.25rem; }
+.usage-drawer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .75rem 1rem; align-items: end; }
+:is(.usage-toolbar-grid, .usage-drawer-grid) > :is([data-usage-field="dates"], [data-usage-field="people"]) { grid-column: span 2; }
+@media (min-width: 1400px) {
+  :is(.usage-toolbar-grid, .usage-drawer-grid) { grid-template-columns: minmax(16rem, 1.4fr) minmax(19rem, 1.6fr) repeat(4, minmax(6.5rem, 1fr)) auto; }
+  :is(.usage-toolbar-grid, .usage-drawer-grid) > :is([data-usage-field="dates"], [data-usage-field="people"]) { grid-column: auto; }
+}
+
+/* 02 · Analyst figures as tiles. */
+.usage-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+.usage-tile { position: relative; margin: 0 !important; overflow: hidden; }
+.usage-tile::before { content: ""; position: absolute; inset: 0 auto 0 0; inline-size: 3px; background: var(--usage-color, var(--usage-input)); }
+.usage-tile > .card-body { padding: 1rem 1.1rem; }
+
+/* 03 · Spend console. */
+.usage-drawer:not([open]) > summary { border-bottom: 0; }
+.usage-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.usage-bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.usage-bento > * { min-inline-size: 0; margin: 0; }
+.usage-bento > .card, .usage-bento > .usage-tile-daily > .card { margin-bottom: 0 !important; }
+.usage-tile-tokens > .card-body, .usage-tile-requests > .card-body { display: flex; flex-direction: column; }
+.usage-tile-tokens .usage-spark-wide { flex: 1 0 3rem; block-size: auto; min-block-size: 3rem; }
+.usage-tile-foot { display: flex; justify-content: space-between; gap: 1rem; margin-top: auto; padding-top: .75rem; border-top: 1px solid var(--tblr-border-color); font-size: .8125rem; color: var(--tblr-secondary); }
+.usage-outcomes { margin-bottom: 1rem !important; }
+.usage-tile-spend { grid-column: span 5; background: linear-gradient(160deg, color-mix(in srgb, var(--tblr-primary) 7%, var(--tblr-bg-surface)), var(--tblr-bg-surface) 65%); }
+.usage-tile-tokens { grid-column: span 4; }
+.usage-tile-requests { grid-column: span 3; }
+.usage-tile-chart { grid-column: span 8; }
+.usage-tile-leaders { grid-column: span 4; }
+.usage-tile-table, .usage-tile-daily { grid-column: 1 / -1; }
+.usage-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.usage-assumptions-inline { padding-top: 1rem; border-top: 1px solid var(--tblr-border-color); }
+.usage-outcome { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; gap: .5rem; align-items: center; padding: .2rem 0; font-size: .8125rem; }
+.usage-outcome-name { text-transform: capitalize; }
+.usage-outcome-value { color: var(--tblr-secondary); font-variant-numeric: tabular-nums; }
+.usage-outcome-bar, .usage-ranked-bar { block-size: .375rem; border-radius: 999px; overflow: hidden; background: var(--tblr-bg-surface-secondary); }
+.usage-outcome-bar span, .usage-ranked-bar span { display: block; block-size: 100%; background: var(--usage-color, var(--usage-input)); }
+[data-outcome="done"] { --usage-color: var(--tblr-success); }
+[data-outcome="failed"] { --usage-color: var(--tblr-danger); }
+[data-outcome="refused"] { --usage-color: var(--tblr-warning); }
+[data-outcome="hung up"] { --usage-color: var(--usage-fallback); }
+[data-outcome="stopped"] { --usage-color: var(--tblr-secondary); }
+.usage-ranked { counter-reset: rank; }
+.usage-ranked-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem .75rem; padding: .6rem 0; border-bottom: 1px solid var(--tblr-border-color); }
+.usage-ranked-row:last-child { border-bottom: 0; }
+.usage-ranked-name { font-weight: 600; overflow-wrap: anywhere; }
+.usage-ranked-name::before { counter-increment: rank; content: counter(rank); display: inline-grid; place-items: center; inline-size: 1.35rem; block-size: 1.35rem; margin-right: .5rem;
+  border-radius: 50%; background: var(--tblr-bg-surface-secondary); color: var(--tblr-secondary); font-size: .7rem; }
+.usage-ranked-value { color: var(--tblr-secondary); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.usage-ranked-bar { grid-column: 1 / -1; }
+
+/* Narrower screens: fewer tiles, the bento in one or two columns. */
+@media (max-width: 1199.98px) {
+  .usage-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .usage-tile-spend, .usage-tile-chart, .usage-tile-leaders { grid-column: 1 / -1; }
+  .usage-tile-tokens, .usage-tile-requests { grid-column: span 6; }
+}
+@media (max-width: 767.98px) {
+  :is(.usage-toolbar-grid, .usage-drawer-grid) > :is([data-usage-field="dates"], [data-usage-field="people"]) { grid-column: auto; }
+  .usage-tile-tokens, .usage-tile-requests { grid-column: 1 / -1; }
+}
+@media (max-width: 479.98px) {
+  .usage-tiles { grid-template-columns: minmax(0, 1fr); }
+  .usage-pair { grid-template-columns: minmax(0, 1fr); }
+}

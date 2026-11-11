@@ -1,17 +1,15 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, card, section_title %}
-{% from "benchmark_parts.html" import number %}
-{% from "filter_parts.html" import users_groups %}
-{% from "usage_parts.html" import money %}
+{% from "parts.html" import page_header %}
 {% block title %}Usage · openWeightGym{% endblock %}
 {% block page_class %}usage-page{% endblock %}
 {% block scripts %}
+<link rel="stylesheet" href="/static/usage.css?v=1">
 <script src="/static/echarts.min.js" defer></script>
-<script src="/static/usage.js?v=5" defer></script>
+<script src="/static/usage.js?v=7" defer></script>
 {% endblock %}
 {% block main %}
-{{ page_header('Usage', 'Inspect recorded requests, token usage and costs.', pretitle='Logs') }}
-<p><a href="/allowances">Spending allowances and remaining recorded amounts</a></p>
+{# The heading leads straight into the dashboard. #}
+{% call page_header('Usage', pretitle='Logs', id='usage-header') %}<a class="btn btn-outline-secondary btn-sm" href="/allowances" title="Spending allowances and remaining recorded amounts">Spending allowances</a>{% endcall %}
 {% if report is defined %}{% include 'usage_content.html' %}{% else %}
 {% from "deferred.html" import loading %}
 {{ loading('usage-report', fragment_url, 'Loading usage data…') }}

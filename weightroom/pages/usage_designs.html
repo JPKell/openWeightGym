@@ -1,0 +1,160 @@
+{# Standalone sample-data review of three Usage dashboards. The live page stays usage_report.html with usage_content.html.
+   Every proposal arranges the same pieces from usage_parts.html, so each keeps all the live page's fields, IDs and form
+   links, and the live static/usage.js draws its chart. Rendered with scripts/preview-usage-designs.py. #}
+{% from 'parts.html' import page_header, card, section_title, empty_row %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'usage_parts.html' import usage_total, usage_range, usage_filter_fields, usage_filter_actions, usage_filter_hidden, usage_rates,
+   usage_token_figures as token_figures, usage_cost_sources as cost_sources, usage_token_band, usage_cost_band, usage_filter_rail, usage_no_requests as no_requests,
+   usage_chart_card as chart_card, usage_breakdown_card as breakdown_card, usage_daily_card as daily_card, usage_notes_card as notes_card, usage_data %}
+
+{# The heading every proposal opens with: no lead paragraph, the range beside the title, and the allowances link as an action. #}
+{% macro usage_heading(report, filters_button=false) %}
+{% call page_header('Usage', pretitle='LOGS', id='usage-header') %}
+  <span class="usage-range-chip" title="Selected range and calendar time zone">{{ usage_range(report) }}</span>
+  {% if filters_button %}<button type="button" class="btn btn-outline-secondary" data-toggle-filters aria-controls="usage-filter-drawer" aria-expanded="false">Filters <span class="badge bg-blue-lt ms-1" data-filter-count></span></button>{% endif %}
+  <a class="btn btn-outline-secondary" href="/allowances" title="Spending allowances and remaining recorded amounts" data-preview-link>Spending allowances</a>
+{% endcall %}
+{% endmacro %}
+
+{# 01 · Briefing: filters as one toolbar under the heading, a token band with trends, a cost band, then the evidence. #}
+{% macro briefing(report) %}
+{{ usage_heading(report) }}
+{% call card('', tag='form', id='usage-filters', class_='usage-toolbar', attrs={'method': 'get', 'action': '/usage', 'aria-label': 'Usage filters'}, body_class='usage-toolbar-grid') %}
+  {{ usage_filter_fields(report, 'usage-toolbar-field') }}{{ usage_filter_actions('usage-toolbar-actions d-flex gap-2') }}{{ usage_filter_hidden(report) }}
+{% endcall %}
+{{ no_requests(report) }}
+{{ usage_token_band(report) }}
+{{ usage_cost_band(report) }}
+{{ chart_card('mb-3') }}
+{{ breakdown_card(report, 'mb-3', shares=true) }}
+{{ daily_card(report) }}
+{{ notes_card(report) }}
+{{ usage_data(report) }}
+{% endmacro %}
+
+{# 02 · Analyst: every filter and assumption in a sticky rail; the figures and evidence in the column beside it. #}
+{% macro analyst(report) %}
+{{ usage_heading(report) }}
+<div class="usage-dashboard">
+  {{ usage_filter_rail(report, rates=true) }}
+  <div class="usage-main">
+    {{ no_requests(report) }}
+    <div class="usage-tiles mb-3" aria-label="Usage totals">
+    {% for key, label in token_figures %}
+      {% call card('', class_='usage-tile', attrs={'data-figure': key}) %}
+        <div class="usage-label">{{ label }}</div>{{ usage_total(report, key, 'usage-value') }}
+        <div class="usage-sub" data-derived="{{ key }}"></div>
+      {% endcall %}
+    {% endfor %}
+    {% call card('', class_='usage-tile', attrs={'data-source': 'effective'}) %}
+      <div class="usage-label">Total cost / estimate · USD</div>{{ usage_total(report, 'effective_cost', 'usage-value') }}
+      <div class="usage-composition usage-composition-thin mt-2" data-composition role="img" aria-label="Share of the total from each cost source"></div>
+    {% endcall %}
+    {% for key, label, source in cost_sources %}
+      {% call card('', class_='usage-tile', attrs={'data-source': source}) %}
+        <div class="usage-label"><i class="usage-swatch" aria-hidden="true"></i>{{ label }} · USD</div>{{ usage_total(report, key, 'usage-value usage-value-sm') }}
+        <div class="usage-sub" data-share="{{ key }}"></div>
+      {% endcall %}
+    {% endfor %}
+    </div>
+    {{ chart_card('mb-3') }}
+    {{ breakdown_card(report, 'mb-3') }}
+    {{ daily_card(report) }}
+    {{ notes_card(report) }}
+  </div>
+</div>
+{{ usage_data(report) }}
+{% endmacro %}
+
+{# 03 · Spend console: cost first, in a bento of tiles; the filters fold into a drawer that says which are on. #}
+{% macro spend(report) %}
+{{ usage_heading(report, filters_button=true) }}
+{% set _chips %}<span class="usage-chips" data-filter-summary></span>{% endset %}
+{% call card('Filters', open=false, id='usage-filter-drawer', class_='usage-drawer', actions=_chips) %}
+  <form id="usage-filters" method="get" action="/usage">
+    <div class="usage-drawer-grid">{{ usage_filter_fields(report, 'usage-drawer-field') }}{{ usage_filter_actions('usage-drawer-actions d-flex gap-2') }}</div>
+    {{ usage_filter_hidden(report) }}
+  </form>
+{% endcall %}
+{{ no_requests(report) }}
+<div class="usage-bento">
+  {% call card('', class_='usage-tile-spend', attrs={'aria-label': 'Cost'}) %}
+    <div class="usage-label">Total cost / estimate · USD</div>{{ usage_total(report, 'effective_cost', 'usage-value usage-value-xl') }}
+    <div class="usage-composition usage-composition-tall my-3" data-composition role="img" aria-label="Share of the total from each cost source"></div>
+    <dl class="usage-sources usage-sources-rows mb-3">
+    {% for key, label, source in cost_sources %}
+      <div class="usage-source" data-source="{{ source }}"><dt><i class="usage-swatch" aria-hidden="true"></i>{{ label }} · USD</dt><dd>{{ usage_total(report, key, 'usage-source-value') }}<small class="text-secondary" data-share="{{ key }}"></small></dd></div>
+    {% endfor %}
+    </dl>
+    <div class="usage-assumptions-inline"><span class="usage-label">Pricing assumptions</span><div class="row g-2 align-items-end">{{ usage_rates(report, 'col-6') }}</div></div>
+  {% endcall %}
+  {% call card('', class_='usage-tile-tokens', attrs={'aria-label': 'Tokens'}) %}
+    <div class="usage-label">Total tokens</div>{{ usage_total(report, 'total_tokens', 'usage-value usage-value-lg') }}
+    <div class="usage-split my-3" data-split role="img" aria-label="Input and output share of all tokens"></div>
+    <div class="usage-pair">
+      <div data-figure="input_tokens"><div class="usage-label"><i class="usage-swatch" data-side="input" aria-hidden="true"></i>Input tokens</div>{{ usage_total(report, 'input_tokens', 'usage-value usage-value-sm') }}<div class="usage-sub" data-derived="input_tokens"></div></div>
+      <div data-figure="output_tokens"><div class="usage-label"><i class="usage-swatch" data-side="output" aria-hidden="true"></i>Output tokens</div>{{ usage_total(report, 'output_tokens', 'usage-value usage-value-sm') }}<div class="usage-sub" data-derived="output_tokens"></div></div>
+    </div>
+    <svg class="usage-spark usage-spark-wide mt-3" data-spark="total_tokens" viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true"></svg>
+  {% endcall %}
+  {% call card('', class_='usage-tile-requests', attrs={'aria-label': 'Requests'}) %}
+    <div class="usage-label">Requests</div>{{ usage_total(report, 'requests', 'usage-value usage-value-lg') }}
+    <div class="usage-sub" data-derived="requests"></div>
+    <div class="usage-label mt-3">Outcomes</div>
+    <ul class="usage-outcomes list-unstyled" data-outcome-mix></ul>
+    <div class="usage-tile-foot"><span>Missing token counts</span>{{ usage_total(report, 'missing_usage', 'text-body') }}</div>
+  {% endcall %}
+  {{ chart_card('usage-tile-chart mb-0') }}
+  {% call card('', class_='usage-tile-leaders', attrs={'aria-labelledby': 'usage-leaders-heading'}) %}
+    {{ section_title('Top models', id='usage-leaders-heading') }}
+    <ol class="usage-ranked list-unstyled mb-0" data-ranked></ol>
+  {% endcall %}
+  {{ breakdown_card(report, 'usage-tile-table mb-0') }}
+  <div class="usage-tile-daily">{{ daily_card(report) }}</div>
+</div>
+{{ notes_card(report) }}
+{{ usage_data(report) }}
+{% endmacro %}
+
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage · Three dashboard proposals · openWeightGym</title>
+<style>{{ css|safe }}</style>
+<script>{{ theme_javascript|safe }}</script>
+</head>
+<body class="usage-page">
+{# Reuse the console theme controller without account preferences or a second palette definition. #}
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to the usage dashboard</a>
+<div class="usage-review-bar border-bottom px-4 py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+  <div><strong>openWeightGym</strong><span class="text-secondary ms-3">Logs / Usage · design review</span></div>
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <span class="badge bg-blue-lt">Design preview · sample data</span>
+    <select id="scenario" class="form-select form-select-sm w-auto" aria-label="Sample scenario">{% for key, (label, report) in scenarios.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+    <button class="btn btn-sm btn-outline-secondary" id="theme">Dark mode</button>
+  </div>
+</div>
+<main class="usage-design-page">
+  {% call pills('Design options', buttons=true, class_='usage-design-tabs gap-2 mb-2') %}
+    {{ pill_button('01 / Briefing', true, attrs={'data-design': 'briefing'}) }}
+    {{ pill_button('02 / Analyst', attrs={'data-design': 'analyst'}) }}
+    {{ pill_button('03 / Spend console', attrs={'data-design': 'spend'}) }}
+  {% endcall %}
+  <p class="text-secondary small mb-3" id="design-description"></p>
+  <div id="preview-status" class="usage-preview-status small" role="status" aria-live="polite"></div>
+  <div id="workspace" data-design="briefing"></div>
+</main>
+<template id="empty-row-template">{{ empty_row(1) }}</template>
+{# What usage-designs.js fills in from the report: a bar segment, an outcome and a ranked row. #}
+<template id="usage-outcome-template"><li class="usage-outcome"><span class="usage-outcome-name"></span><span class="usage-outcome-bar"><span></span></span><span class="usage-outcome-value"></span></li></template>
+<template id="usage-ranked-template"><li class="usage-ranked-row"><span class="usage-ranked-name"></span><span class="usage-ranked-value"></span><span class="usage-ranked-bar"><span></span></span></li></template>
+{% for key, (label, report) in scenarios.items() %}
+<template data-proposal="briefing" data-scenario="{{ key }}">{{ briefing(report) }}</template>
+<template data-proposal="analyst" data-scenario="{{ key }}">{{ analyst(report) }}</template>
+<template data-proposal="spend" data-scenario="{{ key }}">{{ spend(report) }}</template>
+{% endfor %}
+<script>{{ javascript|safe }}</script>
+</body>
+</html>

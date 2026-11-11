@@ -21,7 +21,8 @@ within their own layouts.
 | Documentation sections, contents, tables, notes and code blocks | [docs_parts.html](weightroom/pages/docs_parts.html) |
 | Pill links, view buttons, radio choices and pagination | [navigation_parts.html](weightroom/pages/navigation_parts.html), [pagination.html](weightroom/pages/pagination.html) |
 | User/group filters | [filter_parts.html](weightroom/pages/filter_parts.html) |
-| Usage amounts and totals | [usage_parts.html](weightroom/pages/usage_parts.html), [usage_kpis.html](weightroom/pages/usage_kpis.html) |
+| Usage amounts and totals; the Usage dashboard's filter rail, token and cost bands, rates, chart card, tables and notes | [usage_parts.html](weightroom/pages/usage_parts.html), arranged by [usage_content.html](weightroom/pages/usage_content.html); [usage.css](weightroom/static/usage.css); [usage.js](weightroom/static/usage.js) (draws the chart, trend lines and cost bars, redraws on theme change and announces each redraw as `weightroom:usage`) |
+| Standalone Usage dashboard proposals (sample data; the live page combines 01 Briefing with 02 Analyst's filter rail) | [usage_designs.html](weightroom/pages/usage_designs.html), rendered with `scripts/preview-usage-designs.py`; each proposal arranges the `usage_parts.html` macros and is checked against the live page's fields in [test_usage_designs.py](tests/test_usage_designs.py) |
 | Settings forms and rows | [settings_program.html](weightroom/pages/settings_program.html), [setting_row.html](weightroom/pages/setting_row.html) |
 | Chat options, model choices and prompt navigation | [chat_main.html](weightroom/pages/chat_main.html), [chat_navigation.html](weightroom/pages/chat_navigation.html) |
 | Deferred loading and retry | [deferred.html](weightroom/pages/deferred.html), [deferred_error.html](weightroom/pages/deferred_error.html) |
