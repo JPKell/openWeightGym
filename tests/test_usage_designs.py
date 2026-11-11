@@ -147,6 +147,6 @@ def test_scenarios_and_preview_only_actions(page):
     expect(page.locator('[data-toggle-filters]')).to_have_attribute('aria-expanded', 'true')
     page.get_by_role('button', name='Apply').click()
     expect(page.locator('#preview-status')).to_contain_text('No request was sent')
-    page.get_by_role('link', name='Spending allowances').click()
-    expect(page.locator('#preview-status')).to_contain_text('Spending allowances on the live page')
+    page.get_by_role('link', name='Reset').click()
+    expect(page.locator('#preview-status')).to_contain_text('Reset clears every filter')
     assert page.url.endswith('index.html#spend')

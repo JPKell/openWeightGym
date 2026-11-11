@@ -1,7 +1,7 @@
 # Advisory spending allowances
 
 C07 / milestone 107 implements the owner's **soft enforcement** decision of 2026-10-15.
-**Logs → Usage → Spending allowances** reports rolling 24-hour USD allowances for individual
+**Settings → Spending allowances** reports rolling 24-hour USD allowances for individual
 users, pooled groups and persistent API keys. All are disabled initially; setting zero disables
 one. Exceeding an allowance does not reject, redirect or reserve a request. Existing hosted
 user/service spending ceilings and all normal authorization/admission rules still apply.

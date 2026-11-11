@@ -129,7 +129,8 @@ def test_front_allowance_forms_offline_and_scope(desk,tmp_path):
     page=browser.get('/allowances')
     assert page.status_code==200 and 'View only' in page.text and 'jordan /' not in page.text
     assert browser.post('/allowances',data={'target':'user:'+identity,'amount':'100'}).status_code==403
-    assert 'Spending allowances and remaining' in browser.get('/usage').text
+    usage = browser.get('/usage').text  # the allowances are a Settings page, not part of the Usage report
+    assert 'Spending allowances and remaining' not in usage and 'class="eyebrow' not in usage
 
 
 def test_allowances_postgresql_transfer_and_unresolved(tmp_path,postgres):
