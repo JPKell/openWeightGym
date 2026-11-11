@@ -63,7 +63,7 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --no-browser            do not open the console in a browser at the end
   --ref BRANCH            which branch of openWeightGym to fetch (default: main)
   --plain                 no colour or animation
-  --update                update an installed openWeightGym (as owg update does)
+  --update                fetch openWeightGym code only (as owg update does)
   --repair                reinstall packages and services as they are
   --uninstall             remove openWeightGym (see uninstall.sh --help)
   -h, --help              show this help
@@ -96,6 +96,12 @@ main() {
   set_retry
   if [[ $ACTION == uninstall ]]; then run_uninstaller; fi
   ui_banner "$(installed_version)"
+  # Updating code is independent of a saved installation plan, even if setup never finished.
+  if [[ $ACTION == update ]]; then
+    ((SYSTEM)) && ui_sudo "updating the system installation's code"
+    update
+    return 0
+  fi
   RECOVERY_ACTION='continue'
   if [[ $(receipt_get state) == pending ]]; then
     interrupted_menu
@@ -114,7 +120,6 @@ main() {
   elif [[ $RECOVERY_ACTION != restart ]] && is_installed "$DIR"; then
     ((SYSTEM)) && ui_sudo "looking after the system installation"
     case "$ACTION" in
-      update) update ;;
       repair) reinstall ;;
       components) install_components ;;
       *) installed_menu ;;
@@ -156,10 +161,12 @@ set_retry() {
   local command flags=''
   if [[ -f $DIR/install.sh ]]; then
     command=$(shell_path "$DIR/install.sh")
+    [[ $ACTION != update ]] || command+=' --update'
   else
     command="curl -fsSL $OWG_RAW/$OWG_REF/install.sh | bash"
     if ((SYSTEM)); then flags+=' --system'; fi
     if ((DIR_GIVEN)); then flags+=" --dir $(shell_path "$DIR")"; fi
+    [[ $ACTION != update ]] || flags+=' --update'
     if [[ -n $flags ]]; then command+=" -s --$flags"; fi
   fi
   OWG_RETRY_COMMAND=$command
@@ -167,7 +174,7 @@ set_retry() {
 It carries on where it stopped; nothing finished is undone."
   case "$ACTION" in
     uninstall) OWG_STOP_TITLE="Uninstalling stopped" OWG_RETRY='' ;;
-    update) OWG_STOP_TITLE="The update stopped" ;;
+    update) OWG_STOP_TITLE="The update stopped"; OWG_RETRY="Run the code update again: $command" ;;
     *) OWG_STOP_TITLE="The install stopped" ;;
   esac
   export OWG_RETRY OWG_RETRY_COMMAND OWG_STOP_TITLE
@@ -408,7 +415,7 @@ warm_up() {
 
   MISSING_TOOLS=()
   local tool
-  for tool in git curl tar gzip; do command -v "$tool" >/dev/null || MISSING_TOOLS+=("$tool"); done
+  for tool in git curl tar gzip age; do command -v "$tool" >/dev/null || MISSING_TOOLS+=("$tool"); done
   if ((${#MISSING_TOOLS[@]})); then ui_warn "Not installed: ${MISSING_TOOLS[*]}" "they will be installed with ${PKG_MANAGER:-your package manager}"
   else ui_ok "git, curl and tar"; fi
 
@@ -491,7 +498,7 @@ libraries or command), whoever installed them:$list" "${UNITS_STEPS[@]}"
 # ---- an existing installation ---------------------------------------------------------------
 
 interrupted_menu() {
-  # Explicit repair/update and unattended runs continue the saved plan directly.
+  # Explicit repair and unattended runs continue the saved plan; update is handled separately.
   [[ -z $ACTION ]] && ((!ASSUME_YES)) || return 0
   ui_section "Welcome back" "A previous installation in ${DIR/#$HOME/\~} did not finish"
   local choice=0 rc=0
@@ -523,7 +530,7 @@ installed_menu() {
   ui_section "Welcome back" "openWeightGym is installed in ${DIR/#$HOME/\~}"
   local choice=0
   local -a actions=(update repair components) labels=(
-    "Update|fetch the latest openWeightGym and reinstall, keeping settings and data"
+    "Update|fetch the latest openWeightGym code only"
     "Repair|reinstall packages and services as they are"
     "Install components|add services or model engines skipped earlier")
   if [[ ,$(receipt_get services), == *,weightroom,* ]]; then
@@ -544,7 +551,9 @@ installed_menu() {
 }
 
 update() {
-  if [[ -d $DIR/.git ]]; then
+  ACTION=update
+  set_retry
+  if [[ -e $DIR/.git ]]; then
     local git_dir
     git_dir="git -C $(shell_path "$DIR")"
     if [[ -n $(as_owner git -C "$DIR" status --porcelain --untracked-files=no) ]]; then
@@ -560,9 +569,13 @@ update() {
     if [[ $(as_owner git -C "$DIR" rev-parse --short HEAD) == "$before" ]]; then ui_ok "Already up to date" "$before"
     else ui_ok "Updated" "$before → $(as_owner git -C "$DIR" rev-parse --short HEAD)"; fi
   else
-    ui_warn "$DIR is not a git checkout" "reinstalling the code that is there"
+    ui_die "$DIR is not a Git checkout, so its code cannot be updated with git pull." \
+      'Use an openWeightGym Git checkout for code updates'
   fi
-  reinstall
+  ui_info 'Code update complete. Restart running services when ready: owg restart'
+  if [[ $(receipt_get state) == pending ]]; then
+    ui_note 'The unfinished installation is still saved. Run install.sh separately when you want to continue it.'
+  fi
 }
 
 # Run the uninstaller as a child so recovery can start a new setup after it finishes.

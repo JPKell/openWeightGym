@@ -8,8 +8,7 @@
 #   owg start|stop|restart [PROGRAM...]          all installed programs by default
 #   owg restart --host USER@HOST [PROGRAM...]    restart services on another machine over SSH
 #   owg logs [PROGRAM] [-f|--follow] [-n LINES]  the latest 80 lines unless -n says otherwise
-#   owg update [--yes] [--plain]                 fetch the latest openWeightGym and reinstall,
-#                                                keeping settings and data
+#   owg update [--yes] [--plain]                 fetch the latest openWeightGym code only
 #   owg repair [--yes] [--plain]                 reinstall packages and services as they are
 #   owg install [--yes] [OPTIONS]                add omitted services and model engines
 #                                                options: install.sh --help
@@ -347,7 +346,7 @@ menu() {
   local -a actions=(restart remote update repair doctor logs install) labels=(
     "Restart services|choose which programs to restart"
     "Restart another machine|restart a GPU node's services over SSH"
-    "Update|fetch the latest openWeightGym and reinstall"
+    "Update|fetch the latest openWeightGym code only"
     "Repair|reinstall packages and services as they are"
     "Doctor|check everything and say what to fix"
     "Logs|the latest from every program"
