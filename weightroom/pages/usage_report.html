@@ -9,7 +9,7 @@
 {% endblock %}
 {% block main %}
 {# The heading leads straight into the dashboard. #}
-{% call page_header('Usage', pretitle='Logs', id='usage-header') %}<a class="btn btn-outline-secondary btn-sm" href="/allowances" title="Spending allowances and remaining recorded amounts">Spending allowances</a>{% endcall %}
+{{ page_header('Usage', id='usage-header') }}
 {% if report is defined %}{% include 'usage_content.html' %}{% else %}
 {% from "deferred.html" import loading %}
 {{ loading('usage-report', fragment_url, 'Loading usage data…') }}

@@ -45,7 +45,9 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
     for ability, label, url in [("manage-users", "Users", "/users"), ("manage-groups", "Groups", "/groups"), ("manage-settings", "Tools", "/tools"), ("front-manage-plugins", "Plugins", "/plugins"), ("manage-settings", "Backups", "/backups"), ("manage-settings", "DB", "/databases"), ("manage-settings", "General", "/settings")]:
         if ability in can:
             groups[4 if url in ('/backups', '/databases') else 5]["links"].append((label, url))
-    settings_order = ['Compute nodes', 'Users', 'Groups', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
+    # Everyone may open it: members see their own and their group's allowance, managers edit them.
+    groups[5]["links"].append(("Spending allowances", "/allowances"))
+    settings_order = ['Compute nodes', 'Users', 'Groups', 'Spending allowances', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
     groups[5]['links'].sort(key=lambda link: settings_order.index(link[0]))
     groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Components', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups'].index(link[0]))
     root = "/" + path.strip("/").split("/")[0]

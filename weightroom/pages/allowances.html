@@ -3,7 +3,7 @@
 {% from "usage_parts.html" import money %}
 {% block title %}Spending allowances · openWeightGym{% endblock %}
 {% block main %}
-{% call page_header('Spending allowances', 'Review recorded spending against advisory allowances.', pretitle='Logs · Usage') %}<a href="/allowances" class="btn btn-outline-secondary btn-sm">Refresh</a>{% endcall %}
+{% call page_header('Spending allowances', 'Review recorded spending against advisory allowances.', pretitle='Settings') %}<a href="/allowances" class="btn btn-outline-secondary btn-sm">Refresh</a>{% endcall %}
 <p>Soft allowances · rolling 24 hours · USD. All start disabled. Exceeding these allowances does not refuse a request or reserve money. Existing hosted spending ceilings still apply.</p>
 {% if not report.compute_synchronized %}{% call alert('warning', tag='p') %}Compute did not synchronize its latest records. These amounts may be stale; compute was not woken.{% endcall %}{% endif %}
 {% call card("", body=false) %}<div class="table-responsive"><table id="allowances" class="table sortable align-middle mb-0"><thead><tr><th>Scope</th><th>Name</th><th class="text-end">Allowance USD</th><th class="text-end">Recorded USD</th><th class="text-end">Remaining USD</th><th class="text-end">Unknown costs</th><th class="text-end">Without ending</th><th>Change</th></tr></thead><tbody>

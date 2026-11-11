@@ -7,12 +7,11 @@
    usage_token_figures as token_figures, usage_cost_sources as cost_sources, usage_token_band, usage_cost_band, usage_filter_rail, usage_no_requests as no_requests,
    usage_chart_card as chart_card, usage_breakdown_card as breakdown_card, usage_daily_card as daily_card, usage_notes_card as notes_card, usage_data %}
 
-{# The heading every proposal opens with: no lead paragraph, the range beside the title, and the allowances link as an action. #}
+{# The heading every proposal opens with: no lead paragraph, the range beside the title. #}
 {% macro usage_heading(report, filters_button=false) %}
-{% call page_header('Usage', pretitle='LOGS', id='usage-header') %}
+{% call page_header('Usage', id='usage-header') %}
   <span class="usage-range-chip" title="Selected range and calendar time zone">{{ usage_range(report) }}</span>
   {% if filters_button %}<button type="button" class="btn btn-outline-secondary" data-toggle-filters aria-controls="usage-filter-drawer" aria-expanded="false">Filters <span class="badge bg-blue-lt ms-1" data-filter-count></span></button>{% endif %}
-  <a class="btn btn-outline-secondary" href="/allowances" title="Spending allowances and remaining recorded amounts" data-preview-link>Spending allowances</a>
 {% endcall %}
 {% endmacro %}
 

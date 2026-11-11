@@ -11024,7 +11024,7 @@ The private internal `/loadcoach/workflows` routes and console controls are docu
 
 ## Advisory spending allowances (C07, milestone 107)
 
-The owner selected soft enforcement. Logs → Usage → Spending allowances and front-owned
+The owner selected soft enforcement. Settings → Spending allowances and front-owned
 `GET/POST /loadcoach/allowances` reuse the accounts store and ordinary event log. Optional
 rolling 24-hour USD policies cover immutable users, persistent keys and pooled named groups;
 zero disables them. Existing hosted spending ceilings remain unchanged. No reservation or

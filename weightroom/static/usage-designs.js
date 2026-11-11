@@ -81,11 +81,10 @@
     announce('Sample preview: on the live page, Apply reloads /usage with these filters in the address. No request was sent.');
   });
   document.addEventListener('click', event => {
-    const link = event.target.closest('a[href="/usage"], a[data-preview-link]');
-    if (link) {
+    if (event.target.closest('a[href="/usage"]')) {
       event.preventDefault();
-      announce(link.matches('[data-preview-link]') ? 'Sample preview: this opens Spending allowances on the live page.' : 'Sample preview: Reset clears every filter. The sample has been reloaded.');
-      if (!link.matches('[data-preview-link]')) show();
+      announce('Sample preview: Reset clears every filter. The sample has been reloaded.');
+      show();
       return;
     }
     const toggle = event.target.closest('[data-toggle-filters]');

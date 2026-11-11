@@ -36,7 +36,9 @@ def test_navigation_orders_and_detail_parents():
     assert navigation('/reliability', [], False)['section'] == 'Logs'
     nav = navigation('/tools', can, True)
     assert nav['section'] == 'Settings'
-    assert [name for name, _ in nav['links']] == ['Compute nodes', 'Users', 'Groups', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
+    assert [name for name, _ in nav['links']] == ['Compute nodes', 'Users', 'Groups', 'Spending allowances', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
+    # Every account may see its own allowance, so the page is in Settings for everyone.
+    assert navigation('/allowances', [], False)['section'] == 'Settings' and navigation('/allowances', [], False)['links'] == [('Spending allowances', '/allowances')]
     assert navigation('/requests/42', can, True)['active'] == '/requests'
     assert navigation('/output', can, True)['section'] == 'Logs'
     assert navigation('/', [], False)['section'] == 'System'
