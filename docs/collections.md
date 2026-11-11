@@ -18,7 +18,7 @@ is [owner-accepted with model-specific limits recorded](loadcoach.md#h3-image-re
 
 ## Using the page
 
-Open **Chat → Collections**. Create a named collection with an explicit local embedding model
+Open **Benchmark → Collections**. Create a named collection with an explicit local embedding model
 and a sensitivity level your current group permits. Upload UTF-8 text or a selectable-text PDF,
 then select **Index / retry**. Uploading and viewing status never start inference or wake
 compute. A selected collection omits the list-page introduction and return link; its collapsed

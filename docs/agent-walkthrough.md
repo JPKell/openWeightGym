@@ -86,11 +86,6 @@ Tests: [dashboard](../tests/test_dashboard.py), [usage](../tests/test_usage.py).
 |---|---|---|
 | [Conversations](../app-walkthrough.md#chat-conversations) | Visible model/Send controls, no-model state, history/search, rename, ordering and account privacy; retain draft/navigation context. | L/R; W for owned scratch history changes. |
 | [Conversation](../app-walkthrough.md#chat-conversation) | Stream/follow-up, Stop/retry/Continue, copy, settings persistence, attachments, comparison, temporary and plugin session modes; inspect actual submitted model/options. | L/R; W for real replies; no existing conversation edits. |
-| [Collections](../app-walkthrough.md#chat-collections) | Owner list, sensitivity, embedder selection, create validation and no-permitted-embedder state. | L/R; W for a disposable collection. |
-| [Collection](../app-walkthrough.md#chat-collection) | Text/PDF upload and original download, unsupported/scanned PDF handling, indexing progress/cancel/retry, embedding identity, privacy and absent-fact retrieval. | L/R; W for indexing/search/generation. Rebuild/delete only disposable sources. |
-| [Source excerpt](../app-walkthrough.md#chat-source-excerpt) | Citation-to-original correspondence, surrounding text, collection ownership, long text and missing/forbidden source links. | L/R; generated citations require W if none exist. |
-| [Workflows](../app-walkthrough.md#chat-workflows) | Creation validation, model/output choices, prompt version preservation and frozen source/model identity. | L/R; W for owned scratch runs. |
-| [Workflow](../app-walkthrough.md#chat-workflow) | State transitions, research acceptance, draft/review, attempt records, cancellation/retry, reopening and exact citations. | L/R; W for real steps; acceptance here tests state, not owner approval of prose. |
 | [Image generation](../app-walkthrough.md#chat-image-generation) | Model/workflow constraints, references/mask wording, delayed submission/polling, exact deletion target, gallery/reuse/download and temporary mode. | L/R; W for a small job. Reproduce unsafe deletion locally; do not test an open deletion defect on live assets. H for quality. |
 | [Music](../app-walkthrough.md#chat-music) | Model-specific controls, lyrics, reuse/variation seed/source/range, loop, older/tagged audio, failed jobs and retry payloads. | L/R; W for short takes; H for musical quality. |
 | [Sounds](../app-walkthrough.md#chat-sounds) | Sound-specific controls, progress/cancel, playback/download, reuse and owned deletion target. | L/R; W for short output; H for sound quality. |
@@ -98,7 +93,7 @@ Tests: [dashboard](../tests/test_dashboard.py), [usage](../tests/test_usage.py).
 | [Voice](../app-walkthrough.md#chat-voice) | Run the Voice-first checklist above; inspect permissions, scoped call options and session cleanup. | L/R; W for a real generated-audio exchange; H for physical microphone/output. |
 | [Voice desktop app](../app-walkthrough.md#chat-voice-desktop-app) | Download/ZIP contents, launch instructions, absence of private credentials, saved-key handling and simulated device/socket cleanup. | L/R; H for native Windows/macOS/Linux setup and physical audio. |
 
-Tests: [front Chat](../tests/test_front_chat.py), [Chat controls](../tests/test_chat_controls.py), [restart](../tests/test_chat_restart.py), [scroll](../tests/test_chat_scroll_browser.py), [collections](../tests/test_collections.py), [collection pages](../tests/test_collection_pages.py), [indexing status](../tests/test_collection_status_browser.py), [workflows](../tests/test_workflows.py), [workflow pages](../tests/test_workflow_pages.py), [images](../tests/test_mirrorwall.py), [image controls](../tests/test_model_image_settings_browser.py), [audio](../tests/test_soundroom.py), [audio browser](../tests/test_soundroom_browser.py).
+Tests: [front Chat](../tests/test_front_chat.py), [Chat controls](../tests/test_chat_controls.py), [restart](../tests/test_chat_restart.py), [scroll](../tests/test_chat_scroll_browser.py), [images](../tests/test_mirrorwall.py), [image controls](../tests/test_model_image_settings_browser.py), [audio](../tests/test_soundroom.py), [audio browser](../tests/test_soundroom_browser.py).
 
 ## Models
 
@@ -130,9 +125,14 @@ Tests: [setup](../tests/test_model_setup_browser.py), [installation](../tests/te
 | [Node measurements](../app-walkthrough.md#benchmark-node-measurements) | LLM/Embedder/Image/Audio pills, Speed retention, host columns, units and unavailable versus zero. | L/R from retained or fixture measurements. |
 | [Embedders](../app-walkthrough.md#benchmark-embedders) | Context/speed/load views, CPU/GPU locations, vector/input-capacity evidence and saved run comparison. | L/R; W for one bounded real measurement if needed. |
 | [Compare](../app-walkthrough.md#benchmark-compare) | Multi-selection, fingerprints/engine/machine filters, score direction, missing evidence and exact source runs. | L/R; H for usefulness to the owner's actual workload. |
+| [Collections](../app-walkthrough.md#benchmark-collections) | Owner list, sensitivity, embedder selection, create validation and no-permitted-embedder state. | L/R; W for a disposable collection. |
+| [Collection](../app-walkthrough.md#benchmark-collection) | Text/PDF upload and original download, unsupported/scanned PDF handling, indexing progress/cancel/retry, embedding identity, privacy and absent-fact retrieval. | L/R; W for indexing/search/generation. Rebuild/delete only disposable sources. |
+| [Source excerpt](../app-walkthrough.md#benchmark-source-excerpt) | Citation-to-original correspondence, surrounding text, collection ownership, long text and missing/forbidden source links. | L/R; generated citations require W if none exist. |
+| [Workflows](../app-walkthrough.md#benchmark-workflows) | Creation validation, model/output choices, prompt version preservation and frozen source/model identity. | L/R; W for owned scratch runs. |
+| [Workflow](../app-walkthrough.md#benchmark-workflow) | State transitions, research acceptance, draft/review, attempt records, cancellation/retry, reopening and exact citations. | L/R; W for real steps; acceptance here tests state, not owner approval of prose. |
 | [Manage](../app-walkthrough.md#benchmark-manage) | Versioned case import/export, invalid JSON/checks, retained input, formula validation and immutable dataset identity. | L/R; mutations use isolated definitions, not shared production formulas/enablement. |
 
-Tests: [benchmark pages](../tests/test_benchmark_pages.py), [browser](../tests/test_benchmark_browser.py), [custom cases](../tests/test_custom_benchmarks_browser.py). A checker fixture pass is not model quality qualification.
+Tests: [benchmark pages](../tests/test_benchmark_pages.py), [browser](../tests/test_benchmark_browser.py), [custom cases](../tests/test_custom_benchmarks_browser.py), [collections](../tests/test_collections.py), [collection pages](../tests/test_collection_pages.py), [indexing status](../tests/test_collection_status_browser.py), [workflows](../tests/test_workflows.py) and [workflow pages](../tests/test_workflow_pages.py). A checker fixture pass is not model quality qualification.
 
 ## Logs
 

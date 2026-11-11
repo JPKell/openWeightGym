@@ -1,8 +1,8 @@
 {% extends "frame.html" %}
 {% from "parts.html" import said_box, page_header, card, section_title , confirm_loss, confirm_two, alert, empty_row %}
-{% block title %}{{ workflow.title if workflow else 'Workflows' }} · openWeightGym{% endblock %}
+{% block title %}{{ workflow.title if workflow else 'Workflows' }} · Benchmark · openWeightGym{% endblock %}
 {% block main %}
-{% call page_header(workflow.title if workflow else 'Workflows', lead="Run repeatable steps with your permitted models and sources." if not workflow else "", help="/docs/web-app/workflows") %}<a class="btn btn-outline-secondary btn-sm" href="{{ '/workflows/'+workflow.id if workflow else '/workflows' }}">Refresh status</a>{% endcall %}
+{% call page_header(workflow.title if workflow else 'Workflows', pretitle='Benchmark', lead="Run repeatable steps with your permitted models and sources." if not workflow else "", help="/docs/web-app/workflows") %}<a class="btn btn-outline-secondary btn-sm" href="{{ '/workflows/'+workflow.id if workflow else '/workflows' }}">Refresh status</a>{% endcall %}
 {{ said_box(said, true) }}
 {% if unavailable %}{% call alert('warning') %}{{ unavailable }}{% endcall %}{% endif %}
 {% if not workflow %}

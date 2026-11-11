@@ -2,7 +2,7 @@
 
 C10 / README milestone 106 is deployed; the owner accepted the live H3 research-to-draft
 sample on **2026-10-16**, as recorded below.
-**Chat → Workflows** hosts one fixed, read-only collection-research-to-draft workflow inside
+**Benchmark → Workflows** hosts one fixed, read-only collection-research-to-draft workflow inside
 WeightRoom's existing chat process and private database. It reuses C08 retrieval and guarded
 ordinary inference; it adds no service, listener, shared credential, GPU scheduler, agent runtime
 or tool/code executor.

@@ -10953,7 +10953,7 @@ representative qualification cleared 2026-10-18 ([results and coverage](benchmar
 ## Private document collections and local inference guards (C08, milestone 105)
 
 Implemented **2026-10-15**; [delivery and owner grounding acceptance](collections.md#owner-grounding-review--2026-10-16) are recorded in the collection guide.
-Chat → Collections hosts owner-private UTF-8 text/selectable PDF ingestion and cited retrieval
+Benchmark → Collections hosts owner-private UTF-8 text/selectable PDF ingestion and cited retrieval
 inside WeightRoom's existing chat process/store. Original sources, chunks and normalized
 finite vectors use `weightroom.chat` migration 3. Identity, current model permissions,
 sensitivity, traces, normal inference admission and accounting remain the existing authorities.
@@ -10987,7 +10987,7 @@ source limits, context/pooling requirements, deletion and qualification boundari
 
 ## Versioned private prompts and fixed workflows (C10, milestone 106)
 
-Implemented **2026-10-15**; [delivery and owner acceptance](workflows.md#live-h3-review--2026-10-16) are recorded in the workflow guide. Chat → Workflows adds a fixed collection-research-to-draft plan alongside chat in
+Implemented **2026-10-15**; [delivery and owner acceptance](workflows.md#live-h3-review--2026-10-16) are recorded in the workflow guide. Benchmark → Workflows adds a fixed collection-research-to-draft plan alongside chat in
 WeightRoom. Private prompt versions and complete effective system prompts are frozen with model
 IDs/fingerprints/builds, generation limits, question and source references. Research acceptance
 is explicit; draft retry/resume retains accepted research and never silently chooses a new model

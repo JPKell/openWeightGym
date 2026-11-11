@@ -49,9 +49,9 @@ The app opens on **System → Status**. Pages and controls depend on your accoun
 
 | Section | What you can do |
 |---|---|
-| Chat | Keep conversations, use Mirror Wall image generation and SoundRoom music, sounds and speech, compare models, query private collections and run workflows; open Voice. |
+| Chat | Keep conversations, use Mirror Wall image generation and SoundRoom music, sounds and speech, compare models; open Voice. |
 | Models | Configure language/image/audio models, image workflows and roles; install audio packages; manage Files, Hugging Face/Civitai downloads and cloud providers. |
-| Benchmark | Start at Runs; filter Results by LLM/Image/Audio, compare Node measurements or embedders and inspect saved evidence. |
+| Benchmark | Start at Runs; filter Results by LLM/Image/Audio, compare Node measurements or embedders and inspect saved evidence; query private Collections and run Workflows to compare models' grounded answers. |
 | Logs | Inspect usage/costs, requests and traces, batches, reliability, plugin activity and system output. |
 | System | Inspect status, telemetry, alerts, schedules, databases and backups. |
 | Settings | Manage compute nodes, users, groups, tools, plugins, voice, audio, image policy and general settings. |
@@ -126,7 +126,7 @@ requests bypass that cache. Load older images pages through retained outputs.
 
 ### Audio
 
-Under **Chat**, Collections and Workflows follow Conversations; image and audio tools follow them.
+Under **Chat**, image and audio tools follow Conversations. Collections and Workflows are under **Benchmark**, after Compare.
 In **Music**, choose a model and read its input guidance. HeartMuLa requires lyrics; use ACE-Step
 for an instrumental. Where supported, **Musical direction** supplies tempo, key, time signature
 and vocal language. Turbo caps denoising at eight steps and ignores diffusion guidance.

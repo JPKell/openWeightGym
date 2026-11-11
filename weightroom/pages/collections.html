@@ -1,9 +1,9 @@
 {% extends "frame.html" %}
 {% from "parts.html" import said_box, page_header, card , confirm_check, confirm_loss, confirm_two, alert, empty_row %}
-{% block title %}Collections · openWeightGym{% endblock %}
+{% block title %}{{ collection.title if collection else 'Collections' }} · Benchmark · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/collections.js?v=3" defer></script>{% endblock %}
 {% block main %}
-{% call page_header(collection.title if collection else 'Collections', lead="Keep private sources and compare grounded answers." if not collection else "", help="/docs/web-app/collections") %}<a class="btn btn-outline-secondary btn-sm" href="{{ '/collections/'+collection.id if collection else '/collections' }}">Refresh status</a>{% endcall %}
+{% call page_header(collection.title if collection else 'Collections', pretitle='Benchmark', lead="Keep private sources and compare grounded answers." if not collection else "", help="/docs/web-app/collections") %}<a class="btn btn-outline-secondary btn-sm" href="{{ '/collections/'+collection.id if collection else '/collections' }}">Refresh status</a>{% endcall %}
 {{ said_box(said, true) }}
 {% if unavailable %}{% call alert('warning') %}{{ unavailable }}{% endcall %}{% endif %}
 {% if not collection %}
