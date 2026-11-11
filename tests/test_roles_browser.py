@@ -226,6 +226,10 @@ def test_studio_populated_layout_uses_shared_sizes_in_all_states(studio, tmp_pat
                 assert not result['namelessFields'], result['namelessFields']
                 assert not result['invalidControls'], result['invalidControls']
                 assert not result['mismatches'], result['mismatches']
+                name_field = page.locator('#role-name').bounding_box()
+                remove_button = page.locator('#role-removal button').bounding_box()
+                assert abs(name_field['y'] - remove_button['y']) < 1
+                assert abs(name_field['height'] - remove_button['height']) < 1
                 assert page.evaluate("() => { const ids = [...document.querySelectorAll('[id]')].map(el => el.id); return ids.length === new Set(ids).size; }")
 
 
@@ -244,3 +248,13 @@ def test_studio_create_role_and_keyboard_copy(studio):
     page.keyboard.press('Enter')
     playwright.expect(page.locator('[data-role-copy-status]')).to_contain_text('Copied research')
     assert page.evaluate('window.copiedRole') == 'research'
+    assert page.locator('#role-removal input[type=checkbox]').count() == 0
+    page.get_by_role('button', name='Remove the role', exact=True).click()
+    playwright.expect(page.get_by_role('button', name='Are you sure? Remove the role', exact=True)).to_be_visible()
+    assert roles.get('research') is not None
+    page.keyboard.press('Escape')
+    playwright.expect(page.get_by_role('button', name='Remove the role', exact=True)).to_be_visible()
+    page.get_by_role('button', name='Remove the role', exact=True).click()
+    page.get_by_role('button', name='Are you sure? Remove the role', exact=True).click()
+    playwright.expect(page.locator('.said-box')).to_have_text('Removed the role research.')
+    assert roles.get('research') is None and roles.get('code') is not None
