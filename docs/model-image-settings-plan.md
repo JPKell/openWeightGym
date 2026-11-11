@@ -151,6 +151,49 @@ Status: **implemented and locally tested; deployment and native qualification pe
 - [ ] Deploy matching front/gateway/worker changes and perform operator-authorized native qualification. Commit/push does not deploy services. Keep prior assets and verified model-store/load-out backups; follow the canonical API contract's fixed-profile rollback precautions. Do not load or migrate real models merely to review the implementation.
 <!-- fit-design-todo:end -->
 
+## 8. Benchmark Runs redesign proposals (2026-11-11)
+
+Status: **03 / Run studio implemented locally with a compact picker for 15–30 models; deployment and live inference not performed**. The three sample-only proposals remain available through `python scripts/preview-benchmark-designs.py` → `build/benchmark-designs/index.html`; their illustrative fleet is not a live inventory. The production UI and batch/recovery contract are documented once in [benchmarks/README.md](../benchmarks/README.md).
+
+| Proposal | Best use | Structure |
+|---|---|---|
+| 01 / Comparison lab | Repeated evaluation across models and nodes | Model × node selection with all-node overview |
+| 02 / Machine lanes — previous layout | Planning around individual machines | All-node overview, running work, queue, node-local setup, filtered history |
+| **03 / Run studio — selected and implemented** | Preparing a deliberate batch | Bounded model picker beside running work and queue; history below |
+
+### Implementation checklist
+
+- [x] Adopt Run studio in `benchmark_studio.html`/`benchmark_nodes.html`, reusing `parts.html`, navigation and the canonical `benchmark_parts.html` model rows, node choices, evidence and run controls. Show one row per model in a bounded, searchable list with a sticky header and selection by model or node; cap queue height and disclose logs on demand.
+- [x] Use gateway node topology independently of compatible models; retain front, empty, disabled, unknown and unreachable nodes. Consume choices only from the authorized catalogue, never the monitor's model list.
+- [x] Keep running work, queue, setup and terminal history expanded, with recorded node/test/version/identity, detail links and controls; preserve existing POST names and HTMX fragment IDs.
+- [x] Review up to 100 exact model/node targets, preserve per-test selections across dynamic replacements and searches, and preserve unapplied history filters during polling. Revalidate permissions and targets server-side; return per-target outcomes and stable run IDs.
+- [x] Support compatible LLM/embedding tests and media load-only choices; keep node-local evidence and honest unknown inventory. No inferred capacity or fabricated throughput.
+- [x] Retain **globally serial execution**; no node-parallel worker extension. Render the current active list without duplicating running work in the queue.
+- [x] Retain backend global-pause semantics and label the control **Pause all**; it yields running work and retains completed samples.
+- [x] Add bounded history pagination, model/test/reason search, node/outcome filters and “Set up again”; preserve UTC storage and existing local-time rendering.
+- [ ] Deploy through the existing release procedure after review; preserve prior code/assets for rollback. No schema migration or inference run is required to install this UI.
+
+### Code review findings and implemented fixes
+
+Scope: benchmark page/forms, setup/live/queue/history fragments, selection behavior, view helpers, internal API submission, reservations and acknowledgement recovery. All ten original benchmark findings are addressed below.
+
+| Priority | Original finding | Implemented fix / regression coverage |
+|---|---|---|
+| P1 | Batch could partially succeed while reporting generic failure. | `queue_runs` retains each task outcome and continues independent targets; the page reports accepted, active, failed and unconfirmed counts. API tests reject the second target after accepting the first. |
+| P1 | Malformed target JSON silently discarded valid explicit targets. | Browser submissions reject malformed/non-object/mixed or oversized target lists before forwarding any target; regression tests assert zero submit calls. |
+| P1 | Changing a quality node left the old node's score/date/flags visible. | Removed the quality location dropdown; each compact node choice binds its own `(model, node, test)` evidence and exact target. Different-node evidence is tested independently. |
+| P2 | Nodes disappeared when no eligible model existed there. | Configured topology drives both overview and lanes; privacy and empty/offline/disabled/front-node tests cover nodes with no choices. |
+| P2 | Running work appeared again in the queue. | Separate active and waiting lists; shared controls stay available on active cards. A live-detail outage retains the running summary and other page sections. |
+| P2 | Empty selections could be submitted. | Queue/review is disabled for zero or over 100 eligible targets, including embedder setup; server validation remains mandatory. |
+| P2 | Fully deduplicated batches still said “Queued.” | API returns existing run IDs and the UI reports “Queued 0 runs” plus the active count; paused/creating reservations also exclude duplicates. |
+| P2 | Queue/history omitted node identity. | Both show recorded nodes with legacy primary-node fallback; history can filter by node and prepare the same target again. |
+| P2 | Active-detail failure replaced the whole page with an error. | Live-detail failures render a scoped retry notice alongside the retained run identity; queue, setup and history remain usable. |
+| P3 | Quality setup's empty row spanned four of five columns. | Removed the obsolete quality table. Embedder matrix empty rows continue to derive their actual node-column count. |
+
+Additional recovery hardening retains uncertain submissions in `creating` rather than freeing their reservations. Restart reconciliation reads the original task ID/token without resubmitting; pause/resume is refused until acceptance is known. Tests cover a lost acknowledgement, restart, duplicate retry, and recovery of the same task. Browser tests cover fast test changes before HTMX settles, focus-preserving searches, selection review, polling and 1440/390/320 layouts.
+
+Publish validation: **108 tests passed** after integration with the latest `main`, covering benchmark API/recovery/progress, the three design previews, 15/30-model browser cases and the complete UI audit, including all-page layouts, narrow/error states and dynamic replacements. The upstream Users sizing fixes resolve the earlier audit failures. Temporary `age` binaries satisfied the fixture dependency without changing system packages. `git diff --check` and Python compilation pass; deployment and live inference remain unperformed.
+
 ## Verification and delivery
 
 Use focused checks per phase, then the required repository checks before release:

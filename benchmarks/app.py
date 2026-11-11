@@ -194,8 +194,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             machine = target.get('machine')
             places = logical.get('locations', [])
             place = next((one for one in places if one.get('machine') == machine), None) if machine else None
-            if machine and place is None:
+            if machine and place is None and (places or machine != 'compute'):
                 return error(404, f"{logical['id']} is not available at {machine}.")
+            if not machine and places:
+                place = places[0]
+            machine = machine or (place or {}).get('machine', 'compute')
+            if machine in catalogue.get('unavailable_machines', []):
+                return error(409, f"{machine} is unavailable; refresh its inventory before queueing.")
             if place is not None and not place.get('enabled', True):
                 return error(400, f"{logical['id']} is disabled at {machine}.")
             capabilities = (place or logical).get('capabilities', logical.get('capabilities', {}))
@@ -203,8 +208,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
                 return error(400, f"{logical['id']}: image/audio models support load-time benchmarks only; context is unavailable.")
             if capabilities.get('native_probes') is False and not (definition['id'] == 'load' and capabilities.get('load_probes')):
                 return error(400, f"{logical['id']}: this engine does not support native benchmark probes; no run was queued.")
-            if not machine and places and not places[0].get('enabled', True):
-                return error(400, f"{logical['id']}'s default location is disabled; choose an enabled machine.")
             local_name = (place or {}).get('id', logical['id'])
             local_id = (place or {}).get('model_id', logical.get('model_id'))
             key = (logical['id'], machine or '')
@@ -214,22 +217,30 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             # Embedding and generation measurements have different native transports and scores.
             embedding = (place or logical).get('embedding', logical.get('embedding', False))
             if definition['id'] != 'load' and bool(definition.get('embedding')) != bool(embedding):
-                skipped.append(logical['id'] + (f' at {machine}' if machine else ''))
+                skipped.append(logical['id'] + (f' at {machine}' if target.get('machine') else ''))
                 continue
             selected.append({'model': logical['id'], 'local_name': local_name, 'model_id': local_id, 'machine': machine or ''})
         if not selected:
             return error(400, 'Quality benchmarks do not apply to embedding models.' if definition.get('quality') else
                          'Choose embedding models for embedder benchmarks, and other models for generation benchmarks.')
-        numbers = await queue_runs(request, user, definition, selected)
+        result = await queue_runs(request, user, definition, selected)
         worker.wake.set()
-        return JSONResponse({'runs':numbers, 'skipped':skipped}, status_code=202)
+        if result['errors'] and not (result['runs'] or result['active'] or result['pending']):
+            failure = result['errors'][0]
+            return JSONResponse({**result, 'skipped': skipped, 'error': {'message': failure['message']}},
+                                status_code=failure['status'])
+        return JSONResponse({**result, 'skipped': skipped}, status_code=207 if result['errors'] or result['pending'] else 202)
 
     async def queue_runs(request, user, definition, selected):
         """Create LoadCoach tasks for already-authorized, type-compatible targets."""
-        numbers = []
+        result = {'runs': [], 'active': [], 'errors': [], 'pending': [], 'outcomes': []}
         for target in selected:
+            outcome = {'model': target['model'], 'machine': target['machine'] or 'compute', 'benchmark': definition['id']}
             number = store.create(user['name'], target['model'], definition['id'], target['model_id'], location=target['machine'], reserve=True)
             if number is None:
+                existing = store.active_for(target['model_id'] or target['model'], target['machine'], definition['id'], by_name=not target['model_id'])
+                result['active'].append({**outcome, 'run': existing})
+                result['outcomes'].append({**outcome, 'run': existing, 'state': 'already_active'})
                 continue
             creating.add(number)
             try:
@@ -239,22 +250,29 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
                     'metadata':{'benchmark':definition['id'],'benchmark_version':definition['version'],'model':target['model'],
                                 **({'machine': target['machine']} if target['machine'] else {})}})
                 store.activate(number, task)
-                numbers.append(number)
+                result['runs'].append(number)
+                result['outcomes'].append({**outcome, 'run': number, 'state': 'queued'})
             except httpx.HTTPStatusError as problem:
                 try:
                     reason = problem.response.json()['error']['message']
                 except (ValueError, KeyError, TypeError):
                     reason = 'Compute rejected this benchmark.'
                 store.finish(number, 'failed', reason)
-                worker.wake.set()
-                raise
+                failure = {**outcome, 'run': number, 'status': problem.response.status_code, 'message': reason}
+                result['errors'].append(failure)
+                result['outcomes'].append({**failure, 'state': 'failed'})
             except httpx.HTTPError:
-                store.finish(number, 'failed', 'LoadCoach task submission failed in transport; acceptance is unconfirmed.')
-                worker.wake.set()
-                raise
+                # Keep the intent and reservation: compute may have accepted the task.
+                # Reconciliation uses this same task ID/token, never a second POST.
+                reason = 'LoadCoach task acceptance is unconfirmed; checking the existing task before retrying.'
+                store.message(number, reason)
+                pending = {**outcome, 'run': number, 'status': 503, 'message': reason}
+                result['pending'].append(pending)
+                result['outcomes'].append({**pending, 'state': 'creating'})
             finally:
                 creating.discard(number)
-        return numbers
+                worker.wake.set()
+        return result
 
     async def outstanding(request, user):
         """Queue every enabled benchmark lacking current completed or already queued evidence for one model."""
@@ -318,7 +336,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
                                                'model_id': (place or {}).get('model_id', logical.get('model_id')),
                                                'machine': (place or {}).get('machine', '')}, place))
 
-        queued, fresh, active, unavailable, errors = [], [], [], [], []
+        queued, fresh, active, unavailable, errors, pending = [], [], [], [], [], []
         for definition, target, place in plans:
             if not compatible({**logical, **(place or {})}, definition):
                 continue
@@ -343,20 +361,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             elif current_active:
                 active.append(label)
             else:
-                try:
-                    queued.extend(await queue_runs(request, user, definition, [target]))
-                except httpx.HTTPStatusError as problem:
-                    try:
-                        message = problem.response.json()['error']['message']
-                    except (ValueError, KeyError, TypeError):
-                        message = 'Compute rejected this benchmark.'
-                    errors.append({'benchmark': label, 'status': problem.response.status_code, 'message': message})
-                except httpx.HTTPError:
-                    errors.append({'benchmark': label, 'status': 503, 'message': 'Compute is unavailable.'})
+                result = await queue_runs(request, user, definition, [target])
+                queued.extend(result['runs'])
+                if result['active']:
+                    active.append(label)
+                errors.extend({**item, 'benchmark': label} for item in result['errors'])
+                pending.extend({**item, 'benchmark': label} for item in result['pending'])
         worker.wake.set()
         return JSONResponse({'runs': queued, 'queued': len(queued), 'fresh': fresh, 'active': active,
-                             'unavailable': unavailable, 'errors': errors},
-                            status_code=207 if errors or unavailable else 202)
+                             'unavailable': unavailable, 'errors': errors, 'pending': pending},
+                            status_code=207 if errors or unavailable or pending else 202)
 
     async def control(request, user):
         """Pause, resume or cancel the selected benchmark run."""
@@ -376,6 +390,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
                 return error(403, 'You may only control your own benchmark runs.')
             if action not in ('pause','resume','stop') or run['state'] in TERMINAL:
                 return error(400, 'This run cannot take that action.')
+            if run['state'] == 'creating' and action != 'stop':
+                return error(409, 'Task acceptance is still being checked. Wait before pausing or resuming.')
             if action == 'stop':
                 store.finish(number,'cancelled',f'Stopped by {user["name"]}.')
             else:

@@ -49,10 +49,10 @@ def test_results_type_pills_and_node_page_preserve_selected_models(desk, typed_m
         page.get_by_role('link', name='Runs', exact=True).click()
         page.wait_for_url('http://console.test/benchmarks/runs')
         page.select_option('#benchmark', 'load')
-        playwright.expect(page.locator('#benchmark-models tbody')).to_contain_text('llm-model')
-        assert 'image-model' not in page.locator('#benchmark-choice').inner_text()
-        assert 'audio-model' not in page.locator('#benchmark-choice').inner_text()
-        assert page.locator('#outstanding-model option').all_text_contents() == ['llm-model']
+        playwright.expect(page.locator('#benchmark-models')).to_contain_text('llm-model')
+        playwright.expect(page.locator('#benchmark-models')).to_contain_text('image-model')
+        playwright.expect(page.locator('#benchmark-models')).to_contain_text('audio-model')
+        assert set(page.locator('#outstanding-model option').all_text_contents()) == {'llm-model', 'image-model', 'audio-model'}
         assert not errors
         browser.close()
 
@@ -80,32 +80,23 @@ def test_cards_survive_navigation_oob_refresh_accounts_and_sample_anchors(desk, 
             serve_browser_request(server, 'http://benchmark.test', route)
         context.route('http://benchmark.test/**', serve)
         page.goto('http://benchmark.test/benchmarks/runs')
-        if page.locator('[data-card-key="benchmark-start"]').get_attribute('open') is None:
-            page.locator('[data-card-key="benchmark-start"] > summary').click()
+        for section in ('benchmark-start', 'benchmark-active', 'benchmark-queue', 'benchmark-history'):
+            playwright.expect(page.locator('#' + section)).to_be_visible()
+            assert page.locator('#' + section).evaluate('(el) => el.tagName') == 'SECTION'
         assert page.locator('#outstanding-model').count() == 1
+        page.locator('summary').filter(has_text='Queue every outstanding benchmark').click()
         playwright.expect(page.get_by_role('button', name='Queue outstanding benchmarks')).to_be_enabled()
-        page.locator('[data-card-key="benchmark-start"] > summary').click()
-        page.reload()
-        playwright.expect(page.locator('[data-card-key="benchmark-start"]')).not_to_have_attribute('open', '')
-        page.goto('http://benchmark.test/benchmarks')
-        playwright.expect(page.get_by_role('heading', name='Runs', exact=True)).to_be_visible()
-        playwright.expect(page.locator('[data-card-key="benchmark-start"]')).not_to_have_attribute('open', '')
-        # Both a previously closed card and a previously opened one survive real OOB polling.
-        page.goto('http://benchmark.test/benchmarks/runs')
-        page.locator('#benchmark-active > summary').click()
-        page.locator('#benchmark-history > summary').click()
         page.evaluate("window.priorHistory = document.querySelector('#benchmark-history')")
         page.wait_for_function("document.querySelector('#benchmark-history') !== window.priorHistory", timeout=7000)
         assert page.locator('#benchmark-active').count() == 1
         assert page.locator('#benchmark-queue').count() == 1
-        playwright.expect(page.locator('#benchmark-active')).not_to_have_attribute('open', '')
-        playwright.expect(page.locator('#benchmark-history')).to_have_attribute('open', '')
+        playwright.expect(page.locator('#benchmark-history')).to_be_visible()
         page.reload()
-        playwright.expect(page.locator('#benchmark-history')).to_have_attribute('open', '')
-        page.locator('[data-card-key="benchmark-start"] > summary').click()
+        playwright.expect(page.locator('#benchmark-start')).to_be_visible()
         page.select_option('#benchmark', 'abstention')
-        page.locator('[data-select-row]').first.locator('th').click()
-        playwright.expect(page.locator('[data-selected-count]')).to_have_text('1 model selected')
+        playwright.expect(page.locator('#start-benchmark input')).to_have_value('abstention')
+        page.locator('#benchmark-models input[name="run-target"]:enabled').first.check()
+        playwright.expect(page.locator('[data-selected-count]')).to_have_text('1 run selected')
         page.select_option('#benchmark', 'abstention')
         playwright.expect(page.locator('#start-benchmark input')).to_have_value('abstention')
         page.select_option('#benchmark', 'hierarchy')
@@ -171,12 +162,12 @@ def test_cards_survive_navigation_oob_refresh_accounts_and_sample_anchors(desk, 
         assert page.locator('[name=history_filter]:checked').count() == 1
         sign_in(server, 'pat')
         page.goto('http://benchmark.test/benchmarks/runs')
-        playwright.expect(page.locator('[data-card-key="benchmark-start"]')).to_have_attribute('open', '')
+        playwright.expect(page.locator('[data-card-key="benchmark-start"]')).to_be_visible()
         page.set_viewport_size({'width': 390, 'height': 844})
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.screenshot(path=str(images / 'mobile.png'))
         page.evaluate("() => { Storage.prototype.setItem = () => { throw new Error('disabled'); }; }")
-        page.locator('[data-card-key="benchmark-start"] > summary').click()
+        page.locator('summary').filter(has_text='Queue every outstanding benchmark').click()
         assert not errors
         browser.close()
 

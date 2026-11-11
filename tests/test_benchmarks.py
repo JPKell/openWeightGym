@@ -180,14 +180,15 @@ def test_current_benchmark_evidence_requires_model_protocol_engine_and_machine_i
 
 
 def queue_fixture(tmp_path, *, disabled=(), offline=(), rejected=(), rejected_status=503, transport_fail=(),
-                  can=('benchmark', 'stop'), capabilities=None):
+                  can=('benchmark', 'stop'), capabilities=None, rejected_nodes=(), transport_fail_nodes=(),
+                  accepted_after_disconnect=False):
     """Two copies of the same logical model with independently addressable evidence."""
     locations = [
         {'machine': name, 'id': 'small', 'model_id': name + '-id', 'fingerprint': 'same-weights',
          'embedding': False, 'enabled': name not in disabled, **({'capabilities':capabilities} if capabilities is not None else {})}
         for name in ('compute', 'rig')]
     catalogue = {'data': [{**locations[0], 'id': 'small', 'owned_by': 'loadcoach', 'locations': locations}]}
-    submitted = []
+    submitted, remote_tasks = [], {}
 
     def answer(request):
         path = request.url.path
@@ -203,14 +204,22 @@ def queue_fixture(tmp_path, *, disabled=(), offline=(), rejected=(), rejected_st
             payload = json.loads(request.content)
             submitted.append(payload)
             kind = payload['metadata']['benchmark']
-            if kind in transport_fail:
-                raise httpx.ConnectError('connection dropped before task acknowledgement')
-            if kind in rejected:
-                return httpx.Response(rejected_status, json={'error': {'message': 'location unavailable'}})
             machine = payload.get('machine', 'compute')
-            return httpx.Response(200, json={'fingerprint': 'same-weights', 'model_id': machine + '-id',
+            if kind in rejected or machine in rejected_nodes:
+                return httpx.Response(rejected_status, json={'error': {'message': 'location unavailable'}})
+            task = {'fingerprint': 'same-weights', 'model_id': machine + '-id',
                 'machine': machine, 'subject': {}, 'environment': {
-                    'engine_hash': 'engine-' + machine, 'machine_hash': 'host-' + machine}})
+                    'engine_hash': 'engine-' + machine, 'machine_hash': 'host-' + machine}}
+            if kind in transport_fail or machine in transport_fail_nodes:
+                if accepted_after_disconnect:
+                    remote_tasks[payload['id']] = task
+                raise httpx.ConnectError('connection dropped before task acknowledgement')
+            remote_tasks[payload['id']] = task
+            return httpx.Response(200, json=task)
+        if path.startswith('/loadcoach/tasks/') and request.method == 'GET':
+            task = remote_tasks.get(path.rsplit('/', 1)[-1])
+            if task:
+                return httpx.Response(200, json={**task, 'status': 'queued', 'allowed': True})
         return httpx.Response(404, json={'error': {'message': path}})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url='http://compute')
@@ -261,7 +270,7 @@ def test_outstanding_reports_offline_and_partial_queue_failures(tmp_path):
         result = response.json()
         assert response.status_code == 207 and result['queued'] == 1
         assert set(result['unavailable']) == {'load at rig', 'context at rig'}
-        assert result['errors'] == [{'benchmark': 'context at compute', 'status': 503,
+        assert [{key: item[key] for key in ('benchmark', 'status', 'message')} for item in result['errors']] == [{'benchmark': 'context at compute', 'status': 503,
                                      'message': 'location unavailable'}]
         assert {task['machine'] for task in submitted} == {'compute'}
         assert all(run['location'] != 'rig' for run in app.state.store.listing())
@@ -279,23 +288,22 @@ def test_outstanding_keeps_supported_work_when_one_suite_is_rejected(tmp_path):
         assert {task['metadata']['benchmark'] for task in submitted} == {'context', 'load'}
 
 
-def test_outstanding_transport_failure_closes_intent_and_keeps_successful_work(tmp_path):
+def test_outstanding_transport_failure_retains_intent_and_keeps_successful_work(tmp_path):
     app, submitted = queue_fixture(tmp_path, transport_fail=('context',))
     with TestClient(app) as caller:
         result = caller.post('/benchmarks/outstanding', headers={'authorization': 'Bearer test'},
                              json={'model': 'small'})
         assert result.status_code == 207 and result.json()['queued'] == 2
-        assert {error['benchmark'] for error in result.json()['errors']} == {
+        assert {error['benchmark'] for error in result.json()['pending']} == {
             'context at compute', 'context at rig'}
-        assert all(error['status'] == 503 for error in result.json()['errors'])
+        assert all(error['status'] == 503 for error in result.json()['pending'])
         runs = app.state.store.listing()
-        assert len(runs) == 4 and sorted(run['state'] for run in runs) == ['failed', 'failed', 'queued', 'queued']
-        assert all('acceptance is unconfirmed' in run['reason'] for run in runs if run['state'] == 'failed')
+        assert len(runs) == 4 and sorted(run['state'] for run in runs) == ['creating', 'creating', 'queued', 'queued']
         assert {run['id'] for run in runs} == {task['id'] for task in submitted}
         again = caller.post('/benchmarks/outstanding', headers={'authorization': 'Bearer test'},
                             json={'model': 'small'})
-        assert again.json()['queued'] == 0 and set(again.json()['active']) == {'load at compute', 'load at rig'}
-        assert not any(run['state'] == 'creating' for run in app.state.store.listing())
+        assert again.json()['queued'] == 0 and set(again.json()['active']) == {'load at compute', 'load at rig', 'context at compute', 'context at rig'}
+        assert len(submitted) == 4
 
 
 def test_direct_queue_transport_failure_wakes_reconciliation(tmp_path):
@@ -303,11 +311,52 @@ def test_direct_queue_transport_failure_wakes_reconciliation(tmp_path):
     with TestClient(app) as caller:
         response = caller.post('/benchmarks', headers={'authorization': 'Bearer test'},
                                json={'benchmark': 'load', 'targets': [{'model': 'small', 'machine': 'compute'}]})
-        assert response.status_code == 503 and len(submitted) == 1
+        assert response.status_code == 207 and len(submitted) == 1
         runs = app.state.store.listing()
-        assert len(runs) == 1 and runs[0]['state'] == 'failed'
-        assert 'acceptance is unconfirmed' in runs[0]['reason']
+        assert len(runs) == 1 and runs[0]['state'] == 'creating'
+        assert response.json()['pending'][0]['run'] == runs[0]['id']
         assert app.state.worker.wake.is_set()
+
+
+def test_batch_reports_success_failure_and_deduplication_per_target(tmp_path):
+    app, submitted = queue_fixture(tmp_path, rejected_nodes=('rig',))
+    headers = {'authorization': 'Bearer test'}
+    batch = {'benchmark': 'load', 'targets': [{'model': 'small', 'machine': node} for node in ('compute', 'rig')]}
+    with TestClient(app) as caller:
+        result = caller.post('/benchmarks', headers=headers, json=batch)
+        assert result.status_code == 207
+        data = result.json()
+        assert len(data['runs']) == 1 and len(data['errors']) == 1
+        assert [(item['machine'], item['state']) for item in data['outcomes']] == [('compute', 'queued'), ('rig', 'failed')]
+        assert data['outcomes'][0]['run'] == data['runs'][0]
+        assert app.state.store.get(data['errors'][0]['run'])['state'] == 'failed'
+        again = caller.post('/benchmarks', headers=headers, json={'benchmark': 'load', 'targets': batch['targets'][:1]})
+        assert again.status_code == 202 and again.json()['runs'] == []
+        assert again.json()['active'][0]['run'] == data['runs'][0]
+        assert len(submitted) == 2
+
+
+def test_lost_reply_keeps_reservation_and_recovers_same_task_after_restart(tmp_path):
+    app, submitted = queue_fixture(tmp_path, transport_fail_nodes=('rig',), accepted_after_disconnect=True)
+    headers = {'authorization': 'Bearer test'}
+    batch = {'benchmark': 'load', 'targets': [{'model': 'small', 'machine': 'rig'}]}
+    restored = None
+    with TestClient(app) as caller:
+        data = caller.post('/benchmarks', headers=headers, json=batch).json()
+        number = data['pending'][0]['run']
+        assert caller.post('/benchmarks', headers=headers, json=batch).json()['active'][0]['run'] == number
+        assert len(submitted) == 1
+        assert caller.post('/benchmarks/control', headers=headers, json={'action': 'resume', 'run': number}).status_code == 409
+        restored = Benchmarks(str(tmp_path / 'queue.db'))
+        assert restored.get(number)['state'] == 'creating'
+        restored.db.execute('UPDATE benchmark_runs SET created=created-31 WHERE id=?', (number,))
+        restored.db.commit()
+        app.state.worker.store = restored
+        caller.portal.call(app.state.worker.reconcile)
+        assert restored.get(number)['state'] == 'queued'
+        assert restored.get(number)['location'] == 'rig'
+        assert len(submitted) == 1
+    restored.db.close()
 
 
 def test_outstanding_rejects_unpermitted_user_without_creating_tasks(tmp_path):

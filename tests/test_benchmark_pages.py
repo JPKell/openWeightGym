@@ -69,7 +69,7 @@ def test_result_model_types_and_node_comparisons_keep_evidence_separate(desk, ty
 
 
 @pytest.mark.parametrize('legacy', [False, True])
-def test_scores_and_run_choices_exclude_image_and_audio_models(desk, typed_models, monkeypatch, legacy):
+def test_scores_exclude_media_and_run_lanes_offer_only_compatible_models(desk, typed_models, monkeypatch, legacy):
     browser, _, _ = desk
     if legacy:
         route = next(route for route in browser.app.state.benchmarks.routes if route.path == '/benchmarks' and 'GET' in route.methods)
@@ -89,8 +89,12 @@ def test_scores_and_run_choices_exclude_image_and_audio_models(desk, typed_model
     for benchmark in ('load', 'context', 'extraction'):
         page = browser.get('/benchmarks/runs', params={'benchmark': benchmark})
         assert page.status_code == 200
-        choices = page.text.split('id="benchmark-choice"', 1)[1].split('id="benchmark-queue"', 1)[0]
-        assert 'llm-model' in choices and 'image-model' not in choices and 'audio-model' not in choices
+        import re
+        from html import unescape
+        choices = [json.loads(unescape(value))['model'] for value in re.findall(r'name="run-target"[^>]*value="([^"]+)"', page.text)]
+        assert 'llm-model' in choices
+        assert ('image-model' in choices) == (benchmark == 'load')
+        assert ('audio-model' in choices) == (benchmark == 'load')
     # Previously saved measurements remain available without returning these models to the picker.
     for kind in ('image', 'audio'):
         assert browser.get('/benchmarks/run/' + typed_models[kind][1]).status_code == 200
@@ -149,9 +153,9 @@ def test_benchmark_pages_filter_models_before_rendering_or_comparing(desk, tmp_p
     # Shared cards include their headers in polling; remembered state restores after OOB swaps.
     for key in ('benchmark-running', 'benchmark-start', 'benchmark-queue', 'benchmark-history'):
         assert f'data-card-key="{key}"' in runs
-    assert "Running · Idle" in runs and "No benchmark is running." in runs
+    assert "Running now" in runs and "No benchmark is running." in runs
     again = browser.get("/benchmarks/runs?part=live").text
-    assert "<html" not in again and again.count('hx-swap-oob="outerHTML"') == 3
+    assert "<html" not in again and again.count('hx-swap-oob="outerHTML"') == 4
     assert all(f'id="{piece}"' in runs and f'id="{piece}"' in again for piece in ("benchmark-active", "benchmark-queue", "benchmark-history"))
     assert 'aria-label="Select visible-model at compute" disabled' in runs
     assert browser.get("/benchmarks/manage").status_code == 403
@@ -169,7 +173,7 @@ def test_runs_is_the_landing_page_and_polling_preserves_the_start_form(desk, tmp
     assert browser.get('/benchmarks/home').status_code == 404
     idle = browser.get('/benchmarks').text
     assert '<h1 class="page-title wrap">Runs</h1>' in idle and '<div id="benchmark-choice">' in idle
-    assert 'data-benchmark-rows="10"' in idle and 'class="card-heading">Start a run</span>' in idle
+    assert 'data-benchmark-rows="10"' in idle and 'class="card-heading">Start a run</h2>' in idle
     store = browser.app.state.benchmarks.state.store
     number = store.create('jordan', 'active-model', 'load')
     store.activate(number, {'fingerprint': 'fp', 'subject': {'settings': {'flags': {'ctx-size': 2048}}}, 'environment': {}})
@@ -183,7 +187,7 @@ def test_runs_is_the_landing_page_and_polling_preserves_the_start_form(desk, tmp
         assert 'Newest line &lt;script&gt;unsafe()&lt;/script&gt;' in text
         assert 'tabindex="0" aria-label="Latest benchmark log"' in text
     refresh = browser.get('/benchmarks?part=live').text
-    assert refresh.count('hx-swap-oob="outerHTML"') == 3 and 'Running · load · active-model' in refresh
+    assert refresh.count('hx-swap-oob="outerHTML"') == 4 and 'Running now' in refresh and 'active-model' in refresh
     assert 'start-benchmark' not in refresh
     store.finish(number, 'completed')
     assert 'No benchmark is running.' in browser.get('/benchmarks?part=live').text
