@@ -1952,8 +1952,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         answer = await ask("GET", "/turnstile/models/files", person.key)
         return Response(answer.content, answer.status_code, media_type="application/json", headers={"cache-control":"no-store"})
 
-    async def fit_page(request: Request, person: Person, said: str = '', failed: bool = False, review: dict | None = None) -> Response:
-        """The dry fit: models ticked onto the cards, each card drawn as a bar, to see what fits at which context. Nothing is loaded.
+    async def fit_page(request: Request, person: Person, said: str = '', failed: bool = False, review: dict | None = None, machine_override: str = '') -> Response:
+        """Render the node-local split browser and combined memory estimate without loading models.
 
         The bars, the sliders and the automatic fit are static/fit.js, which works from what
         this page hands it. The roles are worked out here, by the same rule LoadCoach picks
@@ -1964,18 +1964,20 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if isinstance(known, Response):
             return known
         asked = request.query_params
-        multi_node = bool(known.get("nodes"))
-        nodes = known.get("nodes") or {"compute": {}}
-        machine = asked.get("machine", "compute" if "compute" in nodes else next(iter(nodes)))
+        multi_node = bool(known.get("nodes")) or bool(known.get('unavailable_machines'))
+        nodes = known.get("nodes") or {"compute": {key: known.get(key) for key in ('cards', 'defaults', 'engine_cards', 'devices', 'memory_policy')}}
+        nodes = {**nodes, **{name: {} for name in known.get('unavailable_machines', []) if name not in nodes}}
+        known = {**known, 'nodes': nodes}
+        machine = machine_override or asked.get("machine", "compute" if "compute" in nodes else next(iter(nodes)))
         if machine not in nodes:
             return page(request, "refused.html", person, status=404, why=f"There is no answering compute node named {machine}.")
         known = fit_node(known, machine)
         local = {model["name"] for model in known["models"]}
         # The page opens with what is loaded right now ticked, each model at the context it was loaded with.
-        on = set(asked.getlist("on")) if "part" in asked else {model["name"] for model in known["models"] if model["loaded"] == 'ready'}
+        on = set(asked.getlist("on")) if "part" in asked else {model["name"] for model in known["models"] if model.get("loaded") == 'ready'}
         found = await fetch(request, person, "/loadcoach/roles")
         if isinstance(found, Response):
-            return found
+            found = {'roles': []}
         for role in found["roles"]:
             answer = await ask("GET", "/loadcoach/pick", person.key, params={"model": role["name"]})
             seen = answer.json()["models"] if answer.status_code == 200 else []  # refused: a role with no model this person may use
@@ -1992,30 +1994,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, "fit_roles.html", person, roles=found["roles"], on=on, address=model_address)
         status_path = f"/turnstile/machines/{quote(machine, safe='')}/control/status" if multi_node else "/loadcoach/status"
         now_answer = await ask("GET", status_path, person.key)
-        if now_answer.status_code != 200:
-            return page(request, "refused.html", person, status=now_answer.status_code,
-                        why=now_answer.json().get("error", {}).get("message", f"Node {machine} is not answering."))
-        now = now_answer.json()
-        if machine == "compute":
-            saved = await ask('GET', '/loadcoach/loadouts', person.key)
-            loadouts = saved.json() if saved.is_success else {'loadouts': [], 'leases': [], 'why': saved.json().get('error', {}).get('message', 'Matching compute update is required.')}
-        else:
-            loadouts = {'loadouts': [], 'leases': [], 'why': 'Named load-outs currently belong to the primary compute node.'}
-        system_memory = now.get("system_memory") or {}
-        cpu_loaded = sum(one.get("rss_mib") or 0 for one in now.get("loaded", []) if not one.get("gpus")) + system_memory.get("hybrid_reserved", 0)
-        cpu_limit = fit_cpu_limit(system_memory)
-        cpu_others = max(0, cpu_limit - system_memory.get("free", 0) - cpu_loaded)
-        lines = {model["name"]: fit_line(model, known["cards"]) for model in known["models"]}
-        cpu_available = any(line["need"] == 0 for line in lines.values()) or any(model.get("host_ram_budget_mib") for model in known["models"])
-        return page(request, "fit.html", person, status=400 if failed else 200, known=known, memory=now["memory"], margin=now["margin"], roles=found["roles"], on=on,
-                    machine=machine, nodes=nodes, system_memory=system_memory, cpu_available=cpu_available, cpu_limit=cpu_limit, cpu_others=cpu_others,
-                    loadouts=loadouts, review=review, said=said or asked.get('said', ''), failed=failed,
-                    lines=lines,
-                    cpu_lines={model["name"]: fit_cpu_mib(model) for model in known["models"]}, address=model_address)  # fmt: skip
+        available = now_answer.status_code == 200
+        now = now_answer.json() if available else {'memory': {}, 'margin': 0, 'system_memory': {}}
+        loadout_path = f'/turnstile/machines/{quote(machine, safe="")}/control/loadouts' if multi_node else '/loadcoach/loadouts'
+        saved = await ask('GET', loadout_path, person.key) if available else None
+        loadouts = saved.json() if saved is not None and saved.is_success else {'loadouts': [], 'leases': [], 'why': saved.json().get('error', {}).get('message', 'Matching compute update is required.') if saved is not None else f'Node {machine} is unavailable. Reconnect to save, review or load its sets.'}
+        known['cards'] = known.get('cards') or []
+        from weightroom.fit import workspace as fit_workspace
+        workspace = fit_workspace(known, now, fit_line, fit_cpu_mib)
+        workspace.update(machine=machine, api_path=loadout_path, available=available)
+        return page(request, "fit.html", person, status=400 if failed else 200, known=known, roles=found["roles"], on=on,
+                    machine=machine, nodes=nodes,
+                    loadouts=loadouts, review=review, said=said or asked.get('said', ''), failed=failed, workspace=workspace,
+                    address=lambda name: model_address(name) + '?node=' + quote(machine, safe=''))
 
     async def fit_do(request: Request, person: Person) -> Response:
         """Validate and apply the selected Dry fit operation."""
         form = await typed(request)
+        machine = form.get('machine') or request.query_params.get('machine') or 'compute'
         action = form.get('do', '')
         if action == 'preview-undo':
             action = 'preview'
@@ -2031,16 +2027,17 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if action in ('renew', 'release'):
                 body['lease'] = form.get('lease', '')
         except (ValueError, RecursionError):
-            return await fit_page(request, person, 'The selection or version is not valid. Review the controls and try again.', True)
-        answer = await ask('POST', '/loadcoach/loadouts', person.key, json=body, timeout=None)
+            return await fit_page(request, person, 'The selection or version is not valid. Review the controls and try again.', True, machine_override=machine)
+        # Always target the named node, including primary compute. No fallback can apply another node's set.
+        answer = await ask('POST', f'/turnstile/machines/{quote(machine, safe="")}/control/loadouts', person.key, json=body, timeout=None)
         if not answer.is_success:
-            return await fit_page(request, person, answer.json().get('error', {}).get('message', 'The operation failed.'), True)
+            return await fit_page(request, person, answer.json().get('error', {}).get('message', 'The operation failed.'), True, machine_override=machine)
         if action == 'preview':
-            return await fit_page(request, person, review=answer.json())
+            return await fit_page(request, person, review=answer.json(), machine_override=machine)
         message = {'save': 'Saved selection. Preview it before applying or loading.', 'apply': 'Restored the reviewed configuration.' if body.get('undo') else 'Applied the complete reviewed configuration.',
                    'request': 'All load-out members are ready and held for ten minutes.', 'renew': 'Renewed this set hold for ten minutes.',
                    'release': 'Released this set hold.', 'delete': 'Deleted the saved selection.'}.get(action, 'Done.')
-        return go('/dry-fit?said=' + quote(message))
+        return go('/dry-fit?' + urlencode({'machine': machine, 'said': message}))
 
     async def add_model(request: Request, person: Person) -> Response:
         """Parse the engine-specific form and add the model on each chosen node."""

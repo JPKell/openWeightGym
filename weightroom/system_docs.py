@@ -256,9 +256,10 @@ def source_reference(slug: str, selected: str = '') -> dict:
 def api_headers(relative: str, path: str, method: str) -> tuple[str, ...]:
     """Document route-specific headers; common transport headers are explained once on the page."""
     headers = []
-    if path in ('/loadcoach/facts', '/loadcoach/lock', '/loadcoach/unlock', '/loadcoach/hold', '/loadcoach/unload') or path == '/loadcoach/loadouts' and method == 'POST':
+    loadouts = (path == '/loadcoach/loadouts' or path.endswith('/control/loadouts')) and method == 'POST'
+    if path in ('/loadcoach/facts', '/loadcoach/lock', '/loadcoach/unlock', '/loadcoach/hold', '/loadcoach/unload') or loadouts:
         headers.append('X-LoadCoach-Lock')
-    if path in ('/loadcoach/hold', '/loadcoach/unload', '/loadcoach/lock') or path == '/loadcoach/loadouts' and method == 'POST':
+    if path in ('/loadcoach/hold', '/loadcoach/unload', '/loadcoach/lock') or loadouts:
         headers.append('X-LoadCoach-Priority (when acquiring admission)')
     if path == '/loadcoach/sign-in':
         headers.append('X-LoadCoach-From (trusted sign-in callers only)')

@@ -17,7 +17,7 @@ def render() -> str:
     todo = guide.split('<!-- fit-design-todo:start -->')[1].split('<!-- fit-design-todo:end -->')[0]
     return pages.get_template('fit_designs.html').render(
         css='\n'.join((static / name).read_text() for name in
-                      ('tabler.min.css', 'style.css', 'themes.css', 'fit-designs.css')),
+                      ('tabler.min.css', 'style.css', 'themes.css', 'fit.css', 'fit-designs.css')),
         javascript=(static / 'fit-designs.js').read_text(),
         theme_javascript=(static / 'themes.js').read_text(),
         todo=MarkdownIt().render(todo),

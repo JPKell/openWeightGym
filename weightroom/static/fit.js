@@ -1,232 +1,291 @@
-// The dry fit page: models ticked onto cards, each card drawn as a bar. Nothing here asks compute for anything
-// but what the roles would pick, and nothing is loaded.
-//
-// A row of the list is a model. It carries the points its memory is drawn through, as [context, [MiB on each card]],
-// and how many cards it needs. See fit_line() in app.py. Under the bars every such model has a line of its own, with
-// its name and its slider, which is hidden until the model is ticked. That line carries the model's maximum context
-// and the lowest the automatic fit may give it.
+// Node-local planning only. Saved-set forms are the sole mutation path; loading needs server review.
+(() => {
+  'use strict';
+  const $ = selector => document.querySelector(selector);
+  const $$ = selector => [...document.querySelectorAll(selector)];
+  const data = JSON.parse($('#fit-data').textContent), models = data.models, resources = data.resources;
+  const clone = id => document.getElementById(id).content.firstElementChild.cloneNode(true);
+  const size = value => `${(value / 1024).toFixed(1)} GiB`;
+  const number = value => value.toLocaleString('en-US');
+  const color = model => `hsl(${models.indexOf(model) * 137.5 % 360} 55% 43%)`;
+  const invalid = new Map();
+  let kind = 'all';
+  const selected = () => models.filter(model => model.selected);
+  const placement = model => model.placements[model.placement];
+  const needed = resource => resource.id === '__cpu__' || selected().some(model => placement(model)?.cards.includes(resource.id));
+  const account = document.documentElement.dataset.themeUser || 'anonymous';
+  const storageKey = `weightroom-fit-v1:${account}:${data.machine}`;
+  const message = value => {$('#fit-message').textContent = value;};
 
-const table = document.getElementById("fit-table"), auto = document.getElementById("fit-auto");
-const rooms = [...document.querySelectorAll(".fit-room")], margin = +table.dataset.margin;
-/** List GPU model rows that have usable measured placement points. */
-const models = () => [...table.tBodies[0].rows].filter(row => row.dataset.points);
-/** List the catalogue rows representing CPU models. */
-const cpuModels = () => [...table.tBodies[0].rows].filter(row => row.dataset.cpu);
-const picks = document.getElementById("fit-picks");
-/** Find the selected model's controls beneath the resource bars. */
-const pick = row => picks.querySelector(`.fit-pick[data-model="${CSS.escape(row.dataset.model)}"]`);  // a model's line under the bars
-/** Find the selected model's context-size slider. */
-const slider = row => pick(row).querySelector(".fit-context");
-/** Read the preview context size from its slider or fixed model limit. */
-const context = row => slider(row) ? +slider(row).value : +pick(row).dataset.top;
-/** Return whether the model is included in the current placement preview. */
-const ticked = row => Boolean(row.querySelector(".fit-on:checked"));
-/** Sum the modeled memory usage of the selected placement pieces. */
-const sum = pieces => pieces.reduce((total, piece) => total + piece.mib, 0);
-// A size in MiB as the rest of the site writes one.
-/** Format preview memory in megabytes or gigabytes. */
-const size = mib => mib >= 1000 ? (mib / 1024).toFixed(1) + " GB" : Math.round(mib) + " MB";
-// What a card has for models: all of it, less the margin, less what other programs use. Without end for a card of unknown size.
-/** Read usable device capacity after margin and external usage. */
-const usable = room => room.hasAttribute("data-total") ? +room.dataset.total - +(room.dataset.margin ?? margin) - +room.dataset.others : Infinity;
-
-// What a model takes on one of its cards at a context: on the straight line through the two points nearest to it.
-// Below the first point and above the last, the nearest line is carried on.
-/** Interpolate measured model memory at the requested context and device position. */
-function takes(points, at, place) {
-  if (points.length < 2) return points[0][1][place];
-  let end = points.findIndex(point => point[0] >= at);
-  end = end < 0 ? points.length - 1 : Math.max(1, end);
-  const [context0, mib0] = points[end - 1], [context1, mib1] = points[end];
-  return Math.max(0, mib0[place] + (mib1[place] - mib0[place]) * (at - context0) / (context1 - context0));
-}
-
-// Every card with the models ticked onto it, as { row, mib }. A model's first ticked card takes what its first card measured.
-/** Compute the preview memory assigned to each selected device. */
-function loads() {
-  const on = Object.fromEntries(rooms.map(room => [room.dataset.card, []]));
-  for (const row of models()) {
-    const points = JSON.parse(row.dataset.points);
-    [...row.querySelectorAll(".fit-on:checked")].forEach((box, place) => on[box.dataset.card].push({ row, mib: takes(points, context(row), place) }));
-    if (on.__cpu__ && ticked(row) && +row.dataset.hostRamMib) on.__cpu__.push({row, mib: +row.dataset.hostRamMib});
+  function interpolate(points, at, index = null) {
+    if (!points.length) return 0;
+    const value = point => index === null ? point[1] : point[1][index];
+    if (points.length === 1) return value(points[0]) || 0;
+    let end = points.findIndex(point => point[0] >= at);
+    end = end < 0 ? points.length - 1 : Math.max(1, end);
+    const from = points[end - 1], to = points[end];
+    return Math.max(0, value(from) + (value(to) - value(from)) * (at - from[0]) / (to[0] - from[0]));
   }
-  for (const row of cpuModels()) if (on.__cpu__ && row.querySelector(".fit-cpu:checked")) {
-    on.__cpu__.push({row, mib: +row.dataset.cpuMib});
+
+  function allocation(model) {
+    const on = {};
+    (placement(model)?.cards || []).forEach((card, index) => {on[card] = interpolate(model.points, model.context || 0, index);});
+    if (model.ram_points.length) on.__cpu__ = interpolate(model.ram_points, model.context || 0);
+    return on;
   }
-  return on;
-}
-
-// Whether what is ticked onto each of these cards fits on it.
-/** Check modeled device usage against every selected device's usable capacity. */
-const fits = judged => { const on = loads(); return judged.every(room => sum(on[room.dataset.card]) <= usable(room)); };
-
-// One piece of a bar, as wide as its share of the bar.
-/** Create one labeled memory segment for a resource bar. */
-function piece(mib, scale, label, classes, colour = "") {
-  const part = document.createElement("div");
-  part.className = "progress-bar " + classes;
-  part.style.width = 100 * mib / scale + "%";
-  part.style.backgroundColor = colour;
-  part.textContent = label;
-  part.title = `${label}: ${size(mib)}`;
-  return part;
-}
-
-/** Render current placements, capacity warnings and context controls. */
-function draw() {
-  // A colour for each ticked model, in the order of the list. Steps of 137.5 degrees round the circle keep neighbours well apart.
-  models().filter(ticked).forEach((row, place) => pick(row).style.setProperty("--hue", place * 137.5 % 360));
-  for (const row of models()) {
-    const points = JSON.parse(row.dataset.points), line = pick(row);
-    line.hidden = !ticked(row);
-    line.querySelector(".fit-below").hidden = context(row) >= line.dataset.low;
-    line.querySelector(".fit-tokens").textContent = row.dataset.fixed === "true" ? "" : context(row).toLocaleString("en-US");
-    line.querySelector(".fit-memory").textContent = points[0][1].map((_, place) => size(takes(points, context(row), place))).join(" + ");
+  const memoryText = model => model.unknown ? 'Unknown / unqualified' : Object.entries(allocation(model))
+    .map(([id, amount]) => `${size(amount)} ${id === '__cpu__' ? 'RAM' : id}`).join(' + ');
+  const definition = () => selected().map(model => ({id: model.id, placement: placement(model)?.cards || [], context: model.context, locked: model.locked}));
+  function keepDraft() {
+    if (!data.available) return;
+    try {sessionStorage.setItem(storageKey, JSON.stringify({models: definition(), invalid: [...invalid]}));} catch { /* Planning remains available without storage. */ }
   }
-  document.getElementById("fit-none").hidden = models().some(ticked) || cpuModels().some(row => row.querySelector(".fit-cpu:checked"));
-  const on = loads();
-  const exclusive = document.getElementById('fit-exclusive-warning');
-  if (exclusive) {
-    const conflicts = rooms.filter(room => room.dataset.card !== '__cpu__' && on[room.dataset.card].length > 1 && on[room.dataset.card].some(piece => piece.row.dataset.exclusive === 'true'));
-    exclusive.hidden = !conflicts.length; exclusive.textContent = conflicts.length ? 'Exclusive placement conflict on ' + conflicts.map(room => room.dataset.card).join(', ') + ': these models require an empty card.' : '';
-  }
-  for (const room of rooms) {
-    const mine = on[room.dataset.card], need = sum(mine), says = room.querySelector(".fit-says");
-    const total = +room.dataset.total || 0, others = +room.dataset.others || 0, left = usable(room) - need;
-    // A bar is as long as its card. With more ticked than fits it is as long as what is ticked, and a line marks where the card ends.
-    const scale = Math.max(total, others + need + (total ? margin : 0)) || 1;
-    const pieces = mine.map((one, place) => piece(one.mib, scale, one.row.dataset.model || one.row.dataset.cpu, "", `hsl(${place * 137.5 % 360} 60% 42%)`));
-    if (room.hasAttribute("data-total")) {
-      pieces.unshift(piece(others, scale, "other programs", "bg-secondary"));
-      const reserved = +(room.dataset.margin ?? margin);
-      pieces.push(piece(Math.max(0, left), scale, "", "bg-transparent"), piece(reserved, scale, reserved ? "kept free" : "", "progress-bar-striped bg-secondary"));
-    }
-    if (left < 0) {
-      const limit = document.createElement("div");
-      limit.className = "fit-limit";
-      limit.style.left = 100 * (total - margin) / scale + "%";
-      pieces.push(limit);
-    }
-    room.querySelector(".fit-bar").replaceChildren(...pieces);
-    says.className = "fit-says" + (left < 0 ? " text-danger fw-bold" : "");
-    says.textContent = !total ? `${size(need)} needed` : left < 0 ? `${size(need)} needed of ${size(usable(room))}: over by ${size(-left)}` : `${size(need)} needed of ${size(usable(room))}: ${size(left)} free`;
-  }
-}
-
-// The largest contexts that fit on the cards in `judged`. `set` is given a share from 0 to 1 and moves sliders by it.
-// The share that still fits is found by halving: twelve times is finer than a slider's steps.
-/** Find the highest common context fraction that fits the selected placements. */
-function highest(set, judged) {
-  set(1);
-  if (fits(judged)) return;
-  let low = 0, high = 1;
-  for (let turn = 0; turn < 12; turn++) {
-    const middle = (low + high) / 2;
-    set(middle);
-    if (fits(judged)) low = middle; else high = middle;
-  }
-  set(low);
-}
-
-// First every ticked model gets the same share of its range, from its lowest context to its maximum. A model that is not
-// on the fullest card could have more than that, so then each in turn takes what is left.
-/** Adjust selected context sliders within measured limits to fit available memory. */
-function autoFit() {
-  /** Read the model's selected device checkboxes. */
-  const cards = row => [...row.querySelectorAll(".fit-on:checked")].map(box => box.dataset.card);
-  const chosen = models().filter(row => slider(row) && ticked(row));
-  const floor = new Map(chosen.map(row => [row, +pick(row).dataset.low]));  // the lowest each may be given: at first its own minimum
-  /** Assign each selected model its interpolated context fraction. */
-  const place = (rows, share) => rows.forEach(row => { slider(row).value = floor.get(row) + share * (slider(row).max - floor.get(row)); });
-  // With every model at its lowest: the cards that fit, and the models that are on such cards only.
-  /** Check whether the selected models fit at their minimum contexts. */
-  const lowest = () => {
-    place(chosen, 0);
-    const on = loads(), good = rooms.filter(room => sum(on[room.dataset.card]) <= usable(room));
-    return [good, chosen.filter(row => cards(row).every(card => good.some(room => room.dataset.card === card)))];
-  };
-  // A card can be too full with every model at its minimum context. Its models may then go under their minimum, as far as
-  // the slider goes: draw() says so on the model's line. A card that is too full even so cannot be helped by a context.
-  // Its models stay at their lowest, and the other cards are fitted without it.
-  let [good, moved] = lowest();
-  for (const row of chosen) if (!moved.includes(row)) floor.set(row, +slider(row).min);
-  [good, moved] = lowest();
-  highest(share => place(moved, share), good);
-  for (const row of moved) {
-    const from = +slider(row).value;
-    highest(share => { slider(row).value = from + share * (slider(row).max - from); }, good);
-  }
-}
-
-/** Recompute automatic fit when enabled and redraw the resource preview. */
-const settle = () => { if (auto.checked) autoFit(); draw(); };
-
-// A model is on as many cards as it needs, or on none. Ticking one card of a model that needs two ticks another too,
-// and ticking a second card of a model that needs one moves it there.
-table.addEventListener("change", event => {
-  const box = event.target;
-  if (box.matches('.fit-cpu')) { settle(); htmx.trigger('#fit-roles', 'ticked'); return; }
-  if (!box.matches(".fit-on")) return;
-  const row = box.closest("tr"), boxes = [...row.querySelectorAll(".fit-on")];
-  const wanted = box.checked ? [box, ...boxes.filter(other => other !== box && other.checked), ...boxes.filter(other => !other.checked)].slice(0, +row.dataset.need) : [];
-  boxes.forEach(other => { other.checked = wanted.includes(other); });
-  settle();
-  htmx.trigger("#fit-roles", "ticked");  // what the roles would pick now. See pages/fit_roles.html
-});
-picks.addEventListener("input", () => {  // only the sliders are in there
-  auto.checked = false;  // a context set by hand stays as it was set
-  draw();
-});
-auto.addEventListener("change", settle);
-settle();
-
-// The save operation sends only the visible selection. Definitions and actual admission
-// are validated again by compute; interpolated bar sizes never become memory evidence.
-const saveFit = document.getElementById('fit-save');
-if (saveFit) {
-  const fitName = document.getElementById('fit-name'), replaceFit = document.getElementById('fit-replace');
-  const fitMessage = document.getElementById('fit-selection-message');
-  saveFit.addEventListener('submit', () => {
-    const chosen = models().filter(row => ticked(row) && row.dataset.fixed !== 'true').map(row => ({model: row.dataset.model,
-      cards: [...row.querySelectorAll('.fit-on:checked')].map(box => box.dataset.card), context: context(row)}));
-    for (const row of table.querySelectorAll('[data-cpu]')) {
-      if (row.dataset.fixed === 'true') continue;
-      if (row.querySelector('.fit-cpu').checked) chosen.push({model: row.dataset.cpu, cards: [], context: +row.querySelector('.fit-cpu-context').value});
-    }
-    document.getElementById('fit-selection').value = JSON.stringify(chosen);
-    const previous = [...document.querySelectorAll('[data-loadout-name]')].find(row => row.dataset.loadoutName === fitName.value.trim());
-    document.getElementById('fit-version').value = replaceFit.checked && previous ? previous.dataset.version : '';
-  });
-  for (const button of document.querySelectorAll('[data-loadout-edit]')) button.addEventListener('click', () => {
-    const saved = JSON.parse(button.dataset.loadoutEdit), warnings = [];
-    for (const row of models()) {
-      const selected = saved.models.find(one => one.model_id === row.dataset.modelId);
-      row.querySelectorAll('.fit-on').forEach(box => { box.checked = Boolean(selected && selected.cards.includes(box.dataset.card)); });
-      if (selected && slider(row)) {
-        slider(row).value = selected.context;
-        if (context(row) !== selected.context) warnings.push(`${row.dataset.model}: review the rounded slider context`);
+  function restoreDraft() {
+    try {
+      const kept = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+      if (!kept || !Array.isArray(kept.models)) return;
+      const warnings = [];
+      for (const model of models) {
+        const one = kept.models.find(entry => entry?.id === model.id);
+        model.selected = Boolean(one && model.enabled);
+        if (!one) continue;
+        const index = model.placements.findIndex(place => JSON.stringify(place.cards) === JSON.stringify(one.placement));
+        if (index < 0 || (!model.fixed && (!Number.isInteger(one.context) || one.context < model.min || one.context > model.max))) {
+          model.selected = false; warnings.push(model.name); continue;
+        }
+        model.placement = index; model.locked = Boolean(one.locked);
+        if (!model.fixed) model.context = one.context;
       }
-    }
-    for (const row of table.querySelectorAll('[data-cpu]')) {
-      const selected = saved.models.find(one => one.model_id === row.dataset.modelId);
-      row.querySelector('.fit-cpu').checked = Boolean(selected);
-      if (selected) row.querySelector('.fit-cpu-context').value = selected.context;
-    }
-    for (const selected of saved.models) {
-      if (![...table.querySelectorAll('[data-model-id]')].some(row => row.dataset.modelId === selected.model_id)) warnings.push(`${selected.name || selected.label}: not available in these controls`);
-    }
-    auto.checked = false;
-    fitName.value = saved.name;
-    replaceFit.checked = true;
-    settle();
-    htmx.trigger('#fit-roles', 'ticked');
-    fitMessage.textContent = warnings.length ? warnings.join('; ') : 'Saved selection is in the controls above. Review before saving a replacement.';
-  });
-}
+      for (const entry of Array.isArray(kept.invalid) ? kept.invalid : []) {
+        if (Array.isArray(entry) && models.some(model => model.id === entry[0] && model.selected) && typeof entry[1] === 'string') invalid.set(entry[0], entry[1]);
+      }
+      if (warnings.length) message(`Review changed placement or context limits for: ${warnings.join(', ')}.`);
+    } catch { /* Ignore malformed browser-local drafts. */ }
+  }
 
-// Filtering never changes the combined selection or its resource bars.
-for (const pill of document.querySelectorAll('[data-fit-kind]')) pill.addEventListener('click', () => {
-  for (const other of document.querySelectorAll('[data-fit-kind]')) {other.classList.toggle('active',other===pill);other.setAttribute('aria-pressed',String(other===pill));}
-  for (const row of table.querySelectorAll('[data-fit-type]')) row.hidden=row.dataset.fitType!==pill.dataset.fitKind;
-});
-document.querySelector('[data-fit-kind="llm"]')?.click();
+  function judge() {
+    const used = Object.fromEntries(resources.map(resource => [resource.id, 0]));
+    for (const model of selected()) for (const [id, amount] of Object.entries(allocation(model))) used[id] += amount;
+    let state = 'fits', title = 'Known reservations fit the estimate';
+    let detail = 'No model is loaded. A fresh server review checks actual resources, holds and protected work.';
+    const over = resources.filter(resource => resource.budget !== null && used[resource.id] > resource.budget + .001);
+    const exclusive = resources.filter(resource => resource.id !== '__cpu__' && selected().filter(model => placement(model)?.cards.includes(resource.id)).length > 1 &&
+      selected().some(model => model.exclusive && placement(model)?.cards.includes(resource.id)));
+    if (!data.available) {state = 'unknown'; title = 'Node unavailable'; detail = 'Capacity is unknown. Your browser draft is retained until this node reconnects.';}
+    else if (!selected().length) {state = 'empty'; title = 'Choose a combination'; detail = 'Select models from the catalogue to plan them together.';}
+    else if (invalid.size) {state = 'blocked'; title = 'Review context values'; detail = 'Use whole-number contexts within each model’s configured bounds.';}
+    else if (exclusive.length) {state = 'blocked'; title = 'Exclusive placement conflict'; detail = `A selected model requires ${exclusive.map(resource => resource.name).join(', ')} to itself.`;}
+    else if (selected().some(model => model.unknown) || resources.some(resource => needed(resource) && resource.budget === null)) {
+      state = 'unknown'; title = 'Combined fit is unknown'; detail = 'A selected profile or memory pool is unmeasured. Known reservations are shown without assuming missing values are zero.';
+    } else if (over.length) {state = 'over'; title = 'Over the memory budget'; detail = over.map(resource => `${resource.name}: ${size(used[resource.id] - resource.budget)} over`).join(' · ');}
+    return {state, title, detail, used};
+  }
+
+  function renderRows() {
+    const query = $('#search').value.toLowerCase();
+    $('#fit-picks').replaceChildren(...selected().map(model => {
+      const row = clone('fit-model-template'), prefix = `fit-${models.indexOf(model)}`;
+      row.dataset.model = model.name; row.dataset.modelId = model.id;
+      row.classList.add('is-selected'); row.style.setProperty('--fit-model-color', color(model));
+      row.hidden = (kind !== 'all' && model.kind !== kind) || !model.name.toLowerCase().includes(query);
+      const tick = row.querySelector('[data-select]');
+      tick.id = prefix + '-on'; tick.name = 'on'; tick.value = model.name; tick.checked = true;
+      row.querySelector('[data-name]').htmlFor = tick.id; row.querySelector('[data-name]').textContent = model.name;
+      row.querySelector('[data-detail]').textContent = `${model.engine}${model.fixed ? '' : ` · ${model.shared_context ? 'shared' : 'fixed'} slots × ${Number.isInteger(model.parallel) && model.parallel > 0 ? model.parallel : 'auto'}`}`;
+      const badge = row.querySelector('[data-kind]'); badge.textContent = {llm: 'LLM', audio: 'Audio', image: 'Image'}[model.kind]; badge.classList.add(`bg-${{llm: 'blue', audio: 'teal', image: 'purple'}[model.kind]}-lt`);
+      const place = row.querySelector('[data-placement]'); place.id = prefix + '-placement';
+      row.querySelector('[data-placement-label]').htmlFor = place.id;
+      row.querySelector('[data-placement-label]').textContent = `Placement for ${model.name}`;
+      model.placements.forEach((one, index) => place.add(new Option(one.label, String(index))));
+      if (!model.placements.length) place.add(new Option('No eligible devices', '0'));
+      place.value = String(model.placement);
+      row.querySelector('[data-fixed]').hidden = !model.fixed;
+      row.querySelector('[data-profile]').textContent = `${model.profile_label || model.kind} · fixed envelope`;
+      if (model.fixed) row.querySelector('[data-context-controls]').remove();
+      else {
+        const context = row.querySelector('[data-context]'), slider = row.querySelector('[data-slider]');
+        context.id = prefix + '-context'; context.classList.add(placement(model)?.cards.length ? 'fit-context-number' : 'fit-cpu-context');
+        row.querySelector('[data-context-label]').htmlFor = context.id;
+        row.querySelector('[data-context-label]').textContent = `Context tokens for ${model.name}`;
+        for (const input of [context, slider]) {input.min = model.min; input.max = model.max; input.value = model.context || ''; input.title = `${number(model.min)}–${number(model.max)} total tokens`;}
+        context.value = invalid.has(model.id) ? invalid.get(model.id) : model.context || '';
+        if (invalid.has(model.id)) context.setCustomValidity('Enter a whole-number context within the model bounds.');
+        slider.classList.add('fit-context'); slider.setAttribute('aria-label', `Context slider for ${model.name}`);
+        const lock = row.querySelector('[data-lock]'); lock.checked = model.locked; lock.setAttribute('aria-label', `Lock context for ${model.name}`);
+        row.querySelector('[data-bounds]').textContent = context.title;
+      }
+      row.querySelector('[data-memory]').textContent = memoryText(model);
+      row.querySelector('[data-memory]').title = model.ram_note + (model.guessed ? '; interpolated/estimated VRAM curve' : '');
+      row.querySelector('[data-evidence]').textContent = model.ram_note;
+      return row;
+    }));
+    const shown = $$('#fit-picks tr').filter(row => !row.hidden).length;
+    $('#fit-none').hidden = Boolean(shown);
+    $('#fit-none').textContent = selected().length ? 'No selected rows match this filter. The combined budget still includes every selected model.' : 'Choose models from this node’s catalogue to start tuning.';
+    $('#visible-count').textContent = `${shown} rows shown · ${selected().length} selected across all types`;
+  }
+
+  function renderCatalogue() {
+    const query = $('#catalogue-search').value.toLowerCase(), filter = $('#catalogue-kind').value, order = $('#catalogue-sort').value;
+    const visible = models.filter(model => (filter === 'all' || model.kind === filter) && `${model.name} ${model.engine}`.toLowerCase().includes(query));
+    const total = model => model.unknown ? Infinity : Object.values(allocation(model)).reduce((a, b) => a + b, 0);
+    visible.sort((a, b) => (order === 'memory' ? total(a) - total(b) : order === 'selected' ? Number(b.selected) - Number(a.selected) : 0) || a.name.localeCompare(b.name));
+    const scroll = $('#catalogue-list').scrollTop;
+    $('#catalogue-list').replaceChildren(...visible.map(model => {
+      const item = clone('fit-catalogue-template'), tick = item.querySelector('[data-catalogue-select]');
+      tick.id = `fit-choice-${models.indexOf(model)}`; tick.dataset.modelId = model.id; tick.checked = model.selected;
+      tick.disabled = !model.enabled || !model.placements.length;
+      tick.setAttribute('aria-label', `Select ${model.name}`);
+      item.querySelector('[data-name]').textContent = model.name;
+      item.querySelector('[data-detail]').textContent = model.engine;
+      item.title = model.enabled ? `${model.engine} · ${memoryText(model)}` : 'This model location is disabled.';
+      item.querySelector('[data-catalogue-kind]').textContent = {llm: 'LLM', audio: 'Audio', image: 'Image'}[model.kind];
+      item.querySelector('[data-catalogue-memory]').textContent = model.unknown ? 'Unknown' : size(total(model));
+      return item;
+    }));
+    if (!visible.length) $('#catalogue-list').textContent = models.length ? 'No matches. Clear the search or change type.' : 'No local models. Add a model on this node first.';
+    $('#catalogue-list').scrollTop = scroll;
+    $('#catalogue-count').textContent = `${visible.length} of ${models.length} models · ${selected().length} selected`;
+  }
+
+  function renderBudget() {
+    const result = judge();
+    $('#verdict').dataset.state = result.state; $('#verdict-title').textContent = result.title; $('#verdict-detail').textContent = result.detail;
+    $('#selection-count').textContent = `${selected().length} selected · ${selected().filter(m => m.kind === 'llm').length} LLM · ${selected().filter(m => m.kind === 'audio').length} audio · ${selected().filter(m => m.kind === 'image').length} image`;
+    $('#resources').replaceChildren(...resources.map(resource => {
+      const row = clone('fit-resource-template'), used = result.used[resource.id];
+      row.dataset.card = resource.id;
+      row.querySelector('[data-resource-name]').textContent = resource.name;
+      row.querySelector('[data-resource-total]').textContent = resource.total ? `${size(resource.total)} physical` : 'Capacity unknown';
+      row.querySelector('[data-resource-used]').textContent = size(used);
+      const free = resource.budget === null ? null : resource.budget - used;
+      row.querySelector('[data-resource-free]').textContent = result.state === 'unknown' ? 'known allocations only' : free === null ? 'budget unknown' : `${size(Math.abs(free))} ${free < 0 ? 'over budget' : 'left for models'}`;
+      row.querySelector('[data-resource-note]').textContent = resource.budget === null ? 'Memory telemetry is unavailable; capacity is not assumed.' :
+        `${size(resource.other || 0)} other use · ${size(resource.reserve)} kept free${resource.configured_limit ? ` · ${size(resource.configured_limit)} model RAM limit` : ''}${resource.policy_reserved ? ` · ${size(resource.policy_reserved)} outside current model budget` : ''}`;
+      const bar = row.querySelector('[data-resource-bar]');
+      const scale = Math.max(resource.total || 0, used + (resource.other || 0) + resource.reserve + (resource.policy_reserved || 0), 1);
+      const segments = [];
+      const add = (amount, label, background, extra) => {
+        const segment = clone('fit-segment-template'); segment.style.width = `${amount / scale * 100}%`;
+        if (background) segment.style.backgroundColor = background;
+        if (extra) segment.classList.add(extra);
+        segment.title = `${label}: ${size(amount)}`; segments.push(segment);
+      };
+      if (resource.budget !== null) add(resource.other || 0, 'Other use', '', 'bg-secondary');
+      selected().forEach(model => {const amount = allocation(model)[resource.id]; if (amount) add(amount, model.name, color(model));});
+      if (resource.total) {add(Math.max(0, resource.total - (resource.other || 0) - resource.reserve - (resource.policy_reserved || 0) - used), 'Unallocated model budget', 'transparent'); add(resource.policy_reserved || 0, 'Outside current model budget', '', 'bg-secondary'); add(resource.reserve, 'Kept free', '', 'fit-headroom');}
+      bar.replaceChildren(...segments); bar.hidden = resource.budget === null;
+      bar.setAttribute('aria-label', `${resource.name}: ${size(used)} known selected allocations; ${free === null ? 'budget unknown' : `${size(Math.abs(free))} ${free < 0 ? 'over budget' : 'left'}`}`);
+      return row;
+    }));
+    $('#memory-notes').textContent = resources.filter(r => r.service_limit).map(r => `Service memory ceiling: ${size(r.service_limit)}; current cgroup room: ${r.service_available === null ? 'unknown' : size(r.service_available)}. RSS planning does not replace cgroup admission.`).join(' ');
+    $('#fit-auto').disabled = !data.available || invalid.size > 0 || !selected().some(model => !model.fixed && !model.locked) || selected().some(model => model.unknown) || resources.some(resource => needed(resource) && resource.budget === null);
+    const submit = $('#fit-save button[value="save"]');
+    if (submit) submit.disabled = !data.available || !selected().length || invalid.size > 0 || selected().length > data.max_members || selected().some(model => model.fixed && !model.profile);
+    if ($('#fit-selection-message')) $('#fit-selection-message').textContent = selected().length > data.max_members ? `A named set supports up to ${data.max_members} models; reduce the selection before saving.` :
+      invalid.size ? 'Correct context values before saving.' : 'Saving keeps exact contexts, placements and fixed profiles. It loads nothing.';
+  }
+
+  function render() {
+    const focused = document.activeElement?.id;
+    const scroll = $('.fit-row-scroll').scrollTop;
+    renderRows(); renderCatalogue(); renderBudget();
+    $('.fit-row-scroll').scrollTop = scroll;
+    if (focused) document.getElementById(focused)?.focus({preventScroll: true});
+    keepDraft();
+  }
+  const roles = () => {if ($('#fit-roles')) htmx.trigger('#fit-roles', 'ticked');};
+
+  $('#catalogue-list').addEventListener('change', event => {
+    if (!event.target.matches('[data-catalogue-select]')) return;
+    const model = models.find(one => one.id === event.target.dataset.modelId);
+    model.selected = event.target.checked;
+    if (!model.selected) invalid.delete(model.id);
+    render(); roles();
+  });
+  $('#fit-picks').addEventListener('change', event => {
+    const row = event.target.closest('[data-model-id]'); if (!row) return;
+    const model = models.find(one => one.id === row.dataset.modelId);
+    if (event.target.matches('[data-select]')) {model.selected = false; invalid.delete(model.id);}
+    else if (event.target.matches('[data-placement]')) model.placement = Number(event.target.value);
+    else if (event.target.matches('[data-lock]')) model.locked = event.target.checked;
+    else return;
+    render(); roles();
+  });
+  $('#fit-picks').addEventListener('input', event => {
+    if (!event.target.matches('[data-context], [data-slider]')) return;
+    const row = event.target.closest('[data-model-id]'), model = models.find(one => one.id === row.dataset.modelId);
+    const value = Number(event.target.value);
+    if (!event.target.value || !Number.isInteger(value) || value < model.min || value > model.max) {
+      invalid.set(model.id, event.target.value); event.target.setCustomValidity(`Enter ${model.min}–${model.max} whole tokens.`);
+    } else {
+      invalid.delete(model.id); model.context = value;
+      for (const input of row.querySelectorAll('[data-context], [data-slider]')) {input.setCustomValidity(''); input.value = value;}
+      row.querySelector('[data-memory]').textContent = memoryText(model);
+    }
+    renderBudget(); keepDraft();
+  });
+  $('#fit-editor').addEventListener('submit', event => event.preventDefault());
+  for (const id of ['catalogue-search', 'catalogue-kind', 'catalogue-sort']) $(`#${id}`).addEventListener(id === 'catalogue-search' ? 'input' : 'change', () => {$('#catalogue-list').scrollTop = 0; renderCatalogue();});
+  $('#search').addEventListener('input', renderRows);
+  $$('[data-fit-kind]').forEach(button => button.addEventListener('click', () => {
+    kind = button.dataset.fitKind;
+    $$('[data-fit-kind]').forEach(other => {other.classList.toggle('active', other === button); other.setAttribute('aria-pressed', String(other === button));});
+    renderRows();
+  }));
+  $('#clear').addEventListener('click', () => {models.forEach(model => {model.selected = false;}); invalid.clear(); render(); roles();});
+  $('#fit-auto').addEventListener('click', () => {
+    const moving = selected().filter(model => !model.fixed && !model.locked), before = moving.map(model => model.context);
+    moving.forEach(model => {model.context = model.min;});
+    if (judge().state !== 'fits') {
+      moving.forEach((model, index) => {model.context = before[index];});
+      message('Minimum contexts, locked models or fixed reservations cannot fit. Change placement or remove a model; contexts were not lowered below their minimum.'); render(); return;
+    }
+    let low = 0, high = 1;
+    for (let i = 0; i < 24; i++) {
+      const share = (low + high) / 2;
+      moving.forEach(model => {model.context = Math.floor(model.min + share * (model.max - model.min));});
+      if (judge().state === 'fits') low = share; else high = share;
+    }
+    moving.forEach(model => {model.context = Math.floor(model.min + low * (model.max - model.min));});
+    for (const model of moving) {
+      let from = model.context, to = model.max;
+      while (from < to) {model.context = Math.ceil((from + to) / 2); if (judge().state === 'fits') from = model.context; else to = model.context - 1;}
+      model.context = from;
+    }
+    message(`Adjusted ${moving.length} unlocked LLM contexts. Locked values and fixed audio/image profiles stayed unchanged.`); render();
+  });
+  $('#fit-save')?.addEventListener('submit', event => {
+    if (invalid.size || !selected().length || selected().length > data.max_members) {event.preventDefault(); message('Choose 1–16 models and correct all context values.'); return;}
+    $('#fit-selection').value = JSON.stringify(selected().map(model => ({model: model.local_name, cards: placement(model).cards,
+      ...(model.fixed ? {profile: model.profile} : {context: model.context})})));
+    const prior = $$('[data-loadout-name]').find(row => row.dataset.loadoutName === $('#fit-name').value.trim());
+    $('#fit-version').value = $('#fit-replace').checked && prior ? prior.dataset.version : '';
+    keepDraft();
+  });
+  $$('[data-loadout-edit]').forEach(button => button.addEventListener('click', () => {
+    const saved = JSON.parse(button.dataset.loadoutEdit), warnings = [];
+    invalid.clear();
+    models.forEach(model => {
+      const entry = saved.models.find(one => one.model_id === model.id); model.selected = Boolean(entry);
+      if (!entry) return;
+      const index = model.placements.findIndex(place => JSON.stringify(place.cards) === JSON.stringify(entry.cards));
+      if (index < 0 || (model.fixed ? entry.profile !== model.profile : !Number.isInteger(entry.context) || entry.context < model.min || entry.context > model.max)) {
+        model.selected = false; warnings.push(`${model.name}: placement, context bounds or fixed profile changed`); return;
+      }
+      model.placement = index; if (!model.fixed) model.context = entry.context;
+    });
+    saved.models.forEach(entry => {if (!models.some(model => model.id === entry.model_id)) warnings.push(`${entry.label}: unavailable on this node`);});
+    $('#fit-name').value = saved.name; $('#fit-replace').checked = true;
+    message(warnings.length ? warnings.join('; ') : `Selected ${saved.name} at its exact saved settings. Nothing loaded.`); render(); roles();
+  }));
+  $$('[data-loadout-api]').forEach(button => button.addEventListener('click', () => {
+    const body = action => JSON.stringify({action, name: button.dataset.loadoutApi, ...(action === 'request' ? {token: 'TOKEN_FROM_PREVIEW'} : {})});
+    const command = action => `curl --fail-with-body "$OWG_URL${data.api_path}" -H "Authorization: Bearer $OWG_KEY" -H 'Content-Type: application/json' --data-binary @- <<'OWG_JSON'\n${body(action)}\nOWG_JSON`;
+    $('#fit-api-code').textContent = `# ${data.machine}: preview first and review all changes/warnings.\n${command('preview')}\n\n# Substitute the returned token after review.\n${command('request')}`;
+    $('#fit-api').showModal();
+  }));
+  $('[data-fit-close]').addEventListener('click', () => $('#fit-api').close());
+  window.addEventListener('pagehide', keepDraft);
+  restoreDraft(); render(); roles();
+})();
