@@ -2,7 +2,7 @@
 {% from "parts.html" import card, said_box, swaps, page_header, more, section_title, confirm_check, confirm_loss, node_state %}
 {% block title %}{{ model.name }} · openWeightGym{% endblock %}
 {% block main_attributes %}data-card-scope="model"{% endblock %}
-{% block scripts %}<script src="/static/model-settings.js?v=4" defer></script><script src="/static/model-matrix.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/model-settings.js?v=4" defer></script><script src="/static/model-matrix.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <nav class="mb-2"><a href="/models">Models</a></nav>
 {% call page_header(model.name, 'Configure this model and review its availability across nodes.') %}{% include "model_state.html" %}{% endcall %}
@@ -19,6 +19,14 @@
       </select>
 {% endmacro %}
 
+{% call card("File facts", false) %}{% include "file_says.html" %}
+<dl class="row facts small mb-0">
+  <dt class="col-md-3">Fingerprint</dt><dd class="col-md-9 wrap">{% if model.fingerprint %}<a href="/fingerprints?start={{ model.fingerprint }}"><code>{{ model.fingerprint }}</code></a>{% else %}Not available{% endif %}</dd>
+  {% if model.sha256 %}<dt class="col-md-3">File SHA-256</dt><dd class="col-md-9 wrap"><code>{{ model.sha256 }}</code></dd>{% endif %}
+  {% if build %}<dt class="col-md-3">llama-server</dt><dd class="col-md-9">{{ build }}</dd>{% endif %}
+</dl>
+{% endcall %}
+
 {# The box for a new name sits among the settings and belongs to this form of its own, so that Rename sends the name alone.
    So do each node's Enable/Disable buttons, in the node matrix's column headings. #}
 <form id="rename" method="post" action="{{ address(model.name) }}"></form>
@@ -29,10 +37,18 @@
     <span class="small text-secondary">Tick node columns to edit them together. Highlighted cells differ between nodes.</span>
     <label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" data-matrix-differences><span class="form-check-label">Only rows that differ</span></label>
   </div>{% endif %}
-  <form method="post" action="{{ address(model.name) }}#configuration-preview" data-model-settings>
+  <form method="post" action="{{ address(model.name) }}" data-model-settings>
     <input type="hidden" name="engine" value="{{ engine_schema.id }}">
     {% include engine_schema.matrix_template %}
-    <div class="sticky-actions mt-3"><button class="btn btn-primary" name="do" value="setup-preview">Preview and save</button><span class="small text-secondary">{% if several %}Each changed node is previewed, then saved together on its next load.{% else %}Changes apply to {{ selected_node }} on next load.{% endif %}</span></div>
+    <div class="sticky-actions mt-3">
+      <button class="btn btn-primary" name="do" value="save-settings">Save</button>
+      <span class="small text-secondary">{% if several %}Every changed node is saved together.{% else %}Applies to {{ selected_node }} on next load.{% endif %}</span>
+      {# The name is sent with every button and read only by Save preset. #}
+      <div class="d-flex flex-wrap align-items-center gap-2 ms-auto">
+        <div class="input-group input-group-sm w-auto"><input id="preset-name" name="preset" maxlength="80" class="form-control" placeholder="Preset name" aria-label="Preset name"><button class="btn btn-outline-primary" name="do" value="save-preset">Save preset</button></div>
+        <label class="form-check mb-0 small"><input id="replace-preset" type="checkbox" class="form-check-input" name="replace"><span class="form-check-label">Replace</span></label>
+      </div>
+    </div>
   </form>
 
   <form method="post" action="{{ address(model.name) }}" id="copy-model" class="form-section mt-4" data-model-transfer>
@@ -54,13 +70,6 @@
 
 {% include "model_setup.html" %}
 {% call card("Benchmark results", false) %}{% include "model_benchmark.html" %}{% endcall %}
-{% call card("File facts", false) %}{% include "file_says.html" %}
-<dl class="row facts small mb-0">
-  <dt class="col-md-3">Fingerprint</dt><dd class="col-md-9 wrap">{% if model.fingerprint %}<a href="/fingerprints?start={{ model.fingerprint }}"><code>{{ model.fingerprint }}</code></a>{% else %}Not available{% endif %}</dd>
-  {% if model.sha256 %}<dt class="col-md-3">File SHA-256</dt><dd class="col-md-9 wrap"><code>{{ model.sha256 }}</code></dd>{% endif %}
-  {% if build %}<dt class="col-md-3">llama-server</dt><dd class="col-md-9">{{ build }}</dd>{% endif %}
-</dl>
-{% endcall %}
 
 {% call card("Danger zone") %}
     {% if model.measurements %}<form method="post" action="{{ address(model.name) }}" class="mb-3" {{ swaps() }}><button  class="btn btn-outline-danger btn-sm" name="do" value="forget-measure" {{ confirm_loss() }}>Forget measurements</button></form>{% endif %}

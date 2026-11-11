@@ -1,4 +1,4 @@
-"""The real model editor's reviewed preset workflow in desktop/mobile Chromium."""
+"""The real model editor's preset workflow in desktop/mobile Chromium."""
 
 import json
 
@@ -11,7 +11,7 @@ from test_weightroom import gguf, sign_in
 
 
 @pytest.mark.parametrize("width", [1440, 390, 320])
-def test_reviewed_preset_workflow_in_browser(setup_desk, tmp_path, width):
+def test_preset_workflow_in_browser(setup_desk, tmp_path, width):
     server, _, _ = setup_desk
     library = Models(str(tmp_path / "loadcoach.db"))
     original = fixture_model(tmp_path)
@@ -29,57 +29,34 @@ def test_reviewed_preset_workflow_in_browser(setup_desk, tmp_path, width):
         errors = []; page.on("pageerror", lambda error: errors.append(str(error)))
         page.set_viewport_size({"width": width, "height": 1000})
         page.goto("http://console.test/models/example")
-        # Old saved collapse preferences must never hide a new configuration review.
-        page.evaluate("""() => {
-            const key = `weightroom-cards-v1:${encodeURIComponent(document.documentElement.dataset.themeUser)}`;
-            localStorage.setItem(key, JSON.stringify({[`${location.pathname}::configuration-preview`]: false}));
-        }""")
+        # Save preset keeps the settings typed as a named preset, beside Save, and leaves the model as it was.
         page.locator("#ctx").fill("4096")
-        page.get_by_role("button", name="Preview and save", exact=True).click()
-        preview = page.locator("#configuration-preview")
-        playwright.expect(preview).to_be_visible()
-        playwright.expect(preview).to_be_focused()
-        assert page.url.endswith("#configuration-preview")
-        page.wait_for_function("""() => document.getElementById('configuration-preview-heading').getBoundingClientRect().top >=
-            document.querySelector('header').getBoundingClientRect().bottom - 1""")
-        assert library.stored("example") == original
-        playwright.expect(page.locator("#model-review")).to_be_visible()
-        page.evaluate("async () => { await htmx.ajax('GET', '/strip', {target: '#strip', swap: 'innerHTML'}); }")
-        playwright.expect(page.locator("#model-review")).to_be_visible()
-        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-        page.locator("#configuration-preview").screenshot(path=str(tmp_path / f"setup-preview-{width}.png"))
-        page.locator("#setup-acknowledge").check()
         page.locator("#preset-name").fill("Daily <safe>")
         page.evaluate("async () => { await htmx.ajax('GET', '/strip', {target: '#strip', swap: 'innerHTML'}); }")
         playwright.expect(page.locator("#preset-name")).to_be_focused()
-        page.get_by_role("button", name="Save as preset", exact=True).click()
-        playwright.expect(page.get_by_text("Preset saved.", exact=True)).to_be_visible()
+        page.locator("#preset-name").press("Enter")  # Enter in the name saves the preset, not the settings
+        playwright.expect(page.get_by_text("Saved the preset Daily <safe>.", exact=True)).to_be_visible()
         assert library.stored("example") == original
+        assert page.locator("#configuration-preview").count() == 0
         preset = page.get_by_role("table", name="Model presets", exact=True)
         playwright.expect(preset.get_by_text("Daily <safe>", exact=True)).to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        # Another quant of the same model loads it into its settings; Save applies it there, keeping its own file.
         page.goto('http://console.test/models/second-quant')
-        playwright.expect(preset.get_by_text('Daily <safe>', exact=True)).to_be_visible()
-        preset.get_by_role('button', name='Preview preset', exact=True).click()
-        playwright.expect(page.locator('#configuration-preview')).to_be_focused()
-        page.locator('#setup-acknowledge').check()
-        page.get_by_role('button', name='Apply reviewed configuration', exact=True).click()
+        preset.get_by_role('button', name='Load preset', exact=True).click()
+        playwright.expect(page.get_by_text('Loaded the preset Daily <safe>. Save to apply it.', exact=True)).to_be_visible()
+        playwright.expect(page.locator('#ctx')).to_have_value('4096')
+        assert library.stored('second-quant') == other
+        page.get_by_role('button', name='Save', exact=True).click()
+        playwright.expect(page.locator('.said-box')).to_contain_text('Saved.')  # with any warnings noted after it
         assert library.stored('second-quant')['flags']['model'] == str(other_file)
         assert library.stored('second-quant')['flags']['ctx-size'] == 4096
         assert library.stored('example') == original
-        page.get_by_role('button', name='Preview undo of last configuration change', exact=True).click()
-        playwright.expect(page.locator('#configuration-preview')).to_be_focused()
-        page.locator('#setup-acknowledge').check()
-        page.get_by_role('button', name='Restore reviewed configuration', exact=True).click()
+        # Undo asks twice, then restores at once.
+        page.get_by_role('button', name='Undo last change', exact=True).click()
+        page.get_by_role('button', name='Are you sure? Undo last change', exact=True).click()
+        playwright.expect(page.locator('.said-box')).to_contain_text('Configuration restored.')
         assert library.stored('second-quant') == other
-        page.goto('http://console.test/models/example')
-        preset.get_by_role("button", name="Preview preset", exact=True).click()
-        page.locator("#setup-acknowledge").check()
-        page.get_by_role("button", name="Apply reviewed configuration", exact=True).click()
-        assert library.stored("example")["flags"]["ctx-size"] == 4096
-        page.get_by_role("button", name="Preview undo of last configuration change", exact=True).click()
-        page.locator("#setup-acknowledge").check()
-        page.get_by_role("button", name="Restore reviewed configuration", exact=True).click()
-        assert library.stored("example") == original
         preset.get_by_role("button", name="Delete preset", exact=True).click()
         page.locator("#danger-confirmation-check").check()
         page.get_by_role("button", name="Continue", exact=True).click()

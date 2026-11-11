@@ -391,24 +391,31 @@ def setup_desk(native, monkeypatch, request):
     return request.getfixturevalue("desk")
 
 
-def test_existing_editor_reviews_saves_applies_and_undoes_presets(setup_desk, tmp_path):
+def test_existing_editor_saves_presets_loads_them_and_undoes(setup_desk, tmp_path):
     browser, _, _ = setup_desk
     settings = fixture_model(tmp_path)
     library = Models(str(tmp_path / "loadcoach.db"))
     library.put("example", settings)
     sign_in(browser, "jordan")
-    reviewed = browser.post("/models/example", data={"do": "setup-preview", "file": settings["flags"]["model"], "ctx": "4096", "cards": "0"})
-    def hidden(response):
-        return {name: html.unescape(value) for name, value in re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)">', response.text)}
-    fields = hidden(reviewed)
-    assert "Configuration preview" in reviewed.text and fields["token"] and library.stored("example") == settings
-    assert browser.post("/models/example", data={**fields, "do": "save-preset", "preset": "Daily", "acknowledge": "yes"}).status_code == 200
+    form = {"file": settings["flags"]["model"], "ctx": "4096", "cards": "0"}
+    # Save preset keeps what is typed as a preset and leaves the model as it was. A name is needed, and an existing one is replaced only when asked.
+    assert "Give the preset a name." in browser.post("/models/example", data={**form, "do": "save-preset", "preset": " "}).text
+    saved = browser.post("/models/example", data={**form, "do": "save-preset", "preset": "Daily"})
+    assert saved.status_code == 200 and "Saved the preset Daily." in saved.text
     assert len(library.presets("example")) == 1 and library.stored("example") == settings
-    assert "Undo is available" in browser.post("/models/example", data={**fields, "do": "apply-reviewed", "acknowledge": "yes"}).text
+    again = browser.post("/models/example", data={**form, "do": "save-preset", "preset": "Daily"})
+    assert again.status_code == 400 and "That preset exists" in again.text
+    assert browser.post("/models/example", data={**form, "do": "save-preset", "preset": "Daily", "replace": "on"}).status_code == 200
+    # Load preset fills the settings in without saving them.
+    loaded = browser.post("/models/example", data={"do": "load-preset", "preset": "Daily"})
+    assert "Loaded the preset Daily. Save to apply it." in loaded.text and 'id="ctx" name="ctx" class="form-control" value="4096"' in loaded.text
+    assert library.stored("example") == settings and "Configuration preview" not in loaded.text
+    # Save applies at once, with an undo.
+    applied = browser.post("/models/example", data={**form, "do": "save-settings"})
+    assert "Saved." in applied.text and library.stored("example")["flags"]["ctx-size"] == 4096
+    assert "No changes to save." in browser.post("/models/example", data={**form, "do": "save-settings"}).text
     undo = library.setup_undo("example")["receipt"]
-    reviewed = browser.post("/models/example", data={"do": "preview-undo", "undo": undo})
-    fields = hidden(reviewed)
-    assert "Configuration restored" in browser.post("/models/example", data={**fields, "do": "apply-reviewed", "acknowledge": "yes"}).text
+    assert "Configuration restored" in browser.post("/models/example", data={"do": "undo", "undo": undo}).text
     assert library.stored("example") == settings and library.setup_undo("example") is None
     assert "Preset deleted" in browser.post("/models/example", data={"do": "delete-preset", "preset": "Daily"}).text
     assert browser.post("/models/example", data={"do": "delete-preset", "preset": "Daily"}, headers={"Origin": "https://elsewhere.test"}).status_code == 403

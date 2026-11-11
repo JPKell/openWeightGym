@@ -97,7 +97,7 @@ parallel requests, hardware placement, the model file and loading flags belong t
 tick several node columns to edit them together. Generation defaults (sampling and reasoning),
 the projector, adapters and list position are shared: they appear once and are kept the same on
 every copy, with each file named as its own node keeps it. A shared file a node lacks must be
-copied there in Files first. **Preview and save** reviews each changed node; several are applied
+copied there in Files first. **Save** checks and applies each changed node; several are applied
 together or not at all, and all configured nodes must answer before shared settings change.
 
 **Copy or move** below the settings copies the complete model to one or more other nodes. A move

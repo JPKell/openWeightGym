@@ -34,7 +34,7 @@ def test_engine_model_selection_and_pending_node_settings_in_browser(desk, tmp_p
         page.get_by_role('link',name='Open model',exact=True).click(timeout=10000)
         # The ASGI bridge follows redirects internally; HTTP tests cover their URLs.
         playwright.expect(page.get_by_role("heading", name="engine-example", exact=True)).to_be_visible()
-        assert page.locator('form[action="/models/engine-example?node=compute#configuration-preview"]').count() == 1
+        assert page.locator('form[action="/models/engine-example?node=compute"][data-model-settings]').count() == 1
         playwright.expect(page.locator('[name="engine"]')).to_have_value("llama_cpp")
         assert library.stored("engine-example")["engine"] == "llama_cpp"
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
