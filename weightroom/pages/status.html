@@ -6,7 +6,8 @@
 {% for label, value in [('Processing', workspace.running), ('In queue', workspace.waiting)] %}<div><span class="text-secondary small">{{ label }}</span><strong>{{ value if value is not none else '—' }}{{ '+' if value is not none and workspace.partial else '' }}</strong><small class="text-secondary">Current requests</small></div>{% endfor %}
 {% for minutes in [5,15,60] %}<div><span class="text-secondary small">Last {{ minutes }} min</span><strong>{{ workspace.counts[loop.index0] if workspace.counts[loop.index0] is not none else '—' }}</strong><small class="text-secondary">{{ 'Your recorded arrivals' if workspace.count_scope == 'mine' else 'Recorded arrivals' }}</small></div>{% endfor %}
 </div>
-<p class="small text-secondary">Arrival counts use records received on front.{{ ' + indicates a partial live count; some nodes are unavailable.' if workspace.partial else '' }}</p>
+<div class="mb-3" id="status-search-control" hx-preserve><label for="status-search" class="visually-hidden">Find requests and nodes</label><input id="status-search" class="form-control form-control-sm" type="search" placeholder="Find a request, model, user or node…"></div>
+{% include 'current_requests.html' %}
 {% if not now %}
 {% call alert('danger', class_='said') %}Compute is off since {{ compute.since|timestamp }} on the primary compute node. Other nodes are shown below.{% endcall %}
 {% if wake_button and "front-wake" in person.can %}
@@ -26,9 +27,12 @@
   {% if "drain" in person.can %}<button class="btn btn-outline-secondary btn-sm" name="do" value="open">Take requests again</button>{% endif %}
 {% endcall %}
 {% endfor %}
+{% if workspace.partial %}<p class="small text-secondary">+ indicates a partial live count; some nodes are unavailable.</p>{% endif %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-2" id="status-capacity-heading">
+{{ section_title('Capacity & loaded models', wrapper_class='mb-0') }}
 {% if nodes and ('drain' in person.can or 'clear-line' in person.can or 'unload' in person.can) %}
-<div id="status-controls" class="mb-3 status-controls" hx-preserve>
-  <form method="post" action="/control" {{ confirm_two() }} class="d-flex flex-wrap align-items-center gap-2" data-hold-refresh>
+<div id="status-controls" class="status-controls ms-auto" hx-preserve>
+  <form method="post" action="/control" {{ confirm_two() }} class="d-flex flex-wrap align-items-center justify-content-end gap-2" data-hold-refresh>
     <label for="status-control-machine" class="visually-hidden">the compute service</label>
     <select id="status-control-machine" name="machine" class="form-select form-select-sm status-node-select" aria-label="the compute service for status control" required>
       {% for node in nodes %}<option value="{{ node.name }}"{% if node.state != 'ready' or not node.status_live %} disabled{% endif %}>{{ node.name }}{% if node.state != 'ready' or not node.status_live %} (unavailable){% endif %}</option>{% endfor %}
@@ -39,9 +43,6 @@
   </form>
 </div>
 {% endif %}
-<div class="mb-3" id="status-search-control" hx-preserve><label for="status-search" class="visually-hidden">Find requests and nodes</label><input id="status-search" class="form-control form-control-sm" type="search" placeholder="Find a request, model, user or node…"></div>
-{% include 'current_requests.html' %}
-{{ section_title('Capacity & loaded models', wrapper_class='mb-2') }}
+</div>
 {% include 'status_nodes.html' %}
-{% if 'manage-settings' in person.can %}<details class="small mt-3"><summary>Sign-in service troubleshooting</summary><p>If nobody can sign in, an administrator can check the gateway on front with <code>systemctl --user status turnstile</code> and start it with <code>systemctl --user start turnstile</code>.</p></details>{% endif %}
 </div>

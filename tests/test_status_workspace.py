@@ -75,6 +75,10 @@ def test_live_dispatch_layout_filter_refresh_and_narrow_screens(desk,monkeypatch
         assert '41' in page.locator('table[aria-label="Processing now"]').inner_text()
         assert '42' in page.locator('table[aria-label="Waiting to start"]').inner_text()
         assert 'Past requests' not in page.locator('main').inner_text()
+        assert 'Arrival counts use records received on front.' not in page.locator('main').inner_text()
+        assert 'Sign-in service troubleshooting' not in page.locator('main').inner_text()
+        assert page.locator('.status-kpis + #status-search-control + #current-requests').count() == 1
+        assert page.locator('#status-capacity-heading #status-controls').count() == 1
         assert 'CPU load' not in page.locator('#status-capacity').inner_text()
         assert '1 processing · 1 queued' in page.locator('.status-node-counts').first.inner_text()
         assert '15.0 GiB VRAM' in page.locator('#status-capacity').inner_text()
