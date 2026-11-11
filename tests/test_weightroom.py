@@ -358,24 +358,24 @@ def test_ticks_become_what_an_account_is_given_and_what_is_taken_from_it():
 def test_the_users_page_adds_an_account_and_its_own_page_changes_it(desk):
     browser, _, users = desk
     assert 'href="/users"' not in sign_in(browser, "pat").text and browser.get("/users").status_code == 403
+    # Nor is anyone who may not read the log shown an account's 30 days: the Usage report would answer with their own requests.
+    assert browser.get("/users/pat?part=activity").status_code == 403
     browser.post("/sign-out")
     sign_in(browser, 'jordan')
     assert 'href="/users"' in browser.get('/users').text
+    # Every account in the directory, each a link that swaps in its page; /users chooses the first.
     listed = browser.get("/users").text
-    assert '<a href="/users/pat">pat</a>' in listed and "<td>careful</td>" in listed
-    first = browser.get("/users?limit=2&page=1").text
-    second = browser.get("/users?limit=2&page=2").text
-    first_names = re.findall(r'<a href="/users/([^"/]+)">', first)
-    second_names = re.findall(r'<a href="/users/([^"/]+)">', second)
-    assert len(first_names) == len(second_names) == 2 and set(first_names).isdisjoint(second_names)
-    assert 'id="users-limit"' in first and '<option value="2" selected>2</option>' in first
-    assert 'class="d-flex flex-nowrap align-items-center gap-3 mb-2"' in first
-    assert "6 results · Page 1 of 3" in first and 'href="/users?limit=2&amp;page=2"' in first
-    assert "6 results · Page 3 of 3" in browser.get("/users?limit=2&page=999").text
+    directory = re.findall(r'<a class="nav-link account-choice( active)?" href="/users/([^"/]+)"', listed)
+    assert [name for _, name in directory] == sorted(users.listing()[i]["name"] for i in range(len(users.listing())))
+    assert [name for active, name in directory if active] == [directory[0][1]] and 'data-user-choice="cleo"' in listed
+    assert 'data-user-kind="person"' in listed and 'data-user-search="cleo careful person' in listed and 'id="user-filter"' in listed
+    assert 'id="add-account"' in listed and re.search(r'<section class="card mb-3 users-add" id="add-account" hidden', listed)
+    assert re.search(r'<a class="nav-link account-choice active" href="/users/pat"', browser.get("/users/pat").text)
 
     # Added for a person: a temporary password and no key, shown this once on the account's own page.
     wrong = browser.post("/users", data={"name": "Ada L", "group": "plain", "password": "on"})
     assert wrong.status_code == 400 and "a user name is lowercase letters" in wrong.text and 'value="Ada L"' in wrong.text
+    assert re.search(r'<section class="card mb-3 users-add" id="add-account">', wrong.text)  # refused, the form stays open with what was typed
     added = browser.post("/users", data={"name": "ada", "group": "plain", "password": "on"})
     secret = re.findall(r'<pre class="secret">(.+?)</pre>', added.text)
     assert "Added ada." in added.text and "Temporary password." in added.text and len(secret) == 1 and "API key." not in added.text
@@ -383,13 +383,15 @@ def test_the_users_page_adds_an_account_and_its_own_page_changes_it(desk):
 
     # Its page: what it asked for over three spans, the last of which can be chosen.
     page = browser.get("/users/ada").text
-    assert all(span in page for span in ("<td>24 hours</td>", "<td>7 days</td>", "<td>28 days</td>")) and "<td>3 days</td>" in browser.get("/users/ada?days=3").text
-    assert '<h2 class="section-title mb-0">Requests</h2>' in page and "Asked for" not in page
-    assert page.index('<h2 class="section-title mb-0">Rename</h2>') < page.index('<h2 class="section-title mb-0">Requests</h2>')
-    assert page.index('<h2 class="section-title mb-0">API keys</h2>') < page.index('<h2 class="section-title mb-0">Requests</h2>') and page.count('class="col-lg-6"') == 2
-    assert page.index('value="enabled-no"') < page.index('<dl class="row facts')
-    assert '<summary class="card-header fw-semibold">Remove</summary>' not in page and '<h2 class="section-title mb-0">Remove</h2>' in page
-    assert "Keys, sign-ins and saved conversations stay" not in page and "For programs that use the models" not in page
+    assert all(span in page for span in (">Last 24 hours<", ">Last 7 days<", ">Last 28 days<")) and ">Last 3 days<" in browser.get("/users/ada?days=3").text
+    assert "Asked for" not in page and 'data-user-draft-status' in page and 'data-state="invited"' in page
+    order = [page.index(f'class="card-heading">{title}</h2>') for title in ("Activity", "Sign-in &amp; group", "API keys", "Permissions", "Limits &amp; tools")]
+    assert order == sorted(order) and page.index('value="enabled-no"') < page.index('<dl class="account-facts">')
+    assert '<legend class="small fw-semibold">Remove the account</legend>' in page and "It has not signed in yet" in page
+    # Someone who may read the log is shown its last 30 days, loaded after the page.
+    assert 'hx-get="/users/ada?part=activity"' in page
+    trend = browser.get("/users/ada?part=activity")
+    assert trend.status_code == 200 and 'id="account-trend"' in trend.text and "Requests per day" in trend.text
     # A tick for every ability: its group's are ticked and marked, and one the person looking may not do is greyed.
     box = lambda name, text: re.search(rf'<input id="can-{name}"[^>]*>', text).group(0)  # noqa: E731
     assert "checked" in box("load", page) and "checked" not in box("lock", page) and "disabled" in box("superuser", page) and "disabled" not in box("lock", page)
@@ -397,11 +399,17 @@ def test_the_users_page_adds_an_account_and_its_own_page_changes_it(desk):
 
     # Ticks are turned into what it is given and what is taken away. Ticked as its group is, it has nothing of its own again.
     saved = browser.post("/users/ada", data={"do": "abilities", "can": ["lock", "see-log"]})
-    assert "Saved." in saved.text and users.own("ada") == {"add": ["lock", "see-log"], "remove": ["load"]} and "differs from its group" in browser.get("/users").text
-    assert re.search(r'<details class="card mb-3" open>.*?class="card-heading">Abilities</span>', saved.text, re.S)  # the card just used is left open
+    assert "Saved." in saved.text and users.own("ada") == {"add": ["lock", "see-log"], "remove": ["load"]} and 'data-user-choice="ada" data-user-kind="person" data-user-state="invited" data-user-attention="yes" data-user-custom="yes"' in browser.get("/users").text
     assert saved.text.count(">given</span>") == 2 and saved.text.count(">taken away</span>") == 1  # and what differs from its group is pointed at
+    assert saved.text.count('data-ability-diff="given"') == 2 and '<strong>2</strong> given' in saved.text
     browser.post("/users/ada", data={"do": "abilities", "can": ["load"]})
-    assert users.own("ada") == {} and "differs from its group" not in browser.get("/users").text
+    assert users.own("ada") == {} and 'data-user-custom="yes" data-user-search="ada' not in browser.get("/users").text
+
+    # The page's one form saves its abilities, limits and tools together.
+    together = browser.post("/users/ada", data={"do": "save", "can": ["load", "lock"], "fewer": "on", "model": ["small"], "max_requests": "2", "add_tools": "code__diff"})
+    assert "Saved." in together.text and users.own("ada") == {"add": ["lock"], "models": ["small"], "max_requests": 2, "add_tools": ["code__diff"]}
+    browser.post("/users/ada", data={"do": "save", "can": ["load"]})
+    assert users.own("ada") == {}
 
     # Tighter than its group, and what LoadCoach refuses is said in its words.
     browser.post("/users/ada", data={"do": "limits", "fewer": "on", "model": ["small"], "max_requests": "2", "max_sensitivity": "normal", "priority": "high"})
@@ -421,7 +429,7 @@ def test_the_users_page_adds_an_account_and_its_own_page_changes_it(desk):
     key = re.search(r'<pre class="secret">(lc_[\w-]+)</pre>', made.text).group(1)
     assert users.by_key(key).name == "ada" and "laptop" in made.text
     browser.post("/users/ada", data={"do": "enabled-no"})
-    assert users.by_key(key) is None and "disabled</span>" in browser.get("/users/ada").text
+    assert users.by_key(key) is None and 'class="account-status" data-account-status data-state="disabled">Disabled</span>' in browser.get("/users/ada").text
     browser.post("/users/ada", data={"do": "enabled-yes"})
     browser.post("/users/ada", data={"do": "keys-remove", "key": users.listing("ada")[0]["keys"][0]["id"]})
     assert users.listing("ada")[0]["enabled"] and users.by_key(key) is None and "No keys." in browser.get("/users/ada").text
@@ -443,7 +451,7 @@ def test_the_users_page_adds_an_account_and_its_own_page_changes_it(desk):
     assert "disabled" not in box("superuser", browser.get("/users/pat").text)
     # Their own account is theirs to change too, all but disabling and removing it.
     mine = browser.get("/users/sam").text
-    assert DISABLED not in mine and 'value="limits"' in mine and 'value="enabled-no"' not in mine and 'value="remove"' not in mine
+    assert DISABLED not in mine and 'value="save"' in mine and 'value="enabled-no"' not in mine and 'value="remove"' not in mine
     browser.post("/users/sam", data={"do": "limits", "priority": "high"})
     assert users.own("sam") == {"priority": "high"} and browser.post("/users/sam", data={"do": "enabled-no"}).status_code == 400 and users.listing("sam")[0]["enabled"]
     browser.post("/users/pat", data={"do": "abilities", "can": ["superuser", "load", "power"]})

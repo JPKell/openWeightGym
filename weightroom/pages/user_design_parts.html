@@ -1,0 +1,65 @@
+{% from 'parts.html' import section_title %}
+{% from 'user_parts.html' import account_avatar, account_status, account_choice %}
+{# One set of preview components for the three Users proposals (users_designs.html). user-designs.js clones each
+   from its DOM <template>, so every list, row and card the script adds has the same markup as the first. #}
+
+{# The avatar, status and 01's directory row are the live page's (user_parts.html); user-designs.js fills them in. #}
+{% macro user_choice() %}{{ account_choice() }}{% endmacro %}
+
+{# 02 · A row of the access ledger. #}
+{% macro user_row() %}
+<tr data-user-row>
+  <td><button type="button" class="btn btn-link account-link" data-user-choice aria-pressed="false">{{ account_avatar(class_='account-avatar-sm') }}<span class="min-w-0"><strong data-user-name></strong><small class="d-block text-secondary" data-user-kind></small></span><span class="draft-mark" data-draft-mark hidden aria-label="Unsaved changes"></span></button></td>
+  <td data-user-group></td>
+  <td><span class="sign-in-chips" data-sign-in></span></td>
+  <td class="text-end" data-user-keys></td>
+  <td class="text-end" data-user-sessions></td>
+  <td class="ledger-spark-cell"><svg class="usage-spark ledger-spark" data-user-spark viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true"></svg><span class="small text-secondary" data-user-requests></span></td>
+  <td>{{ account_status() }}</td>
+</tr>
+{% endmacro %}
+
+{# 03 · One group's lane, and an account's card within it. #}
+{% macro group_lane() %}
+<section class="group-lane" data-group-lane>
+  <header class="group-lane-head"><div class="min-w-0">{{ section_title('', attrs={'data-lane-name': ''}) }}<small class="text-secondary" data-lane-summary></small></div><span class="badge bg-secondary-lt" data-lane-count></span></header>
+  <div class="group-lane-cards" data-lane-cards></div>
+</section>
+{% endmacro %}
+
+{% macro user_card() %}
+<button type="button" class="account-card" data-user-choice aria-pressed="false">
+  <span class="d-flex align-items-center gap-2 min-w-0">{{ account_avatar() }}<span class="min-w-0 flex-grow-1"><strong data-user-name></strong><small class="d-block text-secondary" data-user-kind></small></span>{{ account_status() }}</span>
+  <span class="sign-in-chips" data-sign-in></span>
+  <span class="account-card-foot"><span data-user-requests></span><svg class="usage-spark" data-user-spark viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true"></svg></span>
+  <span class="account-card-flags"><span class="attention-text" data-attention-text hidden></span><span class="draft-mark" data-draft-mark hidden aria-label="Unsaved changes"></span></span>
+</button>
+{% endmacro %}
+
+{# A heading and its abilities. In 03 the heading also names the group's column. #}
+{% macro ability_category() %}<section class="ability-category" data-ability-category>{{ section_title('', level=3, class_='eyebrow ability-category-title', attrs={'data-category-title': ''}) }}</section>{% endmacro %}
+
+{# An ability. The marks say how it differs from the group; the group column is shown only in 03's comparison. #}
+{% macro ability_row() %}
+<div class="ability-row" data-ability-row>
+  <label class="form-check mb-0 min-w-0"><input type="checkbox" class="form-check-input" name="can" data-ability><span class="form-check-label"><code data-ability-name></code> <span class="ability-marks" data-ability-marks></span><small class="d-block text-secondary" data-ability-words></small></span></label>
+  <span class="ability-group-state small" data-ability-group></span>
+</div>
+{% endmacro %}
+
+{% macro key_row() %}
+<tr data-key-row>
+  <th scope="row" class="fw-medium" data-key-label></th><td class="text-nowrap" data-key-made></td><td><code data-key-id></code></td>
+  <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" data-key-remove>Remove</button></td>
+</tr>
+{% endmacro %}
+
+{% macro model_choice() %}<label class="form-check mb-0"><input type="checkbox" class="form-check-input" name="model" data-model><span class="form-check-label" data-model-name></span></label>{% endmacro %}
+
+{# A password or key just made. It is shown here once and never again. #}
+{% macro secret_row() %}
+<div class="secret-row" data-secret-row>
+  <div class="d-flex justify-content-between align-items-center gap-2 mb-1"><strong class="small" data-secret-what></strong><button type="button" class="btn btn-outline-secondary btn-sm" data-secret-copy>Copy</button></div>
+  <pre class="secret mb-0"><code data-secret-value></code></pre>
+</div>
+{% endmacro %}

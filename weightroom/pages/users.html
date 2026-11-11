@@ -1,77 +1,263 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps %}
-{% from "parts.html" import page_header, form_section, more %}
-{% block title %}Users · openWeightGym{% endblock %}
+{% from "parts.html" import card, said_box, swaps, page_header, section_title, more, alert, empty_row, confirm_check, confirm_loss, confirm_two %}
+{% from "navigation_parts.html" import pills %}
+{% from "deferred.html" import loading %}
+{% from "user_parts.html" import account_choice, account_avatar, account_status, ability_categories %}
+{% block title %}{{ user.name }} · Users · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=1"><link rel="stylesheet" href="/static/users.css?v=1"><script src="/static/users.js?v=1" defer></script>{% endblock %}
 {% block main %}
-{{ page_header('Users', 'Manage accounts and the access each account receives.') }}
+{# The directory of accounts beside the chosen one, as Compute nodes lays out its machines. /users chooses the first.
+   Every form names its account's address itself: the page is also shown at /users, straight after an account is added. #}
+{% set here = "/users/" ~ user.name %}
+{% set adding = form or opened == 'add' %}
+{% set group = (known.groups|selectattr("name", "equalto", user.group)|first) or {} %}
+<div class="settings-page users-workspace usage-page" data-users data-user="{{ user.name }}">
+{% call page_header('Users', pretitle='SETTINGS / ACCESS') %}
+  {% if "manage-groups" in person.can %}<a class="btn btn-outline-secondary btn-sm" href="/groups">Groups</a>{% endif %}
+  <form method="get" action="{{ here }}" class="m-0"><input type="hidden" name="open" value="add"><button class="btn btn-primary btn-sm" data-toggle-add aria-expanded="{{ 'true' if adding else 'false' }}" aria-controls="add-account">+ Add account</button></form>
+{% endcall %}
+{% set needing = accounts|selectattr('attention')|list|length %}
+<div class="users-summary small text-secondary mb-3" aria-label="Accounts summary">
+  <span><strong class="text-body">{{ accounts|length }}</strong> {{ 'account' if accounts|length == 1 else 'accounts' }}</span>
+  <span><strong class="text-body">{{ accounts|selectattr('kind', 'equalto', 'person')|list|length }}</strong> people · <strong class="text-body">{{ accounts|selectattr('kind', 'equalto', 'program')|list|length }}</strong> programs</span>
+  <span><strong class="text-body">{{ accounts|sum(attribute='sessions') }}</strong> signed in now</span>
+  <span><strong class="text-body">{{ accounts|map(attribute='keys')|map('length')|sum }}</strong> API keys</span>
+  {% if needing %}<span class="users-summary-attention"><strong>{{ needing }}</strong> {{ 'needs' if needing == 1 else 'need' }} attention <button type="button" class="btn btn-link btn-sm p-0" data-show-attention>Show</button></span>{% endif %}
+</div>
 {{ said_box(said, failed) }}
 
-{% call card("Add an account", form) %}
-  <p class="text-secondary">For a person, or for a program that is to have a key of its own. What it may do comes from its group, and can be changed on its own page afterwards.</p>
-  <form method="post" action="/users" class="row g-3">
-    <div class="col-md-6">
-      <label for="name" class="form-label">Name <small class="text-secondary">lowercase letters, digits, dot, dash or underscore</small></label>
-      <input id="name" name="name" class="form-control" value="{{ form.name or '' }}" autocapitalize="none" spellcheck="false" autocomplete="off" required>
-    </div>
-    <div class="col-md-6">
-      <label for="group" class="form-label">Group</label>
-      <select id="group" name="group" class="form-select" required>
-        {# No group is chosen to begin with, so that none is given by leaving the box alone. #}
-        <option value="" disabled {{ "selected" if not form.group }}>choose a group</option>
-        {% for group in known.groups %}<option {{ "selected" if group == form.group }}>{{ group }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="col-md-6">
-      <div class="form-check">
-        <input id="password" name="password" type="checkbox" class="form-check-input" {{ "checked" if form.password is defined }}>
-        <label for="password" class="form-check-label">A temporary password <small class="text-secondary">for a person: it only serves to choose their own, the first time they sign in</small></label>
+{% set add_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" data-close-add>Close</button>{% endset %}
+{% call card('Add an account', id='add-account', actions=add_actions, attrs={} if adding else {'hidden': ''}, class_='users-add', hint='For a person, or for a program that is to have a key of its own. What it may do comes from its group, and can be changed on its page afterwards.') %}
+  <form method="post" action="/users" class="users-add-layout">
+    <fieldset class="users-add-kind">
+      <legend class="visually-hidden">Kind of account</legend>
+      <label class="users-add-choice"><input type="radio" name="kind" value="person" class="form-check-input" {{ "checked" if form.kind != "program" }}><span><strong>A person</strong><small class="d-block text-secondary">Signs in with a temporary password, then chooses their own.</small></span></label>
+      <label class="users-add-choice"><input type="radio" name="kind" value="program" class="form-check-input" {{ "checked" if form.kind == "program" }}><span><strong>A program</strong><small class="d-block text-secondary">Calls the API with a key of its own.</small></span></label>
+    </fieldset>
+    <div class="row g-3">
+      <div class="col-sm-6">
+        <label for="add-name" class="form-label">Name</label>
+        <input id="add-name" name="name" class="form-control" value="{{ form.name or '' }}" maxlength="64" autocapitalize="none" spellcheck="false" autocomplete="off" required aria-describedby="add-name-hint">
+        <small class="form-hint" id="add-name-hint">Lowercase letters, digits, dot, dash or underscore.</small>
       </div>
-    </div>
-    <div class="col-md-6">
-      <div class="form-check">
-        <input id="key" name="key" type="checkbox" class="form-check-input" {{ "checked" if form.key is defined }}>
-        <label for="key" class="form-check-label">An API key <small class="text-secondary">for a program</small></label>
+      <div class="col-sm-6">
+        <label for="add-group" class="form-label">Group</label>
+        <select id="add-group" name="group" class="form-select" required>
+          {# No group is chosen to begin with, so that none is given by leaving the box alone. #}
+          <option value="" disabled {{ "selected" if not form.group }}>choose a group</option>
+          {% for name in group_names %}<option {{ "selected" if name == form.group }}>{{ name }}</option>{% endfor %}
+        </select>
       </div>
-      <input name="label" class="form-control mt-2" maxlength="60" value="{{ form.label or '' }}" placeholder="a label for the key: what it is for" aria-label="A label for the key">
-    </div>
-    <div class="col-12">
-      <button class="btn btn-primary">Add</button>
-      <span class="text-secondary ms-2">Each is shown once, on the next page.</span>
+      <div class="col-sm-6"><div class="form-check"><input id="add-password" name="password" type="checkbox" class="form-check-input" {{ "checked" if form.password is defined or not form }}><label for="add-password" class="form-check-label">A temporary password <small class="text-secondary">it only serves to choose their own, the first time they sign in</small></label></div></div>
+      <div class="col-sm-6">
+        <div class="form-check"><input id="add-key" name="key" type="checkbox" class="form-check-input" {{ "checked" if form.key is defined }}><label for="add-key" class="form-check-label">An API key <small class="text-secondary">for a program</small></label></div>
+        <input name="label" class="form-control form-control-sm mt-2" maxlength="60" value="{{ form.label or '' }}" placeholder="a label for the key: what it is for" aria-label="A label for the key">
+      </div>
+      <div class="col-12 d-flex flex-wrap align-items-center gap-2"><button class="btn btn-primary">Add account</button><span class="small text-secondary">Each secret is shown once, straight afterwards.</span></div>
     </div>
   </form>
 {% endcall %}
 
-{% call card("Users", true, "users-list") %}
-<div id="users-list">
-{# static/sort.js does the finding. An app is an account like any other: type its group to see only those. #}
-<div class="d-flex flex-nowrap align-items-center gap-3 mb-2">
-  <input type="search" class="form-control flex-grow-1" style="min-width: 0" data-filter="users-table" placeholder="Find an account: a name, a group, or a word from its row" aria-label="Find an account" autocapitalize="none" spellcheck="false">
-  <small class="text-secondary text-nowrap" data-count="users-table"></small>
-  <form method="get" action="/users" class="d-flex flex-shrink-0 align-items-center gap-2" {{ swaps('users-list', true) }} data-auto-submit>
-    <label for="users-limit" class="form-label mb-0 text-nowrap">Users per page</label>
-    <select id="users-limit" name="limit" class="form-select form-select-sm w-auto">{% for n in paging.sizes %}<option value="{{ n }}" {{ 'selected' if n == paging.limit }}>{{ n }}</option>{% endfor %}</select>
-    <noscript><button class="btn btn-primary btn-sm">Show</button></noscript>
-  </form>
+<div class="users-layout">
+<aside class="users-directory" aria-label="Accounts">
+  <div class="users-directory-tools">
+    <label class="visually-hidden" for="user-search">Find an account</label><input id="user-search" type="search" class="form-control form-control-sm" placeholder="Find an account, group or key…" autocomplete="off" autocapitalize="none" spellcheck="false">
+    <select id="user-filter" class="form-select form-select-sm" aria-label="Show accounts">
+      {% for value, words in [('all', 'All accounts'), ('person', 'People'), ('program', 'Programs'), ('attention', 'Needs attention'), ('custom', 'Differs from its group'), ('disabled', 'Disabled')] %}<option value="{{ value }}">{{ words }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="eyebrow d-flex justify-content-between mt-3 mb-2 px-2">ACCOUNTS <span data-user-count role="status" aria-live="polite">{{ accounts|length }}</span></div>
+  {% call pills('Accounts', class_='users-list gap-1 mb-0') %}{% for one in accounts %}{{ account_choice(one, user.name) }}{% endfor %}{% endcall %}
+  <p class="small text-secondary mt-3 px-2" data-user-empty hidden>No matching accounts. Clear the search or choose All accounts.</p>
+  <p class="small text-secondary mt-3 px-2 mb-0">Choose an account to manage it. Unsaved changes stay with each account while you switch.</p>
+</aside>
+
+<section class="users-inspector" aria-label="Selected account">
+  <div class="account-heading">
+    <div class="d-flex align-items-center gap-3 min-w-0">
+      {{ account_avatar(facts, 'account-avatar-lg') }}
+      <div class="min-w-0">{{ section_title(user.name, id='selected-user', class_='wrap', wrapper_class='account-title') }}<span class="small text-secondary">{% if "manage-groups" in person.can %}<a href="/groups/{{ user.group }}">{{ user.group }}</a>{% else %}{{ user.group }}{% endif %} · {{ facts.kind }}</span></div>
+      {{ account_status(facts) }}
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <span class="small text-secondary">{{ user["keys"]|length }} key{{ "" if user["keys"]|length == 1 else "s" }} · {{ "signed in at %d place%s"|format(user.sessions, "" if user.sessions == 1 else "s") if user.sessions else "not signed in" }}</span>
+      {% if user.name != person.name %}
+      <form method="post" action="{{ here }}" class="m-0" {{ swaps() }}>
+        {% if user.enabled %}<button class="btn btn-outline-warning btn-sm" name="do" value="enabled-no" {{ "disabled" if user.why_not }} {{ confirm_two() }}>Disable</button>
+        {% else %}<button class="btn btn-primary btn-sm" name="do" value="enabled-yes" {{ "disabled" if user.why_not }}>Enable</button>{% endif %}
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% if user.why_not %}{% call alert('secondary', class_='py-2 small') %}{{ user.why_not }}{% if user.name == person.name %} Your password and your keys are on <a href="/account">My account</a>.{% endif %}{% endcall %}{% endif %}
+  {% if facts.attention %}{% call alert('warning', class_='py-2 small', role='status') %}{{ facts.attention|join(' ') }}{% endcall %}{% endif %}
+  {% if once %}
+  {% call card('Copy now: shown once', class_='account-secrets', hint='Neither is shown again. Make a new one if it is lost.') %}
+    {% for what, secret in once %}<p class="mb-1 small"><strong>{{ what }}.</strong> Copy it now: it is not shown again.</p>
+<pre class="secret">{{ secret }}</pre>{% endfor %}
+  {% endcall %}
+  {% endif %}
+
+  <div class="account-panels">
+    {% call card('Activity', id='account-activity', class_='account-panel', attrs={'data-panel': 'activity'}, hint='Requests by this account. The full report is on Usage.') %}
+      <div id="usage">
+        <div class="account-figures">
+          {% for row in user.usage %}
+          <div data-figure="requests"><span class="usage-label">{{ "Last 24 hours" if row.days == 1 else "Last %d days"|format(row.days) }}</span><strong class="usage-value usage-value-sm">{{ "{:,}".format(row.requests) }}</strong><span class="usage-sub">request{{ "" if row.requests == 1 else "s" }}</span></div>
+          {% endfor %}
+          {% set last = user.usage|last %}
+          {% if last %}<div data-figure="input_tokens"><span class="usage-label">Tokens · {{ "24 hours" if last.days == 1 else "%d days"|format(last.days) }}</span><strong class="usage-value usage-value-sm" title="{{ '{:,}'.format(last.prompt_tokens + last.answer_tokens) }}">{{ (last.prompt_tokens + last.answer_tokens)|count }}</strong><span class="usage-sub">{{ last.prompt_tokens|count }} in · {{ last.answer_tokens|count }} out</span></div>{% endif %}
+        </div>
+        <form method="get" action="{{ here }}" class="account-days" {{ swaps("usage", true) }}>
+          <label for="days" class="small text-secondary">Days in the last figure</label>
+          <input id="days" name="days" type="number" min="1" {% if user.keep_days %}max="{{ user.keep_days|int }}"{% endif %} class="form-control form-control-sm" value="{{ last.days if last else 28 }}" required>
+          <button class="btn btn-outline-secondary btn-sm">Show</button>
+          <small class="text-secondary">{{ "the log is kept for " ~ "%g"|format(user.keep_days) ~ " days" if user.keep_days else "the log is kept for ever" }}</small>
+        </form>
+      </div>
+      {% if "see-log" in person.can %}{{ loading('account-trend', trend_url, 'Loading the last 30 days…') }}{% endif %}
+      {% if "see-log" in person.can %}<div class="d-flex flex-wrap justify-content-end gap-3 small mt-2"><a href="/usage?user={{ user.name|urlencode }}">Open in Usage</a><a href="/log?user={{ user.name|urlencode }}">Everything on record that {{ user.name }} did</a></div>{% endif %}
+    {% endcall %}
+
+    {% call card('Sign-in & group', id='account-access', class_='account-panel', attrs={'data-panel': 'access'}) %}
+      <dl class="account-facts">
+        <div><dt>Password</dt><dd>{{ "Temporary · waiting for a new one" if user.password == "temporary" else "Set" if user.password else "None · uses API keys" }}</dd></div>
+        <div><dt>Authenticator</dt><dd>{{ "Set up" if user.second_step else "Not used" }}</dd></div>
+        <div><dt>Signed in now</dt><dd>{{ "%d place%s"|format(user.sessions, "" if user.sessions == 1 else "s") if user.sessions else "Nowhere" }}</dd></div>
+      </dl>
+      {# What the compute service would refuse is shown and cannot be sent: a browser greys everything inside a disabled fieldset. #}
+      <fieldset {{ "disabled" if user.why_not }}>
+        <form method="post" action="{{ here }}" class="d-flex flex-wrap gap-2 mb-3" {{ swaps() }}>
+          <button class="btn btn-outline-primary btn-sm" name="do" value="password-new">Make a temporary password</button>
+          {% if user.second_step %}<button class="btn btn-outline-danger btn-sm" name="do" value="password-code" {{ confirm_loss() }}>Forget their authenticator</button>{% endif %}
+        </form>
+        <form method="post" action="{{ here }}" class="mb-1" {{ swaps() }}>
+          <label for="account-group" class="form-label">Group</label>
+          <div class="input-group input-group-sm">
+            <select id="account-group" name="group" class="form-select form-select-sm">
+              {% for one in known.groups %}<option {{ "selected" if one.name == user.group }}>{{ one.name }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-outline-primary" name="do" value="group">Move</button>
+          </div>
+        </form>
+        {% if group %}<p class="form-hint mb-3">{{ user.group }}: {{ "superuser" if "superuser" in group.can else "%d %s"|format(group.can|length, "ability" if group.can|length == 1 else "abilities") }} · {{ group.priority or "normal" }} priority{% if group.max_requests %} · {{ group.max_requests }} at once{% endif %}{% if group.max_sensitivity %} · up to {{ group.max_sensitivity }}{% endif %}.</p>{% endif %}
+      </fieldset>
+      {% if not user.why_not or user.name == person.name %}
+      <form method="post" action="{{ here }}">
+        <label for="new-name" class="form-label">Name</label>
+        <div class="input-group input-group-sm">
+          <input id="new-name" name="name" class="form-control" value="{{ user.name }}" maxlength="64" pattern="[a-z0-9][a-z0-9._\-]{0,63}" autocapitalize="none" spellcheck="false" required>
+          <button class="btn btn-outline-secondary" name="do" value="rename">Rename</button>
+        </div>
+      </form>
+      {% endif %}
+      {# Nobody disables or removes their own account from the site, so on one's own page this is left out. #}
+      {% if user.name != person.name %}
+      <fieldset class="account-remove" {{ "disabled" if user.why_not }}>
+        <legend class="small fw-semibold">Remove the account</legend>
+        <p class="form-hint">Its keys stop working at once. Its history stays in the log under its name.</p>
+        <form method="post" action="{{ here }}" class="d-flex flex-wrap align-items-center gap-2">
+          {% set confirmation_label %}Yes, remove {{ user.name }}{% endset %}{{ confirm_check(confirmation_label, "sure") }}
+          <button class="btn btn-outline-danger btn-sm" name="do" value="remove" {{ confirm_loss() }}>Remove</button>
+        </form>
+      </fieldset>
+      {% endif %}
+    {% endcall %}
+
+    {% call card('API keys', id='account-keys', class_='account-panel', attrs={'data-panel': 'keys'}, hint='For programs. A key acts with this account’s access.') %}
+      <fieldset {{ "disabled" if user.why_not }}>
+        <div class="table-responsive">
+        <table id="keys" class="table table-sm align-middle sortable">
+          <thead><tr><th data-sort="text">Label</th><th data-sort="value">Made</th><th data-sort="text">Id</th><th><span class="visually-hidden">Remove</span></th></tr></thead>
+          <tbody>
+          {% for key in user["keys"] %}
+          <tr>
+            <td>{{ key.label or "none" }}</td><td class="when">{{ key.created|timestamp }}</td><td><code>{{ key.id }}</code></td>
+            <td class="text-end"><form method="post" action="{{ here }}" class="m-0" {{ swaps() }}><input type="hidden" name="key" value="{{ key.id }}"><button class="btn btn-outline-danger btn-sm" name="do" value="keys-remove" {{ confirm_loss() }} aria-label="Remove the key {{ key.label or key.id }}">Remove</button></form></td>
+          </tr>
+          {% else %}
+          {% call empty_row(4) %}No keys. A program needs one to call the API.{% endcall %}
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        <form method="post" action="{{ here }}" class="input-group input-group-sm" {{ swaps() }}>
+          <label for="label" class="visually-hidden">Label for a new key</label>
+          <input id="label" name="label" class="form-control" maxlength="60" placeholder="Label, e.g. ci-runner" required>
+          <button class="btn btn-primary" name="do" value="keys-add">Make a key</button>
+        </form>
+      </fieldset>
+    {% endcall %}
+
+    {# Permissions, limits and tools are saved together. The form gives its cards to the grid around it (display: contents),
+       and static/users.js keeps what is typed in it for each account while another is looked at. #}
+    <form method="post" action="{{ here }}" class="account-policy" data-account-draft {{ swaps() }}>
+    <fieldset class="account-policy-fields" {{ "disabled" if user.why_not }}>
+      {% set given = ticks|selectattr('ticked')|rejectattr('group')|list|length %}
+      {% set taken = ticks|selectattr('group')|rejectattr('ticked')|list|length %}
+      {% call card('Permissions', id='account-permissions', class_='account-panel', attrs={'data-panel': 'permissions'}) %}
+        <div class="account-permission-tools">
+          <div class="account-permission-counts small"><span><strong>{{ ticks|selectattr('ticked')|selectattr('group')|list|length }}</strong> from its group</span><span data-tone="given"><strong>{{ given }}</strong> given</span><span data-tone="taken"><strong>{{ taken }}</strong> taken away</span></div>
+          <div class="form-check form-switch mb-0"><input id="changed-only" type="checkbox" class="form-check-input" data-changed-only><label for="changed-only" class="form-check-label small">Only what differs from the group</label></div>
+        </div>
+        <p class="small text-secondary mb-2" data-no-changes hidden>Nothing differs from the group. Untick an ability to take it away, or tick one to give it.</p>
+        {% with marks = true %}{% include "abilities.html" %}{% endwith %}
+        {% call more('How permissions combine') %}What is ticked is what this account may do; <span class="badge text-bg-secondary">group</span> marks what its group gives it. A tick that differs from the group is kept as its own, and marked once saved. A greyed one you may not do yourself, so it is not yours to hand out. <code>superuser</code> stands for all the others, except those for a program’s own key: untick it to choose them one by one.{% endcall %}
+      {% endcall %}
+
+      {% call card('Limits & tools', id='account-limits', class_='account-panel', attrs={'data-panel': 'limits'}, hint='Limits only narrow what the group allows; priority can go either way. Left empty, the group’s hold.') %}
+        {{ section_title("Limits and priority", level=3) }}
+        <div class="row g-2 mb-3">
+          <div class="col-sm-6">
+            <label for="max_requests" class="form-label">Requests at once <small class="text-secondary">in line or being answered</small></label>
+            <input id="max_requests" name="max_requests" type="number" min="1" class="form-control form-control-sm" value="{{ user.own.max_requests or '' }}" placeholder="as its group{{ ' · %s'|format(group.max_requests) if group.max_requests }}">
+          </div>
+          <div class="col-sm-6">
+            <label for="max_sensitivity" class="form-label">Highest level of work</label>
+            <select id="max_sensitivity" name="max_sensitivity" class="form-select form-select-sm">
+              <option value="">as its group{{ ' · %s'|format(group.max_sensitivity) if group.max_sensitivity }}</option>
+              {% for level in known.levels %}<option {{ "selected" if user.own.max_sensitivity == level }}>{{ level }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-6">
+            <label for="priority" class="form-label">Priority <small class="text-secondary">who goes first in line</small></label>
+            <select id="priority" name="priority" class="form-select form-select-sm">
+              <option value="">as its group{{ ' · %s'|format(group.priority) if group.priority }}</option>
+              {% for priority in ("high", "normal", "low") %}<option {{ "selected" if user.own.priority == priority }}>{{ priority }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-check form-switch">
+          <input id="fewer" name="fewer" type="checkbox" class="form-check-input" {{ "checked" if "models" in user.own }}>
+          <label for="fewer" class="form-check-label">Only the models ticked here, of those its group allows</label>
+        </div>
+        <div class="account-models mb-3">
+          {% for model in models %}
+          <div class="form-check mb-0">
+            <input id="model-{{ loop.index }}" name="model" value="{{ model }}" type="checkbox" class="form-check-input" {{ "checked" if model in user.own.get("models", []) }}>
+            <label for="model-{{ loop.index }}" class="form-check-label">{{ model }}</label>
+          </div>
+          {% endfor %}
+        </div>
+        {% set group_tools = group.tools|default("*") %}
+        {{ section_title("Tools of its own", level=3) }}
+        <p class="form-hint">Its group is shown {% if group_tools == "*" %}every tool{% else %}<code>{{ group_tools|join(", ") }}</code>{% endif %}.
+          Tools listed here are shown to this account as well, or hidden from it, one to a line; <code>*</code> stands for anything.
+          A group shown every tool has none to add. A tool above the account's level stays hidden either way.</p>
+        <div class="row g-2">
+          <div class="col-sm-6"><label for="add_tools" class="form-label">Also shown</label><textarea id="add_tools" name="add_tools" rows="3" class="form-control form-control-sm font-monospace">{{ user.own.get("add_tools", [])|join("\n") }}</textarea></div>
+          <div class="col-sm-6"><label for="remove_tools" class="form-label">Hidden</label><textarea id="remove_tools" name="remove_tools" rows="3" class="form-control form-control-sm font-monospace">{{ user.own.get("remove_tools", [])|join("\n") }}</textarea></div>
+        </div>
+      {% endcall %}
+
+      <div class="account-save-bar">
+        <span class="small text-secondary" data-user-draft-status role="status" aria-live="polite">No unsaved changes</span>
+        <div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-discard-draft hidden>Discard</button><button class="btn btn-primary btn-sm" name="do" value="save">Save {{ user.name }}</button></div>
+      </div>
+    </fieldset>
+    </form>
+  </div>
+</section>
 </div>
-<div class="table-responsive">
-<table id="users-table" class="table table-hover align-middle sortable">
-  <thead><tr><th data-sort="text">Name</th><th data-sort="text">Group</th><th data-sort="text">Password</th><th data-sort="text">Code</th><th data-sort="value">Signed in</th><th data-sort="value">Keys</th><th data-sort="text">Of its own</th></tr></thead>
-  <tbody>
-  {% for user in known.users %}
-  <tr>
-    <td><a href="/users/{{ user.name }}">{{ user.name }}</a>{% if not user.enabled %} <span class="badge text-bg-secondary">disabled</span>{% endif %}</td>
-    <td>{{ user.group }}</td>
-    <td>{{ "temporary" if user.password == "temporary" else "set" if user.password else "none" }}</td>
-    <td>{{ "set up" if user.second_step else "" }}</td>
-    <td data-value="{{ user.sessions }}">{{ user.sessions or "" }}</td>
-    <td data-value="{{ user["keys"]|length }}">{{ user["keys"]|length or "" }}</td>
-    <td>{{ "differs from its group" if user.own }}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
 </div>
-{% with target='users-list' %}{% include 'pagination.html' %}{% endwith %}
-</div>
-{% endcall %}
 {% endblock %}

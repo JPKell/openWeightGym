@@ -4017,18 +4017,28 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     # ---- users ------------------------------------------------------------------------------
 
+    def account_facts(user: dict) -> dict:
+        """What the Users directory says of an account beside its name: a person (it has a password) or a program (keys only),
+        whether it is active, invited (a temporary password not yet changed) or disabled, and why it may need looking at."""
+        person_like = bool(user["password"])
+        admin = any(ability == "superuser" or ability.startswith("manage-") for ability in user.get("can", []))
+        attention = [words for when, words in (
+            (user["password"] == "temporary", "It has not signed in yet to choose its own password."),
+            (person_like and admin and not user["second_step"], "It may manage others but signs in without an authenticator."),
+            (not person_like and not user["keys"], "It has no password and no API key, so nothing can use it."),
+        ) if when and user["enabled"]]
+        return {"kind": "person" if person_like else "program", "state": "disabled" if not user["enabled"] else "invited" if user["password"] == "temporary" else "active",
+                "attention": attention, "custom": bool(user.get("own")), "initials": re.sub(r"[^a-z0-9]", "", user["name"])[:2].upper() or "?"}  # fmt: skip
+
+    def spark_paths(values: list[int]) -> dict:
+        """A day-by-day line and the area under it, in the 120 × 32 box the Usage sparklines are drawn in."""
+        most, step = max([*values, 1]), 120 / max(len(values) - 1, 1)
+        points = " L".join(f"{index * step:.1f},{30 - 28 * value / most:.1f}" for index, value in enumerate(values))
+        return {"line": f"M{points}", "area": f"M0,32 L{points} L120,32 Z", "total": sum(values), "most": max(values, default=0)}
+
     async def users_page(request: Request, person: Person, said: str = "", failed: bool = False, form: dict | None = None) -> Response:
-        """Render manageable accounts and their public credential metadata."""
-        known = await fetch(request, person, "/loadcoach/users")
-        if isinstance(known, Response):
-            return known
-        limit, current = controls(request.query_params)
-        total = len(known["users"])
-        current = min(current, max(1, (total + limit - 1) // limit))
-        known = {**known, "users": known["users"][(current - 1) * limit:current * limit]}
-        return page(request, "users.html", person, status=400 if failed else 200, known=known,
-                    paging=pagination("/users", request.query_params, total, limit, current),
-                    said=said or request.query_params.get("said", ""), failed=failed, form=form or {})
+        """The directory of accounts, with the first one chosen. A refused new account comes back here with what was typed."""
+        return await user_page(request, person, said, failed, opened="add" if failed else "", form=form)
 
     async def add_user(request: Request, person: Person) -> Response:
         """Validate and submit creation of a manageable account."""
@@ -4044,18 +4054,45 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """The secrets in an answer of LoadCoach's, each with what to call it. They can be seen this one time."""
         return [(what, made[field]) for what, field in (("Temporary password", "temporary_password"), ("API key", "key")) if field in made]
 
-    async def user_page(request: Request, person: Person, said: str = "", failed: bool = False, opened: str = "", once=(), name: str = "") -> Response:
-        """`opened` names the card to show open. `once` is what was just made and is shown this one time."""
-        name, asked = name or request.path_params["name"], request.query_params
-        user = await fetch(request, person, f"/loadcoach/users/{quote(name, safe='')}", params={"days": asked.get("days", "28")})
-        known = user if isinstance(user, Response) else await fetch(request, person, "/loadcoach/groups")
-        if isinstance(known, Response):
-            return known
+    async def user_activity(request: Request, person: Person, name: str) -> Response:
+        """An account's requests per day over the last 30 days, and its 24-hour spending against its allowance.
+        Only for someone who may read the log: for anyone else the Usage report would answer with their own requests."""
+        if "see-log" not in person.can:
+            return page(request, "refused.html", person, status=403, why="Reading another account's activity needs the see-log ability.")
+        params = {"period": "30", "user": name, "group_by": "user", "timezone": settings.timezone or "UTC"}
+        usage, allowances = await asyncio.gather(ask("GET", "/loadcoach/usage", person.key, params=params), ask("GET", "/loadcoach/allowances", person.key))
+        if not usage.is_success:
+            return fragment_error(request, person, "account-trend", "activity", usage)
+        row = next((one for one in (allowances.json()["rows"] if allowances.is_success else []) if one["scope"] == "user" and one["name"] == name), None)
+        spend = None
+        if row:
+            share = 100 * row["recorded"] / row["allowance"] if row["allowance"] else 0
+            spend = {"recorded": row["recorded"], "allowance": row["allowance"], "share": min(100.0, share), "near": share >= 90, "manage": row.get("manage")}
+        return page(request, "user_activity.html", person, trend=spark_paths([day["requests"] for day in usage.json()["daily"]]), spend=spend)
+
+    async def user_page(request: Request, person: Person, said: str = "", failed: bool = False, opened: str = "", once=(), name: str = "", form: dict | None = None) -> Response:
+        """The directory of accounts beside the one chosen. `opened` names a panel to show open (`add` for adding an account),
+        `once` is what was just made and is shown this one time, and `form` what was typed into a refused new account."""
+        name, asked = name or request.path_params.get("name", ""), request.query_params
+        if name and asked.get("part") == "activity":
+            return await user_activity(request, person, name)
+        listing = await fetch(request, person, "/loadcoach/users")
+        if isinstance(listing, Response):
+            return listing
+        accounts = [{**one, **account_facts(one)} for one in listing["users"]]
+        name = name or (accounts[0]["name"] if accounts else person.name)
+        user, known = await asyncio.gather(fetch(request, person, f"/loadcoach/users/{quote(name, safe='')}", params={"days": asked.get("days", "28")}),
+                                           fetch(request, person, "/loadcoach/groups"))  # fmt: skip
+        for answer in (user, known):
+            if isinstance(answer, Response):
+                return answer
         group = next((one for one in known["groups"] if one["name"] == user["group"]), {"can": []})  # its group may have been removed
         # The models to choose from are those the one looking may use, since nobody hands out more. One already chosen stays in the list.
         models = list(dict.fromkeys([*person.me.get("models", []), *user["own"].get("models", [])]))
-        return page(request, "user.html", person, status=400 if failed else 200, user=user, known=known, ticks=tick_list(person, known, user["can"], group["can"]), models=models,
-                    said=said or asked.get("said", ""), failed=failed, opened=opened or asked.get("open", ""), once=once)  # fmt: skip
+        return page(request, "users.html", person, status=400 if failed else 200, user=user, facts=account_facts(user), accounts=accounts, group_names=listing["groups"],
+                    known=known, ticks=tick_list(person, known, user["can"], group["can"]), models=models, form=form or {},
+                    trend_url=f"/users/{quote(name, safe='')}?part=activity", said=said or asked.get("said", ""), failed=failed,
+                    opened=opened or asked.get("open", ""), once=once)  # fmt: skip
 
     async def change_user(request: Request, person: Person) -> Response:
         """Every form on a user's page comes here. `do` says which: the name of its card, and after a dash what to do there."""
@@ -4084,15 +4121,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             answer = known if now.status_code == 200 else now
             if answer.status_code == 200:
                 own = now.json()["own"]
-                if do == "abilities":
-                    group_can = next((group["can"] for group in known.json()["groups"] if group["name"] == now.json()["group"]), [])
-                    own |= of_its_own(form.get("can", []), group_can, known.json())
-                elif do == "tools":  # tools shown to it as well as its group's, and tools hidden from it
-                    own |= {key: names_in(one(key)) for key in ("add_tools", "remove_tools")}
-                else:  # limits: fewer models, fewer requests at once, a lower level, and a priority of its own
+                # `save` is the account page's one form: its limits, then its abilities, then its tools, as each card's own form would.
+                if do not in ("abilities", "tools"):  # limits: fewer models, fewer requests at once, a lower level, and a priority of its own
                     own = {key: value for key, value in own.items() if key in ("add", "remove", "add_tools", "remove_tools")}
                     own |= {"models": form.get("model", [])} if "fewer" in form else {}
                     own |= {key: read(one(key)) for key in ("max_requests", "max_sensitivity", "priority") if one(key)}
+                if do in ("abilities", "save"):
+                    group_can = next((group["can"] for group in known.json()["groups"] if group["name"] == now.json()["group"]), [])
+                    own |= of_its_own(form.get("can", []), group_can, known.json())
+                if do in ("tools", "save"):  # tools shown to it as well as its group's, and tools hidden from it
+                    own |= {key: names_in(one(key)) for key in ("add_tools", "remove_tools")}
                 # A list left empty is left out, so that an account with nothing of its own is its group again. No models at all is something of its own.
                 answer = await ask("POST", where, person.key, json={"own": {key: value for key, value in own.items() if value != [] or key == "models"}})
         card = do.partition("-")[0]
