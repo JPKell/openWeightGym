@@ -322,7 +322,9 @@ def status_nodes(inventory: dict, poll_seconds: float, now: dict | None = None) 
     current: dict[str, dict] = {}
     if now:
         for key, room in (now.get("memory") or {}).items():
-            machine, card = key.split(":", 1) if ":" in key else ("compute", key)
+            # PCI addresses contain colons too; only a prefix before the vendor is a node name.
+            prefix = key.split(":", 1)[0]
+            machine, card = key.split(":", 1) if ":" in key and "@" not in prefix else ("compute", key)
             # Keep an empty service entry so excluded devices do not return from cached inventory.
             current.setdefault(machine, {"cards": [], "loaded": []})
             if "model_cards" in now and key not in now["model_cards"]:
@@ -346,6 +348,10 @@ def status_nodes(inventory: dict, poll_seconds: float, now: dict | None = None) 
         if fresh or (now and len(machines) == 1 and node["name"] == "compute"):
             fresh = fresh or {"cards": [], "loaded": []}
             node = {**node, **fresh, "state": "ready", "status_live": True}
+        # Older workers can still report PCI-only integrated graphics as model capacity.
+        # Apply this display filter to both live and cached inventory, independently of policy metadata.
+        node = {**node, "cards": [card for card in node.get("cards", [])
+                                  if not (card["card"].startswith(("AMD@", "Intel@")) and not card.get("total"))]}
         host = hosts.get(node.get("fingerprint"))
         host_fresh = host and host.get("telemetry") and host.get("age") is not None and host["age"] <= poll_seconds * 3
         own_stale = node.get("telemetry_age") is None or node["telemetry_age"] > poll_seconds * 3
