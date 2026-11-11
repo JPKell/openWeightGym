@@ -312,3 +312,99 @@ def test_cross_node_install_streams_into_the_verified_atomic_receiver(tmp_path, 
         assert (destination/'weights.gguf').exists() is (failure is None)
         assert not list(destination.glob('*.part'))
         assert (source/'weights.gguf').read_bytes()==content
+
+
+def test_installs_to_several_nodes_promote_a_shared_stored_file_once():
+    stored = {'path': '/front/storage/weights.gguf', 'size': SPARE, 'place': 'storage_llm', 'tier': 'storage'}
+    settings = {'flags': {'model': stored['path'], 'ctx-size': 2048}, 'gpus': 0}
+    nodes = [node('front', [stored]), node('cpu'), node('gpu')]
+    plans = [plan(settings, nodes, each, 'front') for each in ('cpu', 'gpu')]
+    placed = {('front', stored['path']): 'fixture-sha'}
+    promotions, transfers = [], []
+    async def digest(machine, path):
+        await asyncio.sleep(0)
+        if (machine, path) not in placed:
+            raise ValueError(f'Could not verify {path} on {machine}.')
+        return placed[(machine, path)]
+    async def promote(step):
+        promotions.append(step['path'])
+        await asyncio.sleep(0)  # the other installation runs meanwhile, and must wait rather than promote again
+        placed[(step['node'], step['path'])] = placed[(step['source'], step['file']['path'])]
+    async def transfer(step, wanted, job):
+        transfers.append(step['node'])
+        placed[(step['node'], step['path'])] = wanted
+    locks = {}
+    def claim(machine, path):
+        return locks.setdefault((machine, path), asyncio.Lock())
+    async def both():
+        return await asyncio.gather(*(execute(one, digest, promote, transfer, {}, claim) for one in plans))
+    results = asyncio.run(both())
+    assert promotions == ['/front/cache/weights.gguf'] and sorted(transfers) == ['cpu', 'gpu']
+    assert [one['flags']['model'] for one in results] == ['/cpu/cache/weights.gguf', '/gpu/cache/weights.gguf']
+
+
+@pytest.mark.parametrize('taken', [False, True])
+def test_one_request_installs_a_model_on_several_nodes_or_on_none(tmp_path, taken):
+    import hashlib
+    from starlette.responses import Response
+    from spotter.app import Settings as SpotterSettings, build_app as build_spotter
+    source, destination = tmp_path/'source', tmp_path/'destination'
+    source.mkdir(); destination.mkdir()
+    content = b'fixture model bytes'
+    (source/'weights.gguf').write_bytes(content)
+    users = Users(str(tmp_path/'accounts.db'), {'manager':Group(can=frozenset({'manage-models'}))})
+    users.add('manager','manager')
+    headers = {'authorization':'Bearer '+users.new_key('manager')}
+    primary_key=machine_key(tmp_path); rig_key=str(tmp_path/'rig.key');statement.replace_key(rig_key,'r'*40)
+    created=[]
+    def worker(name, folder, key):
+        async def answer(request):
+            if request.url.path == '/loadcoach/files':
+                return JSONResponse({'places':[{'name':'llm','folder':str(folder),'free':10*SPARE,'tier':'cache','filesystem':'one'}],
+                    'files':[{'path':str(file),'size':file.stat().st_size,'place':'llm','tier':'cache'} for file in folder.glob('*.gguf')]})
+            if request.url.path == '/loadcoach/models':
+                # With `taken`, the second node has a model of that name already, so neither node may start.
+                rows = [{'name':'copied','model_id':'old','flags':{'model':'/elsewhere.gguf','ctx-size':2048},'gpus':0}] if taken and name == 'rig' else []
+                return JSONResponse({'models':rows,'cards':['CUDA0'],'defaults':{}})
+            if request.url.path == '/loadcoach/engines':
+                return JSONResponse({'engines':[{'id':'llama_cpp','enabled':True,'available':True}]})
+            if request.url.path == '/loadcoach/files/hash':
+                file=Path(request.query_params['path'])
+                if file.parent != folder or not file.is_file():return JSONResponse({'error':{'message':'missing'}},404)
+                return JSONResponse({'sha256':hashlib.sha256(file.read_bytes()).hexdigest()})
+            if request.url.path == '/loadcoach/files/content':
+                return Response(content,media_type='application/octet-stream')
+            if request.url.path == '/loadcoach/models/copied':
+                settings=json.loads(await request.body())
+                assert Path(settings['flags']['model']).read_bytes()==content
+                created.append(name)
+                return JSONResponse(settings,201)
+            return JSONResponse({'error':{'message':'unused fixture endpoint'}},404)
+        return statement.Statements(Starlette(routes=[Route('/{path:path}',answer,methods=['GET','POST'])]),key)
+    receiver = build_spotter(SpotterSettings(services={},database=str(tmp_path/'spotter.db'), history=str(tmp_path/'history.db'),
+        machine_key_file=rig_key,places={'llm':str(destination)}))
+    class Wire(httpx.AsyncBaseTransport):
+        wires = {8442:httpx.ASGITransport(app=worker('compute',source,primary_key)),
+                 9442:httpx.ASGITransport(app=worker('rig',destination,rig_key)),9444:httpx.ASGITransport(app=receiver)}
+        async def handle_async_request(self,request):
+            return await self.wires[request.url.port].handle_async_request(request)
+    settings=Settings(compute='compute',data=str(tmp_path),machine_key_file=primary_key,ports=(8442,8443,8444),
+        machines={'rig':{'compute':'http://compute:9442','spotter':'http://compute:9444','machine_key_file':rig_key}})
+    with TestClient(build_app(settings,httpx.AsyncClient(transport=Wire()),users=users),base_url='http://front:8442') as front:
+        result=front.post('/turnstile/models/install',headers=headers,json={'name':'copied','machines':['compute','rig','compute'],'source_machine':'compute',
+            'settings':{'flags':{'model':str(source/'weights.gguf'),'ctx-size':2048},'gpus':0}})
+        if taken:
+            assert result.status_code==409 and result.json()['error']['message']=='rig: There is already a model named copied on rig. Nothing was started.'
+            assert not front.get('/turnstile/artifacts/distributions',headers=headers).json()['distributions']
+        else:
+            assert result.status_code==202,result.text
+            assert [job['machine'] for job in result.json()['jobs']]==['compute','rig']  # each node once, in the order asked
+            deadline=time.monotonic()+5
+            while time.monotonic()<deadline:
+                jobs=front.get('/turnstile/artifacts/distributions',headers=headers).json()['distributions']
+                if all(job['state'] in ('failed','complete') for job in jobs):break
+                time.sleep(.05)
+            assert [job['state'] for job in jobs]==['complete','complete'],jobs
+    assert sorted(created)==([] if taken else ['compute','rig'])
+    assert (destination/'weights.gguf').exists() is not taken
+    assert (source/'weights.gguf').read_bytes()==content

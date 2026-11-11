@@ -39,9 +39,9 @@ def test_model_defaults_workflow_versions_and_civitai_destinations(desk,tmp_path
         playwright.expect(page.locator('#ctx')).to_have_value('6000')
         assert page.locator('#cards, #allow-split').count()==0
         if width==1440:
-            positions=[page.locator(selector).bounding_box() for selector in ['#model-node','#file','#model-engine','#name','#min-context','#ctx']]
-            assert positions[0]['x']<positions[1]['x']<positions[2]['x'] and positions[3]['x']<positions[4]['x']<positions[5]['x']
-            assert positions[0]['y']<positions[3]['y']
+            positions=[page.locator(selector).bounding_box() for selector in ['#model-nodes','#file','#model-engine','#name','#projector','#min-context','#ctx']]
+            assert positions[0]['x']<positions[1]['x']<positions[2]['x'] and positions[3]['x']<positions[4]['x']<positions[5]['x']<positions[6]['x']
+            assert positions[0]['y']<positions[3]['y'] and len({round(box['y']+box['height']) for box in positions[3:]})==1  # the second row's fields line up
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         folder=Path('data/qualification/model-image-settings-20261027');folder.mkdir(parents=True,exist_ok=True)
         page.screenshot(path=str(folder/f'models-{width}.png'),full_page=True)

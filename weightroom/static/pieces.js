@@ -106,7 +106,7 @@ document.addEventListener("htmx:beforeSwap", event => {
     return `${scope}:${parent}:${detail.id || heading?.textContent.trim()}`;
   };
   /** Restrict remembered expansion state to supported main-page sections. */
-  const eligible = detail => detail.matches("main details") && !detail.matches("[data-add-model-card]") && !detail.matches(".user-menu");
+  const eligible = detail => detail.matches("main details") && !detail.matches(".user-menu");
   /** Persist bounded section expansion choices when browser storage is available. */
   const save = () => { try { localStorage.setItem(storageKey, JSON.stringify(kept)); } catch (_) {} };
   /** Restore remembered section expansion state after fragment updates. */

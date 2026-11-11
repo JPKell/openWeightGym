@@ -917,15 +917,16 @@ def test_models_list_leads_and_add_explains_disabled_state(ui_console):
     with playwright.sync_playwright() as engine:
         browser,page=browser_context(engine,server)
         page.goto('http://console.test/models')
-        assert page.locator('#add-model').get_attribute('open') is None
+        assert page.locator('#add-model').evaluate('el => el.tagName') == 'SECTION'  # a card that cannot be collapsed
         assert page.locator('#models-table').bounding_box()['y'] < page.locator('#add-model').bounding_box()['y']
+        assert not page.get_by_text('Storage originals are retained', exact=False).count()
+        assert not page.get_by_role('link', name='View model fingerprints').count()
         page.get_by_role('link',name='Add a model',exact=True).click()
-        playwright.expect(page.locator('#add-model')).to_have_attribute('open','')
         button=page.locator('[data-file-submit]')
         playwright.expect(button).to_be_disabled()
         assert button.get_attribute('title') == page.locator('#model-add-reason').inner_text()
-        assert 'status not reported' in page.locator('#model-node').inner_text()
-        playwright.expect(page.get_by_role('button',name='Browse node files',exact=True)).to_be_visible()
+        assert 'status not reported' in page.locator('#model-nodes').inner_text()
+        assert page.get_by_role('button',name='Browse node files',exact=True).count() == 0
         browser.close()
 
 

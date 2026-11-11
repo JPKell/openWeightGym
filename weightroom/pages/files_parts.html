@@ -20,6 +20,9 @@
 {% if answering %}<p class="small text-secondary mb-3">Files last checked: {% for node in answering %}{{ 'Front' if node.name == 'front' else node.name }} {{ node.checked|timestamp }}{{ ' · ' if not loop.last }}{% endfor %}.</p>{% endif %}
 {% endmacro %}
 
+{# A file offered in a list to choose from: where it is first, then its name, without its folders. #}
+{% macro file_choice_label(file) %}{{ file.machine }} · {{ file.tier }} · {{ file.path.rsplit('/', 1)[-1] }} · {{ file.size|size }}{% endmacro %}
+
 {# A drive's size: as |size, but in TB from 1000 GB up, so a big drive fits a narrow card. #}
 {% macro drive_size(count) %}{{ '%.1f TB'|format(count / 2**40) if count >= 1000 * 2**30 else count|size }}{% endmacro %}
 
