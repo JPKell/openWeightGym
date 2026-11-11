@@ -84,7 +84,7 @@ from weightroom.database_console import DatabaseConsole, owner_of
 from weightroom.conversations import build_app as build_conversations
 from weightroom import pairing
 from weightroom.plugin_pages import build_routes as plugin_routes
-from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, model_kind as benchmark_model_kind
+from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, run_lanes, run_model_rows, model_kind as benchmark_model_kind
 from benchmarks.identity import variant
 from turnstile.model_configuration import (configuration as model_configuration, generation as generation_settings, comparable, shared as shared_values,
                                            translate, GLOBAL_FLAGS, PROFILE_GLOBALS)
@@ -1494,6 +1494,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         selected = form.get("engine", ["llama_cpp"])[-1].strip() or "llama_cpp"
         return engine_for(selected).parse_form(form, read)
 
+    benchmark_inventory = {}
+
     async def benchmark_page(request: Request, person: Person) -> Response:
         """Render benchmark evidence using the caller's catalogue and authorised run list."""
         section = 'detail' if 'number' in request.path_params else request.path_params.get("section")
@@ -1525,8 +1527,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if 'kind' not in request.query_params and embedding_family:
                 kind = 'embedding'
             embedding_family = kind == 'embedding'
-        if section == 'runs':
-            models = [model for model in models if benchmark_model_kind(model) == 'llm']
         if section in ('results', 'node-measurements'):
             models = [model for model in models if benchmark_model_kind(model) == ('llm' if kind == 'embedding' else kind)]
             if kind in ('image', 'audio'):
@@ -1682,20 +1682,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         measurement_models = start_models
         preferred_node = request.query_params.get('machine', 'compute')
         unavailable_nodes = catalogue.get('unavailable_machines', [])
-        from benchmarks.eligibility import resolve_location
-        quality_models = []
-        for model in eligible_models:
-            choices = [one for one in start_models if one['id'] == model['id']]
-            try:
-                location, reason = resolve_location(model, preferred_node, unavailable_nodes)
-                target_choice = next((one for one in choices if one['location'] == location['machine']), None)
-                if target_choice:
-                    quality_models.append({**target_choice, 'choices': choices, 'fallback_reason': reason})
-            except ValueError as problem:
-                quality_models.append({**model, 'target': {}, 'location': '', 'result_key': None,
-                                       'choices': [], 'fallback_reason': str(problem)})
-        if selected.get('quality'):
-            start_models = quality_models
         start_nodes, start_rows = [], []
         if selected['id'] in resource_ids:
             for candidate in start_models:
@@ -1708,16 +1694,39 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     if candidate['id'] == model['id']:
                         targets[candidate['location'] or 'compute'] = candidate
                 start_rows.append({'model': model, 'targets': targets})
-        queue = sorted((run for run in runs if run['state'] not in ('completed', 'failed', 'cancelled')),
-                       key=lambda run: (0 if run['state'] == 'running' else 1 if run['state'] == 'queued' else 2, run['created']))
-        active = next((run for run in runs if run['state'] == 'running'), None)
-        live = await fetch(request, person, '/benchmarks/' + active['id']) if active else None
-        if isinstance(live, Response):
-            return live
+        may_run = ('benchmark' in person.can or 'superuser' in person.can) and not found['compute_unavailable']
+        inventory = {'machines': list(benchmark_inventory.values())}
+        if section == 'runs':
+            try:
+                answer = await ask('GET', '/turnstile/machines', person.key)
+                if answer.is_success:
+                    # The monitor's model/loaded lists are not caller-scoped. Only
+                    # public node topology is consumed; choices use the catalogue.
+                    inventory = {'machines': [{key: node[key] for key in
+                        ('name', 'state', 'hostname', 'lifecycle', 'accepting_work') if key in node}
+                        for node in answer.json().get('machines', [])]}
+                    benchmark_inventory.clear()
+                    benchmark_inventory.update({node['name']: node for node in inventory['machines']})
+            except ComputeOff:
+                pass
+        lanes = run_lanes(catalogue, inventory, models, selected, runs, location_latest, latest, may_run)
+        queue = sorted((run for run in runs if run['state'] not in ('running', 'completed', 'failed', 'cancelled')),
+                       key=lambda run: run['created'])
+        active_runs = [run for run in runs if run['state'] == 'running']
+        live_runs = []
+        for active in active_runs:
+            data = await fetch(request, person, '/benchmarks/' + active['id'])
+            live_runs.append({'run': active, 'detail': None if isinstance(data, Response) else data})
+        live = next((item['detail'] for item in live_runs if item['detail']), None)
+        pagination = history_page(runs, request.query_params)
+        history_query = urlencode({'benchmark': selected['id'], 'per_page': pagination['size'],
+                                  'history_node': pagination['node'], 'outcome': pagination['outcome'], 'q': pagination['search']})
         return page(request, 'benchmark_live.html' if section in ('embedders', 'runs') and request.query_params.get('part') == 'live' else 'benchmarks.html', person,
                     section=section, benchmarks=definitions, benchmark=selected, models=models, selected_models=chosen,
                     comparisons=comparisons, columns=columns, history=filtered_history, history_filter=history_filter,
-                    selected_runs=selected_runs, detail=detail, start_models=start_models, queue=queue, pagination=history_page(runs, request.query_params),
+                    selected_runs=selected_runs, detail=detail, start_models=start_models, queue=queue, pagination=pagination,
+                    history_query=history_query, live_query=history_query + '&page=' + str(pagination['page']) + '&part=live',
+                    lanes=lanes, run_models=run_model_rows(lanes), live_runs=live_runs, selected_target=(request.query_params.get('pick_model'), request.query_params.get('pick_node')),
                     regression=regression, regression_error=regression_error,
                     latest=latest, location_latest=location_latest, measurement_models=measurement_models,
                     resource_benchmarks=resource_benchmarks, score_benchmarks=score_benchmarks,
@@ -1727,7 +1736,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     start_nodes=start_nodes, start_rows=start_rows, preferred_node=preferred_node, preferred_nodes=sorted(set(resource_nodes) | set(unavailable_nodes) | {preferred_node}), resource_ids=resource_ids,
                     colours=colours, runs=runs, paused=found['paused'], live=live,
                     embedding_family=embedding_family, kind=kind, type_benchmarks=type_benchmarks,
-                    may_run='benchmark' in person.can or 'superuser' in person.can, catalogue_warning=catalogue_warning,
+                    may_run=may_run, catalogue_warning=catalogue_warning,
                     said=request.query_params.get('said',''), failed='failed' in request.query_params,
                     partial='partial' in request.query_params)
 
@@ -1753,8 +1762,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 targets = []
                 try:
                     targets = [json.loads(value) for value in form.get('run-target', [])]
+                    if len(targets) > 100 or any(not isinstance(target, dict) or not isinstance(target.get('model'), str)
+                        or not target.get('model') or not isinstance(target.get('machine'), str) or not target.get('machine') for target in targets):
+                        raise ValueError('Invalid target')
+                    if targets and form.get('run-model'):
+                        raise ValueError('Mixed target formats')
                 except (ValueError, TypeError):
-                    pass
+                    return go('/benchmarks/runs?failed=1&benchmark=' + quote(one('benchmark'), safe='') + '&said=' +
+                              quote('Choose one to 100 valid model and node targets. No runs were submitted.'))
                 path, body, back = '/benchmarks', {'benchmark': one('benchmark'),
                                                     **({'targets': targets} if targets else {'models': form.get('run-model', [])})}, 'runs'
         elif section == 'control':
@@ -1779,15 +1794,31 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 said += f" {len(result['active'])} already queued or running."
             unavailable = result.get('unavailable') or []
             errors = result.get('errors') or []
+            pending = result.get('pending') or []
             if unavailable:
                 said += ' Environment unavailable: ' + ', '.join(unavailable) + '.'
             if errors:
                 said += ' Could not queue: ' + ', '.join(
                     f"{item['benchmark']} ({item.get('message') or 'compute rejected the request'})" for item in errors) + '.'
-            return go('/benchmarks/runs?' + ('partial=1&' if unavailable or errors else '') + 'said=' + quote(said))
-        skipped = answer.json().get('skipped') if section == 'runs' else None
-        left_out = f" Left out because the benchmark needs a different model type: {', '.join(skipped)}." if skipped else ''
-        return go('/benchmarks/' + back + '?said=' + quote('Queued.' + left_out if section == 'runs' else 'Saved.') + ('&benchmark=' + quote(one('benchmark'), safe='') if section == 'manage' else ''))
+            if pending:
+                said += f' {len(pending)} task acknowledgements pending; existing task IDs will be checked before retrying.'
+            return go('/benchmarks/runs?' + ('partial=1&' if unavailable or errors or pending else '') + 'said=' + quote(said))
+        if section == 'runs':
+            result = answer.json()
+            count = len(result.get('runs', []))
+            said = f"Queued {count} run{'s' if count != 1 else ''}."
+            if result.get('active'):
+                said += f" {len(result['active'])} already queued or running."
+            if result.get('pending'):
+                said += f" {len(result['pending'])} task acknowledgements pending; existing task IDs will be checked before retrying."
+            if result.get('errors'):
+                said += ' Could not queue: ' + '; '.join(
+                    f"{item['model']} at {item['machine']}: {item['message']}" for item in result['errors']) + '.'
+            if result.get('skipped'):
+                said += ' Incompatible model type: ' + ', '.join(result['skipped']) + '.'
+            flag = 'partial=1&' if result.get('errors') or result.get('pending') or result.get('skipped') else ''
+            return go('/benchmarks/runs?benchmark=' + quote(one('benchmark'), safe='') + '&' + flag + 'said=' + quote(said))
+        return go('/benchmarks/' + back + '?said=' + quote('Saved.') + ('&benchmark=' + quote(one('benchmark'), safe='') if section == 'manage' else ''))
 
     async def models_page(request: Request, person: Person, said: str = "", failed: bool = False, form: dict | None = None) -> Response:
         """Render the merged authorized model catalogue in configured order.

@@ -1,0 +1,59 @@
+{% from 'parts.html' import page_header, card, alert, section_title %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'benchmark_design_parts.html' import templates %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Benchmark Runs · Three proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to benchmark runs</a>
+<div class="review-bar px-4 py-3 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-2"><div><strong>openWeightGym</strong><span class="text-secondary ms-3">Benchmark / design review</span></div><div class="d-flex flex-wrap gap-2 align-items-center"><span class="badge bg-blue-lt">Sample data · simulated actions</span><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div></div>
+<main class="benchmark-design-page">
+{% call pills('Design options', buttons=true, class_='gap-2 mb-3') %}
+{{ pill_button('01 / Comparison lab · recommended', true, attrs={'data-design': 'matrix'}) }}
+{{ pill_button('02 / Machine lanes', attrs={'data-design': 'lanes'}) }}
+{{ pill_button('03 / Run studio', attrs={'data-design': 'studio'}) }}
+{% endcall %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4"><p class="small text-secondary mb-0" id="design-description"></p><label class="d-flex gap-2 align-items-center small">Try a state<select class="form-select form-select-sm w-auto" id="scenario"><option value="normal">Mixed fleet</option><option value="offline">Connection lost</option><option value="empty">No models or runs</option><option value="readonly">View only</option></select></label></div>
+<div id="workspace" data-layout="matrix">
+{% call page_header('Benchmark runs', pretitle='EVALUATE / YOUR FLEET') %}<a href="#composer" class="btn btn-primary">Set up a run <span aria-hidden="true" class="ms-2">↗</span></a>{% endcall %}
+<div class="fleet-heading d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-3"><strong id="fleet-summary"></strong><span class="small text-secondary">Sample snapshot · 11 Nov 2026, 10:42 PST</span></div>
+<section id="nodes" class="fleet-grid mb-4" aria-label="All configured nodes"></section>
+<div id="connection-note" hidden>{{ alert('warning', 'Connection lost. Last known work stays visible. New runs and queue changes are unavailable.', class_='py-2') }}</div>
+<div id="permission-note" hidden>{{ alert('info', 'View only. Ask an administrator for the benchmark ability to queue or manage runs.', class_='py-2') }}</div>
+<div id="feedback" role="status" aria-live="polite" class="small mb-3"></div>
+<div class="runs-workspace">
+{% call card('Running now', id='running-panel', hint='Work on every node, in one view.', body_class='p-0', actions='<span class="badge bg-blue-lt" id="running-count"></span>'|safe) %}<div id="running" class="live-grid"></div>{% endcall %}
+{% call card('Start a run', id='composer', hint='Choose a test, then the exact model and node pairs.', body_class='p-0') %}
+<form id="setup" data-hold-refresh>
+<div class="setup-toolbar p-3 border-bottom">
+<div><label class="form-label" for="benchmark">01 / What to measure</label><select id="benchmark" name="benchmark" class="form-select"><optgroup label="Machine performance"><option value="speed">Generation speed</option><option value="context">Context capacity</option><option value="load">Load time · all model types</option><option value="embedding_speed">Embedding throughput</option></optgroup><optgroup label="Language quality"><option value="extraction">Structured extraction</option></optgroup></select></div>
+<div><label class="form-label" for="search-models">02 / Models & nodes</label><input class="form-control" id="search-models" type="search" placeholder="Find a model…"></div>
+<div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-primary" id="select-gaps">Select missing & changed</button><button type="button" class="btn btn-outline-secondary" id="clear-selection">Clear</button></div>
+</div>
+<div class="d-flex flex-wrap justify-content-between gap-2 px-3 pt-3"><p id="benchmark-note" class="small text-secondary"></p><span class="small text-secondary">Cells show saved evidence for this test.</span></div>
+<div id="targets" class="target-area"></div>
+<div class="setup-review p-3 border-top"><div><strong id="selection-count"></strong><p class="small text-secondary mb-0 mt-1" id="selection-note"></p></div><button type="submit" class="btn btn-primary" id="review" disabled>Review & queue <span aria-hidden="true" class="ms-2">→</span></button></div>
+</form>
+{% endcall %}
+{% call card('Queue', id='queue-panel', hint='Oldest first · low priority · yields to user requests.', body=false, actions='<button type="button" class="btn btn-outline-secondary btn-sm" id="pause-all">Pause queue</button>'|safe) %}
+<div class="table-responsive"><table class="table align-middle mb-0" aria-label="Queued benchmarks"><thead><tr><th scope="col">Model</th><th scope="col">Node</th><th scope="col">Test</th><th scope="col">State</th><th scope="col">Actions</th></tr></thead><tbody id="queue"></tbody></table></div><p class="small text-secondary px-3 py-2 mb-0" id="queue-summary"></p>
+{% endcall %}
+{% call card('Run history', id='history-panel', body=false, actions='<span class="small text-secondary" id="history-count"></span>'|safe) %}
+<div class="d-flex flex-wrap gap-2 p-3 border-bottom"><input id="history-search" type="search" class="form-control flex-fill" aria-label="Search run history" placeholder="Find a model, node or test…"><select id="history-state" class="form-select w-auto" aria-label="Filter history state"><option value="all">All outcomes</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></div>
+<div class="table-responsive"><table class="table table-hover align-middle mb-0" aria-label="Finished benchmarks"><thead><tr><th scope="col">Model / run</th><th scope="col">Node</th><th scope="col">Test</th><th scope="col">Result</th><th scope="col">Outcome</th><th scope="col">Action</th></tr></thead><tbody id="history"></tbody></table></div>
+{% endcall %}
+</div>
+<p class="small text-secondary mt-3">Illustrative fleet and results. Times are shown in America/Vancouver. All actions stay in this preview; no models are loaded and no benchmarks are started.</p>
+<p class="small"><a href="../../docs/model-image-settings-plan.md#8-benchmark-runs-redesign-proposals-2026-11-11">Implementation checklist & code review findings ↗</a></p>
+</div>
+</main>
+{{ templates() }}
+<dialog id="review-dialog" class="benchmark-dialog" aria-labelledby="review-title">
+{% call card('Review this batch', header_id='review-title', class_='mb-0') %}<p id="review-summary"></p><div class="table-responsive"><table class="table table-sm" aria-label="Exact run targets"><thead><tr><th scope="col">Model</th><th scope="col">Node</th><th scope="col">Test</th></tr></thead><tbody id="review-rows"></tbody></table></div><p class="small text-secondary">Targets stay pinned to these nodes. A disconnected node waits for recovery. No finish-time estimate is available before sampling.</p><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-primary" id="queue-batch">Queue sample batch</button><button type="button" class="btn btn-outline-secondary" data-close>Back to setup</button></div>{% endcall %}
+</dialog>
+<dialog id="detail-dialog" class="benchmark-dialog" aria-labelledby="detail-title">
+{% call card('Saved run', header_id='detail-title', class_='mb-0') %}<dl id="run-detail" class="detail-grid"></dl><p class="small text-secondary">Results belong to their recorded node, settings and protocol. Compare results using the same test version and context.</p><button class="btn btn-outline-secondary" data-close>Close</button>{% endcall %}
+</dialog>
+<script>{{ javascript|safe }}</script>
+</body></html>

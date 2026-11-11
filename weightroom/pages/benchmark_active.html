@@ -1,4 +1,4 @@
-{% from "parts.html" import section_title %}
+{% from "parts.html" import section_title, more %}
 {# What is in the Running card on Benchmark, Runs: the run being done now, its log and what it has measured so far. #}
 {% from "benchmark_parts.html" import number, duration %}
 {% if live %}
@@ -8,8 +8,9 @@
   <div><span class="small text-secondary" title="Wall-clock time since the first start, including pauses and waits">Time elapsed</span><strong>{{ duration(progress.elapsed_seconds) }}</strong></div>
   <div><span class="small text-secondary">Estimated time remaining</span><strong>{% if progress.eta_overdue %}Taking longer than estimated{% elif progress.eta_seconds is not none %}~ {{ duration(progress.eta_seconds) }}{% else %}Estimating…{% endif %}</strong></div>
 </div>
-<div class="benchmark-live"><div>{{ section_title("Log", level=3) }}<pre class="benchmark-log frame" tabindex="0" aria-label="Latest benchmark log">{% for message in live.messages %}{{ message.at|timestamp }} {{ message.text }}
+{% set measurements %}<div class="benchmark-live"><div>{{ section_title("Log", level=3) }}<pre class="benchmark-log frame" tabindex="0" aria-label="Latest benchmark log">{% for message in live.messages %}{{ message.at|timestamp }} {{ message.text }}
 {% endfor %}</pre></div><div>{{ section_title("Live measurements", level=3) }}<div class="table-responsive"><table class="table table-sm"><tbody>{% for key,value in live.metrics.items() %}<tr><th scope="row">{{ key }}</th><td>{{ number(value) }}</td></tr>{% else %}<tr><td class="text-secondary">Measurements appear after each completed sample.</td></tr>{% endfor %}</tbody></table></div></div></div>
+{% endset %}{% if section == 'runs' %}{% call more('Live measurements & log', attrs={'data-card-key': 'benchmark-live-details-' ~ live.id}) %}{{ measurements }}{% endcall %}{% else %}{{ measurements }}{% endif %}
 {% else %}
 <p class="small text-secondary mb-0">No benchmark is running.</p>
 {% endif %}

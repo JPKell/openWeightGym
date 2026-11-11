@@ -1,0 +1,5 @@
+{% from 'benchmark_parts.html' import node_summary %}
+<section id="benchmark-nodes" aria-label="All configured nodes"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><strong>{{ lanes|length }} nodes visible · {{ live_runs|length }} running</strong><a href="#benchmark-choice" class="btn btn-primary btn-sm">Set up a run</a></div>
+<div class="benchmark-node-grid mb-4">{% for node in lanes %}{{ node_summary(node) }}{% endfor %}</div>
+</section>

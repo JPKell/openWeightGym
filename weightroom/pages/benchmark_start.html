@@ -1,23 +1,13 @@
+{% if section == 'runs' %}{% include 'benchmark_studio.html' %}{% else %}
 {% from "benchmark_parts.html" import number, flags %}
 {% from "parts.html" import card, swaps, empty_row %}
 <div id="benchmark-choice">
 {% call card("Start a run", true, "benchmark-start") %}
 {% for model in models if model.capabilities is defined and model.capabilities.native_probes is defined and not model.capabilities.native_probes %}<p class="small text-secondary">{{ model.id }} · Unsupported: this engine has no qualified native benchmark probes.</p>{% endfor %}
-{% if section == 'runs' %}
-<form method="post" action="/benchmarks/runs" class="row g-2 align-items-end mb-4">
-  <input type="hidden" name="action" value="outstanding">
-  <div class="col-md-8"><label for="outstanding-model" class="form-label">Model</label><select id="outstanding-model" name="model" class="form-select" required>
-    {% for model in models if model.capabilities is not defined or model.capabilities.native_probes is not defined or model.capabilities.native_probes %}<option value="{{ model.id }}">{{ model.id }}</option>{% endfor %}
-  </select></div>
-  <div class="col-md-4"><button class="btn btn-primary w-100"{% if not may_run or not models %} disabled{% endif %}>Queue outstanding benchmarks</button></div>
-</form>
-<p class="small text-secondary">Queues every enabled benchmark this model has never completed, plus results made stale by model settings, benchmark protocol, inference engine or machine changes. Node-specific measurements are queued once per available location.</p>
-<hr>
-{% endif %}
 <form method="get" action="{{ '/benchmarks/embedders' if section == 'embedders' else '/benchmarks/runs' }}" class="benchmark-picker" {{ swaps("benchmark-choice", true) }}>
 <label for="benchmark-node">Preferred node</label><select id="benchmark-node" name="machine" class="form-select form-select-sm" data-benchmark-select>{% for node in preferred_nodes %}<option value="{{ node }}"{{ ' selected' if node==preferred_node }}>{{ node }}</option>{% endfor %}</select>
 <label for="benchmark">Benchmark</label><select id="benchmark" name="benchmark" class="form-select form-select-sm" data-benchmark-select>{% for bench in benchmarks %}<option value="{{ bench.id }}" {{ 'selected' if benchmark.id == bench.id }}{% if not bench.enabled %} disabled{% endif %}>{{ bench.name }}{{ ' (disabled)' if not bench.enabled }}</option>{% endfor %}</select>
-<button type="submit" form="start-benchmark" class="btn btn-primary btn-sm ms-auto"{% if not may_run or not benchmark.enabled %} disabled{% endif %}>Queue selected models</button></form>
+<button type="submit" form="start-benchmark" class="btn btn-primary btn-sm ms-auto" data-queue-selected data-may-run="{{ 'true' if may_run and benchmark.enabled else 'false' }}" disabled>Queue selected models</button></form>
 <p class="small text-secondary">{{ benchmark.summary }} One model at a time, at low priority.</p>
 {% if not may_run %}<p class="text-warning-emphasis small">Your account needs the benchmark ability to start runs.</p>{% endif %}
 <form id="start-benchmark" method="post" action="/benchmarks/runs"><input type="hidden" name="benchmark" value="{{ benchmark.id }}"></form>
@@ -25,7 +15,6 @@
 {% if benchmark.id in resource_ids %}<th scope="col">Model <span class="small text-secondary" data-selected-count>0 nodes selected</span></th>{% for node in start_nodes %}<th scope="col">{{ node }}<small><label><input type="checkbox" class="form-check-input" aria-label="Select all models on {{ node }}" data-select-node="{{ node }}"{% if not may_run %} disabled{% endif %}> all</label></small></th>{% endfor %}</tr></thead><tbody>
 {% for row in start_rows %}<tr><th scope="row">{{ row.model.id }}</th>{% for node in start_nodes %}{% set candidate = row.targets.get(node) %}<td>{% if candidate %}{% set result = location_latest.get(candidate.result_key) if candidate.result_key else latest.get(candidate.id, {}).get(benchmark.id) %}<label class="d-flex gap-2 align-items-start"><input type="checkbox" class="form-check-input" name="{{ 'run-target' if candidate.location else 'run-model' }}" form="start-benchmark" value="{{ candidate.target|tojson|forceescape if candidate.location else candidate.id }}" data-node="{{ node }}" aria-label="Select {{ candidate.id }} at {{ node }}"{% if not may_run %} disabled{% endif %}><span>{{ number(result.score if result else none) }}<small class="d-block text-secondary">{{ result.ended|timestamp if result else 'Not run' }}</small></span></label>{% else %}<span class="text-secondary">Not available</span>{% endif %}</td>{% endfor %}</tr>
 {% else %}{% call empty_row((start_nodes|length + 1), class_='empty-state') %}No local models are available to your account.{% endcall %}{% endfor %}
-{% else %}<th scope="col" class="check-column"><input type="checkbox" class="form-check-input" aria-label="Select all models" data-select-models{% if not may_run or not models %} disabled{% endif %}></th><th scope="col" data-sort="text">Model <span class="small text-secondary" data-selected-count>0 models selected</span></th><th scope="col">Target node</th><th scope="col" data-sort="value">Score</th><th scope="col" data-sort="value">Last run</th></tr></thead><tbody>
-{% for model in start_models %}{% set result = location_latest.get(model.result_key) if model.result_key else latest.get(model.id, {}).get(benchmark.id) %}<tr data-select-row><td><input type="checkbox" class="form-check-input" name="{{ 'run-target' if model.location else 'run-model' }}" form="start-benchmark" value="{{ model.target|tojson|forceescape if model.location else model.id }}" aria-label="Select {{ model.id }}{{ ' at ' + model.location if model.location }}"{% if not may_run or not model.choices %} disabled{% endif %}></td><th scope="row">{{ model.id }}</th><td><select class="form-select form-select-sm mt-1" data-target-node aria-label="Target node for {{ model.id }}"{% if not model.choices %} disabled{% endif %}>{% for choice in model.choices %}<option value="{{ choice.target|tojson|forceescape }}"{{ ' selected' if choice.location==model.location }}>{{ choice.location }}</option>{% else %}<option>Unavailable</option>{% endfor %}</select><small class="d-block text-secondary" data-target-reason>{{ model.fallback_reason }}</small></td><td data-value="{{ result.score if result and result.score is not none else '' }}">{{ number(result.score if result else none) }}{{ flags(result) }}</td><td data-value="{{ result.ended if result and result.ended else 0 }}" class="text-secondary">{{ result.ended|timestamp if result else 'Not run' }}</td></tr>
-{% else %}{% call empty_row(4, class_='empty-state') %}No local models are available to your account.{% endcall %}{% endfor %}{% endif %}</tbody></table></div>
+{% endif %}</tbody></table></div>
 {% endcall %}</div>
+{% endif %}

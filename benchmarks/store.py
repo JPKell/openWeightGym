@@ -158,7 +158,7 @@ class Benchmarks:
             if reserve:
                 from benchmarks.eligibility import reservation_key
                 key = reservation_key(model_id or model, location, kind)
-                if self.db.execute("SELECT id FROM benchmark_runs WHERE model_id=? AND COALESCE(NULLIF(location,''),'compute')=? AND benchmark=? AND state IN ('creating','queued','running')", (model_id,location or 'compute',kind)).fetchone():
+                if self.active_for(model_id or model, location, kind, by_name=not model_id):
                     return None
                 self.db.execute("DELETE FROM benchmark_reservations WHERE key=? AND run IN (SELECT id FROM benchmark_runs WHERE state IN ('completed','failed','cancelled'))", (key,))
                 if not self.db.execute('INSERT INTO benchmark_reservations(key,run) VALUES(?,?) ON CONFLICT(key) DO NOTHING', (key, number)).rowcount:
@@ -167,6 +167,15 @@ class Benchmarks:
             self.db.execute('INSERT INTO benchmark_runs(id,model,model_id,benchmark,fingerprint,subject,environment,state,created,user,token,location) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
                             (number, model, model_id, kind, '', json.dumps(subject), '{}', 'creating', time.time(), user, token, location))
         return number
+
+    def active_for(self, identity: str, location: str, kind: str, *, by_name=False) -> str | None:
+        """Find the existing reservation without exposing its scoped task credential."""
+        column = 'model' if by_name else 'model_id'
+        found = self.db.execute(f"SELECT id FROM benchmark_runs WHERE {column}=? "
+                                "AND COALESCE(NULLIF(location,''),'compute')=? AND benchmark=? "
+                                "AND state NOT IN ('completed','failed','cancelled') ORDER BY created LIMIT 1",
+                                (identity, location or 'compute', kind)).fetchone()
+        return found[0] if found else None
 
     def activate(self, number: str, task: dict) -> None:
         """Freeze the accepted LoadCoach subject/environment and make the durable intent runnable."""
