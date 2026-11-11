@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import tarfile
+import tempfile
 import time
 
 from db import Database, local_path, migrate, schema_version
@@ -28,7 +29,7 @@ def stamp(connection, table):
         digest({key: normalized(value, key) for key, value in row.items()}) for row in values))}
 
 
-def recovery_assets(folder, outside):
+def recovery_assets(folder, outside, identity=None):
     """Bind both verified archive halves and independent database copies to the proof."""
     folder, outside = Path(folder).resolve(), Path(outside).resolve()
     assets, snapshots, identifiers = {}, {}, set()
@@ -38,21 +39,37 @@ def recovery_assets(folder, outside):
         if manifest.get('machine') != side or manifest.get('verification', {}).get('state') != 'verified':
             raise ValueError('Both recovery halves must have verified isolated restores')
         identifiers.add(manifest['id'])
+        encrypted = archive.with_suffix(archive.suffix + '.age')
+        expected_hashes = {}
+        if encrypted.is_file():
+            if identity is None:
+                raise ValueError('Encrypted retirement recovery requires an offline age identity')
+            from loadcoach.backup_restore import verify
+            with tempfile.TemporaryDirectory(prefix='suite-retirement-check-') as temporary:
+                staged = Path(temporary) / 'staged'
+                verify(encrypted, Path(identity), output=staged, expected_sha256=manifest.get('archive_sha256'))
+                embedded = json.loads((staged / 'manifest.json').read_text())
+                if embedded != {key: value for key, value in manifest.items() if key != 'archive_sha256'}:
+                    raise ValueError('The recovery sidecar differs from its authenticated manifest')
+                expected_hashes = {name: checksum(staged / 'payload/data' / (name + '.db')) for name in names}
+            archive = encrypted
+        else:
+            with tarfile.open(archive) as saved:
+                for name in names:
+                    with saved.extractfile('payload/data/' + name + '.db') as source:
+                        expected_hashes[name] = hashlib.file_digest(source, 'sha256').hexdigest()
         for path in (manifest_path, archive):
             assets[str(path)] = checksum(path)
-        with tarfile.open(archive) as saved:
-            for name in names:
-                snapshot = folder / (name + '.db')
-                with saved.extractfile('payload/data/' + name + '.db') as source:
-                    expected = hashlib.file_digest(source, 'sha256').hexdigest()
-                if checksum(snapshot) != expected:
-                    raise ValueError('A comparison snapshot differs from its verified recovery archive')
-                snapshots[name] = snapshot
-                if side == 'compute':
-                    independent = outside / (name + '.db')
-                    if checksum(independent) != expected:
-                        raise ValueError('Independent compute recovery copies do not match')
-                    assets[str(independent)] = expected
+        for name, expected in expected_hashes.items():
+            snapshot = folder / (name + '.db')
+            if checksum(snapshot) != expected:
+                raise ValueError('A comparison snapshot differs from its verified recovery archive')
+            snapshots[name] = snapshot
+            if side == 'compute':
+                independent = outside / (name + '.db')
+                if checksum(independent) != expected:
+                    raise ValueError('Independent compute recovery copies do not match')
+                assets[str(independent)] = expected
     if len(identifiers) != 1:
         raise ValueError('Recovery halves must belong to the same paired set')
     retention = json.loads((outside / 'retention.json').read_text())
@@ -62,13 +79,13 @@ def recovery_assets(folder, outside):
     return assets, snapshots, identifiers.pop()
 
 
-def prepare(target, recovery, outside, approved_audit):
+def prepare(target, recovery, outside, approved_audit, identity=None):
     """Refuse new missing/conflicting data; accept only the owner's exact archived exceptions."""
     target, outside = Path(target).resolve(), Path(outside).resolve()
     project = target.parent.parent
     if outside == project or project in outside.parents:
         raise ValueError('Independent recovery copies must be outside the project')
-    assets, snapshots, identifier = recovery_assets(recovery, outside)
+    assets, snapshots, identifier = recovery_assets(recovery, outside, identity)
     previous = json.loads(Path(approved_audit).read_text())
     approved = {(table, record['key_sha256'], record['content_sha256'], record['state'])
                 for table, found in previous['tables'].items() for record in found['records']
@@ -150,6 +167,7 @@ def main():
     parser.add_argument('--recovery', type=Path)
     parser.add_argument('--outside', type=Path)
     parser.add_argument('--approved-audit', type=Path)
+    parser.add_argument('--identity', type=Path, help='Offline age identity for encrypted recovery sets')
     args = parser.parse_args()
     told, store, _ = kept_by_loadcoach(args.config)
     target = local_path(store)
@@ -158,7 +176,7 @@ def main():
     if args.action == 'prepare':
         if not all((args.recovery, args.outside, args.approved_audit)):
             parser.error('prepare needs --recovery, --outside and --approved-audit')
-        result = prepare(target, args.recovery, args.outside, args.approved_audit)
+        result = prepare(target, args.recovery, args.outside, args.approved_audit, args.identity)
         args.proof.write_text(json.dumps(result, indent=2) + '\n')
         args.proof.chmod(0o600)
         print(json.dumps({'state': 'prepared', 'recovery_set': result['recovery_set'], 'tables': result['tables']}))

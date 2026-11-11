@@ -76,6 +76,7 @@ from loadcoach.backups import (
     new_id as new_backup_id,
     store_inventory,
 )
+from loadcoach.backup_crypto import encryption_status, recipients as backup_recipients
 from loadcoach.database_admin import catalogs as database_catalogs, configured_sources, dump_tools, make_sql_dump, safe_filename
 from db.health import stores_health
 from weightroom.conversations import build_app as build_conversations
@@ -2526,7 +2527,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         for backup_id, row in joined.items():
             halves = [row.get("front"), row.get("compute")]
             verified = [part for part in halves if part and part.get("verification", {}).get("state") == "verified"]
-            state = "verified" if len(verified) == 2 else "partial" if verified else "failed"
+            legacy = any(part and part.get("verification", {}).get("state") == "legacy-unencrypted" for part in halves)
+            state = "verified" if len(verified) == 2 else "partial" if verified else "legacy-unencrypted" if legacy else "failed"
             counts: dict[str, int] = {}
             for part in verified:
                 counts.update(part["verification"].get("counts", {}))
@@ -2575,12 +2577,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             compute_inventory=remote["inventory"],
             compute_root=remote["archive_root"],
             compute_error=remote_error,
+            front_protection=await asyncio.to_thread(encryption_status, root),
+            compute_protection=remote.get("protection", {"ready": False, "reason": "Compute encryption readiness is unavailable."}),
         )
 
     async def backup_create(request: Request, person: Person) -> Response:
         """Create and verify a paired front and compute recovery set."""
         if "manage-settings" not in person.can:
             return page(request, "refused.html", person, status=403, why="You may not manage backups.")
+        try:
+            await asyncio.to_thread(backup_recipients, backup_root(settings.data))
+        except (OSError, ValueError, subprocess.SubprocessError) as problem:
+            return await backups_page(request, person, str(problem), failed=True)
         backup_id = new_backup_id()
         try:
             remote = await ask("POST", "/loadcoach/backups", person.key,

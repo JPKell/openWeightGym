@@ -151,12 +151,14 @@ def test_existing_schedule_schema_migrates_without_losing_saved_work(tmp_path):
 
 def test_delayed_scheduled_backup_retention_uses_creation_time(tmp_path):
     from loadcoach.backups import BACKUP_ID, rotate
+    from loadcoach.backup_crypto import ARCHIVE
     _, late = occurrence_ids('a'*32, NOW-20*86400)
     assert BACKUP_ID.fullmatch(late) and len(late.split('-')[1]) == 24
     older='20261013T120000Z-abcdef'
     for identifier, created in ((older,'2026-10-13T12:00:00+00:00'), (late,'2026-10-13T13:00:00+00:00')):
         folder=tmp_path/identifier; folder.mkdir()
         (folder/'manifest.json').write_text(json.dumps({'created_at':created}))
+        (folder/ARCHIVE).write_bytes(b'fixture ciphertext')
     assert rotate(tmp_path,1) == [older]
     assert (tmp_path/late).is_dir()
 
@@ -292,7 +294,9 @@ def test_inflight_schedule_snapshot_keeps_durable_intent_across_maintenance(tmp_
     store.db.close()
 
 
-def test_schedule_ui_authorization_pause_resume_csrf_and_backup(desk, tmp_path):
+def test_schedule_ui_authorization_pause_resume_csrf_and_backup(desk, tmp_path, backup_keys):
+    backup_keys.configure(tmp_path / 'backups')
+    backup_keys.configure(tmp_path / 'data/backups')
     browser, wire, users = desk
     core = connect(str(tmp_path / 'loadcoach.db'))  # the grants are compute's; the accounts are front's
     sign_in(browser, 'pat')
@@ -411,7 +415,8 @@ def through(tmp_path, monkeypatch, **config):
     return front_of(lambda front: build_app(settings, None, front), Users(tmp_path/'accounts.db', GROUPS), tmp_path)
 
 
-def test_schedule_dispatch_is_scoped_idempotent_and_preserves_model_access(tmp_path, monkeypatch):
+def test_schedule_dispatch_is_scoped_idempotent_and_preserves_model_access(tmp_path, monkeypatch, backup_keys):
+    backup_keys.configure(tmp_path / 'backups')
     caller = through(tmp_path, monkeypatch, database=str(tmp_path/'core.db')).__enter__()
     users, core = caller.users, connect(str(tmp_path/'core.db'))
     users.add('owner','admin'); users.add('pat','plain')

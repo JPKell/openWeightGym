@@ -61,6 +61,7 @@ from loadcoach.backups import (
     manifests as backup_manifests,
     store_inventory,
 )
+from loadcoach.backup_crypto import encryption_status
 from loadcoach.database_admin import catalogs as database_catalogs, dump_tools, make_sql_dump, safe_filename, store_sources
 from db.health import stores_health
 from loadcoach.tasks import Tasks
@@ -2714,6 +2715,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 "excluded": excluded,
                 "backups": backup_manifests(root),
                 "archive_root": str(root),
+                "protection": await asyncio.to_thread(encryption_status, root),
             }
         )
 

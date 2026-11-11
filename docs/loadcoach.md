@@ -9548,38 +9548,21 @@ front's copies were outside the project cleanup's scope.
 
 ## Backup and restore management, milestone 59
 
-System → Backups creates one recovery-set ID and asks each machine to make its own local archive.
-Compute exposes `GET/POST /loadcoach/backups` and `GET /loadcoach/backups/{id}` to accounts with
-`manage-settings`. WeightRoom owns the paired UI and its front archive. A failure on either
-machine remains visible as a partial set; it is never presented as a verified recovery point.
+The [backup and restore operator procedure](../weightroom/pages/docs/data/backups.html)
+(also served at `/docs/data/backups`) covers encryption setup, retention, protected data,
+offline recovery checks, maintenance-window restore, identity portability and legacy archives.
 
-SQLite databases use the online backup API, so each database file is a consistent snapshot
-while its service remains available. Each manifest records every included source, archive path,
-size and SHA-256, missing inventory, explicit exclusions, and the services that must stop before
-replacement. The finished tar archive is extracted into a new temporary directory, file hashes
-are checked, `PRAGMA integrity_check` runs on every database, and key table counts are read from
-LoadCoach, chat, benchmark and Spotter databases. Only then does the set receive `verified` and
-become eligible for the last verified recovery-point display.
+`loadcoach/backups.py` owns paired recovery archive creation and local verification;
+`loadcoach/backup_crypto.py` delegates authenticated encryption to the maintained age tools.
+`loadcoach/backup_restore.py` supplies offline verification and private staging through
+`suite-backup-verify`. All callers, including schedules and database migration recovery,
+require public recipients in the host's actual `data/backups/recipients.txt`. Private recovery
+keys stay off the application hosts. Missing configuration fails closed before snapshots.
 
-Archives live under `data/backups/ID/` on the machine that made them, with directories mode 0700
-and archive/manifest files mode 0600. They are not downloadable from the site. LoadCoach's
-database necessarily carries password verifiers and authenticator secrets used to recover
-accounts. Raw API/provider keys, key directories, `.env` files, runtime CLI tokens and
-WeightRoom's cookie-signing secret are excluded and must come from a separate private source.
-Model weights are excluded; the compute manifest records stable IDs, paths, sizes, known hashes
-and an inferred Hugging Face source where the managed download layout identifies one.
-The recovery-set table shows both the compressed `archive.tar.gz` size and the total size of the
-files represented by the manifest before compression. SQLite free pages and repetitive retained
-records can compress heavily, so the archive can be much smaller than its recoverable payload.
-Legacy settings names such as `tooldoor.toml` and `frontdesk.toml` are compatibility symlinks.
-Backups record a safe same-directory alias in the inventory and archive its canonical TOML file
-once. Missing links and links outside the settings directory remain excluded as unsafe inputs.
-
-`backup_retention` is a WeightRoom setting from 0 through 100. Zero keeps every set. After a
-successful archive is verified, each machine removes its older local sets beyond the limit.
-The restore preview lists exact destinations and services to stop. Live replacement is left to a
-maintenance window because WeightRoom cannot safely replace the databases from which it and
-LoadCoach are serving the request.
+The Backups page and compute's `GET/POST /loadcoach/backups` and
+`GET /loadcoach/backups/{id}` remain restricted to `manage-settings`. Browser restore views
+show recorded metadata; live replacement remains an offline maintenance operation. Creation-time
+verification and a recovery drill with the saved private key are separate checks.
 
 ## Database inventory and exports, milestone 62
 

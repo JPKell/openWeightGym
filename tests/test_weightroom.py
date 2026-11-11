@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sqlite3
+import shutil
 import struct
 import sys
 import threading
@@ -1195,6 +1196,9 @@ def desk_with_machine(tmp_path, monkeypatch):
     monkeypatch.setattr("weightroom.app.LOOK_EVERY", 0.05)
     stand_ins, asked = tmp_path / "bin", tmp_path / "asked.txt"
     stand_ins.mkdir()
+    for program in ('age', 'age-keygen'):
+        if executable := shutil.which(program):
+            (stand_ins / program).symlink_to(executable)
     for name, script in (
         ("nvidia-smi", 'echo "0, RTX Made Up, 51, 36, 77.31, 45, 15756, 16311, 180.00"\necho "1, RTX Made Up, 88, [N/A], 86.14, [N/A], 1024, 16311, [N/A]"\n'),
         ("systemctl", f'echo "$@" >> {asked}\ncase "$2" in show) printf "ActiveState=active\\nSubState=running\\nNRestarts=2\\nMemoryCurrent=1048576\\n";; esac\n'),
@@ -1847,7 +1851,9 @@ def test_the_batches_page_shows_how_far_each_has_got_and_gives_its_answers(live_
     assert "No batches." in browser.get("/batches").text
 
 
-def test_backup_page_creates_a_paired_verified_recovery_set(desk):
+def test_backup_page_creates_a_paired_verified_recovery_set(desk, tmp_path, backup_keys):
+    backup_keys.configure(tmp_path / 'backups')
+    backup_keys.configure(tmp_path / 'data/backups')
     browser, _, _ = desk
     sign_in(browser, "jordan")
     page = browser.get("/backups")
@@ -1867,6 +1873,20 @@ def test_backup_page_creates_a_paired_verified_recovery_set(desk):
     assert "weightroom.service" in preview and "loadcoach.service" in preview
     assert "users <strong>" in preview and "conversations <strong>" in preview and "benchmark runs <strong>" in preview
     assert "Verified database stores" in preview and "SQLite online backup API" in preview
+
+
+def test_backup_post_cannot_bypass_permissions_or_encryption_setup(desk, tmp_path, backup_keys):
+    browser, _, _ = desk
+    sign_in(browser, 'pat')
+    assert browser.post('/backups/create').status_code == 403
+    sign_in(browser, 'jordan')
+    refused = browser.post('/backups/create')
+    assert refused.status_code == 400 and 'not configured' in refused.text
+    assert not (tmp_path / 'backups').exists()  # front preflight never starts compute
+    backup_keys.configure(tmp_path / 'data/backups')
+    refused = browser.post('/backups/create')
+    assert refused.status_code == 400 and 'not configured' in refused.text
+    assert not list((tmp_path / 'data/backups').glob('*/archive*'))
 
 
 def test_database_page_lists_front_tables_and_exports_restorable_sql(desk, tmp_path):
@@ -1891,7 +1911,9 @@ def test_database_page_lists_front_tables_and_exports_restorable_sql(desk, tmp_p
     restored.close()
 
 
-def test_store_health_permissions_backup_age_and_compute_outage(desk):
+def test_store_health_permissions_backup_age_and_compute_outage(desk, tmp_path, backup_keys):
+    backup_keys.configure(tmp_path / 'backups')
+    backup_keys.configure(tmp_path / 'data/backups')
     browser, compute, _ = desk
     sign_in(browser, "pat")
     assert browser.get("/databases").status_code == 403

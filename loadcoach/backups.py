@@ -1,18 +1,20 @@
-"""Local, manifest-backed recovery archives for the two openWeightGym machines.
+"""Encrypted, manifest-backed recovery archives for the two openWeightGym machines.
 
 Backups deliberately stay on the machine that made them.  Database snapshots are made with
 SQLite's online backup API, every included file is hashed, and the finished archive is restored
-into a temporary directory and checked before it is called verified.  Raw keys, environment
+through age into a private temporary directory and checked before it is called verified. Raw keys, environment
 files and runtime tokens are not inputs to this module.
 """
 
 from __future__ import annotations
 
 import hashlib
+import fcntl
 import json
 import os
 import re
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import time
@@ -22,7 +24,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from db import DatabaseSource, connect, local_path
-from db.recovery import RecoveryStore, backup_store, inspect_store, sqlite_metadata
+from db.recovery import RecoveryStore, archive_name, backup_store, inspect_store, sqlite_metadata
+from .backup_crypto import ARCHIVE, decrypt, executable, private_directory, read_regular, recipients, safe_path, temporary_identity
 from typing import Iterable
 
 
@@ -76,6 +79,7 @@ def _snapshot(source: Path, target: Path, database: bool) -> None:
         copied = connect(target)
         try:
             original.backup(copied)
+            copied.execute("PRAGMA journal_mode=DELETE")
         finally:
             copied.close()
             original.close()
@@ -125,6 +129,21 @@ def _database_counts(path: Path) -> dict[str, int]:
 
 def _check_payload(folder: Path, manifest: dict) -> dict[str, int]:
     """Verify restored file hashes and store metadata against the recovery manifest."""
+    _validate_manifest(manifest)
+    expected_paths = {entry["archive"] for entry in manifest["files"]}
+    if manifest['schema'] == 2:
+        # Historical archives could contain untracked journals created by read-only
+        # SQLite verification. Never replay those journals over the hashed snapshot.
+        for entry in manifest['files']:
+            if entry['database'] and entry.get('engine', 'sqlite') == 'sqlite':
+                for suffix in ('-wal', '-shm'):
+                    companion = entry['archive'] + suffix
+                    path = folder / companion
+                    if companion not in expected_paths and path.is_file():
+                        path.unlink()
+    actual_paths = {path.relative_to(folder).as_posix() for path in folder.rglob("*") if path.is_file()}
+    if actual_paths != expected_paths:
+        raise ValueError("The recovery payload does not match its manifest file inventory.")
     counts: dict[str, int] = {}
     for entry in manifest["files"]:
         restored = folder / entry["archive"]
@@ -149,18 +168,70 @@ def _check_payload(folder: Path, manifest: dict) -> dict[str, int]:
 
 def _write_json(path: Path, value: dict) -> None:
     """Write an owner-readable JSON recovery manifest."""
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
-    path.chmod(0o600)
+    with path.open("x") as out:
+        path.chmod(0o600)
+        out.write(json.dumps(value, indent=2, sort_keys=True) + "\n")
+        out.flush()
+        os.fsync(out.fileno())
 
 
-def _safe_extract(archive: Path, target: Path) -> None:
-    """Reject unsafe archive paths and types before extracting recovery files."""
+def _archive_path(name: str) -> str:
+    """Accept canonical, bounded relative paths only, without traversal or ambiguous aliases."""
+    if (not isinstance(name, str) or len(name) > 4096 or "\\" in name or "\x00" in name
+            or any(part in ("", ".", "..") for part in name.split("/")) or name.startswith("/")):
+        raise ValueError("The recovery archive contains an unsafe path.")
+    return name
+
+
+def _validate_manifest(manifest: dict) -> None:
+    """Validate all paths before using decrypted metadata to open files."""
+    if (not isinstance(manifest, dict) or manifest.get("schema") not in (2, 3)
+            or not isinstance(manifest.get("files"), list) or not manifest["files"]
+            or not isinstance(manifest.get("stores", []), list)
+            or not isinstance(manifest.get("machine"), str)
+            or not isinstance(manifest.get("verification"), dict)
+            or not BACKUP_ID.fullmatch(str(manifest.get("id", "")))):
+        raise ValueError("Invalid recovery manifest.")
+    if manifest["schema"] == 3 and (not isinstance(manifest.get("protection"), dict)
+            or manifest["protection"].get("format") != "age" or manifest["protection"].get("encrypted") is not True):
+        raise ValueError("Invalid recovery encryption metadata.")
+    names = set()
+    for item in manifest["files"]:
+        if not isinstance(item, dict):
+            raise ValueError("Invalid recovery file metadata.")
+        name = _archive_path(item["archive"])
+        if (name in names or type(item.get("size")) is not int or item["size"] < 0
+                or type(item.get("database")) is not bool
+                or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", "")))):
+            raise ValueError("Invalid or duplicate recovery file metadata.")
+        names.add(name)
+    for item in manifest.get("stores", []):
+        if _archive_path(item["archive"]) not in names:
+            raise ValueError("A recovery store is missing from the file inventory.")
+
+
+def _safe_extract(archive: Path, target: Path, max_bytes: int = 1024**4) -> None:
+    """Extract regular files privately, refusing links, duplicates, special files and bombs."""
+    seen, total = set(), 0
     with tarfile.open(archive, "r:gz") as bundle:
-        for member in bundle.getmembers():
-            relative = Path(member.name)
-            if relative.is_absolute() or ".." in relative.parts or not (member.isfile() or member.isdir()):
+        for member in bundle:
+            name = _archive_path(member.name)
+            if (name in seen or len(seen) >= 1_000_000 or member.size < 0
+                    or not (member.isfile() or member.isdir()) or member.sparse is not None
+                    or name != "manifest.json" and name != "payload" and not name.startswith("payload/")):
                 raise ValueError("The recovery archive contains an unsafe path or file type")
-        bundle.extractall(target, filter="data")
+            seen.add(name)
+            total += member.size
+            if total > max_bytes or name == "manifest.json" and member.size > 16 * 1024**2:
+                raise ValueError("The recovery archive exceeds the extraction size limit.")
+            destination = target / name
+            if member.isdir():
+                destination.mkdir(parents=True, exist_ok=True, mode=0o700)
+            else:
+                destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                with bundle.extractfile(member) as source, destination.open("xb") as out:
+                    destination.chmod(0o600)
+                    shutil.copyfileobj(source, out)
 
 
 def create_backup(
@@ -176,14 +247,37 @@ def create_backup(
     now: float | None = None,
     stores: Iterable[RecoveryStore] = (),
 ) -> dict:
-    """Create, verify and retain one local half of a paired recovery set."""
+    """Serialize local creation/rotation; refuse backups without offline recovery recipients."""
     if not BACKUP_ID.fullmatch(backup_id):
         raise ValueError("The recovery-set ID is invalid.")
     if type(retention) is not int or not 0 <= retention <= 100:
         raise ValueError("Retention must be a whole number from 0 through 100.")
+    root = private_directory(root)
+    configured = recipients(root)
+    lock = safe_path(root / ".backup.lock")
+    descriptor = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("Another backup is running on this machine; retry after it finishes.") from None
+        return _create_backup(root, backup_id, machine, files, inventory, excluded, services,
+                              retention, models, now, stores, configured)
+    finally:
+        os.close(descriptor)
+
+
+def _create_backup(root, backup_id, machine, files, inventory, excluded, services,
+                   retention, models, now, stores, configured) -> dict:
+    """Snapshot, encrypt, authenticate and restore-check before atomic publication and rotation."""
     stores = list(stores)
-    root.mkdir(parents=True, exist_ok=True)
-    root.chmod(0o700)
+    store_paths = {item.database.path.resolve() for item in stores
+                   if item.database.engine == "sqlite" and item.database.path is not None}
+    files = [item for item in files if not item.database or item.source.resolve() not in store_paths]
+    names = [_archive_path(item.archive) for item in files]
+    names.extend(_archive_path(archive_name(store)) for store in stores)
+    if len(names) != len(set(names)) or any(str(parent) in names for name in names for parent in Path(name).parents):
+        raise ValueError("Backup inputs have duplicate or overlapping archive paths.")
     target = root / backup_id
     if target.exists():
         raise FileExistsError(f"Recovery set {backup_id} already exists on {machine}.")
@@ -193,19 +287,11 @@ def create_backup(
         payload = work / "payload"
         payload.mkdir()
         records: list[dict] = []
-        store_paths = {
-            item.database.path.resolve()
-            for item in stores
-            if item.database.engine == "sqlite" and item.database.path is not None
-        }
         for item in files:
+            safe_path(item.source)
             if not item.source.is_file():
                 continue
-            if item.database and item.source.resolve() in store_paths:
-                continue
-            if item.source.is_symlink():
-                raise ValueError(f"Refusing to archive the symlink {item.source}.")
-            if item.kind in ("settings", "plugin settings") and (field := _inline_secret(item.source)):
+            if item.kind in ("settings", "plugin settings", "site-managed settings") and (field := _inline_secret(item.source)):
                 raise ValueError(f"Refusing to archive inline secret field {field} in {item.source}; move it to an owner-only key file.")
             destination = payload / item.archive
             _snapshot(item.source, destination, item.database)
@@ -221,6 +307,9 @@ def create_backup(
                     "sha256": _sha256(destination),
                 }
             )
+        for store in stores:
+            if store.database.path is not None:
+                safe_path(store.database.path)
         store_records = [backup_store(store, payload) for store in stores]
         records.extend(
             {
@@ -229,7 +318,7 @@ def create_backup(
                 "kind": f"{item['name']} logical database store",
                 "database": True,
                 "engine": item["engine"],
-                "contains_protected_identity": any("identity" in binding or binding == "loadcoach.core" for binding in item["bindings"]),
+                "contains_protected_identity": any("identity" in binding or binding in ("loadcoach.core", "weightroom.accounts") for binding in item["bindings"]),
                 "size": item["size"],
                 "sha256": item["sha256"],
             }
@@ -238,7 +327,7 @@ def create_backup(
         if not records:
             raise ValueError(f"No recoverable files were found on {machine}.")
         manifest = {
-            "schema": 2,
+            "schema": 3,
             "id": backup_id,
             "machine": machine,
             "created_at": created_at,
@@ -247,9 +336,13 @@ def create_backup(
             "excluded": excluded,
             "models": models or [],
             "stores": store_records,
+            "verification": {"state": "pending"},
             "services_to_stop": services,
+            "protection": {"format": "age", "encrypted": True,
+                           "recipients_sha256": hashlib.sha256("\n".join(configured).encode()).hexdigest(),
+                           "recovery_key_tested": False},
             "secret_policy": {
-                "archive_access": "owner-only on the machine that created it",
+                "archive_access": "age encrypted and owner-only; private recovery keys are held offline",
                 "included": "LoadCoach database credential verifiers, authenticator secrets and job-specific benchmark/schedule tokens needed to recover durable work",
                 "excluded": "raw API keys, provider keys, key folders, environment files, CLI tokens and WeightRoom cookie-signing secrets",
                 "recovery": "restore raw keys separately from their private source after restoring the openWeightGym data",
@@ -258,30 +351,59 @@ def create_backup(
         counts = _check_payload(payload, manifest)
         for item in store_records:
             counts.update(item["verification"].get("counts", {}))
-        manifest["verification"] = {"state": "verified", "verified_at": created_at, "counts": counts}
+        manifest["verification"] = {"state": "verified", "verified_at": created_at, "counts": counts,
+                                    "scope": "local ciphertext round trip; offline recovery key drill required"}
         _write_json(work / "manifest.json", manifest)
-        archive = work / "archive.tar.gz"
-        with tarfile.open(archive, "w:gz") as bundle:
-            bundle.add(work / "manifest.json", arcname="manifest.json")
-            bundle.add(payload, arcname="payload")
-        archive.chmod(0o600)
+        identity, temporary_recipient = temporary_identity()
+        archive = work / ARCHIVE
+        # Stream compressed bytes directly into age; no plaintext tar archive is retained.
+        with archive.open("xb") as encrypted:
+            archive.chmod(0o600)
+            process = subprocess.Popen([executable("age"), *(arg for value in [*configured, temporary_recipient]
+                                        for arg in ("-r", value))], stdin=subprocess.PIPE,
+                                       stdout=encrypted, stderr=subprocess.DEVNULL)
+            try:
+                with process.stdin as stream, tarfile.open(fileobj=stream, mode="w|gz") as bundle:
+                    bundle.add(work / "manifest.json", arcname="manifest.json")
+                    bundle.add(payload, arcname="payload")
+                if process.wait(timeout=3600):
+                    raise ValueError("Backup encryption failed; no recovery set was published.")
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+            encrypted.flush()
+            os.fsync(encrypted.fileno())
 
-        with tempfile.TemporaryDirectory(prefix="suite-restore-check-") as restored:
+        with tempfile.TemporaryDirectory(prefix="restore-check-", dir=work) as restored:
             restored_path = Path(restored)
-            _safe_extract(archive, restored_path)
+            plaintext = restored_path / "check.tar.gz"
+            decrypt(archive, identity, plaintext)
+            _safe_extract(plaintext, restored_path)
             embedded = json.loads((restored_path / "manifest.json").read_text())
             isolated_counts = _check_payload(restored_path / "payload", embedded)
             if isolated_counts != counts:
                 raise ValueError("The isolated restore check did not reproduce the manifest counts.")
+        del identity
+        manifest["archive_sha256"] = _sha256(archive)
 
         final = root / ("." + backup_id + "-ready")
         if final.exists():
-            shutil.rmtree(final)
+            raise FileExistsError("A backup publication directory already exists; inspect it before retrying.")
         final.mkdir(mode=0o700)
-        shutil.move(str(archive), final / "archive.tar.gz")
-        shutil.copy2(work / "manifest.json", final / "manifest.json")
-        (final / "manifest.json").chmod(0o600)
+        shutil.move(str(archive), final / ARCHIVE)
+        _write_json(final / "manifest.json", manifest)
+        descriptor = os.open(final, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
         final.rename(target)
+        directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
 
     rotate(root, retention)
     return manifest
@@ -300,7 +422,9 @@ def rotate(root: Path, retention: int) -> list[str]:
             return datetime.fromisoformat(value).timestamp(), path.name
         except (OSError, ValueError, KeyError, TypeError):
             return datetime.strptime(path.name.split('-')[0], '%Y%m%dT%H%M%SZ').replace(tzinfo=UTC).timestamp(), path.name
-    existing = sorted((path for path in root.iterdir() if path.is_dir() and BACKUP_ID.fullmatch(path.name)), key=created, reverse=True)
+    # Legacy plaintext sets are preserved for explicit migration/removal by the owner.
+    existing = sorted((path for path in root.iterdir() if not path.is_symlink() and path.is_dir()
+                       and BACKUP_ID.fullmatch(path.name) and (path / ARCHIVE).is_file()), key=created, reverse=True)
     removed: list[str] = []
     for path in existing[retention:]:
         shutil.rmtree(path)
@@ -310,17 +434,27 @@ def rotate(root: Path, retention: int) -> list[str]:
 
 def manifests(root: Path) -> list[dict]:
     """Read valid sidecar manifests, newest first; a damaged entry is reported honestly."""
+    root = safe_path(root)
     if not root.is_dir():
         return []
     found: list[dict] = []
-    for folder in sorted((path for path in root.iterdir() if path.is_dir() and BACKUP_ID.fullmatch(path.name)), reverse=True):
+    for folder in sorted((path for path in root.iterdir() if not path.is_symlink() and path.is_dir() and BACKUP_ID.fullmatch(path.name)), reverse=True):
         try:
-            manifest = json.loads((folder / "manifest.json").read_text())
-            manifest["archive_size"] = (folder / "archive.tar.gz").stat().st_size
+            manifest = json.loads(read_regular(folder / "manifest.json", 16 * 1024**2))
+            _validate_manifest(manifest)
+            if manifest["id"] != folder.name:
+                raise ValueError("Recovery manifest identity does not match its directory.")
+            encrypted = (folder / ARCHIVE).is_file() and not (folder / ARCHIVE).is_symlink()
+            archive = folder / (ARCHIVE if encrypted else "archive.tar.gz")
+            safe_path(archive)
+            manifest["archive_size"] = archive.stat().st_size
+            if not encrypted or not manifest.get("protection", {}).get("encrypted"):
+                manifest["protection"] = {"encrypted": False, "format": "legacy plaintext"}
+                manifest["verification"] = {**manifest.get("verification", {}), "state": "legacy-unencrypted"}
             manifest["payload_size"] = sum(int(item.get("size", 0)) for item in manifest.get("files", []))
-        except (OSError, ValueError, TypeError) as problem:
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
             manifest = {"id": folder.name, "machine": "unknown", "created_at": "", "files": [],
-                        "verification": {"state": "failed", "error": str(problem)},
+                        "verification": {"state": "failed", "error": "Backup metadata or archive is unavailable or invalid; inspect it offline."},
                         "archive_size": 0, "payload_size": 0}
         found.append(manifest)
     return found

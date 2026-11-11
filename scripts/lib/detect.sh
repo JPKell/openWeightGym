@@ -114,6 +114,7 @@ package_for() {  # package_for git|libgomp.so.1|libvulkan.so.1|libssl.so.3 ...
     *:curl) echo curl ;;
     *:tar) echo tar ;;
     *:gzip) echo gzip ;;
+    *:age) echo age ;;
     *:awk) echo gawk ;;
     *:sed) echo sed ;;
     *:grep) echo grep ;;

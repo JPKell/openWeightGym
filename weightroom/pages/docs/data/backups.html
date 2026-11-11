@@ -1,20 +1,76 @@
-{% from "docs_parts.html" import doc_contents, doc_section %}
-{{ doc_contents([('recovery-sets', 'Recovery sets'), ('excluded', 'What a set leaves out'), ('identities', 'Keeping identities through a reinstall')]) }}
-{% call doc_section('Recovery sets', 'recovery-sets') %}
-<p><a href="/backups">System → Backups</a> backs up both machines at once. Each machine archives every store it is configured with, and the set is verified only when both halves are:
-  SQLite stores are copied with SQLite's online backup and checked for integrity, and PostgreSQL stores are dumped with <code>pg_dump</code>, restored into a temporary database and compared with the source.
-  A configured store that is missing or does not answer stops the set rather than leaving it quietly incomplete.</p>
-<p>Choose how many sets each machine keeps; older ones are removed after a backup succeeds, and zero keeps them all. Restore preview shows what a set would change before anything is restored.
-  Restoring needs a maintenance window: stop the services that use the stores first.</p>
+{% from "docs_parts.html" import doc_contents, doc_section, doc_table, doc_note, doc_code %}
+{{ doc_contents([('setup', 'Recovery encryption'), ('recovery-sets', 'Create and retain backups'), ('protected-data', 'Protected data'), ('restore', 'Verify and restore'), ('identities', 'Planned reinstall'), ('legacy', 'Older archives and rotation')]) }}
+
+{% call doc_section('Set up recovery encryption', 'setup') %}
+<p>Every new recovery archive requires <a href="https://age-encryption.org/">age</a> authenticated encryption. Servers hold public recipients; private recovery keys belong in separate recovery storage. Missing tools or recipients stop a backup before snapshots are taken. There is no unencrypted fallback.</p>
+<ol>
+  <li>Install the distribution's <code>age</code> package on both servers and a trusted recovery computer. It supplies <code>age</code> and <code>age-keygen</code>. The main installer includes this dependency; existing installations need it added.</li>
+  <li>Generate the key pair on the recovery computer using the first block below. Keep <code>recovery.key</code> on encrypted removable storage or in a private credential vault, with a second independent recovery copy. Keep it off application servers, source control, email and logs.</li>
+  <li>Copy only <code>recipients.txt</code> to each server. As the service account, run the second block with your actual data and source paths. The file accepts 1–20 native <code>age1…</code> public recipients, one per line; any corresponding private key can decrypt the archive.</li>
+  <li>Open <a href="/backups">System → Backups</a>, confirm both hosts are ready, create a set, and test it with the saved recovery key.</li>
+</ol>
+{% call doc_code('backup-key-generation') %}
+umask 077
+age-keygen -o recovery.key
+age-keygen -y recovery.key &gt; recipients.txt
 {% endcall %}
-{% call doc_section('What a set leaves out', 'excluded') %}
-<p>Archives stay on the machine that made them, readable only by its service account, and are not offered as browser downloads.</p>
-<p>The accounts store holds the password verifiers and authenticator secrets needed to recover accounts. Raw API keys, provider keys, key folders, environment files,
-  runtime command-line tokens and the console's cookie-signing secret are not included: recover them separately from where you keep them.
-  Model weights are not included either; the compute manifest records each model's identity, path, size, known SHA-256 and likely Hugging Face source.</p>
+{% call doc_code('backup-recipient-install') %}
+install -d -m 700 /path/to/data/backups
+install -m 600 /path/to/recipients.txt /path/to/data/backups/recipients.txt
 {% endcall %}
-{% call doc_section('Keeping identities through a reinstall', 'identities') %}
-<p>Run <code>suite-identity</code> in a terminal on each host to export a passphrase-encrypted bundle of accounts, permissions, service credentials and configuration.
-  Request and conversation history is not included. Stop the services that take part before exporting or importing. An import previews its changes first and refuses to replace different existing accounts.
-  The <a href="/docs/system/accounts?module=loadcoach/identity_bundle.py#source-title">identity export and import reference</a> has the details.</p>
+{% call doc_note('warning', 'Keep the recovery key separate') %}<p>A lost private key cannot be reset or recovered by the server. Anyone obtaining it can decrypt retained archives addressed to it. A compromised service can still read live data, substitute future recipients or delete local backups.</p>{% endcall %}
+{% endcall %}
+
+{% call doc_section('Create and retain backups', 'recovery-sets') %}
+<p><a href="/backups">System → Backups</a> creates a shared set ID for front and compute. Scheduled backups use the same encrypted path. Each host snapshots every configured store: SQLite uses its online backup API; PostgreSQL uses <code>pg_dump</code>, a disposable restore, and content/schema comparisons. Missing or unreachable required stores fail that host's backup.</p>
+<p>Compressed archive bytes stream directly into age. Before publication, the host decrypts the actual ciphertext with a disposable verification key, safely extracts it, and checks the embedded inventory, file hashes, SQLite integrity and counts. The temporary private key stays in memory and is discarded; only the encrypted archive and an owner-only sidecar manifest are published under <code>data/backups/ID/</code>. Creation and rotation are serialized locally.</p>
+<p><strong>Verified means the local creation-time check passed.</strong> It does not prove your saved private key works, that an offsite copy exists, or that the application has passed a recovery drill. Both halves must pass for a verified pair. Separate stores and hosts are not one distributed transaction; drain work and stop all writers before an offline backup if you need a coordinated snapshot.</p>
+<p>Retention keeps 0–100 encrypted sets per host; zero keeps all. Rotation follows successful local publication. A partial pair does not stop retention advancing on the successful host, so allow enough sets for outages. External copies and legacy plaintext archives are managed separately.</p>
+<p>Keep three copies across two independent storage systems, with one offline or immutable offsite copy. Copy both encrypted halves and their manifests to storage the application account cannot modify or delete, and save ciphertext hashes independently. Schedule backups for the data loss you can tolerate; test full recovery monthly and after key/storage changes. See <a href="https://www.cisa.gov/sites/default/files/publications/CISA_MS-ISAC_Ransomware%20Guide_S508C.pdf">CISA's encrypted, offline backup guidance</a>.</p>
+{% call doc_note('note', 'Temporary plaintext and metadata') %}<p>Snapshots and verification files exist briefly inside private temporary directories. Use encrypted host/recovery disks and encrypted swap. Normal completion and handled errors remove temporary files; interruption may require administrator cleanup. Deletion does not guarantee secure erasure on SSDs or snapshots. The sidecar contains paths, hashes and counts, not raw credentials; it is operational metadata, not independent proof of provenance. The full manifest is also encrypted inside the archive.</p>{% endcall %}
+{% endcall %}
+
+{% call doc_section('Protected data and exclusions', 'protected-data') %}
+{% call doc_table('Recovery archive contents') %}
+<thead><tr><th scope="col">Data</th><th scope="col">Recovery handling</th></tr></thead>
+<tbody>
+  <tr><td>Configured account/application stores</td><td>Encrypted, including password verifiers, authenticator seeds, permissions, conversations, requests and durable job grants. Treat archives as credential-bearing private data.</td></tr>
+  <tr><td>Settings and saved image/audio assets</td><td>Included. Recognized inline secret fields in ordinary settings are refused. Secrets pasted into histories or other retained data remain part of those stores.</td></tr>
+  <tr><td>Separate key folders, environment files, runtime CLI tokens and cookie-signing secret</td><td>Excluded from normal recovery sets. Recover long-lived API/provider/service keys from a separate private source. Services regenerate runtime tokens; users sign in again.</td></tr>
+  <tr><td>Model weights</td><td>Excluded. Compute records stable identities, paths, sizes, known hashes and inferred Hugging Face sources. Recover and verify weights separately.</td></tr>
+</tbody>
+{% endcall %}
+<p>Archives have no browser download endpoint. Manifest viewing and backup creation require <code>manage-settings</code>. Files are mode 0600 beneath mode 0700 directories; permissions do not isolate processes using the same service account or protect against root.</p>
+{% endcall %}
+
+{% call doc_section('Verify and restore', 'restore') %}
+<ol>
+  <li>Choose a complete pair from before the failure or suspected compromise. Copy each host's <code>archive.tar.gz.age</code> to a trusted recovery computer with enough encrypted disk space. Obtain the matching private key separately. Supply <code>--sha256</code> with the ciphertext hash from an independent trusted record when available.</li>
+  <li>Run the verification command once per half. It authenticates the complete ciphertext before extraction and validates the embedded manifest and payload hashes. It rejects traversal, links, special files, duplicates and size-limit violations. It changes no live stores and removes temporary plaintext. The archive/extraction limit defaults to 1 TiB; adjust <code>--max-bytes</code> deliberately for larger installations.</li>
+  <li>Add <code>--output</code> to stage files in a new private directory; existing directories are refused. Inspect its embedded <code>manifest.json</code>, original destinations, store engines and services to stop. Anyone holding a public recipient can create a new archive: use trusted backup storage and an independent ciphertext hash to establish provenance.</li>
+  <li>For a drill, restore into an isolated installation with compatible application/schema versions. Restore PostgreSQL dumps into a fresh disposable database using compatible <code>pg_restore</code>, then check schemas and contents. The verifier checks dump hashes; it does not perform a new PostgreSQL server restore.</li>
+  <li>For live recovery, drain work and stop every affected writer, worker, adapter, schedule and automatic restart. Preserve current databases and matching SQLite WAL/SHM files privately for rollback. Install only staged files mapped to reviewed destinations, with correct service ownership and mode 0600. Never combine restored SQLite files with old WAL/SHM files. Restore PostgreSQL into a fresh target and switch all owners together; never overwrite an active database.</li>
+  <li>Recover long-lived credentials and model files separately. Start services and test password/authenticator sign-in, permissions, model inventory, conversations/media and benchmark evidence. Review restored grants and pending jobs before resuming schedules. Record the recovery-key and application checks in your existing operations record.</li>
+</ol>
+{% call doc_code('backup-verify') %}
+python -m loadcoach.backup_restore /recovery/front/archive.tar.gz.age \
+  --identity /private/recovery.key
+{% endcall %}
+{% call doc_code('backup-stage') %}
+python -m loadcoach.backup_restore /recovery/front/archive.tar.gz.age \
+  --identity /private/recovery.key --output /recovery/front-staged
+{% endcall %}
+<p>The installed <code>suite-backup-verify</code> command has the same interface. Its JSON report identifies the set, machine, ciphertext hash and whether PostgreSQL restore testing remains. A recovery-key test does not change the server's historical manifest.</p>
+{% call doc_note('warning', 'After a compromise') %}<p>Rebuild affected hosts from trusted software and use a known-clean backup. Before reconnecting, revoke restored API/job tokens, replace service/provider keys, reset affected passwords and re-enroll authenticators. Old backups can restore credentials or permissions revoked since they were created.</p>{% endcall %}
+{% endcall %}
+
+{% call doc_section('Planned reinstall', 'identities') %}
+<p><code>suite-identity</code> creates a separate bundle of accounts, permissions, password verifiers, authenticator seeds, service credentials and configuration, excluding request/conversation history. It uses AES-256-GCM with a scrypt-derived key. Treat it as a master credential backup: use a unique randomly generated passphrase, store that separately, and keep the bundle offline or in immutable private storage.</p>
+<p>Stop participating services, adapters, schedules and automatic restarts before export or applying an import. Imports preview first and refuse different existing accounts. This tool currently requires SQLite accounts and original installation paths. Test an isolated import before reinstalling. Use it for planned continuity; replace credentials after a compromise. See the <a href="/docs/system/accounts?module=loadcoach/identity_bundle.py#source-title">identity export/import reference</a> for commands and constraints.</p>
+{% endcall %}
+
+{% call doc_section('Older archives and key rotation', 'legacy') %}
+<p>Existing <code>archive.tar.gz</code> files remain plaintext. They are labeled <code>legacy-unencrypted</code>, excluded from protected recovery points and preserved outside automatic encrypted retention. New encryption does not protect old copies or filesystem snapshots.</p>
+<p>Create and test an encrypted replacement before retiring an old recovery point. If historical data must remain, encrypt its old archive with age on a trusted machine, test decryption, and retain its original manifest. The offline tool accepts its embedded legacy schema, but manually wrapping an archive does not upgrade its server verification record. Remove plaintext copies and address snapshots under your storage policy after proving recovery.</p>
+<p>For key rotation, generate a new private key off-server, replace public recipients on each host and test a new pair. Keep previous private keys separately while archives addressed to them exist. If a key is compromised, restrict access and re-encrypt retained data for a new key; rotation cannot protect ciphertext already stolen.</p>
 {% endcall %}

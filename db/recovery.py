@@ -156,6 +156,8 @@ def backup_store(store: RecoveryStore, payload: Path) -> dict:
             original.execute('BEGIN')
             source_meta = _sqlite_metadata(original, source)
             original.backup(copied)
+            # Recovery snapshots are standalone files, not live WAL databases.
+            copied.execute('PRAGMA journal_mode=DELETE')
         finally:
             copied.close()
             original.close()

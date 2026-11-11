@@ -4,6 +4,15 @@
 {% block main %}
 {{ page_header("Backup and restore", lead="Create backups and preview recovery before restoring data.") }}
 {{ said_box(said, failed) }}
+{% if not front_protection.ready or not compute_protection.ready %}
+{% call alert('warning') %}
+Encrypted backups require setup on both machines.
+{% for label, protection in [("Front", front_protection), ("Compute", compute_protection)] %}
+{{ label }}: {{ protection.reason }}.
+{% endfor %}
+<a href="/docs/data/backups#setup">Configure recovery encryption</a>.
+{% endcall %}
+{% endif %}
 
 <div class="row g-3 mb-3">
   <div class="col-lg-4">
@@ -11,13 +20,14 @@
       <div class="text-secondary small">Last verified recovery point</div>
       <div class="fs-5 fw-semibold">{{ last_verified.created_at|timestamp if last_verified else "No verified backup yet" }}</div>
       {% if last_verified %}<a href="/backups/{{ last_verified.id }}">{{ last_verified.id }}</a>{% else %}<div class="small text-secondary">A recovery point needs a verified archive from both machines.</div>{% endif %}
+      <div class="small text-secondary">Local integrity checks only. Test the offline recovery key separately.</div>
     {% endcall %}
   </div>
   <div class="col-lg-4">
     {% call card("", class_="h-100") %}
       <form method="post" action="/backups/create">
         <div class="text-secondary small mb-1">Manual backup</div>
-        <button class="btn btn-primary btn-sm">Back up both machines</button>
+        <button class="btn btn-primary btn-sm"{% if not front_protection.ready or not compute_protection.ready %} disabled{% endif %}>Back up both machines</button>
       </form>
     {% endcall %}
   </div>
@@ -39,7 +49,7 @@
   {% for backup in sets %}
   <tr>
     <td><code>{{ backup.id }}</code><div class="small text-secondary">{{ backup.created_at|timestamp }}</div></td>
-    <td><span class="badge {{ 'text-bg-success' if backup.state == 'verified' else 'text-bg-warning' if backup.state == 'partial' else 'text-bg-danger' }}">{{ backup.state }}</span></td>
+    <td><span class="badge {{ 'text-bg-success' if backup.state == 'verified' else 'text-bg-warning' if backup.state == 'partial' else 'text-bg-danger' }}">{{ backup.state }}</span>{% if backup.state == 'legacy-unencrypted' %}<div class="small text-danger">Protect or retire this plaintext copy.</div>{% endif %}</td>
     <td>{{ backup.front.verification.state if backup.front else "missing" }}</td>
     <td>{{ backup.compute.verification.state if backup.compute else "missing" }}</td>
     <td>{{ backup.archive_size|size }} <span class="text-secondary">archive</span><div class="small text-secondary">{{ backup.payload_size|size }} data before compression</div></td>
@@ -63,13 +73,13 @@
 {% endcall %}
 
 {% call card("Keep identities through a clean reinstall", false) %}
-<p class="mb-2">Use <code>suite-identity</code> in a terminal on each host to export a passphrase-encrypted bundle of accounts, permissions, service credentials and configuration. Request and conversation histories are excluded.</p>
-<p class="mb-0">Stop participating services before exporting or applying an import. Imports preview changes first and refuse different existing accounts. <a href="/docs/system/accounts?module=loadcoach/identity_bundle.py#source-title">Identity export/import reference</a></p>
+<p class="mb-2">For a planned reinstall, <code>suite-identity</code> creates a separate passphrase-encrypted bundle containing accounts, authenticator secrets, service credentials and configuration. Treat it as a master credential backup; use a unique randomly generated passphrase and keep it separately from the bundle.</p>
+<p class="mb-0">Stop participating services before export or import. Imports preview changes first and refuse different existing accounts. After a suspected compromise, replace credentials and re-enroll authenticators. <a href="/docs/data/backups#identities">Identity recovery precautions</a></p>
 {% endcall %}
 
 {% call card("Key and archive protection", false) %}
-<p class="mb-2">Archives remain on the machine that created them and are readable only by its service account. They are not offered as browser downloads.</p>
-<p class="mb-2">The accounts database contains password verifiers and authenticator secrets required to recover accounts. Raw API keys, provider keys, key folders, environment files, runtime CLI tokens and openWeightGym's cookie-signing secret are excluded.</p>
-<p class="mb-0">Recover raw keys separately from their private source. Model weights are excluded; the compute manifest records each model's stable identity, path, size, known SHA-256 and inferred Hugging Face source.</p>
+<p class="mb-2">New archives use authenticated age encryption with public recovery recipients. Keep private recovery keys off both servers. Archive files are owner-only and have no browser download endpoint. Older plaintext archives remain unencrypted until you protect or retire them.</p>
+<p class="mb-2">Backups include password verifiers, authenticator secrets and private histories. Separate key folders, environment files, runtime CLI tokens and the cookie-signing secret are excluded; recover those separately. Model weights are excluded.</p>
+<p class="mb-0">Keep an encrypted offline or immutable offsite copy and test recovery with the saved private key. Local encryption cannot protect live data or stop a compromised service from deleting local backups. <a href="/docs/data/backups">Backup and restore procedure</a></p>
 {% endcall %}
 {% endblock %}

@@ -34,7 +34,7 @@ def backup_signal(store, manifests, now, identity="") -> dict:
             continue
         verified = manifest.get("verification")
         records = manifest.get("stores", [])
-        if (manifest.get("schema") != 2 or not isinstance(verified, dict) or verified.get("state") != "verified"
+        if (manifest.get("schema") not in (2, 3) or not isinstance(verified, dict) or verified.get("state") != "verified"
                 or not isinstance(manifest.get("archive_size"), int) or manifest["archive_size"] <= 0
                 or not isinstance(records, list) or not manifest.get("id")):
             continue

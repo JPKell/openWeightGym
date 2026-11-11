@@ -18,6 +18,35 @@ from test_weightroom import desk, desk_with_machine, sign_in  # noqa: F401
 playwright = pytest.importorskip('playwright.sync_api')
 
 
+@pytest.mark.parametrize('width', [1440, 390])
+def test_backup_encryption_setup_and_docs_are_usable(desk, tmp_path, backup_keys, width):
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.set_viewport_size({'width': width, 'height': 1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/backups')
+        playwright.expect(page.get_by_role('button', name='Back up both machines')).to_be_disabled()
+        playwright.expect(page.get_by_role('link', name='Configure recovery encryption')).to_be_visible()
+        assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+        page.get_by_role('link', name='Configure recovery encryption').click()
+        playwright.expect(page.locator('#backup-key-generation')).to_contain_text('age-keygen -o recovery.key')
+        playwright.expect(page.locator('#backup-verify')).to_contain_text('loadcoach.backup_restore')
+        assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+        backup_keys.configure(tmp_path / 'backups')
+        backup_keys.configure(tmp_path / 'data/backups')
+        page.goto('http://console.test/backups')
+        playwright.expect(page.get_by_role('button', name='Back up both machines')).to_be_enabled()
+        page.get_by_role('button', name='Back up both machines').click()
+        page.get_by_role('link', name='Restore preview', exact=True).click()
+        playwright.expect(page.get_by_text('Encrypted with age.', exact=False).first).to_be_visible()
+        assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+        assert not errors
+        browser.close()
+
+
 def browser_context(engine, server, **options):
     browser = engine.chromium.launch(headless=True, args=["--disable-gpu"])
     context = browser.new_context(viewport={'width': 1440, 'height': 1000})
