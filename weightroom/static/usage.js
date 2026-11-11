@@ -118,7 +118,7 @@ function initializeUsage() {
       { key: "output", label: "Output", value: totals.output_tokens, text: short(totals.output_tokens) }]);
     // Someone who sees only their own usage is not filtering by user.
     const used = Object.entries(report.filters).filter(([key, value]) => value && !(key === "user" && !report.everyone)).length;
-    for (const badge of document.querySelectorAll("[data-filter-count]")) badge.textContent = used ? `${used} on` : "None";
+    for (const badge of document.querySelectorAll("[data-filter-count]")) badge.textContent = used ? `${used} on` : "No filters";
   }
   /** Each breakdown row's share of all tokens, as a thin bar under its name. */
   function shares() {

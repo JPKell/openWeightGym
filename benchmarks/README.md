@@ -17,10 +17,31 @@ for one hour. Current evidence requires the same local stable identity, node, fi
 protocol/server mode and engine/machine hashes. Formula-only edits reuse retained metrics.
 Unavailable inventory defers work; nothing wakes a host. All-current occurrences record “Nothing
 outstanding.” Existing tokens, owner checks, overlap policies and foreground preemption remain.
-**Start a run** also shows a preferred node and explicit targets; quality runs retain node-specific
-evidence. A verified absent model can fall back before submission; an unknown preferred node
-cannot. Frozen tasks never silently switch nodes. See
+**Benchmark → Runs** uses Run studio: every configured node stays visible, including empty,
+disabled and unreachable nodes, alongside front's host. Choices come only from the caller's
+authorized catalogue. Setup sits beside running work and the queue on wide screens; history
+spans the workspace below. The picker shows each model once with compact node choices and
+saved scores, in a list capped at 48vh/30rem with a sticky header. This bounds page height for
+15–30 models. Search, per-model selection and per-node selection retain the full batch across
+searches and test changes, with a review of up to 100 exact targets. Every target keeps its own
+evidence and freshness; media models appear only for generic Load time. Running logs expand
+on demand, the queue scrolls within its panel, and narrow screens stack the workspace.
+Running work, queue and history stay expanded. History supports node/outcome/search filters,
+pagination and “Set up again”; polling preserves the setup draft and unapplied history filters.
+Quality runs can explicitly target several nodes, with no silent fallback. Frozen tasks never
+switch nodes. **Execution remains globally serial**, and **Pause all** yields running work as
+well as queued work while retaining completed samples. Schedules still use their preferred-node
+resolution. See
 [the schedule contract](../docs/loadcoach.md#recurring-schedules-milestone-71).
+
+The internal benchmark API's `POST /benchmarks` returns `runs`, `active`, `errors`, `pending`
+and a per-target `outcomes` list with stable run IDs. All accepted/already-active targets return
+202; partial or unconfirmed acceptance returns 207; a fully rejected batch retains its error
+status. A lost task acknowledgement retains the durable `creating` intent and reservation.
+The worker checks the same task ID/token after the creation grace period; it does not repeat the
+POST. Confirmed acceptance activates that run; confirmed absence closes the intent. Retries
+report existing active work rather than creating a second task. Malformed browser target JSON
+is rejected before forwarding any target. No benchmark storage migration is required.
 
 Deployment status reviewed: **2026-10-13**. WeightRoom and LoadCoach are active, and the
 deployed benchmark worker, scoring, and original suite files matched the checkout before local P4 work. Extraction-v4 is
