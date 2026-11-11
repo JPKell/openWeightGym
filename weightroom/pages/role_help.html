@@ -1,0 +1,16 @@
+{# Routing instructions also remain available without JavaScript. #}
+{% call more('How request modes work') %}
+<p class="text-secondary mt-2">A role is a kind of work, such as <code>chat</code> or <code>code</code>. People and programs name the role where a model's name would go, and compute picks the model. Naming a model itself always works too.
+  A role's models are ranked by your weights and any selected benchmarks. Equal scores keep the order in which the models were listed; 0 leaves a model out. These are preference weights, rather than percentages of requests. The name can say how much the pick matters:</p>
+<div class="table-responsive mb-2">
+<table class="sortable table table-sm align-middle">
+  <tbody>
+    <tr><td><code>ROLE</code></td><td>The highest preference after adding the role's loaded-model bonus to eligible loaded local models. The default 25% bonus lets a loaded candidate with at least 80% of the strongest eligible score win.</td></tr>
+    <tr><td><code>ROLE:best</code></td><td>The top of the list. It is waited for, and idle models are pushed off the cards to load it. For work that matters.</td></tr>
+    <tr><td><code>ROLE:available</code></td><td>The highest in the list that is warm: loaded and ready. Nothing is loaded or pushed off unless nothing is warm.</td></tr>
+    <tr><td><code>ROLE:fast</code></td><td>Prefer speed using queue/load estimates and the request's inferred prompt and maximum output budgets, divided by the role's fast reuse multiplier for eligible loaded local models (×2 by default). This preview uses 400 output tokens. Unknown timing stays unavailable.</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="small text-secondary">The <code>:fast</code> estimate uses 60 seconds to load and 10 output tokens/s when measurements are missing. A resident or warm model has no estimated load cost. Its reuse weighting is a preference, not a reduction in measured seconds. Prompt processing and queue wait are not included, so this is a comparison estimate, not a response-time guarantee. The previews below use your permissions and current model state; an actual request also checks its context, images, tools and sensitivity requirements.</p>
+{% endcall %}

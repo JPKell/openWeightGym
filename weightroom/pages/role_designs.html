@@ -1,0 +1,149 @@
+{# Standalone proposals. The production Roles page remains roles.html. #}
+{% from 'parts.html' import page_header, card, section_title, alert, more %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'role_design_parts.html' import role_choice, model_choice, evidence_row %}
+{% from 'role_parts.html' import request_path %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roles · Three design proposals · openWeightGym</title>
+<style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script>
+</head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to Roles</a>
+<div class="review-bar border-bottom px-4 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+  <div class="d-flex align-items-center gap-3"><strong>openWeightGym<span class="text-primary"> /</span></strong><span class="text-secondary small">Roles · design review</span></div>
+  <div class="d-flex flex-wrap gap-2 align-items-center"><span class="small text-secondary">Sample data · saved only in this browser</span><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div>
+</div>
+<main class="roles-review">
+  {% call pills('Design options', buttons=true, class_='design-options mb-2') %}
+    {{ pill_button('01 / Role Studio', true, attrs={'data-design': 'studio'}) }}
+    {{ pill_button('02 / Guided Setup', attrs={'data-design': 'guided'}) }}
+    {{ pill_button('03 / Decision Canvas', attrs={'data-design': 'canvas'}) }}
+  {% endcall %}
+  <p class="text-secondary small mb-4" id="design-description"></p>
+  <div id="workspace" data-layout="studio" data-step="1">
+    {% call page_header('One role. The right model.', pretitle='MODELS / ROLES') %}
+      <button type="button" class="btn btn-primary" id="new-role">+ Create role</button>
+    {% endcall %}
+    <p class="role-intro">Give your app one model name. Set your preferences. The system picks an eligible model each time a request arrives.</p>
+
+    {{ request_path('code') }}
+    <div id="said" role="status" aria-live="polite"></div>
+
+    <div class="role-layout">
+      <aside class="role-navigation" aria-label="Your roles">
+        <div class="eyebrow mb-3">YOUR ROLES <span id="role-total" class="text-secondary ms-1"></span></div>
+        <div id="role-list"></div>
+        <p class="small text-secondary mt-3 mb-0">Apps keep the same name, even when your models change.</p>
+      </aside>
+
+      <form id="role-editor" novalidate aria-label="Role settings" data-hold-refresh>
+        <nav class="wizard-steps" aria-label="Setup steps" hidden>
+          {% for step, label in [(1, 'Name your role'), (2, 'Choose models'), (3, 'Review & save')] %}
+          <button type="button" data-step-to="{{ step }}" class="wizard-step"><span>{{ step }}</span>{{ label }}</button>
+          {% endfor %}
+        </nav>
+
+        {% call card('The name your app uses', id='identity', class_='setup-panel', attrs={'data-setup-step': '1'}, hint='A role appears in calling apps just like a model.') %}
+          <label class="form-label" for="role-name">Role name</label>
+          <input id="role-name" name="name" class="form-control" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" maxlength="64" spellcheck="false" autocapitalize="none" aria-describedby="name-hint" autocomplete="off">
+          <p class="form-hint mb-3" id="name-hint">Use a short name for the job, such as code, chat, or research.</p>
+          <div class="connection-example"><span class="small text-secondary">In your app’s model field</span><div class="d-flex align-items-center justify-content-between gap-2 mt-1"><code data-request-name>code</code><button type="button" class="btn btn-outline-secondary btn-sm" data-copy>Copy name</button></div></div>
+        {% endcall %}
+
+        {% call card('Which models can answer?', id='models-panel', class_='setup-panel', attrs={'data-setup-step': '2'}, hint='Higher weights make a model more preferred. A weight of 0 pauses it.') %}
+          <p class="weight-hint small text-secondary">Weights rank models; they don’t split traffic. A model at 4 is preferred more strongly than one at 2.</p>
+          <div id="candidates" class="candidates"></div>
+          <p id="models-empty" class="text-secondary p-3 border rounded" hidden>No models yet. Add a candidate below to give this role somewhere to send requests.</p>
+          <div class="d-flex flex-wrap gap-2 pt-3 mt-3 border-top"><select id="add-model" class="form-select flex-fill" aria-label="Model to add"></select><button type="button" class="btn btn-outline-primary" id="add-model-button">+ Add model</button></div>
+        {% endcall %}
+
+        {% call card('Fine-tune selection', false, id='tuning', class_='setup-panel', attrs={'data-setup-step': '3'}, hint='Optional · requirements, benchmarks, and loaded-model preferences') %}
+          {{ section_title('Only use models that meet these needs', level=3) }}
+          <div class="row g-3 mb-4">
+            <div class="col-sm-6"><label for="minimum-context" class="form-label">Minimum context tokens</label><input id="minimum-context" name="requires-tokens" type="number" min="0" max="100000000" step="1" class="form-control" value="0" required><small class="form-hint">0 adds no role minimum. Each request still has to fit.</small></div>
+            <div class="col-sm-6 d-grid gap-2 align-content-start">
+              {% for key, label in [('pictures', 'Accept images'), ('tools', 'Support tool calls'), ('stays', 'Keep requests local')] %}
+              <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="requires-{{ key }}" data-requirement="{{ key }}"><span class="form-check-label">{{ label }}</span></label>
+              {% endfor %}
+            </div>
+          </div>
+          {{ section_title('Let benchmark results influence the ranking', level=3) }}
+          <p class="small text-secondary">Leave both at 0 to rank by your model weights and reliability. Higher benchmark weights give that skill more influence.</p>
+          <div class="row g-3 mb-3">
+            {% for key, label in [('code_retrieval', 'Code reading'), ('ifeval', 'Following instructions')] %}
+            <div class="col-sm-6"><label for="benchmark-{{ key }}" class="form-label">{{ label }}</label><input id="benchmark-{{ key }}" name="benchmark-weight" type="number" min="0" max="1e100" step="any" class="form-control" data-benchmark="{{ key }}" required><output class="form-hint" data-share="{{ key }}"></output></div>
+            {% endfor %}
+          </div>
+          <p class="small text-secondary mb-4">Preview uses compatible sample results, normalized across this role’s eligible candidates. Code reading does not measure code generation or tool use.</p>
+          {{ section_title('Give loaded models a head start', level=3) }}
+          <div class="row g-3">
+            <div class="col-sm-6"><label for="loaded-bonus" class="form-label">Default requests · bonus (%)</label><input id="loaded-bonus" name="loaded_bonus" type="number" min="0" max="100" step="any" class="form-control" required><small class="form-hint">25% boosts an eligible loaded local model’s score by ×1.25, even if busy. Set 0 to turn off.</small></div>
+            <div class="col-sm-6"><label for="fast-bonus" class="form-label">Fast requests · reuse bonus (%)</label><input id="fast-bonus" name="fast_loaded_bonus" type="number" min="0" max="500" step="any" class="form-control" required><small class="form-hint">100% gives an eligible loaded local model ×2 speed preference. Measured time stays the same.</small></div>
+          </div>
+        {% endcall %}
+
+        <div id="review-summary" class="setup-panel" data-setup-step="3" hidden>
+          {% call card('Ready for your app') %}<p id="review-text"></p><p class="small text-secondary mb-0">Save this preview to keep it in this browser. A live role would use these settings for future requests.</p>{% endcall %}
+        </div>
+        <div class="save-actions d-flex flex-wrap align-items-center gap-2">
+          <button type="button" id="previous-step" class="btn btn-outline-secondary" hidden>Back</button>
+          <button type="button" id="next-step" class="btn btn-primary" hidden>Choose models →</button>
+          <button type="submit" id="save" class="btn btn-primary">Save role</button>
+          <button type="button" id="discard" class="btn btn-outline-secondary">Discard changes</button>
+          <span class="small text-secondary" id="save-state" aria-live="polite"></span>
+        </div>
+      </form>
+
+      <aside id="decision" aria-label="Request preview">
+        {% call card('See what gets picked', class_='decision-card', hint='Live preview of your draft · sample model state') %}
+          <label class="form-label" for="request-mode">How your app asks</label>
+          <select id="request-mode" class="form-select mb-2"><option value="default">Default · balanced preference</option><option value="best">Best · highest preference</option><option value="available">Available · prefer ready models</option><option value="fast">Fast · prefer a quicker answer</option></select>
+          <div class="request-code"><code id="request-code"></code><button type="button" class="btn btn-link btn-sm px-1" data-copy aria-label="Copy request model name">Copy</button></div>
+          <p id="mode-explanation" class="small text-secondary mt-2"></p>
+          <div class="pick-result" role="status" aria-live="polite" aria-atomic="true">
+            <span class="eyebrow" id="pick-label">WOULD PICK NOW</span>
+            <strong id="picked-model" class="d-block wrap"></strong>
+            <p id="pick-reason" class="small mb-0"></p>
+          </div>
+          <p class="small text-secondary mt-3 mb-0">One request → one eligible model. The next request may pick differently as availability changes.</p>
+          <label class="form-label mt-4" for="sample-state">Try a different situation</label>
+          <select id="sample-state" class="form-select"><option value="normal">Qwen 32B is ready</option><option value="cold">All models unloaded</option><option value="busy">Qwen 32B is loaded, but busy</option></select>
+          {% call more('What goes into this preview?') %}
+            <p>Weights, sample benchmark results, sample reliability, role requirements, and the state above. All sample models are permitted and fit the sample hardware.</p>
+            <p class="mb-0">Fast mode estimates loading plus 400 output tokens. Queue wait and prompt processing are omitted, so this is a comparison, not a latency guarantee. Actual requests also check access, context, capabilities, and sensitivity.</p>
+          {% endcall %}
+        {% endcall %}
+      </aside>
+    </div>
+
+    {% call card('Behind the pick', false, id='evidence', hint='Optional · see the numbers behind your draft') %}
+      <p class="small text-secondary">Base score = model weight × (1 + benchmark quality) × reliability. Default requests then apply the loaded local model bonus. With benchmarks off, quality adds nothing. Equal base scores keep the order models were added; default requests prefer a loaded model in a final tie.</p>
+      <div class="table-responsive"><table class="table table-sm align-middle" aria-label="Sample routing scores"><thead><tr><th>Model</th><th>Weight</th><th>Quality</th><th>Reliability</th><th>Loaded bonus</th><th>Default score</th></tr></thead><tbody id="evidence-rows"></tbody></table></div>
+      <p class="small text-secondary mb-0">Scores express preference, never a share of requests. Zero-weight and incompatible models are excluded before selection.</p>
+    {% endcall %}
+    <footer class="small text-secondary mt-4 d-flex flex-wrap justify-content-between gap-2"><span>Interactive design preview · changes stay in this browser.</span><span id="design-note">01 / Role Studio</span></footer>
+  </div>
+</main>
+
+<dialog id="create-dialog" aria-labelledby="create-title">
+  {% call card('Create a role', class_='mb-0', header_id='create-title') %}
+    <form id="create-form">
+      <p class="text-secondary">Start with a name. Then choose the models that can answer for it.</p>
+      <label for="new-name" class="form-label">Role name</label><input id="new-name" class="form-control" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" placeholder="e.g. research" spellcheck="false" autocapitalize="none" autocomplete="off">
+      <p class="form-hint">Letters, digits, dots, underscores, and dashes. Start with a letter or digit.</p>
+      <p id="create-error" class="text-danger small" role="alert"></p>
+      <div class="d-flex gap-2 mt-3"><button class="btn btn-primary">Create role</button><button type="button" id="cancel-create" class="btn btn-outline-secondary">Cancel</button></div>
+    </form>
+  {% endcall %}
+</dialog>
+<template id="role-choice-template">{{ role_choice() }}</template>
+<template id="candidate-template">{{ model_choice() }}</template>
+<template id="evidence-template">{{ evidence_row() }}</template>
+<noscript>{% call alert('warning') %}Enable JavaScript to try these interactive design previews.{% endcall %}</noscript>
+<script>{{ javascript|safe }}</script>
+</body>
+</html>

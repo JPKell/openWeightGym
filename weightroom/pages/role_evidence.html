@@ -1,0 +1,25 @@
+{# Canonical saved evidence for each model; controls live only in role_parts.candidate. #}
+{% for model in picks[role.name].models %}
+{% call card(model.name, false) %}
+<div class="row g-3">
+<div class="col-lg-7">
+{{ model.score|round(3) }}{% if model.quality is not none %}<small class="d-block">Quality {{ (model.quality * 100)|round(1) }}%</small>{% endif %}
+            <small class="d-block">Reliability ×{{ model.reliability.factor|round(3) }} · {{ model.reliability.state }} · <a href="/reliability?model={{ model.name|urlencode }}&amp;role={{ role.name|urlencode }}">report</a></small>
+            {% if model.loaded_factor is defined %}<small class="d-block">Loaded ×{{ model.loaded_factor|round(3) }} · ordinary-role score {{ model.routing_score|round(3) }}</small>
+            <small class="d-block">Fast reuse ×{{ model.fast_loaded_factor|round(3) }} · weighted speed comparison {{ model.fast_preference_seconds|round(1) }}</small>{% else %}<small class="d-block text-warning">Loaded-model weights need the matching compute update.</small>{% endif %}
+            <small class="d-block text-secondary">{{ model.reliability.reason }}</small>{% if model.reliability.regression %}<small class="d-block text-warning">Recent reliability regression; inspect the report.</small>{% endif %}
+            {% if model.fallback %}<small class="d-block text-secondary">{{ model.fallback }}</small>{% endif %}
+            {% for evidence in model.evidence %}<small class="d-block">{{ evidence.benchmark }}: {% if evidence.normalized is not none %}{{ evidence.raw|round(3) }} → {{ (evidence.normalized * 100)|round(1) }}% (weight {{ evidence.weight }}){% else %}{{ evidence.reason }}{% endif %}
+              <span class="d-block">{{ (evidence.share * 100)|round(1) }}% of quality weight{% if evidence.contribution is not none %} · adds {{ (evidence.contribution * 100)|round(1) }} quality points{% else %} · quality contribution unavailable{% endif %}</span>
+              {% if evidence.run %}<a href="/benchmarks/run/{{ evidence.run }}">run</a>{% endif %}
+              {% for warning in evidence.warnings %}<span class="d-block text-warning">{{ warning }}</span>{% endfor %}</small>{% endfor %}
+</div><div class="col-lg-5 small">
+<p>{{ "Ready now" if model.warm else "Loaded, busy" if model.resident else "Not loaded" }} · {{ model.fit }}{% if model.context %} · {{ model.context }} context tokens{% endif %}</p>
+{% if model.evictions %}<p>Would evict: {{ model.evictions|join(', ') }}</p>{% endif %}
+<p>Answers at: {% if model.speed %}{{ model.speed|round|int }} tokens a second{% else %}<span class="text-secondary">not known yet</span>{% endif %}<br>Loads in: {% if model.load is not none %}{{ model.load|round|int }} s{% else %}<span class="text-secondary">not known yet</span>{% endif %}</p>
+<p>{{ model.decision }}</p>
+<p>{% if model.estimated_seconds is not none %}Estimated {{ model.estimated_seconds|round(1) }} s for this preview{% else %}Timing estimate unavailable{% endif %}</p>
+{% if model.estimate is defined %}<p class="text-secondary">Measured rates; inferred work. Queue/load {{ model.estimate.wait_seconds if model.estimate.wait_seconds is not none else 'unknown' }} s; processing budget {{ model.estimate.work_seconds if model.estimate.work_seconds is not none else 'unknown' }} s.</p>{% endif %}
+</div></div>
+{% endcall %}
+{% endfor %}

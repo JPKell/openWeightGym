@@ -1,0 +1,45 @@
+{# All existing role preferences keep their POST names and IDs inside the optional studio panel. #}
+      <input type="hidden" name="evidence-settings" value="1">
+      <div class="mb-3">
+        <label class="form-label" for="loaded-{{ role.name }}">Loaded-model bonus (%)</label>
+        <input id="loaded-{{ role.name }}" name="loaded_bonus" type="number" min="0" max="100" step="any" class="form-control" value="{{ role.get('loaded_bonus', 25) }}">
+        <small class="text-secondary">For default requests: weighted quality and reliability × (1 + bonus / 100) for an eligible loaded local model, even if busy. Default 25%; 0 disables the bonus. Capability and access requirements still apply. :best keeps quality order; :available and :fast keep their own rules.</small>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="fast-loaded-{{ role.name }}">Fast loaded-model bonus (%)</label>
+        <input id="fast-loaded-{{ role.name }}" name="fast_loaded_bonus" type="number" min="0" max="500" step="any" class="form-control" value="{{ role.get('fast_loaded_bonus', 100) }}">
+        <small class="text-secondary">For :fast only: default 100% gives a loaded local model ×2 preference, in addition to avoiding its reload time. 0 disables the extra reuse preference. It does not reduce measured latency or bypass role requirements.</small>
+      </div>
+      {{ section_title("Required for this role") }}
+      <div class="row g-3 mb-3">
+        <div class="col-md-4"><label class="form-label" for="context-{{ role.name }}">Minimum context tokens</label><input id="context-{{ role.name }}" name="requires-tokens" type="number" min="0" max="100000000" step="1" class="form-control" value="{{ role.get('requires', {}).get('tokens', 0) }}"></div>
+        {% for key, label in [('pictures', 'Images'), ('tools', 'Tool calls'), ('stays', 'Keep requests local')] %}<div class="col-md-2 align-self-end"><label class="form-check-label"><input type="checkbox" class="form-check-input" name="requires-{{ key }}" {{ 'checked' if role.get('requires', {}).get(key) }}> {{ label }}</label></div>{% endfor %}
+      </div>
+      {% set _section_title4 %}Benchmark preferences for {{ role.name }}{% endset %}
+{{ section_title(_section_title4) }}
+      <p class="small text-secondary">These weights apply only to <strong>{{ role.name }}</strong>. Use 0 to ignore a benchmark; 3 gives it three times the influence of 1. For example, code at 3 and instructions at 1 make up 75% and 25% of the quality score. Multiplying all weights by the same factor keeps the same balance. Model weights above are a separate preference.</p>
+      <div class="d-flex flex-wrap gap-2 mb-2">
+        <button type="button" class="btn btn-outline-secondary" data-benchmark-preset="{{ benchmark_presets.coding|tojson|forceescape }}">Use coding weights</button>
+        <button type="button" class="btn btn-outline-secondary" data-benchmark-preset="{{ benchmark_presets.chat|tojson|forceescape }}">Use chat weights</button>
+        <button type="button" class="btn btn-outline-secondary" data-benchmark-preset="{}">Ignore all benchmarks</button>
+      </div>
+      <p class="small text-secondary">Editable starting points: Coding emphasizes code reading, structured answers and instruction following; Chat emphasizes instructions, recall and generation speed. They set other benchmark weights to 0 in this role. Code reading does not measure code generation or tool use. Use <strong>Save</strong> to apply changes.</p>
+      <p class="small text-secondary" data-benchmark-status aria-live="polite"></p>
+      <div class="row g-3 mb-3" data-benchmark-weights>
+        {% for benchmark in benchmark_definitions %}<div class="col-md-4">
+          <input type="hidden" name="benchmark" value="{{ benchmark.id }}">
+          <label class="form-label" for="bench-{{ role.name }}-{{ benchmark.id }}">{{ benchmark.name }} <small class="text-secondary">{{ 'higher' if benchmark.direction == 'high' else 'lower' }} is better</small></label>
+          <input id="bench-{{ role.name }}-{{ benchmark.id }}" name="benchmark-weight" type="number" min="0" max="1e100" step="any" class="form-control" value="{{ role.get('benchmarks', {}).get(benchmark.id, 0) }}" data-benchmark-id="{{ benchmark.id }}">
+          <small class="d-block text-secondary">{{ 'Answer from a passage and mark unsupported answers as missing.' if benchmark.id == 'abstention' else benchmark.summary }}</small>
+          <output class="small d-block" data-benchmark-share="{{ benchmark.id }}" aria-label="quality share of {{ benchmark.name }} for {{ role.name }}">{{ (role.benchmark_shares.get(benchmark.id, 0) * 100)|round(1) }}% share</output>
+        </div>{% endfor %}
+        {% for key, weight in role.get('benchmarks', {}).items() if key not in benchmark_definitions|map(attribute='id')|list %}
+          <div class="col-md-4"><input type="hidden" name="benchmark" value="{{ key }}"><label class="form-label">{{ key }} (definition unavailable)<input name="benchmark-weight" class="form-control" type="number" min="0" max="1e100" step="any" value="{{ weight }}" data-benchmark-id="{{ key }}"></label><output class="small d-block" data-benchmark-share="{{ key }}">{{ (role.benchmark_shares.get(key, 0) * 100)|round(1) }}% share</output></div>
+        {% endfor %}
+        <div class="col-md-4"><label class="form-label" for="missing-{{ role.name }}">Missing or incompatible evidence</label>
+          <select id="missing-{{ role.name }}" name="missing" class="form-select"><option value="manual" {{ 'selected' if role.get('missing', 'manual') == 'manual' }}>Use manual weight</option><option value="exclude" {{ 'selected' if role.get('missing') == 'exclude' }}>Exclude the model</option></select></div>
+        <div class="col-md-4"><label class="form-label" for="stale-{{ role.name }}">Engine, machine or age warning</label>
+          <select id="stale-{{ role.name }}" name="stale" class="form-select"><option value="warn" {{ 'selected' if role.get('stale', 'warn') == 'warn' }}>Use evidence with a warning</option><option value="exclude" {{ 'selected' if role.get('stale') == 'exclude' }}>Treat as missing evidence</option></select></div>
+        <div class="col-md-4"><label class="form-label" for="age-{{ role.name }}">Maximum evidence age (days)</label><input id="age-{{ role.name }}" type="number" min="0" max="36500" step="any" class="form-control" name="max_age_days" value="{{ role.get('max_age_days', 0) }}"><small class="text-secondary">0 disables the age limit.</small></div>
+      </div>
+      <p class="small text-secondary">The model preview reflects saved weights. Scores normalize to 0–100% among your permitted candidates, respecting high/low direction; equal results receive 50%. Each normalized score contributes its displayed share to quality; the final score is model weight × (1 + quality), a multiplier from 1 to 2. If any selected measurement is unusable, the missing-evidence policy applies to the whole quality score. Edit benchmark formulas and directions on <a href="/benchmarks/manage">Benchmarks</a>. Routing uses the saved result snapshot on compute.</p>
