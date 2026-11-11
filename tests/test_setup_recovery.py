@@ -520,7 +520,7 @@ printf '%s %s %s' "$DIR" "$SYSTEM" "$OWG_OWNER"
 @pytest.mark.parametrize("action,choice,child_status,arguments", [
     ("continue", 0, 0, ""),
     ("restart", 1, 0, ""),
-    ("quit", 2, 0, ""),
+    ("quit", 3, 0, ""),
     ("cancel", 1, 3, ""),
     ("failure", 1, 7, ""),
     ("continue", 2, 0, "--yes"),
