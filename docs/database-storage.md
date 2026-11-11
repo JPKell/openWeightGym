@@ -710,7 +710,9 @@ The sample proposals remain available through `scripts/preview-database-designs.
   identities include the host and file identity; PostgreSQL uses server/database identity, with a
   host/endpoint scope for loopback or Unix-socket connections. Unprovable aliases remain separate.
 - [x] **Unbound files:** show discovered/unused SQLite files separately, excluding them from active
-  totals, all-active-store exports and maintenance. A configured missing database is an error, not
+  totals, all-active-store exports and maintenance. Only existing regular files are discovered;
+  unused registry fallbacks and unbound PostgreSQL configuration are not filesystem discoveries.
+  A configured missing database is an error, not
   a reason to silently use an old file. Mixed PostgreSQL/SQLite alone is valid.
 - [x] **Compact inventory:** one row per known physical database; load expensive exact table counts
   only on expansion. Keep owner, bindings, sanitized location, version, allocated size, indexes,
