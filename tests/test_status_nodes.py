@@ -64,7 +64,7 @@ def test_status_shows_gpu_cpu_and_unavailable_loadcoaches_with_scoped_locks():
     assert 'title="gpu-model: 8.8 GiB"' in html and 'bg-secondary' in html
     assert 'CPU' in html and 'embedder' in html and '12.0 GiB available' in html
     assert 'system RAM used, including openWeightGym' in html
-    assert '384 MiB RSS' in html and '4 logical CPUs' in html and '2 waiting' in html
+    assert '384 MiB RSS' in html and 'logical CPUs' not in html and '2 queued' in html
     assert 'Admission 1.5 GiB free' in html and '512 MiB host reserve' in html
     assert '4.0 GiB service ceiling' in html
     assert 'Loaded models unavailable.' in html

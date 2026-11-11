@@ -22,7 +22,6 @@ def select_text(page, selector):
 @pytest.mark.parametrize('selected,refreshing', [
     ('#status h2', '#status'),
     ('#requests td', '#current-requests'),
-    ('#recent-requests td', '#recent-requests'),
 ])
 def test_status_polling_defers_selected_section_and_resumes(desk_with_machine, tmp_path, selected, refreshing):
     server, _, _, _, _ = desk_with_machine

@@ -255,6 +255,19 @@ class Log:
                                (owner, limit, offset))
         return {'total': total, 'page': offset // limit + 1, 'events': [self.entry(row) for row in rows]}
 
+    def request_counts(self, owner: str | None, now: float) -> list[int]:
+        """Recorded arrivals in rolling windows, without reading bodies or joining endings."""
+        where = "kind = 'request' AND what = 'asked' AND at >= ? AND at <= ?"
+        values = [now - 3600, now]
+        if owner is not None:
+            where += ' AND user = ?'
+            values.append(owner)
+        row = self.db.execute(
+            "SELECT SUM(CASE WHEN at >= ? THEN 1 ELSE 0 END), "
+            "SUM(CASE WHEN at >= ? THEN 1 ELSE 0 END), COUNT(*) FROM events WHERE " + where,
+            (now - 300, now - 900, *values)).fetchone()
+        return [int(value or 0) for value in row]
+
     def requests(self, owner: str | None, limit: int, offset: int = 0, completed: bool = False,
                  group: str = '', memberships: dict | None = None, filters: dict | None = None) -> dict:
         """Page request starts with their final outcome, never prompt or response text."""

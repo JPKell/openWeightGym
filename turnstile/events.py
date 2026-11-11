@@ -125,6 +125,16 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
                     entry.pop("text", None)
         return JSONResponse({"entry": entries[0], "after": entries[1:]})
 
+    async def request_counts(request: Request, user: User) -> Response:
+        """Status totals from records already received on front; never wake or poll workers."""
+        owner = None if user.can('see-all') else user.name
+        at = time.time()
+        counts = await report(lambda view: view.request_counts(owner, at))
+        if isinstance(counts, Response):
+            return counts
+        return JSONResponse({'counts': counts, 'at': at, 'scope': 'all' if owner is None else 'mine'},
+                            headers={'cache-control': 'private, no-store'})
+
     async def requests_list(request: Request, user: User) -> Response:
         """List retained request facts visible to the caller."""
         paged = page_of(request)
@@ -274,7 +284,8 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         """Register the handler behind the service authentication wrapper."""
         return Route(path, signed_in(caller, log, fresh(handler)))
 
-    return [route("/loadcoach/events", events), route("/loadcoach/events/{entry:int}", event_one),
+    return [Route("/loadcoach/requests/counts", signed_in(caller, log, request_counts)),
+            route("/loadcoach/events", events), route("/loadcoach/events/{entry:int}", event_one),
             route("/loadcoach/event-choices", event_choices), route("/loadcoach/requests", requests_list),
             route("/loadcoach/requests/{entry:int}", request_facts), route("/loadcoach/usage", usage),
             route("/loadcoach/account-events", account_events)]

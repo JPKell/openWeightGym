@@ -31,6 +31,7 @@ within their own layouts.
 | Standalone Status/Telemetry design previews (sample data) | [operations_designs.html](weightroom/pages/operations_designs.html), rendered with `scripts/preview-operations-designs.py` |
 | Status request and capacity design previews (sample data) | [status_designs.html](weightroom/pages/status_designs.html), rendered with `scripts/preview-operations-designs.py --status` |
 | Selected Telemetry workspace preview (sample data) | [telemetry_design.html](weightroom/pages/telemetry_design.html), rendered with `scripts/preview-operations-designs.py --telemetry` |
+| Live Status lanes, capacity ledger and request rows | [status.html](weightroom/pages/status.html), [status_nodes.html](weightroom/pages/status_nodes.html), [status_parts.html](weightroom/pages/status_parts.html), [current_requests.html](weightroom/pages/current_requests.html) |
 | Physical-host Telemetry workspace, device tables and graphs | [telemetry_workspace.html](weightroom/pages/telemetry_workspace.html), [telemetry_parts.html](weightroom/pages/telemetry_parts.html), [telemetry-workspace.js](weightroom/static/telemetry-workspace.js) |
 | Node GPU assignments and RAM policy | [cards.html](weightroom/pages/cards.html) |
 | Node/component summaries and model details | [machines.html](weightroom/pages/machines.html), [components_content.html](weightroom/pages/components_content.html), [multimedia_model.html](weightroom/pages/multimedia_model.html) |
