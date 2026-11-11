@@ -1,0 +1,30 @@
+/* Standalone DB review; console palette and component tokens remain authoritative. */
+.db-design-page { max-width: 1600px; margin: auto; padding: 1.5rem var(--suite-page-gutter); }
+.review-bar, .snapshot-bar { background: var(--bs-body-bg); }
+.db-design-page .page-header { margin-bottom: 1rem !important; }
+.db-filters #search { min-width: 12rem; width: auto; }
+.db-inventory { min-width: 1120px; font-variant-numeric: tabular-nums; }
+.db-inventory > tbody > tr > td { padding-block: .35rem; }
+.db-inventory [data-name] { font-size: .875rem; }
+.db-detail > td { background: var(--tblr-bg-surface-secondary); padding: 0 !important; }
+.detail-content { border-left: 3px solid var(--bs-primary); }
+.db-detail table { background: var(--bs-body-bg); }
+.db-group th { background: var(--suite-accent-bg); color: var(--bs-body-color); }
+.db-workspace { display: grid; grid-template-columns: minmax(0, 1fr); }
+#operations { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+[data-layout="desk"] .db-workspace { grid-template-columns: minmax(0, 1fr) 285px; gap: 1rem; align-items: start; }
+[data-layout="desk"] #operations { display: block; position: sticky; top: 1rem; }
+[data-layout="desk"] .db-inventory { min-width: 1050px; }
+[data-layout="nodes"] .db-group th { border-top: 8px solid var(--bs-body-bg); }
+.db-dialog { padding: 0; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius-lg); width: min(780px, calc(100vw - 2rem)); max-height: 90vh; color: var(--bs-body-color); background: var(--bs-body-bg); }
+.db-dialog::backdrop { background: #0008; }
+.db-todo li { margin-bottom: .75rem; }
+@media (max-width: 1100px) {
+  [data-layout="desk"] .db-workspace { grid-template-columns: minmax(0, 1fr); }
+  [data-layout="desk"] #operations { display: grid; position: static; }
+}
+@media (max-width: 767px) {
+  .db-design-page { padding-top: 1rem; }
+  #operations, [data-layout="desk"] #operations { grid-template-columns: minmax(0, 1fr); }
+  .db-filters .form-select { flex: 1 1 120px; }
+}

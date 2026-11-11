@@ -2516,6 +2516,86 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(503, f"LoadCoach {name} is not answering.", {"Retry-After": "5"})
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
 
+    async def machine_databases(request: Request) -> Response:
+        """Signed, bounded node-specific storage API. Never wake or fall back to another node."""
+        from loadcoach.database_admin import SAFE_ID
+        from loadcoach.database_jobs import ID
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, 'Missing or wrong API key.')
+        if not user.can('manage-settings'):
+            return error(403, 'Database operations require manage-settings.')
+        name = request.path_params['name']
+        if name not in machines.names:
+            return error(404, 'That compute node is not configured.')
+        if name != 'compute' and name not in settings.machines:
+            return error(404, 'That compute node has no configured database endpoint.')
+        if machines.state(name) == 'retired':
+            return error(409, 'This node is retired; its databases are not queried.')
+        parts = request.path_params['operation'].split('/')
+        method = request.method
+        path = ''
+        if parts == ['inventory'] and method == 'GET':
+            path = '/loadcoach/databases?summary=1'
+        elif len(parts) == 3 and parts[0] == 'stores' and SAFE_ID.fullmatch(parts[1]) and method == 'GET':
+            if parts[2] == 'dump':
+                path = '/loadcoach/databases/' + quote(parts[1], safe='') + '/dump'
+                if table := request.query_params.get('table'):
+                    path += '?' + urlencode({'table': table})
+                if identity := request.query_params.get('identity'):
+                    path += ('&' if '?' in path else '?') + urlencode({'identity': identity})
+            elif parts[2] == 'details':
+                path = '/loadcoach/database-operations/details/' + quote(parts[1], safe='')
+        elif parts in [['preview'], ['execute']] and method == 'POST':
+            path = '/loadcoach/database-operations/' + parts[0]
+        elif parts == ['jobs'] and method == 'GET':
+            path = '/loadcoach/database-operations/jobs'
+        elif len(parts) in {2, 3} and parts[0] == 'jobs' and ID.fullmatch(parts[1]):
+            if method == 'GET' and (len(parts) == 2 or parts[2] == 'recovery') or method == 'POST' and parts[2:] == ['cancel']:
+                path = '/loadcoach/database-operations/' + '/'.join(parts)
+        elif parts == ['backups'] and method in {'GET', 'POST'}:
+            path = '/loadcoach/backups'
+        elif len(parts) == 2 and parts[0] == 'backups' and SAFE_ID.fullmatch(parts[1]) and method == 'GET':
+            path = '/loadcoach/backups/' + parts[1]
+        if not path:
+            return error(405, 'Unsupported node database operation.')
+        # Direct signed HTTP does not enter Turnstile's wake/retry machinery.
+        other = settings.machines.get(name, {}) if name != 'compute' else {}
+        base = other.get('compute', settings.upstream(settings.ports[0])).rstrip('/')
+        body = await request.body() if method == 'POST' else b''
+        headers, nonce = signed_headers(user, method, path, body, [('content-type', 'application/json')], key_file=other.get('machine_key_file', ''))
+        streamed = parts[-1] in {'dump', 'recovery'}
+        try:
+            upstream = internal.build_request(method, base + path, headers=headers, content=body,
+                timeout=httpx.Timeout(905 if streamed or parts[0] == 'backups' and method == 'POST' else 65 if parts[-1] == 'details' else 30 if parts[0] == 'preview' else 12, connect=2))
+            answer = await internal.send(upstream, stream=True)
+        except httpx.HTTPError:
+            return error(503, f'LoadCoach {name} is not answering. No other node was used.')
+        if not proven(answer, nonce, other.get('machine_key_file', '')):
+            await answer.aclose()
+            return error(502, 'This node did not prove its database response.')
+        if not streamed or answer.status_code != 200:
+            try:
+                content = await answer.aread()
+                if answer.status_code == 200 and parts == ['inventory']:
+                    result = json.loads(content)
+                    result['machine'] = name
+                    for row in [*result.get('databases', []), *result.get('health', [])]:
+                        row['machine'] = name
+                    content = json.dumps(result).encode()
+                return Response(content, status_code=answer.status_code, media_type=answer.headers.get('content-type'), headers={'cache-control': 'no-store'})
+            finally:
+                await answer.aclose()
+
+        async def chunks():
+            try:
+                async for block in answer.aiter_bytes():
+                    yield block
+            finally:
+                await answer.aclose()
+        forwarded = {key: value for key, value in answer.headers.items() if key in {'content-type', 'content-disposition', 'x-suite-dump-method'}}
+        return StreamingResponse(chunks(), headers={**forwarded, 'cache-control': 'no-store'})
+
     async def machine_model_lock(request: Request) -> Response:
         """Apply a Status-page lock to the named LoadCoach, which validates the caller's ability."""
         user = caller(key_of(request))
@@ -2651,6 +2731,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/machines/{name}/engines", machine_engines),
                             Route("/turnstile/machines/{name}/model-api/{operation:path}", machine_model_api, methods=["GET", "POST", "DELETE"]),
                             Route("/turnstile/machines/{name}/cards", machine_cards, methods=["GET", "POST"]),
+                            Route('/turnstile/machines/{name}/databases/{operation:path}', machine_databases, methods=['GET', 'POST']),
                             Route("/turnstile/machines/{name}/machine-key", rotate, methods=["GET", "POST"]),
                             Route("/turnstile/machines/{name}/model-lock", machine_model_lock, methods=["POST"]),
                             Route("/turnstile/machines/{name}/probe-environment", machine_probe_environment),

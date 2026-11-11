@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import uuid
+import time
 from pathlib import Path
 
 from .database import Database, DatabaseConfigurationError, DriverUnavailable
@@ -96,11 +97,29 @@ def _failure(name: str, problem: subprocess.CalledProcessError | subprocess.Time
 
 
 def _run(database: Database, name: str, arguments: list[str], *, dbname: str | None = None,
-         capture: bool = False, timeout: int = 900) -> subprocess.CompletedProcess:
+         capture: bool = False, timeout: int = 900, guarded_output: Path | None = None) -> subprocess.CompletedProcess:
     """Run a PostgreSQL maintenance tool with private connection environment."""
     connection, environment, password = _connection(database, dbname)
     command = [_tool(name), *arguments, f"--dbname={connection}"]
     try:
+        if guarded_output is not None:
+            started = time.monotonic()
+            with subprocess.Popen(command, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) as process:
+                while True:
+                    try:
+                        _, stderr = process.communicate(timeout=.2)
+                        break
+                    except subprocess.TimeoutExpired:
+                        oversized = guarded_output.exists() and guarded_output.stat().st_size > 2 * 1024 ** 3
+                        if oversized or shutil.disk_usage(guarded_output.parent).free < 64 * 1024 ** 2 or time.monotonic() - started > timeout:
+                            process.kill()
+                            process.communicate()
+                            raise PostgreSQLToolError('SQL export exceeded its 2 GiB, disk-space or time budget. Export smaller stores separately.')
+                if process.returncode:
+                    raise subprocess.CalledProcessError(process.returncode, command, stderr=stderr)
+                if guarded_output.stat().st_size > 2 * 1024 ** 3:
+                    raise PostgreSQLToolError('SQL export exceeded its 2 GiB limit.')
+                return subprocess.CompletedProcess(command, 0, stderr=stderr)
         return subprocess.run(
             command,
             env=environment,
@@ -160,7 +179,7 @@ def dump_sql(database: Database, output: Path, table: str | None = None) -> str:
             raise KeyError(table)
         pattern = f'{database.quote_identifier(schema)}.{database.quote_identifier(name)}'
         arguments.extend(("--strict-names", f"--table={pattern}"))
-    _run(database, "pg_dump", arguments)
+    _run(database, "pg_dump", arguments, guarded_output=output)
     output.chmod(0o600)
     return "pg_dump plain SQL"
 

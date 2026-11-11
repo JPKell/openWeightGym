@@ -693,23 +693,93 @@ Use SQLite's existing recovery contract on SQLite-only installations; no Postgre
 client tools are required for them. See
 [pg_upgrade](https://www.postgresql.org/docs/16/pgupgrade.html).
 
-## DB page baseline behavior
+## DB operations desk
 
-The first page is deliberately useful without pretending that PostgreSQL already works:
+System → DB uses the selected operations desk: a compact database ledger, expandable table
+inventories and an operations panel. Install matching code on Front and every configured
+LoadCoach to enable the node-scoped API. Existing SQLite/PostgreSQL bindings are preserved;
+this change does not migrate an engine or delete production records on installation.
+The sample proposals remain available through `scripts/preview-database-designs.py`.
 
-- live inventory comes from both machines and remains partially useful if compute is off;
-- each database shows its engine, owner, absolute source, main/sidecar disk size and tables;
-- each table shows an exact record count and allocated table-plus-index bytes when SQLite's
-  `dbstat` virtual table is available;
-- per-table and full-database SQL downloads are generated from a consistent read transaction;
-- dump downloads require `manage-settings`, use bounded database/table identifiers chosen from
-  the discovered catalog, and never accept a filesystem path from the request;
-- tool/capability status explains which dump implementation will run;
-- migration profiles expose a Start control only after guarded P4 preflight produces a concrete
-  binding/configuration preview; installations without configured profiles retain inventory and
-  export access.
+<!-- db-design-todo:start -->
+- [x] **Fleet discovery:** enumerate the configured Turnstile machines, including retired and
+  unreachable nodes; probe with bounded concurrency and timeouts without waking or substituting
+  hosts. A missing node or store blocks a complete export. Explicit partial exports record omissions.
+- [x] **Store identity:** resolve registry bindings and actual engines; deduplicate proven physical
+  identities across services/nodes, retaining consumer routes and an export owner. Local SQLite
+  identities include the host and file identity; PostgreSQL uses server/database identity, with a
+  host/endpoint scope for loopback or Unix-socket connections. Unprovable aliases remain separate.
+- [x] **Unbound files:** show discovered/unused SQLite files separately, excluding them from active
+  totals, all-active-store exports and maintenance. A configured missing database is an error, not
+  a reason to silently use an old file. Mixed PostgreSQL/SQLite alone is valid.
+- [x] **Compact inventory:** one row per known physical database; load expensive exact table counts
+  only on expansion. Keep owner, bindings, sanitized location, version, allocated size, indexes,
+  SQLite main/WAL/SHM/reusable bytes, tool status, verified-backup age and migration reports.
+  Counts are unknown or explicitly estimated until details load. Refresh preserves filters,
+  selection, expansion and focus; completed maintenance invalidates cached details.
+- [x] **Scoped downloads:** signed, authorized node-specific database/table dumps stream from the
+  selected owner. SQL filenames and store/table identifiers come from trusted catalogs, never
+  arbitrary caller paths. Table-only SQL carries a dependency warning.
+- [x] **Bulk export jobs:** all or selected stores produce a private ZIP with one SQL file per
+  database and a manifest of identities, engines, consumers, snapshot windows, sizes, hashes and
+  outcomes. Dump all ignores filters. Jobs retain partial failures, support cancellation between
+  transactions/stores, survive page refresh, and mark interrupted work without automatic replay.
+- [x] **Approved purge policy:** only bound Spotter `readings.at` is eligible initially. Reviews
+  freeze the exact timestamp keys strictly before the chosen date at 00:00 UTC, so newly inserted
+  or backdated readings are excluded. Spotter's existing `keep_days` sweep may independently remove
+  readings; receipts report actual deletions. Accounts, settings, chained logs, active requests,
+  private content, benchmarks and migration ledgers remain protected. Other histories require an
+  owning-repository retention policy before becoming eligible; no date column is inferred.
+- [x] **Reviewed execution:** maintenance reviews expire after ten minutes and are owner-bound,
+  single-use and tied to store identity/schema revision. Permissions, same-origin POST protection,
+  confirmation, per-store leases, bounded transactions and audit outcomes are enforced. Changes
+  already committed on one store are not presented as rolled back when another store fails.
+- [x] **Recovery before maintenance:** create and independently verify an encrypted single-store
+  backup through the existing recovery path before deletion or compaction. Configure age tools and
+  public recovery recipients on each owning node first. Private recovery identities stay offline;
+  browser links expose receipts, not recovery archives. Backups follow ordinary backup retention;
+  single-store maintenance copies do not claim a complete paired or fleet recovery set.
+- [x] **Separate disk reclamation:** SQLite checkpoints WAL and uses VACUUM, with lock/time limits
+  and rewrite headroom. PostgreSQL routine VACUUM (ANALYZE) makes space reusable; VACUUM FULL uses
+  exclusive locks and rewrites storage. Full reclamation requires observable free space on the
+  actual server filesystem and its tablespaces; remote/unreadable server storage is refused.
+  Report measured before/after bytes rather than promising DELETE shrinks files. References:
+  [SQLite VACUUM](https://www.sqlite.org/lang_vacuum.html) and
+  [PostgreSQL vacuuming](https://www.postgresql.org/docs/current/routine-vacuuming.html).
+- [x] **Node-specific recovery evidence:** probe health and backups on every owning node and
+  keep unknown/stale/missing distinct. Native node receipts use the configured machine identity.
+  Existing Backups remains the explicitly paired Front/default-Compute workflow; independent
+  worker maintenance evidence is available in the DB desk's Recent operations.
+- [x] **Validation:** four real signed LoadCoach fixtures plus Front, a real mixed-engine fleet,
+  SQL round-trip restores, omitted-node manifests, protected stores, UTC boundaries, replay/owner/
+  expiry/schema checks, low disk, PostgreSQL lock refusal and measured SQLite/PostgreSQL
+  reclamation. Shared-component/all-page browser checks cover both themes, narrow layouts,
+  error/empty states and dynamic replacements.
+<!-- db-design-todo:end -->
 
+### Operating limits and recovery
 
+SQL export input is limited to 2 GiB per archive, with a 64 MiB disk reserve and bounded dump
+workers. Export smaller stores separately when the limit is reached. SQL downloads expire after
+24 hours; operation receipts and review plans are private files under Front's `database-jobs`
+and each node's `database-operations` (Front maintenance uses `database-maintenance`). Job
+receipts expire after seven days and reviews after ten minutes. A purge review is limited to
+one million telemetry keys per owning-node review; choose fewer stores or an earlier cutoff for larger
+histories. The per-store backup receipt names the owning machine and encrypted recovery set.
+
+Inspect failed/interrupted receipts before retrying. Cancellation stops remaining work after
+the current bounded transaction; it does not undo committed batches. If a node stops answering
+after execution was accepted, inspect that node's job rather than sending a replacement.
+Use the documented encrypted-backup recovery procedure on its owning server for rollback.
+Keep the private recovery identity outside both servers. Migration profiles retain their separate
+coordinated offline cutover/rollback workflow.
+
+To restore an individual SQL export, choose an empty disposable target of the recorded engine:
+`sqlite3 restored.db < database.sql`, or `psql --dbname=TARGET --set=ON_ERROR_STOP=1 --file=database.sql`.
+Verify the manifest hash and restored content before using it. A collection of independent SQL
+snapshots is not a simultaneous cross-store recovery point and does not replace a coordinated,
+verified recovery set. Re-enable the original store configuration if a deployment is rolled back;
+this UI release introduces no schema migration or automatic database engine switch.
 
 ## Private document collections in the chat store (milestone 105)
 

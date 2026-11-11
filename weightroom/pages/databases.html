@@ -1,88 +1,79 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, page_header, alert, empty_row %}
+{% from "parts.html" import page_header, card, said_box, alert, confirm_check, empty_row %}
+{% from "database_parts.html" import table_head, dom_templates %}
 {% block title %}DB · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/databases.css?v=1"><script src="/static/databases.js?v=1" defer></script>{% endblock %}
 {% block main %}
-{{ page_header("Database storage", "Live inventory, restorable SQL exports and engine migration readiness.") }}
-
-{% if compute_error %}{% call alert('warning', class_='py-2') %}{{ compute_error }}{% endcall %}{% endif %}
+<div class="database-console" data-database-console>
+{% call page_header('Databases', pretitle='SYSTEM / STORAGE', help='/docs/data/engines') %}
+<button type="button" class="btn btn-outline-secondary btn-sm" id="refresh">Refresh snapshot</button><button type="button" class="btn btn-primary btn-sm" id="export-all">Dump all databases</button>
+{% endcall %}
 {{ said_box(said) }}
-{% call alert('info', class_='py-2') %}SQL exports can contain password verifiers, authenticator secrets, API-key hashes, retained prompts and responses. Keep downloaded dumps private and owner-readable.{% endcall %}
-
-<div class="row g-3 mb-3">
-  <div class="col-md-4">{% call card("", class_="h-100") %}<div class="text-secondary small">Databases</div><div class="fs-4 fw-semibold">{{ database_count }}</div>{% endcall %}</div>
-  <div class="col-md-4">{% call card("", class_="h-100") %}<div class="text-secondary small">Tables</div><div class="fs-4 fw-semibold">{{ table_count }}</div>{% endcall %}</div>
-  <div class="col-md-4">{% call card("", class_="h-100") %}<div class="text-secondary small">On disk now</div><div class="fs-4 fw-semibold">{{ disk_size|disk_size }}</div>{% endcall %}</div>
+<div class="d-flex flex-wrap align-items-center gap-3 border rounded px-3 py-2 mb-3" aria-label="Snapshot summary"><strong id="coverage"></strong><span id="totals"></span><span class="small text-secondary ms-md-auto" id="snapshot-time"></span></div>
+<div id="coverage-note" hidden>{{ alert('warning', class_='py-2', attrs={'id': 'coverage-message'}) }}</div>
+<div id="node-strip" class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Node coverage"></div>
+<div id="status" role="status" aria-live="polite" class="small mb-2"></div>
+<div class="database-workspace">
+{% call card(id='inventory', body=false, attrs={'aria-label': 'Database inventory'}) %}
+<div class="d-flex flex-wrap gap-2 p-3 border-bottom database-filters">
+<input type="search" id="search" class="form-control flex-fill" aria-label="Search databases" placeholder="Find a database or owner…">
+<select id="node-filter" class="form-select w-auto" aria-label="Filter by node"><option value="all">All nodes</option></select>
+<select id="engine-filter" class="form-select w-auto" aria-label="Filter by engine"><option value="all">All engines</option><option>PostgreSQL</option><option>SQLite</option></select>
+<button type="button" class="btn btn-outline-secondary btn-sm" id="expand-all">Expand visible</button>
 </div>
-
+<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 db-inventory" aria-label="Databases">{{ table_head() }}<tbody id="databases"></tbody></table></div>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top p-3"><span class="small text-secondary" id="visible-count"></span><div class="d-flex flex-wrap gap-2 align-items-center"><strong class="small" id="selection">No databases selected</strong><button type="button" class="btn btn-outline-secondary btn-sm" id="clear-selection">Clear</button><button type="button" class="btn btn-outline-primary btn-sm" id="export-selected" disabled>Dump selected</button><button type="button" class="btn btn-outline-danger btn-sm" id="purge-selected" disabled>Purge by date…</button></div></div>
+{% endcall %}
+<aside aria-label="Operations">
+{% call card('Export & maintenance', hint='Choose a database row or select several.') %}
+<p class="small text-secondary">Dump one database as SQL, or download a ZIP containing one SQL dump per selected database and a completeness manifest.</p>
+<div class="d-flex flex-wrap gap-2 mb-3"><button type="button" class="btn btn-outline-primary btn-sm" data-all-export>Dump all</button><button type="button" class="btn btn-outline-secondary btn-sm" id="reclaim-selected" disabled>Reclaim selected…</button></div>
+<div class="border-top pt-3 small"><strong>Cleanup by date</strong><p class="text-secondary mt-1">Preview telemetry readings before a UTC date, then confirm deletion. Other tables remain protected until they have an approved retention policy.</p><p class="text-secondary mb-0">Reclaim disk separately. A verified recovery copy is created before each store is changed; maintenance can hold locks.</p></div>
+{% endcall %}
+{% call card('Recent operations', id='jobs-card', body_class='py-2') %}
+<button type="button" class="btn btn-outline-secondary btn-sm mb-2" id="refresh-jobs">Refresh jobs</button><ol class="list-unstyled small mb-0" id="jobs"><li class="text-secondary">Loading your operations…</li></ol>
+{% endcall %}
+</aside>
+</div>
+{% call card('Discovered & unbound files', false, hint='Excluded from active totals, Dump all and maintenance. Export explicitly after inspecting ownership.') %}
+<div class="table-responsive"><table class="table table-sm align-middle" aria-label="Discovered databases"><thead><tr><th>Node / database</th><th>Location</th><th>Size</th><th>Action</th></tr></thead><tbody id="discovered"></tbody></table></div>
+{% endcall %}
+{% call card('Diagnostics & migration', false, hint='Engine support, tool availability, store health and offline migration.') %}
+<p class="small">SQLite and PostgreSQL are supported per store. Engine labels do not represent compute nodes. Row counts are estimates where marked; expand a database for exact counts.</p>
+<div class="table-responsive mb-3"><table class="table table-sm" aria-label="Dump tools by node"><thead><tr><th>Node</th><th>sqlite3</th><th>pg_dump</th><th>pg_restore</th><th>psql</th><th>pgloader</th></tr></thead><tbody>{% for node in snapshot.nodes %}<tr><td>{{ node.name }}</td>{% for tool in ['sqlite3','pg_dump','pg_restore','psql','pgloader'] %}<td>{{ 'available' if node.tools.get(tool, {}).get('available') else 'unavailable' if node.answering else 'unknown' }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
 {% include "store_health.html" %}
-
-{% call card("Engine and migration readiness", true) %}
-<div class="table-responsive mb-3"><table class="table table-sm align-middle mb-0">
-  <thead><tr><th>Engine</th><th>Runtime</th><th>Migration</th><th>Reason</th></tr></thead>
-  <tbody>
-    <tr><td>SQLite</td><td><span class="badge text-bg-success">supported</span></td><td>SQL exports available</td><td>Default for one-machine installations; named stores can select either engine.</td></tr>
-    <tr><td>PostgreSQL</td><td><span class="badge text-bg-success">supported</span></td><td>Offline migration available</td><td>Verified recovery, logical copy, content validation, coordinated cutover and automatic rollback.</td></tr>
-  </tbody>
-</table></div>
-<p class="mb-2">SQLite and PostgreSQL now share the storage contract, versioned schemas, recovery manifests and restorable SQL exports. Recovery sets refuse to complete when a configured store is missing or unreachable.</p>
-<p class="mb-0 text-secondary">Choose an operator-configured migration profile below to review its target and bindings before starting maintenance.</p>
+{% call card('Offline migration', false) %}
+{% for profile in migration_profiles %}<form method="post" action="/databases/migrations/{{ profile }}/preview" class="d-flex gap-2 align-items-center mb-2"><strong>{{ profile }}</strong><button class="btn btn-outline-primary btn-sm">Check and preview</button></form>{% else %}<p class="small text-secondary">No migration profiles are configured. Configure an owner-only profile under <code>settings/migrations/</code> before changing a populated store's engine.</p>{% endfor %}
+{% for report in migration_reports %}<details class="mt-2"><summary>{{ report.id }} · {{ report.state }}</summary><p>{{ report.failure or report.operator_action or 'No failure recorded.' }}</p><p>Recovery hosts: {{ report.recovery.keys()|join(', ') }}</p>{% if report.acceptance %}<p>Acceptance: {{ report.acceptance }}</p>{% endif %}<ol>{% for step in report.steps %}<li>{{ step.state }} · {{ step.at|timestamp }}</li>{% endfor %}</ol></details>{% endfor %}
 {% endcall %}
-
-{% call card("Offline migration", true) %}
-{% for profile in migration_profiles %}
-<form method="post" action="/databases/migrations/{{ profile }}/preview" class="d-flex gap-2 align-items-center mb-2"><strong>{{ profile }}</strong><button type="submit" class="btn btn-outline-primary btn-sm">Check and preview</button></form>
-{% else %}<p class="mb-0 text-secondary">No migration profiles are configured. An operator first creates an owner-only profile under <code>settings/migrations/</code>, provisions the empty target and acceptance checks, and installs matching openWeightGym code on every host. See the database storage guide.</p>{% endfor %}
-{% for report in migration_reports %}
-<details class="mt-3"><summary><code>{{ report.id }}</code> · {{ report.state }}</summary>
-{% if report.failure %}<p class="text-danger">{{ report.failure }}</p>{% endif %}
-{% if report.operator_action %}<p class="text-danger">{{ report.operator_action }}</p>{% endif %}
-<p>Recovery hosts: {{ report.recovery.keys()|join(", ") or "none yet" }}</p>
-{% if report.acceptance %}<p>Acceptance: {% for name, state in report.acceptance.items() %}{{ name }} {{ state }}{{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
-<ol>{% for step in report.steps %}<li>{{ step.state }} · {{ step.at|timestamp }}</li>{% endfor %}</ol>
-</details>
-{% endfor %}
 {% endcall %}
-
-{% call card("Dump tools", false) %}
-<div class="table-responsive"><table class="table table-sm align-middle mb-0">
-  <thead><tr><th>Machine</th><th>sqlite3</th><th>pg_dump</th><th>pg_restore</th><th>psql</th><th>pgloader</th></tr></thead>
-  <tbody>
-  {% for machine, tools in [("Front", front_tools), ("Compute", compute_tools)] %}
-    <tr><td>{{ machine }}</td>{% for tool in ["sqlite3", "pg_dump", "pg_restore", "psql", "pgloader"] %}<td>{% if tools.get(tool, {}).get("available") %}<span class="badge text-bg-success">available</span>{% else %}<span class="text-secondary">not installed</span>{% endif %}</td>{% endfor %}</tr>
-  {% endfor %}
-  </tbody>
-</table></div>
-<div class="small text-secondary mt-2">Complete SQLite exports prefer <code>sqlite3</code>; exact table exports can use Python's SQLite library. PostgreSQL exports use <code>pg_dump</code>. Verified recovery also requires <code>pg_restore</code> with a client version compatible with the server.</div>
-{% endcall %}
-
-{% for database in databases %}
-{% call card(database.machine|capitalize ~ " · " ~ database.name, true) %}
-<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
-  <div>
-    <span class="badge text-bg-secondary">{{ database.engine }}</span>
-    {% if not database.expected %}<span class="badge text-bg-warning">discovered</span>{% endif %}
-    <span class="ms-2">{{ database.owner }}</span>
-    <div class="small text-secondary mt-1"><code>{{ database.path }}</code></div>
-  </div>
-  {% if not database.error %}<a class="btn btn-outline-primary btn-sm" href="/databases/{{ database.machine }}/{{ database.id }}/dump">Dump complete database</a>{% endif %}
+<p class="small text-secondary">SQL exports may contain secrets and retained content; keep them private. Each database has its own snapshot. A batch export is not a verified simultaneous recovery set. SQL downloads expire after 24 hours; job receipts expire after seven days. Encrypted maintenance backups stay on the owning server under the normal backup retention policy.</p>
+<noscript>{{ alert('info', 'Enable JavaScript for the database operations desk. Recovery sets remain available from Backups.') }}</noscript>
+{{ dom_templates() }}
+<template id="discovered-row"><tr><td data-name></td><td><code class="wrap" data-path></code></td><td data-size></td><td><button type="button" class="btn btn-outline-secondary btn-sm" data-dump>Dump SQL</button></td></tr></template>
+<template id="empty-discovered">{{ empty_row(4, 'No unbound database files found.') }}</template>
+<template id="database-job"><li class="py-2 border-top"><strong data-job-title></strong><span class="d-block text-secondary" data-job-state></span><div class="small" data-job-outcomes></div><div class="d-flex flex-wrap gap-2 mt-2" data-job-actions></div></li></template>
+<script type="application/json" id="database-snapshot">{{ snapshot|tojson }}</script>
+<dialog id="export-dialog" class="database-dialog" aria-labelledby="export-title">
+{% call card('Review SQL export', class_='mb-0', header_id='export-title') %}
+<p id="export-summary"></p><ul id="export-list" class="small"></ul>
+<div class="form-check mb-3" id="partial-option" hidden><input type="checkbox" class="form-check-input" id="allow-partial"><label class="form-check-label" for="allow-partial">Export only reachable databases; record omitted nodes and stores in the manifest.</label></div>
+<p class="small text-secondary">Separate per-database snapshots; no cluster-wide consistency guarantee. Dump all includes every active database regardless of filters. Unbound files require explicit selection.</p>
+<div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-primary" id="download-export">Start export job</button><button type="button" class="btn btn-outline-secondary" data-close>Cancel</button></div>
+{% endcall %}</dialog>
+<dialog id="cleanup-dialog" class="database-dialog" aria-labelledby="cleanup-title">
+{% call card('Purge records & reclaim disk', class_='mb-0', header_id='cleanup-title') %}
+<p class="small" id="cleanup-scope"></p><form id="cleanup-form" data-hold-refresh>
+<div class="row g-3 mb-3"><div class="col-sm-7"><label for="cutoff" class="form-label">Delete records before (UTC)</label><input type="date" id="cutoff" class="form-control"><div class="form-hint">Strictly before 00:00 UTC on this date; that date is kept.</div></div><div class="col-sm-5 d-flex align-items-end"><button type="button" class="btn btn-outline-primary" id="preview-purge">Preview purge</button></div></div>
+<div class="mb-3"><label for="reclaim-mode" class="form-label">Disk reclamation method</label><select id="reclaim-mode" class="form-select"><option value="full">Return space to disk · SQLite VACUUM / PostgreSQL VACUUM FULL</option><option value="reuse">Routine maintenance · PostgreSQL VACUUM (ANALYZE); SQLite VACUUM</option></select><div class="form-hint">Full reclamation needs rewrite headroom and maintenance locks. Remote PostgreSQL server free space must be verifiable on its owning node.</div></div>
+<button type="button" class="btn btn-outline-secondary mb-3" id="preview-reclaim">Preview disk reclaim</button>
+<div id="maintenance-preview" hidden>
+<div class="table-responsive mb-3"><table class="table table-sm" aria-label="Maintenance preview"><thead><tr><th>Node / database</th><th>Records / method</th><th>Policy / headroom</th></tr></thead><tbody id="maintenance-rows"></tbody></table></div>
+<p class="small text-secondary" id="maintenance-notice"></p>
+{{ confirm_check('I reviewed these records or maintenance locks and authorize this operation.', 'confirm-maintenance') }}
+<button type="button" class="btn btn-danger" id="apply-maintenance" disabled>Apply reviewed operation</button>
+</div></form>
+<div id="cleanup-result" role="status" aria-live="polite" class="small my-3"></div><button type="button" class="btn btn-outline-secondary" data-close>Close</button>
+{% endcall %}</dialog>
 </div>
-{% if database.error %}{% call alert('danger', class_='py-2 mb-0') %}{{ database.error }}{% endcall %}{% else %}
-<div class="row g-2 small mb-2">
-  <div class="col-md-3"><span class="text-secondary">On disk</span><br><strong>{{ database.size|disk_size }}</strong></div>
-  <div class="col-md-3"><span class="text-secondary">Main file</span><br><strong>{{ database.main_size|disk_size }}</strong></div>
-  <div class="col-md-3"><span class="text-secondary">{{ "Server version" if database.engine == "PostgreSQL" else "Reusable pages" }}</span><br><strong>{{ database.server_version if database.engine == "PostgreSQL" else database.free|disk_size }}</strong></div>
-  <div class="col-md-3"><span class="text-secondary">Dump method</span><br><strong>{{ database.dump_method }}</strong></div>
-</div>
-<div class="table-responsive"><table id="database-tables-{{ loop.index0 }}" class="table table-sm align-middle sortable mb-0">
-  <thead><tr><th scope="col" data-sort="text">Table</th><th scope="col" class="text-end" data-sort="value">Records</th><th scope="col" class="text-end" data-sort="value">Table + indexes</th><th scope="col" class="text-end" data-sort="value">Indexes</th><th scope="col"></th></tr></thead>
-  <tbody>
-  {% for table in database.tables %}
-    <tr><td><code>{{ table.name }}</code></td><td class="text-end" data-value="{{ table.records }}">{{ "{:,}".format(table.records) }}</td><td class="text-end" data-value="{{ table.size if table.size is not none else '' }}">{{ table.size|disk_size }}</td><td class="text-end" data-value="{{ table.indexes }}">{{ table.indexes }}</td><td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/databases/{{ database.machine }}/{{ database.id }}/dump?table={{ table.name|query }}">Dump SQL</a></td></tr>
-  {% else %}{% call empty_row(5) %}No user tables.{% endcall %}{% endfor %}
-  </tbody>
-</table></div>
-<div class="small text-secondary mt-2">Table size includes its allocated table and index storage.{% if database.engine == "SQLite" %} Database size also includes active WAL and shared-memory sidecars.{% else %} Database size is reported by <code>pg_database_size</code>.{% endif %}</div>
-{% endif %}
-{% endcall %}
-{% else %}{% call alert('secondary') %}No database files were found.{% endcall %}{% endfor %}
 {% endblock %}

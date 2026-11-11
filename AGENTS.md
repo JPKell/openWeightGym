@@ -33,6 +33,8 @@ within their own layouts.
 | Status request and capacity design previews (sample data) | [status_designs.html](weightroom/pages/status_designs.html), rendered with `scripts/preview-operations-designs.py --status` |
 | Selected Telemetry workspace preview (sample data) | [telemetry_design.html](weightroom/pages/telemetry_design.html), rendered with `scripts/preview-operations-designs.py --telemetry` |
 | Standalone model settings design previews (sample data) | [model_designs.html](weightroom/pages/model_designs.html), rendered with `scripts/preview-model-designs.py` |
+| Standalone DB design previews (sample data) | [database_designs.html](weightroom/pages/database_designs.html), rendered with `scripts/preview-database-designs.py`; implementation and operating limits in [database-storage.md](docs/database-storage.md#db-operations-desk) |
+| DB operations desk, database rows and nested table inventories | [databases.html](weightroom/pages/databases.html), [database_parts.html](weightroom/pages/database_parts.html), [databases.js](weightroom/static/databases.js); the sample proposals also use `database_parts.html` |
 | Live Status lanes, capacity ledger and request rows | [status.html](weightroom/pages/status.html), [status_nodes.html](weightroom/pages/status_nodes.html), [status_parts.html](weightroom/pages/status_parts.html), [current_requests.html](weightroom/pages/current_requests.html) |
 | Physical-host Telemetry workspace, device tables and graphs | [telemetry_workspace.html](weightroom/pages/telemetry_workspace.html), [telemetry_parts.html](weightroom/pages/telemetry_parts.html), [telemetry-workspace.js](weightroom/static/telemetry-workspace.js) |
 | Node GPU assignments and RAM policy | [cards.html](weightroom/pages/cards.html) |

@@ -1,0 +1,24 @@
+{# Database inventory DOM primitives shared by the live desk and its sample proposals. #}
+{% from "parts.html" import empty_row %}
+{% macro table_head() %}
+<thead><tr><th scope="col"><input type="checkbox" class="form-check-input" id="select-all" aria-label="Select visible databases"></th><th scope="col">Database</th><th scope="col">Node</th><th scope="col">Engine</th><th scope="col" class="text-end">Tables</th><th scope="col" class="text-end">Records</th><th scope="col" class="text-end">On disk</th><th scope="col">Health / backup</th><th scope="col" class="text-end">Actions</th></tr></thead>
+{% endmacro %}
+
+{% macro dom_templates() %}
+<template id="database-row"><tr data-database>
+<td><input type="checkbox" class="form-check-input" data-select></td>
+<td><button class="btn btn-link btn-sm p-0 text-start fw-semibold" data-expand aria-expanded="false"><span aria-hidden="true" data-chevron>▸</span> <span data-name></span></button><span class="visually-hidden" data-owner></span></td>
+<td data-node></td><td><span class="badge bg-secondary-lt" data-engine></span></td><td class="text-end" data-tables></td><td class="text-end" data-records></td><td class="text-end text-nowrap" data-size></td><td class="small"><span data-health></span><span class="d-block text-secondary" data-backup></span></td>
+<td><div class="d-flex justify-content-end gap-1"><button class="btn btn-outline-primary btn-sm" data-dump>Dump</button><button class="btn btn-outline-secondary btn-sm" data-maintain>Clean…</button></div></td>
+</tr></template>
+<template id="database-detail"><tr class="db-detail" data-detail><td colspan="9">
+<div class="detail-content p-3">
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3"><div><strong data-detail-name></strong><span class="d-block small" data-detail-owner></span><code class="d-block small wrap mt-1" data-path></code><span class="small text-secondary" data-bindings></span></div><div class="small text-secondary text-md-end" data-storage></div></div>
+<div class="table-responsive"><table class="table table-sm align-middle mb-0" data-table-list><thead><tr><th scope="col">Table</th><th scope="col" class="text-end">Records</th><th scope="col" class="text-end">Table + indexes</th><th scope="col" class="text-end">Indexes</th><th scope="col">Date cleanup</th><th scope="col" class="text-end">Export</th></tr></thead><tbody data-table-rows></tbody></table></div>
+<p class="small text-secondary mt-2 mb-0">Sample exact counts · table sizes include indexes · database size may also include engine overhead.</p>
+</div></td></tr></template>
+<template id="table-row"><tr><td><code data-table-name></code></td><td class="text-end" data-records></td><td class="text-end" data-size></td><td class="text-end" data-indexes></td><td class="small" data-retention></td><td class="text-end"><button class="btn btn-outline-secondary btn-sm" data-table-dump>Dump SQL</button></td></tr></template>
+<template id="node-group"><tr class="db-group"><th colspan="9" scope="rowgroup" class="py-2" data-group-label></th></tr></template>
+<template id="empty-databases">{{ empty_row(9, 'No databases match. Clear the filters or configure a store.') }}</template>
+
+{% endmacro %}
