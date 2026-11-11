@@ -105,5 +105,20 @@ def test_status_capacity_honors_model_devices_and_preserves_unknown_memory():
     nodes = status_nodes(inventory, 10, {'memory':memory, 'model_cards':['compute:CUDA0']})
     assert nodes[0]['cards'] == [{'card':'CUDA0','total':None,'free':None,'others':None}]
     assert nodes[1]['cards'] == []
-    # Older workers without policy metadata retain their unknown-memory devices.
-    assert len(status_nodes({},10,{'memory':memory})[0]['cards']) == 2
+    # Older workers retain unknown-memory CUDA devices, but not PCI-only integrated graphics.
+    assert [card['card'] for card in status_nodes({},10,{'memory':memory})[0]['cards']] == ['CUDA0']
+
+
+def test_status_hides_integrated_pci_entries_without_worker_policy():
+    integrated = 'AMD@0000:0e:00.0'
+    memory = {'CUDA0':None, integrated:None, 'Intel@0000:00:02.0':None,
+              'AMD@0000:01:00.0':{'total':16384,'free':8192}}
+    expected = ['CUDA0', 'AMD@0000:01:00.0']
+    for prefix in ('', 'worker:'):
+        nodes = status_nodes({},10,{'memory':{prefix + key:value for key,value in memory.items()}})
+        assert len(nodes) == 1  # PCI addresses must not become phantom compute nodes.
+        assert [card['card'] for card in nodes[0]['cards']] == expected
+    inventory = {'machines':[{'name':'worker','state':'ready','status_live':True,
+                              'cards':[{'card':key, **(value or {})} for key,value in memory.items()]}]}
+    assert [card['card'] for card in status_nodes(inventory,10)[0]['cards']] == expected
+    assert len(inventory['machines'][0]['cards']) == 4  # preserve the hardware inventory
