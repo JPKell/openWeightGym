@@ -3,7 +3,7 @@
 
 {% macro request_path(name='your role') %}
 <ol class="request-path" aria-label="How a role works">
-  <li><span class="path-number">1</span><span><small>Your app sends</small><code data-request-name>{{ name }}</code></span></li>
+  <li><span class="path-number">1</span><span><small>Your app sends</small><code data-request-name>{{ name }}</code><small class="mt-1">A role appears in calling apps just like a model.</small></span></li>
   <li><span class="path-number">2</span><span><small>The role checks</small><strong>Requirements &amp; weights</strong></span></li>
   <li><span class="path-number">3</span><span><small>At request time</small><strong>One model is selected</strong></span></li>
 </ol>

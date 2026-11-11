@@ -99,10 +99,11 @@
 {# Reversible actions ask twice; data or credential loss uses the shared checkbox dialog. #}
 {% macro confirm_two() %}data-confirm-two{% endmacro %}
 {% macro confirm_loss() %}data-confirm-loss{% endmacro %}
-{% macro confirm_check(label, id, name='', value='yes') %}
-{% call card('', class_='border-danger', body_class='py-2') %}
+{% macro confirm_check(label, id, name='', value='yes', framed=true) %}
+{% set field %}
 <div class="form-check mb-0"><input id="{{ id }}" type="checkbox" class="form-check-input" required data-loss-confirm{% if name %} name="{{ name }}" value="{{ value }}"{% endif %}><label for="{{ id }}" class="form-check-label">{{ label }}</label></div>
-{% endcall %}
+{% endset %}
+{% if framed %}{% call card('', class_='border-danger', body_class='py-2') %}{{ field }}{% endcall %}{% else %}{{ field }}{% endif %}
 {% endmacro %}
 {% macro danger_confirmation() %}
 <dialog id="danger-confirmation" aria-labelledby="danger-confirmation-title">
