@@ -1,0 +1,62 @@
+{# Three interactive Status proposals. Every reading and control is simulated. #}
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, section_title, card, empty_row %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% macro requests_table(key) %}
+<div class="table-responsive sd-request-scroll"><table class="table table-sm table-hover align-middle mb-0 sd-requests" aria-label="{{ key }} requests"><thead><tr><th>Request / user</th><th>Model</th><th>Node</th><th>State</th><th>Elapsed</th><th></th></tr></thead><tbody data-requests="{{ key }}"></tbody></table></div>
+{% endmacro %}
+{% macro models_table() %}
+<div class="table-responsive"><table class="table table-sm align-middle mb-0 sd-models" aria-label="Loaded model memory"><thead><tr><th>Model / node</th><th>Device</th><th>VRAM</th><th>RAM · RSS</th><th>Work</th></tr></thead><tbody data-models></tbody></table></div>
+{% endmacro %}
+{% block title %}Status · Three design options{% endblock %}
+{% block page_class %}sd-page{% endblock %}
+{% block scripts %}<style>{{ css|safe }}</style>{% endblock %}
+{% block main %}
+<div hidden>{{ icons_svg|safe }}<form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option selected>dark</option></select></form></div>
+<div class="sd-review mb-3 border-bottom pb-3">
+  {% call pills('Status design options', buttons=true, class_='gap-2 mb-2') %}
+    {{ pill_button('01 / Focused workspace', true, attrs={'data-design':'focus'}) }}
+    {{ pill_button('02 / Operations ledger', attrs={'data-design':'ledger'}) }}
+    {{ pill_button('03 / Dispatch lanes', attrs={'data-design':'lanes'}) }}
+  {% endcall %}
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><span id="design-note" class="small text-secondary"></span><div class="d-flex flex-wrap gap-2 align-items-center"><label for="fleet-size" class="small text-secondary">Sample nodes</label><select id="fleet-size" class="form-select form-select-sm w-auto"><option>0</option><option>1</option><option selected>4</option><option>12</option><option>48</option></select><select id="scenario" class="form-select form-select-sm w-auto" aria-label="Sample scenario"><option value="mixed">Mixed workload</option><option value="idle">Idle fleet</option><option value="offline">Disconnected</option></select><button id="reset" class="btn btn-outline-secondary btn-sm">Reset</button><button id="theme" class="btn btn-outline-secondary btn-sm">Light mode</button></div></div>
+</div>
+<div id="sd-workspace" data-design="focus">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">{{ page_header('Status', pretitle='SYSTEM / OPERATIONS') }}<span class="small text-secondary">Sample snapshot · no live connection</span></div>
+  <div class="sd-kpis mb-3" aria-label="Fleet request totals">
+    {% for key, title, hint in [('running','Processing','Active requests'),('queued','In queue','Waiting to start'),('five','Last 5 min','Requests received'),('fifteen','Last 15 min','Requests received'),('sixty','Last 60 min','Requests received')] %}<div><span class="small text-secondary">{{ title }}</span><strong data-kpi="{{ key }}">—</strong><small class="text-secondary">{{ hint }}</small></div>{% endfor %}
+  </div>
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <input id="search" type="search" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Find a request, model, user or node…" aria-label="Find requests and nodes">
+    <label for="control-scope" class="small text-secondary">Control</label><select id="control-scope" class="form-select form-select-sm w-auto" aria-label="Control scope"></select>
+    <button id="pause" class="btn btn-outline-primary btn-sm">Pause intake</button><button id="clear" class="btn btn-outline-danger btn-sm">Clear queue</button><button id="unload" class="btn btn-outline-secondary btn-sm">Unload models</button>
+  </div>
+  <div id="feedback" class="small text-secondary mb-2" role="status" aria-live="polite">Fleet totals stay visible when filtering. Rolling counts are requests received, including those still active.</div>
+  <section id="requests-section" aria-label="Current requests" class="mb-3">
+    <div id="request-ledger">{% call card('Current requests', body=false, class_='mb-0', actions='<span class="small text-secondary" id="request-total"></span>'|safe) %}{{ requests_table('all') }}{% endcall %}</div>
+    <div id="request-lanes" class="sd-lanes" hidden>{% for key, title in [('running','Processing now'),('queued','Waiting to start')] %}{% call card(title, body=false, class_='mb-0') %}{{ requests_table(key) }}{% endcall %}{% endfor %}</div>
+  </section>
+  <div class="d-flex justify-content-between flex-wrap gap-2 mb-2">{{ section_title('Capacity & loaded models', wrapper_class='mb-0') }}<span class="small text-secondary" id="capacity-summary"></span></div>
+  <section id="capacity-section" aria-label="Node capacity and loaded models">
+    <aside id="node-navigator">{% call card('Compute nodes', body=false, class_='mb-0') %}<div id="node-list"></div>{% endcall %}</aside>
+    <div id="focus-panel">{% call card(body=false, class_='mb-0') %}<div class="d-flex justify-content-between align-items-center gap-2 border-bottom p-3"><div><strong id="focus-title"></strong><small class="text-secondary d-block" id="focus-subtitle"></small></div><span class="badge" id="focus-state"></span></div><div class="p-3" id="focus-capacity"></div>{{ models_table() }}<div class="border-top p-2 small text-secondary">VRAM is model allocation. RAM is process RSS; CPU load belongs to the host.</div>{% endcall %}</div>
+    <div id="capacity-ledger" class="sd-ledger" hidden>
+      {% call card('Node capacity', body=false, class_='mb-0') %}<div id="capacity-list"></div>{% endcall %}
+      {% call card('Loaded models', body=false, class_='mb-0') %}{{ models_table() }}{% endcall %}
+    </div>
+    <div id="capacity-grid" hidden></div>
+    <p id="empty-nodes" class="text-secondary p-3" hidden>No nodes match this view.</p>
+  </section>
+  <footer class="small text-secondary mt-3 d-flex flex-wrap justify-content-between gap-2"><span>Design preview · simulated actions and memory allocations</span><span>Pause stops new arrivals · Clear removes queued work · Unload waits for existing work</span></footer>
+</div>
+<template id="sd-request-row"><tr><td><strong class="small" data-id></strong><small class="text-secondary d-block" data-user></small></td><td><span data-model></span><small class="text-secondary sd-request-node" data-request-node></small></td><td data-node></td><td><span class="badge" data-state></span></td><td class="text-nowrap" data-elapsed></td><td class="text-end"><button class="btn btn-outline-secondary btn-sm" data-stop>Stop</button></td></tr></template>
+<template id="sd-empty-requests">{{ empty_row(6, 'No current requests in this view.') }}</template>
+<template id="sd-model-row"><tr><td><strong class="small" data-model></strong><small class="text-secondary d-block" data-node></small></td><td class="text-nowrap" data-device></td><td class="text-nowrap" data-vram></td><td class="text-nowrap" data-rss></td><td><span class="badge" data-work></span></td></tr></template>
+<template id="sd-empty-models">{{ empty_row(5, 'No models loaded.') }}</template>
+<template id="sd-node-link"><button class="sd-node-link"><span class="d-flex justify-content-between gap-2"><strong data-name></strong><span class="badge" data-state></span></span><small class="d-block text-secondary mt-1" data-work></small></button></template>
+<template id="sd-capacity"><div class="sd-capacity border-bottom p-3"><div class="d-flex justify-content-between gap-2 mb-2"><strong data-name></strong><span class="badge" data-state></span></div><div data-devices></div><div class="small text-secondary mt-2" data-cpu></div></div></template>
+<template id="sd-meter"><div class="mb-2"><div class="d-flex justify-content-between gap-2 small mb-1"><span data-label></span><strong data-value></strong></div><div class="progress progress-sm" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" data-model-bar></div><div class="progress-bar bg-secondary" data-other-bar></div></div><small class="text-secondary" data-note></small></div></template>
+<template id="sd-node-card">{% call card(body=false, class_='mb-0') %}<div data-capacity></div>{{ models_table() }}<div class="d-flex gap-2 border-top p-2"><button class="btn btn-outline-primary btn-sm" data-node-pause>Pause intake</button><button class="btn btn-outline-secondary btn-sm" data-node-control>Manage node</button></div>{% endcall %}</template>
+<dialog id="action-dialog" class="border rounded p-0 sd-dialog" aria-labelledby="action-title"><div class="p-3 border-bottom"><strong id="action-title"></strong></div><div class="p-3"><p id="action-description"></p><div class="d-flex justify-content-end gap-2"><button id="cancel-action" class="btn btn-outline-secondary btn-sm">Cancel</button><button id="confirm-action" class="btn btn-primary btn-sm">Confirm sample action</button></div></div></dialog>
+<script>{{ javascript|safe }}</script>
+{% endblock %}
