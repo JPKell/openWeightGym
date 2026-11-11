@@ -28,6 +28,9 @@ within their own layouts.
 | Model fields and engine-specific controls | [model_form.html](weightroom/pages/model_form.html), [engines/](weightroom/pages/engines/) |
 | File lists and locations | [files_parts.html](weightroom/pages/files_parts.html) |
 | Standalone Files design previews (sample data) | [files_designs.html](weightroom/pages/files_designs.html), rendered with `scripts/preview-files-designs.py` |
+| Standalone Status/Telemetry design previews (sample data) | [operations_designs.html](weightroom/pages/operations_designs.html), rendered with `scripts/preview-operations-designs.py` |
+| Selected Telemetry workspace preview (sample data) | [telemetry_design.html](weightroom/pages/telemetry_design.html), rendered with `scripts/preview-operations-designs.py --telemetry` |
+| Physical-host Telemetry workspace, device tables and graphs | [telemetry_workspace.html](weightroom/pages/telemetry_workspace.html), [telemetry_parts.html](weightroom/pages/telemetry_parts.html), [telemetry-workspace.js](weightroom/static/telemetry-workspace.js) |
 | Node GPU assignments and RAM policy | [cards.html](weightroom/pages/cards.html) |
 | Node/component summaries and model details | [machines.html](weightroom/pages/machines.html), [components_content.html](weightroom/pages/components_content.html), [multimedia_model.html](weightroom/pages/multimedia_model.html) |
 | Benchmark values and shared panels | [benchmark_parts.html](weightroom/pages/benchmark_parts.html) and adjacent `benchmark_*.html` includes |

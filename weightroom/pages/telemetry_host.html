@@ -1,30 +1,3 @@
-{% extends "frame.html" %}
-{% from "parts.html" import swaps, page_header, section_title, alert %}
+{# Host deep links share the fleet shell and workspace. #}
+{% extends 'machines.html' %}
 {% block title %}{{ host.hostname }} telemetry · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/echarts.min.js" defer></script><script src="/static/charts.js?v=4" defer></script>{% endblock %}
-{% block main %}
-{{ page_header(host.hostname, "Inspect retained telemetry and resource history for this host.", back=("/telemetry", "All telemetry")) }}
-{% if request.query_params.get('said') %}{% call alert(('danger' if request.query_params.get('failed') else 'info'), class_='py-1', tag='p', role='status') %}{{ request.query_params.get('said') }}{% endcall %}{% endif %}
-<p class="small text-secondary">{{ host.machines|join(", ") }} · {{ host.state }}{% if host.fingerprint %} · fingerprint <code>{{ host.fingerprint }}</code>{% endif %}</p>
-{% include "host_wake.html" %}
-{% include "host_models.html" %}
-<div id="stretch">
-<form method="get" action="/telemetry/{{ host.fingerprint }}" class="row g-3 align-items-end mb-3" {{ swaps("stretch", true) }}>
-  <div class="col-md-6"><label for="hours" class="form-label">Hours shown</label><input id="hours" name="hours" type="number" class="form-control form-control-sm" min="0.1" max="672" step="any" value="{{ hours|round(2) }}" required></div>
-  <div class="col-md-6"><label for="until" class="form-label">Until <small class="text-secondary">empty means now</small></label><input id="until" name="until" type="datetime-local" data-input-zone="{{ server_timezone }}" data-instant="{{ input_utc(until, server_timezone) }}" class="form-control form-control-sm" value="{{ until }}"></div>
-  <div class="col-12 d-flex flex-wrap gap-2 align-items-center"><button class="btn-sm btn btn-primary">Show</button>
-    {% for label, back in (("1 hour", 1), ("6 hours", 6), ("1 day", 24), ("1 week", 168), ("4 weeks", 672)) %}<a class="btn btn-outline-secondary btn-sm" href="/telemetry/{{ host.fingerprint }}?hours={{ back }}">{{ label }}</a>{% endfor %}
-    <span class="text-secondary ms-auto">{{ begin|timestamp }} to {{ end|timestamp }}</span>
-  </div>
-</form>
-<div id="charts" data-times='{{ times|tojson }}' data-time-start="{{ begin }}" data-time-step="{{ step }}">
-{% for group in groups %}<div class="row g-3 mb-4">{{ section_title(group.title, wrapper_class="col-12", class_="text-secondary") }}
-  {% for one in group.charts %}<figure class="col-md-6 col-xl-4 m-0"><div class="chart frame">
-    <figcaption class="d-flex justify-content-between"><span>{{ one.title }}</span>{% if one.told %}<b>{{ one.last }}</b>{% endif %}</figcaption>
-    {% if one.told %}<div class="plot" role="img" aria-label="{{ one.name }}: now {{ one.last }}, from {{ one.low }} to {{ one.high }}" data-chart='{{ one.told|tojson }}'></div><small class="text-secondary">{{ one.low }} to {{ one.high }}</small>
-    {% else %}<p class="text-secondary my-3">Nothing was read in this stretch.</p>{% endif %}
-  </div></figure>{% endfor %}
-</div>{% else %}<p class="text-secondary">Nothing has been kept for this stretch of time.</p>{% endfor %}
-</div></div>
-{% if 'compute' in host.machines %}<p><a href="/machine">Compute service and power controls</a></p>{% endif %}
-{% endblock %}

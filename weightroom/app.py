@@ -4277,49 +4277,56 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         said = (f"Asked {name} to wake." if answer.is_success else answer.json()["error"]["message"])
         return go(destination + "?" + ("" if answer.is_success else "failed=1&") + "said=" + quote(said))
 
-    async def machines_page(request: Request, person: Person) -> Response:
-        """Telemetry cards for the physical hosts front knows about."""
+    async def telemetry_workspace_page(request: Request, person: Person) -> Response:
+        """One physical-host workspace, with bounded history only for the selected host."""
+        from weightroom.telemetry_workspace import hosts_view, fleet_summary, history_groups
         found = await fetch(request, person, "/turnstile/machines")
         if isinstance(found, Response):
             return found
-        return page(request, "machines.html", person, hosts=found.get("hosts", []), poll=found["poll_seconds"])
+        source_poll = float(found.get("poll_seconds", 10))
+        source_poll = source_poll if math.isfinite(source_poll) and source_poll > 0 else 10
+        poll = max(5, min(source_poll, 60))
+        hosts = hosts_view(found.get("hosts", []), source_poll)
+        asked = request.query_params
+        identity = request.path_params.get("fingerprint") or asked.get("node")
+        host = next((one for one in hosts if one["identity"] == identity), None) if identity else None
+        if identity and host is None:
+            return page(request, "refused.html", person, status=404, why="That machine fingerprint is not known to front.")
+        try:
+            hours = float(asked.get("hours") or 1)
+            if not math.isfinite(hours):
+                raise ValueError("Hours must be finite")
+            hours = min(max(hours, 1 / 60), 672)
+            until = datetime.fromisoformat(asked["until"]).replace(tzinfo=zone).timestamp() if asked.get("until") else time.time()
+        except (ValueError, OverflowError, OSError):
+            hours, until = 1, time.time()
+        past = {"begin": until - hours * 3600, "end": until, "step": hours * 3600 / 240, "series": {}}
+        history_error = None
+        if host and host.get("fingerprint"):
+            answer = await fetch(request, person, f"/turnstile/telemetry/{host['fingerprint']}/history?end={until}&seconds={hours * 3600}&points=240")
+            if isinstance(answer, Response):
+                history_error = "History is temporarily unavailable. Current host readings are still shown. Retry with Refresh."
+            else:
+                past = answer
+        summary = fleet_summary(hosts)
+        groups = history_groups(host, past, chart) if host else []
+        query = [(key, value) for key, value in asked.multi_items() if key not in ('part', 'said', 'failed')]
+        refresh_url = request.url.path + '?' + urlencode([*query, ('part', 'workspace')])
+        graph_data = {"groups": groups, "begin": past["begin"], "end": past["end"], "step": past["step"],
+                      "identity": identity or "", "hours": hours, "until": asked.get("until", ""),
+                      "initial_group": 'gpu-' + asked['gpu'] if asked.get('gpu', '').isdigit() else 'processor'}
+        template = "telemetry_workspace.html" if asked.get("part") == "workspace" else "telemetry_host.html" if host else "machines.html"
+        return page(request, template, person, hosts=hosts, host=host, summary=summary, graph_data=graph_data,
+                    poll=poll, hours=hours, until=asked.get("until", ""), refresh_url=refresh_url,
+                    history_error=history_error, snapshot_at=time.time())
+
+    async def machines_page(request: Request, person: Person) -> Response:
+        """Open the fleet grid without automatically selecting a host."""
+        return await telemetry_workspace_page(request, person)
 
     async def telemetry_host(request: Request, person: Person) -> Response:
-        """Render bounded retained telemetry for the selected physical host."""
-        fingerprint = request.path_params["fingerprint"]
-        found = await fetch(request, person, "/turnstile/machines")
-        if isinstance(found, Response):
-            return found
-        host = next((one for one in found.get("hosts", []) if one.get("fingerprint") == fingerprint), None)
-        if host is None:
-            return page(request, "refused.html", person, status=404, why="That machine fingerprint is not known to front.")
-        asked = request.query_params
-        try:
-            hours = min(max(float(asked.get("hours") or 1), 1 / 60), 672)
-            until = datetime.fromisoformat(asked["until"]).replace(tzinfo=zone).timestamp() if asked.get("until") else time.time()
-        except ValueError:
-            hours, until = 1, time.time()
-        past = await fetch(request, person, f"/turnstile/telemetry/{fingerprint}/history?end={until}&seconds={hours * 3600}&points=240")
-        if isinstance(past, Response):
-            return past
-        now = host.get("telemetry") or {}
-        tops = {"memory used": now.get("memory", {}).get("total"), "processor load": 100}
-        for card in now.get("cards", []):
-            tops.update({f"GPU {card['card']} memory used": card.get("memory_total"),
-                         f"GPU {card['card']} load": 100, f"GPU {card['card']} fan": 100,
-                         f"GPU {card['card']} power": card.get("power_limit")})
-        tops.update({f"free on {disk['path']}": disk["total"] for disk in now.get("disks", [])})
-        grouped: dict[str, list] = {}
-        for name, values in past.get("series", {}).items():
-            heading = " ".join(name.split()[:2]) if name.startswith("GPU ") else "Storage" if name.startswith("free on ") else "Processor and memory"
-            short = name.removeprefix(heading + " ")
-            grouped.setdefault(heading, []).append(chart(name, values, tops.get(name)) | {"title": short[0].upper() + short[1:]})
-        groups = [{"title": title, "charts": charts} for title, charts in grouped.items()]
-        said = "%H:%M" if hours <= 24 else "%d %b %H:%M"
-        times = [datetime.fromtimestamp(past["begin"] + past["step"] * step, zone).strftime(said)
-                 for step in range(len(next(iter(past.get("series", {}).values()), [])))]
-        return page(request, "telemetry_host.html", person, host=host, groups=groups, times=times, step=past["step"],
-                    begin=past["begin"], end=past["end"], hours=hours, until=asked.get("until", ""))
+        """Open a bookmarkable host inside the same Telemetry workspace."""
+        return await telemetry_workspace_page(request, person)
 
     async def docs_page(request: Request, person: Person) -> Response:
         """A docs section's overview or one of its topics. Every account may read the Web app section; the rest needs manage-settings."""
