@@ -1021,6 +1021,11 @@ if has_service loadcoach && [[ $AUDIOCPP_ACTION == install ]]; then
   fi
 fi
 
+# Save versions after optional engines are installed, before services start reading them.
+try_step 'Recording component versions' "$PY" -m loadcoach.component_versions --root "$ROOT" ||
+  die 'Component versions could not be saved to the database.' \
+    'Put right the database or settings error above, then run owg repair'
+
 render_unit() {
   local service=$1
   local source=$ROOT/services/$service.service target=$UNIT_DIR/$service.service

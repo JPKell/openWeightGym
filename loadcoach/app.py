@@ -164,6 +164,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         {"loadcoach.core": config.database},
     )
     core = databases.database("loadcoach.core")
+    from loadcoach.component_versions import Versions
+    component_versions = Versions(core)
     if not config.front_tasks:
         with core.connection() as connection:
             if schema_version(connection, "loadcoach.retirement"):
@@ -1865,7 +1867,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if denied := lacks(user, "manage-settings"):
             return denied
         from loadcoach import components
-        found = await components.here(config, running_here=("loadcoach",))
+        found = await components.here(config, running_here=("loadcoach",), versions=component_versions)
         for engine in found["engines"]:
             engine["build"] = runner.known_version({"engine": engine["id"]}) if engine["installed"] else ""
         return JSONResponse(found, headers={"cache-control": "no-store"})
@@ -2468,6 +2470,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         await client.aclose()
         await web.aclose()
         log.add("loadcoach", "stopped")
+        component_versions.db.close()
         await observation.shutdown(app)
 
     # ---- settings ---------------------------------------------------------------------------

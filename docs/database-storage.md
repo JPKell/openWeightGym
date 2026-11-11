@@ -181,6 +181,9 @@ The remaining engine-specific work is operational:
   outside services, batch files/lines and external tasks.
 - ToolLocker and Spotter independently open that same file for shared identity, authorization,
   settings and event logging. Spotter also owns `spotter.db`.
+- `components.versions` keeps each host’s shared service Git tag/commit and engine-reported versions in
+  `loadcoach.core` (front-only installs use `weightroom.accounts`). Spotter checks them every 60 minutes;
+  installation forces a refresh. Failed probes display Unknown; Components reads saved versions without loading models.
 - WeightRoom owns `chat.db` and `plugins.db`; its embedded benchmark worker owns
   `benchmarks.db`.
 - Each repository invokes its own numbered migration stream under an SQLite immediate lock or a

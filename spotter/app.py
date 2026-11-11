@@ -271,6 +271,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
         {"spotter.identity": settings.database, "spotter.history": settings.history},
     )
     identity = databases.database("spotter.identity")
+    from loadcoach.component_versions import Versions
+    component_settings = Path(settings.path).parent / settings.file.get("loadcoach", "loadcoach.toml") if settings.path else None
+    component_source = kept_by_loadcoach(component_settings)[1] if component_settings and component_settings.is_file() else identity
+    component_versions = Versions(component_source)
     gate = Gate(settings.path)
     log = Log(identity)
     loadcoach = client or httpx.AsyncClient(base_url=settings.compute, timeout=httpx.Timeout(15, connect=2))
@@ -423,6 +427,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
                     except OSError as problem:
                         print(f"spotter: the model files could not be looked through: {problem}", file=sys.stderr, flush=True)
             await asyncio.sleep(min(every or 60, 60))  # a change to files_every is taken on within a minute
+
+    async def keep_versions() -> None:
+        """Check installed suite and native engine versions every 60 minutes, independently of telemetry."""
+        while True:
+            await gate.wait()
+            try:
+                await component_versions.refresh(settings=component_settings)
+            except (OSError, ValueError) as problem:
+                print(f"spotter: component versions could not be checked: {problem}", file=sys.stderr, flush=True)
+            await asyncio.sleep(60)  # persisted timestamps determine which hourly checks are due
 
     async def systemctl(*arguments: str, own: bool = True) -> tuple[int, str]:
         """Run systemctl and return how it ended and what it said. `own` is for this account's services, otherwise root's.
@@ -746,12 +760,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
     @asynccontextmanager
     async def lifespan(_: Starlette):
         """Start background workers and release service resources on shutdown."""
-        watching, filing = asyncio.create_task(keep_watch()), asyncio.create_task(keep_files())
+        watching, filing, versioning = (asyncio.create_task(work()) for work in (keep_watch, keep_files, keep_versions))
         log.add("spotter", "started", services=list(units), sleep_after=settings.sleep_after)
         yield
-        for task in [watching, filing, *going]:
+        for task in [watching, filing, versioning, *going]:
             task.cancel()
-        await asyncio.wait({watching, filing, *going})
+        await asyncio.wait({watching, filing, versioning, *going})
+        component_versions.db.close()
         await loadcoach.aclose()
         log.add("spotter", "stopped")
 

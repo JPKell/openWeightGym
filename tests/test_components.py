@@ -214,6 +214,10 @@ def test_the_console_page_shows_every_machine_with_each_component_installed_or_n
     async def older_order(*args, **kwargs):
         found = await here(*args, **kwargs)
         found['services'].reverse()
+        for row in found['services']:
+            row['version'] = 'v1.2.3 (abcdef123456)'
+        for row in found['engines']:
+            row['version'] = 'b999 (<build>)'
         return found
 
     monkeypatch.setattr(components, 'here', older_order)
@@ -245,6 +249,41 @@ def test_the_console_page_shows_every_machine_with_each_component_installed_or_n
     assert {"Voice", "Monitor", "Tools", "Voice gateway"} <= missing["Front"] and not {"Web console", "API gateway", "Model runner"} & missing["Front"]
     assert "Model runner" not in missing["compute"] and "Web console" in missing["compute"] and "llama.cpp" not in missing["compute"]
     front, compute = (body for _, body in cards)
+    assert 'Version: v1.2.3 (abcdef123456)' in front
+    assert 'Version: b999 (&lt;build&gt;)' in compute
     assert "Same machine as front" in compute and "3 of 7 installed" in front and "2 of 7 installed" in compute
     whole = browser.get("/system/components?complete=1")
     assert whole.status_code == 200 and "data-deferred-loader" not in whole.text and "component-card" in whole.text
+
+
+@pytest.mark.parametrize("width", [1440, 390])
+def test_component_versions_fit_and_survive_fragment_replacement(desk, systemd, monkeypatch, width):
+    from test_console_browser import browser_context, playwright
+    server, _, _ = desk
+    systemd["user"] = told(**{"turnstile.service": ("loaded", "active", "running")})
+    original = components.here
+    version = "v1.2.3-long-release-name (abcdef123456)"
+
+    async def installed(*args, **kwargs):
+        report = await original(*args, **kwargs)
+        for row in report["services"]:
+            row["version"] = version
+        report["engines"][0].update(installed=True, version="b1234 (deadbeef)")
+        report["engines"][1].update(installed=True, version="", version_error="Version probe failed")
+        return report
+
+    monkeypatch.setattr(components, "here", installed)
+    sign_in(server, "jordan")
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.set_viewport_size({"width": width, "height": 1000})
+        page.goto("http://console.test/system/components")
+        report = page.locator("#components-report")
+        playwright.expect(report).to_contain_text("Version: " + version)
+        playwright.expect(report).to_contain_text("Version: b1234 (deadbeef)")
+        playwright.expect(report).to_contain_text("Version: Unknown")
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        page.evaluate("async () => { await htmx.ajax('GET', '/system/components?part=page', {target: '#components-report', swap: 'outerHTML'}); }")
+        playwright.expect(report).to_contain_text("Version: " + version)
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        browser.close()
