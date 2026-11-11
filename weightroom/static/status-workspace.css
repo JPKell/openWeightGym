@@ -10,6 +10,8 @@
 .status-workspace .table { font-size:12px; }
 .status-workspace .table td { padding:7px 10px; }
 .status-workspace .table th { white-space:nowrap; }
+.status-workspace .status-controls { width:44rem; max-width:100%; }
+.status-workspace #status-capacity-heading .section-heading { margin-bottom:0 !important; }
 .status-workspace .status-controls form { flex-wrap:wrap; width:100%; min-width:0; }
 .status-workspace .status-drain-group { flex:0 1 22rem; }
 .status-workspace .status-node-select { max-width:100%; }

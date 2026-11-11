@@ -278,7 +278,11 @@ def test_confirm_cards_pagination_and_live_usage(desk, tmp_path):
         page.goto('http://console.test/status')
         controls_box = page.locator('#status-controls').bounding_box()
         cards_box = page.locator('#status-capacity > .card').first.bounding_box()
-        assert abs(cards_box['x'] - controls_box['x']) <= 12 and controls_box['y'] < cards_box['y']
+        heading_box = page.locator('#status-capacity-heading .section-title').bounding_box()
+        ledger_box = page.locator('#status-capacity').bounding_box()
+        assert controls_box['y'] < cards_box['y']
+        assert abs((heading_box['y'] + heading_box['height']/2) - (controls_box['y'] + controls_box['height']/2)) <= 2
+        assert abs((controls_box['x'] + controls_box['width']) - (ledger_box['x'] + ledger_box['width'])) <= 2
         assert page.locator('#status-controls .input-group input[name="why"]').count() == 1
         assert page.locator('#status-controls .input-group button[value="drain"]').count() == 1
         assert abs(page.locator('#status-control-machine').bounding_box()['y'] - page.locator('button[value="unload"]').bounding_box()['y']) <= 2
