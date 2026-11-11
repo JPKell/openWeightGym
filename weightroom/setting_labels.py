@@ -84,7 +84,7 @@ def describe(setting):
             **({'choices': TIMEZONES} if name == 'timezone' else {})}
 
 
-def sections(programs):
+def sections(programs, *, compute_node=False):
     """Group editable rows by purpose while preserving one program POST per fragment."""
     result = {}
     for program in programs:
@@ -92,10 +92,15 @@ def sections(programs):
             if setting['when'] == 'file':
                 continue
             title = describe(setting)['section']
+            if compute_node:
+                if title == 'Power and idle' or setting['name'] == 'sample_every':
+                    title = 'Telemetry, power and idle'
+                elif title == 'Alerts and monitoring':
+                    continue
             group = result.setdefault(title, {})
             fragment = group.setdefault(program['program'], {**program, 'settings': []})
             fragment['settings'].append(setting)
-    order = ['Requests and queue', 'Logs and retention', 'Power and idle', 'Alerts and monitoring',
+    order = ['Requests and queue', 'Logs and retention', 'Power and idle', 'Telemetry, power and idle', 'Alerts and monitoring',
              'Tools', 'Display and costs', 'Model files', 'Direct conversations', 'Hermes agent',
              'Sessions and limits', 'Speech', 'RAM policy', 'Additional settings', 'Advanced']
     return [{'title': title, 'programs': list(result[title].values())}

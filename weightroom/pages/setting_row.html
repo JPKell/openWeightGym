@@ -23,7 +23,7 @@
   {% else %}
   <div class="input-group input-group-flat"><input id="{{ id }}" name="value-{{ setting.name }}" class="form-control font-monospace" value="{{ typed }}" type="{{ 'number' if meta.control == 'number' else 'text' }}"{% if meta.control == 'number' %} min="0" step="{{ '1' if holds is integer else 'any' }}"{% endif %} aria-label="{{ setting.label|default(meta.label) }}" autocapitalize="none" spellcheck="false">{% if meta.unit %}<span class="input-group-text">{{ meta.unit }}</span>{% endif %}</div>
   {% endif %}
-  {% if setting.says %}{% call more() %}{{ setting.says }}{% endcall %}{% endif %}
+  {% if setting.says and show_setting_help|default(true) %}{% call more() %}{{ setting.says }}{% endcall %}{% endif %}
   {% if setting.changed %}<small class="text-secondary d-block mt-1">Changed here by {{ setting.changed.by or 'someone at the node' }}, {{ setting.changed.at|timestamp }}.</small><button class="btn btn-link p-0" name="reset" value="{{ setting.name }}">Revert to file</button>{% endif %}
   {% if setting.refused %}<small class="text-danger d-block">{{ setting.refused }}</small>{% endif %}
 </div>

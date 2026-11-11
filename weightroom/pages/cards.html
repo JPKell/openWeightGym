@@ -1,4 +1,4 @@
-{% from "parts.html" import card, alert, empty_row, form_section, more, swaps %}
+{% from "parts.html" import card, alert, empty_row, form_section, swaps %}
 {% call card("GPUs & host RAM", id="manage-gpus") %}
 {% if gpu_error %}{% call alert('warning', class_='mb-0') %}{{ gpu_error }}{% endcall %}{% else %}
 {% set gpu_engines = gpu_inventory.engines|default([]) %}
@@ -17,7 +17,6 @@
 {% if gpu_inventory.missing_disabled %}<p class="text-secondary">Excluded cards currently missing: {{ gpu_inventory.missing_disabled|join(", ") }}. Their exclusions are kept if they return.</p>{% endif %}
 <button class="btn btn-primary">Save GPUs</button>
 </form>
-{% call more('Assignments, compatibility & model fit') %}Discrete NVIDIA, AMD and Intel GPUs are detected when compute starts, independently of llama.cpp. Integrated graphics are excluded. Disable a card for all engines, or choose which engines may use it. Models and benchmarks share these assignments. Idle models affected by a change unload when you save; loading, answering or held models must finish first. GPU execution requires a compatible driver and engine build; image, audio and Strata currently use CUDA. A card with no engine selected stays available to other programs. VRAM is per device; model fit also depends on context, cache and runtime overhead.{% endcall %}
 {% endif %}
 {% if resource_settings %}
 <form method="post" action="/settings/loadcoach" class="row g-3 mt-3" data-node-draft data-hold-refresh {{ swaps() }}><input type="hidden" name="machine" value="{{ selected_machine }}">
