@@ -1,11 +1,26 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, form_section, more , confirm_loss, alert %}
+{% from "parts.html" import card, said_box, swaps, page_header, form_section, more, confirm_loss, confirm_two, alert, node_state %}
+{% from "navigation_parts.html" import pills, pill_link %}
 {% block title %}Compute nodes · openWeightGym{% endblock %}
 {% block main %}
 <div class="settings-page">
 {{ page_header('Compute nodes', 'Manage hardware policy and runtime settings for the selected node.') }}
-{% if machine_choices|length > 1 %}<form method="get" action="/compute-nodes" class="d-flex flex-wrap align-items-center gap-2 mb-3"><label for="settings-machine">Compute node</label><select id="settings-machine" name="machine" class="form-select form-select-sm w-auto">{% for host in machine_choices %}<option value="{{ host.name }}"{% if host.name == selected_machine %} selected{% endif %}>{{ host.name }} · {{ host.state }}</option>{% endfor %}</select><button class="btn btn-outline-secondary btn-sm">Show node</button></form>{% endif %}
+{% call pills('Compute nodes') %}{% for host in machine_choices %}
+{{ pill_link(host.name ~ ' · ' ~ (host.lifecycle if host.lifecycle|default('active') != 'active' else node_state(host.state)), '/compute-nodes?machine=' ~ host.name|urlencode, host.name == selected_machine) }}
+{% endfor %}{% endcall %}
 {{ said_box(said, failed) }}
+{% call card('Node status', id='node-lifecycle') %}
+<p><strong>{{ selected_machine }}</strong> is {{ selected_node.lifecycle|default('active') }}. Reachability: {{ node_state(selected_node.state) }}.</p>
+<p class="text-secondary">Disable for maintenance to stop new work and wake requests while keeping telemetry visible. Retire to stop monitoring and hide this node from telemetry; historical logs are preserved. Existing work can finish.</p>
+{% if selected_node.lifecycle_changed %}<p class="small text-secondary">Changed by {{ selected_node.lifecycle_changed.changed_by }} · {{ selected_node.lifecycle_changed.changed_at|timestamp }}.</p>{% endif %}
+<form method="post" action="/compute-nodes/lifecycle" class="d-flex flex-wrap gap-2">
+<input type="hidden" name="machine" value="{{ selected_machine }}">
+{% if selected_node.lifecycle|default('active') != 'active' and selected_node.configured|default(true) %}<button class="btn btn-primary" name="state" value="active">Enable node</button>{% endif %}
+{% if selected_node.lifecycle|default('active') == 'active' %}<button class="btn btn-outline-warning" name="state" value="disabled" {{ confirm_two() }}>Disable node</button>{% endif %}
+{% if selected_node.lifecycle|default('active') != 'retired' %}<button class="btn btn-outline-danger" name="state" value="retired" {{ confirm_two() }}>Retire node</button>{% endif %}
+</form>
+{% if not selected_node.configured|default(true) %}<p class="small text-secondary mt-2 mb-0">This is a retained registration. Pair or configure the node again before enabling it.</p>{% endif %}
+{% endcall %}
 {% if node_settings_error %}{% call alert('warning', tag='p', role='status') %}Saved file locations could not be applied: {{ node_settings_error }}{% endcall %}
 {% elif node_settings_pending %}{% call alert('info', tag='p', role='status') %}File locations are saved on front. They will be delivered when this node reconnects and apply after its compute service restarts.{% endcall %}{% endif %}
 {% if may_pair %}{% call card("Add a GPU node", id="add-node") %}
@@ -18,6 +33,7 @@
 <form method="post" action="/compute-nodes/pair"><button class="btn btn-primary">Make a pairing code</button></form>
 {% endif %}
 {% endcall %}{% endif %}
+{% if selected_node.lifecycle|default('active') != 'retired' and selected_node.configured|default(true) %}
 {% if machine_key %}{% call card("Machine key", id="machine-key") %}
 <p class="mb-2">Last rotated {{ machine_key.changed|timestamp }}.</p>
 <p class="text-secondary small mb-3">The gateway sends the replacement key to {{ selected_machine }} first, sealed with the current key. The old key remains valid for ten minutes. If the two sides fall out of step, run <code>loadcoach --replace-key</code> on that node.</p>
@@ -34,5 +50,6 @@
 {% include "engine_nodes.html" %}
 {% set fixed=true %}{% for program in programs %}{% include "settings_program.html" %}{% else %}<p class="text-secondary">This node has not reported the compute service or the node monitor settings.</p>{% endfor %}
 {% include 'settings_machine_values.html' %}
+{% endif %}
 </div>
 {% endblock %}

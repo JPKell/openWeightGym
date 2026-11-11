@@ -2856,10 +2856,23 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Render configured compute nodes and their active engine availability."""
         form = typed_in or {}
         selected = form.get("machine") or request.query_params.get("machine", "compute")
-        machines_answer = await ask("GET", "/turnstile/machines", person.key)
+        machines_answer = await ask("GET", "/turnstile/machines?include_retired=1", person.key)
+        if machines_answer.status_code == 403:
+            return page(request, "refused.html", person, status=403, why="Compute node settings require manage-settings.")
         choices = machines_answer.json().get("machines", []) if machines_answer.status_code == 200 else []
+        for row in choices:
+            if row.get("lifecycle") == "retired":
+                row["state"] = "monitoring stopped"
+            elif row.get("state") == "ready" and row.get("status_live") is False:
+                row["state"] = "not answering"
         if selected not in {row.get("name") for row in choices}:
             return Response("That compute node is not configured.", status_code=404)
+        selected_node = next(row for row in choices if row["name"] == selected)
+        if selected_node.get("lifecycle") == "retired" or not selected_node.get("configured", True):
+            return page(request, "compute_nodes.html", person, status=400 if failed else 200,
+                        said=said or request.query_params.get("said", ""), failed=failed,
+                        selected_machine=selected, selected_node=selected_node, machine_choices=choices,
+                        programs=[], may_pair="superuser" in person.can, pairing_code=pairing_code)
         base = "/turnstile/machines/" + quote(selected, safe="")
         settings_answer = await ask("GET", base + "/settings", person.key)
         if settings_answer.status_code not in (200, 503):
@@ -2900,11 +2913,25 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "compute_nodes.html", person, status=400 if failed else 200,
                     programs=found["programs"], said=said or asked.get("said", ""), failed=failed,
                     typed_in=form, opened=opened or asked.get("open", ""), selected_machine=selected,
-                    machine_choices=choices, gpu_inventory=gpu_inventory, gpu_error=gpu_error,
+                    machine_choices=choices, selected_node=selected_node, gpu_inventory=gpu_inventory, gpu_error=gpu_error,
                     gpu_disabled=gpu_disabled, machine_key=machine_key, resource_settings=resources,
                     may_pair="superuser" in person.can, pairing_code=pairing_code,
                     node_settings_pending=found.get('pending', False), node_settings_error=found.get('pending_error', ''),
                     engine_choices=engine_choices, engine_error="" if engine_answer.is_success else "Engine controls require a matching LoadCoach update.")  # fmt: skip
+
+    async def change_node_lifecycle(request: Request, person: Person) -> Response:
+        """Save lifecycle on front without requiring the selected compute node to answer."""
+        form = await typed(request)
+        machine = form.get("machine", "")
+        state = form.get("state", "")
+        answer = await ask("POST", "/turnstile/machines/" + quote(machine, safe="") + "/lifecycle",
+                           person.key, json={"state": state})
+        if not answer.is_success:
+            return await compute_nodes_page(request, person, answer.json()["error"]["message"], True, typed_in=form)
+        message = {"active": "Node enabled for new work.",
+                   "disabled": "Node disabled for new work. Telemetry remains visible; existing work can finish.",
+                   "retired": "Node retired and hidden from telemetry. Historical logs are preserved."}[state]
+        return go("/compute-nodes?machine=" + quote(machine, safe="") + "&said=" + quote(message))
 
     async def change_node_engine(request: Request, person: Person) -> Response:
         """Save validated node engine settings with restart requirements visible."""
@@ -4694,6 +4721,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route("/cards", change_cards, "POST"),
             route("/settings/gpus", change_cards, "POST"),
             route("/compute-nodes/engines", change_node_engine, "POST"),
+            route("/compute-nodes/lifecycle", change_node_lifecycle, "POST"),
             route("/compute-nodes/gpus", change_cards, "POST"),
             route("/compute-nodes/machine-key", new_machine_key, "POST"),
             route("/compute-nodes/pair", make_pairing_code, "POST"),

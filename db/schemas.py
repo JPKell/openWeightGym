@@ -241,6 +241,11 @@ LOG = (
     Migration(10, "caller scoped node discovery", """
         CREATE TABLE node_discovery (scope TEXT PRIMARY KEY, at DOUBLE PRECISION NOT NULL, data TEXT NOT NULL);
     """),
+    Migration(11, "front owned compute node lifecycle", """
+        CREATE TABLE machine_lifecycle (
+            name TEXT PRIMARY KEY, state TEXT NOT NULL,
+            changed_at DOUBLE PRECISION NOT NULL, changed_by TEXT NOT NULL);
+    """),
 )
 
 

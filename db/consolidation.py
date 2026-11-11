@@ -27,7 +27,7 @@ RETAIN = {
 DESTINATIONS = {
     **dict.fromkeys(("users", "groups", "keys", "services", "events", "texts",
                     "traces", "seen", "files", "batches", "batch_lines",
-                    "machine_telemetry", "machine_hosts", "node_discovery"), "accounts"),
+                    "machine_telemetry", "machine_hosts", "machine_lifecycle", "node_discovery"), "accounts"),
     **dict.fromkeys(("roles", "role_benchmarks", "role_evidence",
                     "reliability_state", "reliability_outcomes"), "roles"),
     **dict.fromkeys(("benchmark_definitions", "benchmark_state", "benchmark_runs",

@@ -327,6 +327,17 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         given = upstream.headers.get(statement.PROOF, "")
         return not nonce or any(secrets.compare_digest(given, statement.proof(key, nonce)) for key in statement.keys(key_file or settings.machine_key_file))
 
+    def lifecycle_refusal(name: str, method: str, where: str) -> str:
+        """Stop new work while allowing disabled-node observation and maintenance."""
+        state = machines.state(name)
+        maintenance = where.partition('?')[0]
+        allowed = method == "GET" or maintenance.startswith(("/loadcoach/settings/", "/loadcoach/stop/")) or maintenance in {
+            "/loadcoach/drain", "/loadcoach/clear", "/loadcoach/unload", "/loadcoach/cards",
+            "/loadcoach/model-lock", "/loadcoach/machine-key", "/loadcoach/send-log"}
+        if state == "retired" or (state == "disabled" and not allowed):
+            return f"Compute node {name} is {state}. Enable it in Settings → Compute nodes before using it."
+        return ""
+
     async def ask_compute(user: User, method: str, where: str, body: bytes = b"", port: int | None = None,
                           machine: str = "", timeout: float | None = 30) -> httpx.Response | None:
         """Ask compute something as `user`, without waking it, and read the whole answer. None if it is not answering or its answer is not proven.
@@ -334,6 +345,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         Unless another `port` is given, LoadCoach is asked: the first of `ports`. `machine` names one of
         `settings.machines` instead of the main machine, which is signed with its own key.
         """
+        if why := lifecycle_refusal(machine or "compute", method, where):
+            return httpx.Response(409, json={"error": {"message": why}})
         # Log flushing is observation too; its POST must not make offline reports wait.
         observing = method == "GET" or (method == "POST" and where == "/loadcoach/send-log")
         if observing and passive_reads.get() and settings.auth_key_file and machines.available(machine or "compute") is False:
@@ -389,21 +402,22 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return httpx.Response(200, json=json.loads(row[1]),
                                   headers={"x-suite-retained": "1"} if available is False else {})
 
-        answers = await asyncio.gather(*(metadata(name) for name in machines.names))
+        names = machines.active_names
+        answers = await asyncio.gather(*(metadata(name) for name in names))
         good = [answer.json() for answer in answers if answer is not None and answer.status_code == 200]
         if not good:
-            return httpx.Response(200, json={"models": [], "chat": {"models": {}}, "unavailable_machines": machines.names})
+            return httpx.Response(200, json={"models": [], "chat": {"models": {}}, "unavailable_machines": names})
         result = {**good[0], "models": [], "chat": {**good[0].get("chat", {}), "models": {}}}
         for told in good:
             result["models"].extend(name for name in told.get("models", []) if name not in result["models"])
             result["chat"]["models"].update(told.get("chat", {}).get("models", {}))
         visible = {}
-        for name in machines.names:
+        for name in names:
             row = log.db.execute("SELECT data FROM node_discovery WHERE scope=?",
                                  (discovery_key(user, name, "/v1/models"),)).fetchone()
             if row:
                 visible[name] = json.loads(row[0])
-        details = {name: answer.json().get("chat", {}).get("models", {}) for name, answer in zip(machines.names, answers)
+        details = {name: answer.json().get("chat", {}).get("models", {}) for name, answer in zip(names, answers)
                    if answer is not None and answer.status_code == 200}
         if visible:
             covered = {alias["id"] for told in visible.values() for alias in told.get("data", [])}
@@ -417,12 +431,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 if metadata is not None:
                     result["models"].append(logical["id"])
                     result["chat"]["models"][logical["id"]] = metadata
-        result["unavailable_machines"] = [name for name, answer in zip(machines.names, answers)
+        result["unavailable_machines"] = [name for name, answer in zip(names, answers)
                                           if answer is None or answer.headers.get("x-suite-retained") or answer.status_code != 200]
         return httpx.Response(200, json=result)
 
     async def ask_live(user: User, method: str, where: str, machine: str = "", port: int | None = None, *, prime: bool = False, passive: bool = False) -> httpx.Response | None:
         """A bounded inventory/placement question; one silent machine must not stall the others."""
+        if why := lifecycle_refusal(machine or "compute", method, where):
+            return httpx.Response(409, json={"error": {"message": why}})
         try:
             answer = (None if passive and machines.available(machine or "compute") is False else
                       await asyncio.wait_for(ask_compute(user, method, where, machine=machine, port=port), timeout=5))
@@ -480,8 +496,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """
         policy = settings.machines.get(machine, {}) if machine and machine != "compute" else {
             "wake_mac": settings.wake_mac, "wake_address": settings.wake_address}
+        if why := lifecycle_refusal(machine or "compute", request.method, request.url.path):
+            return error(409, why)
         got = None if passive(request) and machines.available(machine or "compute") is False else await attempt()
         if got is None:
+            if not machines.enabled(machine or "compute"):
+                return error(409, f"Compute node {machine or 'compute'} is {machines.state(machine or 'compute')}; wake is disabled.")
             if (not policy.get("wake_mac") or user is None or NO_WAKE in request.headers or
                 request.url.path.rstrip('/') in NO_WAKE_PATHS or
                 (machine and not request.url.path.startswith("/v1/"))):
@@ -490,6 +510,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             print(f"turnstile: waking compute for a request to {request.url.path}", flush=True)
             give_up = time.monotonic() + settings.wait
             while got is None:
+                if not machines.enabled(machine or "compute"):
+                    return error(409, f"Compute node {machine or 'compute'} is no longer active; wake was cancelled.")
                 if time.monotonic() > give_up:
                     return error(504, f"Compute was asked to wake and has not answered in {settings.wait:g} seconds.")
                 try:
@@ -518,11 +540,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         port = port or settings.ports[0]
         other = settings.machines.get(machine, {}) if machine != "compute" else {}
         front_tools = not machine and port == 8443 and bool(settings.toollocker_url)
+        if not front_tools and (why := lifecycle_refusal(machine or "compute", method, where)):
+            return error(409, why)
         base = settings.toollocker_url.rstrip("/") if front_tools else other["compute"].rstrip("/") if other else settings.upstream(port)
         key_file = other.get("machine_key_file", "")
 
         async def reach() -> tuple[httpx.Response, str] | Response | None:
             """Send the request to the selected compute service and verify its machine proof."""
+            if not front_tools and (why := lifecycle_refusal(machine or "compute", method, where)):
+                return error(409, why)
             signed, nonce = signed_headers(user, method, where, body, headers, request.client.host if request.client else "", key_file)
             async def disconnected():
                 """Wait for departure after the complete request body has been consumed."""
@@ -661,6 +687,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         seen = facts_seen.get(scope)
         if seen and time.monotonic() - seen[0] < roles.FACTS_FOR:
             return seen[1]
+        if not machines.active_names:
+            return {"models": hosted.facts(user), "environment": {}, "compute_unavailable": True,
+                    "placements": {}, "location_models": {}}
         if not settings.machines:
             answer = await woken(request, user, lambda: ask_live(user, "GET", "/loadcoach/facts"))
             if isinstance(answer, Response):
@@ -672,7 +701,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             facts_seen[scope] = (time.monotonic(), said)
             return said
         reports = {one["name"]: one for one in machines.report()}
-        names = ["compute", *settings.machines]
+        names = machines.active_names
         answers = await asyncio.gather(*(ask_live(user, "GET", "/loadcoach/facts", machine="" if name == "compute" else name)
                                          for name in names))
         fresh = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
@@ -924,6 +953,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         for name, owner_id in due:
             user = users.by_identity(owner_id)
             why = "The schedule owner is unavailable or no longer has manage-settings."
+            if machines.state(name) == "retired":
+                continue
             if user and user.can("manage-settings") and name in machines.names:
                 async with rotation_lock:
                     why = await replace_machine_key(name, user)
@@ -1138,10 +1169,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     async def combined_view(request: Request, user: User, path: str) -> Response:
         """A caller sees retained deployments and answering machines' active work."""
-        names = ["compute", *settings.machines]
+        names = machines.active_names if path == "/v1/models" else [name for name in machines.names if machines.state(name) != "retired"]
         answers = await asyncio.gather(*(ask_live(user, "GET", path, machine="" if name == "compute" else name, prime=path == "/v1/models", passive=passive(request))
                                          for name in names))
         found = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
+        if not found and path == "/v1/models" and not names:
+            return JSONResponse(routing.with_roles({"object": "list", "data": [
+                {"id": name, "object": "model", "created": 0, "owned_by": "hosted"} for name in hosted.offered(user)],
+                "unavailable_machines": [], "available_machines": []}))
         if not found and path == "/v1/models":
             if NO_WAKE in request.headers:
                 return off()
@@ -1397,6 +1432,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             name, destination, candidate = asked["name"], asked["machine"], asked["settings"]
             if destination not in machines.names or not isinstance(name, str) or not name:
                 raise ValueError("Choose a model name and compute node.")
+            if not machines.enabled(destination):
+                raise ValueError(f"Compute node {destination} is {machines.state(destination)}. Enable it before installing a model.")
             async with installation_lock:
                 nodes = await model_file_inventory(user)
                 inventory = await ask_machine(user, "GET", "/loadcoach/models", machine=destination, timeout=5)
@@ -1892,6 +1929,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         name = request.path_params["name"]
         if name not in machines.names:
             return error(404, "Unknown node.")
+        if not machines.enabled(name):
+            return error(409, f"Compute node {name} is {machines.state(name)}; wake is disabled.")
         policy = settings.machines.get(name, {}) if name != "compute" else {
             "wake_mac": settings.wake_mac, "wake_address": settings.wake_address}
         if not policy.get("wake_mac"):
@@ -1908,11 +1947,38 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         hosts = with_power_state(machines.hosts(), machines.seen, notice)
         for host in hosts:
-            host["wake_nodes"] = [name for name in host["machines"] if
+            host["wake_nodes"] = [name for name in host["machines"] if machines.enabled(name) and
                 (settings.wake_mac if name == "compute" else settings.machines.get(name, {}).get("wake_mac"))]
-        return JSONResponse({"machines": machines.report(), "hosts": hosts,
+        include_retired = request.query_params.get("include_retired") == "1"
+        if include_retired and not caller(key_of(request)).can("manage-settings"):
+            return error(403, "Node lifecycle settings require manage-settings.")
+        return JSONResponse({"machines": machines.report(include_retired), "hosts": hosts,
                              "models": machines.models(), "poll_seconds": settings.machines_poll_seconds,
                              "artifact_machine": file_store()},
+                            headers={"cache-control": "no-store"})
+
+    async def machine_lifecycle(request: Request) -> Response:
+        """Change front's durable registration, even when the compute node is unreachable."""
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, "Missing or wrong API key.")
+        if not user.can("manage-settings"):
+            return error(403, "Node lifecycle settings require manage-settings.")
+        name = request.path_params["name"]
+        if name not in machines.all_names():
+            return error(404, "Unknown compute node.")
+        try:
+            asked = json.loads(await request.body())
+            state = asked["state"]
+            previous = machines.state(name)
+            machines.change_state(name, state, user.name)
+        except (ValueError, KeyError, TypeError):
+            return error(400, "Choose active, disabled or retired; enabling requires a configured node.")
+        facts_seen.clear()
+        ready_cache.clear()
+        if previous != state:
+            log.add("machine", state, user.name, "operator", machine=name, previous=previous)
+        return JSONResponse(next(row for row in machines.report(True) if row["name"] == name),
                             headers={"cache-control": "no-store"})
 
     async def logical_models(request: Request) -> Response:
@@ -2007,6 +2073,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Retry queued roots without waking nodes, rechecking the saving account's authority."""
         async with publication_lock:
             for name in machines.names:
+                if machines.state(name) == "retired":
+                    continue
                 pending = pending_file_settings(name)
                 if not pending:
                     continue
@@ -2398,6 +2466,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/power", power_notice, methods=["POST"]),
                             Route("/turnstile/accounts", accounts_list),
                             Route("/turnstile/machines", machines_list),
+                            Route("/turnstile/machines/{name}/lifecycle", machine_lifecycle, methods=["POST"]),
                             Route("/turnstile/machines/{name}/wake", machine_wake, methods=["POST"]),
                             Route("/turnstile/artifacts/files", artifact_files),
                             Route("/turnstile/artifacts/settings", front_file_settings, methods=['GET', 'POST']),

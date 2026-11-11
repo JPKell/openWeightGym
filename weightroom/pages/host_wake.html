@@ -2,8 +2,9 @@
 {% for name in host.machines %}
 <form method="post" action="/telemetry/nodes/{{ name|urlencode }}/wake" class="position-relative d-inline-block mb-2" style="z-index:2">
 <input type="hidden" name="return_to" value="/telemetry{% if host.fingerprint %}/{{ host.fingerprint }}{% endif %}">
-<button class="btn btn-sm btn-outline-primary"{% if name not in host.wake_nodes|default([]) %} disabled title="Configure Wake-on-LAN for this node"{% endif %}>Wake {{ name }}</button>
+<button class="btn btn-sm btn-outline-primary"{% if name not in host.wake_nodes|default([]) %} disabled title="{{ 'Enable this node in Compute nodes before waking it' if name in host.disabled_nodes|default([]) else 'Configure Wake-on-LAN for this node' }}"{% endif %}>Wake {{ name }}</button>
 </form>
 {% endfor %}
 {% endif %}
+{% if host.disabled_nodes %}<p class="small text-warning" role="status">Disabled for new work: {{ host.disabled_nodes|join(', ') }}. Telemetry remains visible.</p>{% endif %}
 {% if host.state != 'ready' or host.models_unknown %}<p class="small text-warning" role="status">{{ host.hostname }}: {% if host.state != 'ready' %}node is not answering{% else %}the compute service is not answering{% endif %}. Live controls are unavailable; retained readings remain visible.</p>{% endif %}

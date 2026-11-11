@@ -98,6 +98,43 @@ class Machines:
             fingerprint: {"hostname": hostname, "machines": json.loads(names), "last_seen": last_seen}
             for fingerprint, hostname, names, last_seen in store.execute(
                 "SELECT fingerprint, hostname, names, last_seen FROM machine_hosts").fetchall()}
+        self.lifecycle = {} if store is None else {
+            name: {"state": state, "changed_at": at, "changed_by": by}
+            for name, state, at, by in store.execute(
+                "SELECT name, state, changed_at, changed_by FROM machine_lifecycle").fetchall()}
+
+    def all_names(self) -> list[str]:
+        """Include retained registrations so an uninstalled, offline node can be retired."""
+        known = {name for host in self.known_hosts.values() for name in host["machines"]}
+        return list(dict.fromkeys([*self.names, *sorted(known | self.lifecycle.keys())]))
+
+    def state(self, name: str) -> str:
+        """Read the operator's lifecycle choice independently of reachability."""
+        return self.lifecycle.get(name, {}).get("state", "active")
+
+    def enabled(self, name: str) -> bool:
+        """Only configured, active nodes may receive new work or wake requests."""
+        return name in self.names and self.state(name) == "active"
+
+    @property
+    def active_names(self) -> list[str]:
+        """Configured nodes eligible for discovery and placement."""
+        return [name for name in self.names if self.enabled(name)]
+
+    def change_state(self, name: str, state: str, by: str) -> None:
+        """Persist lifecycle on front, without contacting the node or deleting history."""
+        if name not in self.all_names():
+            raise ValueError("Unknown compute node.")
+        if state not in ("active", "disabled", "retired"):
+            raise ValueError("Choose active, disabled or retired.")
+        if state == "active" and name not in self.names:
+            raise ValueError("Pair or configure this node again before enabling it.")
+        at = self.now()
+        if self.store is not None:
+            self.store.execute("INSERT INTO machine_lifecycle(name,state,changed_at,changed_by) VALUES(?,?,?,?) "
+                               "ON CONFLICT(name) DO UPDATE SET state=excluded.state, changed_at=excluded.changed_at, changed_by=excluded.changed_by",
+                               (name, state, at, by))
+        self.lifecycle[name] = {"state": state, "changed_at": at, "changed_by": by}
 
     async def poll(self) -> None:
         """Ask each machine about itself once. A machine that does not answer keeps what it last said."""
@@ -107,6 +144,8 @@ class Machines:
                 self.ask(name, "/loadcoach/status"), self.ask(name, "/v1/models"),
                 self.ask_telemetry(name, "/spotter/now") if self.ask_telemetry else asyncio.sleep(0, result=None),
                 return_exceptions=True)
+            if self.state(name) == "retired":
+                return  # a retirement during the poll must not publish another reading
             status = None if isinstance(status, Exception) else status
             models = None if isinstance(models, Exception) else models
             telemetry = None if isinstance(telemetry, Exception) else telemetry
@@ -160,28 +199,36 @@ class Machines:
                 self.store.execute("INSERT INTO machine_telemetry (fingerprint, at, numbers) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
                                    (fingerprint, telemetry["at"], json.dumps(series(telemetry))))
                 self.last_saved[fingerprint] = self.now()
-        outcomes = await asyncio.gather(*(one(name) for name in self.names), return_exceptions=True)
-        for name, outcome in zip(self.names, outcomes):
+        names = [name for name in self.names if self.state(name) != "retired"]
+        outcomes = await asyncio.gather(*(one(name) for name in names), return_exceptions=True)
+        for name, outcome in zip(names, outcomes):
             if isinstance(outcome, Exception):
                 print(f"turnstile: machine {name} poll failed: {outcome!r}", flush=True)
         if self.store and self.now() - self.last_pruned > 3600:
             self.store.execute("DELETE FROM machine_telemetry WHERE at < ?", (self.now() - 28 * 86400,))
             self.last_pruned = self.now()
 
-    def report(self) -> list[dict]:
+    def report(self, include_retired: bool = False) -> list[dict]:
         """Every machine, with its last facts and their age. `ready` means it answered within three polls."""
         out = []
-        for name in self.names:
+        for name in self.all_names() if include_retired else self.names:
+            if not include_retired and self.state(name) == "retired":
+                continue
             found = self.seen.get(name)
             age = None if found is None or found["at"] is None else max(0.0, self.now() - found["at"])
             state = UNKNOWN if age is None else READY if age <= 3 * self.every else SILENT
             telemetry_age = None if found is None or found.get("telemetry_at") is None else max(0.0, self.now() - found["telemetry_at"])
             out.append({"name": name, "state": state, "age": age, "telemetry_age": telemetry_age,
+                        "lifecycle": self.state(name), "configured": name in self.names,
+                        "accepting_work": self.enabled(name),
+                        "lifecycle_changed": self.lifecycle.get(name),
                         **({k: v for k, v in found.items() if k != "at"} if found else {})})
         return out
 
     def available(self, name: str) -> bool | None:
         """Latest passive status result; None until the first monitor poll completes."""
+        if self.state(name) == "retired":
+            return False
         if name not in self.checked:
             return None
         found = self.seen.get(name, {})
@@ -212,10 +259,15 @@ class Machines:
             if machine.get("telemetry") and (host["age"] is None or machine["telemetry_age"] < host["age"]):
                 host["telemetry"], host["age"] = machine["telemetry"], machine["telemetry_age"]
         for fingerprint, known in self.known_hosts.items():
+            names = [name for name in known["machines"] if self.state(name) != "retired"]
+            if not names:
+                continue
             grouped.setdefault(fingerprint, {"fingerprint": fingerprint, "hostname": known["hostname"],
-                                             "machines": known["machines"], "state": SILENT,
+                                             "machines": names, "state": SILENT,
                                              "telemetry": None, "age": max(0.0, self.now() - known["last_seen"]),
                                              "loaded": [], "models_unknown": True})
+        for host in grouped.values():
+            host["disabled_nodes"] = [name for name in host["machines"] if self.state(name) == "disabled"]
         return list(grouped.values())
 
     def history(self, fingerprint: str, end: float, seconds: float, points: int) -> dict:
@@ -234,6 +286,8 @@ class Machines:
         """
         found: dict = {}
         for name, facts in self.seen.items():
+            if not self.enabled(name):
+                continue
             for one in facts["models"]:
                 key = one["content"] or f"{name}:{one['name']}"
                 entry = found.setdefault(key, {"content": one["content"], "names": set(), "machines": []})
