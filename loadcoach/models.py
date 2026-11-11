@@ -100,6 +100,11 @@ def memory_base(settings: dict) -> dict:
     return engine_for(settings).model.memory_base(settings)
 
 
+# How a failure to start the engine was worded when such failures were still kept as measurements.
+# They say nothing of the model's memory, so they are read as if the context had not been tried.
+LAUNCH_FAILURE_PREFIX = "Could not run "
+
+
 class Models:
     """The models table. Every change is written at once and applies to the next request."""
 
@@ -411,6 +416,8 @@ class Models:
             rows = json.loads(kept)
             for seen in rows if isinstance(rows, list) else [rows]:
                 if seen.get("resident_only") or memory_base(seen["settings"]) != memory_base(now) or seen.get("files") != self.stamps(now):
+                    continue
+                if not seen["mib"] and str(seen.get("error") or "").startswith(LAUNCH_FAILURE_PREFIX):
                     continue
                 context = seen["settings"]["flags"]["ctx-size"]
                 before = found.get(context)
