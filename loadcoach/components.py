@@ -124,8 +124,9 @@ def receipt(root: Path = ROOT) -> dict | None:
     return {field: told.get(field, "") for field in RECEIPT_FIELDS}
 
 
-async def here(config=None, running_here: tuple[str, ...] = (), settings: Path | None = None) -> dict:
+async def here(config=None, running_here: tuple[str, ...] = (), settings: Path | None = None, versions=None) -> dict:
     """This machine's services, engines and install receipt. `config` is LoadCoach's own; without it, `settings` is read."""
-    return {"hostname": socket.gethostname(), "services": await services(running_here),
+    report = {"hostname": socket.gethostname(), "services": await services(running_here),
             "engines": engines(config) if config is not None else engines_from_settings(settings or ROOT / "settings/loadcoach.toml"),
             "receipt": receipt()}
+    return await versions.attach(report) if versions is not None else report

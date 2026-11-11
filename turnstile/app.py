@@ -278,6 +278,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     Path(settings.data).mkdir(parents=True, exist_ok=True)
     stores = front_stores(settings.databases, Path(settings.path).parent if settings.path else Path.cwd(), Path(settings.data))
     model_locations = ModelLocations(stores.database("weightroom.roles"))
+    from loadcoach.component_versions import Versions
+    from loadcoach.config import kept_by_loadcoach
+    component_settings = Path(settings.path).parent / "loadcoach.toml" if settings.path else None
+    component_source = (kept_by_loadcoach(component_settings)[1] if component_settings and component_settings.is_file()
+                        else stores.database("weightroom.accounts"))
+    component_versions = Versions(component_source)
     passive_reads = contextvars.ContextVar("turnstile_passive_reads", default=False)
     users = users or Users(stores.database("weightroom.accounts"), settings.groups)
     # The one event log: what was done here to the accounts, and since milestone 91 every entry compute sends.
@@ -2266,7 +2272,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         from loadcoach import components
         shared = Path(settings.path).parent / "loadcoach.toml" if settings.path else None
         front = {"name": "front", "state": "ready", "answering": True, "with_front": True,
-                 **await components.here(running_here=("turnstile",), settings=shared)}
+                 **await components.here(running_here=("turnstile",), settings=shared, versions=component_versions)}
         reports = {one["name"]: one for one in machines.report()}
 
         def on_front(name: str) -> bool:
@@ -2608,6 +2614,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             await batch_work.door.aclose()
             front_settings.changes.db.close()
             model_locations.db.close()
+            component_versions.db.close()
             if plugins:
                 plugins.registry.db.close()
             if adapter_client is None:

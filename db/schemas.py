@@ -644,6 +644,13 @@ PLUGIN_RUNTIME = (Migration(1, "plugin sessions and request receipts", """
         response TEXT, error_code TEXT, UNIQUE(owner, profile, idem));
 """),)
 
+COMPONENT_VERSIONS = (Migration(1, "installed service and engine versions", """
+    CREATE TABLE IF NOT EXISTS component_versions (
+        hostname TEXT NOT NULL, component TEXT NOT NULL, version TEXT NOT NULL,
+        checked DOUBLE PRECISION NOT NULL, error TEXT NOT NULL,
+        PRIMARY KEY(hostname, component));
+"""),)
+
 SPOTTER = (Migration(1, "machine readings", """
     CREATE TABLE IF NOT EXISTS readings (at DOUBLE PRECISION PRIMARY KEY, numbers TEXT NOT NULL);
 """),)
@@ -677,6 +684,7 @@ COMPUTE_RETIREMENT = (Migration(1, "retire verified front-owned compute copies",
 
 
 STREAMS = {
+    "components.versions": COMPONENT_VERSIONS,
     "loadcoach.retirement": COMPUTE_RETIREMENT,
     "loadcoach.settings": SETTINGS, "loadcoach.groups": GROUPS,
     "loadcoach.outside": OUTSIDE_SERVICES, "loadcoach.users": USERS,

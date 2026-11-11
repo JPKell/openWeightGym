@@ -395,3 +395,16 @@ def test_macos_is_asked_for_its_own_count(tmp_path, monkeypatch):
     (stand_ins / "ioreg").chmod(0o755)
     monkeypatch.setenv("PATH", f"{stand_ins}:/usr/bin:/bin")
     assert asyncio.run(screen.macos()) == 42.5
+
+
+def test_spotter_refreshes_versions_in_its_background_worker(tmp_path, monkeypatch):
+    from loadcoach.component_versions import Versions
+    refreshed = []
+
+    async def refresh(self, **kwargs):
+        refreshed.append(kwargs)
+
+    monkeypatch.setattr(Versions, "refresh", refresh)
+    with made_up(tmp_path, monkeypatch):
+        wait_until(lambda: refreshed)
+        assert refreshed == [{"settings": None}]
