@@ -28,7 +28,7 @@ def nodes(tmp_path):
     (tmp_path / 'panel.key').write_text(panel)
     primary_key, remote_key = machine_key(tmp_path), str(tmp_path / 'remote.key')
     statement.replace_key(remote_key, 'r' * 40)
-    primary = {'loadcoach': {'host_ram_headroom_mib': 512, 'card_margin': 1024, 'model_defaults': {'cache-type-k': 'q8_0', 'cache-type-v': 'q8_0', 'flash-attn': 'on'}, 'models_folder': '/srv/cache', 'models_storage_folder': '/srv/storage', 'keep_text': 50}, 'spotter': {'sleep_after': 0, 'files_every': 10}}
+    primary = {'loadcoach': {'host_ram_headroom_mib': 512, 'card_margin': 1024, 'model_defaults': {'cache-type-k': 'q8_0', 'cache-type-v': 'q8_0', 'flash-attn': 'on'}, 'models_folder': '/srv/cache', 'models_storage_folder': '/srv/storage', 'keep_text': 50}, 'spotter': {'sleep_after': 0, 'files_every': 10, 'sample_every': 30, 'alert_gpu_temperature': 90}}
     secondary = {'loadcoach': {'host_ram_headroom_mib': 768, 'card_margin': 1024, 'model_defaults': {'cache-type-k': 'f16'}, 'models_folder': '/remote/cache', 'models_storage_folder': '/remote/storage', 'keep_text': 20}, 'spotter': {'sleep_after': 45, 'files_every': 20}}
     async def identity(request):
         return JSONResponse({'models': [], 'chat': {'models': {}}})
@@ -91,6 +91,14 @@ def test_drafts_follow_nodes_and_section_saves_do_not_erase_other_edits(nodes):
         logs.get_by_role('button', name='Save spotter', exact=True).click()
         expect(page.locator('.said-box')).to_contain_text('Saved.')
         assert primary['spotter']['files_every'] == 15 and secondary['spotter']['files_every'] == 20
+        telemetry = page.locator('[data-card-key="settings:Telemetry, power and idle"]')
+        telemetry.locator(':scope > summary').click()
+        telemetry.locator('[name="value-sample_every"]').fill('20')
+        telemetry.get_by_role('button', name='Save spotter', exact=True).click()
+        expect(page.locator('.said-box')).to_contain_text('Saved.')
+        assert primary['spotter']['sample_every'] == 20
+        assert primary['spotter']['sleep_after'] == 0
+        assert primary['spotter']['alert_gpu_temperature'] == 90
         expect(page.locator('[name="value-models_folder"]')).to_have_value('/draft/cache')
         assert not errors
         browser.close()
@@ -218,6 +226,10 @@ def test_live_layout_fits_each_width_theme_and_has_named_fields(desk, tmp_path):
         expect(page.locator('#manage-gpus [name="value-card_margin"]')).to_have_count(1)
         expect(page.locator('[aria-label="llama.cpp runtime"] [name="value-model_defaults"]')).to_have_count(1)
         expect(page.locator('[data-card-key="settings:Advanced"], [data-card-key="settings:RAM policy"]')).to_have_count(0)
+        expect(page.locator('[data-card-key="settings:Power and idle"], [data-card-key="settings:Alerts and monitoring"]')).to_have_count(0)
+        expect(page.locator('[name="value-alert_gpu_temperature"]')).to_have_count(0)
+        expect(page.locator('summary').filter(has_text='Assignments, compatibility & model fit')).to_have_count(0)
+        expect(page.get_by_text('Why?', exact=True)).to_have_count(0)
         assert page.locator('[name="value-model_defaults"]').evaluate('el => el.form.getAttribute("action")') == '/settings/loadcoach'
         page.screenshot(path=str(tmp_path / 'compute-nodes-default.png'), full_page=True)
         for theme in ('light', 'dark'):

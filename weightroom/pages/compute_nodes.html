@@ -5,9 +5,10 @@
 {% block title %}Compute nodes · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/static/compute-nodes.css?v=1"><script src="/static/compute-nodes.js?v=1" defer></script>{% endblock %}
 {% block main %}
+{% set show_setting_help = false %}
 <div class="settings-page compute-nodes" data-compute-nodes data-machine="{{ selected_machine }}">
 {% set pairing_open = pairing_code or opened|default('') == 'add-node' %}
-{% call page_header('Compute nodes', pretitle='SETTINGS / INFRASTRUCTURE') %}
+{% call page_header('Compute nodes') %}
 {% if may_pair %}<form method="get" action="/compute-nodes"><input type="hidden" name="machine" value="{{ selected_machine }}"><input type="hidden" name="open" value="add-node"><button class="btn btn-primary btn-sm" data-toggle-pairing aria-expanded="{{ 'true' if pairing_open else 'false' }}" aria-controls="add-node">+ Add GPU node</button></form>{% endif %}
 {% endcall %}
 <div class="compute-fleet-summary small text-secondary mb-3" aria-label="Fleet summary"><span><strong class="text-body">{{ machine_choices|length }}</strong> {{ 'node' if machine_choices|length == 1 else 'nodes' }}</span><span><strong class="text-body">{{ machine_choices|selectattr('state', 'equalto', 'ready')|selectattr('lifecycle', 'equalto', 'active')|list|length }}</strong> available for new work</span><span class="ms-auto d-none d-lg-inline">Hardware, runtimes &amp; access</span></div>
@@ -41,7 +42,7 @@
   {% if selected_node.lifecycle|default('active') != 'retired' and selected_node.configured|default(true) %}
     <div class="compute-node-column">
     {% include 'cards.html' %}
-    {% set groups = settings_sections(programs) %}
+    {% set groups = settings_sections(programs, compute_node=true) %}
     {% with settings_groups=groups|selectattr('title', 'equalto', 'Model files')|list, settings_fixed=true, settings_readonly=false, settings_empty=false %}{% include 'settings_sections.html' %}{% endwith %}
     {% with settings_groups=groups|rejectattr('title', 'equalto', 'Model files')|list, settings_readonly=false, settings_empty=not groups %}{% include 'settings_sections.html' %}{% endwith %}
     </div>
