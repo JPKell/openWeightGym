@@ -31,5 +31,6 @@
   /** Attach role preference controls to newly rendered forms. */
   const initialize = () => document.querySelectorAll('[data-benchmark-weights]').forEach(section => update(section.closest('form')));
   document.addEventListener('htmx:afterSwap', initialize);
+  document.addEventListener('weightroom:role-preferences', initialize);
   initialize();
 })();

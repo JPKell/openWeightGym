@@ -1,0 +1,56 @@
+/* Role Studio uses the shared console palette, type, cards, and control sizes. */
+.role-studio { container-type: inline-size; }
+.role-studio [hidden] { display: none !important; }
+.role-studio .role-intro { max-width: 55rem; color: var(--bs-secondary-color); margin: -1rem 0 1.5rem; }
+.role-studio .request-path { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; gap: 1.5rem; padding: 1.1rem 1.3rem; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); background: var(--tblr-bg-surface); margin-bottom: 1.5rem; }
+.role-studio .request-path li { display: flex; align-items: center; gap: .8rem; min-width: 0; }
+.role-studio .request-path li + li { border-left: 1px solid var(--bs-border-color); padding-left: 1.5rem; }
+.role-studio .request-path small, .role-studio .request-path strong, .role-studio .request-path code { display: block; overflow-wrap: anywhere; }
+.role-studio .request-path small { color: var(--bs-secondary-color); margin-bottom: .2rem; }
+.role-studio .path-number, .role-studio .role-monogram, .role-studio .model-mark { flex: none; display: grid; place-items: center; background: var(--suite-accent-bg); color: var(--suite-accent); border-radius: var(--bs-border-radius); width: 2rem; height: 2rem; font-weight: 600; }
+.role-studio .path-number { border-radius: 50%; font-size: .8rem; width: 1.8rem; height: 1.8rem; }
+.role-studio .role-layout { display: grid; grid-template-columns: 160px minmax(0, 1fr) 300px; gap: 1.25rem; align-items: start; }
+.role-studio .role-layout > * { min-width: 0; }
+.role-studio .role-list { display: grid; }
+.role-studio .role-choice { display: flex; align-items: center; gap: .6rem; padding: .75rem .6rem; border: 1px solid transparent; color: inherit; min-width: 0; }
+.role-studio .role-choice.active { background: var(--tblr-bg-surface); border-color: var(--bs-border-color); color: inherit; box-shadow: var(--bs-box-shadow); }
+.role-studio .role-draft-mark { width: .4rem; height: .4rem; border-radius: 50%; background: var(--bs-primary); margin-left: auto; flex: none; }
+.role-studio #role-identity .card-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.role-studio .connection-example { background: var(--tblr-bg-surface-secondary); border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); padding: .7rem; }
+.role-studio .connection-example code { overflow-wrap: anywhere; }
+.role-studio .role-candidates { display: grid; gap: .8rem; }
+.role-studio .role-candidate { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .7fr); gap: .5rem 1rem; padding: 1rem; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); background: var(--tblr-bg-surface); }
+.role-studio .role-candidate.is-picked { border-color: var(--suite-accent); background: var(--suite-accent-bg); }
+.role-studio .role-candidate > p, .role-studio .candidate-result { grid-column: 1 / -1; }
+.role-studio .weight-control { display: grid; grid-template-columns: minmax(0, 1fr) 5rem; gap: .4rem .7rem; align-items: center; }
+.role-studio .weight-control label { grid-column: 1 / -1; }
+.role-studio .weight-control .form-range { accent-color: var(--suite-accent); min-width: 0; margin: 0; }
+.role-studio .weight-control:has([data-weight-slider][hidden]) { grid-template-columns: minmax(0, 1fr); }
+.role-studio .status-dot { width: .4rem; height: .4rem; border-radius: 50%; background: var(--bs-secondary-color); flex: none; }
+.role-studio .status-dot.is-ready { background: var(--bs-success); }
+.role-studio .role-add-model [data-add-weight] { width: 5rem; }
+.role-studio .role-save-actions { border-top: 1px solid var(--bs-border-color); }
+.role-studio .role-preview { position: sticky; top: 8rem; }
+.role-studio .role-decision { border-top: 3px solid var(--suite-accent); }
+.role-studio .role-request-code { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .4rem .65rem; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); }
+.role-studio .role-request-code code { overflow-wrap: anywhere; }
+.role-studio .pick-result { background: var(--suite-accent-bg); padding: 1rem; border-radius: var(--bs-border-radius); }
+.role-studio .role-picked-model { font-size: 1.25rem; line-height: 1.3; letter-spacing: -.02em; margin: .6rem 0; }
+.role-studio .role-picked-model a { color: inherit; text-decoration: none; }
+.role-studio .role-picked-model a:hover { text-decoration: underline; }
+.role-studio #role-evidence { margin-top: 1.5rem; }
+@container (max-width: 1060px) {
+  .role-studio .role-layout { grid-template-columns: minmax(0, 1fr) 280px; }
+  .role-studio .role-navigation { grid-column: 1 / -1; }
+  .role-studio .role-list { display: flex; flex-wrap: wrap; }
+  .role-studio .role-navigation > p { display: none; }
+  .role-studio #role-identity .card-body { grid-template-columns: minmax(0, 1fr); }
+  .role-studio .role-candidate { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 740px) {
+  .role-studio .role-layout { grid-template-columns: minmax(0, 1fr); }
+  .role-studio .role-preview { position: static; grid-row: 2; }
+  .role-studio .role-editor { grid-row: 3; }
+  .role-studio .request-path { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1rem; }
+  .role-studio .request-path li + li { border: 0; padding-left: 0; }
+}

@@ -29,7 +29,7 @@ def test_the_roles_page_makes_a_role_weights_its_models_and_shows_what_it_would_
     shown = browser.get("/roles").text
     assert "mark unsupported answers as missing" in shown and "unsupported answers null" not in shown
     assert shown.index("Required for this role") < shown.index("Benchmark preferences for chat")
-    assert shown.index('value="strong"') < shown.index('value="quick"') and "not known yet" in shown and "not loaded" in shown
+    assert shown.index('value="strong"') < shown.index('value="quick"') and "not known yet" in shown and "Not loaded" in shown
     # What it would pick right now, each way of asking, and why. Nothing is loaded here, so each way comes to the top of the list.
     for asked in ("chat", "chat:best", "chat:available", "chat:fast"):
         assert f"<code>{asked}</code>" in shown
@@ -39,7 +39,7 @@ def test_the_roles_page_makes_a_role_weights_its_models_and_shows_what_it_would_
     chat = browser.get("/chat").text
     assert '<option value="chat">chat</option>' in chat.replace(" selected", "") and ">chat:best</option>" in chat and ">chat:fast</option>" in chat
     browser.post("/roles", data={"do": "save", "name": "chat", "model": ["quick", "strong"], "weight": ["", "0"]})  # a weight emptied takes a model out; 0 keeps it listed and out of the picking
-    assert roles.get("chat") == {"models": {"strong": 0}} and "left out: its weight is 0" in browser.get("/roles").text
+    assert roles.get("chat") == {"models": {"strong": 0}} and "Paused · weight is 0" in browser.get("/roles").text
     removed = browser.post("/roles", data={"do": "remove", "name": "chat"})
     assert "Removed the role chat." in removed.text and roles.get("chat") is None
 

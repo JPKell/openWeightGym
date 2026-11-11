@@ -1,0 +1,121 @@
+/* Roles proposals share console typography, controls, palette, and card macros. */
+.roles-review { max-width: 1480px; margin: auto; padding: 1.75rem var(--suite-page-gutter); }
+.review-bar { background: var(--tblr-bg-surface); }
+.roles-review [hidden] { display: none !important; }
+.roles-review input[aria-invalid=true] { border-color: var(--bs-danger); }
+.design-options { gap: .4rem; padding: .4rem; background: var(--tblr-bg-surface-secondary); border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); width: fit-content; }
+.design-options .nav-link { padding: .65rem 1rem; }
+.role-intro { max-width: 55rem; font-size: 1.05rem; color: var(--bs-secondary-color); margin: -1rem 0 1.5rem; }
+.request-path { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; gap: 1.5rem; padding: 1.15rem 1.5rem; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); background: var(--tblr-bg-surface); margin-bottom: 2rem; }
+.request-path li { display: flex; align-items: center; gap: .8rem; min-width: 0; }
+.request-path li + li { border-left: 1px solid var(--bs-border-color); padding-left: 1.5rem; }
+.request-path small, .request-path strong, .request-path code { display: block; }
+.request-path small { color: var(--bs-secondary-color); margin-bottom: .2rem; }
+.path-number, .role-monogram, .model-mark { flex: none; display: grid; place-items: center; background: var(--suite-accent-bg); color: var(--suite-accent); border-radius: var(--bs-border-radius); width: 2.25rem; height: 2.25rem; font-weight: 600; }
+.path-number { border-radius: 50%; font-size: .8rem; width: 1.8rem; height: 1.8rem; }
+.role-layout { display: grid; grid-template-columns: 180px minmax(0, 1fr) 320px; gap: 1.5rem; align-items: start; }
+.role-layout > * { min-width: 0; }
+.role-navigation { padding-top: .25rem; }
+#role-list { display: grid; gap: .4rem; }
+.role-choice { display: flex; align-items: center; text-align: left; gap: .65rem; padding: .8rem .6rem; width: 100%; border: 1px solid transparent; background: transparent; color: inherit; border-radius: var(--bs-border-radius); }
+.role-choice:hover { background: var(--tblr-bg-surface-secondary); }
+.role-choice[aria-pressed=true] { background: var(--tblr-bg-surface); border-color: var(--bs-border-color); box-shadow: var(--bs-box-shadow); }
+.role-choice strong { overflow-wrap: anywhere; }
+.role-monogram { width: 2rem; height: 2rem; }
+.change-dot { width: .4rem; height: .4rem; border-radius: 50%; background: var(--bs-primary); margin-left: auto; flex: none; }
+.connection-example { background: var(--tblr-bg-surface-secondary); border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); padding: .7rem 1rem; }
+.connection-example code { font-size: 1rem; overflow-wrap: anywhere; }
+.candidates { display: grid; gap: 1rem; }
+.candidate { padding: 1rem; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); background: var(--tblr-bg-surface); }
+.candidate.is-picked { border-color: var(--suite-accent); background: var(--suite-accent-bg); }
+.candidate.is-excluded { border-style: dashed; }
+.candidate-heading { margin-bottom: 1rem; }
+.model-mark { font-family: var(--bs-font-monospace); font-size: .75rem; background: var(--tblr-bg-surface-secondary); }
+.weight-control { display: grid; grid-template-columns: minmax(0, 1fr) 5rem; align-items: center; gap: .5rem 1rem; }
+.weight-control label { grid-column: 1 / -1; }
+.weight-control .form-range { accent-color: var(--suite-accent); margin: 0; min-width: 0; }
+.candidate-result { margin-top: 1rem; }
+.status-dot { width: .4rem; height: .4rem; background: var(--bs-secondary-color); border-radius: 50%; flex: none; }
+.status-dot.is-ready { background: var(--bs-success); }
+.score-track { height: 3px; background: var(--tblr-bg-surface-secondary); margin-top: .6rem; border-radius: 2px; overflow: hidden; }
+.score-track span { height: 100%; display: block; background: var(--suite-accent); }
+#add-model { width: auto; min-width: 0; }
+#decision { position: sticky; top: 1rem; }
+.decision-card { border-top: 3px solid var(--suite-accent); }
+.request-code { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .4rem .65rem; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); }
+.request-code code { overflow-wrap: anywhere; }
+.pick-result { background: var(--suite-accent-bg); padding: 1.15rem; border-radius: var(--bs-border-radius); }
+#picked-model { font-size: 1.35rem; line-height: 1.3; letter-spacing: -.02em; margin: .6rem 0; }
+.save-actions { padding: 1rem 0; }
+#workspace[data-layout=studio] #identity .card-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 1.5rem; align-items: start; }
+#workspace[data-layout=studio] #identity label, #workspace[data-layout=studio] #identity input, #workspace[data-layout=studio] #identity .form-hint { grid-column: 1; }
+#workspace[data-layout=studio] #identity .connection-example { grid-column: 2; grid-row: 1 / 4; }
+[data-layout=studio] .candidate { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, .7fr); gap: .5rem 1rem; }
+[data-layout=studio] .candidate-heading { margin: 0; }
+[data-layout=studio] .candidate-result, [data-layout=studio] .score-track, [data-layout=studio] [data-exclusion] { grid-column: 1 / -1; margin-top: .25rem; }
+#evidence { margin-top: 1.5rem; }
+#create-dialog { width: min(480px, calc(100vw - 2rem)); padding: 0; border: 0; border-radius: var(--bs-border-radius); background: var(--tblr-bg-surface); color: inherit; }
+#create-dialog::backdrop { background: #0007; }
+.role-choice:focus-visible, .wizard-step:focus-visible { outline: 2px solid var(--suite-accent); outline-offset: 3px; }
+
+/* 02: one decision at a time, with a persistent request preview. */
+[data-layout=guided] .role-layout { grid-template-columns: minmax(0, 760px) 320px; max-width: 1120px; margin: auto; }
+[data-layout=guided] .role-navigation { grid-column: 1 / -1; }
+[data-layout=guided] #role-list, [data-layout=canvas] #role-list { display: flex; flex-wrap: wrap; }
+[data-layout=guided] .role-choice, [data-layout=canvas] .role-choice { width: auto; min-width: 140px; }
+[data-layout=guided] .role-navigation > p, [data-layout=canvas] .role-navigation > p { display: none; }
+.wizard-steps { display: flex; gap: .7rem; margin-bottom: 1.5rem; }
+.wizard-step { flex: 1; display: flex; align-items: center; gap: .6rem; padding: .6rem 0; background: transparent; border: 0; border-bottom: 2px solid var(--bs-border-color); color: var(--bs-secondary-color); text-align: left; }
+.wizard-step span { display: grid; place-items: center; border: 1px solid var(--bs-border-color); width: 1.8rem; height: 1.8rem; border-radius: 50%; flex: none; }
+.wizard-step[aria-current=step] { border-color: var(--suite-accent); color: var(--suite-accent); font-weight: 600; }
+.wizard-step[aria-current=step] span { background: var(--suite-accent-bg); border-color: var(--suite-accent); }
+[data-layout=guided] #role-editor { min-height: 430px; }
+[data-layout=guided] .save-actions { justify-content: flex-end; }
+
+/* 03: show the decision as a spatial flow, with candidates side by side. */
+[data-layout=canvas] .request-path { border: 0; background: transparent; padding-inline: 0; margin-bottom: 2.5rem; }
+[data-layout=canvas] .request-path li { border: 0; position: relative; padding-left: 0; }
+[data-layout=canvas] .request-path li:not(:last-child)::after { content: '→'; position: absolute; right: 1rem; color: var(--bs-secondary-color); font-size: 1.5rem; }
+[data-layout=canvas] .role-layout { grid-template-columns: minmax(0, 1fr) 360px; }
+[data-layout=canvas] .role-navigation { grid-column: 1 / -1; }
+[data-layout=canvas] #role-editor { display: contents; }
+[data-layout=canvas] #identity { grid-column: 1 / -1; }
+[data-layout=canvas] #identity .card-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 2rem; align-items: start; }
+[data-layout=canvas] #identity label, [data-layout=canvas] #identity input, [data-layout=canvas] #identity .form-hint { grid-column: 1; }
+[data-layout=canvas] #identity .connection-example { grid-column: 2; grid-row: 1 / 4; }
+[data-layout=canvas] #models-panel { grid-column: 1; grid-row: 3; }
+[data-layout=canvas] #decision { grid-column: 2; grid-row: 3 / 6; }
+[data-layout=canvas] #tuning { grid-column: 1; }
+[data-layout=canvas] .save-actions { grid-column: 1; }
+[data-layout=canvas] .candidates { grid-template-columns: repeat(auto-fit, minmax(min(100%, 225px), 1fr)); }
+[data-layout=canvas] .candidate-heading { flex-wrap: wrap; }
+[data-layout=canvas] .candidate-heading > .min-w-0 { flex-basis: calc(100% - 3rem); }
+
+@media (max-width: 1199px) {
+  .role-layout { grid-template-columns: minmax(0, 1fr) 300px; }
+  .role-navigation { grid-column: 1 / -1; }
+  #role-list { display: flex; flex-wrap: wrap; }
+  .role-choice { width: auto; min-width: 140px; }
+  .role-navigation > p { display: none; }
+  [data-layout=canvas] .role-layout { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+@media (max-width: 767px) {
+  .roles-review { padding-top: 1rem; }
+  .design-options { width: 100%; }
+  .design-options .nav-link { flex: 1 1 100%; text-align: left; }
+  .request-path { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1rem; }
+  .request-path li + li { border: 0; padding-left: 0; }
+  .role-layout, [data-layout=guided] .role-layout, [data-layout=canvas] .role-layout { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+  #decision { position: static; }
+  #workspace[data-layout=studio] #identity .card-body, [data-layout=studio] .candidate { display: block; }
+  [data-layout=studio] .candidate-heading { margin-bottom: 1rem; }
+  [data-layout=studio] .candidate-result { margin-top: 1rem; }
+  [data-layout=canvas] #role-editor { display: block; }
+  [data-layout=canvas] #identity, [data-layout=canvas] #decision { grid-column: auto; grid-row: auto; }
+  [data-layout=canvas] #identity .card-body { display: block; }
+  [data-layout=canvas] .request-path li::after { display: none; }
+  .wizard-steps { gap: .5rem; }
+  .wizard-step { display: grid; align-content: start; font-size: .8rem; }
+  .role-intro { font-size: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) { .roles-review * { scroll-behavior: auto !important; transition: none !important; } }

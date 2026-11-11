@@ -1,0 +1,41 @@
+{# Shared Roles components for the live studio and design proposals. #}
+{% from 'navigation_parts.html' import pill_link %}
+
+{% macro request_path(name='your role') %}
+<ol class="request-path" aria-label="How a role works">
+  <li><span class="path-number">1</span><span><small>Your app sends</small><code data-request-name>{{ name }}</code></span></li>
+  <li><span class="path-number">2</span><span><small>The role checks</small><strong>Requirements &amp; weights</strong></span></li>
+  <li><span class="path-number">3</span><span><small>At request time</small><strong>One model is selected</strong></span></li>
+</ol>
+{% endmacro %}
+
+{% macro role_link(name, selected) %}
+{% set label %}<span class="role-monogram" aria-hidden="true">{{ name[0]|upper }}</span><strong class="wrap">{{ name }}</strong><span data-role-draft-mark class="role-draft-mark" hidden aria-label="Unsaved changes"></span>{% endset %}
+{{ pill_link(label, '/roles?role=' ~ (name|urlencode), name == selected, class_='role-choice', target='page-content', attrs={'data-role-choice': name, 'aria-label': name}) }}
+{% endmacro %}
+
+{% macro weight_control(name='', weight=1, key='new', preview=false) %}
+<div class="weight-control">
+  <label for="{{ key }}-weight" class="small text-secondary" data-weight-label>Preference weight</label>
+  <input type="range" min="0" max="10" step="0.1" class="form-range" value="{{ [10, weight]|min }}" data-weight-slider aria-label="Adjust preference for {{ name }}"{% if not preview %} hidden{% endif %}>
+  <input id="{{ key }}-weight" name="weight" type="number" min="0" max="1e100" step="any" class="form-control" value="{{ weight }}" inputmode="decimal" data-weight aria-label="weight of {{ name }}"{% if preview %} required{% endif %}>
+</div>
+{% endmacro %}
+
+{% macro candidate(name='', weight=1, key='new', facts=none) %}
+<article class="role-candidate" data-role-candidate data-model-name="{{ name }}">
+  <input type="hidden" name="model" value="{{ name }}">
+  <div class="candidate-heading d-flex align-items-start gap-2">
+    <span class="model-mark" aria-hidden="true">{{ name[0]|upper if name else 'M' }}</span>
+    <div class="min-w-0 flex-fill"><strong class="d-block wrap" data-candidate-name>{{ name }}</strong><span class="small text-secondary" data-candidate-detail>{% if facts and facts.context %}{{ facts.context }} context tokens{% else %}Role candidate{% endif %}</span></div>
+    <button type="button" class="btn btn-link btn-sm px-1" data-role-remove aria-label="Remove {{ name }} from role" hidden>Remove</button>
+  </div>
+  {{ weight_control(name, weight, key) }}
+  <div class="candidate-result d-flex flex-wrap align-items-center gap-2 small">
+    <span class="status-dot{{ ' is-ready' if facts and facts.warm }}" aria-hidden="true"></span>
+    <span data-candidate-state>{% if weight == 0 %}Paused · weight is 0{% elif facts %}{{ 'Ready now' if facts.warm else 'Loaded, busy' if facts.resident else 'Not loaded' }}{% else %}Save to check availability{% endif %}</span>
+    <output class="ms-auto text-secondary" data-saved-score>{% if facts %}Saved score {{ facts.routing_score|default(facts.score)|round(3) }}{% endif %}</output>
+  </div>
+  {% if facts and facts.why_not %}<p class="small text-warning mb-0 mt-2">{{ facts.why_not }}</p>{% endif %}
+</article>
+{% endmacro %}

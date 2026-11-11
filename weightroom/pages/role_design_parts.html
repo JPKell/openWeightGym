@@ -1,0 +1,33 @@
+{# Components shared by every Roles proposal, including JavaScript replacements. #}
+{% from 'navigation_parts.html' import pill_button %}
+{% from 'role_parts.html' import weight_control %}
+
+{% macro role_choice() %}
+{% set label %}
+  <span class="role-monogram" aria-hidden="true" data-initial></span>
+  <span class="min-w-0"><strong class="d-block" data-name></strong><small class="text-secondary" data-count></small></span>
+  <span class="change-dot" data-dirty hidden aria-label="Unsaved changes"></span>
+{% endset %}
+{{ pill_button(label, class_='role-choice', attrs={'data-role-choice': ''}) }}
+{% endmacro %}
+
+{% macro model_choice() %}
+<article class="candidate" data-candidate>
+  <div class="candidate-heading d-flex align-items-start gap-2">
+    <span class="model-mark" aria-hidden="true" data-initial></span>
+    <div class="min-w-0 flex-fill"><strong class="d-block wrap" data-model-name></strong><span class="small text-secondary" data-model-detail></span></div>
+    <button type="button" class="btn btn-link btn-sm px-1" data-remove>Remove</button>
+  </div>
+  {{ weight_control(preview=true) }}
+  <div class="candidate-result d-flex align-items-center gap-2 small">
+    <span class="status-dot" aria-hidden="true" data-state-dot></span><span data-state></span>
+    <output class="ms-auto" data-score></output>
+  </div>
+  <div class="score-track" aria-hidden="true"><span data-score-bar></span></div>
+  <p class="small mb-0 mt-2" data-exclusion hidden></p>
+</article>
+{% endmacro %}
+
+{% macro evidence_row() %}
+<tr><td data-evidence-model></td><td data-evidence-weight></td><td data-evidence-quality></td><td data-evidence-reliability></td><td data-evidence-bonus></td><td data-evidence-score></td></tr>
+{% endmacro %}
