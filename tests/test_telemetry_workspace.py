@@ -39,7 +39,7 @@ def fleet(monkeypatch):
                   'memory used': [n * 2**30 if n is not None else None for n in [1, 2, None, 10, 12]],
                   'free on /models': [n * 2**30 for n in [100, 90, 80, 70, 60]]}
         for slot in (0, 2):
-            values.update({f'GPU {slot} load': [0, 25, None, 50, 100],
+            values.update({f'GPU {slot} load': [0, None, 50, None, 100],
                            f'GPU {slot} memory used': [n * 2**30 for n in [1, 2, 3, 5, 7]],
                            f'GPU {slot} temperature': [40, 50, None, 70, 90],
                            f'GPU {slot} power': [5, 20, None, 100, 180]})
@@ -138,7 +138,12 @@ def test_live_browser_tabs_coloring_refresh_and_navigation(telemetry_server, tmp
         config = plot.evaluate('el => {const o=echarts.getInstanceByDom(el).getOption(); return {heat:o.visualMap[0],series:o.series[0]};}')
         assert config['heat']['min'] == 0 and config['heat']['max'] == 100
         assert config['heat']['inRange']['color'] == ['hsl(120,60%,42%)', 'hsl(90,60%,42%)', 'hsl(60,60%,42%)', 'hsl(30,60%,42%)', 'hsl(0,60%,42%)']
-        assert config['series']['data'][2][1] is None
+        assert config['series']['data'][1][1] is None
+        # Sparse history must draw one continuous polyline, not three isolated dots.
+        commands = plot.evaluate('''el => echarts.getInstanceByDom(el).getZr().storage.getDisplayList()
+            .filter(shape => shape.type === 'ec-polyline')
+            .map(shape => Array.from(shape.getUpdatedPathProxy().data).filter((_, i) => i % 3 === 0))''')
+        assert commands == [[1, 2, 2]]  # move to first reading, line to each subsequent reading
         page.screenshot(path=str(tmp_path / 'telemetry-heat.png'), full_page=True, animations='disabled')
         plot.evaluate("el => echarts.getInstanceByDom(el).dispatchAction({type:'dataZoom', start:25, end:75})")
         page.get_by_role('button', name='Refresh', exact=True).click()
