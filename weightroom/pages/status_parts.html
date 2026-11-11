@@ -1,0 +1,11 @@
+{% from 'parts.html' import confirm_two %}
+{% macro request_row(item, person, now) %}
+<tr data-status-search="{{ ([item.id|string, item.model or '', item.user, item.machine or 'compute']|join(' '))|lower }}">
+<td>{% if item.batch %}<a href="{{ item.href }}">{{ item.id }}</a><small class="d-block text-secondary">Batch</small>{% elif item.id and now %}<a href="/requests/{{ item.id }}">{{ item.id }}</a>{% else %}{{ item.id or 'Unlogged' }}{% endif %}<small class="d-block text-secondary">{{ item.description }}</small></td>
+<td>{{ item.model or ('the lock' if item.priority == 'lock' else 'unload') }}<small class="d-block text-secondary">{{ item.machine or 'compute' }}</small></td>
+<td>{{ item.user }}<small class="d-block text-secondary">{{ item.caller }}</small></td><td class="text-nowrap">{{ item.seconds|round|int }} s</td>
+<td class="text-end">{% if not item.batch and now %}{% if item.id and (item.user == person.name or 'stop' in person.can) %}<form method="post" action="/requests/{{ item.id }}/stop" class="m-0"><input type="hidden" name="back" value="status"><button class="btn btn-outline-danger btn-sm" {{ confirm_two() }}>Stop</button></form>{% elif item.stop_handle and item.may_stop %}<form method="post" action="/requests/unlogged/stop" class="m-0"><input type="hidden" name="handle" value="{{ item.stop_handle }}"><button class="btn btn-outline-danger btn-sm" {{ confirm_two() }}>Stop</button></form>{% endif %}{% endif %}</td>
+</tr>
+{% endmacro %}
+
+{% macro node_work(node) %}<span class="small text-secondary ms-2 status-node-counts">{{ node.running if node.status_live and node.state == 'ready' and node.running is defined and node.running is not none else '—' }} processing · {{ node.waiting if node.status_live and node.state == 'ready' and node.waiting is defined and node.waiting is not none else '—' }} queued</span>{% endmacro %}

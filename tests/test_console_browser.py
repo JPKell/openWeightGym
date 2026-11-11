@@ -277,7 +277,7 @@ def test_confirm_cards_pagination_and_live_usage(desk, tmp_path):
         errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/status')
         controls_box = page.locator('#status-controls').bounding_box()
-        cards_box = page.locator('#status .col-md-6').first.bounding_box()
+        cards_box = page.locator('#status-capacity > .card').first.bounding_box()
         assert abs(cards_box['x'] - controls_box['x']) <= 12 and controls_box['y'] < cards_box['y']
         assert page.locator('#status-controls .input-group input[name="why"]').count() == 1
         assert page.locator('#status-controls .input-group button[value="drain"]').count() == 1
@@ -285,19 +285,19 @@ def test_confirm_cards_pagination_and_live_usage(desk, tmp_path):
         assert page.locator('#status-controls').evaluate('(element) => element.scrollWidth <= element.clientWidth')
         images = Path('data/console-previews'); images.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(images / 'status.png'))
-        page.get_by_role('button', name='Take no requests', exact=True).click()
+        page.get_by_role('button', name='Pause intake', exact=True).click()
         playwright.expect(page.locator('button[value="drain"]')).to_have_text('Are you sure?')
-        page.get_by_role('button', name='Clear requests', exact=True).click()
-        playwright.expect(page.locator('button[value="drain"]')).to_have_text('Take no requests')
+        page.get_by_role('button', name='Clear queue', exact=True).click()
+        playwright.expect(page.locator('button[value="drain"]')).to_have_text('Pause intake')
         assert not controls
         confirm = page.locator('button[value="clear"]')
         playwright.expect(confirm).to_have_text('Are you sure?')
         assert confirm.evaluate('e=>e.hasAttribute("data-confirm-two") || e.form.hasAttribute("data-confirm-two")')
         # Status polling preserves confirmation state and collapsed request cards.
-        page.locator('[data-card-key="current-requests"] > summary').click()
+        page.locator('[data-card-key="current-requests-processing"] > summary').click()
         page.evaluate('window.priorStatus = document.querySelector("#status")')
         page.wait_for_function('document.querySelector("#status") !== window.priorStatus', timeout=5000)
-        playwright.expect(page.locator('[data-card-key="current-requests"]')).not_to_have_attribute('open', '')
+        playwright.expect(page.locator('[data-card-key="current-requests-processing"]')).not_to_have_attribute('open', '')
         playwright.expect(confirm).to_have_text('Are you sure?')
         confirm.click()
         page.wait_for_load_state()

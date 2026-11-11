@@ -1,24 +1,11 @@
 {% extends "frame.html" %}
 {% from "parts.html" import card, said_box, page_header, alert %}
 {% block title %}Status · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/status-workspace.css?v=1"><script src="/static/status-workspace.js?v=1" defer></script>{% endblock %}
+{% block page_class %}status-workspace{% endblock %}
 {% block main %}
 {{ page_header("Status", lead="Monitor model availability, active requests and queued work.") }}
 {{ said_box(said, failed) }}
 
-{% if not now %}
-{% call alert('danger', class_='said') %}Compute is off since {{ compute.since|timestamp }} on the primary compute node. Other nodes are shown below.{% endcall %}
-{% if wake_button and "front-wake" in person.can %}
-<form method="post" action="/wake" class="mb-3">
-  <button class="btn btn-primary">Wake compute</button>
-  <span class="text-secondary ms-2">Sends the waking packet. It works if compute is asleep, and if it is off only where the machine allows that.</span>
-</form>
-{% endif %}
-{% if compute.status %}<p class="text-secondary">Last available compute status from {{ compute.seen|timestamp }}. These readings may be out of date.</p>{% endif %}
-{% endif %}
-
 {% include "status.html" %}
-{% include "current_requests.html" %}
-{% call card("Past requests", true, 'past-requests') %}
-{% with completed=true, embedded=true, request_path='/status' %}{% include "requests_list.html" %}{% endwith %}
-{% endcall %}
 {% endblock %}

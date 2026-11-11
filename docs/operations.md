@@ -716,6 +716,14 @@ keys, settings and the earlier release.
 
 ## Multi-machine telemetry
 
+The Status page places processing and queued requests above node capacity and loaded model
+memory. Node headings show processing/queued counts; the capacity ledger omits CPU load.
+Rolling 5/15/60-minute KPIs count recorded arrivals received on front, including unfinished
+requests, and can lag unsent worker logs. They respect `see-all` (otherwise only the caller's
+arrivals). Current counts include authorized anonymous totals; unavailable readings stay unknown.
+Pause intake lets accepted work finish, Clear queue removes waiting work, and Unload models
+waits its turn. Controls target the selected compute node and retain existing permissions.
+
 The Telemetry page keeps fleet KPIs above a host navigator and an overview grid. Select a
 host or individual GPU for retained history; hardware tabs and metric buttons choose the
 graph, with GPU comparison, zoom and expansion in the same workspace. Green-to-red coloring

@@ -1086,25 +1086,30 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         missing = person.me.get("unavailable_machines", [])
         if available or not told.get("machines") or any(node["name"] not in missing for node in told["machines"]):
             try:
-                now = (await ask("GET", "/loadcoach/status", person.key)).json()
-                now['active_batches'] = current_batch_jobs(now, person, benchmarks.state.worker, benchmarks.state.store)
+                answer = await ask("GET", "/loadcoach/status", person.key)
+                if answer.status_code == 200:
+                    now = answer.json()
+                    now['active_batches'] = current_batch_jobs(now, person, benchmarks.state.worker, benchmarks.state.store)
             except ComputeOff:
                 pass
         nodes = status_nodes(told, poll_seconds, now)
-        if request.query_params.get("part") == "status":  # the status asking for itself again
-            return page(request, "status.html", person, now=now, nodes=nodes, poll_seconds=poll_seconds, address=model_address)
+        from weightroom.status_workspace import present
+        summary = None
+        try:
+            counts = await ask('GET', '/loadcoach/requests/counts', person.key)
+            if counts.status_code == 200:
+                summary = counts.json()
+        except ComputeOff:
+            pass
+        workspace = present(now, nodes, summary)
+        context = dict(now=now, nodes=nodes, poll_seconds=poll_seconds, address=model_address, workspace=workspace)
+        if request.query_params.get('part') == 'status':
+            return page(request, 'status.html', person, **context)
         if request.query_params.get('part') == 'requests':
-            return page(request, 'current_requests.html', person, now=now)
+            return page(request, 'current_requests.html', person, **context)
         asked = request.query_params
-        limit, _ = controls(asked)
-        recent = {'requests': [], 'total': 0}
-        if now:
-            found = await fetch(request, person, '/loadcoach/requests', params={'limit': limit, 'completed': 1})
-            if not isinstance(found, Response):
-                recent = found
-        return page(request, "home.html", person, now=now, nodes=nodes, poll_seconds=poll_seconds, recent=recent['requests'],
-                    paging=pagination('/requests', {'completed': '1'}, recent['total'], limit, 1),
-                    said=asked.get("said", ""), failed="failed" in asked, address=model_address)
+        return page(request, 'home.html', person, **context,
+                    said=asked.get('said', ''), failed='failed' in asked)
 
     async def carry_on(method: str, path: str, key: str) -> None:
         """Ask LoadCoach for something that may take minutes, without anyone waiting for the answer."""
