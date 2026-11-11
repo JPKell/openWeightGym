@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -21,7 +22,12 @@ def postgresql_identity(connection) -> str:
         "SELECT current_database(), inet_server_addr()::text, inet_server_port(), "
         "(SELECT oid FROM pg_database WHERE datname = current_database())"
     ).fetchone()
-    return hashlib.sha256(json.dumps(list(row)).encode()).hexdigest()
+    public = list(row)
+    if (row[1].split('/')[0] if row[1] else None) in {None, '127.0.0.1', '::1'}:
+        from loadcoach.machine_identity import fingerprint
+        info = getattr(connection, 'info', None)
+        public.extend([fingerprint(), getattr(info, 'host', ''), getattr(info, 'port', '')])
+    return hashlib.sha256(json.dumps(public).encode()).hexdigest()
 
 
 def backup_signal(store, manifests, now, identity="") -> dict:
@@ -138,3 +144,12 @@ def stores_health(stores, machine, manifests=(), now=None) -> list[dict]:
     """Keep an unavailable store from hiding the remaining mixed-engine installation."""
     now = time.time() if now is None else now
     return [store_health(store, machine, manifests, now) for store in stores]
+
+
+async def async_stores_health(stores, machine, manifests=()) -> list[dict]:
+    """Keep per-store timeouts from accumulating across a large node's inventory."""
+    semaphore = asyncio.Semaphore(4)
+    async def probe(store):
+        async with semaphore:
+            return await asyncio.to_thread(store_health, store, machine, manifests)
+    return await asyncio.gather(*(probe(store) for store in stores))

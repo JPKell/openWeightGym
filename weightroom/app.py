@@ -78,7 +78,9 @@ from loadcoach.backups import (
 )
 from loadcoach.backup_crypto import encryption_status, recipients as backup_recipients
 from loadcoach.database_admin import catalogs as database_catalogs, configured_sources, dump_tools, make_sql_dump, safe_filename
-from db.health import stores_health
+from db.health import stores_health, async_stores_health
+from loadcoach.database_operations import DatabaseOperations
+from weightroom.database_console import DatabaseConsole, owner_of
 from weightroom.conversations import build_app as build_conversations
 from weightroom import pairing
 from weightroom.plugin_pages import build_routes as plugin_routes
@@ -2500,6 +2502,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Enumerate configured front-owned stores for paired recovery sets."""
         stores = []
         for bound in database_registry.bound_stores():
+            if not bound.bindings:
+                continue
             archive = ""
             if bound.database.path is not None and bound.database.path.parent.resolve() == data.resolve():
                 archive = f"data/{bound.database.path.name}"
@@ -2710,98 +2714,82 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, "database_migration.html", person, status=409, profile=name, preview=None, why=why)
         return go("/databases?said=" + quote(f"Migration {job} started. The console will close during maintenance; return here after services restart."))
 
-    async def databases_page(request: Request, person: Person) -> Response:
-        """Show both machines' live stores and honest engine/migration readiness."""
-        if "manage-settings" not in person.can:
-            return page(request, "refused.html", person, status=403, why="You may not inspect databases.")
-        front = await asyncio.to_thread(database_catalogs, front_database_sources(), "front")
-        health = await front_store_health()
-        compute_rows, compute_tools, compute_error = [], {}, ""
-        try:
-            answer = await ask("GET", "/loadcoach/databases", person.key)
-            if answer.status_code == 200:
-                remote = answer.json()
-                compute_rows, compute_tools = remote["databases"], remote["tools"]
-                health.extend(remote.get("health", []))
-                if "health" not in remote:
-                    compute_error = "Compute storage health is unavailable until its openWeightGym code is updated."
-            else:
-                compute_error = answer.json()["error"]["message"]
-        except ComputeOff:
-            compute_error = "Compute is not answering. Front databases and exports remain available."
-        databases = [*front, *compute_rows]
-        return page(
-            request,
-            "databases.html",
-            person,
-            databases=databases,
-            store_health=health,
-            store_health_error=compute_error,
-            compute_error=compute_error,
-            front_tools=dump_tools(),
-            compute_tools=compute_tools,
-            database_count=len(databases),
-            table_count=sum(len(item.get("tables", [])) for item in databases),
-            disk_size=sum(item.get("size") or 0 for item in databases),
-            migration_profiles=migration_profiles(migration_locations()[0]),
-            migration_reports=migration_reports(migration_locations()[1]),
-            said=request.query_params.get("said", ""),
-        )
-
     async def front_store_health():
         """Probe front stores independently of compute and reuse recorded recovery evidence."""
-        return await asyncio.to_thread(stores_health, front_recovery_stores(), "front", backup_manifests(backup_root(settings.data)))
+        return await async_stores_health(front_recovery_stores(), 'front', backup_manifests(backup_root(settings.data)))
+
+    database_operations = DatabaseOperations(front_database_sources, data / 'database-maintenance', machine='front', recovery_prefix='weightroom.')
+    database_console = DatabaseConsole(front_database_sources, front_store_health, database_operations, ask, loadcoach, data / 'database-jobs')
+
+    async def databases_page(request: Request, person: Person) -> Response:
+        """Operations desk over configured nodes and proven physical store identities."""
+        if "manage-settings" not in person.can:
+            return page(request, "refused.html", person, status=403, why="You may not inspect databases.")
+        snapshot = await database_console.snapshot(person)
+        return page(request, 'databases.html', person, snapshot=snapshot,
+                    databases=snapshot['databases'], store_health=snapshot['store_health'], store_health_error=snapshot['inventory_error'],
+                    migration_profiles=migration_profiles(migration_locations()[0]),
+                    migration_reports=migration_reports(migration_locations()[1]), said=request.query_params.get('said', ''))
+
+    async def database_console_api(request: Request, person: Person) -> Response:
+        return await database_console.api(request, person)
+
+    async def database_node_operation(request: Request, person: Person) -> Response:
+        if 'manage-settings' not in person.can:
+            return JSONResponse({'error': {'message': 'Database operations require manage-settings.'}}, status_code=403)
+        machine = request.path_params['machine']
+        if machine == 'front':
+            return await database_operations.handle(request, owner_of(person))
+        operation = request.path_params['operation']
+        if request.method == 'GET' and operation.endswith('/recovery'):
+            try:
+                return await database_console.stream(person, machine, operation)
+            except (httpx.HTTPError, ValueError):
+                return Response('The owning node cannot provide this recovery copy.', status_code=503)
+        try:
+            answer = await ask(request.method, database_console.remote_path(machine, operation), person.key,
+                               **({'json': await request.json()} if request.method == 'POST' else {}))
+            return Response(answer.content, status_code=answer.status_code, media_type=answer.headers.get('content-type'), headers={'cache-control': 'no-store'})
+        except (ComputeOff, httpx.HTTPError):
+            return JSONResponse({'error': {'message': 'The owning node is unavailable.'}}, status_code=503)
+
+    async def database_details(request: Request, person: Person) -> Response:
+        if 'manage-settings' not in person.can:
+            return Response('Database details require manage-settings.', status_code=403)
+        machine, identifier = request.path_params['machine'], request.path_params['database']
+        if machine == 'front':
+            delegated = Request({**request.scope, 'path_params': {'operation': 'details/' + identifier}}, request.receive)
+            return await database_operations.handle(delegated, owner_of(person))
+        try:
+            answer = await ask('GET', database_console.remote_path(machine, 'stores/' + quote(identifier, safe='') + '/details'), person.key, timeout=60)
+            return Response(answer.content, status_code=answer.status_code, media_type='application/json', headers={'cache-control': 'no-store'})
+        except ComputeOff:
+            return Response('The owning node is unavailable.', status_code=503)
 
     async def database_dump(request: Request, person: Person) -> Response:
-        """Export a front table locally or stream an authorized compute export."""
-        if "manage-settings" not in person.can:
-            return page(request, "refused.html", person, status=403, why="You may not export databases.")
-        machine, database = request.path_params["machine"], request.path_params["database"]
-        table = request.query_params.get("table") or None
-        if machine == "front":
-            source = front_database_sources().get(database)
+        if 'manage-settings' not in person.can:
+            return Response('Database exports require manage-settings.', status_code=403)
+        machine, identifier = request.path_params['machine'], request.path_params['database']
+        table = request.query_params.get('table') or None
+        if machine == 'front':
+            source = front_database_sources().get(identifier)
             if source is None:
-                return Response("There is no such front database.", status_code=404)
+                return Response('There is no such front database.', status_code=404)
             try:
                 path, method = await asyncio.to_thread(make_sql_dump, source, table)
             except KeyError:
-                return Response("There is no such table in that database.", status_code=404)
-            except (OSError, ValueError, TypeError, RuntimeError) as problem:
-                return Response(f"Database dump failed: {problem}", status_code=500)
-            return FileResponse(
-                path,
-                media_type="application/sql",
-                filename=safe_filename(source, table),
-                headers={"x-suite-dump-method": method, "cache-control": "no-store"},
-                background=BackgroundTask(path.unlink, missing_ok=True),
-            )
-        if machine != "compute":
-            return Response("There is no such database machine.", status_code=404)
-        path = f"/loadcoach/databases/{quote(database, safe='')}/dump"
-        remote_request = loadcoach.build_request(
-            "GET", path, headers={"authorization": f"Bearer {person.key}"}, params={"table": table} if table else None
-        )
+                return Response('There is no such table in that database.', status_code=404)
+            except Exception:
+                return Response('Database export failed. Check permissions, connectivity, disk space and native tools.', status_code=500)
+            return FileResponse(path, media_type='application/sql', filename=safe_filename(source, table),
+                headers={'x-suite-dump-method': method, 'cache-control': 'no-store'}, background=BackgroundTask(path.unlink, missing_ok=True))
+        operation = 'stores/' + quote(identifier, safe='') + '/dump'
+        if table:
+            operation += '?' + urlencode({'table': table})
         try:
-            answer = await loadcoach.send(remote_request, stream=True)
-        except httpx.HTTPError:
-            noted(False)
-            return Response("Compute is not answering.", status_code=503)
-        if answer.status_code != 200:
-            content = await answer.aread()
-            await answer.aclose()
-            return Response(content, status_code=answer.status_code, media_type=answer.headers.get("content-type"))
-
-        async def chunks():
-            """Stream the database export file and release its temporary resources on exit."""
-            try:
-                async for chunk in answer.aiter_bytes():
-                    yield chunk
-            finally:
-                await answer.aclose()
-
-        headers = {name: value for name, value in answer.headers.items()
-                   if name.lower() in {"content-disposition", "x-suite-dump-method", "cache-control"}}
-        return StreamingResponse(chunks(), media_type="application/sql", headers=headers)
+            return await database_console.stream(person, machine, operation, 'application/sql')
+        except (ValueError, httpx.HTTPError):
+            return Response('The owning node cannot export this database.', status_code=503)
 
     async def fingerprints_page(request: Request, person: Person) -> Response:
         """Every fingerprint there has been, or those that begin a given way. One alone is shown with all that was written down of it."""
@@ -4886,6 +4874,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 alert_watching.cancel()
                 scheduling.cancel()
                 await asyncio.gather(watching, alert_watching, scheduling, return_exceptions=True)
+        await database_console.jobs.close()
+        await database_operations.jobs.close()
         await chat_client.aclose()
         await plugin_http.aclose()
         plugins.db.close()
@@ -4955,6 +4945,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route("/backups/retention", backup_retention, "POST"),
             route("/backups/{backup_id}", backup_preview),
             Route("/databases", for_people(databases_page)),
+            Route("/databases/api/{operation:path}", for_people(database_console_api), methods=["GET", "POST"]),
+            Route("/databases/{machine}/operation/{operation:path}", for_people(database_node_operation), methods=["GET", "POST"]),
+            route("/databases/{machine}/{database}/details", database_details),
             route("/databases/migrations/{profile}/preview", database_migration_preview, "POST"),
             route("/databases/migrations/{profile}/start", database_migration_start, "POST"),
             route("/databases/{machine}/{database}/dump", database_dump),
@@ -5074,6 +5067,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     app.add_middleware(Barrier, gate=gate)
     from loadcoach.log import Log
     observation_log = Log(database_registry.database("weightroom.accounts"))
+    database_operations.audit = lambda event, owner, **detail: observation_log.add('database', event, owner, machine='front', **detail)
     from loadcoach.observation_store import set_policy
     with observation_log.db:  # front's span policy, which every writer and pruner of this store follows
         set_policy(observation_log.db, settings.observation_keep_days, settings.observation_success_percent,

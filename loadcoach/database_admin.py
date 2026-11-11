@@ -8,6 +8,11 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import hashlib
+import json
+import time
+import asyncio
+from dataclasses import replace
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,6 +34,7 @@ class DatabaseSource:
     expected: bool = True
     database: Database | None = None
     bindings: tuple[str, ...] = ()
+    stores: tuple[str, ...] = ()
 
 
 def sqlite_sources(folder: str | Path, owners: dict[str, str], primary: str | Path | None = None) -> dict[str, DatabaseSource]:
@@ -61,13 +67,97 @@ def store_sources(stores, folder: str | Path, owners: dict[str, str]) -> dict[st
             identifier = store.name
         owner = owners.get(path.name, "") if path is not None else ""
         owner = owner or ", ".join(store.bindings) or "Unbound configured store"
-        answer[identifier] = DatabaseSource(identifier, path, owner, True, target, store.bindings)
+        answer[identifier] = DatabaseSource(identifier, path, owner, bool(store.bindings), target, store.bindings, (store.name,))
         if path is not None:
             configured_paths.add(path.resolve())
     for identifier, source in sqlite_sources(folder, owners).items():
         if source.path.resolve() not in configured_paths and identifier not in answer:
-            answer[identifier] = source
+            answer[identifier] = replace(source, expected=False)
     return dict(sorted(answer.items()))
+
+
+def source_identity(source: DatabaseSource) -> str:
+    """Identify an actual database, including shared files; never fingerprint credentials."""
+    if source.database and source.database.engine == 'postgresql':
+        from db.health import postgresql_identity
+        with source.database.connection(connect_timeout=2) as connection:
+            connection.execute("SET LOCAL statement_timeout = '2000ms'")
+            return 'postgresql:' + postgresql_identity(connection)
+    if source.path is None or source.path.is_symlink() or not source.path.is_file():
+        raise ValueError('The configured SQLite database is missing or not a regular local file.')
+    stat = source.path.stat()
+    try:
+        host = Path('/etc/machine-id').read_text().strip()
+    except OSError:
+        import socket
+        host = socket.gethostname()
+    return 'sqlite:' + hashlib.sha256(json.dumps([host, stat.st_dev, stat.st_ino]).encode()).hexdigest()
+
+
+def summaries(sources: dict[str, DatabaseSource], machine: str) -> list[dict]:
+    """Bounded summary probes: no exact row counts, dbstat scans or schema exports."""
+    rows = []
+    for source in sources.values():
+        engine = 'PostgreSQL' if source.database and source.database.engine == 'postgresql' else 'SQLite'
+        row = dict(id=source.id, name=source.path.name if source.path else source.database.display_name,
+                   machine=machine, owner=source.owner, expected=source.expected, engine=engine,
+                   bindings=list(source.bindings), stores=list(source.stores), path=str(source.path) if source.path else source.database.display_name,
+                   identity='', size=None, table_count=None, records=None, checked_at=time.time(), error='',
+                   tables=[], dump_method='pg_dump plain SQL' if engine == 'PostgreSQL' else 'Python sqlite3 fallback')
+        try:
+            row['identity'] = source_identity(source)
+            if engine == 'SQLite':
+                connection = connect(source.path.resolve().as_uri() + '?mode=ro', uri=True, timeout=2)
+                try:
+                    row['table_count'] = connection.execute("SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchone()[0]
+                    row['server_version'] = sqlite3.sqlite_version
+                finally:
+                    connection.close()
+                row['size'] = sum(item['size'] for item in _sidecars(source.path))
+            else:
+                with source.database.connection(connect_timeout=2) as connection:
+                    connection.execute("SET TRANSACTION READ ONLY")
+                    connection.execute("SET LOCAL statement_timeout = '2000ms'")
+                    row['size'], row['database_name'], row['server_version'] = connection.execute(
+                        'SELECT pg_database_size(current_database()), current_database(), current_setting(\'server_version\')').fetchone()
+                    row['table_count'], row['records'] = connection.execute(
+                        "SELECT COUNT(*), COALESCE(SUM(GREATEST(c.reltuples,0)),0)::bigint FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+                        "WHERE c.relkind='r' AND n.nspname NOT LIKE 'pg_%' AND n.nspname <> 'information_schema'").fetchone()
+                    row['records_estimated'] = True
+        except Exception:
+            row['error'] = 'Store probe failed. Check the owning node, configured binding and database permissions.'
+        rows.append(row)
+    return rows
+
+
+async def async_summaries(sources: dict[str, DatabaseSource], machine: str) -> list[dict]:
+    semaphore = asyncio.Semaphore(4)
+    async def probe(identifier, source):
+        async with semaphore:
+            return await asyncio.to_thread(summaries, {identifier: source}, machine)
+    return [row for batch in await asyncio.gather(*(probe(identifier, source) for identifier, source in sources.items())) for row in batch]
+
+
+def merge_inventory(rows: list[dict]) -> list[dict]:
+    """Merge only proven physical identities; retain each node/store route and binding."""
+    merged = {}
+    for item in rows:
+        row = dict(item)
+        route = {'machine': row['machine'], 'id': row['id'], 'bindings': row.get('bindings', []), 'stores': row.get('stores', [])}
+        key = row.get('identity') or f"unknown:{row['machine']}:{row['id']}"
+        if key not in merged:
+            row['consumers'] = [route]
+            merged[key] = row
+        else:
+            target = merged[key]
+            if row['expected'] and not target['expected']:
+                row['consumers'] = target['consumers']
+                target = merged[key] = row
+            target['consumers'].append(route)
+            target['bindings'] = sorted(set(target.get('bindings', [])) | set(row.get('bindings', [])))
+            target['stores'] = sorted(set(target.get('stores', [])) | set(row.get('stores', [])))
+            target['expected'] = target['expected'] or row['expected']
+    return list(merged.values())
 
 
 def configured_sources(registry: DatabaseRegistry, folder: str | Path, owners: dict[str, str]) -> dict[str, DatabaseSource]:
@@ -115,7 +205,10 @@ def sqlite_catalog(source: DatabaseSource, machine: str) -> dict:
         sidecars = _sidecars(source.path)
         db = connect(f"file:{source.path}?mode=ro", uri=True, timeout=10)
         try:
+            deadline = time.monotonic() + 30
+            db.set_progress_handler(lambda: int(time.monotonic() > deadline), 10000)
             db.execute("PRAGMA query_only=ON")
+            db.execute('BEGIN')
             page_size = int(db.execute("PRAGMA page_size").fetchone()[0])
             page_count = int(db.execute("PRAGMA page_count").fetchone()[0])
             free_pages = int(db.execute("PRAGMA freelist_count").fetchone()[0])
@@ -157,7 +250,7 @@ def sqlite_catalog(source: DatabaseSource, machine: str) -> dict:
             "free": free_pages * page_size,
             "modified": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
             "tables": tables,
-            "dump_method": "sqlite3 command" if dump_tools()["sqlite3"]["available"] else "Python sqlite3 fallback",
+            "dump_method": "Python sqlite3 fallback",
             "error": "",
         }
     except (OSError, sqlite3.Error, ValueError, TypeError) as problem:
@@ -179,6 +272,8 @@ def postgresql_catalog(source: DatabaseSource, machine: str) -> dict:
     }
     try:
         with source.database.connection(connect_timeout=10) as db:
+            db.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+            db.execute("SET LOCAL statement_timeout = '30000ms'")
             database_name = db.execute("SELECT current_database()").fetchone()[0]
             server_version = db.execute("SHOW server_version").fetchone()[0]
             size = int(db.execute("SELECT pg_database_size(current_database())").fetchone()[0])
@@ -240,12 +335,26 @@ def _python_dump(source: DatabaseSource, output: Path, table: str | None) -> Non
     """Write a consistent exact-table or full SQLite dump without a CLI dependency."""
     db = connect(f"file:{source.path}?mode=ro", uri=True, timeout=30)
     try:
+        deadline = time.monotonic() + 300
+        db.set_progress_handler(lambda: int(time.monotonic() > deadline), 10000)
         db.execute("PRAGMA query_only=ON")
         db.execute("BEGIN")
         with output.open("w", encoding="utf-8", newline="\n") as target:
+            written = 0
+            checked_bytes = 0
+            def emit(line):
+                nonlocal written, checked_bytes
+                written += len(line.encode('utf-8'))
+                if written > 2 * 1024 ** 3 or time.monotonic() > deadline:
+                    raise ValueError('SQL export exceeded its 2 GiB, disk-space or time budget.')
+                if written - checked_bytes >= 1024 ** 2:
+                    checked_bytes = written
+                    if shutil.disk_usage(output.parent).free < 64 * 1024 ** 2:
+                        raise ValueError('SQL export exhausted its disk-space reserve.')
+                target.write(line)
             if table is None:
                 for line in db.iterdump():
-                    target.write(line + "\n")
+                    emit(line + "\n")
                 return
             row = db.execute("SELECT sql FROM sqlite_schema WHERE type='table' AND name=?", (table,)).fetchone()
             if not row or not row[0]:
@@ -254,18 +363,18 @@ def _python_dump(source: DatabaseSource, output: Path, table: str | None) -> Non
             if not columns:
                 raise ValueError(f"Table {table} has no dumpable columns")
             names = ",".join(_identifier(name) for name in columns)
-            target.write("PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n")
-            target.write(row[0].rstrip(";") + ";\n")
+            emit("PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n")
+            emit(row[0].rstrip(";") + ";\n")
             query = f"SELECT {names} FROM {_identifier(table)}"
             prefix = f"INSERT INTO {_identifier(table)}({names}) VALUES("
             for values in db.execute(query):
-                target.write(prefix + ",".join(_literal(value) for value in values) + ");\n")
+                emit(prefix + ",".join(_literal(value) for value in values) + ");\n")
             for sql, in db.execute(
                 "SELECT sql FROM sqlite_schema WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name",
                 (table,),
             ):
-                target.write(sql.rstrip(";") + ";\n")
-            target.write("COMMIT;\n")
+                emit(sql.rstrip(";") + ";\n")
+            emit("COMMIT;\n")
     finally:
         db.close()
 
@@ -296,12 +405,6 @@ def make_sql_dump(source: DatabaseSource, table: str | None = None) -> tuple[Pat
     output = Path(name)
     output.chmod(0o600)
     try:
-        command = shutil.which("sqlite3")
-        if command and table is None:
-            with output.open("wb") as target:
-                subprocess.run([command, str(source.path), ".dump"], stdout=target, stderr=subprocess.PIPE,
-                               check=True, timeout=300)
-            return output, "sqlite3 command"
         _python_dump(source, output, table)
         return output, "Python sqlite3 fallback"
     except Exception:

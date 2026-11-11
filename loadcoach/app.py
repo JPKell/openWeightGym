@@ -62,8 +62,9 @@ from loadcoach.backups import (
     store_inventory,
 )
 from loadcoach.backup_crypto import encryption_status
-from loadcoach.database_admin import catalogs as database_catalogs, dump_tools, make_sql_dump, safe_filename, store_sources
-from db.health import stores_health
+from loadcoach.database_admin import catalogs as database_catalogs, async_summaries, dump_tools, make_sql_dump, safe_filename, store_sources
+from loadcoach.database_operations import DatabaseOperations
+from db.health import stores_health, async_stores_health
 from loadcoach.tasks import Tasks
 from loadcoach.capture import answer_text, request_text, said_wrong
 from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings, shared_places, storage_places
@@ -2457,6 +2458,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         report()
         log.add("loadcoach", "started", models=len(library.names()), cards=list(config.gpus))
         yield
+        await database_operations.jobs.close()
         if config.token_file:
             os.unlink(config.token_file)
         # LoadCoach is shutting down. Stop deciding and loading, then take the model servers with it.
@@ -2682,6 +2684,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
         combined: dict[tuple[str, str], RecoveryStore] = {}
         for prefix, bound in candidates:
+            if not bound.bindings:
+                continue
             key = (bound.database.engine, str(bound.database.path or Path(bound.database.store.dsn_file).resolve()))
             archive = ""
             if bound.database.path is not None and bound.database.path.parent.resolve() == folder.resolve():
@@ -2710,7 +2714,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         root, _, excluded, rows, _ = compute_backup_context()
         return JSONResponse(
             {
-                "machine": "compute",
+                "machine": config.machine_name,
                 "inventory": rows,
                 "excluded": excluded,
                 "backups": backup_manifests(root),
@@ -2735,7 +2739,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 create_backup,
                 root,
                 backup_id,
-                "compute",
+                config.machine_name,
                 files,
                 rows,
                 excluded,
@@ -2748,9 +2752,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         except FileExistsError as problem:
             return error(409, str(problem))
         except (OSError, ValueError, TypeError, sqlite3.Error, subprocess.SubprocessError, RuntimeError) as problem:
-            log.add("backup", "failed", user.name, address(request), backup=backup_id, machine="compute", why=str(problem)[:500])
+            log.add("backup", "failed", user.name, address(request), backup=backup_id, machine=config.machine_name, why='Backup failed; inspect the owning node.')
             return error(500, f"Compute backup failed: {problem}")
-        log.add("backup", "created", user.name, address(request), backup=backup_id, machine="compute",
+        log.add("backup", "created", user.name, address(request), backup=backup_id, machine=config.machine_name,
                 files=len(made["files"]), verified=made["verification"]["state"])
         return JSONResponse(made, status_code=201)
 
@@ -2891,12 +2895,13 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if denied := lacks(user, "manage-settings"):
             return denied
         sources = compute_database_sources()
-        rows = await asyncio.to_thread(database_catalogs, sources, "compute")
+        rows = (await async_summaries(sources, config.machine_name) if request.query_params.get('summary') == '1'
+                else await asyncio.to_thread(database_catalogs, sources, config.machine_name))
         tools = dump_tools()
         postgres_tools = tools["pg_dump"]["available"] and tools["pg_restore"]["available"]
         return JSONResponse(
             {
-                "machine": "compute",
+                "machine": config.machine_name,
                 "databases": rows,
                 "health": await compute_store_health(),
                 "tools": tools,
@@ -2910,15 +2915,21 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     async def compute_store_health():
         """Read only bound-store probes and existing manifests, avoiding full inventory scans."""
-        return await asyncio.to_thread(
-            stores_health, compute_recovery_stores(), "compute", backup_manifests(backup_root(compute_data_folder()))
-        )
+        return await async_stores_health(compute_recovery_stores(), config.machine_name, backup_manifests(backup_root(compute_data_folder())))
 
     async def databases_health(request: Request, user: User) -> Response:
         """Expose safe, lightweight operational signals to storage managers."""
         if denied := lacks(user, "manage-settings"):
             return denied
-        return JSONResponse({"machine": "compute", "stores": await compute_store_health()})
+        return JSONResponse({"machine": config.machine_name, "stores": await compute_store_health()})
+
+    database_operations = DatabaseOperations(compute_database_sources, compute_data_folder() / 'database-operations',
+        lambda event, owner, **detail: log.add('database', event, owner, machine=config.machine_name, **detail), machine=config.machine_name)
+
+    async def database_operation(request: Request, user: User) -> Response:
+        if denied := lacks(user, 'manage-settings'):
+            return denied
+        return await database_operations.handle(request, user.identity or user.name)
 
     async def database_dump(request: Request, user: User) -> Response:
         """Download an exact table or complete compute database as restorable SQL."""
@@ -2927,15 +2938,22 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         source = compute_database_sources().get(request.path_params["database"])
         if source is None:
             return error(404, "There is no such compute database.")
+        if expected_identity := request.query_params.get('identity'):
+            from loadcoach.database_admin import source_identity
+            try:
+                if await asyncio.to_thread(source_identity, source) != expected_identity:
+                    return error(409, 'This store binding changed. Refresh before exporting.')
+            except Exception:
+                return error(409, 'This store identity cannot be verified.')
         table = request.query_params.get("table") or None
         try:
             path, method = await asyncio.to_thread(make_sql_dump, source, table)
         except KeyError:
             return error(404, "There is no such table in that database.")
         except (OSError, ValueError, TypeError, sqlite3.Error, subprocess.SubprocessError, RuntimeError) as problem:
-            return error(500, f"Database dump failed: {problem}")
+            return error(500, 'Database dump failed. Check database permissions, connectivity, disk space and native tools.')
         log.add("database", "dumped", user.name, address(request), database=source.id,
-                table=table or "all", machine="compute", method=method)
+                table=table or "all", machine=config.machine_name, method=method)
         return FileResponse(
             path,
             media_type="application/sql",
@@ -2994,6 +3012,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             route("/loadcoach/databases", databases_list),
             route("/loadcoach/databases/health", databases_health),
             route("/loadcoach/databases/{database}/dump", database_dump),
+            Route('/loadcoach/database-operations/{operation:path}', signed_in(database_operation), methods=['GET', 'POST']),
             route("/loadcoach/models", model_list),
             route("/loadcoach/model-setup", model_setup_page),
             route("/loadcoach/model-setup", model_setup_page, "POST"),

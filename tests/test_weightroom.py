@@ -1894,14 +1894,13 @@ def test_database_page_lists_front_tables_and_exports_restorable_sql(desk, tmp_p
     sign_in(browser, "jordan")
     page = browser.get("/databases")
     assert page.status_code == 200
-    assert "Database storage" in page.text and "PostgreSQL" in page.text and "supported" in page.text
-    assert "Offline migration available" in page.text and "No migration profiles are configured" in page.text
-    assert "chat.db" in page.text and "conversations" in page.text and "Dump SQL" in page.text
-    assert "KiB" in page.text
-    assert 'class="table table-sm align-middle sortable mb-0"' in page.text
-    assert 'data-sort="text">Table</th>' in page.text
-    assert page.text.count('data-sort="value"') >= 3
-    assert re.search(r'<td class="text-end" data-value="\d+">', page.text)
+    assert 'data-database-console' in page.text and 'Export &amp; maintenance' in page.text
+    assert 'PostgreSQL' in page.text and 'No migration profiles are configured' in page.text
+    snapshot = browser.get('/databases/api/snapshot').json()
+    chat = next(row for row in snapshot['databases'] if row['id'] == 'chat.db')
+    assert chat['tables'] == [] and chat['records'] is None
+    details = browser.get(chat['detail_url']).json()
+    assert any(table['name'] == 'conversations' and table['records'] == 0 for table in details['tables'])
 
     dumped = browser.get("/databases/front/chat.db/dump?table=conversations")
     assert dumped.status_code == 200 and "CREATE TABLE conversations" in dumped.text
@@ -1928,7 +1927,7 @@ def test_store_health_permissions_backup_age_and_compute_outage(desk, tmp_path, 
     compute.off = True
     page = browser.get("/databases")
     assert page.status_code == 200
-    assert "Compute is not answering" in page.text and "default_weightroom_chat" in page.text
+    assert "compute is not answering" in page.text and "default_weightroom_chat" in page.text
 
 
 def test_machine_storage_signals_are_on_database_page(desk_with_machine):

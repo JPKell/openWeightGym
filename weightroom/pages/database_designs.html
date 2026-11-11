@@ -1,0 +1,97 @@
+{# Standalone proposals; no requests to live databases or production mutation controls. #}
+{% from 'parts.html' import page_header, card, empty_row, alert, confirm_check %}
+{% from 'database_parts.html' import table_head, dom_templates %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DB · Three design proposals · openWeightGym</title>
+<style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to databases</a>
+<div class="review-bar d-flex flex-wrap align-items-center justify-content-between gap-2 px-4 py-3 border-bottom">
+  <div><strong>openWeightGym</strong><span class="text-secondary ms-3">DB / design review</span></div>
+  <div class="d-flex flex-wrap align-items-center gap-2"><span class="badge bg-blue-lt">Sample data · simulated actions</span><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div>
+</div>
+<main class="db-design-page">
+{% call pills('Design options', buttons=true, class_='gap-2 mb-2') %}
+{{ pill_button('01 / Compact ledger · recommended', true, attrs={'data-design': 'ledger'}) }}
+{{ pill_button('02 / Node groups', attrs={'data-design': 'nodes'}) }}
+{{ pill_button('03 / Operations desk', attrs={'data-design': 'desk'}) }}
+{% endcall %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4"><p class="small text-secondary mb-0" id="design-description"></p><label class="d-flex align-items-center gap-2 small">Try a state<select class="form-select form-select-sm w-auto" id="scenario"><option value="healthy">All nodes reachable</option><option value="offline">One node unreachable</option><option value="mismatch">Store binding mismatch</option><option value="empty">No stores configured</option></select></label></div>
+<div id="workspace" data-layout="ledger">
+{% call page_header('Databases', pretitle='SYSTEM / STORAGE') %}
+<button class="btn btn-outline-secondary" id="refresh">Refresh snapshot</button><button class="btn btn-primary" id="export-all">Dump all databases</button>
+{% endcall %}
+<div class="snapshot-bar border rounded d-flex flex-wrap align-items-center gap-3 px-3 py-2 mb-3" aria-label="Snapshot summary">
+<strong id="coverage"></strong><span id="totals"></span><span class="text-secondary small ms-md-auto" id="snapshot-time">Sample snapshot · 11 Nov 2026, 18:42 UTC</span>
+</div>
+<div id="coverage-note" hidden>{{ alert('warning', class_='py-2', attrs={'id': 'coverage-message'}) }}</div>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="node-strip" role="group" aria-label="Node coverage"></div>
+<div id="status" role="status" aria-live="polite" class="small mb-2"></div>
+<div class="db-workspace">
+{% call card(id='inventory', body=false, attrs={'aria-label': 'Database inventory'}) %}
+<div class="d-flex flex-wrap align-items-center gap-2 p-3 border-bottom db-filters">
+<input id="search" type="search" class="form-control flex-fill" aria-label="Search databases" placeholder="Find a database, owner or table…">
+<select id="node-filter" class="form-select w-auto" aria-label="Filter by node"><option value="all">All nodes</option></select>
+<select id="engine-filter" class="form-select w-auto" aria-label="Filter by engine"><option value="all">All engines</option><option>PostgreSQL</option><option>SQLite</option></select>
+<button class="btn btn-outline-secondary btn-sm" id="expand-all">Expand visible</button>
+</div>
+<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 db-inventory" aria-label="Databases">{{ table_head() }}<tbody id="databases"></tbody></table></div>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 border-top">
+<span class="small text-secondary" id="visible-count"></span><div class="d-flex flex-wrap align-items-center gap-2"><strong class="small" id="selection">No databases selected</strong><button class="btn btn-outline-primary btn-sm" id="export-selected" disabled>Dump selected</button><button class="btn btn-outline-danger btn-sm" id="purge-selected" disabled>Purge by date…</button></div>
+</div>
+{% endcall %}
+<aside id="operations" aria-label="Operations">
+{% call card('Export & maintenance', false, id='operations-card', hint='Choose a database row or select several.') %}
+<p class="small text-secondary">SQL for one database; a ZIP with one SQL dump per database for a batch.</p>
+<div class="d-flex flex-wrap gap-2 mb-3"><button class="btn btn-outline-primary btn-sm" data-all-export>Dump all</button><button class="btn btn-outline-secondary btn-sm" id="reclaim-selected" disabled>Reclaim selected…</button></div>
+<div class="small border-top pt-3"><strong>How cleanup works</strong><p class="text-secondary mt-1 mb-0">Preview eligible records before a cutoff, confirm the deletion, then reclaim disk separately. Accounts, settings and active work stay protected.</p></div>
+{% endcall %}
+{% call card('Recent operations', false, id='jobs-card', body_class='py-2') %}
+<ol class="list-unstyled small mb-0" id="jobs"><li class="py-2"><span class="badge bg-green-lt me-1">Verified backup</span> Front · 2 hours ago</li><li class="py-2 border-top text-secondary">No export or cleanup jobs in this demo yet.</li></ol>
+{% endcall %}
+</aside>
+</div>
+{% call card('Diagnostics & migration', false, id='diagnostics', hint='Store bindings, tools and migration readiness stay available off the main inventory.') %}
+<p class="small">Engines belong to stores. Front plus all four compute nodes remain visible even when a node cannot answer. Multiple services using the same physical database count once.</p>
+<div class="table-responsive"><table class="table table-sm" aria-label="Dump tools by node"><thead><tr><th>Node</th><th>Engine in use</th><th>Dump method</th><th>Restore capability</th></tr></thead><tbody id="tools"></tbody></table></div>
+<p class="small text-secondary mb-0">Migration profiles and reports belong here. An export job is not a verified recovery set; multi-database exports have separate snapshot times unless writers are coordinated.</p>
+{% endcall %}
+<p class="small text-secondary">Illustrative names, counts, engines and sizes. Mixed PostgreSQL/SQLite is supported in this proposal. No live inventory has been queried.</p>
+</div>
+{% call card('Code-fix TODO', false, id='code-todo', hint='Derived from the current routes, catalog and recovery code; canonical source: docs/database-storage.md.') %}<div class="small db-todo">{{ todo|safe }}</div>{% endcall %}
+</main>
+
+{{ dom_templates() }}
+
+<dialog id="export-dialog" class="db-dialog" aria-labelledby="export-title">
+{% call card('Review SQL export', class_='mb-0', header_id='export-title') %}
+<p id="export-summary"></p><ul id="export-list" class="small"></ul>
+{{ alert('info', 'Sample download only. Real dumps may include account secrets and retained content; keep them private.', class_='py-2 small') }}
+<p class="small text-secondary" id="export-consistency"></p>
+<div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" id="download-export">Download sample</button><button class="btn btn-outline-secondary" data-close>Cancel</button></div>
+{% endcall %}</dialog>
+
+<dialog id="cleanup-dialog" class="db-dialog" aria-labelledby="cleanup-title">
+{% call card('Purge records & reclaim disk', class_='mb-0', header_id='cleanup-title') %}
+<p class="small" id="cleanup-scope"></p>
+<form id="cleanup-form" data-hold-refresh>
+<div class="row g-3 mb-3"><div class="col-sm-7"><label for="cutoff" class="form-label">Delete records before (UTC)</label><input type="date" id="cutoff" value="2026-10-01" max="2026-11-11" class="form-control"><div class="form-hint">Strictly before 00:00 UTC on this date; that date is kept.</div></div><div class="col-sm-5 d-flex align-items-end"><button type="button" class="btn btn-outline-primary" id="preview-purge">Preview purge</button></div></div>
+<div id="purge-preview" hidden>
+<div class="table-responsive mb-3"><table class="table table-sm" aria-label="Purge preview"><thead><tr><th>Database / table</th><th class="text-end">Records to delete</th><th>Reason / policy</th></tr></thead><tbody id="purge-rows"></tbody></table></div>
+<p class="small text-secondary" id="purge-impact"></p>
+{{ confirm_check('I reviewed the cutoff and eligible records. Delete them permanently.', 'confirm-purge') }}
+<button type="button" class="btn btn-danger mb-3" id="apply-purge" disabled>Simulate purge</button>
+</div>
+<div class="border-top pt-3 mt-2"><strong class="d-block mb-2">Reclaim disk space</strong><p class="small text-secondary" id="reclaim-impact"></p>
+{{ confirm_check('Allow maintenance locks and the required temporary disk space.', 'confirm-reclaim') }}
+<button type="button" class="btn btn-outline-secondary" id="apply-reclaim" disabled>Simulate disk reclaim</button></div>
+</form>
+<div id="cleanup-result" role="status" aria-live="polite" class="small my-3"></div>
+<button class="btn btn-outline-secondary" data-close>Close</button>
+{% endcall %}</dialog>
+<script>{{ javascript|safe }}</script>
+</body></html>

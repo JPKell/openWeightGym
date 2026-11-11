@@ -1,0 +1,12 @@
+/* Live operations desk, using the console's shared palette and controls. */
+.database-console .database-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 285px; gap: 1rem; align-items: start; }
+.database-console .database-filters #search { width: auto; min-width: 12rem; }
+.database-console .db-inventory { min-width: 1050px; font-variant-numeric: tabular-nums; }
+.database-console .db-inventory > tbody > tr > td { padding-block: .35rem; }
+.database-console .db-detail > td { padding: 0 !important; background: var(--tblr-bg-surface-secondary); }
+.database-console .detail-content { border-left: 3px solid var(--bs-primary); }
+.database-console .db-detail table { background: var(--bs-body-bg); }
+.database-dialog { padding: 0; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius-lg); width: min(800px, calc(100vw - 2rem)); max-height: 90vh; color: var(--bs-body-color); background: var(--bs-body-bg); }
+.database-dialog::backdrop { background: #0008; }
+@media (max-width: 1200px) { .database-console .database-workspace { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) { .database-console .database-filters .form-select { flex: 1 1 120px; } }
