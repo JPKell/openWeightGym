@@ -264,7 +264,9 @@ Adding voice to a remote node needs the console's voice-service key: the install
 a new pairing code, or accept `--voice-key-file FILE` (and `--services voice`).
 
 Strata builds the [reviewed source revision](https://github.com/Niko1221/Strata/tree/477ac13cbe8e582c20484871ce459d20d82df09d)
-in `runtimes/strata`, with a private Python environment. Selecting it permits hybrid host RAM use
+in `runtimes/strata`, with a private Python environment. It queries GPU compute capabilities through
+`nvidia-smi` (7.5 or newer required) and passes explicit architectures so upstream can select
+the matching FP4 kernels on RTX 50 cards. Selecting it permits hybrid host RAM use
 up to `--strata-host-ram-mib` (22528 MiB by default). Its systemd drop-in delegates memory without
 raising the worker's existing limits; the budget must fit within `MemoryMax`, with
 `MemorySwapMax=0`. The adapter still requires supported text models and prepared tokenizer files.

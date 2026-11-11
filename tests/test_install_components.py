@@ -255,6 +255,8 @@ def strata_install(tmp_path, monkeypatch):
     def run(command, **kwargs):
         command = [str(value) for value in command]
         commands.append(command)
+        if command[0] == "nvidia-smi":
+            return subprocess.CompletedProcess(command, 0, stdout="12.0\n12.0\n", stderr="")
         if command[:2] == ["git", "clone"]:
             (Path(command[-1]) / "serve").mkdir(parents=True)
         elif "checkout" in command:
@@ -289,16 +291,58 @@ def test_strata_build_is_pinned_private_and_does_not_fetch_models(strata_install
     assert strata.REVISION in node["source"]
     assert any(command[-2:] == ["--detach", strata.REVISION] for command in commands)
     assert any("-DSTRATA_ENABLE_CUDA=ON" in command for command in commands)
+    assert any("-DCMAKE_CUDA_ARCHITECTURES=120" in command for command in commands)
     assert not any("setup.py" in " ".join(command) or "huggingface" in " ".join(command) for command in commands)
     assert next((args.root / "data/installation/strata-backups").iterdir()).read_text() == original
     dropin = (args.unit_dir / "loadcoach.service.d/50-owg-strata.conf").read_text()
     assert "Delegate=memory" in dropin and "MemoryMax=" not in dropin
     count = len(commands)
     strata.install(args)
-    assert not any(command[0] in ("git", "cmake") for command in commands[count:])
+    assert not any(command[0] in ("git", "cmake", "nvidia-smi") for command in commands[count:])
     Path(node["executable"]).write_text("tampered")
     with pytest.raises(ValueError, match="artifacts changed"):
         strata.install(args)
+
+
+@pytest.mark.parametrize("capabilities, expected", [
+    ("12.0\n12.0\n", "120"),
+    ("8.9\n12.1\n7.5\n8.9\n", "75;89;121"),
+    (" 8.6 \n", "86"),
+])
+def test_strata_resolves_explicit_cuda_architectures(monkeypatch, capabilities, expected):
+    environment = {"PATH": "/cuda/bin:/usr/bin"}
+
+    def query(command, **kwargs):
+        assert command == ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"]
+        assert kwargs["env"] is environment and kwargs["timeout"] == 30
+        return subprocess.CompletedProcess(command, 0, stdout=capabilities)
+
+    monkeypatch.setattr(strata, "run", query)
+    assert strata.cuda_architectures(environment) == expected
+
+
+@pytest.mark.parametrize("capabilities", ["", "[N/A]\n", "12.0\nunknown\n", "6.1\n12.0\n"])
+def test_strata_refuses_invalid_gpu_before_downloading(strata_install, monkeypatch, capabilities):
+    args, config, commands, _ = strata_install
+    original = config.read_bytes()
+    monkeypatch.setattr(strata, "run", lambda command, **kwargs:
+                        subprocess.CompletedProcess(command, 0, stdout=capabilities))
+    with pytest.raises(ValueError, match="compute capabilit"):
+        strata.install(args)
+    assert config.read_bytes() == original and not commands
+    assert not (args.root / "runtimes").exists()
+
+
+@pytest.mark.parametrize("problem", [FileNotFoundError("nvidia-smi"),
+                                      subprocess.CalledProcessError(1, ["nvidia-smi"]),
+                                      subprocess.TimeoutExpired(["nvidia-smi"], 30)])
+def test_strata_gpu_query_failure_is_actionable(monkeypatch, problem):
+    def query(*args, **kwargs):
+        raise problem
+
+    monkeypatch.setattr(strata, "run", query)
+    with pytest.raises(ValueError, match="check that nvidia-smi"):
+        strata.cuda_architectures({})
 
 
 def test_failed_strata_build_preserves_settings_and_can_retry(strata_install):

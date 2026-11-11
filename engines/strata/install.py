@@ -29,6 +29,23 @@ def run(command, **kwargs):
     return subprocess.run([str(value) for value in command], check=True, **kwargs)
 
 
+def cuda_architectures(environment):
+    """Resolve native GPUs so Strata can select architecture-specific FP4 kernels."""
+    # Upstream rewrites numeric 12x to 12xa for W4A4; literal "native" bypasses it.
+    try:
+        result = run(["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+                     capture_output=True, text=True, timeout=30, env=environment)
+    except (OSError, subprocess.SubprocessError) as problem:
+        raise ValueError("Cannot detect Strata CUDA architectures; check that nvidia-smi can query GPU compute capabilities") from problem
+    capabilities = result.stdout.strip().splitlines()
+    if not capabilities or any(not re.fullmatch(r"[1-9][0-9]*\.[0-9]", value.strip()) for value in capabilities):
+        raise ValueError("nvidia-smi did not report valid GPU compute capabilities for Strata")
+    architectures = sorted({int(value.strip().replace(".", "")) for value in capabilities})
+    if architectures[0] < 75:
+        raise ValueError("Strata requires NVIDIA GPUs with compute capability 7.5 or newer")
+    return ";".join(map(str, architectures))
+
+
 def digest(path):
     """Hash an installed native artifact."""
     with path.open("rb") as stream:
@@ -109,7 +126,7 @@ def install(args):
         verify(NodeSettings.read(options))
         print("Strata source, native libraries and Python environment verified.")
         return
-    print(f"Strata: CUDA; revision {REVISION}; host RAM budget {args.host_ram_mib} MiB; target {target}")
+    print(f"Strata: CUDA; revision {REVISION}; host RAM budget {args.host_ram_mib} MiB; target {target}", flush=True)
     if args.dry_run:
         print("Would build the reviewed native runtime, create private Python, configure Strata and delegate worker memory. No models downloaded.")
         return
@@ -119,6 +136,8 @@ def install(args):
     if not manifest.exists():
         from engines.build import build_environment
         environment = build_environment("cuda", "Strata")
+        architectures = cuda_architectures(environment)
+        print(f"Strata: CUDA architectures {architectures}", flush=True)
         target.mkdir(parents=True, exist_ok=True)
         source = Path(node.source)
         if not source.exists():
@@ -130,7 +149,8 @@ def install(args):
         build = target / "build"
         run(["cmake", "-S", source, "-B", build, "-DCMAKE_BUILD_TYPE=Release",
              "-DSTRATA_ENABLE_CUDA=ON", "-DSTRATA_BUILD_TESTS=OFF", "-DSTRATA_NATIVE_EXPERTS=ON",
-             "-DCMAKE_CUDA_ARCHITECTURES=native", "-DCMAKE_CUDA_COMPILER=" + environment["CUDACXX"]], env=environment)
+             "-DCMAKE_CUDA_ARCHITECTURES=" + architectures,
+             "-DCMAKE_CUDA_COMPILER=" + environment["CUDACXX"]], env=environment)
         run(["cmake", "--build", build, "--target", "strata", "strata_kq", "--parallel", args.jobs], env=environment)
         run([sys.executable, "-m", "venv", target / "venv"])
         run([node.python, "-m", "pip", "install", "--disable-pip-version-check", *REQUIREMENTS])
