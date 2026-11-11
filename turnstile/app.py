@@ -23,6 +23,7 @@ from loadcoach import observability as observation
 from turnstile import observations
 
 import asyncio
+from collections import Counter
 import contextvars
 import threading
 import base64
@@ -1325,6 +1326,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     installation_lock = asyncio.Lock()
     configuration_lock = asyncio.Lock()
     installation_reservations = {}
+    installation_placing: Counter = Counter()  # (node, path) of files pending installations will place
+    installation_claims: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def model_file_inventory(user, refresh=False):
         """Read all managed files without requiring the artifact host to be the source. `refresh` looks through every folder again first."""
@@ -1421,7 +1424,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             yield upstream
 
     async def install_model(request):
-        """Preflight a complete model bundle before queueing verified file placement and creation."""
+        """Preflight a complete model bundle before queueing verified file placement and creation.
+
+        `machine` names one destination; `machines` names several, which are all checked before any
+        is started. Each destination is then a job of its own, and a file two of them need placed in
+        the same spot, such as one stored file promoted into its cache, is placed once.
+        """
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
@@ -1429,38 +1437,78 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(403, "Model management is required.")
         try:
             asked = json.loads(await request.body())
-            name, destination, candidate = asked["name"], asked["machine"], asked["settings"]
-            if destination not in machines.names or not isinstance(name, str) or not name:
+            name, wanted = asked["name"], asked["settings"]
+            several = "machines" in asked
+            destinations = list(dict.fromkeys(asked["machines"] if several else [asked["machine"]]))
+            if not isinstance(name, str) or not name or not destinations or not all(isinstance(one, str) for one in destinations):
                 raise ValueError("Choose a model name and compute node.")
-            if not machines.enabled(destination):
-                raise ValueError(f"Compute node {destination} is {machines.state(destination)}. Enable it before installing a model.")
+            for destination in destinations:
+                if destination not in machines.names:
+                    raise ValueError("Choose a model name and compute node.")
+                if not machines.enabled(destination):
+                    raise ValueError(f"Compute node {destination} is {machines.state(destination)}. Enable it before installing a model.")
+            planned, problems, placing = [], [], Counter()
             async with installation_lock:
                 nodes = await model_file_inventory(user)
-                inventory = await ask_machine(user, "GET", "/loadcoach/models", machine=destination, timeout=5)
-                engines = await ask_machine(user, "GET", "/loadcoach/engines", machine=destination, timeout=5)
-                if inventory is None or inventory.status_code != 200 or engines is None or engines.status_code != 200:
-                    raise ValueError("The destination node cannot be checked; no action was started.")
-                if any(row["name"] == name for row in inventory.json()["models"]):
-                    raise ValueError(f"There is already a model named {name} on {destination}.")
-                selected = engine_for(candidate)
-                if isinstance(asked.get('generation'), dict):
-                    candidate = with_generation(candidate, asked['generation'])
-                    for flag in generation({'flags': inventory.json().get('defaults') or {}})['flags']:
-                        candidate['flags'].setdefault(flag, None)
-                installed = next((one for one in engines.json()["engines"] if one["id"] == selected.id), {})
-                if not installed.get("enabled") or not installed.get("available"):
-                    raise ValueError(f"{selected.label} is not available on {destination}.")
-                # Node schema validation is read-only and runs before any transfer.
-                selected.model.check_model(name, selected.model.effective({key:value for key,value in candidate.items() if key != 'order'}, inventory.json().get("defaults") or {}),
-                                           tuple(inventory.json().get("cards") or []))
-                prepared = installation_plan(candidate, nodes, destination, asked.get("source_machine", ""))
-                for key, allocation in prepared["allocations"].items():
-                    if allocation["free"] < allocation["bytes"] + installation_reservations.get(key, 0) + SPARE:
-                        raise ValueError(f"Not enough cache space on {allocation['node']} after pending transfers; no action was started.")
-                for key, allocation in prepared["allocations"].items():
-                    installation_reservations[key] = installation_reservations.get(key, 0) + allocation["bytes"]
+                for destination in destinations:
+                    try:
+                        planned.append(await prepare_installation(user, name, destination, wanted, asked, nodes, placing))
+                    except ValueError as problem:
+                        problems.append(f"{destination}: {problem}" if several else str(problem))
+                if problems:
+                    raise ValueError(" ".join(problems) + (" Nothing was started." if several else ""))
+                for one in planned:
+                    claim_installation(one["prepared"], 1)
         except (ValueError, KeyError, TypeError) as problem:
             return error(409, str(problem))
+        jobs = [start_installation(user, name, asked, **one) for one in planned]
+        return JSONResponse({"jobs": jobs} if several else jobs[0], status_code=202)
+
+    async def prepare_installation(user, name, destination, candidate, asked, nodes, placing):
+        """Check one destination and plan its files. `placing` counts the files that destinations
+        planned earlier in the same request will place, so that a shared one is counted once."""
+        inventory = await ask_machine(user, "GET", "/loadcoach/models", machine=destination, timeout=5)
+        engines = await ask_machine(user, "GET", "/loadcoach/engines", machine=destination, timeout=5)
+        if inventory is None or inventory.status_code != 200 or engines is None or engines.status_code != 200:
+            raise ValueError("The destination node cannot be checked; no action was started.")
+        if any(row["name"] == name for row in inventory.json()["models"]):
+            raise ValueError(f"There is already a model named {name} on {destination}.")
+        selected = engine_for(candidate)
+        if isinstance(asked.get('generation'), dict):
+            candidate = with_generation(candidate, asked['generation'])
+            for flag in generation({'flags': inventory.json().get('defaults') or {}})['flags']:
+                candidate['flags'].setdefault(flag, None)
+        installed = next((one for one in engines.json()["engines"] if one["id"] == selected.id), {})
+        if not installed.get("enabled") or not installed.get("available"):
+            raise ValueError(f"{selected.label} is not available on {destination}.")
+        # Node schema validation is read-only and runs before any transfer.
+        selected.model.check_model(name, selected.model.effective({key:value for key,value in candidate.items() if key != 'order'}, inventory.json().get("defaults") or {}),
+                                   tuple(inventory.json().get("cards") or []))
+        prepared = installation_plan(candidate, nodes, destination, asked.get("source_machine", ""))
+        for step in prepared["steps"]:
+            spot = (step["node"], step["path"])
+            if not step["existing"] and (installation_placing[spot] or placing[spot]):
+                # Another installation will place this file; its room is counted there already.
+                place = step["place"]
+                prepared["allocations"][(step["node"], place.get("filesystem", place["folder"]))]["bytes"] -= step["file"]["size"]
+        for key, allocation in prepared["allocations"].items():
+            if allocation["free"] < allocation["bytes"] + installation_reservations.get(key, 0) + SPARE:
+                raise ValueError(f"Not enough cache space on {allocation['node']} after pending transfers; no action was started.")
+        placing.update((step["node"], step["path"]) for step in prepared["steps"] if not step["existing"])
+        return {"destination": destination, "candidate": candidate, "selected": selected, "inventory": inventory, "prepared": prepared}
+
+    def claim_installation(prepared, sign):
+        """Reserve (1) or release (-1) the room and file placements a planned installation needs."""
+        for key, allocation in prepared["allocations"].items():
+            installation_reservations[key] = installation_reservations.get(key, 0) + sign * allocation["bytes"]
+        installation_placing.update({(step["node"], step["path"]): sign for step in prepared["steps"] if not step["existing"]})
+
+    def placement_claim(node, path):
+        """One installation at a time places a given file on a given node."""
+        return installation_claims.setdefault((node, path), asyncio.Lock())
+
+    def start_installation(user, name, asked, *, destination, candidate, selected, inventory, prepared):
+        """Queue one destination's verified file placement, then its model configuration."""
         number = secrets.token_urlsafe(8)
         job = distributions[number] = {"id": number, "kind": "model-install", "name": name, "machine": destination,
                                        "state": "queued", "file": Path(candidate["flags"]["model"]).name, "targets": {}}
@@ -1469,7 +1517,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             try:
                 placed = await install_files(prepared, lambda machine, path: managed_digest(user, machine, path),
                                              lambda step: promote_model_file(user, step),
-                                             lambda step, digest, progress: transfer_model_file(user, step, digest, progress), job)
+                                             lambda step, digest, progress: transfer_model_file(user, step, digest, progress), job,
+                                             claim=placement_claim)
                 async with configuration_lock:
                     if asked.get('source_model_id'):
                         source = await ask_machine(user, 'GET', '/loadcoach/models', machine=asked.get('source_machine') or 'compute', timeout=5)
@@ -1490,12 +1539,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             except (ValueError, OSError, httpx.HTTPError) as problem:
                 job.update(state="failed", why=str(problem))
             finally:
-                for key, allocation in prepared["allocations"].items():
-                    installation_reservations[key] -= allocation["bytes"]
+                claim_installation(prepared, -1)
         task = asyncio.create_task(run())
         distribution_tasks.add(task)
         task.add_done_callback(distribution_tasks.discard)
-        return JSONResponse(job, status_code=202)
+        return job
 
     async def ask_machine(user: User, method: str, path: str, body: bytes = b"", *, spotter: bool = False,
                           machine: str | None = None, timeout: float | None = 30) -> httpx.Response | None:

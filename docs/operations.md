@@ -58,8 +58,8 @@ For rollback, reverse this patch in those four files and restart the same servic
 later unrelated edits.
 
 Follow-up: Models, Usage, Requests and AI Logs now return an authenticated page shell before
-fetching their contents. The collapsed Add a model form reads node engines and model-file
-headers only when opened. Offline report refreshes also skip `POST /loadcoach/send-log` to
+fetching their contents. The Add a model form reads node engines and model-file
+headers as a fragment of its own, after the page shell. Offline report refreshes also skip `POST /loadcoach/send-log` to
 unavailable workers, removing another two-second timeout per report. Failed loads offer Retry;
 each fragment rechecks the session and permissions. `complete=1` retains the full-data view.
 

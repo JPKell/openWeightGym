@@ -71,12 +71,21 @@ preview still needs a real load to establish that the configuration works.
 
 ### Models and node settings
 
-Open **Models** and choose **LLM**, **Image** or **Audio** above the catalogue table.
-**Add a model** is above the table. Choose a cache/storage file and a destination node;
-image components and complete audio packages have their own configuration forms. A language file with valid trained-context metadata starts at half that context minimum and the full maximum; both remain editable. New llama.cpp entries use automatic cards and allow splitting; detailed placement stays on their node page.
-Installation checks the complete bundle's cache capacity, leaves 1 GiB spare, retains storage
-originals and verifies SHA-256 before adding the model. Insufficient space blocks the operation.
-Progress and failures appear on Models.
+Open **Models**. The **Compute node** pills show **All** nodes' models or one node's, and
+**LLM**, **Image** or **Audio** choose the catalogue table.
+**Add a model** is below the table. Tick one or more compute nodes, then choose a
+cache/storage file and, for a model that sees pictures, a projector file. Files are listed as
+node · cache/storage · file name · size; the full path is in each entry's tooltip. Choosing a
+file names the model after it, in lower case and without the extension, until you type a name
+of your own. Image components and complete audio packages have their own configuration forms.
+A language file with valid trained-context metadata starts at half that context minimum and the
+full maximum, and the trained context is noted beneath the form; both remain editable. New
+llama.cpp entries use automatic cards and allow splitting; detailed placement stays on their
+node page.
+Installation checks every ticked node's cache capacity for the complete bundle, leaves 1 GiB
+spare, retains storage originals and verifies SHA-256 before adding the model. If any ticked
+node refuses, nothing starts. Each node then has its own progress and failures on Models, and a
+stored file that several nodes need is promoted into its cache once.
 
 The audio form lists files already in cache/storage, with optional companion files. Download
 other compatible weights through **Files → Hugging Face**, then select their runtime family.

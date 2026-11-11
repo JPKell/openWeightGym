@@ -45,7 +45,7 @@ def test_usage_appears_after_navigation_and_retries_a_failed_report(deferred_con
         browser.close()
 
 
-def test_model_files_load_only_after_opening_add_model(deferred_console):
+def test_model_files_load_after_the_model_list_into_the_open_add_model_card(deferred_console):
     server, calls, _, _, _ = deferred_console
     pending = {}
 
@@ -60,11 +60,12 @@ def test_model_files_load_only_after_opening_add_model(deferred_console):
         browser, page = browser_context(engine, server, capture=capture)
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
-        page.goto('http://console.test/models', wait_until='load')
+        # Add a model is always open; its editor is a fragment of its own, so the list does not wait for it.
+        with page.expect_request('**/models?part=editor'):
+            page.goto('http://console.test/models', wait_until='load')
         playwright.expect(page.locator('#models-table')).to_be_visible()
         assert '/turnstile/models/files' not in calls
-        with page.expect_request('**/models?part=editor'):
-            page.locator('#add-model > summary').click()
+        assert page.locator('#add-model').evaluate('el => el.tagName') == 'SECTION'
         playwright.expect(page.locator('#model-editor')).to_contain_text('Loading node engines and model files')
         response = server.get('/models?part=editor', headers={'HX-Request': 'true'})
         pending.pop('editor').fulfill(status=response.status_code, content_type='text/html', body=response.content)

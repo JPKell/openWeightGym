@@ -23,12 +23,12 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {# htmx keeps no copy of a page for the Back button: going back loads the page again, so nothing that was shown is kept in the browser. #}
 <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
 <script src="/static/htmx.min.js" defer></script>
-<script src="/static/pieces.js?v=11" defer></script>
+<script src="/static/pieces.js?v=12" defer></script>
 <script src="/static/deferred.js?v=1" defer></script>
 <script src="/static/telemetry.js?v=4" defer></script>
 <script src="/static/sort.js?v=5" defer></script>
 <script src="/static/navigation.js?v=4" defer></script>
-<script src="/static/console.js?v=10" defer></script>
+<script src="/static/console.js?v=11" defer></script>
 <script src="/static/user-picker.js?v=1" defer></script>
 {% if person and nav.active == '/chat' %}<script src="/static/chat_sidebar.js?v=2" defer></script>{% endif %}
 {% block scripts %}{% endblock %}

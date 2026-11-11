@@ -3445,7 +3445,14 @@ what it is doing now, and when it was last asked for. "Now" is a few words: `not
 `old settings` if it was changed while loaded, and `its file is missing` in red. The list asks
 for itself again every five seconds, so it stays true while it is open.
 
-Below the model list is a form to add a model: name, a cache/storage file picker, context size and cards. The LLM/Image/Audio pills select the table type. Cards defaults to
+Above the list, Compute node pills show All nodes' models (`/models`) or one node's
+(`/models?node=NAME`), and the LLM/Image/Audio pills select the table type. Below the model
+list is a form to add a model: the compute nodes to add it to (ticked boxes; a node that is not
+accepting work cannot be ticked), a cache/storage file picker, the engine, the name, a projector
+picker, context size and cards. The pickers label each file `node · tier · file name · size`
+and keep the full path as its title. Choosing a file fills the name with the file's own name,
+lower-cased and without its extension, unless a name has been typed. The trained-context note
+and the reason Add cannot be used yet sit in a row beneath the fields. Cards defaults to
 `any`, including when the field is blank or omitted on submission; `0` explicitly selects
 CPU only. Adding refuses a name
 that is taken. LoadCoach's `POST /loadcoach/models/NAME` replaces by default, so `?new` was
@@ -3455,6 +3462,12 @@ added to it for this: with it, a taken name gets `409` and nothing changes.
 `GET /turnstile/models/files` inventories every configured node under `manage-models`.
 `POST /turnstile/models/install` checks the complete referenced bundle and aggregate free space
 per node/filesystem, including pending installs and 1 GiB spare, before queueing any mutation.
+`machine` names one destination and answers with its job. `machines` names several: each is
+checked before any starts, a refusal from one is reported as `NODE: why. Nothing was started.`,
+and the answer is `{"jobs": [...]}`, one per node. A file that several destinations place in
+the same spot, such as a stored file promoted into its cache, is counted once against free
+space and placed once. The other installations wait for it and use the copy whose SHA-256
+matches.
 Storage promotion uses Files' atomic copy without removing the original. Transfers use signed
 `/loadcoach/files/hash` and `/loadcoach/files/content` with Spotter's existing size/hash-verified
 receiver; relative audio/component paths are retained and conflicting files are never overwritten.

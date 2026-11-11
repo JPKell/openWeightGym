@@ -110,12 +110,17 @@
   addEventListener('pageshow', () => { for (const form of working.keys()) finishWorking(form); });
   document.addEventListener('change', event => {
     if (event.target.matches('[data-engine-picker]')) {
+      // The page again with the engine's own fields, keeping what was chosen. `node` stays the page's pill;
+      // the nodes ticked for the new model travel as `add_to`.
       const url = new URL(window.location.href);
+      url.hash = '';
       url.searchParams.set('engine', event.target.value);
-      const node = event.target.form.querySelector('[name="node"]');
-      if (node) url.searchParams.set('node', node.value);
+      url.searchParams.delete('add_to');
+      for (const box of event.target.form.querySelectorAll('[data-model-node]:checked')) url.searchParams.append('add_to', box.value);
       const picker = event.target.form.querySelector('[data-model-file]');
       if (picker?.value) url.searchParams.set('file', JSON.parse(picker.value).path);
+      const projector = event.target.form.querySelector('[data-model-projector]');
+      if (projector?.value) url.searchParams.set('projector', projector.value); else url.searchParams.delete('projector');
       const name = event.target.form.querySelector('[name="name"]');
       if (name?.value) url.searchParams.set('name', name.value);
       window.location.assign(url.href);

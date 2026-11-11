@@ -566,7 +566,7 @@ def test_a_model_is_added_edited_and_removed_from_its_one_page(desk, tmp_path):
     assert "could not be read as a model file" in added.text  # three megabytes of x is no model, and the page says so
     assert kept.stored("org/small:v1") == {"gpus": "any", "allow_split":True, "flags": {"model": str(file), "ctx-size": 4096}}
     again = browser.post("/models", data={"name": "org/small:v1", "file": str(file), "ctx": "1", "cards": ""})
-    assert again.status_code == 400 and "already a model named org/small:v1" in again.text and f'value="{file}"' in again.text
+    assert again.status_code == 400 and "already a model named org/small:v1" in again.text and re.search(rf'selected( disabled)? title="{re.escape(str(file))}"', again.text)
     assert kept.stored("org/small:v1")["flags"]["ctx-size"] == 4096  # and the one that was there is untouched
 
     # Seed a legacy placement for the remaining editor coverage; creation uses automatic placement.
@@ -692,8 +692,10 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     # "Add" beside a file no model uses opens the Add form with the file in it and a name made from the file's own.
     link = re.search(r'href="(/models\?file=[^"]+)"', files).group(1).replace("&amp;", "&")
     form = browser.get(link + '&complete=1').text
-    assert 'name="artifact" class="form-select"' in form and f'{fresh} · compute · cache' in form and 'value="fresh-download.q8"' in form
-    assert "this file was trained for 32,768" in form and re.search(r'<details[^>]*id="add-model"[^>]*open', form)
+    # The file is offered by where it is, then its name; its folders are left to the option's title.
+    assert 'name="artifact" class="form-select"' in form and f'title="{fresh}"' in form and 'compute · cache · Fresh-Download.Q8.gguf' in form
+    assert 'value="fresh-download.q8"' in form and f'>{Path(fresh).parent}' not in form
+    assert "Trained context: 32,768 tokens." in form and re.search(r'<section[^>]*id="add-model"', form)
 
     # A model's page shows what its file says, and leads to the file's own page, which shows the same.
     its = browser.get("/models/mine").text

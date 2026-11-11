@@ -1690,7 +1690,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return go('/benchmarks/' + back + '?said=' + quote('Queued.' + left_out if section == 'runs' else 'Saved.') + ('&benchmark=' + quote(one('benchmark'), safe='') if section == 'manage' else ''))
 
     async def models_page(request: Request, person: Person, said: str = "", failed: bool = False, form: dict | None = None) -> Response:
-        """Render the merged authorized model catalogue in configured order."""
+        """Render the merged authorized model catalogue in configured order.
+
+        `node` is the pill above the page: one compute node's own models, or all of them merged.
+        Add a model has its own choice of nodes (`add_to`), several at once; with none given it
+        starts from the pill's node, or the only node there is.
+        """
         if 'manage-models' not in person.can:
             return page(request, 'refused.html', person, status=403, why='Your account may not add, change and remove models.')
         asked = request.query_params
@@ -1698,12 +1703,23 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if kind not in ('llm', 'image', 'audio'):
             kind = 'llm'
         part = asked.get('part') if asked.get('complete') != '1' else None
-        if initial_page(request) and form is None and not failed:
-            initial_form = ({'file': asked['file'], 'trained': asked.get('trained', ''),
-                             'name': asked.get('name') or Path(asked['file']).stem.lower()} if 'file' in asked else {})
+        shown_node = asked.get('node', '')
+        if form is None and any(key in asked for key in ('file', 'name', 'projector')):
+            # "Add" was pressed beside a file on the Files page, or the engine was changed. The file goes
+            # into the form, with a name made from the file's own, for the person to change or keep.
+            form = {"file": asked.get("file", ""), "trained": asked.get("trained", ""), "projector": asked.get("projector", ""),
+                    "name": asked.get("name") or (Path(asked["file"]).stem.lower() if asked.get("file") else "")}
+        node_choices = []
+        if part != 'list':
+            nodes_answer = await ask("GET", "/turnstile/machines", person.key)
+            node_choices = nodes_answer.json().get("machines", []) if nodes_answer.is_success else []
+            names = [node["name"] for node in node_choices]
+            if node_choices and not {shown_node, *asked.getlist('add_to')} - {''} <= set(names):
+                return page(request, "refused.html", person, status=404, why="That compute node is not configured.")
+        if initial_page(request) and not failed:
             return page(request, 'models.html', person, deferred=True, known={}, kind=kind,
                         list_url=fragment_url(request, 'list'), editor_url=fragment_url(request, 'editor'),
-                        selected_node=asked.get('node', 'compute'), form=initial_form,
+                        node_choices=node_choices, shown_node=shown_node, form=form or {},
                         said=said or asked.get('said', ''), failed=False)
         try:
             known = await all_models(request, person) if part != 'editor' else {'models': []}
@@ -1713,43 +1729,53 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return fragment_error(request, person, 'models', 'list', known) if part == 'list' else known
         kinds = {"sdcpp": "image", "audiocpp": "audio"}
         known['models'] = [one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == kind]
-        progress = await ask("GET", "/turnstile/artifacts/distributions", person.key) if asked.get("install") else None
-        installation = next((job for job in progress.json().get("distributions", []) if job["id"] == asked.get("install")), None) if progress and progress.is_success else None
+        wanted_jobs = asked.getlist("install")
+        progress = await ask("GET", "/turnstile/artifacts/distributions", person.key) if wanted_jobs else None
+        installations = [job for job in progress.json().get("distributions", []) if job["id"] in wanted_jobs] if progress and progress.is_success else []
         if part == "list":  # the list asking for itself again
             return page(request, "models_list.html", person, known=known, address=lambda label: node_model_address(request, label),
-                        kind=kind, installation=installation, adaptor_models=plugins.models(person.me) if kind == 'llm' else [])
-        if form is None and "file" in asked:
-            # "Add" was pressed beside a file on the Files page. Its path goes into the form, with
-            # a name made from the file's own, for the person to change or keep.
-            form = {"file": asked["file"], "trained": asked.get("trained", ""), "name": asked.get("name") or Path(asked["file"]).stem.lower()}
-        nodes_answer = await ask("GET", "/turnstile/machines", person.key)
-        node_choices = nodes_answer.json().get("machines", []) if nodes_answer.is_success else []
-        selected_node = (form or {}).get("node") or asked.get("node", "compute")
-        if node_choices and selected_node not in {node["name"] for node in node_choices}:
-            return page(request, "refused.html", person, status=404, why="That compute node is not configured.")
-        if part == 'editor':
-            known['cards'] = [card['card'] for node in node_choices if node['name'] == selected_node for card in node.get('cards', [])]
-        engine_answer = await ask("GET", "/turnstile/machines/" + quote(selected_node, safe="") + "/engines", person.key)
-        engine_choices = engine_answer.json().get("engines", []) if engine_answer.is_success else [
-            {"id": "llama_cpp", "label": "llama.cpp", "enabled": True, "schema": engine_for().schema()}] if engine_answer.status_code == 404 else []
-        engine_choices=[row for row in engine_choices if row.get('schema',{}).get('selectable',True)]
+                        kind=kind, installations=installations, adaptor_models=plugins.models(person.me) if kind == 'llm' else [])
+        names = [node["name"] for node in node_choices]
+        add_nodes = ((form or {}).get("nodes") or asked.getlist("add_to") or ([shown_node] if shown_node else names if len(names) == 1 else []))
+        # Each node's engines; an engine can be chosen when it is enabled on every node it is added to.
+        async def engines_of(name):
+            """One node's engines; a node too old to list them has llama.cpp alone."""
+            answer = await ask("GET", "/turnstile/machines/" + quote(name, safe="") + "/engines", person.key)
+            return answer.json().get("engines", []) if answer.is_success else [
+                {"id": "llama_cpp", "label": "llama.cpp", "enabled": True, "schema": engine_for().schema()}] if answer.status_code == 404 else []
+        engine_nodes = names or ["compute"]
+        engine_choices = {}
+        for name, rows in zip(engine_nodes, await asyncio.gather(*(engines_of(name) for name in engine_nodes))):
+            for row in rows:
+                if not row.get('schema', {}).get('selectable', True):
+                    continue
+                merged = engine_choices.setdefault(row["id"], {**row, "enabled": False, "nodes": [], "cards": []})
+                if row["enabled"]:
+                    merged.update(enabled=True)
+                    merged["nodes"].append(name)
+                if name in (add_nodes or engine_nodes):
+                    merged["cards"] += [card for card in row.get("cards", []) if card not in merged["cards"]]
+        engine_choices = list(engine_choices.values())
         chosen_engine = (form or {}).get("engine") or asked.get("engine", "llama_cpp")
         enabled_engines = [row for row in engine_choices if row["enabled"]]
         engine_schema = next((row["schema"] for row in enabled_engines if row["id"] == chosen_engine), None)
         if engine_schema is None and enabled_engines:
-            said, failed = "Choose an engine available on the selected node.", True
+            said, failed = "Choose an engine available on the chosen nodes.", True
             chosen_engine, engine_schema = enabled_engines[0]["id"], enabled_engines[0]["schema"]
         chosen = next((row for row in engine_choices if row['id'] == chosen_engine), {})
-        if 'cards' in chosen:
-            known['cards'] = chosen['cards']
+        known['cards'] = chosen.get('cards') or [card['card'] for node in node_choices if node['name'] in (add_nodes or names) for card in node.get('cards', [])]
         available = await ask("GET", "/turnstile/models/files", person.key) if kind == 'llm' else None
         file_nodes = available.json().get("nodes", []) if available and available.is_success else []
-        file_choices = [{**file, "machine": node["name"]} for node in sorted(file_nodes, key=lambda row: row['name'] != selected_node)
-                        for file in node.get("files", []) if file.get("facts", {}).get("what") == "model" and not file.get("moving")]
+        # The chosen nodes' own files come first; a file anywhere else is copied to them.
+        ordered = sorted(file_nodes, key=lambda row: row['name'] not in add_nodes)
+        def files_that_are(what):
+            """The usable files of one kind ("model" or "projector"), each with the node it is on."""
+            return [{**file, "machine": node["name"]} for node in ordered for file in node.get("files", [])
+                    if file.get("facts", {}).get("what") == what and not file.get("moving")]
         return page(request, 'models_editor.html' if part == 'editor' else "models.html", person, status=400 if failed else 200, known=known,
-                    kind=kind, installation=installation, file_choices=file_choices, file_nodes=file_nodes,
-                    node_choices=node_choices, selected_node=selected_node, engine_choices=engine_choices,
-                    selected_engine=chosen_engine, engine_schema=engine_schema,
+                    kind=kind, installations=installations, file_choices=files_that_are("model"), projector_choices=files_that_are("projector"),
+                    file_nodes=file_nodes, node_choices=node_choices, shown_node=shown_node, add_nodes=add_nodes,
+                    engine_choices=engine_choices, selected_engine=chosen_engine, engine_schema=engine_schema,
                     said=said or asked.get("said", ""), failed=failed, form=form or {}, address=lambda label: node_model_address(request, label),
                     adaptor_models=plugins.models(person.me) if kind == 'llm' else [])  # fmt: skip
 
@@ -1860,7 +1886,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return go('/dry-fit?said=' + quote(message))
 
     async def add_model(request: Request, person: Person) -> Response:
-        """Parse the engine-specific form and add the model on the selected node."""
+        """Parse the engine-specific form and add the model on each chosen node."""
         form = await typed_lists(request)
         if form.get("artifact"):
             try:
@@ -1872,16 +1898,26 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         try:
             made = settings_from(form)
         except ValueError as problem:
-            return await models_page(request, person, str(problem), failed=True, form={key: values[-1] for key, values in form.items()})
+            return await models_page(request, person, str(problem), failed=True, form={key: values[-1] for key, values in form.items()} | {"nodes": form.get("node", [])})
         if made.get("engine", "llama_cpp") == "llama_cpp":
             made.update(gpus="any", allow_split=True)
         # `new`: add only. Without it LoadCoach would replace a model that has this name already.
         if name and form.get("prepare_files"):
-            answer = await ask("POST", "/turnstile/models/install", person.key, json={"name": name,
-                               "machine": form.get("node", [request.query_params.get("node") or "compute"])[-1],
+            # The nodes ticked on the form, each given the model. Turnstile checks them all before starting any.
+            nodes = list(dict.fromkeys(node for node in form.get("node", []) if node)) or (
+                [request.query_params["node"]] if request.query_params.get("node") else [])
+            kept = {key: values[-1] for key, values in form.items()} | {"nodes": nodes}
+            if not nodes:
+                return await models_page(request, person, "Choose at least one compute node.", failed=True, form=kept)
+            answer = await ask("POST", "/turnstile/models/install", person.key, json={"name": name, "machines": nodes,
                                "settings": made, "source_machine": form.get("source_machine", [""])[-1]}, timeout=None)
             if answer.status_code == 202:
-                return go("/models?install=" + quote(answer.json()["id"]) + "&said=" + quote("Preparing model files. The model is added only after verification completes."))
+                shown = form.get("shown_node", [""])[-1]
+                where = nodes[0] if len(nodes) == 1 else ", ".join(nodes[:-1]) + " and " + nodes[-1]
+                said = f"Preparing model files for {where}. The model is added to each only after its files are verified."
+                return go("/models?" + urlencode([("install", job["id"]) for job in answer.json()["jobs"]]
+                                                 + ([("node", shown)] if shown else []) + [("said", said)]))
+            return await models_page(request, person, answer.json()["error"]["message"], failed=True, form=kept)
         else:
             answer = await model_api(request, person, "POST", f"/loadcoach/models/{quote(name, safe='/:')}", json=made, params={"new": "1"}) if name else None
         if answer is None or answer.status_code != 201:
