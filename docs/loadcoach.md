@@ -4850,6 +4850,29 @@ UI labels them as historical locations. Quality evidence retains its logical mod
 
 ### Physical-host telemetry
 
+#### Compute node lifecycle
+
+**Settings → Compute nodes** has selection pills for configured nodes, including unreachable
+nodes, and retained registrations from previously removed nodes. Operators with `manage-settings`
+can change a node's lifecycle without contacting it:
+
+- **Disable node** stops new inference, model installation and wake requests through front.
+  Existing work can finish. Monitoring continues and the node stays in the telemetry strip and pages.
+- **Retire node** also stops monitoring and hides the node from telemetry, including after a
+  gateway restart. Other nodes on the same physical host remain visible. Retirement preserves
+  event logs, the host registration and telemetry history under its usual retention policy.
+- **Enable node** makes a configured disabled or retired node eligible again. A retained node
+  that is no longer configured must be paired or configured again first.
+
+Uninstalling services on a compute node does not unregister it on front; retire its registration
+here after uninstalling. Lifecycle is separate from reachability and runtime draining. Front
+stores it in `machine_lifecycle` in the existing event-log database (log migration 11) and audits
+changes with the operator and previous state. `POST /turnstile/machines/{name}/lifecycle` accepts
+`{"state":"active"}`, `disabled` or `retired` under the same permission. The ordinary machine
+inventory omits retired nodes; `?include_retired=1` gives settings operators all retained registrations.
+
+#### Physical host identity and readings
+
 Each physical host has a stable `machine_fingerprint`: SHA-256 of an openWeightGym-specific prefix and
 `/etc/machine-id`. The raw machine ID never crosses the network; hosts without one keep a
 private random ID under `~/.local/share/suite/machine-id`. LoadCoach status and Spotter readings
