@@ -1,0 +1,96 @@
+{% from 'parts.html' import page_header, card, section_title, alert, more %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'fit_parts.html' import dom_templates %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dry fit · Three proposals · openWeightGym</title>
+<style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to Dry fit</a>
+<div class="fit-review-bar border-bottom px-4 py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+  <div><strong>openWeightGym</strong><span class="text-secondary ms-3">Models / Dry fit</span></div>
+  <div class="d-flex flex-wrap align-items-center gap-2"><span class="badge bg-blue-lt">Design preview · sample data</span><button class="btn btn-sm btn-outline-secondary" id="theme">Dark mode</button><button class="btn btn-sm btn-outline-secondary" id="reset">Reset demo</button></div>
+</div>
+<main class="fit-design-page">
+{% call pills('Design options', buttons=true, class_='fit-design-tabs gap-2 mb-3') %}
+{{ pill_button('01 / Selected rows', true, attrs={'data-design': 'workbench'}) }}
+{{ pill_button('02 / Split browser', attrs={'data-design': 'matrix'}) }}
+{{ pill_button('03 / All-model sheet', attrs={'data-design': 'studio'}) }}
+{% endcall %}
+<p class="text-secondary small mb-4" id="design-description"></p>
+<div id="workspace" data-design="workbench">
+{% call page_header('Dry fit', pretitle='MODELS / CAPACITY PLANNING') %}<span class="badge bg-blue-lt align-self-center">30-model catalogue · sample data</span><button class="btn btn-outline-primary" id="review-open">Review set</button>{% endcall %}
+{% call card(id='fit-node-card', body_class='py-3') %}
+<div class="d-flex align-items-center flex-wrap gap-3">
+<label class="fw-semibold" for="node">Work on node</label><select class="form-select w-auto" id="node"><option value="atlas">atlas · GPU + RAM</option><option value="orion">orion · Dual GPU + RAM</option><option value="cedar">cedar · RAM only</option></select>
+<span class="small text-secondary" id="node-summary"></span>
+<label class="d-flex align-items-center gap-2 small ms-md-auto">Try a state<select class="form-select form-select-sm w-auto" id="scenario"><option value="ready">Available</option><option value="unknown">Memory unknown</option><option value="offline">Node offline</option><option value="empty">No local models</option></select></label>
+</div>
+{% endcall %}
+<div id="fit-message" class="small mb-3" role="status" aria-live="polite"></div>
+<div class="fit-live-budget visually-hidden" aria-label="Live combined budget"><strong id="live-budget-state"></strong><span id="live-budget-values"></span></div>
+<div class="fit-workspace">
+<aside id="catalogue" class="fit-catalogue" aria-label="Node model catalogue">
+{% call card('Choose models', id='catalogue-card', hint='Only models available on the selected node.', body_class='p-0') %}
+<div class="p-3 border-bottom">
+<input type="search" id="catalogue-search" class="form-control form-control-sm mb-2" placeholder="Search 30 local models…" aria-label="Search model catalogue">
+<div class="d-flex gap-2"><select id="catalogue-kind" class="form-select form-select-sm" aria-label="Catalogue model type"><option value="all">All types</option><option value="llm">LLM</option><option value="audio">Audio</option><option value="image">Image</option></select><select id="catalogue-sort" class="form-select form-select-sm" aria-label="Sort model catalogue"><option value="name">Name A–Z</option><option value="memory">Smallest memory</option><option value="selected">Selected first</option></select></div>
+</div>
+<div id="catalogue-list" class="fit-catalogue-list" tabindex="0" aria-label="Available model choices"></div>
+<div class="p-3 border-top d-flex align-items-center justify-content-between gap-2 small"><span id="catalogue-count"></span><button class="btn btn-sm btn-primary" id="catalogue-done">Done</button></div>
+{% endcall %}
+</aside>
+<section id="capacity" class="fit-capacity" aria-label="Combined memory preview">
+{% call card(id='capacity-card', body_class='py-3') %}
+<div class="fit-verdict rounded p-2" id="verdict" role="status" aria-live="polite"><strong id="verdict-title"></strong><p class="small mb-0 mt-1" id="verdict-detail"></p></div>
+<div id="resources"></div>
+<div class="fit-accounting small">{% call more('Memory accounting') %}<p id="memory-notes"></p><div class="fit-legend d-flex flex-wrap gap-3"><span><i class="bg-secondary"></i>Other use</span><span><i class="bg-blue"></i>Selected models</span><span><i class="fit-headroom"></i>Kept free</span></div>{% endcall %}</div>
+{% endcall %}
+</section>
+<section id="tuning" class="fit-tuning" aria-label="Model selection and context tuning">
+{% call card(id='tuning-card', body_class='p-0') %}
+<div class="fit-tuning-toolbar p-3 border-bottom">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><strong class="small" id="selection-count"></strong><div class="d-flex gap-2 flex-wrap"><button class="btn btn-sm btn-primary" id="catalogue-open">Choose models</button><button class="btn btn-sm btn-outline-primary" id="auto-fit">Fit unlocked contexts</button></div></div>
+<div class="d-flex align-items-center flex-wrap gap-2">
+{% call pills('Model type', buttons=true, class_='gap-1') %}{% for kind,label in [('all','All'),('llm','LLM'),('audio','Audio'),('image','Image')] %}{{ pill_button(label, kind == 'all', attrs={'data-kind-filter':kind}) }}{% endfor %}{% endcall %}
+<input type="search" id="search" class="form-control form-control-sm" placeholder="Filter rows…" aria-label="Find a model on this node">
+</div>
+</div>
+<form id="fit-editor" data-hold-refresh novalidate aria-label="Dry fit selection"><div class="fit-row-scroll" tabindex="0" aria-label="Model tuning rows"><table class="table table-sm align-middle mb-0 fit-model-table" aria-label="Models and context settings"><thead><tr><th scope="col">Model</th><th scope="col">Placement</th><th scope="col">Context · tokens / fixed profile</th><th scope="col">Memory · GiB</th></tr></thead><tbody id="models"></tbody></table></div></form>
+<p class="small text-secondary px-3 pb-3 mb-0" id="models-empty" hidden>No matching models. Clear your search or choose another type.</p>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 px-3 py-2 border-top small text-secondary"><span id="visible-count"></span><span>Prompt + reply tokens · 1 request</span><button class="btn btn-sm btn-outline-secondary" id="clear">Clear selection</button></div>
+{% endcall %}
+</section>
+<aside id="sets" class="fit-sets" aria-label="Named model sets">
+{% call card(id='sets-card', body_class='fit-set-toolbar') %}
+<form id="save-set" data-hold-refresh>
+<div><label class="form-label small" for="set-name">Named set · this node</label><input class="form-control form-control-sm" id="set-name" maxlength="80" value="Daily assistant" required></div>
+<button class="btn btn-sm btn-primary" id="save" type="submit">Save named set</button>
+<label class="form-check mb-0"><input type="checkbox" class="form-check-input" id="replace"><span class="form-check-label small">Replace saved version</span></label>
+</form>
+<div class="fit-saved-toolbar"><div><label class="form-label small" for="saved-sets">Saved on this node</label><select class="form-select form-select-sm" id="saved-sets"></select></div><button class="btn btn-sm btn-outline-secondary" id="restore">Select saved set</button><button class="btn btn-sm btn-outline-primary" id="api-open">API example</button><p class="small text-secondary mb-0" id="saved-detail"></p></div>
+{% endcall %}
+</aside>
+</div>
+<div class="small text-secondary mb-4">Illustrative memory profiles. Fit is an estimate; real loading requires a fresh server review and admission.</div>
+</div>
+{% call card('Implementation TODO · code inspection', false, id='implementation-todo', hint='Canonical checklist: docs/model-image-settings-plan.md, section 7.') %}<div class="fit-todo small">{{ todo|safe }}</div>{% endcall %}
+</main>
+{{ dom_templates() }}
+<dialog id="catalogue-dialog" class="fit-dialog fit-picker-dialog" aria-label="Choose local models"></dialog>
+<dialog id="review" class="fit-dialog" aria-labelledby="review-title">
+{% call card('Review named set', header_id='review-title', class_='mb-0') %}
+<p id="review-summary"></p><div class="table-responsive mb-3"><table class="table table-sm" aria-label="Set resource review"><thead><tr><th>Model</th><th>Context / profile</th><th>Placement</th><th>Memory</th></tr></thead><tbody id="review-models"></tbody></table></div>
+{{ alert('info', 'Simulation only. A real request reviews this exact saved version, validates all members together, then loads and holds them for 600 seconds.', class_='small') }}
+<p class="small" id="review-status"></p><div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" id="simulate-load">Simulate reviewed load</button><button class="btn btn-outline-secondary" data-close>Close</button></div>
+{% endcall %}</dialog>
+<dialog id="api" class="fit-dialog" aria-labelledby="api-title">
+{% call card('Load a named set through the API', header_id='api-title', class_='mb-0') %}
+<p id="api-summary"></p>{{ alert('warning', class_='small', attrs={'id':'api-note'}) }}
+<pre class="border rounded p-3 small"><code id="api-code"></code></pre>
+<p class="small text-secondary">Run the preview first and inspect warnings before sending its token. A request requires manage-models, load permission and access to every member; admission may reject it. Release or renew the returned lease before it expires.</p>
+<div class="d-flex gap-2 flex-wrap"><button class="btn btn-primary" id="copy-api">Copy example</button><button class="btn btn-outline-secondary" data-close>Close</button></div><p class="small mt-2 mb-0" id="copy-status" role="status"></p>
+{% endcall %}</dialog>
+<script>{{ javascript|safe }}</script>
+</body></html>

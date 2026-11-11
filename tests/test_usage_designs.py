@@ -134,7 +134,7 @@ def test_scenarios_and_preview_only_actions(page):
     choose(page, 'analyst', 'mine')
     expect(page.locator('#usage-user')).to_have_count(0)
     expect(page.locator('#workspace')).to_contain_text('Showing your usage only.')
-    expect(page.locator('[data-filter-count]')).to_have_text('None')
+    expect(page.locator('[data-filter-count]')).to_have_text('No filters')
     choose(page, 'spend', 'empty')
     expect(page.locator('.usage-empty')).to_have_text('No recorded requests match these filters.')
     expect(page.locator('#usage-breakdown tbody [data-empty-row]')).to_have_text('No usage in this range.')

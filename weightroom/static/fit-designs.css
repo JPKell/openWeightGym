@@ -1,0 +1,4 @@
+.fit-design-page { max-width: 1680px; margin: auto; padding: clamp(.75rem, 2vw, 1.75rem); }
+.fit-review-bar, .fit-live-budget { background: var(--tblr-bg-surface); }
+.fit-design-page .page-header { margin-bottom: 1rem !important; }
+.fit-design-page #design-description { margin-bottom: 1rem !important; }

@@ -63,7 +63,7 @@ model and explains its choice. `chat:best` prefers quality and can wait; `chat:a
 an eligible resident; `chat:fast` estimates time to an answer. Ordinary roles also have a
 configurable resident-model preference. Configure these under **Models → Roles**.
 
-**Dry fit** filters LLM, Audio and Image on the selected node without dropping other selected models from the combined preview. Image/audio use fixed measured reservations, with unknown or unqualified memory shown explicitly. It never loads a model.
+**Dry fit** uses a searchable node-local catalogue beside compact selected rows. Tune exact LLM contexts together, lock values during auto-fit, and include fixed Audio/Image profiles against separate VRAM/system RAM budgets. Save named sets on any answering node, then review and request the complete set through the UI or [node-scoped API](loadcoach.md#validated-model-setup-and-presets-c05-milestone-93). Tuning and saving load nothing.
 
 Idle models stay loaded until their memory is needed. Active work, holds and model locks protect
 them from replacement. Dry fit and configuration previews help plan placement; a successful

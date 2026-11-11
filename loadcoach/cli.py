@@ -960,7 +960,11 @@ def loadouts_list(ctx: typer.Context) -> None:
 
 @loadouts_cli.command('save')
 def loadouts_save(ctx: typer.Context, name: str, file: Path, version: Annotated[Optional[int], typer.Option(help='Current version, required when replacing a saved selection.')] = None) -> None:
-    """Save NAME from a JSON list of {model, cards, context}. Empty cards explicitly mean CPU."""
+    """Save NAME from 1–16 {model,cards,context} or fixed {model,cards,profile} entries.
+
+    Get a media profile key from /loadcoach/models loadout_profile. Empty cards select CPU.
+    This CLI targets its configured local worker; front API clients can use the node-scoped route.
+    """
     if file.stat().st_size > 65536:
         raise ValueError('Selection JSON may be at most 64 KiB.')
     selected = json.loads(file.read_text())

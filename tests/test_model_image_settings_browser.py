@@ -100,16 +100,22 @@ def test_fixed_fit_selection_survives_type_filter_and_navigation_permissions(des
         browser,page=browser_context(driver,server);page.set_viewport_size({'width':width,'height':1000})
         errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
         page.goto('http://console.test/dry-fit')
-        page.get_by_label('language on A',exact=True).check()
-        page.get_by_role('button',name='Image',exact=True).click()
-        page.get_by_label('picture on B',exact=True).check()
+        page.get_by_label('Select language',exact=True).check()
+        page.locator('#catalogue-kind').select_option('image')
+        page.get_by_label('Select picture',exact=True).check()
         assert page.locator('[data-model="picture"] .fit-context').count()==0
-        assert page.locator('tr[data-model="picture"] .fit-on:checked').count()==1
-        playwright.expect(page.get_by_text('Unknown / unqualified memory:',exact=False)).to_be_visible()
+        assert page.locator('tr[data-model="picture"] [data-select]:checked').count()==1
+        page.get_by_label('Select picture',exact=True).uncheck()
+        page.get_by_label('Select unqualified',exact=True).check()
+        playwright.expect(page.locator('#verdict-title')).to_contain_text('Combined fit is unknown')
+        page.get_by_label('Select picture',exact=True).check()
+        playwright.expect(page.locator('#verdict-title')).to_contain_text('Exclusive placement conflict')
         page.get_by_role('button',name='LLM',exact=True).click()
-        assert page.get_by_label('language on A',exact=True).is_checked()
-        assert page.locator('tr[data-model="picture"] .fit-on:checked').count()==1
-        assert page.locator('.fit-pick[data-model="picture"]').is_visible()
+        page.locator('#catalogue-kind').select_option('all')
+        assert page.get_by_label('Select language',exact=True).is_checked()
+        assert page.locator('tr[data-model="picture"] [data-select]:checked').count()==1
+        assert page.locator('tr[data-model="picture"]').is_hidden()
+        assert page.locator('#selection-count').inner_text().startswith('3 selected')
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         folder=Path('data/qualification/model-image-settings-20261027');page.screenshot(path=str(folder/f'fit-{width}.png'),full_page=True)
         page.goto('http://console.test/settings/image')

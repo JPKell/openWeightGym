@@ -41,6 +41,7 @@
       <option value="/v1/chat/completions"><option value="/v1/models">
       <option value="/v1/completions"><option value="/v1/embeddings">
       <option value="/loadcoach/status"><option value="/loadcoach/events"><option value="/loadcoach/me">
+      <option value="/loadcoach/loadouts">
     </datalist></div>
 </div>
 
@@ -66,6 +67,7 @@
 
 <details><summary>Request sent</summary><pre id="sent"></pre></details>
 <details open><summary>Response</summary><pre id="raw"></pre></details>
+<details><summary>Named model sets</summary><p class="note">GET /loadcoach/loadouts lists this node's sets. POST {"action":"preview","name":"Daily"}, inspect the response, then POST {"action":"request","name":"Daily","token":"TOKEN_FROM_PREVIEW"}. Acknowledge warnings only after review. Front clients address a node through /turnstile/machines/NAME/control/loadouts. Fixed media entries use a loadout_profile key from /loadcoach/models instead of context tokens; sets contain at most 16 models.</p></details>
 
 {% endblock %}
 {% block scripts %}<script>const $ = id => document.getElementById(id);
@@ -140,7 +142,7 @@ const pretty = text => { try { return JSON.stringify(JSON.parse(text), null, 2);
 function buildBody() {
   const fields = JSON.parse($("fields").value || "{}");
   const text = $("message").value;
-  if (text && !("messages" in fields)) fields.messages = [{ role: "user", content: text }];
+  if (text && !("messages" in fields) && $("path").value.split('?')[0] === '/v1/chat/completions') fields.messages = [{ role: "user", content: text }];
   return fields;
 }
 
@@ -297,7 +299,7 @@ $("lock").onclick = takeLock;
 $("unlock").onclick = letGo;
 $("path").onchange = () => {
   const path = $("path").value;
-  if (path.startsWith("/v1/models") || ["/loadcoach/status", "/loadcoach/events", "/loadcoach/me"].includes(path.split("?")[0])) $("method").value = "GET";
+  if (path.startsWith("/v1/models") || ["/loadcoach/status", "/loadcoach/events", "/loadcoach/me", "/loadcoach/loadouts"].includes(path.split("?")[0])) $("method").value = "GET";
 };
 showState();
 showModels();

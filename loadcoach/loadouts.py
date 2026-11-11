@@ -13,6 +13,7 @@ import time
 from . import model_setup
 from .models import at_context
 from .runner import Refusal, Server
+from .media_setup import profile_key
 
 HOLD_SECONDS = 600
 
@@ -52,17 +53,26 @@ class Loadouts:
             raise ValueError('Choose one to sixteen models.')
         selected, identities = [], set()
         for one in models:
-            if not isinstance(one, dict) or one.keys() != {'model', 'cards', 'context'}:
-                raise ValueError('Each selection contains model, cards and context.')
-            model, cards, context = one['model'], one['cards'], one['context']
+            if not isinstance(one, dict) or one.keys() not in ({'model', 'cards', 'context'}, {'model', 'cards', 'profile'}):
+                raise ValueError('Each selection contains model, cards and either context or a fixed profile key.')
+            model, cards = one['model'], one['cards']
             mid = self.library.identity(model) if isinstance(model, str) else None
             if not mid or mid in identities:
                 raise ValueError('Choose existing local models, each once.')
             if not isinstance(cards, list) or not all(isinstance(card, str) for card in cards) or len(set(cards)) != len(cards) or not set(cards) <= set(self.runner.config.gpus):
                 raise ValueError('Cards are a list of distinct configured GPU names; an empty list explicitly selects CPU.')
-            if type(context) is not int or not 1 <= context < 2**31:
-                raise ValueError('Context is a positive 32-bit whole number.')
-            selected.append({'model_id': mid, 'label': model, 'cards': [card for card in self.runner.config.gpus if card in cards], 'context': context})
+            fixed = self.library.get(model).get('engine') in ('sdcpp', 'audiocpp')
+            if fixed:
+                key = profile_key(self.library, model)
+                if not isinstance(one.get('profile'), str) or one['profile'] != key:
+                    raise Conflict('The fixed profile changed or is missing. Refresh the catalogue before saving this set.')
+                definition = {'profile': key, 'engine': self.library.get(model)['engine']}
+            else:
+                context = one.get('context')
+                if type(context) is not int or not 1 <= context < 2**31:
+                    raise ValueError('Context is a positive 32-bit whole number.')
+                definition = {'context': context}
+            selected.append({'model_id': mid, 'label': model, 'cards': [card for card in self.runner.config.gpus if card in cards], **definition})
             identities.add(mid)
         name = name.strip()
         with self.db:
@@ -95,7 +105,15 @@ class Loadouts:
         if name is None:
             raise ValueError(f"{one['label']} was removed; recreating its name cannot replace its stable model ID.")
         current = self.library.setup(name)
-        settings = at_context(current['settings'], one['context'])
+        fixed = current['settings'].get('engine') in ('sdcpp', 'audiocpp')
+        if fixed:
+            if one.get('engine') != current['settings']['engine'] or one.get('profile') != profile_key(self.library, name):
+                raise Conflict(f'{name}: the saved fixed profile changed. Select and save its current envelope again.')
+            settings = copy.deepcopy(current['settings'])
+        else:
+            if 'profile' in one:
+                raise Conflict(f'{name}: the saved engine changed. Save a new selection.')
+            settings = at_context(current['settings'], one['context'])
         settings = {**settings, 'gpus': one['cards'] or 0}
         if 'min_context' in settings:
             settings['min_context'] = one['context']
@@ -155,7 +173,7 @@ class Loadouts:
             if launch['flags']['ctx-size'] != settings['flags']['ctx-size'] or set(cards) != set(settings.get('gpus') or []):
                 errors.append(f'{name} cannot be admitted at its exact saved cards and context.')
             trial.holds[name, 'preview'] = float('inf')
-            placements.append({'name': name, 'cards': list(cards), 'context': launch['flags']['ctx-size'], 'reuse': bool(reusable),
+            placements.append({'name': name, 'cards': list(cards), 'context': launch['flags']['ctx-size'] or None, 'reuse': bool(reusable),
                                'measured': bool(self.library.measure(name, launch))})
         return {'fits': bool(reviews) and not errors and len(placements) == len(reviews), 'errors': errors,
                 'placements': placements, 'leaves': leaves, 'note': 'Snapshot only; ordinary admission rechecks live resources.'}
@@ -181,13 +199,16 @@ class Loadouts:
                 else:
                     model, configuration = self.configuration(one)
                 review = model_setup.preview(model, configuration, self.library, self.runner, supported, engine_error)
-                reviews.append({**review, 'name': model, 'undo': one['receipt'] if undo else ''})
+                reviews.append({**review, 'name': model, 'undo': one['receipt'] if undo else '',
+                                'loadout_profile': None if undo else one.get('profile')})
                 errors.extend(f'{model}: {message}' for message in review['errors'])
             except ValueError as problem:
                 errors.append(str(problem))
         joint = ({'fits': False, 'errors': [], 'placements': [], 'leaves': [],
                   'note': 'Undo restores configuration only; it does not load or stop models.'} if undo else self.joint_fit(reviews, lock))
-        token = model_setup.digest([name, saved['version'], saved['models'], saved['undo'] if undo else None,
+        token = model_setup.digest([self.runner.config.machine_name, name, saved['version'], saved['models'], saved['undo'] if undo else None,
+                                    self.runner.config.card_margin, self.runner.config.host_ram_headroom_mib,
+                                    self.runner.config.host_ram_limit_mib, self.runner.config.disable_ram_offload,
                                     [one['token'] for one in reviews], errors, bool(undo)])
         return {'name': name, 'version': saved['version'], 'models': reviews, 'errors': errors, 'joint': joint,
                 'undo': bool(undo), 'token': token, 'can_apply': not errors and bool(reviews),
@@ -205,6 +226,8 @@ class Loadouts:
             if current['version'] != review['version']:
                 raise Conflict('The load-out changed. Preview it again.')
             for one in sorted(changed, key=lambda one: one['model_id']):
+                if one.get('loadout_profile') and one['loadout_profile'] != profile_key(self.library, one['name']):
+                    raise Conflict('A fixed profile changed during review. Preview the complete set again.')
                 self.library.write_setup(one['name'], one['candidate'], one['before'], one['undo'],
                     identity=one['model_id'], revision=one['file_revision'])
             receipt = None if review['undo'] else {'receipt': secrets.token_hex(16), 'models': [
@@ -248,6 +271,8 @@ class Loadouts:
             server = self.runner.serving(name) if name else None
             if not name or self.library.stored(name) != configuration['settings'] or not server or server is not lease['_servers'].get(mid) or not server.ready or server.dead() or not self.runner.answers(server, self.library.get(name)):
                 raise Conflict('A leased model changed or is no longer ready. Release and preview the load-out again.')
+            if mid in lease.get('profiles', {}) and profile_key(self.library, name) != lease['profiles'][mid]:
+                raise Conflict('A leased fixed profile changed. Release and preview the load-out again.')
         lease['until'] = time.monotonic() + HOLD_SECONDS
         asyncio.get_running_loop().call_later(HOLD_SECONDS, self.runner.wake.set)
         return lease
@@ -263,6 +288,7 @@ class Loadouts:
             raise ValueError('The whole set must pass static validation and joint fit before loading.')
         identity = self.lease(review['name'], user, owner_id, {}, state='preparing', version=review['version'])
         lease = self.runner.loadout_leases[identity]
+        lease['profiles'] = {one['model_id']: one['loadout_profile'] for one in review['models'] if one.get('loadout_profile')}
         lease['until'] += self.runner.config.max_wait
         ready = False
         try:
@@ -272,6 +298,8 @@ class Loadouts:
                     name = self.library.name_for(one['model_id'])
                     if not name or self.library.stored(name) != one['candidate']['settings']:
                         raise Conflict('A model changed during loading. Preview the whole set again.')
+                    if one.get('loadout_profile') and one['loadout_profile'] != profile_key(self.library, name):
+                        raise Conflict('A fixed profile changed during loading. Preview the whole set again.')
                     if identity not in self.runner.loadout_leases:
                         raise Conflict('This load-out lease was released while preparing.')
                     ticket = await acquire(name, self.library.get(name))
@@ -279,6 +307,7 @@ class Loadouts:
                         server = ticket.server
                         if (not server or not server.ready or server.dead() or self.library.identity(name) != one['model_id'] or
                             self.library.stored(name) != one['candidate']['settings'] or
+                            (one.get('loadout_profile') and profile_key(self.library, name) != one['loadout_profile']) or
                             not self.runner.answers(server, self.library.get(name)) or
                             server.settings['flags']['ctx-size'] != one['candidate']['settings']['flags']['ctx-size']):
                             raise Conflict('A model did not become ready at its reviewed configuration.')

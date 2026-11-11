@@ -346,14 +346,19 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return ""
 
     async def ask_compute(user: User, method: str, where: str, body: bytes = b"", port: int | None = None,
-                          machine: str = "", timeout: float | None = 30) -> httpx.Response | None:
+                          machine: str = "", timeout: float | None = 30, forwarded: tuple = ()) -> httpx.Response | None:
         """Ask compute something as `user`, without waking it, and read the whole answer. None if it is not answering or its answer is not proven.
 
         Unless another `port` is given, LoadCoach is asked: the first of `ports`. `machine` names one of
         `settings.machines` instead of the main machine, which is signed with its own key.
         """
         if why := lifecycle_refusal(machine or "compute", method, where):
-            return httpx.Response(409, json={"error": {"message": why}})
+            try:
+                releasing = where == '/loadcoach/loadouts' and method == 'POST' and json.loads(body).get('action') == 'release'
+            except (ValueError, AttributeError):
+                releasing = False
+            if not releasing:
+                return httpx.Response(409, json={"error": {"message": why}})
         # Log flushing is observation too; its POST must not make offline reports wait.
         observing = method == "GET" or (method == "POST" and where == "/loadcoach/send-log")
         if observing and passive_reads.get() and settings.auth_key_file and machines.available(machine or "compute") is False:
@@ -363,7 +368,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         port = port or settings.ports[0]
         other = settings.machines.get(machine, {})
         base = (other.get("spotter") if len(settings.ports) > 2 and port == settings.ports[2] and other.get("spotter") else other["compute"]).rstrip("/") if other else settings.upstream(port)
-        headers, nonce = signed_headers(user, method, where, body, [("content-type", "application/json")] if body else [], key_file=other.get("machine_key_file", ""))
+        headers, nonce = signed_headers(user, method, where, body,
+                                        ([('content-type', 'application/json')] if body else []) + list(forwarded),
+                                        key_file=other.get("machine_key_file", ""))
         try:
             answer = await internal.request(method, f"{base}{where}", headers=headers, content=body,
                                             timeout=httpx.Timeout(timeout, connect=2))
@@ -2083,10 +2090,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             rows.append({**canonical, "name": logical["id"], "logical_id": logical.get("logical_id", ""),
                          "machines": logical["machines"], "locations": locations})
         primary = detailed.get("compute") or next(iter(detailed.values()))
-        node_fields = ("defaults", "cards", "build", "to_measure", "measuring")
+        node_fields = ("defaults", "cards", "engine_cards", "devices", "memory_policy", "build", "to_measure", "measuring")
         return JSONResponse({**{key: primary.get(key) for key in node_fields},
                              "nodes": {name: {key: result.get(key) for key in node_fields} for name, result in detailed.items()},
-                             "models": rows}, headers={"cache-control": "no-store"})
+                             "models": rows, 'unavailable_machines': [name for name in names if name not in detailed]}, headers={"cache-control": "no-store"})
 
     async def model_location(request: Request) -> Response:
         """Enable or disable one configured copy for front-side placement."""
@@ -2627,23 +2634,32 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
 
     async def machine_control(request: Request) -> Response:
-        """Forward a named node's status or operator action under the caller's signed identity."""
+        """Forward node status, maintenance or GET/POST load-outs under the signed caller.
+
+        Load-outs support list/save/preview/apply/request/renew/release/delete on this node's
+        own store; worker permissions, review tokens and 600-second leases remain authoritative.
+        This route never wakes a worker or falls back to another node.
+        """
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
-        name, action = request.path_params["name"], request.path_params["action"]
+        name, action = request.path_params["name"], request.path_params.get("action", 'loadouts')
         if name not in machines.names:
             return error(404, "That LoadCoach is not configured.")
-        paths = {"status": "status", "drain": "drain", "clear": "clear", "unload": "unload"}
-        if action not in paths or (request.method == "GET") != (action == "status"):
+        paths = {"status": "status", "drain": "drain", "clear": "clear", "unload": "unload", 'loadouts': 'loadouts'}
+        if action not in paths or (action != 'loadouts' and (request.method == "GET") != (action == "status")):
             return error(404, "That LoadCoach control is not available.")
+        body = await request.body()
+        if action == 'loadouts' and len(body) > 65536:
+            return error(413, 'Load-out requests may be at most 64 KiB.')
+        forwarded = tuple((key, request.headers[key]) for key in ('x-loadcoach-lock', 'x-loadcoach-priority') if key in request.headers) if action == 'loadouts' else ()
         answer = await ask_compute(user, request.method, "/loadcoach/" + paths[action],
-                                   await request.body(), machine="" if name == "compute" else name,
-                                   timeout=None if action == "unload" else 30)
+                                   body, machine="" if name == "compute" else name,
+                                   timeout=None if action in ('unload', 'loadouts') else 30, forwarded=forwarded)
         if answer is None:
             return error(503, f"LoadCoach {name} is not answering.")
         return JSONResponse(answer.json(), status_code=answer.status_code,
-                            headers={"cache-control": "no-store"} if action == "status" else None)
+                            headers={'cache-control': 'no-store', **({'retry-after': answer.headers['retry-after']} if 'retry-after' in answer.headers else {})})
 
     async def telemetry_history(request: Request) -> Response:
         """Return retained physical-host telemetry within the requested range."""
@@ -2735,6 +2751,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/machines/{name}/machine-key", rotate, methods=["GET", "POST"]),
                             Route("/turnstile/machines/{name}/model-lock", machine_model_lock, methods=["POST"]),
                             Route("/turnstile/machines/{name}/probe-environment", machine_probe_environment),
+                            Route('/turnstile/machines/{name}/control/loadouts', machine_control, methods=['GET', 'POST']),
                             Route("/turnstile/machines/{name}/control/{action}", machine_control, methods=["GET", "POST"]),
                             Route("/turnstile/telemetry/{fingerprint}/history", telemetry_history),
                             *[Route(path, signed_in(caller, log, handler), methods=methods)
