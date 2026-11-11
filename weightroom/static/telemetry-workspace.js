@@ -97,7 +97,8 @@
           min: Math.min(cool, hot), max: Math.max(cool, hot),
           inRange: { color: cool < hot ? heatColors : [...heatColors].reverse() } });
       }
-      return { name: line.name, type: 'line', connectNulls: false, symbolSize: 3, showSymbol: true,
+      // History buckets can be finer than the sampling interval; join available readings.
+      return { name: line.name, type: 'line', connectNulls: true, symbolSize: 3, showSymbol: true,
         symbol: ['circle', 'rect', 'triangle', 'diamond'][index % 4],
         data: (line.values || []).map((value, point) => [(data.begin + data.step * point) * 1000, value]),
         lineStyle: { width: 1.5, type: ['solid', 'dashed', 'dotted'][index % 3] },
@@ -178,7 +179,7 @@
     observer = new ResizeObserver(() => { chart?.resize(); expanded?.resize(); });
     observer.observe($('.tw-history', root));
     observer.observe($('#main-view', root));
-    $('#chart-context', root).textContent = `${Intl.DateTimeFormat().resolvedOptions().timeZone} · retained samples; gaps are missing readings · green to red as usage or temperature rises`;
+    $('#chart-context', root).textContent = `${Intl.DateTimeFormat().resolvedOptions().timeZone} · lines connect available readings · green to red as usage or temperature rises`;
     $('#reset-zoom', root).disabled = !values.length;
   }
   function initialize() {
