@@ -1,0 +1,88 @@
+{% from 'parts.html' import page_header, section_title, card, alert, swaps %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'telemetry_parts.html' import amount, state, meter, snapshot, gpu_table, host_tile %}
+<div id="telemetry-workspace" data-host-identity="{{ host.identity if host else '' }}" data-range="{{ hours }}:{{ until }}" hx-get="{{ refresh_url }}" hx-trigger="every {{ poll }}s" hx-target="this" hx-swap="outerHTML show:none" hx-push-url="false" hx-sync="this:replace">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    {{ page_header('Telemetry', pretitle='SYSTEM / HARDWARE') }}
+    <div class="d-flex flex-wrap align-items-center gap-2"><span class="small text-secondary">Snapshot {{ snapshot_at|timestamp }}</span><button type="button" class="btn btn-outline-secondary btn-sm" hx-get="{{ refresh_url }}" hx-target="#telemetry-workspace" hx-swap="outerHTML show:none">Refresh</button></div>
+  </div>
+  {% if request.query_params.get('said') %}{% call alert('danger' if request.query_params.get('failed') else 'info', class_='py-2', role='status') %}{{ request.query_params.get('said') }}{% endcall %}{% endif %}
+  {% call alert('warning', class_='py-2', role='status', attrs={'id':'telemetry-refresh-error','hidden':''}) %}Refresh failed. Values shown are from the previous snapshot. Retrying automatically.{% endcall %}
+  <div class="tw-totals mb-3" id="fleet-totals" aria-label="Fleet hardware summary">
+    <div class="tw-total"><span class="small text-secondary">Hosts reporting</span><strong>{{ summary.reporting }} / {{ summary.total }}</strong><small class="text-secondary">Fresh telemetry</small></div>
+    <div class="tw-total"><span class="small text-secondary">Known GPU devices</span><strong>{{ summary.gpus }}</strong><small class="text-secondary">{{ 'Some inventory unavailable' if summary.partial else 'One count per physical device' }}</small></div>
+    <div class="tw-total"><span class="small text-secondary">Known VRAM installed</span><strong>{{ amount(summary.vram, 'memory') }}</strong><small class="text-secondary">Includes retained inventory</small></div>
+    <div class="tw-total"><span class="small text-secondary">Needs attention</span><strong>{{ summary.attention }}</strong><small class="text-secondary">Offline, stale, or unknown</small></div>
+  </div>
+  <div class="tw-filters d-flex flex-wrap align-items-center gap-2 mb-3">
+    <label class="visually-hidden" for="host-search">Find a host or GPU</label><input id="host-search" type="search" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Find a host or GPU…">
+    <select id="host-filter" class="form-select form-select-sm w-auto" aria-label="Filter hosts"><option value="all">All states</option><option value="attention">Needs attention</option><option value="reporting">Reporting</option><option value="offline">Offline</option></select>
+    <select id="host-sort" class="form-select form-select-sm w-auto" aria-label="Sort hosts"><option value="name">Name A–Z</option><option value="attention">Attention first</option><option value="gpus">Most GPUs</option></select>
+  </div>
+  <div class="tw-layout">
+    <aside class="tw-sidebar" aria-label="Host navigation">
+      {% call card('Physical hosts', body=false, class_='mb-0 tw-hosts') %}
+        <a class="tw-host-link text-decoration-none" href="/telemetry"{% if not host %} aria-current="page"{% endif %} {{ swaps('telemetry-workspace', true) }}><span><strong>All hosts</strong><small class="d-block text-secondary">Fleet overview</small></span><span class="badge bg-blue-lt">{{ hosts|length }}</span></a>
+        <div id="host-list">
+        {% for one in hosts %}<a class="tw-host-link text-decoration-none" href="{{ one.href }}"{% if host and host.identity == one.identity %} aria-current="page"{% endif %} data-host="{{ one.identity }}" data-search="{{ one.search }}" data-fresh="{{ 'true' if one.fresh else 'false' }}" data-state="{{ one.state }}" data-gpus="{{ one.gpus|length }}" data-name="{{ one.hostname|lower }}" {{ swaps('telemetry-workspace', true) }}><span class="tw-host-name"><strong>{{ one.hostname }}</strong><small class="d-block text-secondary">{{ one.gpus|length }} known GPUs · {{ one.label }}</small></span><span class="tw-indicator" data-state="{{ 'reporting' if one.fresh else 'offline' }}" aria-hidden="true"></span></a>{% endfor %}
+        </div>
+        <p id="no-host-match" class="text-secondary small p-2 mb-0" hidden>No matching hosts.</p>
+        <div class="small text-secondary border-top p-3"><span id="host-count">{{ hosts|length }}</span> hosts<span class="d-block mt-1">One entry per physical host</span></div>
+      {% endcall %}
+    </aside>
+    <section id="main-view" aria-label="Telemetry workspace">
+    {% if not host %}
+      {% call card('Fleet overview', class_='mb-0', body_class='p-3', actions='<span class="small text-secondary">Select a host or GPU</span>'|safe) %}
+        <div id="host-grid" class="tw-grid">{% for one in hosts %}{{ host_tile(one) }}{% endfor %}</div>
+        <div id="fleet-empty" class="p-3"{% if hosts %} hidden{% endif %}><strong>{{ 'No matching hosts' if hosts else 'No hosts registered' }}</strong><p class="text-secondary mb-0 mt-1">{{ 'Try a different search or filter.' if hosts else 'Telemetry appears when a host reports its hardware.' }}</p></div>
+      {% endcall %}
+    {% else %}
+      {% call card(class_='mb-0 tw-focus', body=false, attrs={'id':'host-view'}) %}
+        <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 p-3 border-bottom"><div><span class="text-secondary small">PHYSICAL HOST</span>{{ section_title(host.hostname, id='host-title', class_='mt-1', wrapper_class='mb-1') }}<p class="small text-secondary mb-0">{{ host.machines|join(' · ') }} · {{ snapshot(host) }}</p></div><div class="d-flex gap-2 align-items-center">{{ state(host) }}<a href="/telemetry" class="btn btn-outline-secondary btn-sm" {{ swaps('telemetry-workspace', true) }}>All hosts</a></div></div>
+        <div class="p-3">
+          {% if not host.fresh %}{% call alert('warning', class_='py-2', role='status') %}Current readings are unknown. Retained history and known device capacity remain available.{% endcall %}{% endif %}
+          <div class="tw-readings mb-3" id="host-totals" aria-label="Selected host readings">
+            {{ meter('CPU load', host.cpu) }}{{ meter('CPU temperature', host.temperature, 110, 'temperature') }}{{ meter('Memory used', host.ram, host.ram_total, 'memory', 'of ' ~ amount(host.ram_total, 'memory')) }}{{ meter('Disk used', host.disk_percent) }}
+          </div>
+          <div class="tw-detail-layout">
+            <section class="tw-history" aria-label="Resource graphs">
+              {{ section_title('Resource history', wrapper_class='mb-2') }}
+              <form id="history-range" method="get" action="{{ host.href.split('?')[0] }}" class="d-flex flex-wrap align-items-end gap-2 mb-3" data-hold-refresh {{ swaps('telemetry-workspace', true) }}>
+                {% if not host.fingerprint %}<input type="hidden" name="node" value="{{ host.identity }}">{% endif %}
+                <div><label for="hours" class="form-label small">Hours</label><input id="hours" name="hours" type="number" class="form-control form-control-sm" min="0.016666666666666666" max="672" step="any" value="{{ hours }}" required></div>
+                <div><label for="until" class="form-label small">Until <span class="text-secondary">(empty = now)</span></label><input id="until" name="until" type="datetime-local" data-input-zone="{{ server_timezone }}" data-instant="{{ input_utc(until, server_timezone) }}" class="form-control form-control-sm" value="{{ until }}"></div>
+                <button class="btn btn-primary btn-sm">Show</button>
+                <select id="history-preset" class="form-select form-select-sm w-auto" aria-label="History range"><option value="">Range…</option>{% for label, value in [('1 hour',1),('6 hours',6),('1 day',24),('1 week',168),('4 weeks',672)] %}<option value="{{ value }}"{% if hours == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+              </form>
+              {% if history_error %}{% call alert('warning', class_='py-2', role='status') %}{{ history_error }}{% endcall %}{% endif %}
+              <div id="viz-tabs" class="nav nav-tabs tw-tabs mb-2" role="tablist" aria-label="Hardware graphs"></div>
+              <div id="graph-panel" role="tabpanel" tabindex="0">
+                {% call pills('Graph metric', buttons=true, class_='gap-1 mb-3', attrs={'id':'metric-choices'}) %}{% endcall %}
+                <div id="graph-grid" class="tw-graphs"></div>
+              </div>
+              <p id="chart-context" class="small text-secondary mt-3 mb-0"></p>
+              <button id="reset-zoom" type="button" class="btn btn-outline-secondary btn-sm">Reset zoom</button>
+              <noscript><p class="small text-secondary">Enable JavaScript to view interactive history graphs.</p></noscript>
+            </section>
+            <aside class="tw-inventory" aria-label="Device capacity">
+              {{ section_title('Device capacity', wrapper_class='mb-1') }}<p class="small text-secondary mb-2">{{ host.gpus|length }} known GPU devices</p>
+              {% if host.gpus %}{{ gpu_table(host, true) }}{% else %}<p class="small text-secondary">{{ 'No GPU devices reported' if host.has_inventory else 'Device inventory unavailable' }}</p>{% endif %}
+              <div class="mt-3"><div class="border rounded p-2 mb-2 small"><strong>System RAM</strong><span class="d-block text-secondary">{{ amount(host.ram_total, 'memory') }} installed</span></div>{% for disk in host.disks %}<div class="border rounded p-2 mb-2 small"><strong>{{ disk.path }}</strong><span class="d-block text-secondary">{{ amount(disk.free, 'memory') }} / {{ amount(disk.total, 'memory') }} free</span></div>{% endfor %}</div>
+            </aside>
+          </div>
+          {% call card('Services and power', open=false, key='telemetry-services', class_='mt-3 mb-0', body_class='p-3') %}
+            {% include 'host_models.html' %}
+            {% include "host_wake.html" %}
+            {% if 'compute' in host.machines %}<a href="/machine" class="btn btn-outline-secondary btn-sm mt-2">Compute service and power controls</a>{% endif %}
+          {% endcall %}
+        </div>
+      {% endcall %}
+    {% endif %}
+    </section>
+  </div>
+  <script id="telemetry-history" type="application/json">{{ graph_data|tojson }}</script>
+  <template id="telemetry-viz-tab">{{ pill_button('Hardware', attrs={'role':'tab','aria-controls':'graph-panel'}) }}</template>
+  <template id="telemetry-metric-choice">{{ pill_button('Metric', class_='py-1 px-2 small') }}</template>
+  <template id="telemetry-chart-tile"><figure class="tw-chart border rounded p-2 mb-0"><figcaption class="d-flex justify-content-between align-items-center gap-2"><span class="small" data-title></span><strong class="small" data-current></strong></figcaption><div class="tw-plot" role="img"></div><p class="text-secondary small p-3" data-no-history hidden>No readings were retained for this sensor in this time range.</p><div class="d-flex justify-content-between gap-2 align-items-center"><small class="text-secondary" data-extents></small><button type="button" class="btn btn-link btn-sm p-0" data-expand>Expand</button></div></figure></template>
+  <dialog id="graph-dialog" class="tw-dialog rounded border p-0" aria-labelledby="expanded-title"><div class="d-flex justify-content-between align-items-center gap-2 border-bottom p-3"><strong id="expanded-title"></strong><button id="close-graph" type="button" class="btn btn-outline-secondary btn-sm">Close</button></div><div class="p-3"><div id="expanded-chart" role="img"></div></div></dialog>
+</div>

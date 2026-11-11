@@ -87,7 +87,8 @@ def test_new_log_entries_include_physical_host_fingerprint():
     assert len(detail["machine_fingerprint"]) == 64
 
 
-def test_telemetry_cards_and_compact_nav_render_without_temperature():
+def test_telemetry_cards_show_individual_devices_and_compact_nav_stays_unchanged():
+    from weightroom.telemetry_workspace import hosts_view
     pages = Path(__file__).parents[1] / "weightroom/pages"
     env = Environment(loader=FileSystemLoader(pages), autoescape=True)
     env.filters["worded"] = lambda value, name: "—" if value is None else worded(name, value)
@@ -97,10 +98,9 @@ def test_telemetry_cards_and_compact_nav_render_without_temperature():
                 {"card": 0, "memory_used": 2**30, "memory_total": 2**31, "load": 100, "temperature": 99}],
                 "memory": {"used": 2**30, "total": 2**32},
                 "processor": {"load": 100, "temperature": 99}, "disks": []}}
-    card = env.get_template("machines.html").render(person=None, hosts=[host], poll=10, strip=False)
-    assert "GPU 0 VRAM" in card and "CPU load" in card and "temperature" not in card
-    assert "background-color: hsl(30 60% 42%)" in card
-    assert "qwen-test" in card and "Empty" not in card
+    card = env.get_template("telemetry_parts.html").module.host_tile(hosts_view([host], 10)[0])
+    assert 'GPU 0' in card and 'VRAM used' in card and '99°' in card and 'CPU 100%' in card
+    assert "qwen-test" in env.get_template("host_models.html").render(host=host)
     host["loaded"] = []
     assert "Empty" in env.get_template("host_models.html").render(host=host)
     host["models_unknown"] = True
@@ -145,5 +145,5 @@ def test_host_wake_controls_are_node_specific_and_explain_missing_configuration(
     assert 'disabled title="Configure Wake-on-LAN for this node"' in rendered
     assert 'node is not answering' in rendered
     assert '<form' not in template.render(host=host, person=SimpleNamespace(can=set()))
-    for name in ("machines.html", "telemetry_host.html"):
-        assert '{% include "host_wake.html" %}' in (pages / name).read_text()
+    assert '{% include "host_wake.html" %}' in (pages / 'telemetry_workspace.html').read_text()
+    assert "extends 'machines.html'" in (pages / 'telemetry_host.html').read_text()

@@ -1,0 +1,29 @@
+{% from 'parts.html' import card, swaps %}
+
+{% macro amount(value, unit='load') -%}{{ value|worded(unit) if value is not none else '—' }}{%- endmacro %}
+
+{% macro state(host) %}<span class="badge bg-{{ 'green' if host.fresh else 'yellow' if host.label == 'Stale' else 'secondary' }}-lt">{{ host.label }}</span>{% endmacro %}
+
+{% macro meter(label, value, maximum=100, unit='load', note='') %}
+{% set percent = ([0, [100, 100 * value / maximum]|min]|max) if value is not none and maximum else none %}
+<div class="tw-total"><span class="small text-secondary">{{ label }}</span><strong>{{ amount(value, unit) }}</strong><small class="text-secondary">{{ note }}</small><div class="progress progress-sm" role="progressbar" aria-label="{{ label }}" aria-valuemin="0" aria-valuemax="100"{% if percent is not none %} aria-valuenow="{{ percent|round|int }}"{% endif %} aria-valuetext="{{ amount(value, unit) }}"><div class="progress-bar" style="width: {{ percent or 0 }}%;{% if percent is not none %} background-color: hsl({{ (120 - 1.2 * percent)|round|int }} 60% 42%);{% endif %}"></div></div></div>
+{% endmacro %}
+
+{% macro gpu_table(host, selected=false) %}
+<div class="table-responsive"><table class="table table-sm align-middle mb-0 tw-gpus" aria-label="Individual GPU readings for {{ host.hostname }}"><thead><tr><th>GPU</th><th>Load</th><th>VRAM used</th><th>Temp</th></tr></thead><tbody>
+{% for gpu in host.gpus %}<tr data-device="{{ host.identity }}:{{ gpu.card }}"><th scope="row">
+{% if selected %}<button type="button" class="btn btn-link btn-sm p-0" data-open-gpu="gpu-{{ gpu.card }}" aria-label="Inspect {{ host.hostname }} GPU {{ gpu.card }}">GPU {{ gpu.card }}</button>{% else %}<a href="{{ host.href }}{{ '&' if '?' in host.href else '?' }}gpu={{ gpu.card }}" aria-label="Inspect {{ host.hostname }} GPU {{ gpu.card }}" {{ swaps('telemetry-workspace', true) }}>GPU {{ gpu.card }}</a>{% endif %}
+<small class="d-block text-secondary">{{ gpu.model }}</small></th><td>{{ amount(gpu.load) }}<div class="progress progress-sm mt-1"><div class="progress-bar" style="width: {{ gpu.load or 0 }}%"></div></div></td><td class="text-nowrap">{{ amount(gpu.memory_used, 'memory') }}<small class="d-block text-secondary">/ {{ amount(gpu.memory_total, 'memory') }}</small></td><td class="text-nowrap">{{ amount(gpu.temperature, 'temperature') }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endmacro %}
+
+{% macro snapshot(host) %}{% if host.age is not none %}Reading {{ host.age|round|int }}s ago{% else %}No readings yet{% endif %}{% endmacro %}
+
+{% macro host_tile(host) %}
+{% call card(tag='article', class_='tw-host-card mb-0', body=false, attrs={'data-host':host.identity, 'data-search':host.search, 'data-fresh':'true' if host.fresh else 'false', 'data-gpus':host.gpus|length, 'data-name':host.hostname|lower, 'data-state':host.state}) %}
+  <div class="d-flex justify-content-between align-items-center gap-2 p-3 pb-2"><div><a class="fw-bold" href="{{ host.href }}" {{ swaps('telemetry-workspace', true) }}>{{ host.hostname }}</a><small class="d-block text-secondary">{{ host.machines|join(' · ') }}</small></div>{{ state(host) }}</div>
+  <div class="tw-host-summary px-3 pb-2"><span>CPU {{ amount(host.cpu) }}</span><span>RAM {{ amount(host.ram, 'memory') }}</span><span>Disk {{ amount(host.disk_percent) }}</span></div>
+  {% if host.gpus %}{{ gpu_table(host) }}{% elif host.has_inventory %}<p class="small text-secondary px-3 py-2 mb-0">No GPU devices reported</p>{% else %}<p class="small text-secondary px-3 py-2 mb-0">No telemetry is available from this host yet.</p>{% endif %}
+  <div class="d-flex justify-content-between gap-2 small text-secondary px-3 py-2 border-top"><span>{{ host.gpus|length }} known GPUs</span><span>{{ snapshot(host) }}</span></div>
+{% endcall %}
+{% endmacro %}

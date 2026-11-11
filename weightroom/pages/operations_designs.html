@@ -1,0 +1,125 @@
+{# Standalone sample-data review; live Status and Telemetry use their existing templates. #}
+{% from 'parts.html' import page_header, card, section_title, empty_row, alert, more %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'icons.html' import icon %}
+{% macro metric(label, key, hint) %}
+<div class="ops-stat"><span class="text-secondary small">{{ label }}</span><strong data-stat="{{ key }}">—</strong><span class="small text-secondary" data-stat-note="{{ key }}">{{ hint }}</span></div>
+{% endmacro %}
+{% macro resource(key, label) %}
+<div class="ops-resource"><div class="d-flex justify-content-between gap-2 small"><span class="text-secondary">{{ label }}</span><strong data-value="{{ key }}">—</strong></div><div class="progress progress-sm mt-1" role="progressbar" aria-label="{{ label }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" data-bar="{{ key }}"></div></div></div>
+{% endmacro %}
+<!doctype html><html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Status & Telemetry · Design review</title>
+<style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a class="visually-hidden-focusable" href="#workspace">Skip to dashboard</a>
+<header class="ops-review border-bottom px-4 py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+  <div class="d-flex align-items-center gap-2">{{ icon('barbell') }}<strong>weightRoom</strong><span class="text-secondary ms-2">Operations / design review</span></div>
+  <div class="d-flex gap-2"><span class="badge bg-blue-lt align-self-center">Interactive sample</span><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset</button></div>
+</header>
+<main class="ops-page">
+  {% call pills('Design options', buttons=true, class_='ops-designs gap-2 mb-2') %}
+    {{ pill_button('01 / Fleet ledger', true, attrs={'data-design': 'ledger'}) }}
+    {{ pill_button('02 / Compact grid', attrs={'data-design': 'grid'}) }}
+    {{ pill_button('03 / Focus workspace', attrs={'data-design': 'focus'}) }}
+  {% endcall %}
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+    <p id="design-note" class="small text-secondary mb-0"></p>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <label for="fleet-size" class="small text-secondary">Compute nodes</label><select id="fleet-size" class="form-select form-select-sm w-auto"><option>0</option><option>1</option><option selected>4</option><option>12</option><option>48</option></select>
+      <select id="scenario" class="form-select form-select-sm w-auto" aria-label="Monitoring scenario"><option value="normal">Mixed fleet</option><option value="healthy">All healthy</option><option value="stale">Stale readings</option><option value="outage">Monitoring disconnected</option></select>
+    </div>
+  </div>
+  <div id="workspace" data-design="ledger" data-page="status">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+      {{ page_header('Status', pretitle='SYSTEM / OPERATIONS', id='ops-heading') }}
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        {% call pills('Page', buttons=true, class_='gap-1 mb-0') %}
+          {{ pill_button('Status', true, attrs={'data-page': 'status'}) }}{{ pill_button('Telemetry', attrs={'data-page': 'telemetry'}) }}
+        {% endcall %}
+        <button class="btn btn-outline-secondary btn-sm" id="refresh">Refresh sample</button>
+      </div>
+    </div>
+    <div class="ops-meta d-flex flex-wrap justify-content-between gap-2 small text-secondary mb-3"><span id="fleet-description"></span><span id="sample-age">Snapshot · sample data</span></div>
+    <div id="ops-message" class="small mb-2" role="status" aria-live="polite"></div>
+    {% call alert('warning', class_='py-2', attrs={'id':'monitor-warning', 'hidden':''}) %}<strong>Monitoring interrupted.</strong> Current values are unknown. Last readings and history remain available.<button class="btn btn-outline-secondary btn-sm ms-2" id="retry">Retry demo connection</button>{% endcall %}
+    <div class="ops-stats mb-3">
+      {{ metric('Available', 'available', 'Compute services') }}
+      {{ metric('Running', 'running', 'Known active requests') }}
+      {{ metric('Waiting', 'waiting', 'Requests in queue') }}
+      {{ metric('Needs attention', 'attention', 'Review affected nodes') }}
+    </div>
+    <div class="ops-toolbar d-flex flex-wrap align-items-center gap-2 mb-3">
+      <input id="search" class="form-control form-control-sm w-auto flex-grow-1" type="search" placeholder="Find a node, host, or model…" aria-label="Search fleet">
+      <select id="filter" class="form-select form-select-sm w-auto" aria-label="Filter fleet"><option value="all">All states</option><option value="attention">Needs attention</option><option value="ready">Available</option><option value="offline">Offline</option><option value="disabled">Disabled</option></select>
+      <select id="sort" class="form-select form-select-sm w-auto" aria-label="Sort fleet"><option value="attention">Attention first</option><option value="name">Name A–Z</option><option value="load">Highest CPU load</option></select>
+      <div id="history-controls" class="d-flex flex-wrap gap-2" hidden>
+        <select id="metric" class="form-select form-select-sm w-auto" aria-label="Chart metric"><option value="cpu">CPU load</option><option value="ram">RAM used</option><option value="gpu">GPU load</option><option value="temp">GPU temperature</option><option value="power">GPU power</option><option value="disk">Disk used</option></select>
+        <select id="range" class="form-select form-select-sm w-auto" aria-label="History range"><option value="1">1 hour</option><option value="6">6 hours</option><option value="24">24 hours</option><option value="672">4 weeks</option></select>
+      </div>
+    </div>
+    <div class="ops-layout">
+      <section id="fleet-panel" aria-label="Fleet overview">
+        {% call card('Compute nodes', class_='ops-fleet mb-0', header_id='fleet-title', body=false) %}
+          <div class="table-responsive" id="fleet-table-wrap"><table class="table table-sm table-hover align-middle mb-0 ops-table" aria-label="Fleet readings">
+            <thead><tr><th class="compare-column"><span class="visually-hidden">Compare hosts</span></th><th>Node / host</th><th>State</th><th class="status-column">Work</th><th>CPU</th><th>RAM</th><th>GPU</th><th class="status-column">VRAM free</th><th class="telemetry-column">Disk used</th><th class="telemetry-column">Trend</th><th>Updated</th></tr></thead><tbody id="fleet-rows"></tbody>
+          </table></div>
+          <div id="fleet-grid" class="ops-grid p-3" hidden></div>
+          <div id="fleet-list" class="ops-node-list" hidden></div>
+          <div id="empty-fleet" class="p-4 text-center" hidden><strong id="empty-title">No compute nodes yet</strong><p class="text-secondary small mt-2 mb-0" id="empty-description">Connect a node to see availability, workloads, and resource readings.</p><button class="btn btn-outline-secondary btn-sm mt-3" id="clear-filters">Clear filters</button></div>
+          <div class="d-flex align-items-center justify-content-between gap-2 p-3 border-top small"><span class="text-secondary" id="page-count"></span><div class="d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" id="previous">Previous</button><button class="btn btn-outline-secondary btn-sm" id="next">Next</button></div></div>
+        {% endcall %}
+      </section>
+      <section id="inspector" aria-label="Selected node details">
+        {% call card(class_='ops-inspector mb-0', body=false) %}
+          <div class="p-3 border-bottom d-flex justify-content-between align-items-start gap-2"><div><span class="small text-secondary" id="detail-eyebrow">COMPUTE NODE</span>{{ section_title('Select a node', id='detail-title', class_='mt-1', wrapper_class='mb-1') }}<span id="detail-subtitle" class="small text-secondary"></span></div><span class="badge" id="detail-state"></span></div>
+          <div id="detail-content" class="p-3">
+            <div class="ops-resource-grid mb-3">{{ resource('cpu', 'CPU load') }}{{ resource('ram', 'RAM used') }}{{ resource('gpu', 'GPU load') }}{{ resource('disk', 'Disk used') }}</div>
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-2"><strong class="small" id="plot-label">CPU load · last hour</strong><span class="small text-secondary" id="plot-current"></span></div>
+            <div id="detail-chart" class="ops-chart" role="img" aria-label="Resource history"></div>
+            <p class="text-secondary small mt-1 mb-3" id="chart-note"></p>
+            <div id="device-section">{% call more('Device capacity') %}<div class="text-secondary small mb-2">Free / total</div><div id="devices"></div>{% endcall %}</div>
+            <div id="model-section" class="mt-3"><strong class="small">Loaded models</strong><div id="models" class="mt-2"></div></div>
+            <div id="service-section" class="mt-3" hidden><strong class="small">Services on this host</strong><div id="services" class="mt-2 small"></div></div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-3"><button class="btn btn-outline-primary btn-sm" id="node-action">Drain node</button><button class="btn btn-outline-secondary btn-sm" id="switch-detail">View telemetry</button><button class="btn btn-outline-secondary btn-sm" id="compare-selected" hidden>Compare host</button></div>
+            <p id="action-note" class="small text-secondary mt-2 mb-0"></p>
+          </div>
+        {% endcall %}
+      </section>
+      <section id="requests-panel">
+        {% call card('Current requests', body=false) %}<div class="table-responsive"><table class="table table-sm align-middle mb-0 ops-requests" aria-label="Current requests"><thead><tr><th>Request</th><th>Node</th><th>Model</th><th>State</th><th>Elapsed</th></tr></thead><tbody id="requests"></tbody></table></div><p id="request-caption" class="small text-secondary px-3 py-2 mb-0 border-top"></p>{% endcall %}
+      </section>
+    </div>
+    <section id="compare-panel" class="mt-3" hidden>
+      {% call card('Compare physical hosts', actions='<button class="btn btn-outline-secondary btn-sm" id="clear-compare">Clear comparison</button>'|safe) %}
+        <p class="small text-secondary" id="compare-description"></p><div id="compare-chart" class="ops-compare-chart" role="img" aria-label="Host resource comparison"></div>
+      {% endcall %}
+    </section>
+    <footer class="small text-secondary d-flex flex-wrap justify-content-between gap-2 mt-3"><span>Design preview · simulated readings and actions</span><span id="footer-note">Missing readings stay unknown. Counts use fresh reports only.</span></footer>
+  </div>
+</main>
+<template id="fleet-row"><tr>
+  <td class="compare-column"><input type="checkbox" class="form-check-input" data-compare></td>
+  <td><button class="btn btn-link btn-sm p-0 text-start" data-open></button><small class="d-block text-secondary" data-subtitle></small></td>
+  <td><span class="badge" data-state></span></td><td class="status-column text-nowrap" data-work></td>
+  {% for key in ['cpu','ram','gpu'] %}<td><div class="ops-cell-meter"><span data-value="{{ key }}"></span><div class="progress progress-sm"><div class="progress-bar" data-bar="{{ key }}"></div></div></div></td>{% endfor %}
+  <td class="status-column text-nowrap" data-vram></td><td class="telemetry-column" data-value="disk"></td><td class="telemetry-column"><span data-spark class="ops-spark"></span></td><td class="text-nowrap small text-secondary" data-age></td>
+</tr></template>
+<template id="fleet-tile">
+  {% call card(tag='article', class_='ops-tile mb-0', body_class='p-3') %}
+    <div class="d-flex align-items-start justify-content-between gap-2 mb-3"><div><button class="btn btn-link btn-sm p-0 text-start" data-open></button><small class="text-secondary d-block" data-subtitle></small></div><span class="badge" data-state></span></div>
+    <div class="ops-resource-grid">{{ resource('cpu', 'CPU') }}{{ resource('ram', 'RAM') }}{{ resource('gpu', 'GPU') }}{{ resource('disk', 'Disk') }}</div>
+    <div class="status-column small mt-3 d-flex justify-content-between gap-2"><span data-work></span><span data-vram class="text-secondary"></span></div>
+    <div class="telemetry-column mt-3 ops-spark-wide" data-spark></div>
+    <div class="small mt-3 d-flex justify-content-between align-items-center"><span class="text-secondary" data-age></span><label class="compare-column form-check mb-0"><input type="checkbox" class="form-check-input" data-compare><span class="form-check-label">Compare</span></label></div>
+  {% endcall %}
+</template>
+<template id="fleet-list-item"><button class="ops-list-item" data-open><span class="d-flex justify-content-between align-items-center gap-2"><strong data-name></strong><span class="badge" data-state></span></span><span class="d-block small text-secondary mt-1" data-subtitle></span><span class="d-flex justify-content-between small mt-2"><span data-work></span><span data-age></span></span></button></template>
+<template id="device-row"><div class="ops-device border rounded p-2 mb-2"><div class="d-flex justify-content-between gap-2 small"><strong data-device></strong><span data-capacity></span></div><span class="small text-secondary" data-device-note></span></div></template>
+<template id="model-row"><div class="d-flex align-items-center justify-content-between gap-2 py-2 border-bottom"><div class="min-w-0"><strong class="small d-block text-truncate" data-model></strong><span class="small text-secondary" data-device></span></div><button class="btn btn-outline-secondary btn-sm" data-lock>Lock</button></div></template>
+<template id="request-row"><tr><td data-request></td><td data-node></td><td data-model></td><td><span class="badge" data-state></span></td><td data-elapsed></td></tr></template>
+<template id="empty-requests">{{ empty_row(5, 'No active requests in this view.') }}</template>
+<script>{{ charts_javascript|safe }}</script><script>{{ javascript|safe }}</script>
+</body></html>

@@ -1,0 +1,82 @@
+{# Selected Telemetry proposal in the actual application shell. Sample data only. #}
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, section_title, card, alert %}
+{% from 'navigation_parts.html' import pill_button, pills %}
+{% macro gpu_table() %}
+<div class="table-responsive"><table class="table table-sm align-middle mb-0 tw-gpus" aria-label="Individual GPU readings"><thead><tr><th>GPU</th><th>Load</th><th>VRAM used</th><th>Temp</th></tr></thead><tbody data-gpu-rows></tbody></table></div>
+{% endmacro %}
+{% block title %}Telemetry · Focus workspace{% endblock %}
+{% block scripts %}<style>{{ css|safe }}</style>{% endblock %}
+{% block page_class %}tw-page{% endblock %}
+{% block main %}
+<div hidden>{{ icons_svg|safe }}<form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option selected>dark</option></select></form></div>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+  {{ page_header('Telemetry', pretitle='SYSTEM / HARDWARE') }}
+  <div class="d-flex flex-wrap align-items-center gap-2"><label for="fleet-size" class="small text-secondary">Sample hosts</label><select id="fleet-size" class="form-select form-select-sm w-auto"><option>0</option><option>1</option><option selected>4</option><option>12</option><option>48</option></select><select id="scenario" class="form-select form-select-sm w-auto" aria-label="Sample scenario"><option value="mixed">Mixed fleet</option><option value="healthy">All reporting</option><option value="dense">8 GPUs per worker</option><option value="stale">Stale readings</option></select><button class="btn btn-outline-secondary btn-sm" id="theme">Light mode</button></div>
+</div>
+<div class="tw-totals mb-3" id="fleet-totals" aria-label="Fleet hardware summary"></div>
+<div class="tw-filters d-flex flex-wrap align-items-center gap-2 mb-3">
+  <label class="visually-hidden" for="host-search">Find a host or GPU</label><input id="host-search" type="search" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Find a host or GPU…">
+  <select id="host-filter" class="form-select form-select-sm w-auto" aria-label="Filter hosts"><option value="all">All states</option><option value="attention">Needs attention</option><option value="reporting">Reporting</option><option value="offline">Offline</option></select>
+  <select id="host-sort" class="form-select form-select-sm w-auto" aria-label="Sort hosts"><option value="name">Name A–Z</option><option value="attention">Attention first</option><option value="gpus">Most GPUs</option></select>
+</div>
+<div class="tw-layout">
+  <aside class="tw-sidebar" aria-label="Host navigation">
+    {% call card('Physical hosts', body=false, class_='mb-0 tw-hosts') %}
+      <button class="tw-host-link tw-all" id="all-hosts" aria-pressed="true"><span><strong>All hosts</strong><small class="d-block text-secondary">Fleet overview</small></span><span class="badge bg-blue-lt" id="host-total">4</span></button>
+      <div id="host-list"></div>
+      <p id="no-host-match" class="text-secondary small p-2 mb-0" hidden>No matching hosts.</p>
+      <div class="small text-secondary border-top p-3"><span id="host-count"></span> hosts<span class="d-block mt-1" id="inventory-note">One entry per physical host.</span></div>
+    {% endcall %}
+  </aside>
+  <section id="main-view" aria-label="Telemetry workspace">
+    {% call card('Fleet overview', attrs={'id':'fleet-view'}, class_='mb-0', actions='<span class="small text-secondary" id="inventory-total"></span>'|safe, body_class='p-3') %}
+      <div id="host-grid" class="tw-grid"></div>
+      <div id="fleet-empty" class="p-3" hidden><strong id="empty-title">No hosts registered</strong><p id="empty-note" class="text-secondary mb-0 mt-1">Hardware will appear here when a host reports telemetry.</p></div>
+    {% endcall %}
+    {% call card(attrs={'id':'host-view','hidden':''}, class_='mb-0 tw-focus', body=false) %}
+      <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 p-3 border-bottom"><div><span class="text-secondary small">PHYSICAL HOST</span>{{ section_title('Host', id='host-title', class_='mt-1', wrapper_class='mb-1') }}<p id="host-subtitle" class="small text-secondary mb-0"></p></div><div class="d-flex gap-2 align-items-center"><span id="host-state" class="badge"></span><button id="back-to-grid" class="btn btn-outline-secondary btn-sm">All hosts</button></div></div>
+      <div class="p-3">
+        {% call alert('warning', class_='py-2', attrs={'id':'stale-notice','hidden':''}, role='status') %}<span id="stale-note"></span>{% endcall %}
+        <div class="tw-readings mb-3" id="host-totals" aria-label="Selected host readings"></div>
+        <div class="tw-detail-layout">
+          <section class="tw-history" aria-label="Resource graphs">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">{{ section_title('Resource history', wrapper_class='mb-0') }}<div class="d-flex flex-wrap gap-2 align-items-center"><label for="range" class="small text-secondary">Range</label><select id="range" class="form-select form-select-sm w-auto"><option value="1">1 hour</option><option value="6">6 hours</option><option value="24">24 hours</option><option value="168">1 week</option><option value="672">4 weeks</option></select><button id="reset-zoom" class="btn btn-outline-secondary btn-sm">Reset zoom</button></div></div>
+            <div id="viz-tabs" class="nav nav-tabs tw-tabs mb-2" role="tablist" aria-label="Hardware graphs"></div>
+            <div id="graph-panel" role="tabpanel" tabindex="0">
+              {% call pills('Graph metric', buttons=true, class_='gap-1 mb-3', attrs={'id':'metric-choices'}) %}{% endcall %}
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2"><strong id="graph-title" class="small"></strong><span id="graph-note" class="small text-secondary"></span></div>
+              <div id="graph-grid" class="tw-graphs"></div>
+            </div>
+            <p id="chart-context" class="small text-secondary mt-3 mb-0"></p>
+          </section>
+          <aside class="tw-inventory" aria-label="Device capacity">
+            {{ section_title('Device capacity', wrapper_class='mb-1') }}<p id="gpu-total" class="small text-secondary mb-2"></p>
+            {{ gpu_table() }}<p id="cpu-only" class="small text-secondary py-2 mb-0" hidden>CPU-only host · no GPU devices installed.</p>
+            <div id="capacity-list" class="mt-3"></div>
+          </aside>
+        </div>
+      </div>
+    {% endcall %}
+  </section>
+</div>
+<p class="small text-secondary mt-3 mb-0" role="status" id="preview-note">Design preview · simulated hardware and history</p>
+<dialog id="graph-dialog" class="tw-dialog rounded border p-0" aria-labelledby="expanded-title"><div class="d-flex justify-content-between align-items-center gap-2 border-bottom p-3"><strong id="expanded-title"></strong><button id="close-graph" class="btn btn-outline-secondary btn-sm">Close</button></div><div class="p-3"><div id="expanded-chart" role="img"></div><p id="expanded-note" class="small text-secondary mt-2 mb-0"></p></div></dialog>
+<template id="host-link"><button class="tw-host-link" data-host-open><span class="tw-host-name"><strong data-name></strong><small data-subtitle class="d-block text-secondary"></small></span><span class="tw-indicator" data-indicator aria-hidden="true"></span></button></template>
+<template id="host-card">
+  {% call card(tag='article', class_='tw-host-card mb-0', body=false) %}
+    <div class="d-flex justify-content-between align-items-center gap-2 p-3 pb-2"><div><button class="btn btn-link p-0 fw-bold" data-host-open data-name></button><small class="d-block text-secondary" data-subtitle></small></div><span data-state class="badge"></span></div>
+    <div class="tw-host-summary px-3 pb-2" data-host-summary></div>
+    {{ gpu_table() }}
+    <p class="small text-secondary px-3 py-2 mb-0" data-no-gpu hidden>CPU-only · no GPU devices</p>
+    <div class="d-flex justify-content-between gap-2 small text-secondary px-3 py-2 border-top"><span data-count></span><span data-age></span></div>
+  {% endcall %}
+</template>
+<template id="gpu-row"><tr><th scope="row"><button class="btn btn-link btn-sm p-0 text-start" data-gpu-open></button><small data-gpu-name class="d-block text-secondary"></small></th><td><strong data-gpu-load></strong><div class="progress progress-sm mt-1"><div class="progress-bar" data-gpu-bar></div></div></td><td class="text-nowrap"><span data-gpu-memory></span><small class="d-block text-secondary" data-gpu-capacity></small></td><td class="text-nowrap" data-gpu-temp></td></tr></template>
+<template id="summary-value"><div class="tw-total"><span class="small text-secondary" data-label></span><strong data-value></strong><small class="text-secondary" data-note></small><div class="progress progress-sm" data-reading-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" hidden><div class="progress-bar"></div></div></div></template>
+<template id="viz-tab">{{ pill_button('Hardware', attrs={'role':'tab','aria-controls':'graph-panel'}) }}</template>
+<template id="chart-tile"><figure class="tw-chart border rounded p-2 mb-0"><figcaption class="d-flex justify-content-between align-items-center gap-2"><span class="small" data-title></span><strong class="small" data-current></strong></figcaption><div class="tw-plot" role="img"></div><div class="d-flex justify-content-between gap-2 align-items-center"><small class="text-secondary" data-extents></small><button class="btn btn-link btn-sm p-0" data-expand>Expand</button></div></figure></template>
+<template id="metric-choice">{{ pill_button('Metric', class_='py-1 px-2 small') }}</template>
+<template id="capacity-item"><div class="border rounded p-2 mb-2 small"><strong data-capacity-name></strong><span class="d-block text-secondary" data-capacity-value></span></div></template>
+<script>{{ charts_javascript|safe }}</script><script>document.addEventListener('DOMContentLoaded', () => { {{ javascript|safe }} });</script>
+{% endblock %}

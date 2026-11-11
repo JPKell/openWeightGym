@@ -716,6 +716,14 @@ keys, settings and the earlier release.
 
 ## Multi-machine telemetry
 
+The Telemetry page keeps fleet KPIs above a host navigator and an overview grid. Select a
+host or individual GPU for retained history; hardware tabs and metric buttons choose the
+graph, with GPU comparison, zoom and expansion in the same workspace. Green-to-red coloring
+uses capacity or sensor thresholds; storage charts show used space when capacity is known.
+Snapshots refresh automatically without replacing an edited time range, an open expanded
+graph or an active selection. Missing or stale current readings remain unknown. Services,
+loaded models and permission-scoped wake controls remain under **Services and power**.
+
 Install matching LoadCoach/Spotter code on each monitored host and Turnstile/WeightRoom/`db/`
 code on front. Give each host private Spotter settings referencing one local LoadCoach settings
 file and its machine key, a host-specific listening address/port, and only permitted `[services]`.
