@@ -1,6 +1,7 @@
 {% from 'navigation_parts.html' import pill_link %}
-{# The Users directory and its account page (users.html), and the sample proposals (users_designs.html), share these pieces.
-   An account here is a row of LoadCoach's /loadcoach/users with what account_facts in app.py adds: kind, state, attention, custom. #}
+{# The Users directory and its account page (users.html), the Groups directory (groups.html), and the sample proposals (users_designs.html), share these pieces.
+   An account here is a row of LoadCoach's /loadcoach/users with what account_facts in app.py adds: kind, state, attention, custom.
+   A group is a row of /loadcoach/groups with what group_facts adds: kind ("group"), state, superuser, filters. #}
 
 {# How the account page groups the abilities. One missing here is shown under Other. #}
 {% set ability_categories = [
@@ -11,9 +12,9 @@
   ('A program’s own key', ['app-sign-in', 'follow-settings', 'mirror-users', 'sign-in']),
 ] %}
 
-{% set account_states = {'active': 'Active', 'invited': 'Invited', 'disabled': 'Disabled'} %}
+{% set account_states = {'active': 'Active', 'invited': 'Invited', 'disabled': 'Disabled', 'editable': 'Editable', 'read-only': 'Read only'} %}
 
-{# Initials. A person is round; a program, which has keys and no password, is square and monospaced. #}
+{# Initials. A person is round; a program, which has keys and no password, is square and monospaced; a group is a rounded square. #}
 {% macro account_avatar(account=None, class_='') -%}
 <span class="account-avatar{{ ' ' ~ class_ if class_ }}" aria-hidden="true" data-avatar{% if account %} data-kind="{{ account.kind }}"{% endif %}>{{ account.initials if account }}</span>
 {%- endmacro %}
@@ -39,4 +40,18 @@
 {% else %}
 <button type="button" class="account-choice" data-user-choice aria-pressed="false">{{ label }}</button>
 {% endif %}
+{% endmacro %}
+
+{# A row of the Groups directory: a link that swaps in the group's page. #}
+{% macro group_choice(group, selected='') %}
+{% set abilities = 'superuser' if group.superuser else '%d %s'|format(group.can|length, 'ability' if group.can|length == 1 else 'abilities') %}
+{% set label %}
+  {{ account_avatar(group) }}
+  <span class="min-w-0 flex-grow-1"><strong data-group-name>{{ group.name }}</strong><small class="d-block text-secondary">{{ group.members|length }} member{{ '' if group.members|length == 1 else 's' }} · {{ abilities }}{% if group.state == 'read-only' %} · read only{% endif %}</small></span>
+  <span class="draft-mark" data-draft-mark hidden aria-label="Unsaved changes"></span>
+{% endset %}
+{{ pill_link(label, '/groups/' ~ group.name|urlencode, group.name == selected, class_='account-choice', target='page-content',
+             attrs={'aria-label': group.name ~ ' · ' ~ group.members|length ~ ' members · ' ~ abilities ~ (' · read only' if group.state == 'read-only' else ''),
+                    'data-group-choice': group.name, 'data-group-filters': group.filters,
+                    'data-group-search': [group.name, group.members|join(' '), group.priority, group.max_sensitivity]|join(' ')}) }}
 {% endmacro %}

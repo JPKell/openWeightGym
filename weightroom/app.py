@@ -4091,12 +4091,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         usage, allowances = await asyncio.gather(ask("GET", "/loadcoach/usage", person.key, params=params), ask("GET", "/loadcoach/allowances", person.key))
         if not usage.is_success:
             return fragment_error(request, person, "account-trend", "activity", usage)
-        row = next((one for one in (allowances.json()["rows"] if allowances.is_success else []) if one["scope"] == "user" and one["name"] == name), None)
-        spend = None
-        if row:
-            share = 100 * row["recorded"] / row["allowance"] if row["allowance"] else 0
-            spend = {"recorded": row["recorded"], "allowance": row["allowance"], "share": min(100.0, share), "near": share >= 90, "manage": row.get("manage")}
-        return page(request, "user_activity.html", person, trend=spark_paths([day["requests"] for day in usage.json()["daily"]]), spend=spend)
+        return page(request, "user_activity.html", person, trend=spark_paths([day["requests"] for day in usage.json()["daily"]]), spend=spend_of(allowances, "user", name))
+
+    def spend_of(allowances: httpx.Response, scope: str, name: str) -> dict | None:
+        """What an account or a group spent in the last 24 hours against its allowance, from LoadCoach's /loadcoach/allowances."""
+        row = next((one for one in (allowances.json()["rows"] if allowances.is_success else []) if one["scope"] == scope and one["name"] == name), None)
+        if not row:
+            return None
+        share = 100 * row["recorded"] / row["allowance"] if row["allowance"] else 0
+        return {"recorded": row["recorded"], "allowance": row["allowance"], "share": min(100.0, share), "near": share >= 90, "manage": row.get("manage")}
 
     async def user_page(request: Request, person: Person, said: str = "", failed: bool = False, opened: str = "", once=(), name: str = "", form: dict | None = None) -> Response:
         """The directory of accounts beside the one chosen. `opened` names a panel to show open (`add` for adding an account),
@@ -4170,18 +4173,30 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     # ---- groups -----------------------------------------------------------------------------
 
+    def group_facts(group: dict) -> dict:
+        """What the Groups directory says of a group beside its name: whether the one looking may change it, and the words its filter matches."""
+        state = "read-only" if group.get("why_not") else "editable"
+        superuser = "superuser" in group["can"]
+        filters = [state, "members" if group["members"] else "empty", *(["superuser"] if superuser else []), *(["second-step"] if group.get("second_step") else [])]
+        return {"kind": "group", "state": state, "superuser": superuser, "filters": " ".join(filters),
+                "initials": re.sub(r"[^a-z0-9]", "", group["name"])[:2].upper() or "?"}  # fmt: skip
+
     async def groups_page(request: Request, person: Person, said: str = "", failed: bool = False, form: dict | None = None) -> Response:
-        """Render group permissions and authorized group-creation controls."""
-        known = await fetch(request, person, "/loadcoach/groups")
-        if isinstance(known, Response):
-            return known
-        limit, current = controls(request.query_params)
-        total = len(known["groups"])
-        current = min(current, max(1, (total + limit - 1) // limit))
-        known = {**known, "groups": known["groups"][(current - 1) * limit:current * limit]}
-        return page(request, "groups.html", person, status=400 if failed else 200, known=known,
-                    paging=pagination("/groups", request.query_params, total, limit, current),
-                    said=said or request.query_params.get("said", ""), failed=failed, form=form or {})
+        """The directory of groups, with the first one chosen. A refused new group comes back here with what was typed."""
+        return await group_page(request, person, said, failed, opened="add" if failed else "", form=form)
+
+    async def group_activity(request: Request, person: Person, name: str) -> Response:
+        """A group's requests per day over the last 30 days, its busiest members, and its 24-hour spending against its allowance."""
+        if "see-log" not in person.can:
+            return page(request, "refused.html", person, status=403, why="Reading a group's activity needs the see-log ability.")
+        params = {"period": "30", "group": name, "group_by": "user", "timezone": settings.timezone or "UTC"}
+        usage, allowances = await asyncio.gather(ask("GET", "/loadcoach/usage", person.key, params=params), ask("GET", "/loadcoach/allowances", person.key))
+        if not usage.is_success:
+            return fragment_error(request, person, "account-trend", "activity", usage)
+        found = usage.json()
+        busiest = sorted((row for row in found["breakdown"] if row["requests"]), key=lambda row: (-row["requests"], row["name"]))[:5]
+        return page(request, "user_activity.html", person, trend=spark_paths([day["requests"] for day in found["daily"]]), spend=spend_of(allowances, "group", name),
+                    busiest=busiest, most=max([row["requests"] for row in busiest], default=1))  # fmt: skip
 
     async def add_group(request: Request, person: Person) -> Response:
         """Validate and submit a new group within the caller's privilege boundary."""
@@ -4194,19 +4209,31 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await groups_page(request, person, answer.json()["error"]["message"], failed=True, form={"name": name})
         return go(f"/groups/{name}?said=" + quote(f"Added {name}. It allows nothing yet: tick what its members may do, and save."))
 
-    async def group_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None) -> Response:
-        """Render one group's permissions, members and editable settings."""
-        known = await fetch(request, person, "/loadcoach/groups")
+    async def group_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None,
+                         opened: str = "", form: dict | None = None) -> Response:
+        """The directory of groups beside the one chosen, at /groups and /groups/<name>. `typed_in` is what was typed into the
+        chosen group if saving it failed, `opened` names a panel to show open (`add`), and `form` what was typed into a refused new group."""
+        name, asked = request.path_params.get("name", ""), request.query_params
+        if name and asked.get("part") == "activity":
+            return await group_activity(request, person, name)
+        wanted = [fetch(request, person, "/loadcoach/groups")]
+        if "manage-users" in person.can:  # each member's kind and state, beside their name
+            wanted.append(ask("GET", "/loadcoach/users", person.key))
+        known, *listing = await asyncio.gather(*wanted)
         if isinstance(known, Response):
             return known
-        name = request.path_params["name"]
-        group = next((one for one in known["groups"] if one["name"] == name), None)
-        if group is None:
+        groups = [{**one, **group_facts(one)} for one in known["groups"]]
+        group = next((one for one in groups if one["name"] == name), None) if name else (groups[0] if groups else None)
+        if name and group is None:
             return page(request, "refused.html", person, status=404, why=f"There is no group named {name}.")
-        showing = {**group, **(typed_in or {})}  # what was just typed if saving it failed, otherwise what is kept
-        models = list(dict.fromkeys([*person.me.get("models", []), *(showing["models"] if isinstance(showing["models"], list) else [])]))
-        return page(request, "group.html", person, status=400 if failed else 200, group=group, showing=showing, known=known, ticks=tick_list(person, known, showing["can"]), models=models,
-                    said=said or request.query_params.get("said", ""), failed=failed)  # fmt: skip
+        accounts = {one["name"]: {**one, **account_facts(one)} for one in listing[0].json()["users"]} if listing and listing[0].is_success else {}
+        showing = {**group, **(typed_in or {})} if group else {}  # what was just typed if saving it failed, otherwise what is kept
+        models = list(dict.fromkeys([*person.me.get("models", []), *(showing["models"] if isinstance(showing.get("models"), list) else [])]))
+        return page(request, "groups.html", person, status=400 if failed else 200, group=group, groups=groups, showing=showing, known=known,
+                    ticks=tick_list(person, known, showing["can"]) if group else [], models=models, form=form or {},
+                    members=[accounts.get(member, {"name": member}) for member in (group or {}).get("members", [])],
+                    trend_url=f"/groups/{quote(group['name'], safe='')}?part=activity" if group else "",
+                    said=said or asked.get("said", ""), failed=failed, opened=opened or asked.get("open", ""))  # fmt: skip
 
     async def change_group(request: Request, person: Person) -> Response:
         """Validate group updates while preserving self-management and privilege limits."""
@@ -4245,7 +4272,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     "second_step": "second_step" in form,
                     **{number: read(one(number)) for number in limits[2:] if one(number)},
                 }
-            else:  # compatibility with the former combined form
+            else:  # do=save: the whole group as its page shows it, which replaces what is kept
                 can = set(form.get("can", []))
                 made = {
                     "can": sorted(can - covered(known) if "superuser" in can else can),
@@ -4254,6 +4281,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     "max_sensitivity": one("max_sensitivity"),
                     "second_step": "second_step" in form,
                     **{number: read(one(number)) for number in limits[2:] if one(number)},
+                    # A form without the tools leaves them out, as the former combined form did.
+                    **({"tools": "*" if "every_tool" in form else names_in(one("tools"))} if "tools" in form or "every_tool" in form else {}),
                 }
             answer = await ask("PATCH" if do in ("abilities", "limits", "tools") else "POST", where, person.key, json=made)
         if answer.status_code != 200:

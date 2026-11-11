@@ -1,4 +1,5 @@
-{# An account's last 30 days and its 24-hour spending, loaded after its page (deferred.html), for someone who may read the log. #}
+{# An account's or a group's last 30 days and its 24-hour spending, loaded after its page (deferred.html), for someone who may read the log.
+   A group's also names its busiest members. #}
 <div id="account-trend" class="account-trend">
   <div data-figure="requests">
     <div class="d-flex justify-content-between gap-2 small text-secondary"><span>Requests per day · last 30 days</span><span>{{ "{:,}".format(trend.total) }} in all</span></div>
@@ -6,6 +7,16 @@
       <path class="usage-spark-area" d="{{ trend.area }}"></path><path class="usage-spark-line" d="{{ trend.line }}"></path>
     </svg>
   </div>
+  {% if busiest is defined %}
+  <div class="account-busiest">
+    <span class="usage-label">Busiest members · 30 days</span>
+    {% for row in busiest %}
+    <div class="account-busiest-row"><a href="/users/{{ row.name|urlencode }}" class="text-truncate">{{ row.name }}</a><span class="usage-composition usage-composition-thin" aria-hidden="true"><span class="usage-segment" data-source="recorded" style="--account-share: {{ (100 * row.requests / most)|round(1) }}%"></span></span><span class="text-secondary">{{ "{:,}".format(row.requests) }}</span></div>
+    {% else %}
+    <p class="small text-secondary mb-0">No member made a request in the last 30 days.</p>
+    {% endfor %}
+  </div>
+  {% endif %}
   {% if spend %}
   <div class="account-spend{{ ' is-near' if spend.near }}" data-figure="output_tokens">
     <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
