@@ -86,6 +86,11 @@ owner_environment() {
   # The account's own log: it cannot write to the one in your home folder.
   [[ -n ${OWG_OWNER_LOG:-} ]] && OWNER_ENV+=("OWG_LOG=$OWG_OWNER_LOG")
   [[ -n ${UV_PYTHON_INSTALL_DIR:-} ]] && OWNER_ENV+=("UV_PYTHON_INSTALL_DIR=$UV_PYTHON_INSTALL_DIR")
+  # A custom toolkit selected by the administrator must also be visible during owner-run builds.
+  local variable
+  for variable in CUDACXX CUDAToolkit_ROOT CUDA_PATH CUDA_HOME ROCM_PATH HIP_PATH; do
+    [[ -z ${!variable:-} ]] || OWNER_ENV+=("$variable=${!variable}")
+  done
   return 0
 }
 

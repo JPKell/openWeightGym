@@ -644,6 +644,23 @@ runtime_options() {
     --audiocpp "$AUDIOCPP_ACTION" --audiocpp-backend "$AUDIOCPP_BACKEND")
 }
 
+# The service account has no sudo rights. Gather its system tools as the invoking administrator.
+prepare_optional_build_tools() {
+  ((SYSTEM)) || return 0
+  local runtime backend label
+  for runtime in STRATA SDCPP AUDIOCPP; do
+    local action=${runtime}_ACTION
+    [[ ${!action} == install ]] || continue
+    case "$runtime" in
+      STRATA) backend=cuda; label=Strata ;;
+      SDCPP) backend=$SDCPP_BACKEND; label=stable-diffusion.cpp ;;
+      AUDIOCPP) backend=$AUDIOCPP_BACKEND; label=audio.cpp ;;
+    esac
+    "$DIR/scripts/install-build-tools.sh" "$backend" "$label" >/dev/null ||
+      ui_die "Could not prepare $label build tools for the service account." 'Fix the package or toolkit error above, then retry'
+  done
+}
+
 positive_mib() { [[ $1 =~ ^[1-9][0-9]{0,8}$ ]] || { ui_warn 'Enter a positive whole number of MiB'; return 1; }; }
 
 choose_runtimes() {
@@ -800,6 +817,7 @@ apply_components() {
     --database keep --topology "$TOPOLOGY" --address "$HOST_ADDRESS" --start-new --keep-existing-units --uv "$UV")
   runtime_options
   options+=("${RUNTIME_OPTIONS[@]}")
+  prepare_optional_build_tools
   [[ -z $FRONT_URL ]] || options+=(--front-url "$FRONT_URL")
   [[ -z $COMPUTE_URL ]] || options+=(--compute-url "$COMPUTE_URL")
   [[ -z $MACHINE_NAME ]] || options+=(--machine-name "$MACHINE_NAME")
@@ -1332,6 +1350,7 @@ setting_up() {
                  --address "$HOST_ADDRESS" --start-new --uv "$UV" --database "$DATABASE")
   runtime_options
   options+=("${RUNTIME_OPTIONS[@]}")
+  prepare_optional_build_tools
   [[ -n $FRONT_URL ]] && options+=(--front-url "$FRONT_URL")
   [[ -n $COMPUTE_URL ]] && options+=(--compute-url "$COMPUTE_URL")
   [[ -n ${LLAMA_SERVER:-} ]] && options+=(--llama-server "$LLAMA_SERVER")

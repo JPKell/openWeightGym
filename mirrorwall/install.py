@@ -13,8 +13,12 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import tomllib
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 REVISION = "95ff76230889898e1bf40058ba272a3699b50dc6"
 REPOSITORY = "https://github.com/leejet/stable-diffusion.cpp.git"
@@ -131,6 +135,9 @@ def main():
         print("Would verify/build sd-server and sd-cli, atomically select the release, and configure settings/loadcoach.toml. Model weights are separate.")
         return
     if not target.exists():
+        if not args.adopt_build:
+            from engines.build import build_environment
+            environment = build_environment(args.backend, "stable-diffusion.cpp")
         args.prefix.mkdir(parents=True,exist_ok=True,mode=0o700)
         target.parent.mkdir(exist_ok=True)
         source=args.source.expanduser().resolve() if args.source else args.prefix/"source"/(args.revision+("-"+patch_sha[:12] if patch_sha else ""))
@@ -174,11 +181,10 @@ def main():
         elif args.backend=="vulkan":
             flags += ["-DSD_VULKAN=ON"]
         if not args.adopt_build:
-            missing=[tool for tool in ("git","cmake","c++",*(('nvcc',) if args.backend=='cuda' else ())) if not shutil.which(tool)]
-            if missing:
-                raise ValueError("Missing build tools: "+", ".join(missing)+". See docs/installation.md; no CPU fallback was selected.")
-            run(["cmake","-S",source,"-B",build,*flags])
-            run(["cmake","--build",build,"--config","Release","--target","sd-cli","sd-server","--parallel",args.jobs])
+            if args.backend == "cuda":
+                flags.append("-DCMAKE_CUDA_COMPILER=" + environment["CUDACXX"])
+            run(["cmake","-S",source,"-B",build,*flags], env=environment)
+            run(["cmake","--build",build,"--config","Release","--target","sd-cli","sd-server","--parallel",args.jobs], env=environment)
         cache=build/"CMakeCache.txt"
         if not cache.is_file():
             raise ValueError("Build has no CMakeCache.txt provenance")

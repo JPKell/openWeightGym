@@ -272,7 +272,7 @@ def strata_install(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(strata, "run", run)
-    monkeypatch.setattr(strata.shutil, "which", lambda tool: "/fixture/" + tool)
+    monkeypatch.setattr("engines.build.build_environment", lambda *args: {"CUDACXX": "/fixture/nvcc"})
     monkeypatch.setattr(strata, "verify_source", lambda source: (source / "serve/server.py").read_text())
     return args, config, commands, fail
 
