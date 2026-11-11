@@ -19,7 +19,13 @@
       </select>
 {% endmacro %}
 
-{% call card("File facts", false) %}{% include "file_says.html" %}
+{# Measure memory: loads this model at its minimum and maximum context on every node whose copy has not been measured there.
+   Greyed out when every copy is measured, or while measuring is under way. #}
+{% set _measure_actions %}<form method="post" action="{{ address(model.name) }}" class="m-0">
+  <button class="btn btn-outline-primary btn-sm" name="do" value="measure"{{ ' disabled' if not measure.nodes or measure.busy }}
+    title="{{ 'Measuring is under way; see the Models list.' if measure.busy else 'Every copy has its memory measured at its minimum and maximum context.' if not measure.nodes else 'Loads it in turn at its minimum and maximum context on ' ~ measure.nodes|join(', ') ~ ', unloading idle models as needed. A live request pauses measuring.' }}">Measure memory</button>
+</form>{% endset %}
+{% call card("File facts", false, actions=_measure_actions) %}{% include "file_says.html" %}
 <dl class="row facts small mb-0">
   <dt class="col-md-3">Fingerprint</dt><dd class="col-md-9 wrap">{% if model.fingerprint %}<a href="/fingerprints?start={{ model.fingerprint }}"><code>{{ model.fingerprint }}</code></a>{% else %}Not available{% endif %}</dd>
   {% if model.sha256 %}<dt class="col-md-3">File SHA-256</dt><dd class="col-md-9 wrap"><code>{{ model.sha256 }}</code></dd>{% endif %}

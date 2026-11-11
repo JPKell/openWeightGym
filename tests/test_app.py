@@ -3324,3 +3324,33 @@ def test_a_model_that_sees_and_the_same_model_without_a_projector_are_answered_b
     assert [(one["model"], one["answers"]) for one in status] == [("seeing", ["plain"])]
     assert mark(first) == mark(third) != mark(second)  # the plain model is the plain model, whichever server answers for it
     assert fourth.status_code == 400 and "plain has no projector" in fourth.json()["error"]["message"] and len(refused) == 1 and "picture" in refused[0]["why"]
+
+
+def test_an_engine_that_cannot_start_leaves_the_model_to_be_measured(fake_llama_server, fake_cards, tmp_path):
+    """A missing llama-server says nothing of a model's memory: the model is not marked measured, nor ruled out."""
+    missing = str(tmp_path / "not-installed" / "llama-server")
+    with gateway(missing, {"a": sized("a", 3000), "b": sized("b", 4000)}, nvidia_smi=fake_cards[0]) as caller:
+        admin = add_user(caller, "jordan", "admin")
+        listed = lambda: caller.get("/loadcoach/models", headers=admin).json()  # noqa: E731
+        run = lambda **body: caller.post("/loadcoach/model-measure-all", json=body, headers=admin)  # noqa: E731
+        refused = run(names="a").status_code
+        started = run(names=["a"])
+        deadline = time.monotonic() + 8
+        while not (listed()["measuring"] or {}).get("ended") and time.monotonic() < deadline:
+            time.sleep(0.05)
+        after = listed()
+    assert refused == 400 and started.status_code == 202 and started.json()["measuring"] == ["a"]  # only the model asked for
+    assert "Could not run" in after["measuring"]["failed"]["a"] and after["measuring"]["left"] == []
+    assert after["to_measure"] == ["a", "b"]  # nothing was written down for `a`, so it is still to be measured
+    assert next(one for one in after["models"] if one["name"] == "a")["measurements"] == []
+
+
+def test_a_launch_failure_kept_before_it_was_told_apart_is_read_as_unmeasured(tmp_path):
+    from loadcoach.models import Models
+    library = Models(str(tmp_path / "models.db"))
+    library.put("a", sized("a", 3000))
+    settings = library.get("a")
+    library.measured("a", settings, None, "Could not run /x/llama-server: [Errno 2] No such file or directory")
+    assert library.measurements("a", settings) == [] and not library.calibrated("a", settings)
+    library.measured("a", settings, None, "CUDA error: out of memory")
+    assert [point["error"] for point in library.measurements("a", settings)] == ["CUDA error: out of memory"]

@@ -2158,6 +2158,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     async def model_measure_all(request: Request, user: User) -> Response:
         """Start measuring every model that has no measure. With `on` false, stop the run that is under way.
+        With `names`, only those of the listed models that still need measuring are measured.
 
         Each such model is loaded in turn, which pushes idle models off its cards for that one
         load. A run ends by itself when a request arrives that is not its own. Started again,
@@ -2165,9 +2166,12 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """
         if denied := lacks(user, "manage-models"):
             return denied
-        asked = await read_json(request, {"on"})
+        asked = await read_json(request, {"on", "names"})
         if isinstance(asked, Response):
             return asked
+        wanted = asked.get("names")
+        if wanted is not None and (not isinstance(wanted, list) or not all(isinstance(one, str) for one in wanted)):
+            return error(400, "names must be a list of model names.")
         under_way = "task" in measuring and not measuring["task"].done()
         if asked.get("on", True) is False:
             if under_way:
@@ -2179,8 +2183,11 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         await runner.look(fresh=True)
         if runner.seen is None:
             return error(409, f"{config.nvidia_smi} could not be asked what the cards hold, so nothing can be measured.")
+        left = [name for name in unmeasured() if wanted is None or name in wanted]
+        if wanted is not None and not left:
+            return error(409, "Every model asked for already has its memory measured at its minimum and maximum context.")
         measuring.clear()
-        measuring.update(by=user.name, since=datetime.now().isoformat(timespec="seconds"), left=unmeasured(), done=[], failed={}, now=None, ended=None)
+        measuring.update(by=user.name, since=datetime.now().isoformat(timespec="seconds"), left=left, done=[], failed={}, now=None, ended=None)
         log.add("model", "measuring-all", user.name, address(request), models=measuring["left"])
         library.run_begun(user.name, address(request), measuring["since"])
         task = measuring["task"] = asyncio.create_task(measure_all(user.name, address(request)))

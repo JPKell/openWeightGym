@@ -6,29 +6,24 @@
 <div id="models" class="table-responsive mb-3" hx-get="/models?part=list{{ node_query }}" hx-trigger="every 5s" hx-swap="outerHTML">
 {# One line for each node a model is being added to. #}
 {% for installation in installations|default([]) %}{% call alert(('danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info'), role='status') %}<strong>{{ installation.name }}</strong> on {{ installation.machine }}: {{ installation.state }}{% if installation.why %} · {{ installation.why }}{% endif %}{% if installation.of %} · {{ installation.done|size }} / {{ installation.of|size }}{% endif %}{% if installation.moved_from %} · moved from {{ installation.moved_from }}{% endif %}{% if installation.state == 'complete' %} · <a href="/models/{{ installation.name|urlencode }}?node={{ installation.machine|urlencode }}">Open model</a>{% endif %}{% endcall %}{% endfor %}
-{# Measuring every model that has no measure: the button, or how far a run has got, or how the last one ended. #}
-{% set run = known.measuring %}
-{% if run and not run.ended %}
+{# How far measuring has got on each node, or how its last run there ended. The button that starts it is at the top of the page (models_measure.html). #}
+{% if measure_oob|default(false) and kind|default('llm') == 'llm' %}{% include 'models_measure.html' %}{% endif %}
+{% set runs = measuring.runs if measuring is defined and measuring else [] %}
+{% set several = runs|length > 1 %}
+{% set running = runs|rejectattr('ended')|list %}
+{% if running %}
 {% call alert('primary', class_='d-flex flex-wrap align-items-center gap-2', tag='form', attrs={'method': 'post', 'action': '/measure-models' ~ (node_query|replace('&', '?', 1))}) %}
-  <span class="flex-grow-1"><b>Measuring the models</b>, asked by {{ run.by }}: {{ run.now or "between two" }} now, {{ run.done|length }} done, {{ run.left|length }} left{% if run.failed %}, {{ run.failed|length }} would not load{% endif %}.
+  <span class="flex-grow-1"><b>Measuring the models</b>{% for run in running %}{% if several or run.node != 'compute' %}<br><b>{{ run.node }}</b>: asked by{% else %}, asked by{% endif %} {{ run.by }}: {{ run.now or "between two" }} now, {{ run.done|length }} done, {{ run.left|length }} left{% if run.failed %}, {{ run.failed|length }} would not load{% endif %}.{% endfor %}
     It gives way as soon as anyone asks for a model.</span>
   <button  class="btn btn-outline-danger btn-sm" name="do" value="stop" {{ confirm_two() }}>Stop</button>
 {% endcall %}
-{% else %}
-{% if run %}
+{% endif %}
+{% for run in runs if run.ended %}
 {% call alert('secondary') %}
-  The last measuring, asked by {{ run.by }} at {{ run.since|timestamp }}: {{ run.done|length }} measured, {{ run.left|length }} left. {{ run.ended }}
+  The last measuring{% if several or run.node != 'compute' %} on <b>{{ run.node }}</b>{% endif %}, asked by {{ run.by }} at {{ run.since|timestamp }}: {{ run.done|length }} measured, {{ run.left|length }} left. {{ run.ended }}
   {% for name, why in run.failed.items() %}<br><b>{{ name }}</b> would not load: {{ why }}{% endfor %}
 {% endcall %}
-
-{% endif %}
-{% if known.to_measure and kind|default('llm') == 'llm' %}
-<form method="post" action="/measure-models{{ node_query|replace('&', '?', 1) }}" class="d-flex flex-wrap align-items-center gap-2 mb-3">
-  <button class="btn btn-outline-primary btn-sm" name="do" value="start">Measure the {{ known.to_measure|length }} model{{ "" if known.to_measure|length == 1 else "s" }} needing measurements</button>
-  <small class="text-secondary">Measures each model in turn, unloading idle models as needed. A live request pauses measurement. Select Measure again to resume.</small>
-</form>
-{% endif %}
-{% endif %}
+{% endfor %}
 <table id="models-table" class="table table-hover align-middle sortable">
   <thead><tr><th data-sort="value" title="The sort order set on the model's page. The lowest comes first in every list of models">Order</th><th data-sort="text">Model</th><th data-sort="value">Locations</th>{% if kind|default('llm') == 'llm' %}<th data-sort="value">Min context</th><th data-sort="value">Max context</th>{% else %}<th data-sort="text">Family</th>{% if kind == 'audio' %}<th data-sort="text">Kind</th>{% endif %}{% endif %}{% if kind|default('llm') == 'llm' %}<th data-sort="value">Memory at min</th><th data-sort="value">Memory at max</th>{% else %}<th data-sort="value">Measured memory</th>{% endif %}<th data-sort="text">Fingerprint</th><th data-sort="text">Now</th><th data-sort="value">Last used</th></tr></thead>
   <tbody>

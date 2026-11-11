@@ -512,6 +512,36 @@ def fit_node(known: dict, machine: str) -> dict:
     return {**node, "models": models, "nodes": nodes}
 
 
+def node_measuring(known: dict, node: str = "") -> dict[str, dict]:
+    """Each compute node's models still to be measured, by their names there, and its measuring run.
+
+    `known` is the merged catalogue, which carries every node under `nodes`, or one node's own
+    catalogue when `node` names it. With `node`, only that node is kept."""
+    nodes = known.get("nodes") or {node or "compute": known}
+    return {name: {"to_measure": list(one.get("to_measure") or []), "measuring": one.get("measuring")}
+            for name, one in nodes.items() if not node or name == node}
+
+
+def measure_plan(nodes: dict[str, dict], copies: set[tuple[str, str]] | None = None) -> dict[str, list[str]]:
+    """The nodes that have something to measure, each with its models' names there. `copies` keeps only those (node, name) pairs."""
+    plan = {name: [model for model in one["to_measure"] if copies is None or (name, model) in copies] for name, one in nodes.items()}
+    return {name: models for name, models in plan.items() if models}
+
+
+def model_copies(model: dict, node: str = "") -> set[tuple[str, str]]:
+    """Every (node, name there) of one model in the catalogue; a catalogue of one node has no locations and is that node's."""
+    return {(place.get("machine", "compute"), place.get("name", model["name"]))
+            for place in model.get("locations") or [{"machine": node or "compute", "name": model["name"]}]}
+
+
+def measure_button(models: list[dict], nodes: dict[str, dict], node: str = "") -> dict:
+    """What the Measure memory button says: the models with a copy still to measure, and the runs under way."""
+    wanted = {(name, model) for name, models_there in measure_plan(nodes).items() for model in models_there}
+    runs = [{"node": name, **one["measuring"]} for name, one in nodes.items() if one.get("measuring")]
+    return {"models": [model["name"] for model in models if model_copies(model, node) & wanted],
+            "running": [run for run in runs if not run.get("ended")], "runs": runs}
+
+
 # ---- abilities, for the Users and Groups pages -------------------------------------------------
 #
 # `known` is what LoadCoach says at /loadcoach/groups: every ability with its words, and under
@@ -1799,12 +1829,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return fragment_error(request, person, 'models', 'list', known) if part == 'list' else known
         kinds = {"sdcpp": "image", "audiocpp": "audio"}
         known['models'] = [one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == kind]
+        measuring = measure_button(known['models'], node_measuring(known, shown_node), shown_node)
         wanted_jobs = asked.getlist("install")
         progress = await ask("GET", "/turnstile/artifacts/distributions", person.key) if wanted_jobs else None
         installations = [job for job in progress.json().get("distributions", []) if job["id"] in wanted_jobs] if progress and progress.is_success else []
         if part == "list":  # the list asking for itself again
             return page(request, "models_list.html", person, known=known, address=lambda label: node_model_address(request, label),
-                        kind=kind, installations=installations, adaptor_models=plugins.models(person.me) if kind == 'llm' else [])
+                        kind=kind, installations=installations, adaptor_models=plugins.models(person.me) if kind == 'llm' else [],
+                        measuring=measuring, measure_oob=True)
         names = [node["name"] for node in node_choices]
         add_nodes = ((form or {}).get("nodes") or asked.getlist("add_to") or ([shown_node] if shown_node else names if len(names) == 1 else []))
         # Each node's engines; an engine can be chosen when it is enabled on every node it is added to.
@@ -1847,15 +1879,39 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     file_nodes=file_nodes, node_choices=node_choices, shown_node=shown_node, add_nodes=add_nodes,
                     engine_choices=engine_choices, selected_engine=chosen_engine, engine_schema=engine_schema,
                     said=said or asked.get("said", ""), failed=failed, form=form or {}, address=lambda label: node_model_address(request, label),
-                    adaptor_models=plugins.models(person.me) if kind == 'llm' else [])  # fmt: skip
+                    adaptor_models=plugins.models(person.me) if kind == 'llm' else [], measuring=measuring)  # fmt: skip
+
+    async def measure_on_nodes(person: Person, nodes: dict[str, dict], stop: bool, copies: set[tuple[str, str]] | None = None,
+                               merged: bool = True) -> str | None:
+        """Start measuring on every node in `nodes` (see node_measuring) with a model to measure, or stop the runs under way.
+        `copies` keeps one model's copies. `merged` is false for a front too old to merge nodes, which knows compute alone.
+
+        Each node measures its own copies, one after another, and gives way to any request.
+        Says why nothing could be started, or None when every node that was asked agreed."""
+        if stop:
+            targets = {name: None for name, one in nodes.items() if one.get("measuring") and not one["measuring"].get("ended")}
+        else:
+            targets = {name: (models if copies is not None else None) for name, models in measure_plan(nodes, copies).items()}
+        if not targets:
+            return None if stop else "Every model already has its memory measured at its minimum and maximum context."
+        def path(name: str) -> str:
+            return "/turnstile/machines/" + quote(name, safe="") + "/model-api/model-measure-all" if merged else "/loadcoach/model-measure-all"
+        answers = await asyncio.gather(*(ask("POST", path(name), person.key, json={"on": not stop, **({"names": models} if models else {})})
+                                         for name, models in targets.items()))
+        refused = [f"{name}: {answer.json().get('error', {}).get('message', answer.status_code)}"
+                   for name, answer in zip(targets, answers) if not answer.is_success]
+        return "; ".join(refused) or None
 
     async def measure_models(request: Request, person: Person) -> Response:
-        """Start measuring every model that has no measure, or stop the run that is under way. Back to the list, which shows how far it has got."""
+        """Start measuring every model with a copy that has no measure, on each node it is on, or stop the runs under way. Back to the list, which shows how far they have got."""
         stop = (await typed(request)).get("do") == "stop"
-        answer = await model_api(request, person, "POST", "/loadcoach/model-measure-all", json={"on": not stop})
-        if not answer.is_success:
-            return await models_page(request, person, answer.json()["error"]["message"], failed=True)
+        known = await all_models(request, person)
+        if isinstance(known, Response):
+            return known
         node = request.query_params.get("node", "")
+        refused = await measure_on_nodes(person, node_measuring(known, node), stop, merged=bool(known.get("nodes") or node))
+        if refused:
+            return await models_page(request, person, refused, failed=True)
         return go("/models?" + ("node=" + quote(node, safe="") + "&" if node else "") + "said=" + quote("Asked for the measuring to stop." if stop else "Measuring the models that have no measure. The list shows how far it has got."))
 
     async def model_files_picker(request: Request, person: Person) -> Response:
@@ -2070,12 +2126,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         every["flags"] = usable_model_flags(every["flags"])
         setups = await model_api(request, person, "GET", "/loadcoach/model-setup", params={"name": name})
         setup = setups.json() if setups.status_code == 200 else {"presets": [], "undo": None, "can_undo": False, "why": setups.json().get("error", {}).get("message", "")}
+        measure_nodes = node_measuring({"nodes": logical_nodes}) if logical_nodes else node_measuring(known, request.query_params.get("node", ""))
+        measure = {"nodes": sorted(measure_plan(measure_nodes, model_copies(model, selected_node))),
+                   "busy": any(one["measuring"] and not one["measuring"].get("ended") for one in measure_nodes.values())}
         columns = matrix_columns(name, model, selected_node, showing, known, logical_nodes, node_choices, typed_nodes or {},
                                  (told or {}).get("facts", {}).get("trained_context"))
         return page(request, "model.html", person, columns=columns,
                     targets=[node for node in node_choices if node["name"] not in {column["machine"] for column in columns}], status=400 if failed else 200, model=model, build=known.get("build"), parts=parts, showing=showing, known=known, told=told, every=every,
                     selected_node=selected_node, node_choices=node_choices, global_flags=GLOBAL_FLAGS, engine_schema=engine_for(model).schema(),
-                    setup=setup,
+                    setup=setup, measure=measure,
                     **scores,
                     suggestions=suggested(showing, known["defaults"], known["cards"]),
                     parallel=parallel_fields({**known["defaults"], **showing["flags"]}, (told or {}).get("facts", {}).get("trained_context")),
@@ -2291,6 +2350,28 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             left = answer.json()["still_finishing"]
             finishing = f" {left} request{'' if left == 1 else 's'} for it will still be answered, and then it is unloaded." if left else ""
             return go("/models?said=" + quote(f"Removed {name}.{finishing} Its file is left where it is."))
+        if form.get("do", [""])[-1] == "measure":
+            # Every copy of this model, on whichever node, that has no measure at its minimum and maximum context.
+            node = request.query_params.get("node") or "compute"
+            logical = await ask("GET", "/turnstile/models", person.key)
+            if logical.is_success:
+                catalogue = logical.json()
+                row = next((row for row in catalogue["models"] if any(place["machine"] == node and place.get("name") == name
+                                                                       for place in row.get("locations", []))), None)
+                nodes, merged = node_measuring(catalogue), True
+            else:
+                catalogue = await all_models(request, person)
+                if isinstance(catalogue, Response):
+                    return catalogue
+                row = next((row for row in catalogue["models"] if row["name"] == name), None)
+                nodes, merged = node_measuring(catalogue, request.query_params.get("node", "")), bool(request.query_params.get("node"))
+            if row is None:
+                return page(request, "refused.html", person, status=404, why=f"There is no model named {name}.")
+            refused = await measure_on_nodes(person, nodes, False, model_copies(row, node), merged=merged)
+            if refused:
+                return await model_page(request, person, refused, failed=True)
+            return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(
+                f"Measuring {name}'s memory at its minimum and maximum context. It gives way as soon as anyone asks for a model; the Models list shows how far it has got."))
         if form.get("do", [""])[-1] == "forget-measure":
             await model_api(request, person, "POST", "/loadcoach/model-forget-measure", json={"name": name})
             return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(f"Forgot what {name} measured. The next time it loads it has its cards to itself, and is measured afresh."))

@@ -5,7 +5,7 @@
 {% block title %}Models · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/model-files.js?v=4" defer></script>{% endblock %}
 {% block main %}
-{% call page_header('Models', 'Choose a model type to manage its files, settings and availability.') %}<a class="btn btn-primary" href="{{ '#add-model' if kind == 'llm' else '/models/images?new=1' if kind == 'image' else '/models/audio?new=1' }}">Add a model</a>{% endcall %}
+{% call page_header('Models', 'Choose a model type to manage its files, settings and availability.') %}{% if kind == 'llm' %}{% include 'models_measure.html' %}{% endif %}<a class="btn btn-primary" href="{{ '#add-model' if kind == 'llm' else '/models/images?new=1' if kind == 'image' else '/models/audio?new=1' }}">Add a model</a>{% endcall %}
 {{ said_box(said, failed) }}
 
 {# All nodes' models together, or one node's own. Each row of pills keeps the other's choice. #}

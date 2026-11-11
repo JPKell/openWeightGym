@@ -1705,14 +1705,24 @@ def test_the_models_pages_show_a_fingerprint_and_every_one_ever_seen_can_be_read
 def test_a_button_measures_every_model_that_has_no_measure(live_desk):
     browser, _, _ = live_desk
     sign_in(browser, "jordan")
-    assert 'value="start">Measure the 2 models needing measurements</button>' in browser.get("/models?complete=1").text
+    page = browser.get("/models?complete=1").text
+    header = page[page.index('class="page-actions'):]
+    header = header[:header.index('</header>')]
+    assert 'id="measure-models"' in header and ">Measure memory · 2</button>" in header and "disabled" not in header
+    assert 'value="measure"' in browser.get("/models/small").text  # File facts has its own button, for the one model
     pressed = browser.post("/measure-models", data={"do": "start"})
     assert "Measuring the models that have no measure." in pressed.text
     deadline = time.monotonic() + 8
     while "The last measuring" not in browser.get("/models?part=list").text and time.monotonic() < deadline:
         time.sleep(0.05)
     after = browser.get("/models?part=list").text
-    assert "2 measured, 0 left. Every model was tried." in after and "not yet" not in after and 'value="start"' not in after
+    assert "2 measured, 0 left. Every model was tried." in after and "not yet" not in after
+    button = after[after.index('id="measure-models"'):]
+    button = button[:button.index("</form>")]
+    assert 'hx-swap-oob="outerHTML"' in button and " disabled" in button and ">Measure memory</button>" in button  # nothing left to measure: greyed out
+    small = browser.get("/models/small").text
+    assert " disabled" in small[small.index('value="measure"'):small.index(">Measure memory</button>")]
+    assert "already has its memory measured" in browser.post("/models/small", data={"do": "measure"}).text
     assert "2.9 GB" in after and "1.0 GB" in after  # what small and tiny use, as the stand-in for nvidia-smi says
     assert "Asked for the measuring to stop." in browser.post("/measure-models", data={"do": "stop"}).text  # nothing is under way, and saying so does no harm
     browser.post("/sign-out")
@@ -1965,3 +1975,26 @@ def test_initial_parallel_context_is_capped_to_total():
     assert parallel_fields({'ctx-size': 262114}, 262144)['context'] == 262114
     saved = parallel_fields({'ctx-size': 100, 'kv-unified-per-slot': 200})
     assert saved['exceeds_total'] and saved['context'] == 200
+
+
+def test_measure_memory_counts_copies_on_every_node_not_only_compute():
+    from weightroom.app import measure_button, measure_plan, model_copies, node_measuring
+    smol = {"name": "smol", "locations": [{"machine": "compute", "name": "smol"}, {"machine": "gpu-b", "name": "smol"},
+                                          {"machine": "gpu-c", "name": "smol-135m"}, {"machine": "gpu-d", "name": "smol"}]}
+    qwen = {"name": "qwen", "locations": [{"machine": "compute", "name": "qwen"}]}
+    known = {"to_measure": [], "measuring": None, "models": [smol, qwen], "nodes": {
+        "compute": {"to_measure": [], "measuring": None}, "gpu-b": {"to_measure": [], "measuring": None},
+        "gpu-c": {"to_measure": ["smol-135m"], "measuring": None},
+        "gpu-d": {"to_measure": ["smol"], "measuring": {"by": "jordan", "ended": "Every model was tried.", "done": [], "left": [], "failed": {}}}}}
+    nodes = node_measuring(known)
+    button = measure_button(known["models"], nodes)
+    assert button["models"] == ["smol"] and button["running"] == [] and [run["node"] for run in button["runs"]] == ["gpu-d"]
+    assert measure_plan(nodes, model_copies(smol)) == {"gpu-c": ["smol-135m"], "gpu-d": ["smol"]}
+    assert measure_plan(nodes, model_copies(qwen)) == {}
+    # One node's own catalogue, as on /models?node=gpu-c, has no locations and no nodes.
+    one = {"to_measure": ["smol-135m"], "measuring": None, "models": [{"name": "smol-135m"}]}
+    assert measure_button(one["models"], node_measuring(one, "gpu-c"), "gpu-c")["models"] == ["smol-135m"]
+    # Every copy measured: nothing to press.
+    for node in known["nodes"].values():
+        node["to_measure"] = []
+    assert measure_button(known["models"], node_measuring(known))["models"] == []

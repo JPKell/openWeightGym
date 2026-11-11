@@ -25,7 +25,7 @@ from typing import Callable
 import httpx
 
 from loadcoach.config import Config
-from loadcoach.models import Models, at_context, base, contexts, kin_base
+from loadcoach.models import LAUNCH_FAILURE_PREFIX, Models, at_context, base, contexts, kin_base
 from loadcoach.waiting import estimate
 from loadcoach.host_memory import memory_snapshot, resident_mib
 from loadcoach.processes import ProcessGroup, adopt_orphans
@@ -61,6 +61,12 @@ class Refusal(Exception):
         super().__init__(message)
         self.status = status
         self.retry_after = retry_after
+
+
+class LaunchFailure(Refusal):
+    """The engine process could not be started at all: a missing or unusable executable, cards
+    that are not this engine's, or launch settings it rejects. Says nothing of the model's memory,
+    so it is never kept as a context measurement and the model stays to be measured."""
 
 
 class ConfiguredRamCapacity(Refusal):
@@ -915,6 +921,10 @@ class Runner:
                 if any(self.known(card) and self.known(card)["used"] + self.config.card_margin > self.known(card)["total"] for card in server.cards):
                     await self.stop(server)
                     loaded = None
+            except LaunchFailure:
+                if loaded is not None:
+                    await self.stop(server)
+                raise  # the engine itself would not start: no context can be measured, and none is marked as tried
             except Refusal as problem:
                 self.models.measured(server.model, server.settings, None, str(problem))
                 self.note("model", "context-failed", model=server.model, context=context, why=str(problem))
@@ -1066,7 +1076,7 @@ class Runner:
             again = server.packed and self.models.forget_measure(server.model)
             self.note("model", "failed", model=server.model, why=str(refusal), text={"output": server.output()}, **({"again": "alone"} if again else {}))
             automatic = (server.configured or {}).get("gpus") == "any"
-            if automatic and not server.calibrating:
+            if automatic and not server.calibrating and not isinstance(refusal, LaunchFailure):
                 self.models.measured(server.model, server.settings, None, str(refusal))
             split_retry = bool(automatic and (server.configured or {}).get("allow_split") and len(server.cards) == 1 and len(self.engine_cards(server.settings)) >= 2
                                and ("out of memory" in str(refusal).lower() or "cannot fit" in str(refusal).lower()))
@@ -1272,11 +1282,11 @@ class Runner:
     async def start(self, server: Server) -> None:
         """Start on enabled cards only, including isolated probes."""
         if not set(server.cards) <= set(self.engine_cards(server.settings)):
-            raise Refusal(503, "A card selected for this model is disabled, reserved for another engine or unsupported by this engine.")
+            raise LaunchFailure(503, "A card selected for this model is disabled, reserved for another engine or unsupported by this engine.")
         port = free_port()
         engine = engine_for(server.settings)
         if server in self.retiring:
-            raise Refusal(503, "This engine's previous process tree has not finished stopping.")
+            raise LaunchFailure(503, "This engine's previous process tree has not finished stopping.")
         server.stopping = None
         try:
             if engine.id == "strata":
@@ -1302,7 +1312,7 @@ class Runner:
             else:
                 launch = engine.launch(self.config, port, server.settings, server.cards)
         except (OSError, ValueError) as problem:
-            raise Refusal(503, str(problem)) from None
+            raise LaunchFailure(503, str(problem)) from None
         server.launch_cleanup = launch.cleanup
         server.build = launch.build
         if launch.build:
@@ -1343,7 +1353,7 @@ class Runner:
             server.owned_group = ProcessGroup(process) if launch.process_group else None
         except (OSError, ValueError) as problem:
             await self.stop(server)
-            raise Refusal(502, f"Could not run {command[0]}: {problem}") from None
+            raise LaunchFailure(502, f"{LAUNCH_FAILURE_PREFIX}{command[0]}: {problem}") from None
         except BaseException:
             await self.stop(server)
             raise

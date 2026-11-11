@@ -1,0 +1,12 @@
+{# Measure memory, beside Add a model at the top of Models: loads each model with a copy whose memory has not been
+   measured at its minimum and maximum context, on every node that copy is on. Greyed out when every model is measured,
+   or while measuring is under way. The page heading has it before the list has loaded, greyed out; the list asks for
+   itself every 5 seconds and brings it along out of band (`measure_oob`), with the counts filled in. #}
+{% set node = request.query_params.get('node', '') %}
+{% set ready = measuring is defined and measuring %}
+{% set count = measuring.models|length if ready else 0 %}
+{% set busy = ready and measuring.running %}
+<form id="measure-models" method="post" action="/measure-models{{ '?node=' ~ node|urlencode if node }}" class="d-inline-flex"{% if measure_oob|default(false) %} hx-swap-oob="outerHTML"{% endif %}>
+  <button class="btn btn-outline-primary" name="do" value="start"{{ ' disabled' if not count or busy }}
+    title="{{ 'Finding the models still to measure…' if not ready else 'Measuring is under way; see the list below.' if busy else 'Every model has its memory measured at its minimum and maximum context.' if not count else 'Loads each of these models in turn, on every node it is on, unloading idle models as needed. A live request pauses measuring.' }}">Measure memory{% if count %} · {{ count }}{% endif %}</button>
+</form>
