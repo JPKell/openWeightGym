@@ -433,7 +433,7 @@
   function apiExample() {
     const set = chosenSet(); if (!set) return;
     $('#api-summary').textContent = `${set.name} · version ${set.version} · ${machine}`;
-    $('#api-note').textContent = 'Proposed node-scoped route — not implemented. This browser sample is not a real saved load-out. The existing primary-node API is POST /loadcoach/loadouts with actions preview and request; mixed-engine profile support also needs implementation.';
+    $('#api-note').textContent = 'Sample set only. This preview does not create real load-outs. The node-scoped API below is implemented; save a set on the live Dry fit page before running these calls. The primary worker also supports POST /loadcoach/loadouts.';
     // JSON text goes into a code node, never into HTML or an executed command.
     const reviewBody = JSON.stringify({action: 'preview', name: set.name});
     const requestBody = JSON.stringify({action: 'request', name: set.name, token: 'TOKEN_FROM_REVIEW'});
@@ -443,7 +443,7 @@
       const delimiter = heredoc(body);
       return `curl --fail-with-body "$OWG_URL/turnstile/machines/${encodeURIComponent(machine)}/control/loadouts" \\\n  -H "Authorization: Bearer $OWG_KEY" \\\n  -H 'Content-Type: application/json' --data-binary @- ${suffix}<<'${delimiter}'\n${body}\n${delimiter}`;
     };
-    $('#api-code').textContent = `# PROPOSED route; first save this set on the real selected node.\n# 1. Review the saved definition, changes, warnings and joint admission.\n${curl(reviewBody)}\n\n# 2. After reviewing, substitute the returned token.\n# Add "acknowledge":true only after accepting any warnings.\n${curl(requestBody)}\n\n# Success returns a ready lease, version and seconds: 600.\n# Renew/release through the same endpoint using the lease ID.`;
+    $('#api-code').textContent = `# First save this set through the live Dry fit page on the selected node.\n# 1. Review the saved definition, changes, warnings and joint admission.\n${curl(reviewBody)}\n\n# 2. After reviewing, substitute the returned token.\n# Add "acknowledge":true only after accepting any warnings.\n${curl(requestBody)}\n\n# Success returns a ready lease, version and seconds: 600.\n# Renew/release through the same endpoint using the lease ID.`;
     $('#copy-status').textContent = '';
     $('#api').showModal();
   }
@@ -510,7 +510,7 @@
   });
   $('#api-open').addEventListener('click', apiExample);
   $('#copy-api').addEventListener('click', async () => {
-    try {await navigator.clipboard.writeText($('#api-code').textContent); $('#copy-status').textContent = 'Copied proposed API example.';}
+    try {await navigator.clipboard.writeText($('#api-code').textContent); $('#copy-status').textContent = 'Copied API example.';}
     catch {$('#copy-status').textContent = 'Clipboard is unavailable here. Select and copy the example above.';}
   });
   $$('[data-close]').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));

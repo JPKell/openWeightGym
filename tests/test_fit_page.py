@@ -60,24 +60,24 @@ def test_the_dry_fit_page_lists_measured_models_to_tick_and_says_what_each_role_
     shown = browser.get("/dry-fit").text
     assert '<a class="section-link active" href="/dry-fit" aria-current="page">Dry fit</a>' in shown  # beside Models, in its category
     assert "Tick models in the list onto the cards" not in shown
-    # A measured model has a row in the list with its points and a box for each card it may go on, and no slider there.
-    row = re.search(r'<tr\b[^>]*\bdata-model="strong"[^>]*>', shown)[0]
-    assert f'data-model-id="{kept.identity("strong")}"' in row and 'data-need="1"' in row
-    assert json.loads(re.search(r"data-points='([^']+)'", row)[1]) == [[4096, [5000]], [8192, [9000]]]
-    assert shown.count('value="strong" data-card=') == 2 and '<td data-value="9000" class="text-nowrap">8.8 GB</td>' in shown
-    assert "measured at one context" in shown and "not measured yet" in shown
-    # Under the bars it has a line with its name and its slider, hidden until it is ticked. A context of 2,048 is not worth a slider.
-    assert '<div class="fit-pick" data-model="strong" data-top="8192" data-low="4096" hidden>' in shown and "under its minimum context of 4,096" in shown
-    assert 'min="1024" max="8192" step="1024" value="8192"' in shown and shown.count('type="range"') == 1
-    assert shown.index('id="fit-picks"') < shown.index('id="fit-table"') and shown.count('class="fit-pick"') == 2
-    assert "The size of this card is not known" in shown  # these checks have no nvidia-smi
-    assert "<b>CPU RAM</b>" not in shown  # GPU-only catalogues do not offer a misleading host-RAM preview.
-    # Nothing is loaded, so nothing is ticked, and every way of asking comes to the top of the list.
-    assert " checked>" not in shown and shown.count('<a href="/models/strong">strong</a>') == 6 and shown.count("has to be loaded") == 4
+    workspace = json.loads(re.search(r'<script type="application/json" id="fit-data">(.*?)</script>', shown, re.S)[1])
+    strong = next(one for one in workspace['models'] if one['name'] == 'strong')
+    assert strong['id'] == kept.identity('strong') and strong['points'] == [[4096, [5000]], [8192, [9000]]]
+    assert strong['min'] == 4096 and strong['max'] == 8192
+    assert [one['cards'] for one in strong['placements']] == [['A'], ['B']]
+    assert next(one for one in workspace['models'] if one['name'] == 'new')['unknown']
+    # Unknown device capacity is explicit, and system RAM remains visible on GPU nodes.
+    assert workspace['resources'][0]['budget'] is None
+    assert workspace['resources'][-1]['name'] == 'System RAM'
+    assert not any(one['selected'] for one in workspace['models'])
+    assert 'id="catalogue-search"' in shown and 'id="fit-table"' in shown
+    assert shown.count("has to be loaded") == 4
 
     kept.put("processor", {"gpus": 0, "flags": {"model": gguf(tmp_path / "processor.gguf"), "ctx-size": 2048}})
     cpu_shown = browser.get("/dry-fit").text
-    assert "<b>CPU RAM</b>" in cpu_shown and "Include CPU model" in cpu_shown
+    cpu_workspace = json.loads(re.search(r'<script type="application/json" id="fit-data">(.*?)</script>', cpu_shown, re.S)[1])
+    cpu = next(one for one in cpu_workspace['models'] if one['name'] == 'processor')
+    assert cpu['placements'] == [{'cards': [], 'label': 'System RAM'}] and cpu['ram_points']
 
     # A loaded model at half the quality preference cannot win an ordinary 25% bonus.
     # :available and :fast can still favor it; :best keeps the quality order.

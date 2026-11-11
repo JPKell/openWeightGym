@@ -10742,12 +10742,16 @@ These administrative leases are fixed at 600 seconds for model managers; ordinar
 and group `max_hold` limits keep their existing behavior. Runtime leases are volatile, expire,
 and never automatically reload models after a restart. Definitions and undo survive restart.
 
-`GET /loadcoach/loadouts` requires `manage-models` and returns saved versions plus the caller's
-leases. `POST /loadcoach/loadouts` accepts these actions:
+`GET /loadcoach/loadouts` requires `manage-models` and returns saved versions, `max_members: 16`,
+and the caller's leases. Front clients use **GET/POST `/turnstile/machines/{name}/control/loadouts`**
+to address a configured node explicitly, including `compute`. The gateway signs the original caller,
+preserves admission priority/lock headers, never wakes a host, and never falls back to another node.
+Same-named sets and leases on different nodes are independent. The local worker API remains available
+for the CLI and existing clients. Both routes accept these POST actions (at most 64 KiB):
 
 | Action | Fields and result |
 |---|---|
-| `save` | `name`, `models: [{model, cards, context}]`, and current `version` when replacing; returns the saved version |
+| `save` | `name`, 1–16 `models` entries, and current `version` when replacing; LLM entries are `{model, cards, context}`, fixed image/audio entries are `{model, cards, profile}`; returns the saved version |
 | `preview` | `name`, optional `undo: true`; returns member changes/errors/warnings, joint fit and a review `token` |
 | `apply` | `name`, `token`, `acknowledge: true` for warnings, optional `undo: true`; commits every reviewed configuration together |
 | `request` | `name`, `token`, warning acknowledgement; also requires `load` and access to every member; returns a ready `lease`, version and `seconds: 600` |
@@ -10755,12 +10759,50 @@ leases. `POST /loadcoach/loadouts` accepts these actions:
 | `release` | `lease`; the owner can release even after losing management permission |
 | `delete` | `name` and current `version`; removes the definition, preserving applied settings and active leases |
 
-The console's Named load-outs card lives on `/dry-fit`, with Select, replace, preview,
-apply/load, renew/release, guarded undo and delete controls. Model identity data attributes
-preserve selection through renames. Selecting a stored GPU context that a slider rounds is
-reported before resaving; the stored definition's own preview/request retains its exact value.
-Names and JSON attributes are escaped, origin checks remain, and old compute versions show a
-matching-update notice while the existing graph remains usable.
+`model` is the target node's local name; `cards: []` explicitly means CPU. A media `profile` is
+the current `loadout_profile` key from that node's `/loadcoach/models` catalogue (also retained in
+`/turnstile/models` locations). It binds the full fixed envelope, engine, stable model ID, file
+revision and file stats; media never takes a token context. Profiles survive pinning to exact
+cards but a changed envelope/file/engine requires resaving. Existing LLM definitions need no
+database migration. Upgrade matching front/gateway/worker code before creating mixed sets.
+Before rollback to an older worker, restore the pre-release load-out definitions from a verified
+model-store backup: older code cannot interpret fixed-profile entries. No SQL schema downgrade is
+needed, and rollback/restore must follow the existing store recovery procedure.
+A 409 means a stale version, profile or review token: refresh and preview
+again. Unknown nodes return 404; unreachable nodes return 503; disabled-node new work is refused.
+Permissions remain enforced at the worker; the owner may release a lease after losing management
+permission or while a node is disabled. Request needs `manage-models`, `load`, and access to every
+member. It returns a ready lease only after all members load; partial failure releases this
+attempt's set holds and retains guarded configuration undo.
+
+The live `/dry-fit` split browser searches/sorts a 15–30-model node catalogue beside compact
+selected rows. Exact context numbers, sliders and auto-fit locks share one draft per account/node
+in browser session storage; node and type switches do not discard selections. Auto-fit honors
+configured minima and fixed reservations, reporting impossible minima without lowering them.
+CPU context curves use current-profile RSS measurements plus admission growth margin, falling back
+to an explicitly provisional fixed first-load bound. VRAM and system RAM remain separate pools;
+RAM-only nodes show only RAM. CUDA spillover is never invented from unused RAM: enabled offload
+requires host evidence for a combined estimate; hybrid engines reserve their full host budget.
+Missing device telemetry or unqualified media prevents a positive fit verdict. Physical RAM,
+headroom, other use, model-RAM limits and the separate cgroup ceiling stay visible. Saving and
+tuning load nothing; existing Select/replace/review/apply/request/renew/release/undo/delete actions
+retain their checks, origin protection and escaped names. Every form preserves its selected node.
+
+For a set already saved on `rig`, review it first (replace the URL/key with your front API values):
+
+```bash
+curl --fail-with-body "$OWG_URL/turnstile/machines/rig/control/loadouts" \
+  -H "Authorization: Bearer $OWG_KEY" -H 'Content-Type: application/json' \
+  --data '{"action":"preview","name":"Daily"}'
+# Inspect changes, errors and warnings. Substitute that response's token next.
+curl --fail-with-body "$OWG_URL/turnstile/machines/rig/control/loadouts" \
+  -H "Authorization: Bearer $OWG_KEY" -H 'Content-Type: application/json' \
+  --data '{"action":"request","name":"Daily","token":"TOKEN_FROM_PREVIEW"}'
+```
+
+Add `"acknowledge": true` only after reviewing any warnings. Success returns `lease`, `version`
+and `seconds: 600`; renew/release by sending `{action: "renew"|"release", lease: "RETURNED_ID"}`
+to the same node's endpoint. No additional unreviewed load endpoint is provided.
 
 The CLI uses its existing local owner token and running service, with no new key. A selection
 file is a JSON list, for example `[{"model":"my-cpu-model","cards":[],"context":8192}]`.

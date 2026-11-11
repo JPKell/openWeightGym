@@ -489,6 +489,21 @@ class Models:
                 self.db.execute("UPDATE models SET measured = ? WHERE name = ?", (json.dumps(own), name))
         return peak
 
+    def resident_measurements(self, name: str, settings: dict | None = None) -> list[dict]:
+        """Current-profile RSS points by context, including resident-only CPU observations."""
+        settings = settings or self.get(name)
+        if settings is None:
+            return []
+        stamps, found = self.stamps(settings), {}
+        for (kept,) in self.db.execute('SELECT measured FROM models WHERE measured IS NOT NULL'):
+            rows = json.loads(kept)
+            for point in rows if isinstance(rows, list) else [rows]:
+                if memory_base(point['settings']) != memory_base(settings) or point.get('files') != stamps or point.get('rss_mib') is None:
+                    continue
+                context = point['settings']['flags']['ctx-size']
+                found[context] = max(found.get(context, 0), point['rss_mib'])
+        return [{'context': context, 'rss_mib': value} for context, value in sorted(found.items())]
+
     def run_begun(self, by: str, caller: str, since: str) -> None:
         """Write down that a run measuring the models is under way, and who asked for it."""
         with self.db:

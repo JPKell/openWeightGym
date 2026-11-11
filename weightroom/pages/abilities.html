@@ -24,7 +24,7 @@
   {% for title, names in ability_categories + [('Other', ticks|rejectattr('name', 'in', listed)|map(attribute='name')|list)] %}
   {% if ticks|selectattr('name', 'in', names)|first %}
   <section class="ability-category" data-ability-category>
-    {{ section_title(title, level=3, class_='eyebrow ability-category-title') }}
+    {{ section_title(title, level=3, class_='ability-category-title') }}
     {# In the category's own order. #}
     <div class="row g-2">{% for name in names %}{% for row in ticks if row.name == name %}{{ tick(row, marks) }}{% endfor %}{% endfor %}</div>
   </section>

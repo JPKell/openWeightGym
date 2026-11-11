@@ -76,6 +76,17 @@ def test_vendor_without_driver_is_visible_but_not_mistaken_for_cuda(tmp_path, mo
             devices.cuda_environment(config, (card,))
 
 
+def test_identified_integrated_device_is_excluded_without_hiding_unknown_discrete_cards(tmp_path, monkeypatch):
+    pci(tmp_path, '0000:01:00.0', '0x1002')
+    (tmp_path / '0000:01:00.0/device').write_text('0x164e')
+    pci(tmp_path, '0000:02:00.0', '0x1002')
+    monkeypatch.setattr(devices, 'query', lambda command: '')
+    assert [card['pci'] for card in hardware(pci_root=tmp_path)] == ['0000:02:00.0']
+    config = Config(gpus=('integrated', 'legacy'), gpu_details=[{'id': 'integrated', 'integrated': True}])
+    assert Runner(config, None).cards == ('legacy',)
+    assert devices.allowed(config, 'llama_cpp') == ('legacy',)
+
+
 @pytest.mark.parametrize('engine_id', ['sdcpp', 'audiocpp'])
 def test_native_children_only_see_the_assigned_card(engine_id, tmp_path, monkeypatch):
     import json

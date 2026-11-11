@@ -44,14 +44,14 @@ def test_dry_fit_saves_cpu_selection_reviews_loads_holds_and_undoes(loadout_desk
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/dry-fit')
-        page.locator('.fit-cpu').check()
+        page.get_by_label('Select cpu', exact=True).check()
         page.locator('.fit-cpu-context').fill('2048')
         page.locator('#fit-name').fill('Daily <fit>')
         page.get_by_role('button', name='Save current selection', exact=True).click()
         playwright.expect(page.locator('#fit-saved')).to_contain_text('Daily <fit>')
         assert library.get('cpu')['flags']['ctx-size'] == 4096  # saving cannot apply settings
         page.get_by_role('button', name='Select', exact=True).click()
-        playwright.expect(page.locator('.fit-cpu')).to_be_checked()
+        playwright.expect(page.get_by_label('Select cpu', exact=True)).to_be_checked()
         playwright.expect(page.locator('.fit-cpu-context')).to_have_value('2048')
         playwright.expect(page.locator('#fit-replace')).to_be_checked()
         page.get_by_role('button', name='Save current selection', exact=True).click()
@@ -69,7 +69,7 @@ def test_dry_fit_saves_cpu_selection_reviews_loads_holds_and_undoes(loadout_desk
         playwright.expect(page.get_by_role('table', name='Your load-out holds')).to_contain_text('Daily <fit>')
         page.get_by_role('button', name='Release set hold', exact=True).click()
         playwright.expect(page.get_by_role('table', name='Your load-out holds')).to_have_count(0)
-        playwright.expect(page.locator('.fit-cpu')).to_be_checked()  # CPU readiness uses loaded state, not nonempty GPU cards
+        playwright.expect(page.get_by_label('Select cpu', exact=True)).to_be_checked()  # CPU readiness uses loaded state, not GPU cards
         page.get_by_role('button', name='Preview undo', exact=True).click()
         page.locator('#loadout-acknowledge').check()
         page.get_by_role('button', name='Restore settings', exact=True).click()

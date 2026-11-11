@@ -83,6 +83,7 @@ from engines import engine_for, engine_ids, catalogue as engine_catalogue
 from loadcoach.models import request_context, Models, check_model, check_order, effective, files_of, lora_field
 from loadcoach import waiting as waits
 from loadcoach.loadouts import Conflict as LoadoutConflict, Loadouts
+from loadcoach.media_setup import profile_key as loadouts_profile_key
 from loadcoach.runner import Lock, Refusal, Runner, Ticket
 from loadcoach.groups import ABILITIES, LEVELS
 from loadcoach.front import Accounts
@@ -1260,6 +1261,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                     "capabilities": engine_for(settings).capabilities(library.get(name)),
                     **runner.model_metadata(name),
                     "host_ram_budget_mib": runner.hybrid_budget(settings),
+                    'resident_measurements': library.resident_measurements(name, memory_settings),
+                    'loadout_profile': loadouts_profile_key(library, name),
                     "size": file.stat().st_size if file.is_file() else None,  # None: the file is missing
                     "order": library.place(name),  # its sort order, 10 unless it was given another. The list is in that order already: see Models.names()
                     "loaded": server.state if server else None,
@@ -1285,6 +1288,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             hashing.set()  # a file not read yet, such as one a model was given from the command line
         run = {key: value for key, value in measuring.items() if key != "task"} or None
         return JSONResponse({"defaults": config.model_defaults, "cards": list(runner.cards),
+                             'devices': config.gpu_details,
+                             'memory_policy': {'ram_offload': not config.disable_ram_offload},
                              'engine_cards': {engine: list(runner.engine_cards(engine)) for engine in engine_ids()},
                              "build": await runner.version(), "models": listed,
                              "to_measure": unmeasured(), "measuring": run})  # fmt: skip
@@ -2021,7 +2026,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 return denied
             runner.held()
             now = time.monotonic()
-            return JSONResponse({'loadouts': loadouts.listed(), 'hold_seconds': 600,
+            return JSONResponse({'loadouts': loadouts.listed(), 'hold_seconds': 600, 'max_members': 16,
                 'leases': [{'id': identity, 'name': lease['name'], 'state': lease['state'],
                             'version': lease['version'],
                             'seconds_left': max(0, round(lease['until'] - now, 1)),

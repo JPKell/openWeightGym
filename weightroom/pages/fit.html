@@ -1,101 +1,69 @@
 {% extends "frame.html" %}
 {% from "navigation_parts.html" import pills, pill_link, pill_button %}
-{% from "parts.html" import card, said_box, empty_row %}
-{% from "parts.html" import page_header, form_section, more %}
+{% from "parts.html" import card, said_box, empty_row, page_header, form_section, more, alert %}
+{% from "fit_parts.html" import dom_templates %}
 {% block title %}Dry fit · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/fit.js?v=3" defer></script>{% endblock %}
+{% block page_class %}fit-page{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/fit.css?v=1"><script src="/static/fit.js?v=4" defer></script>{% endblock %}
 {% block main %}
-{{ page_header('Dry fit', 'Explore how model selections fit on the selected node without loading them.') }}
+{{ page_header('Dry fit') }}
 {{ said_box(said, failed) }}
 {% call pills('Compute node', class_='mb-3') %}
-  {% for name in nodes %}{{ pill_link(name, '/dry-fit?machine=' ~ (name|urlencode), name == machine) }}{% endfor %}
+{% for name in nodes %}{{ pill_link(name, '/dry-fit?machine=' ~ (name|urlencode), name == machine, attrs={'data-fit-node': name}) }}{% endfor %}
 {% endcall %}
-{% call pills('Model type', class_='gap-2 mb-3', buttons=true) %}{% for kind,label in [('llm','LLM'),('audio','Audio'),('image','Image')] %}{{ pill_button(label, kind == 'llm', attrs={'data-fit-kind': kind}) }}{% endfor %}{% endcall %}
-<div class="form-check form-switch mb-3">
-  <input id="fit-auto" class="form-check-input" type="checkbox" role="switch">
-  <label for="fit-auto" class="form-check-label">Auto fit <small class="text-secondary">Adjust context to fit selected models.</small></label>
+<div id="fit-workspace" data-design="matrix">
+{% if not workspace.available %}{{ alert('warning', 'Node ' ~ machine ~ ' is unavailable. Capacity is unknown; reconnect before saving or loading a set.') }}{% endif %}
+<div id="fit-message" class="small mb-2" role="status" aria-live="polite"></div>
+<div class="fit-workspace">
+<section id="capacity" class="fit-capacity" aria-label="Combined memory preview">
+{% call card(id='capacity-card', body_class='py-3') %}
+<div id="verdict" class="fit-verdict rounded p-2" data-state="unknown" role="status" aria-live="polite"><strong id="verdict-title">Choose models to preview combined memory</strong><p id="verdict-detail" class="small mt-1 mb-0">No model is loaded by these controls.</p></div>
+<div id="resources"></div>
+<div class="fit-accounting small">{% call more('Memory accounting') %}
+<p>VRAM and system RAM are separate budgets. Integrated graphics do not add another memory pool. Host headroom, other use and the node's model RAM limit are accounted for; service memory ceilings and protected work are rechecked when loading.</p>
+<p>{% if workspace.ram_offload %}CUDA RAM offload is enabled on this node. A measured host allocation is required before estimating its combined fit.{% else %}GPU overflow is not assumed to spill into RAM. Hybrid engines count their full configured host reservation.{% endif %}</p>
+<div id="memory-notes"></div>
+<div class="fit-legend d-flex flex-wrap gap-3"><span><i class="bg-secondary"></i>Other use</span><span><i class="bg-blue"></i>Selected models</span><span><i class="fit-headroom"></i>Kept free</span></div>
+{% endcall %}</div>
+{% endcall %}
+</section>
+<aside id="catalogue" class="fit-catalogue" aria-label="Node model catalogue">
+{% call card('Available on ' ~ machine, id='catalogue-card', hint='Choose models to tune together.', body_class='p-0') %}
+<div class="p-3 border-bottom">
+<input id="catalogue-search" type="search" class="form-control form-control-sm mb-2" placeholder="Find a local model…" aria-label="Search model catalogue">
+<div class="d-flex gap-2"><select id="catalogue-kind" class="form-select form-select-sm" aria-label="Catalogue model type"><option value="all">All types</option><option value="llm">LLM</option><option value="audio">Audio</option><option value="image">Image</option></select><select id="catalogue-sort" class="form-select form-select-sm" aria-label="Sort model catalogue"><option value="name">Name A–Z</option><option value="memory">Smallest memory</option><option value="selected">Selected first</option></select></div>
 </div>
-{% call more() %}<small class="text-secondary">gives every ticked model the largest context that fits: all are lowered by the same share of their range, then each takes what is left. A model goes under its minimum context only where its card is too full otherwise. Moving a slider switches it off.</small>{% endcall %}
-
-
-{# One bar a card. static/fit.js draws the pieces and writes the numbers. A card nvidia-smi does not know has no size to draw against. #}
-{% for card in known.cards %}
-{% set room = memory[card] %}
-<div class="fit-room mb-3" data-card="{{ card }}"{% if room %} data-total="{{ room.total }}" data-others="{{ room.others }}"{% endif %}>
-  <div class="d-flex flex-wrap justify-content-between gap-2"><b>{{ card }}</b><span class="fit-says"></span></div>
-  <div class="progress fit-bar" role="img" aria-label="what is ticked onto {{ card }}"></div>
-  <small class="text-secondary">{% if room %}{{ room.total|mib }} card, of which {{ margin|mib }} is kept free{% if room.others %} and {{ room.others|mib }} is used by other programs{% endif %}{% else %}The size of this card is not known: driver memory measurements are unavailable.{% endif %}</small>
+<div id="catalogue-list" class="fit-catalogue-list" tabindex="0" aria-label="Available model choices"></div>
+<p id="catalogue-count" class="small p-3 mb-0 border-top"></p>
+{% endcall %}
+</aside>
+<section id="tuning" class="fit-tuning" aria-label="Selected models and context tuning">
+{% call card(id='tuning-card', body_class='p-0') %}
+<div class="fit-tuning-toolbar p-3 border-bottom">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><strong id="selection-count" class="small"></strong><button type="button" id="fit-auto" class="btn btn-sm btn-outline-primary">Fit unlocked contexts</button></div>
+<div class="d-flex align-items-center flex-wrap gap-2">
+{% call pills('Selected model type', buttons=true, class_='gap-1') %}{% for kind,label in [('all','All'),('llm','LLM'),('audio','Audio'),('image','Image')] %}{{ pill_button(label, kind == 'all', attrs={'data-fit-kind': kind}) }}{% endfor %}{% endcall %}
+<input id="search" type="search" class="form-control form-control-sm" placeholder="Filter selected rows…" aria-label="Filter selected models">
+</div></div>
+<form id="fit-editor" data-hold-refresh aria-label="Dry fit selection" novalidate>
+<div class="fit-row-scroll" tabindex="0" aria-label="Model tuning rows"><table id="fit-table" class="table table-sm align-middle mb-0 fit-model-table" aria-label="Selected model settings"><thead><tr><th>Model</th><th>Placement</th><th>Context · tokens / fixed profile</th><th>Memory</th></tr></thead><tbody id="fit-picks"></tbody></table></div>
+</form>
+<p id="fit-none" class="small text-secondary px-3 py-3 mb-0">Choose models from this node's catalogue to start tuning.</p>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 px-3 py-2 border-top small text-secondary"><span id="visible-count"></span><button type="button" class="btn btn-sm btn-outline-secondary" id="clear">Clear selection</button></div>
+{% endcall %}
+</section>
 </div>
-{% else %}
-<p class="text-secondary">This machine has no cards listed.</p>
-{% endfor %}
-
-{% if cpu_available and system_memory %}
-<div class="fit-room mb-3" data-card="__cpu__" data-total="{{ cpu_limit }}" data-others="{{ cpu_others }}" data-margin="0">
-  <div class="d-flex flex-wrap justify-content-between gap-2"><b>{% if known.models|selectattr('host_ram_budget_mib')|list %}Host RAM (hybrid and CPU){% else %}CPU RAM{% endif %}</b><span class="fit-says"></span></div>
-  <div class="progress fit-bar" role="img" aria-label="what is ticked into CPU RAM"></div>
-  <small class="text-secondary">{{ cpu_limit|mib }} process RAM planning limit for this node; {{ system_memory.headroom|default(0)|mib }} is reserved for the host{% if system_memory.configured_limit %}. <a href="/compute-nodes?machine={{ machine|urlencode }}#manage-gpus">Change this node's CPU model RAM limit</a>{% else %}. <a href="/compute-nodes?machine={{ machine|urlencode }}#manage-gpus">Set a node-specific CPU model RAM limit</a>{% endif %}{% if system_memory.service_limit %}. The {{ system_memory.service_limit|mib }} service memory ceiling is checked separately against actual cgroup usage{% endif %}.</small>
-</div>
-{% endif %}
-
-{# The ticked models, close under the bars: each with its name, a slider for its context, and what it takes there. One is
-   written here for every measured model and hidden until the model is ticked in the list below. static/fit.js shows it. #}
-<div id="fit-picks" class="mb-4">
-  <p id="fit-none" class="text-secondary">Select models below to preview combined memory across all model types. Image and audio reservations use fixed measured profiles.</p>
-  {% for model in known.models if lines[model.name].points %}
-  {% set top = model.flags["ctx-size"] %}
-  {% set fixed = model.engine in ('sdcpp', 'audiocpp') %}
-  {% set slides = not fixed and top is number and top > 2048 %}
-  {# The lowest stop of the slider: at or just above 1,024, so that whole steps of 1,024 end exactly at the model's maximum. #}
-  {% set bottom = top - 1024 * ((top - 1024) // 1024) if slides else top %}
-  <div class="fit-pick" data-model="{{ model.name }}" data-top="{{ top if top is number else 0 }}" data-low="{{ model.min_context|default(bottom) }}" hidden>
-    <span class="text-truncate"><span class="fit-swatch"></span> <a href="{{ address(model.name) }}">{{ model.name }}</a></span>
-    {% if slides %}<input type="range" class="form-range fit-context" min="{{ bottom }}" max="{{ top }}" step="1024" value="{{ model.context_loaded or top }}" aria-label="context of {{ model.name }}">{% else %}<span></span>{% endif %}
-    <span class="text-end"><span class="fit-tokens">{{ "{:,}".format(top) if top is number else top }}</span> <small class="text-secondary">{{ 'fixed profile · context N/A' if fixed else 'tokens' }}</small></span>
-    <span class="fit-memory text-end text-nowrap"></span>
-    <small class="fit-below text-warning-emphasis" hidden>under its minimum context of {{ "{:,}".format(model.min_context|default(bottom)) }}: compute never loads it this low, so the minimum would have to be lowered</small>
-  </div>
-  {% endfor %}
-</div>
-
-{# The list of models. A tick puts a model on a card. A row carries what static/fit.js draws the model from: see fit_line() in app.py. #}
-<div class="table-responsive">
-<table id="fit-table" class="table table-hover table-sm align-middle sortable" data-margin="{{ margin }}">
-  <thead><tr><th data-sort="text" style="min-width: 12rem">Model</th>{% for card in known.cards %}<th>{{ card }}</th>{% endfor %}<th data-sort="value">Max context</th><th data-sort="value">Memory at max</th><th data-sort="text">Roles</th></tr></thead>
-  <tbody>
-  {% for model in known.models %}
-  {% set line = lines[model.name] %}
-  {% set top = model.flags["ctx-size"] %}
-  {% set fixed = model.engine in ('sdcpp', 'audiocpp') %}
-  <tr data-fit-type="{{ 'image' if model.engine=='sdcpp' else 'audio' if model.engine=='audiocpp' else 'llm' }}" data-exclusive="{{ 'true' if model.alone or (line.need > 1 and not fixed and not model.flags['tensor-split'] and not known.defaults['tensor-split']) else 'false' }}" data-fixed="{{ 'true' if fixed else 'false' }}" data-host-ram-mib="{{ model.host_ram_budget_mib|default(0) }}"{% if line.points %} data-model="{{ model.name }}" data-model-id="{{ model.model_id }}" data-points='{{ line.points|tojson }}' data-need="{{ line.need }}"{% elif line.need == 0 and (not fixed or not cpu_lines[model.name][1]) %} data-cpu="{{ model.name }}" data-model-id="{{ model.model_id }}" data-cpu-mib="{{ cpu_lines[model.name][0] }}"{% endif %}>
-    <td><a href="{{ address(model.name) }}">{{ model.name }}</a>
-      {% if model.embedding or model.flags.embedding %}<br><small class="text-secondary">Embedding model</small>{% endif %}{% if model.host_ram_budget_mib %}<br><small class="text-secondary">Hybrid host RAM: {{ model.host_ram_budget_mib|mib }} reserved in addition to VRAM</small>{% endif %}
-      {% if model.alone %}<br><small class="text-warning-emphasis">set alone: compute lets nothing share its cards</small>{% endif %}
-      {% if line.need > 1 and not fixed and not model.flags["tensor-split"] and not known.defaults["tensor-split"] %}<br><small class="text-warning-emphasis">no tensor-split: compute loads it onto empty cards only</small>{% endif %}
-      {% if line.guessed %}<br><small class="text-secondary">measured at one context: below it, guessed from the size of its file</small>{% endif %}
-      {% if line.need == 0 and (not fixed or not cpu_lines[model.name][1]) %}<div class="form-check mt-1"><input type="checkbox" class="form-check-input fit-cpu" name="on" value="{{ model.name }}" id="cpu-{{ loop.index }}"{{ ' checked' if model.name in on }}><label class="form-check-label" for="cpu-{{ loop.index }}">Include CPU model</label></div><label class="small"{{ ' hidden' if fixed }}>Context <input class="form-control form-control-sm fit-cpu-context" type="number" min="1" max="2147483647" value="{{ model.context_loaded or top }}" aria-label="CPU context of {{ model.name }}"></label><div class="small text-secondary">{{ cpu_lines[model.name][0]|mib }} {{ 'conservative estimate' if cpu_lines[model.name][1] else 'measured resident peak' }}</div>{% endif %}</td>
-    {% if line.points %}
-    {% for card in known.cards %}
-    <td>{% if card in line.cards %}<input type="checkbox" class="form-check-input fit-on" name="on" value="{{ model.name }}" data-card="{{ card }}" aria-label="{{ model.name }} on {{ card }}"{{ " checked" if card in model.cards }}>{% endif %}</td>
-    {% endfor %}
-    <td data-value="{{ top if top is number else 0 }}">{{ 'N/A' if fixed else "{:,}".format(top) if top is number else top }}</td>
-    {# What it measured at its highest context that loaded: its maximum, unless that one failed. #}
-    {% set most = line.points[-1] %}
-    <td data-value="{{ most[1]|sum }}" class="text-nowrap">{{ most[1]|map("mib")|join(" + ") }}{% if not fixed and most[0] != top %} <small class="text-secondary">at {{ "{:,}".format(most[0]) }}</small>{% endif %}</td>
-    {% else %}
-    <td colspan="{{ known.cards|length + 2 }}" class="text-secondary">{{ "runs on the processor" if line.need == 0 and not fixed else "{{ 'Unknown / unqualified memory: measure and qualify before planning a load' if fixed else 'not measured yet, so nothing is known of what it takes' }}" }}</td>
-    {% endif %}
-    <td>{% for role in roles if model.name in role.order %}{{ role.name }} <small class="text-secondary">{{ role.order.index(model.name) + 1 }}</small>{{ ", " if not loop.last }}{% endfor %}</td>
-  </tr>
-  {% else %}
-  {% call empty_row((known.cards|length + 4)) %}No models yet.{% endcall %}
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-
-{# What the roles would pick. It asks for itself again at every tick: static/fit.js sends "ticked", and the boxes of the list go with the question: a browser sends those that are ticked. #}
-<div id="fit-roles" hx-get="/dry-fit?part=roles&amp;machine={{ machine|urlencode }}" hx-trigger="ticked" hx-include="#fit-table">{% include "fit_roles.html" %}</div>
-<p id="fit-exclusive-warning" class="text-warning-emphasis" role="status" hidden></p>
+<p class="small text-secondary">Memory is a planning estimate. Fixed image/audio envelopes do not have a token context; LLM context is its total token pool, including prompt and reply. A saved set supports up to 16 models; actual loading requires a fresh review.</p>
 {% include "fit_loadouts.html" %}
+{% if roles %}{% call card('Role preview', false, hint='What routing would pick with this selection resident.') %}<div id="fit-roles" hx-get="/dry-fit?part=roles&amp;machine={{ machine|urlencode }}" hx-trigger="ticked" hx-include="#fit-table">{% include "fit_roles.html" %}</div>{% endcall %}{% endif %}
+</div>
+<noscript>{{ alert('info', 'Enable JavaScript to select and tune models. Saved sets below can still be reviewed and requested using their forms.') }}</noscript>
+<script type="application/json" id="fit-data">{{ workspace|tojson }}</script>
+{{ dom_templates() }}
+<dialog id="fit-api" class="fit-dialog" aria-labelledby="fit-api-title">{% call card('Load this named set through the API', header_id='fit-api-title', class_='mb-0') %}
+<p class="small">Review the saved set first, inspect its changes and warnings, then use the returned token to request all members. Successful requests return a ready lease for 600 seconds.</p>
+<pre class="small border rounded p-3"><code id="fit-api-code"></code></pre>
+<p class="small text-secondary">Use manage-models and load permission with access to every member. Add acknowledge:true only after reviewing warnings. Re-preview after a 409 conflict. Renew or release the returned lease through the same endpoint.</p>
+<button type="button" class="btn btn-outline-secondary" data-fit-close>Close</button>
+{% endcall %}</dialog>
 {% endblock %}
