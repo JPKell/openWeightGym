@@ -93,6 +93,13 @@ def worker(key_file, name, warm, state=None, model="small", content="a" * 64):
             return JSONResponse({"state": "running"}, status_code=202)
         if path == "/loadcoach/model-lock":
             return JSONResponse({"machine": name, "lock": json.loads(await request.body())})
+        if path == '/loadcoach/loadouts':
+            if request.method == 'GET':
+                return JSONResponse({'loadouts': control.get('loadouts', []), 'leases': [], 'machine': name})
+            body = json.loads(await request.body())
+            control.setdefault('loadouts', []).append(body)
+            return JSONResponse({'machine': name, 'body': body, 'caller': request.state.said['caller']['name'],
+                                 'lock': request.headers.get('x-loadcoach-lock'), 'priority': request.headers.get('x-loadcoach-priority')})
         if path == "/loadcoach/drain":
             body = json.loads(await request.body())
             control["drained"] = body.get("on", True)

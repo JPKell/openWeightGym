@@ -19,4 +19,6 @@ def preview(name: str, candidate: dict, library, runner, supported: list[dict], 
     except ValueError as problem:
         return {"errors": [str(problem)], "warnings": [], "candidate": candidate,
                 "before": library.setup(name), "token": ""}
-    return selected.preview(name, candidate, library, runner, supported, engine_error)
+    review = selected.preview(name, candidate, library, runner, supported, engine_error)
+    return {'model_id': library.identity(name), 'file_revision': library.file_revision(name),
+            'effective': {}, 'changes': [], 'artifacts': [], 'placement': {}, **review}

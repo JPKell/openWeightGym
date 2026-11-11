@@ -192,15 +192,9 @@ class SDCpp:
                 "sdcpp":options,"gpus":int(read("image_gpus","1")),"alone":True}
 
     def preview(self,name,candidate,library,runner,supported,engine_error=""):
-        """Validate typed image settings using the same contract as execution."""
-        errors=[]
-        try:
-            model.check_model(name,candidate,runner.engine_cards(candidate))
-        except (ValueError,TypeError) as problem:
-            errors.append(str(problem))
-        if engine_error:
-            errors.append(engine_error)
-        return {"errors":errors,"warnings":[],"settings":candidate,"name":name,"changes":[],"engine":self.id}
+        """Return the shared fixed-profile setup review used by saved sets."""
+        from loadcoach.media_setup import preview
+        return preview(name, candidate, library, runner)
 
     def suggestions(self,settings,defaults,cards):
         """Image profiles have explicit workflow limits and no chat-template guesses."""

@@ -1,0 +1,37 @@
+{# Canonical Dry fit rows and resource bars, shared by the live browser and proposals. #}
+{% from 'parts.html' import card, empty_row %}
+{% macro dom_templates() %}
+<template id="fit-model-template">
+<tr class="fit-model" data-model>
+  <td>
+  <div class="fit-model-identity d-flex align-items-start gap-3">
+    <input type="checkbox" class="form-check-input mt-1" data-select>
+    <div class="min-w-0"><label class="fw-semibold d-block" data-name></label><span class="small text-secondary" data-detail></span></div>
+    <span class="badge ms-auto" data-kind></span>
+  </div>
+  </td>
+  <td class="fit-model-placement"><label class="visually-hidden" data-placement-label>Placement</label><select class="form-select form-select-sm" data-placement></select></td>
+  <td class="fit-model-tokens"><div class="fit-model-context" data-context-controls>
+    <label class="visually-hidden" data-context-label>Context · tokens</label>
+    <input class="form-range" type="range" step="1" data-slider>
+    <input class="form-control form-control-sm" type="number" step="1" required data-context>
+    <label class="form-check mb-0 small"><input type="checkbox" class="form-check-input" data-lock><span class="form-check-label">Lock</span></label>
+    <span class="visually-hidden" data-bounds></span>
+  </div>
+  <div class="fit-model-profile small" data-fixed hidden><span class="text-secondary" data-profile></span></div></td>
+  <td class="fit-model-memory small"><strong data-memory></strong><span class="visually-hidden" data-evidence></span></td>
+</tr>
+</template>
+<template id="fit-resource-template">
+<section class="fit-resource" aria-label="Memory resource">
+  <div class="d-flex justify-content-between gap-2 mb-2"><strong data-resource-name></strong><span class="small text-secondary" data-resource-total></span></div>
+  <div class="d-flex align-items-baseline flex-wrap gap-2 mb-2"><strong class="fit-capacity-number" data-resource-used></strong><span class="small text-secondary" data-resource-free></span></div>
+  <div class="progress fit-capacity-bar mb-2" role="img" data-resource-bar></div>
+  <p class="small text-secondary mb-0" data-resource-note></p>
+</section>
+</template>
+<template id="fit-segment-template"><span class="progress-bar" data-segment></span></template>
+<template id="fit-catalogue-template"><label class="fit-catalogue-item border-bottom"><input type="checkbox" class="form-check-input" data-catalogue-select><span class="min-w-0"><strong class="d-block" data-name></strong><small class="text-secondary" data-detail></small></span><span class="badge bg-secondary-lt" data-catalogue-kind></span><small class="text-secondary" data-catalogue-memory></small></label></template>
+<template id="fit-breakdown-template"><tr><th scope="row" data-name></th><td data-context></td><td data-placement></td><td data-memory></td></tr></template>
+<template id="fit-empty-template">{{ empty_row(4, 'Choose models from this node to build a set.') }}</template>
+{% endmacro %}

@@ -131,6 +131,26 @@ Primary files: `weightroom/app.py::fit_page/fit_line/fit_node`, `weightroom/page
 
 Primary files: `benchmark_start.html`, `weightroom/app.py`, `weightroom/static/benchmarks.js`, `benchmarks/app.py`, `benchmarks/store.py`, `benchmarks/worker.py`, `weightroom/schedules.py`, `loadcoach/schedule_time.py`, `loadcoach/schedule_grants.py`, `turnstile/tasks.py` and schedule templates/schema migrations where needed.
 
+## 7. Dry fit split browser (2026-11-11)
+
+Status: **implemented and locally tested; deployment and native qualification pending**. Selected proposal **02 / Split browser** is the live `/dry-fit` layout. The three sample layouts remain available with `python scripts/preview-fit-designs.py`; shared rows/bars live in `fit_parts.html` and `fit.css`. The [named-set and memory contract](loadcoach.md#validated-model-setup-and-presets-c05-milestone-93) is canonical for API payloads, limits, permissions, stale reviews, leases and failure recovery. This explicitly extends section 5's earlier primary-node-only scope.
+
+<!-- fit-design-todo:start -->
+### Implementation checklist
+
+- [x] Reuse integrated-device classification in discovery, catalogue and Dry fit; retain unknown discrete memory as unknown (`loadcoach/gpu_type.py`, `weightroom/fit.py`).
+- [x] Show separate physical VRAM/system RAM budgets, host headroom, other use, model-RAM policy exclusions and cgroup information; RAM-only nodes have one pool (`weightroom/fit.py`).
+- [x] Account for engine host reservations and qualified offload evidence without treating RAM as automatic extra VRAM; keep exclusivity and per-process component allocations.
+- [x] Ship the compact split browser for 30 local choices, independent search/type filters, memory/name sorting, bounded scrolling, stable-ID node drafts, exact/locked contexts and minimum-respecting auto-fit (`fit.html`, `fit.js`, `fit.css`).
+- [x] Expose current-profile CPU RSS curves with conservative fixed first-load fallbacks (`Models.resident_measurements`); preserve focus, scroll, invalid edits and drafts during dynamic replacement and outages.
+- [x] Save mixed LLM/audio/image sets with fixed media profile keys; validate engine/settings/file revisions and preserve existing LLM definitions without a database migration (`loadcoach/media_setup.py`, `loadcoach/loadouts.py`).
+- [x] Add signed node-scoped GET/POST load-outs and keep every console action/redirect on its selected node; preserve lock/priority headers, caller permissions, no-wake behavior and same-name isolation (`turnstile/app.py`, `fit_page/fit_do`).
+- [x] Retain fresh review tokens, joint admission, atomic settings, guarded undo, protected work and bounded lease cleanup/renew/release; extend tokens to node/resource policy and frozen media profiles.
+- [x] Update API/source reference, CLI and diagnostic examples, README and walkthroughs; promote the shared templates in AGENTS.md.
+- [x] Exercise authenticated 30-model browser flows, 1440/390/320 layouts, exact contexts, mixed profiles, signed two-node routing, outages, API limits, permission checks and existing lifecycle/engine tests. The all-page UI audit includes empty/error and dynamic states; existing source-reference docstring omissions are unchanged by this work.
+- [ ] Deploy matching front/gateway/worker changes and perform operator-authorized native qualification. Commit/push does not deploy services. Keep prior assets and verified model-store/load-out backups; follow the canonical API contract's fixed-profile rollback precautions. Do not load or migrate real models merely to review the implementation.
+<!-- fit-design-todo:end -->
+
 ## Verification and delivery
 
 Use focused checks per phase, then the required repository checks before release:
