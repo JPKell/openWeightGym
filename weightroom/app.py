@@ -3161,24 +3161,35 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                                  pairing_code: dict | None = None) -> Response:
         """Render configured compute nodes and their active engine availability."""
         form = typed_in or {}
-        selected = form.get("machine") or request.query_params.get("machine", "compute")
+        selected = form.get("machine") or request.query_params.get("machine")
         machines_answer = await ask("GET", "/turnstile/machines?include_retired=1", person.key)
         if machines_answer.status_code == 403:
             return page(request, "refused.html", person, status=403, why="Compute node settings require manage-settings.")
+        if not machines_answer.is_success:
+            return page(request, 'refused.html', person, status=machines_answer.status_code,
+                        why='Compute node inventory is unavailable. Try again.')
         choices = machines_answer.json().get("machines", []) if machines_answer.status_code == 200 else []
         for row in choices:
             if row.get("lifecycle") == "retired":
                 row["state"] = "monitoring stopped"
             elif row.get("state") == "ready" and row.get("status_live") is False:
                 row["state"] = "not answering"
-        if selected not in {row.get("name") for row in choices}:
+        if not selected:
+            selected = 'compute' if any(row.get('name') == 'compute' for row in choices) else choices[0]['name'] if choices else ''
+        if selected and selected not in {row.get("name") for row in choices}:
             return Response("That compute node is not configured.", status_code=404)
+        if not choices:
+            return page(request, 'compute_nodes.html', person, status=400 if failed else 200,
+                        said=said or request.query_params.get('said', ''), failed=failed, selected_machine='',
+                        selected_node=None, machine_choices=[], programs=[], typed_in=form, opened=opened or request.query_params.get('open', ''),
+                        may_pair='superuser' in person.can, pairing_code=pairing_code)
         selected_node = next(row for row in choices if row["name"] == selected)
         if selected_node.get("lifecycle") == "retired" or not selected_node.get("configured", True):
             return page(request, "compute_nodes.html", person, status=400 if failed else 200,
                         said=said or request.query_params.get("said", ""), failed=failed,
                         selected_machine=selected, selected_node=selected_node, machine_choices=choices,
-                        programs=[], may_pair="superuser" in person.can, pairing_code=pairing_code)
+                        programs=[], typed_in=form, opened=opened or request.query_params.get('open', ''),
+                        may_pair="superuser" in person.can, pairing_code=pairing_code)
         base = "/turnstile/machines/" + quote(selected, safe="")
         settings_answer = await ask("GET", base + "/settings", person.key)
         if settings_answer.status_code not in (200, 503):
@@ -3289,7 +3300,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, "refused.html", person, status=403, why="Adding a GPU node requires the superuser ability.")
         code, expires = pairing.make_code(Path(settings.data), person.name)
         console = pairing.console_url(request.url.hostname or "", settings.port)
-        return await compute_nodes_page(request, person, opened="add-node", pairing_code={
+        form = await typed(request)
+        return await compute_nodes_page(request, person, typed_in={'machine': form.get('machine', '')}, opened="add-node", pairing_code={
             "code": code, "expires": expires, "command": pairing.command(console, code)})
 
     pairing_failures: dict[str, list[float]] = {}

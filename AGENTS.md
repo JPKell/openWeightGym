@@ -38,6 +38,8 @@ within their own layouts.
 | Live Status lanes, capacity ledger and request rows | [status.html](weightroom/pages/status.html), [status_nodes.html](weightroom/pages/status_nodes.html), [status_parts.html](weightroom/pages/status_parts.html), [current_requests.html](weightroom/pages/current_requests.html) |
 | Physical-host Telemetry workspace, device tables and graphs | [telemetry_workspace.html](weightroom/pages/telemetry_workspace.html), [telemetry_parts.html](weightroom/pages/telemetry_parts.html), [telemetry-workspace.js](weightroom/static/telemetry-workspace.js) |
 | Node GPU assignments and RAM policy | [cards.html](weightroom/pages/cards.html) |
+| Compute node navigator, choices, security and lifecycle | [compute_nodes.html](weightroom/pages/compute_nodes.html), [compute_node_parts.html](weightroom/pages/compute_node_parts.html), [compute_node_access.html](weightroom/pages/compute_node_access.html), [compute-nodes.js](weightroom/static/compute-nodes.js); drafts remain in page memory across node switches and section saves |
+| Standalone Compute nodes proposals and shared preview rows (sample data) | [node_designs.html](weightroom/pages/node_designs.html), [node_design_parts.html](weightroom/pages/node_design_parts.html), rendered with `scripts/preview-node-designs.py` |
 | Node/component summaries and model details | [machines.html](weightroom/pages/machines.html), [components_content.html](weightroom/pages/components_content.html), [multimedia_model.html](weightroom/pages/multimedia_model.html) |
 | Benchmark values and shared panels | [benchmark_parts.html](weightroom/pages/benchmark_parts.html) and adjacent `benchmark_*.html` includes |
 | Icons | [icons.html](weightroom/pages/icons.html) |

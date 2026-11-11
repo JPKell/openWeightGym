@@ -36,6 +36,8 @@ LABELS = {
     'mock_input_rate': ('Input token estimate', 'Display and costs', '$ / M tokens', 'number'),
     'mock_output_rate': ('Output token estimate', 'Display and costs', '$ / M tokens', 'number'),
     'artifact_machine': ('File download node', 'Model files', '', 'text'),
+    'models_folder': ('Active model cache', 'Model files', '', 'text'),
+    'models_storage_folder': ('Model storage library', 'Model files', '', 'text'),
     'files_every': ('Check model files every', 'Model files', 'min', 'number'),
     'host_ram_headroom_mib': ('Host RAM headroom', 'RAM policy', 'MiB', 'number'),
     'host_ram_limit_mib': ('Host RAM limit', 'RAM policy', 'MiB', 'number'),

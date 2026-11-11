@@ -1,0 +1,130 @@
+{# Standalone sample proposals; compute_nodes.html is the production page. #}
+{% from 'parts.html' import page_header, card, section_title, alert, more, empty_row %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'compute_node_parts.html' import node_choice %}
+{% from 'node_design_parts.html' import fleet_row, gpu_row %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compute nodes · Three design proposals · openWeightGym</title>
+<style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script>
+</head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to compute nodes</a>
+<div class="node-review-bar border-bottom d-flex align-items-center justify-content-between gap-3 px-4 py-2">
+  <div class="d-flex align-items-center gap-3"><strong>openWeightGym<span class="text-primary"> /</span></strong><span class="text-secondary small">Settings · design review</span></div>
+  <div class="d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div>
+</div>
+<main class="node-review" id="workspace" data-layout="navigator" data-section="hardware">
+  <div class="proposal-toolbar">
+    {% call pills('Design options', buttons=true, class_='design-options mb-0') %}
+    {{ pill_button('01 / Node navigator', true, attrs={'data-design': 'navigator'}) }}
+    {{ pill_button('02 / Focus workspace', attrs={'data-design': 'focus'}) }}
+    {{ pill_button('03 / Fleet inspector', attrs={'data-design': 'fleet'}) }}
+    {% endcall %}
+    <span class="small text-secondary">Interactive sample data · no live changes</span>
+  </div>
+  <p class="small text-secondary mb-3" id="design-description"></p>
+  {% call page_header('Compute nodes', pretitle='SETTINGS / INFRASTRUCTURE') %}
+    <button type="button" class="btn btn-primary" id="add-node" aria-expanded="false" aria-controls="pairing-panel">+ Add GPU node</button>
+  {% endcall %}
+  <div class="fleet-summary small" aria-label="Fleet summary"><span><strong id="node-total">6</strong> nodes</span><span><i class="state-dot is-ready" aria-hidden="true"></i><strong id="available-total">3</strong> available</span><span id="attention-total"></span><span class="text-secondary">Policy, runtimes &amp; access in one place</span></div>
+
+  {% set pairing_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" id="close-pairing">Close</button>{% endset %}
+  {% call card('Add a GPU node', id='pairing-panel', actions=pairing_actions, attrs={'hidden': '', 'aria-labelledby': 'pairing-title'}, header_id='pairing-title', class_='pairing-panel') %}
+    <div class="pairing-layout">
+      <div><strong>Run this on the new machine</strong><p class="small text-secondary mb-0">The installer registers the node with this console. A real pairing code is single-use and expires.</p></div>
+      <div class="min-w-0"><div class="d-flex gap-2 align-items-start"><pre class="mb-0 flex-grow-1"><code id="pairing-command">{{ pairing_command }}</code></pre><button type="button" class="btn btn-outline-secondary btn-sm" id="copy-command">Copy</button></div><span class="form-hint">Demo command · deliberately nonfunctional. Production generates a fresh code.</span></div>
+    </div>
+  {% endcall %}
+
+  <div id="feedback" role="status" aria-live="polite" class="small text-primary mb-2"></div>
+  <div class="node-layout">
+    <aside class="node-directory" aria-label="Compute node directory">
+      <div class="directory-tools"><label class="visually-hidden" for="node-search">Find a node</label><input id="node-search" type="search" class="form-control form-control-sm" placeholder="Find a node…" autocomplete="off"><select id="node-filter" class="form-select form-select-sm" aria-label="Filter nodes by status"><option value="all">All nodes</option><option value="available">Available</option><option value="attention">Needs attention</option><option value="retired">Retired</option></select></div>
+      <div class="directory-label eyebrow">YOUR NODES <span data-match-count>6</span></div>
+      <div id="node-list" class="node-list"></div>
+      <div class="fleet-table table-responsive"><table class="table table-sm table-hover align-middle mb-0" aria-label="Compute node fleet"><thead><tr><th>Node</th><th>Status</th><th>GPUs / VRAM</th><th>Host RAM</th><th>Runtimes</th></tr></thead><tbody id="fleet-rows"></tbody></table></div>
+      <p id="no-nodes" class="small text-secondary p-3 mb-0" hidden>No matching nodes. Try another name or clear the status filter.</p>
+      <p class="directory-note small text-secondary mb-0">Choose a node to configure it.<br>Drafts stay with each node.</p>
+    </aside>
+
+    <section class="node-inspector" aria-label="Selected node settings">
+      <div class="node-heading">
+        <div class="d-flex align-items-center gap-3 min-w-0"><span class="node-avatar selected-avatar" id="selected-initial" aria-hidden="true">A</span><div class="min-w-0">{{ section_title('atlas', id='selected-name', wrapper_class='mb-0') }}<span id="selected-role" class="small text-secondary"></span></div><span id="selected-status" class="node-status"></span></div>
+        <span class="small text-secondary" id="node-spec"></span>
+      </div>
+      {% call alert('warning', class_='py-2 small mb-3', attrs={'id': 'node-notice', 'hidden': ''}) %}<span id="node-notice-text"></span>{% endcall %}
+      {% call pills('Node settings sections', buttons=true, class_='section-tabs gap-1 mb-3') %}
+      {% for key, label in [('hardware', 'GPUs & RAM'), ('runtime', 'Runtimes'), ('storage', 'Files & monitoring'), ('access', 'Security & lifecycle')] %}
+      {{ pill_button(label, key == 'hardware', attrs={'data-section': key}) }}
+      {% endfor %}
+      {% endcall %}
+      <form id="node-editor" aria-label="Node settings" data-hold-refresh>
+        <input type="hidden" name="machine" id="machine-name">
+        <div class="settings-grid">
+          {% call card('GPUs & host RAM', id='hardware-panel', class_='settings-panel', hint='Control which hardware each runtime can use.', attrs={'data-panel': 'hardware'}) %}
+            <div class="table-responsive"><table class="table table-sm align-middle mb-2" aria-label="GPU assignments"><thead><tr><th>Card</th><th>Device / loaded model</th><th>VRAM</th><th>Disable</th><th>llama.cpp</th><th>Strata</th></tr></thead><tbody id="gpu-rows"></tbody></table></div>
+            <p class="form-hint mb-3">VRAM is per GPU. Model fit also depends on context, cache and runtime overhead.</p>
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-6"><label class="form-label" for="ram-headroom">Reserve host RAM</label><div class="input-group"><input id="ram-headroom" name="value-host_ram_headroom_mib" data-field="headroom" type="number" min="0" max="1048576" step="1" required class="form-control"><span class="input-group-text">MiB</span></div></div>
+              <div class="col-sm-6"><label class="form-label" for="ram-limit">RAM offload limit</label><div class="input-group"><input id="ram-limit" name="value-host_ram_limit_mib" data-field="ramLimit" type="number" min="0" max="1048576" step="1" required class="form-control"><span class="input-group-text">MiB</span></div></div>
+              <div class="col-12"><label class="form-check form-switch mb-0"><input type="checkbox" class="form-check-input" name="value-disable_ram_offload" data-field="disableOffload"><span class="form-check-label">Disable model offload to host RAM</span></label></div>
+            </div>
+            {% call more('How assignments apply') %}Disabling a GPU affects every engine. A GPU with no engine selected stays available to other programs. Idle models affected by a change unload on save; models loading, answering or held must finish first. A RAM limit of 0 adds no policy ceiling; system limits still apply.{% endcall %}
+          {% endcall %}
+
+          {% call card('Inference runtimes', id='runtime-panel', class_='settings-panel', hint='Executables and limits on this node.', attrs={'data-panel': 'runtime'}) %}
+            {% for key, label in [('llama_cpp', 'llama.cpp'), ('strata', 'Strata')] %}
+            <fieldset class="runtime-entry" data-runtime="{{ key }}"><legend class="d-flex align-items-center justify-content-between gap-2 mb-2"><span class="fw-semibold">{{ label }}</span><label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" data-field="{{ key }}Enabled" name="{{ key }}-enabled" aria-label="Enable {{ label }}"><span class="form-check-label small">Enabled</span></label></legend>
+            <div class="row g-2"><div class="col-sm-8"><label class="form-label" for="{{ key }}-path">Server executable</label><input class="form-control font-monospace" id="{{ key }}-path" data-field="{{ key }}Path" name="{{ key }}-executable" required spellcheck="false" autocapitalize="none"></div><div class="col-sm-4"><label class="form-label" for="{{ key }}-slots">Model limit</label><input class="form-control" id="{{ key }}-slots" data-field="{{ key }}Slots" name="{{ key }}-max_models" type="number" min="1" max="128" step="1" required></div></div>
+            </fieldset>
+            {% endfor %}
+            <p class="form-hint mb-0"><span class="badge bg-orange-lt">Needs compute restart</span> Saving paths does not install a runtime.</p>
+          {% endcall %}
+
+          {% call card('Files & monitoring', id='storage-panel', class_='settings-panel', attrs={'data-panel': 'storage'}) %}
+            <div class="row g-2">
+              <div class="col-12"><label for="cache-path" class="form-label">Active model cache</label><input id="cache-path" name="value-models_folder" data-field="cache" class="form-control font-monospace" required spellcheck="false" autocapitalize="none"></div>
+              <div class="col-12"><label for="storage-path" class="form-label">Model storage library</label><input id="storage-path" name="value-models_storage_folder" data-field="storage" class="form-control font-monospace" required spellcheck="false" autocapitalize="none"></div>
+            </div>
+            <p class="form-hint mb-3">Downloads go to storage. Cache holds working copies. Paths apply after compute restarts.</p>
+            <div class="row g-2">
+              {% for key, label, unit, minimum in [('sample', 'Sample every', 'sec', 1), ('retention', 'Keep telemetry', 'days', 0), ('sleep', 'Sleep after idle', 'min', 0)] %}
+              <div class="col-sm-4"><label class="form-label" for="monitor-{{ key }}">{{ label }}</label><div class="input-group"><input id="monitor-{{ key }}" name="value-{{ {'sample': 'sample_every', 'retention': 'keep_days', 'sleep': 'sleep_after'}[key] }}" data-field="{{ key }}" type="number" min="{{ minimum }}" max="100000" step="1" class="form-control" required><span class="input-group-text">{{ unit }}</span></div></div>
+              {% endfor %}
+            </div>
+            <p class="form-hint mb-0">Idle 0 = never sleep. Retention 0 = keep indefinitely.</p>
+          {% endcall %}
+
+          {% call card('Security & lifecycle', id='access-panel', class_='settings-panel', attrs={'data-panel': 'access'}) %}
+            <div class="d-flex flex-wrap align-items-end gap-2 mb-2"><div class="flex-grow-1"><label class="form-label" for="rotation-days">Rotate machine key every</label><div class="input-group"><input id="rotation-days" name="rotation_days" data-field="rotation" class="form-control" type="number" min="0" max="3650" step="1" required><span class="input-group-text">days</span></div></div><button type="button" class="btn btn-outline-secondary" data-action="rotate">Rotate now…</button></div>
+            <p class="form-hint">0 disables scheduled rotation. Last rotated: 2 days ago.</p>
+            {% call more('Key recovery') %}The replacement reaches the node before activation. The previous key works for ten minutes. If the sides fall out of step, run <code>loadcoach --replace-key</code> on the node.{% endcall %}
+            <div class="border-top pt-3 mt-3"><div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><strong class="small">Node lifecycle</strong><span id="lifecycle-state" class="badge bg-secondary-lt"></span></div><p class="form-hint">Disable stops new work and wake requests; telemetry stays visible. Retire also stops monitoring. Existing work may finish; history is preserved.</p><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-warning btn-sm" data-action="disable" id="disable-node">Disable node…</button><button type="button" class="btn btn-outline-primary btn-sm" data-action="enable" id="enable-node" hidden>Enable node…</button><button type="button" class="btn btn-outline-danger btn-sm" data-action="retire" id="retire-node">Retire node…</button></div></div>
+          {% endcall %}
+        </div>
+        <div class="save-bar"><span class="small text-secondary" id="save-state" aria-live="polite">No unsaved changes</span><div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" id="discard">Discard</button><button type="submit" class="btn btn-primary btn-sm" id="save">Save atlas</button></div></div>
+      </form>
+      {% call card('Read-only machine values', false, id='machine-values', class_='mt-3 mb-0') %}
+        <p class="form-hint">Reported from service configuration files.</p><div class="table-responsive"><table class="table table-sm mb-0" aria-label="Read-only machine values"><thead><tr><th>Service</th><th>Setting</th><th>Value</th></tr></thead><tbody><tr><td>loadcoach</td><td><code>host</code></td><td><code>0.0.0.0</code></td></tr><tr><td>spotter</td><td><code>port</code></td><td><code>9001</code></td></tr></tbody></table></div>
+      {% endcall %}
+    </section>
+  </div>
+  <p class="small text-secondary mt-3 mb-0" id="design-note"></p>
+</main>
+<dialog id="action-dialog" aria-labelledby="action-title">
+  {% call card('Confirm action', header_id='action-title', class_='mb-0') %}
+  <form method="dialog" id="action-form"><p id="action-impact"></p><p class="small text-secondary">Preview only · this changes sample data in this browser.</p><div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary btn-sm" value="cancel">Cancel</button><button class="btn btn-danger btn-sm" id="confirm-action" value="confirm">Confirm</button></div></form>
+  {% endcall %}
+</dialog>
+<template id="node-choice-template">{{ node_choice() }}</template>
+<template id="fleet-row-template">{{ fleet_row() }}</template>
+<template id="gpu-row-template">{{ gpu_row() }}</template>
+<template id="gpu-empty-template">{{ empty_row(6, 'No GPUs detected. CPU inference is still available.') }}</template>
+<script id="sample-nodes" type="application/json">{{ nodes|tojson }}</script>
+<script>{{ javascript|safe }}</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{# One set of preview components for every node, including dynamically replaced rows. #}
+{% macro fleet_row() %}
+<tr data-fleet-row>
+  <td><button type="button" class="btn btn-link p-0" data-node-choice aria-pressed="false"><strong data-node-name></strong><span class="draft-mark ms-2" data-draft-mark hidden aria-label="Unsaved changes"></span></button><small class="d-block text-secondary" data-node-role></small></td>
+  <td><span class="node-status" data-node-status></span></td><td data-fleet-gpus></td><td data-fleet-ram></td><td data-fleet-engine></td>
+</tr>
+{% endmacro %}
+
+{% macro gpu_row() %}
+<tr data-gpu-row>
+  <th scope="row"><code data-gpu-id></code></th><td><strong class="fw-medium" data-gpu-device></strong><small class="d-block text-secondary" data-gpu-models></small></td><td class="text-nowrap" data-gpu-vram></td>
+  <td><input type="checkbox" class="form-check-input" name="disabled" data-gpu-disabled></td>
+  <td><input type="checkbox" class="form-check-input" name="gpu-engine-llama_cpp" data-gpu-engine="llama_cpp"></td>
+  <td><input type="checkbox" class="form-check-input" name="gpu-engine-strata" data-gpu-engine="strata"><span class="small text-secondary" data-gpu-unsupported hidden>CUDA only</span></td>
+</tr>
+{% endmacro %}

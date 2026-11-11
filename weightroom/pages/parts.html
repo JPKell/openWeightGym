@@ -58,7 +58,7 @@
 </section>
 {% endmacro %}
 
-{% macro more(title='Why?') %}<details class="more"><summary>{{ title }}</summary><div class="small text-secondary mt-2">{{ caller() }}</div></details>{% endmacro %}
+{% macro more(title='Why?', open=false, attrs={}) %}<details class="more"{{ attrs|xmlattr }}{% if open %} open{% endif %}><summary>{{ title }}</summary><div class="small text-secondary mt-2">{{ caller() }}</div></details>{% endmacro %}
 
 {# One placement vocabulary; legacy fields retain the existing POST/API contracts. #}
 {% macro hardware_card(name, value='', checked=false, kind='checkbox') -%}

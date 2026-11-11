@@ -1,55 +1,58 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, form_section, more, confirm_loss, confirm_two, alert, node_state %}
-{% from "navigation_parts.html" import pills, pill_link %}
+{% from "parts.html" import card, said_box, swaps, page_header, section_title, form_section, more, confirm_loss, confirm_two, alert, node_state %}
+{% from "navigation_parts.html" import pills %}
+{% from "compute_node_parts.html" import node_choice %}
 {% block title %}Compute nodes · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/compute-nodes.css?v=1"><script src="/static/compute-nodes.js?v=1" defer></script>{% endblock %}
 {% block main %}
-<div class="settings-page">
-{{ page_header('Compute nodes', 'Manage hardware policy and runtime settings for the selected node.') }}
-{% call pills('Compute nodes') %}{% for host in machine_choices %}
-{{ pill_link(host.name ~ ' · ' ~ (host.lifecycle if host.lifecycle|default('active') != 'active' else node_state(host.state)), '/compute-nodes?machine=' ~ host.name|urlencode, host.name == selected_machine) }}
-{% endfor %}{% endcall %}
-{{ said_box(said, failed) }}
-{% call card('Node status', id='node-lifecycle') %}
-<p><strong>{{ selected_machine }}</strong> is {{ selected_node.lifecycle|default('active') }}. Reachability: {{ node_state(selected_node.state) }}.</p>
-<p class="text-secondary">Disable for maintenance to stop new work and wake requests while keeping telemetry visible. Retire to stop monitoring and hide this node from telemetry; historical logs are preserved. Existing work can finish.</p>
-{% if selected_node.lifecycle_changed %}<p class="small text-secondary">Changed by {{ selected_node.lifecycle_changed.changed_by }} · {{ selected_node.lifecycle_changed.changed_at|timestamp }}.</p>{% endif %}
-<form method="post" action="/compute-nodes/lifecycle" class="d-flex flex-wrap gap-2">
-<input type="hidden" name="machine" value="{{ selected_machine }}">
-{% if selected_node.lifecycle|default('active') != 'active' and selected_node.configured|default(true) %}<button class="btn btn-primary" name="state" value="active">Enable node</button>{% endif %}
-{% if selected_node.lifecycle|default('active') == 'active' %}<button class="btn btn-outline-warning" name="state" value="disabled" {{ confirm_two() }}>Disable node</button>{% endif %}
-{% if selected_node.lifecycle|default('active') != 'retired' %}<button class="btn btn-outline-danger" name="state" value="retired" {{ confirm_two() }}>Retire node</button>{% endif %}
-</form>
-{% if not selected_node.configured|default(true) %}<p class="small text-secondary mt-2 mb-0">This is a retained registration. Pair or configure the node again before enabling it.</p>{% endif %}
+<div class="settings-page compute-nodes" data-compute-nodes data-machine="{{ selected_machine }}">
+{% set pairing_open = pairing_code or opened|default('') == 'add-node' %}
+{% call page_header('Compute nodes', pretitle='SETTINGS / INFRASTRUCTURE') %}
+{% if may_pair %}<form method="get" action="/compute-nodes"><input type="hidden" name="machine" value="{{ selected_machine }}"><input type="hidden" name="open" value="add-node"><button class="btn btn-primary btn-sm" data-toggle-pairing aria-expanded="{{ 'true' if pairing_open else 'false' }}" aria-controls="add-node">+ Add GPU node</button></form>{% endif %}
 {% endcall %}
-{% if node_settings_error %}{% call alert('warning', tag='p', role='status') %}Saved file locations could not be applied: {{ node_settings_error }}{% endcall %}
-{% elif node_settings_pending %}{% call alert('info', tag='p', role='status') %}File locations are saved on front. They will be delivered when this node reconnects and apply after its compute service restarts.{% endcall %}{% endif %}
-{% if may_pair %}{% call card("Add a GPU node", id="add-node") %}
+<div class="compute-fleet-summary small text-secondary mb-3" aria-label="Fleet summary"><span><strong class="text-body">{{ machine_choices|length }}</strong> {{ 'node' if machine_choices|length == 1 else 'nodes' }}</span><span><strong class="text-body">{{ machine_choices|selectattr('state', 'equalto', 'ready')|selectattr('lifecycle', 'equalto', 'active')|list|length }}</strong> available for new work</span><span class="ms-auto d-none d-lg-inline">Hardware, runtimes &amp; access</span></div>
+{{ said_box(said, failed) }}
+{% if may_pair %}
+{% set pairing_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" data-close-pairing>Close</button>{% endset %}
+{% call card('Add a GPU node', id='add-node', actions=pairing_actions, attrs={} if pairing_open else {'hidden': ''}, class_='compute-pairing') %}
+<div class="compute-pairing-layout"><div><strong>Connect a new machine</strong><p class="small text-secondary mb-0">Install openWeightGym with a one-time pairing code. The installer registers this node and restarts the gateway to use it.</p></div><div class="min-w-0">
 {% if pairing_code %}
-<p class="mb-2">On the GPU machine, run:</p>
-<div class="d-flex align-items-start gap-2 mb-2"><pre class="mb-0 flex-grow-1 text-wrap"><code id="pairing-command">{{ pairing_code.command }}</code></pre><button type="button" class="btn btn-outline-secondary btn-sm" data-copy-target="pairing-command">Copy</button></div>
-<p class="text-secondary small mb-0">The code <strong>{{ pairing_code.code }}</strong> works once, until {{ pairing_code.expires|timestamp }}. When the installer there reaches this console, the node is added here and the gateway restarts to use it.</p>
-{% else %}
-<p class="text-secondary small mb-3">Install openWeightGym on another machine and let it join with a one-time code: no keys to copy by hand.</p>
-<form method="post" action="/compute-nodes/pair"><button class="btn btn-primary">Make a pairing code</button></form>
+<p class="small mb-2">On the GPU machine, run:</p><div class="d-flex align-items-start gap-2 mb-2"><pre class="mb-0 flex-grow-1 text-wrap"><code id="pairing-command">{{ pairing_code.command }}</code></pre><button type="button" class="btn btn-outline-secondary btn-sm" data-copy-target="pairing-command">Copy</button></div>
+<p class="form-hint mb-0">Code <strong>{{ pairing_code.code }}</strong> works once, until {{ pairing_code.expires|timestamp }}.</p>
 {% endif %}
+<form method="post" action="/compute-nodes/pair" {{ swaps() }} class="{{ 'mt-2' if pairing_code }}"><input type="hidden" name="machine" value="{{ selected_machine }}"><button class="btn {{ 'btn-outline-secondary' if pairing_code else 'btn-primary' }} btn-sm">{{ 'Make a new pairing code' if pairing_code else 'Make a pairing code' }}</button></form>
+</div></div>
 {% endcall %}{% endif %}
-{% if selected_node.lifecycle|default('active') != 'retired' and selected_node.configured|default(true) %}
-{% if machine_key %}{% call card("Machine key", id="machine-key") %}
-<p class="mb-2">Last rotated {{ machine_key.changed|timestamp }}.</p>
-<p class="text-secondary small mb-3">The gateway sends the replacement key to {{ selected_machine }} first, sealed with the current key. The old key remains valid for ten minutes. If the two sides fall out of step, run <code>loadcoach --replace-key</code> on that node.</p>
-{% if machine_key.last_error %}{% call alert('warning') %}Scheduled rotation: {{ machine_key.last_error }}{% endcall %}{% endif %}
-<form method="post" action="/compute-nodes/machine-key/schedule" class="row g-3 align-items-end mb-3">
-<input type="hidden" name="machine" value="{{ selected_machine }}">
-<div class="col-sm-6 col-lg-4"><label class="form-label" for="rotation-days">Rotate every</label><div class="input-group"><input id="rotation-days" name="rotation_days" type="number" min="0" max="3650" value="{{ machine_key.rotation_days }}" class="form-control" required><span class="input-group-text">days</span></div></div>
-<div class="col-sm-auto"><button class="btn btn-primary">Save schedule</button></div>
-<div class="col-12 form-hint">Zero disables scheduled rotation.{% if machine_key.next_rotation %} Next: {{ machine_key.next_rotation|timestamp }}.{% endif %}</div>
-</form>
-<form method="post" action="/compute-nodes/machine-key" {{ swaps() }}><input type="hidden" name="machine" value="{{ selected_machine }}"><button  class="btn btn-outline-danger" {{ confirm_loss() }}>Rotate now</button></form>
-{% endcall %}{% endif %}
-{% include "cards.html" %}
-{% include "engine_nodes.html" %}
-{% set fixed=true %}{% for program in programs %}{% include "settings_program.html" %}{% else %}<p class="text-secondary">This node has not reported the compute service or the node monitor settings.</p>{% endfor %}
-{% include 'settings_machine_values.html' %}
-{% endif %}
+
+{% if machine_choices %}
+<div class="compute-node-layout">
+<aside class="compute-node-directory" aria-label="Compute node directory">
+  <div class="compute-directory-tools"><label class="visually-hidden" for="node-search">Find a node</label><input id="node-search" type="search" class="form-control form-control-sm" placeholder="Find a node…" autocomplete="off"><select id="node-filter" class="form-select form-select-sm" aria-label="Filter nodes by status"><option value="all">All nodes</option><option value="available">Available</option><option value="attention">Needs attention</option><option value="retired">Retired</option></select></div>
+  <div class="eyebrow d-flex justify-content-between mt-3 mb-2 px-2">YOUR NODES <span data-node-count role="status" aria-live="polite">{{ machine_choices|length }}</span></div>
+  {% call pills('Compute nodes', class_='compute-node-list gap-1 mb-0') %}{% for host in machine_choices %}{{ node_choice(host, selected_machine) }}{% endfor %}{% endcall %}
+  <p class="small text-secondary mt-3 px-2" data-node-empty hidden>No matching nodes. Clear the search or change the status filter.</p>
+  <p class="small text-secondary mt-3 px-2 mb-0">Choose a node to configure it. Unsent changes stay with each node while you switch.</p>
+</aside>
+<section class="compute-node-inspector" aria-label="Selected node settings">
+  <div class="compute-node-heading d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div class="d-flex align-items-center gap-3 min-w-0"><span class="node-avatar" aria-hidden="true">{{ selected_machine[0]|upper }}</span><div class="min-w-0">{{ section_title(selected_machine, id='selected-node-name', class_='wrap', wrapper_class='compute-selected-title') }}<span class="small text-secondary">{{ selected_node.hostname or 'Compute node' }}</span></div><span class="node-status" data-state="{{ selected_node.lifecycle if selected_node.lifecycle|default('active') != 'active' else selected_node.state }}">{{ selected_node.lifecycle if selected_node.lifecycle|default('active') != 'active' else node_state(selected_node.state) }}</span></div><span class="small text-secondary" data-node-draft-status role="status" aria-live="polite">No unsent changes</span></div>
+  {% if node_settings_error %}{% call alert('warning', tag='p', role='status') %}Saved file locations could not be applied: {{ node_settings_error }}{% endcall %}
+  {% elif node_settings_pending %}{% call alert('info', tag='p', role='status') %}File locations are saved on front. They will be delivered when this node reconnects and apply after its compute service restarts.{% endcall %}{% endif %}
+  <div class="compute-node-panels">
+  {% if selected_node.lifecycle|default('active') != 'retired' and selected_node.configured|default(true) %}
+    <div class="compute-node-column">
+    {% include 'cards.html' %}
+    {% set groups = settings_sections(programs) %}
+    {% with settings_groups=groups|selectattr('title', 'equalto', 'Model files')|list, settings_fixed=true, settings_readonly=false, settings_empty=false %}{% include 'settings_sections.html' %}{% endwith %}
+    {% with settings_groups=groups|rejectattr('title', 'equalto', 'Model files')|list, settings_readonly=false, settings_empty=not groups %}{% include 'settings_sections.html' %}{% endwith %}
+    </div>
+    <div class="compute-node-column">{% include 'engine_nodes.html' %}{% include 'compute_node_access.html' %}</div>
+  {% else %}
+    {% include 'compute_node_access.html' %}
+  {% endif %}
+  </div>
+  {% if selected_node.lifecycle|default('active') != 'retired' and selected_node.configured|default(true) %}{% include 'settings_machine_values.html' %}{% endif %}
+</section>
+</div>
+{% else %}{% call card('No compute nodes yet') %}<p class="text-secondary mb-0">{{ 'Use Add GPU node to connect your first machine.' if may_pair else 'Ask a superuser to pair or configure a compute node.' }}</p>{% endcall %}{% endif %}
 </div>
 {% endblock %}
