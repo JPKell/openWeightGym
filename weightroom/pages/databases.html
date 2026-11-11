@@ -27,8 +27,7 @@
 <aside aria-label="Operations">
 {% call card('Export & maintenance', hint='Choose a database row or select several.') %}
 <p class="small text-secondary">Dump one database as SQL, or download a ZIP containing one SQL dump per selected database and a completeness manifest.</p>
-<div class="d-flex flex-wrap gap-2 mb-3"><button type="button" class="btn btn-outline-primary btn-sm" data-all-export>Dump all</button><button type="button" class="btn btn-outline-secondary btn-sm" id="reclaim-selected" disabled>Reclaim selected…</button></div>
-<div class="border-top pt-3 small"><strong>Cleanup by date</strong><p class="text-secondary mt-1">Preview telemetry readings before a UTC date, then confirm deletion. Other tables remain protected until they have an approved retention policy.</p><p class="text-secondary mb-0">Reclaim disk separately. A verified recovery copy is created before each store is changed; maintenance can hold locks.</p></div>
+<div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-primary btn-sm" data-all-export>Dump all</button><button type="button" class="btn btn-outline-secondary btn-sm" id="reclaim-selected" disabled>Reclaim selected…</button></div>
 {% endcall %}
 {% call card('Recent operations', id='jobs-card', body_class='py-2') %}
 <button type="button" class="btn btn-outline-secondary btn-sm mb-2" id="refresh-jobs">Refresh jobs</button><ol class="list-unstyled small mb-0" id="jobs"><li class="text-secondary">Loading your operations…</li></ol>
