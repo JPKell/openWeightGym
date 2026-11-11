@@ -40,6 +40,7 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --topology NAME         all (one machine), front (console only) or compute (GPU node)
   --yes                   take the defaults without asking
   --components            add omitted components to an existing installation
+  --discard-install       remove partial engine builds and cancel the saved install plan
   --services LIST         components: add comma-separated service names
   --strata install|skip|keep     optional Strata CUDA runtime (default: keep)
   --strata-host-ram-mib N        Strata host RAM budget (default: 22528 MiB)
@@ -96,6 +97,10 @@ main() {
   set_retry
   if [[ $ACTION == uninstall ]]; then run_uninstaller; fi
   ui_banner "$(installed_version)"
+  if [[ $ACTION == discard-install ]]; then
+    discard_install
+    return 0
+  fi
   # Updating code is independent of a saved installation plan, even if setup never finished.
   if [[ $ACTION == update ]]; then
     ((SYSTEM)) && ui_sudo "updating the system installation's code"
@@ -162,11 +167,13 @@ set_retry() {
   if [[ -f $DIR/install.sh ]]; then
     command=$(shell_path "$DIR/install.sh")
     [[ $ACTION != update ]] || command+=' --update'
+    [[ $ACTION != discard-install ]] || command+=' --discard-install'
   else
     command="curl -fsSL $OWG_RAW/$OWG_REF/install.sh | bash"
     if ((SYSTEM)); then flags+=' --system'; fi
     if ((DIR_GIVEN)); then flags+=" --dir $(shell_path "$DIR")"; fi
     [[ $ACTION != update ]] || flags+=' --update'
+    [[ $ACTION != discard-install ]] || flags+=' --discard-install'
     if [[ -n $flags ]]; then command+=" -s --$flags"; fi
   fi
   OWG_RETRY_COMMAND=$command
@@ -175,6 +182,7 @@ It carries on where it stopped; nothing finished is undone."
   case "$ACTION" in
     uninstall) OWG_STOP_TITLE="Uninstalling stopped" OWG_RETRY='' ;;
     update) OWG_STOP_TITLE="The update stopped"; OWG_RETRY="Run the code update again: $command" ;;
+    discard-install) OWG_STOP_TITLE="Discarding the failed install stopped"; OWG_RETRY="Retry cleanup: $command" ;;
     *) OWG_STOP_TITLE="The install stopped" ;;
   esac
   export OWG_RETRY OWG_RETRY_COMMAND OWG_STOP_TITLE
@@ -230,6 +238,7 @@ parse_arguments() {
       --update) ACTION=update; shift ;;
       --repair) ACTION=repair; shift ;;
       --components) ACTION=components; shift ;;
+      --discard-install) ACTION=discard-install; shift ;;
       --services) ADD_SERVICES=$2; shift 2 ;;
       --strata) STRATA_ACTION=$2; PLAN_GIVEN[STRATA_ACTION]=1; shift 2 ;;
       --strata-host-ram-mib) STRATA_HOST_RAM_MIB=$2; PLAN_GIVEN[STRATA_HOST_RAM_MIB]=1; shift 2 ;;
@@ -356,6 +365,7 @@ installed_version() {
 is_installed() {
   [[ -x $1/.venv/bin/python ]] && compgen -G "$1/settings/*.toml" >/dev/null || return 1
   [[ $(receipt_get state) != pending ]] || return 1
+  [[ $(receipt_get state) != cancelled || -n $(receipt_get services) ]] || return 1
   receipt_present && return 0
   # Legacy deployments have no receipt. A virtualenv plus copied settings alone is incomplete.
   local unit command unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
@@ -505,6 +515,7 @@ interrupted_menu() {
   ui_choose choice "What would you like to do?" 0 \
     "Continue previous install|use the saved choices and keep existing settings and data" \
     "Uninstall components and start again|choose what to remove, then choose a new setup" \
+    "Discard failed install|remove partial engine builds and cancel saved choices" \
     "Quit|change nothing"
   case "$choice" in
     0) ;;
@@ -522,8 +533,32 @@ interrupted_menu() {
       if ! pwd -P >/dev/null 2>&1; then cd "$HOME"; fi
       RECOVERY_ACTION=restart
       ;;
+    2) discard_install; RECOVERY_ACTION=quit ;;
     *) RECOVERY_ACTION=quit; ui_info "Nothing changed." ;;
   esac
+}
+
+discard_install() {
+  [[ $(receipt_get state) == pending ]] || { ui_info 'No failed installation plan to discard.'; return 0; }
+  ACTION=discard-install
+  set_retry
+  ((SYSTEM)) && ui_sudo 'discarding the system installation’s failed setup'
+  local python=python3
+  if as_owner test -x "$DIR/.venv/bin/python"; then python=$DIR/.venv/bin/python; fi
+  local runner=(as_owner)
+  if ((SYSTEM)); then
+    # llama.cpp may have failed before handing its root-owned build back to the service account.
+    owner_environment "$SVC"
+    runner=(sudo -n /usr/bin/env "${OWNER_ENV[@]}")
+  fi
+  ui_section 'Discard failed install' 'Completed components, settings, models and build tools are kept'
+  "${runner[@]}" "$python" "$DIR/scripts/discard-install.py" --root "$DIR" || return $?
+  if ((!ASSUME_YES)); then
+    ui_confirm 'Remove these partial builds and cancel all saved installation choices?' n || return 0
+  fi
+  "${runner[@]}" "$python" "$DIR/scripts/discard-install.py" --root "$DIR" --apply || return $?
+  receipt_load "$DIR"
+  ui_ok 'Failed installation discarded' 'It will not resume next run. Use owg install to select components again.'
 }
 
 installed_menu() {
@@ -1485,6 +1520,10 @@ write_receipt() {
     echo "# What install.sh made here, read by the uninstaller. Only what is listed is removed."
     echo "version=2"
     echo "state=$state"
+    if [[ $state == pending ]]; then
+      echo "installer_pid=$$"
+      echo "installer_start=$(awk '{print $22}' /proc/$$/stat)"
+    fi
     echo "operation=${OPERATION:-install}"
     echo "installed=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "mode=$( ((SYSTEM)) && printf system || printf user)"

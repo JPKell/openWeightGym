@@ -235,6 +235,14 @@ models loaded from then on use the new build. To use a llama-server you already 
 
 ## Adding components and optional engines
 
+If an installation failed, choose **Discard failed install** in `owg`, or run
+`owg discard-install`. It previews unfinished engine build folders and asks before deleting
+them, then cancels the entire saved retry plan. Completed engines and services, settings,
+keys, models, shared Python environments and installed build tools (including CUDA) are kept.
+External or symlinked runtime folders are left alone. A private copy of the old receipt is
+kept as `.install-receipt.before-discard-*`. Cancelled choices are not resumed on the next run;
+use **Install components** to select anything you want to try again. `--yes` skips confirmation.
+
 The node installer offers **Strata**, **stable-diffusion.cpp** (images) and **audio.cpp**
 (music, sounds and speech). They are optional; unattended installs keep them unchanged unless
 selected explicitly. Image and audio builds offer CUDA, Vulkan or CPU; Strata uses CUDA.
@@ -322,6 +330,7 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 | `--system` | install for the whole machine |
 | `--dir PATH` | where to install (also `OWG_HOME`) |
 | `--components`, `--services LIST` | add omitted components; optionally name comma-separated services |
+| `--discard-install` | remove partial engine builds and cancel a failed installation's saved choices |
 | `--strata install\|skip\|keep`, `--strata-host-ram-mib N` | optional CUDA Strata runtime and host RAM budget |
 | `--sdcpp install\|skip\|keep`, `--audiocpp install\|skip\|keep` | optional image and audio runtimes |
 | `--sdcpp-backend cuda\|vulkan\|cpu`, `--audiocpp-backend cuda\|vulkan\|cpu` | explicitly select each native backend (default CUDA) |
