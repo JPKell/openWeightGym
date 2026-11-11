@@ -235,8 +235,12 @@ models loaded from then on use the new build. To use a llama-server you already 
 The node installer offers **Strata**, **stable-diffusion.cpp** (images) and **audio.cpp**
 (music, sounds and speech). They are optional; unattended installs keep them unchanged unless
 selected explicitly. Image and audio builds offer CUDA, Vulkan or CPU; Strata uses CUDA.
-These source builds require git, cmake and a C++ compiler, plus the CUDA toolkit for CUDA or
-Vulkan development tools for Vulkan. Model weights are separate.
+All source builders share llama.cpp's toolchain setup: missing git, cmake, C/C++ compilers,
+development headers and the selected CUDA or Vulkan toolkit are installed with the system
+package manager. Existing CUDA toolkits outside `PATH` are reused, including `/opt/cuda`,
+`/usr/local/cuda` and locations named by `CUDACXX`, `CUDAToolkit_ROOT`, `CUDA_PATH` or `CUDA_HOME`.
+Build tools and GPU toolkits remain installed after builds, failures and uninstallation;
+openWeightGym does not purge them. Model weights are separate.
 
 Run **owg → Install components**, or `owg install`, to add services omitted earlier, including
 voice, monitoring and tool services appropriate to this machine's role, or any of the engines

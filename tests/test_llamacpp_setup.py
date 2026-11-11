@@ -23,6 +23,8 @@ def engine_installer(tmp_path):
     shutil.copy2(ROOT / "scripts/install-llamacpp.sh", scripts)
     shutil.copy2(ROOT / "scripts/lib/ui.sh", scripts / "lib")
     shutil.copy2(ROOT / "scripts/lib/detect.sh", scripts / "lib")
+    shutil.copy2(ROOT / "scripts/lib/build.sh", scripts / "lib")
+    shutil.copy2(ROOT / "scripts/install-build-tools.sh", scripts)
     with (scripts / "lib/detect.sh").open("a") as detection:
         detection.write("""
 detect_os() { OS_ARCH=x86_64; OS_FAMILY=${TEST_OS_FAMILY:-other}; }
@@ -30,7 +32,7 @@ detect_gpu() { LLAMA_BACKEND=${TEST_BACKEND:-cpu}; }
 shell_path() { printf '%q' "$1"; }
 """)
     # GPU toolkit discovery must never pick up a real compiler on the test host.
-    installer = scripts / "install-llamacpp.sh"
+    installer = scripts / "lib/build.sh"
     installer.write_text(installer.read_text().replace("/opt/cuda", str(tmp_path / "system/cuda"))
                          .replace("/usr/local/cuda", str(tmp_path / "system/local-cuda"))
                          .replace("/opt/rocm", str(tmp_path / "system/rocm")))
@@ -114,11 +116,13 @@ fi
                    "CUDACXX": "", "CUDAToolkit_ROOT": "", "CUDA_PATH": "", "CUDA_HOME": "",
                    "ROCM_PATH": "", "HIP_PATH": ""}
 
-    def run(*args, terminal=False, answer="", env=None, main_mode=None):
+    def run(*args, terminal=False, answer="", env=None, main_mode=None, toolchain=None):
         """Optionally give the installer a controlling terminal for its real menu."""
         command = ["/bin/bash", str(scripts / "install-llamacpp.sh"), "--prefix", str(prefix), *args]
         if main_mode:
             command = ["/bin/bash", str(driver)]
+        if toolchain:
+            command = ["/bin/bash", str(scripts / "install-build-tools.sh"), *toolchain]
         if terminal:
             terminal_tool = shutil.which("script")
             if not terminal_tool:
@@ -128,6 +132,7 @@ fi
                               env={**environment, "OWG_NO_TTY": "0" if terminal else "1",
                                    "TEST_METHOD": main_mode or "", **(env or {})})
 
+    run.environment = environment
     return run, prefix, commands, calls
 
 

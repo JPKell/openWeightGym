@@ -8,7 +8,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -118,9 +117,8 @@ def install(args):
         raise ValueError("Install loadcoach first, then run owg install --strata install")
     manifest = target / "installation.json"
     if not manifest.exists():
-        missing = [tool for tool in ("git", "cmake", "c++", "nvcc") if not shutil.which(tool)]
-        if missing:
-            raise ValueError("Missing build tools: " + ", ".join(missing) + "; install the CUDA toolkit and C++ build tools, then retry")
+        from engines.build import build_environment
+        environment = build_environment("cuda", "Strata")
         target.mkdir(parents=True, exist_ok=True)
         source = Path(node.source)
         if not source.exists():
@@ -132,8 +130,8 @@ def install(args):
         build = target / "build"
         run(["cmake", "-S", source, "-B", build, "-DCMAKE_BUILD_TYPE=Release",
              "-DSTRATA_ENABLE_CUDA=ON", "-DSTRATA_BUILD_TESTS=OFF", "-DSTRATA_NATIVE_EXPERTS=ON",
-             "-DCMAKE_CUDA_ARCHITECTURES=native"])
-        run(["cmake", "--build", build, "--target", "strata", "strata_kq", "--parallel", args.jobs])
+             "-DCMAKE_CUDA_ARCHITECTURES=native", "-DCMAKE_CUDA_COMPILER=" + environment["CUDACXX"]], env=environment)
+        run(["cmake", "--build", build, "--target", "strata", "strata_kq", "--parallel", args.jobs], env=environment)
         run([sys.executable, "-m", "venv", target / "venv"])
         run([node.python, "-m", "pip", "install", "--disable-pip-version-check", *REQUIREMENTS])
         hashes = verify(node, recorded=False)
