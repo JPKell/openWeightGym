@@ -126,6 +126,22 @@ function showComposer() {
   composer.inert = hidden;
 }
 
+/** Check whether the page is scrolled to its very end, or does not scroll at all. */
+const atBottom = () => {
+  const page = document.scrollingElement;
+  return page && page.scrollHeight - page.clientHeight - page.scrollTop <= 2;
+};
+// At the bottom of the page the composer is always shown. A page that has become shorter, as when
+// Ask again's options close, may leave too little room to scroll down far enough to bring it back.
+/** Show a hidden composer once the page is at its end. */
+const shownAtBottom = () => {
+  if (!composerHidden || !atBottom()) return false;
+  composerHidden = false;
+  scrolled = 0;
+  showComposer();
+  return true;
+};
+
 addEventListener("scroll", () => {
   const now = Math.max(0, scrollY);
   const delta = now - lastScroll;
@@ -136,11 +152,15 @@ addEventListener("scroll", () => {
   scrollDirection = direction;
   scrolled += Math.abs(delta);
   const line = parseFloat(getComputedStyle(document.body).lineHeight) || 24;
-  if (scrolled < line * 7) return;
-  composerHidden = direction < 0;
-  scrolled = 0;
-  showComposer();
+  if (scrolled >= line * 7) {
+    composerHidden = direction < 0;
+    scrolled = 0;
+    showComposer();
+  }
+  shownAtBottom();
 }, {passive: true});
+// Content that shrinks without moving the scroll position, such as a page that no longer scrolls, sends no scroll event.
+new ResizeObserver(shownAtBottom).observe(document.body);
 
 document.addEventListener("click", event => {
   const link = event.target.closest("[data-chat-jump]");
