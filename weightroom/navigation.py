@@ -10,9 +10,10 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
     In Docs the links are its sections, and `children` holds the topics of the section being read, shown beneath it.
     """
     groups = [
-        {"name": "Chat", "links": [("Conversations", "/chat"), ("Collections", "/collections"), ("Workflows", "/workflows"), ("Image generation", "/chat/images"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Speech", "/chat/speech")]},
+        {"name": "Chat", "links": [("Conversations", "/chat"), ("Image generation", "/chat/images"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Speech", "/chat/speech")]},
         {"name": "Models", "links": []},
-        {"name": "Benchmark", "links": [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements"), ("Embedders", "/benchmarks/embedders"), ("Compare", "/benchmarks/compare")]},
+        # Collections and workflows keep their own addresses; they are here because they are used to compare models.
+        {"name": "Benchmark", "links": [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements"), ("Embedders", "/benchmarks/embedders"), ("Compare", "/benchmarks/compare"), ("Collections", "/collections"), ("Workflows", "/workflows")]},
         {"name": "Logs", "links": [("Usage", "/usage"), ("Requests", "/requests"), ("Batches", "/batches"), ("AI Logs", "/log"), ("Reliability", "/reliability")]},
         {"name": "System", "links": [("Status", "/status")]},
         {"name": "Settings", "links": []},

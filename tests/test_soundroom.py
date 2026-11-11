@@ -588,12 +588,20 @@ def test_lyrics_helper_uses_duration_and_instrumental_choice():
     assert "12 seconds" in prompt and "lyrics must be empty" in prompt
 
 
-def test_collections_and_workflows_follow_conversations_in_chat_navigation():
+def test_collections_and_workflows_are_benchmark_pages_used_to_compare_models():
     from weightroom.navigation import navigation
-    for path in ("/chat", "/collections", "/collections/example", "/workflows/example"):
+    chat = navigation("/chat", [], False)
+    assert chat["section"] == "Chat" and chat["links"][0] == ("Conversations", "/chat")
+    assert not {"/collections", "/workflows"} & {url for _, url in chat["links"]}
+    for path, active in (("/collections", "/collections"), ("/collections/example", "/collections"),
+                         ("/collections/example/sources/3", "/collections"), ("/workflows", "/workflows"),
+                         ("/workflows/example", "/workflows")):
         result = navigation(path, [], False)
-        assert result["section"] == "Chat"
-        assert result["links"][:3] == [("Conversations", "/chat"), ("Collections", "/collections"), ("Workflows", "/workflows")]
+        assert result["section"] == "Benchmark" and result["active"] == active
+        assert result["links"][-2:] == [("Collections", "/collections"), ("Workflows", "/workflows")]
+    # Manage stays last for those who may use it.
+    assert navigation("/collections", ["manage-settings"], False)["links"][-3:] == [
+        ("Collections", "/collections"), ("Workflows", "/workflows"), ("Manage", "/benchmarks/manage")]
 
 
 def test_a_spoken_exchange_is_kept_as_a_conversation_without_asking_a_model(desk):
