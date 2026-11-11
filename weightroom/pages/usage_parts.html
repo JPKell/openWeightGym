@@ -1,1 +1,185 @@
+{# The pieces of the Usage report. The live page (usage_content.html) and the sample design proposals
+   (usage_designs.html) arrange the same pieces, so each keeps its names, IDs and `form` links here.
+   static/usage.js finds them by those IDs and keeps the figures, bars and trend lines current; usage.css lays them out. #}
+{% from "parts.html" import card, empty_row, section_title %}
+{% from "filter_parts.html" import users_groups %}
+{% from "navigation_parts.html" import pills, pill_button %}
+
 {% macro money(value) %}<span title="{{ '$%.6f'|format(value) }} USD">${{ '{:,.4f}'.format(value) }}</span>{% endmacro %}
+
+{# Every figure of a report row, in table order. Costs end in _cost. #}
+{% set usage_columns = [('requests', 'Requests'), ('input_tokens', 'Input tokens'), ('output_tokens', 'Output tokens'), ('total_tokens', 'Total tokens'),
+                        ('recorded_cost', 'Recorded USD'), ('model_cost', 'Model-rate USD'), ('fallback_cost', 'Mock fallback USD'),
+                        ('effective_cost', 'Total cost USD'), ('missing_usage', 'Missing counts')] %}
+
+{# One total of the report, kept current by usage.js through `data-usage-total` when the mock rates change. #}
+{% macro usage_total(report, key, class_='fs-3') %}{% if key.endswith('_cost') %}<strong class="{{ class_ }}" data-usage-total="{{ key }}">{{ money(report.totals[key]) }}</strong>{% else %}<strong class="{{ class_ }}" title="{{ '{:,}'.format(report.totals[key]) }}" data-usage-total="{{ key }}">{{ report.totals[key]|count }}</strong>{% endif %}{% endmacro %}
+
+{% macro usage_range(report) %}{{ report.start }} – {{ report.end }} · {{ report.timezone }}{% endmacro %}
+
+{# The fields of the filter form, each in a box of `field_class`. The caller owns <form id="usage-filters">, so it can lay them out. #}
+{% macro usage_filter_fields(report, field_class='col-md-6 col-lg-4') %}
+    <div class="{{ field_class }}" data-usage-field="dates">
+      <label class="form-label" for="usage-start">Date range</label>
+      <div class="input-group input-group-sm">
+        <input class="form-control form-control-sm" id="usage-start" name="start" type="date" aria-label="From" value="{{ report.start }}" required>
+        <span class="input-group-text">through</span>
+        <input class="form-control form-control-sm" id="usage-end" name="end" type="date" aria-label="Through" value="{{ report.end }}" required>
+      </div>
+    </div>
+    <div class="{{ field_class }}" data-usage-field="people">{{ users_groups('usage', report.choices.group, report.user_groups, report.filters.user, report.filters.group, report.everyone) }}</div>
+    {% for key, label in [('model', 'Model'), ('source', 'Source'), ('outcome', 'Outcome'), ('level', 'Level')] %}
+    <div class="{{ field_class }}" data-usage-field="{{ key }}">
+      <label class="form-label" for="usage-{{ key }}">{{ label }}</label>
+      <select class="form-select form-select-sm" id="usage-{{ key }}" name="{{ key }}">
+        <option value="">All</option>
+        {% if report.filters[key] and report.filters[key] not in report.choices[key] %}<option selected value="{{ report.filters[key] }}">{{ report.filters[key] }}</option>{% endif %}
+        {% for value in report.choices[key] %}<option value="{{ value }}" {{ 'selected' if report.filters[key] == value }}>{{ value }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+{% endmacro %}
+
+{% macro usage_filter_actions(class_='col-md-6 col-lg-4 d-flex gap-2') %}<div class="{{ class_ }}"><button class="btn btn-primary btn-sm">Apply</button><a class="btn btn-outline-secondary btn-sm" href="/usage">Reset</a></div>{% endmacro %}
+
+{% macro usage_filter_hidden(report) %}<input type="hidden" name="timezone" value="{{ report.timezone }}">{% endmacro %}
+
+{# The mock input and output rates. They belong to the filter form, wherever they are shown. #}
+{% macro usage_rates(report, field_class='col-sm-6 col-lg-3') %}
+{% for side in ['input', 'output'] %}<div class="{{ field_class }}"><label class="form-label" for="usage-{{ side }}-rate">Mock {{ side }} rate / M tokens</label><input form="usage-filters" class="form-control form-control-sm" id="usage-{{ side }}-rate" name="{{ side }}_rate" type="number" min="0" max="1000000" step="any" value="{{ report.mock_pricing[side ~ '_rate'] }}" required></div>{% endfor %}
+{% endmacro %}
+
+{# The chart's views, as pills. #}
+{% macro usage_chart_views(class_='gap-1 mb-3') %}
+    {% call pills('Usage chart view', buttons=true, class_=class_) %}
+      {% for key, label in [('trend', 'Over time'), ('user', 'By user'), ('group', 'By group'), ('model', 'By model'), ('source', 'By source'), ('outcome', 'By outcome'), ('level', 'By level')] %}
+      {{ pill_button(label, key == 'trend', class_='btn btn-sm', attrs={'data-usage-view': key, 'aria-controls': 'usage-chart'}) }}
+      {% endfor %}
+    {% endcall %}
+{% endmacro %}
+
+{# What the chart draws. usage.js shows the lines, mode and stack controls only where they apply. #}
+{% macro usage_chart_controls(class_='d-flex align-items-center gap-2 flex-wrap mb-2') %}
+    <div class="{{ class_ }}">
+      <label class="small text-secondary" for="usage-metric">Metric</label><select id="usage-metric" class="form-select form-select-sm w-auto"><option value="tokens">Tokens</option><option value="cost">Cost by source (USD)</option><option value="mock">All-mock comparison (USD)</option></select>
+      <div id="usage-lines-control" class="d-flex align-items-center gap-2"><label class="small text-secondary" for="usage-lines">Lines</label><select id="usage-lines" class="form-select form-select-sm w-auto"><option value="total">Total tokens</option><option value="split">Input / output</option></select></div>
+      <div id="usage-mode-control" class="d-flex align-items-center gap-2"><label class="small text-secondary" for="usage-mode">View</label><select id="usage-mode" class="form-select form-select-sm w-auto"><option value="daily">Per day</option><option value="cumulative">Cumulative</option></select></div>
+      <div id="usage-stack-control" class="form-check ms-2 d-none"><input class="form-check-input" type="checkbox" id="usage-stack"><label class="form-check-label small" for="usage-stack">Stack by model</label></div>
+    </div>
+{% endmacro %}
+
+{# The chart under its heading. Called with a block, what the block holds (its controls) goes between the two. #}
+{% macro usage_chart(heading_wrapper='') %}
+    {{ section_title("Tokens over time", id="usage-chart-heading", wrapper_class=heading_wrapper) }}{% if caller is defined %}{{ caller() }}{% endif %}
+    <div id="usage-chart" class="usage-chart frame" role="img" aria-label="Daily total tokens; exact values in the daily totals table below."></div>
+    <noscript><p class="text-secondary small">Enable JavaScript to switch chart views. Usage tables are available below.</p></noscript>
+{% endmacro %}
+
+{# The breakdown table's dimension. It is a filter-form field, so the choice stays in the bookmarkable address. #}
+{% macro usage_group_by(report, class_='ms-auto small text-secondary') %}<label class="{{ class_ }}" for="usage-group-by">Table breakdown</label><select form="usage-filters" class="form-select form-select-sm w-auto" id="usage-group-by" name="group_by">{% for key, label in [('model', 'Model'), ('user', 'User'), ('group', 'Group'), ('source', 'Source'), ('outcome', 'Outcome'), ('level', 'Level')] %}<option value="{{ key }}" {{ 'selected' if report.group_by == key }}>{{ label }}</option>{% endfor %}</select>{% endmacro %}
+
+{% macro usage_row_cells(row) %}{% for key, title in usage_columns %}<td class="text-end" data-value="{{ row[key] }}">{{ money(row[key]) if key.endswith('_cost') else '{:,}'.format(row[key]) }}</td>{% endfor %}{% endmacro %}
+
+{% macro usage_breakdown_table(report, class_='table sortable align-middle mb-0') %}
+    <table id="usage-breakdown" class="{{ class_ }}">
+      <thead><tr><th scope="col" data-sort="text">{{ report.group_by|title }}</th>{% for key, title in usage_columns %}<th scope="col" class="text-end" data-sort="value">{{ title }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for row in report.breakdown %}<tr><th scope="row">{{ row.name }}</th>{{ usage_row_cells(row) }}</tr>{% else %}{% call empty_row(10) %}No usage in this range.{% endcall %}{% endfor %}</tbody>
+      <tfoot><tr><th scope="row">Total</th>{% for key, title in usage_columns %}<td class="text-end">{{ money(report.totals[key]) if key.endswith('_cost') else '{:,}'.format(report.totals[key]) }}</td>{% endfor %}</tr></tfoot>
+    </table>
+{% endmacro %}
+
+{% macro usage_daily_table(report, class_='table mb-0') %}<table id="usage-daily" class="{{ class_ }}"><thead><tr><th scope="col">Date</th>{% for key, title in usage_columns %}<th scope="col" class="text-end">{{ title }}</th>{% endfor %}</tr></thead><tbody>{% for row in report.daily %}<tr><th scope="row">{{ row.date }}</th>{% for key, title in usage_columns %}<td class="text-end">{{ money(row[key]) if key.endswith('_cost') else '{:,}'.format(row[key]) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>{% endmacro %}
+
+{# How the figures are made, and what they leave out. #}
+{% macro usage_notes(report) %}
+<p class="text-secondary small">Costs use the recorded request cost first ({{ report.totals.recorded_requests }} requests), then current model pricing ({{ report.totals.model_requests }}), then mock rates ({{ report.totals.fallback_requests }}). Recorded costs include provider-reported charges or estimates saved at request time; a recorded $0 is kept. The combined total includes estimates, not just billed spend. Mock rates are USD per million tokens and stay in this page’s bookmarkable URL.</p>
+{% if not report.everyone %}<p class="text-secondary small">Showing your usage only.</p>{% endif %}
+{% if report.totals.missing_usage %}<p class="text-warning small">{{ report.totals.missing_usage }} request(s) did not report complete token counts. Token-based estimates include only the counts received and may be understated; recorded costs are kept even without token counts.</p>{% endif %}
+{% if report.totals.inferred_group %}<p class="text-secondary small">Group membership for {{ report.totals.inferred_group }} older request(s) uses current membership where available, or “unknown” for deleted accounts. New requests keep their original group.</p>{% endif %}
+<p class="text-secondary small">Calendar days use {{ report.timezone }}. Cumulative totals start at the selected range's beginning.
+  Based on retained model-request logs{% if report.keep_days %} ({{ '%g'|format(report.keep_days) }}-day retention){% endif %}{% if report.oldest %}; earliest retained request in your access scope: {{ report.oldest }}{% endif %}.
+  Unlogged requests and isolated benchmark probes are excluded.</p>
+{% endmacro %}
+
+{# The figures beside the chart. Token totals in one band, each with what it means per request or per day and a trend line. #}
+{% set usage_token_figures = [('input_tokens', 'Input tokens'), ('output_tokens', 'Output tokens'), ('total_tokens', 'Total tokens'), ('requests', 'Requests')] %}
+{% set usage_cost_sources = [('recorded_cost', 'Recorded cost', 'recorded'), ('model_cost', 'Model-rate estimate', 'model'), ('fallback_cost', 'Mock fallback', 'fallback')] %}
+
+{% macro usage_token_band(report) %}
+{% call card('', class_='usage-band', attrs={'aria-label': 'Token totals'}, body=false) %}
+  <div class="usage-band-grid">
+  {% for key, label in usage_token_figures %}
+    <div class="usage-band-cell" data-figure="{{ key }}">
+      <div class="usage-label">{{ label }}</div>{{ usage_total(report, key, 'usage-value') }}
+      <div class="usage-sub" data-derived="{{ key }}"></div>
+      <svg class="usage-spark" data-spark="{{ key }}" viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true"></svg>
+    </div>
+  {% endfor %}
+  </div>
+{% endcall %}
+{% endmacro %}
+
+{# The total cost, the share each source gives it, and (with `rates`) the mock rates that price the rest. #}
+{% macro usage_cost_band(report, rates=true) %}
+{% call card('', class_='usage-cost-band', attrs={'aria-label': 'Cost totals'}, body_class='usage-cost-grid') %}
+    <div class="usage-cost-hero">
+      <div class="usage-label">Total cost / estimate · USD</div>{{ usage_total(report, 'effective_cost', 'usage-value usage-value-lg') }}
+      <div class="usage-composition mt-3" data-composition role="img" aria-label="Share of the total from each cost source"></div>
+    </div>
+    <dl class="usage-sources mb-0">
+    {% for key, label, source in usage_cost_sources %}
+      <div class="usage-source" data-source="{{ source }}"><dt><i class="usage-swatch" aria-hidden="true"></i>{{ label }} · USD</dt><dd>{{ usage_total(report, key, 'usage-source-value') }}<small class="text-secondary" data-share="{{ key }}"></small></dd></div>
+    {% endfor %}
+    </dl>
+    {% if rates %}
+    <fieldset class="usage-assumptions">
+      <legend class="usage-label">Pricing assumptions</legend>
+      <div class="row g-2 align-items-end">{{ usage_rates(report, 'col-6') }}</div>
+      <p class="small text-secondary mb-0 mt-2">Prices requests with no recorded cost or model rate.</p>
+    </fieldset>
+    {% endif %}
+{% endcall %}
+{% endmacro %}
+
+{# The filter form as a rail beside the report: the range it shows, how many filters are on, every field, then Apply.
+   With `rates`, the mock rates are in it too. #}
+{% macro usage_filter_rail(report, rates=false) %}
+<aside class="usage-rail" aria-label="Usage filters">
+  {% set _count %}<span class="badge bg-blue-lt" data-filter-count title="Filters narrowing this report"></span>{% endset %}
+  {% call card('Filters', tag='form', id='usage-filters', class_='usage-rail-card mb-0', attrs={'method': 'get', 'action': '/usage'}, actions=_count, hint=usage_range(report), body=false) %}
+    <div class="card-body usage-rail-fields">{{ usage_filter_fields(report, 'usage-rail-field') }}</div>
+    {% if rates %}<div class="card-body border-top d-grid gap-2">{{ section_title('Pricing assumptions', level=3, class_='usage-label', wrapper_class='mb-0') }}{{ usage_rates(report, 'usage-rail-field') }}</div>{% endif %}
+    <div class="card-footer">{{ usage_filter_actions('d-flex gap-2') }}</div>
+    {{ usage_filter_hidden(report) }}
+  {% endcall %}
+</aside>
+{% endmacro %}
+
+{% macro usage_no_requests(report) %}{% if not report.totals.requests %}<p class="empty-state usage-empty mb-3">No recorded requests match these filters.</p>{% endif %}{% endmacro %}
+
+{# The chart under one toolbar of its views and metric. #}
+{% macro usage_chart_card(class_='') %}
+{% call card("", class_='usage-chart-card' ~ (' ' ~ class_ if class_), attrs={"aria-labelledby": "usage-chart-heading"}) %}
+  {% call usage_chart() %}<div class="usage-chart-toolbar">{{ usage_chart_views('usage-views gap-1') }}{{ usage_chart_controls('usage-chart-controls d-flex align-items-center gap-2 flex-wrap') }}</div>{% endcall %}
+{% endcall %}
+{% endmacro %}
+
+{# The breakdown table. With `shares`, usage.js draws each row's share of all tokens under its name. #}
+{% macro usage_breakdown_card(report, class_='', shares=false) %}
+{% call card("", class_='usage-breakdown-card' ~ (' ' ~ class_ if class_), attrs={"aria-labelledby": "usage-range-heading"}, body=false) %}
+  <div class="card-body d-flex align-items-center gap-2 flex-wrap usage-breakdown-head">{% set _title %}Selected range by {{ report.group_by }}{% endset %}{{ section_title(_title, id="usage-range-heading", wrapper_class='mb-0') }}{{ usage_group_by(report) }}</div>
+  <div class="table-responsive">{{ usage_breakdown_table(report, 'table sortable align-middle mb-0 usage-table' ~ (' usage-table-shares' if shares)) }}</div>
+{% endcall %}
+{% endmacro %}
+
+{% macro usage_daily_card(report) %}
+{% call card("Daily totals · counts and costs", open=false, body=false, class_='usage-daily-card') %}<div class="table-responsive usage-daily-table">{{ usage_daily_table(report, 'table mb-0 usage-table') }}</div>{% endcall %}
+{% endmacro %}
+
+{# `open=false` folds the notes away; None keeps them always shown. #}
+{% macro usage_notes_card(report, open=false) %}
+{% call card("About these numbers", open=open, class_='usage-notes', body_class='usage-notes-body') %}{{ usage_notes(report) }}{% endcall %}
+{% endmacro %}
+
+{# The report for usage.js, and the bar segment it stamps for each part of a total. #}
+{% macro usage_data(report) %}<script type="application/json" id="usage-data">{{ report|tojson }}</script><template id="usage-segment-template"><span class="usage-segment"></span></template>{% endmacro %}

@@ -343,6 +343,13 @@ def test_confirm_cards_pagination_and_live_usage(desk, tmp_path):
         playwright.expect(page.locator('#recent-requests nav')).to_contain_text('Page 1 of 2')
         assert page.locator('#recent-requests tbody tr').count() == 25
         page.goto('http://console.test/usage')
+        # The heading leads straight into the dashboard: the filter rail on the left, the report beside it.
+        rail, report, header = (page.locator(selector).bounding_box() for selector in ('.usage-rail', '.usage-main', '#usage-header'))
+        assert rail['x'] + rail['width'] < report['x'] and abs(rail['y'] - report['y']) < 2
+        assert rail['y'] - (header['y'] + header['height']) < 40
+        playwright.expect(page.locator('[data-derived="requests"]')).to_contain_text('a day')
+        playwright.expect(page.locator('[data-composition] .usage-segment')).to_have_count(2)
+        playwright.expect(page.locator('[data-filter-count]')).to_have_text('None')
         assert page.locator('#usage-input-rate').input_value() == '2.0'
         assert page.locator('#usage-output-rate').input_value() == '10.0'
         page.locator('#usage-input-rate').fill('3')

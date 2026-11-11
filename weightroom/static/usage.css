@@ -1,0 +1,118 @@
+/* The Usage dashboard: the filter rail, the token and cost bands, the chart card and the exact tables.
+   Shared by the live page and the sample proposals (usage_designs.html). The series colors are the ones static/usage.js
+   gives the chart, so a swatch here and a line there agree. */
+.usage-page { --usage-input: var(--tblr-primary); --usage-output: #41b89a; --usage-fallback: #d98e32; --usage-requests: #9478d1; }
+
+/* The heading leads straight into the dashboard. */
+.usage-page .page-header { margin-bottom: 1rem !important; }
+.usage-page .page-actions { align-items: center; }
+
+/* Figures. */
+.usage-label { display: flex; align-items: center; gap: .4rem; margin-bottom: .3rem; color: var(--tblr-secondary); font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.usage-value { display: block; color: var(--tblr-body-color); font-size: 1.75rem; font-weight: 650; line-height: 1.15; letter-spacing: -.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.usage-value-sm { font-size: 1.3rem; }
+.usage-value-lg { font-size: 2.25rem; }
+.usage-value-xl { font-size: clamp(2.25rem, 4vw, 3rem); }
+.usage-sub { min-height: 1.25em; margin-top: .25rem; color: var(--tblr-secondary); font-size: .8125rem; }
+.usage-swatch { display: inline-block; inline-size: .6rem; block-size: .6rem; border-radius: 2px; background: var(--usage-color, var(--tblr-secondary)); flex-shrink: 0; }
+[data-source="recorded"], [data-figure="input_tokens"], [data-side="input"], .usage-segment[data-source="input"] { --usage-color: var(--usage-input); }
+[data-source="model"], [data-figure="output_tokens"], [data-side="output"], .usage-segment[data-source="output"] { --usage-color: var(--usage-output); }
+[data-source="fallback"] { --usage-color: var(--usage-fallback); }
+[data-figure="requests"] { --usage-color: var(--usage-requests); }
+[data-figure="total_tokens"], [data-source="effective"] { --usage-color: var(--tblr-body-color); }
+.usage-segment[data-source="recorded"] { --usage-color: var(--usage-input); }
+.usage-segment[data-source="model"] { --usage-color: var(--usage-output); }
+
+/* Bars made of parts: where the cost comes from, input against output. */
+.usage-composition, .usage-split { display: flex; gap: 2px; block-size: .625rem; border-radius: 999px; overflow: hidden; background: var(--tblr-bg-surface-secondary); }
+.usage-composition-thin { block-size: .375rem; }
+.usage-composition-tall { block-size: .875rem; }
+.usage-segment { min-inline-size: 3px; background: var(--usage-color); }
+
+/* A month of one figure, as a filled line. */
+.usage-spark { display: block; inline-size: 100%; block-size: 2.25rem; margin-top: .75rem; color: var(--usage-color, var(--tblr-primary)); overflow: visible; }
+.usage-spark-wide { block-size: 3rem; }
+[data-figure="total_tokens"] .usage-spark { color: var(--usage-input); }
+.usage-spark-line { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.usage-spark-area { fill: currentColor; opacity: .12; }
+
+/* Labels over filter fields are quieter than the figures they narrow. */
+:is(#usage-filters, .usage-assumptions) .form-label { margin-bottom: .25rem; color: var(--tblr-secondary); font-size: .75rem; font-weight: 500; }
+.usage-empty { padding: .75rem 1rem; border: 1px dashed var(--tblr-border-color); border-radius: var(--suite-frame-radius); background: var(--tblr-bg-surface); }
+
+/* The filters in a rail beside the report. Its fields take one column there, and pair up when the rail sits above the report;
+   the dates and the people always take a whole row. */
+.usage-report { container: usage-report / inline-size; }
+.usage-dashboard { display: grid; grid-template-columns: 18.5rem minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.usage-main { min-inline-size: 0; container: usage-main / inline-size; }
+@media (min-height: 760px) { .usage-rail { position: sticky; top: calc(var(--top, 4rem) + 1rem); } }
+.usage-rail-card .card-header { display: flex; align-items: flex-start; }
+.usage-rail-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 1rem; }
+.usage-rail-fields > :is([data-usage-field="dates"], [data-usage-field="people"]) { grid-column: 1 / -1; }
+.usage-rail [data-usage-field="dates"] .form-control { min-inline-size: 0; padding-inline: .45rem; }
+.usage-rail [data-usage-field="dates"] .input-group-text { padding-inline: .45rem; }
+.usage-rail [data-users-groups] { display: grid; gap: .5rem; }
+.usage-rail [data-users-groups] > .form-select, .usage-rail [data-users-groups] .user-picker, .usage-rail [data-users-groups] .form-select { inline-size: 100%; margin: 0 !important; border-radius: var(--tblr-border-radius) !important; }
+@container usage-report (max-width: 52rem) {
+  .usage-dashboard { grid-template-columns: minmax(0, 1fr); }
+  .usage-rail { position: static; }
+}
+
+/* Token totals in one band. */
+.usage-band { overflow: hidden; }
+.usage-band-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.usage-band-cell { padding: 1.1rem 1.25rem .9rem; }
+.usage-band-cell + .usage-band-cell { border-left: 1px solid var(--tblr-border-color); }
+
+/* The total cost, its sources and the mock rates. */
+.usage-cost-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, .9fr); gap: 1.5rem 2rem; align-items: start; }
+.usage-assumptions { min-inline-size: 0; margin: 0; padding: 0 0 0 2rem; border: 0; border-left: 1px solid var(--tblr-border-color); }
+.usage-assumptions legend { float: left; inline-size: 100%; padding: 0; }
+.usage-assumptions legend + * { clear: both; }
+.usage-sources { display: grid; gap: .7rem; }
+.usage-source { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-bottom: .6rem; border-bottom: 1px dashed var(--tblr-border-color); }
+.usage-source:last-child { padding-bottom: 0; border-bottom: 0; }
+.usage-source dt { display: flex; align-items: center; gap: .45rem; font-size: .8125rem; font-weight: 500; }
+.usage-source dd { margin: 0; text-align: end; }
+.usage-source-value { font-weight: 650; font-variant-numeric: tabular-nums; }
+.usage-source small { display: block; }
+
+/* Chart card: heading, then views and metric on one toolbar, then the chart. */
+.usage-chart-card > .card-body { padding: 1rem 1.25rem 1.25rem; }
+.usage-chart-card .section-heading { margin-bottom: .75rem !important; }
+.usage-chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-bottom: .5rem; padding-bottom: .75rem; border-bottom: 1px solid var(--tblr-border-color); }
+.usage-chart-toolbar .usage-views { margin-bottom: 0 !important; }
+.usage-chart-toolbar .usage-chart-controls { margin: 0; }
+.usage-chart-card .usage-chart.frame { border: 0; }
+
+/* Exact tables. The header row keeps the theme's colors. */
+.usage-breakdown-head { padding: .875rem 1.25rem; }
+.usage-table > thead th { font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; white-space: normal; vertical-align: bottom; }
+.usage-table td, .usage-table th { font-variant-numeric: tabular-nums; }
+.usage-table > tbody th { font-weight: 600; }
+.usage-table > tfoot th, .usage-table > tfoot td { border-top: 2px solid var(--tblr-border-color); font-weight: 650; }
+.usage-dashboard .usage-table { font-size: .8125rem; }
+.usage-dashboard .usage-table > :not(caption) > * > * { padding: .55rem .6rem; }
+.usage-share { display: block; max-inline-size: 10rem; block-size: 3px; margin-top: .35rem; border-radius: 2px;
+  background: linear-gradient(90deg, var(--usage-input) var(--share), var(--tblr-bg-surface-secondary) var(--share)); }
+.usage-notes-body { columns: 2 24rem; column-gap: 2.5rem; }
+.usage-notes-body p { break-inside: avoid; }
+.usage-notes-body p:last-child { margin-bottom: 0; }
+
+/* A narrower report column: fewer columns in each band. */
+@container usage-main (max-width: 62rem) {
+  .usage-cost-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .usage-assumptions { grid-column: 1 / -1; padding: 1.25rem 0 0; border-left: 0; border-top: 1px solid var(--tblr-border-color); }
+}
+@container usage-main (max-width: 40rem) {
+  .usage-band-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .usage-band-cell:nth-child(3) { border-left: 0; }
+  .usage-band-cell:nth-child(n + 3) { border-top: 1px solid var(--tblr-border-color); }
+  .usage-cost-grid { grid-template-columns: minmax(0, 1fr); }
+  .usage-chart-toolbar { flex-direction: column; align-items: stretch; }
+}
+@container usage-main (max-width: 22rem) {
+  .usage-band-grid { grid-template-columns: minmax(0, 1fr); }
+  .usage-band-cell + .usage-band-cell { border-left: 0; border-top: 1px solid var(--tblr-border-color); }
+  .usage-value-lg { font-size: 1.85rem; }
+}

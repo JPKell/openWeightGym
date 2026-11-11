@@ -5,9 +5,8 @@ function initializeUsage() {
   if (!data || !window.echarts || data.dataset.initialized) return;
   data.dataset.initialized = "true";
   const report = JSON.parse(data.textContent);
-  const style = getComputedStyle(document.documentElement);
   /** Read a usage-chart color from the active theme. */
-  const colour = name => style.getPropertyValue(name).trim();
+  const colour = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   /** Format a numeric usage value for compact chart labels. */
   const compact = value => {
     let suffix = "";
@@ -17,7 +16,10 @@ function initializeUsage() {
     }
     return suffix ? `${value.toFixed(1)}${suffix}` : String(value);
   };
-  const base = {
+  let base, axisLabel, valuesAxis;
+  /** Take the chart's colors from the theme in use; again whenever the theme changes. */
+  function paint() {
+  base = {
     animation: false,
     color: [colour("--bs-primary"), "#41b89a", "#d98e32", "#9478d1", "#d76f88", "#46a8cc", "#88ad4e", "#b3805c", "#708cbb", "#aa7ba2", "#5eac91", "#c3aa52"],
     textStyle: { color: colour("--bs-body-color") },
@@ -25,9 +27,11 @@ function initializeUsage() {
     tooltip: { trigger: "axis", renderMode: "richText", confine: true,
       valueFormatter: value => Number(value).toLocaleString() },
   };
-  const axisLabel = { color: colour("--bs-secondary-color") };
-  const valuesAxis = { type: "value", min: 0, splitNumber: 4, axisLabel: { ...axisLabel, formatter: compact, hideOverlap: true },
+  axisLabel = { color: colour("--bs-secondary-color") };
+  valuesAxis = { type: "value", min: 0, splitNumber: 4, axisLabel: { ...axisLabel, formatter: compact, hideOverlap: true },
     splitLine: { lineStyle: { color: colour("--bs-border-color") } } };
+  }
+  paint();
   const place = document.getElementById("usage-chart");
   const chart = echarts.init(place, null, { renderer: "svg" });
   let view = "trend";
@@ -68,6 +72,66 @@ function initializeUsage() {
     table.tFoot.replaceChildren(cells(report.totals, 'Total'));
     document.getElementById('usage-range-heading').textContent = `Selected range by ${group}`;
     if (typeof sortTable === 'function') sortTable(table);
+    shares();
+  }
+  /** Shorten a count to a whole number or 1.2K, 3.4M. */
+  const short = value => Math.abs(value) < 999.95 ? String(Math.round(value)) : compact(value);
+  const percent = (part, whole) => whole ? `${(100 * part / whole).toFixed(part / whole < 0.1 ? 1 : 0)}%` : "—";
+  /** A filled trend line of one daily figure, drawn into an inline SVG. */
+  function spark(svg, values) {
+    const top = Math.max(...values, 1), step = values.length > 1 ? 120 / (values.length - 1) : 120;
+    const points = values.map((value, index) => `${(index * step).toFixed(2)},${(30 - 28 * value / top).toFixed(2)}`);
+    const ns = "http://www.w3.org/2000/svg", area = document.createElementNS(ns, "path"), line = document.createElementNS(ns, "polyline");
+    area.setAttribute("d", `M0,32 L${points.join(" L")} L120,32 Z`); area.setAttribute("class", "usage-spark-area");
+    line.setAttribute("points", points.join(" ")); line.setAttribute("class", "usage-spark-line");
+    svg.replaceChildren(area, line);
+  }
+  /** Fill a bar with one segment per part, each as wide as its share. */
+  function segments(bar, parts) {
+    const whole = parts.reduce((sum, part) => sum + part.value, 0);
+    bar.replaceChildren(...parts.filter(part => part.value > 0).map(part => {
+      const segment = document.getElementById("usage-segment-template").content.firstElementChild.cloneNode(true);
+      segment.dataset.source = part.key; segment.style.inlineSize = `${100 * part.value / whole}%`;
+      segment.title = `${part.label}: ${part.text} · ${percent(part.value, whole)}`;
+      return segment;
+    }));
+    bar.setAttribute("aria-label", whole ? parts.map(part => `${part.label} ${percent(part.value, whole)}`).join(", ") : "Nothing to divide in this range");
+  }
+  /** What each figure means per request or per day, its trend, the share of each cost source, and how many filters are on. */
+  function figures() {
+    const totals = report.totals, days = report.daily.length || 1;
+    const perRequest = key => totals.requests ? short(totals[key] / totals.requests) : "—";
+    const said = {
+      input_tokens: `${perRequest("input_tokens")} per request`,
+      output_tokens: `${perRequest("output_tokens")} per request · ${percent(totals.output_tokens, totals.total_tokens)} of tokens`,
+      total_tokens: `${short(totals.total_tokens / days)} a day on average`,
+      requests: `${short(totals.requests / days)} a day · ${percent(totals.missing_usage, totals.requests)} missing counts`,
+    };
+    for (const element of document.querySelectorAll("[data-derived]")) element.textContent = said[element.dataset.derived] ?? "";
+    for (const element of document.querySelectorAll("[data-spark]")) spark(element, report.daily.map(day => day[element.dataset.spark]));
+    for (const element of document.querySelectorAll("[data-share]")) element.textContent = ` ${percent(totals[element.dataset.share], totals.effective_cost)} of total`;
+    const dollars = value => "$" + Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    for (const bar of document.querySelectorAll("[data-composition]")) segments(bar, [["recorded", "Recorded"], ["model", "Model-rate estimate"], ["fallback", "Mock fallback"]]
+      .map(([key, label]) => ({ key, label, value: totals[`${key}_cost`], text: dollars(totals[`${key}_cost`]) })));
+    for (const bar of document.querySelectorAll("[data-split]")) segments(bar, [
+      { key: "input", label: "Input", value: totals.input_tokens, text: short(totals.input_tokens) },
+      { key: "output", label: "Output", value: totals.output_tokens, text: short(totals.output_tokens) }]);
+    // Someone who sees only their own usage is not filtering by user.
+    const used = Object.entries(report.filters).filter(([key, value]) => value && !(key === "user" && !report.everyone)).length;
+    for (const badge of document.querySelectorAll("[data-filter-count]")) badge.textContent = used ? `${used} on` : "None";
+  }
+  /** Each breakdown row's share of all tokens, as a thin bar under its name. */
+  function shares() {
+    const table = document.querySelector("#usage-breakdown.usage-table-shares");
+    if (!table) return;
+    for (const row of table.tBodies[0].rows) {
+      const name = row.cells[0];
+      if (row.hasAttribute("data-empty-row") || name.querySelector(".usage-share")) continue;
+      const bar = document.createElement("span"); bar.className = "usage-share";
+      const total = Number(row.cells[4]?.dataset.value || 0), whole = report.totals.total_tokens;
+      bar.style.setProperty("--share", whole ? `${100 * total / whole}%` : "0");
+      name.append(bar);
+    }
   }
   /** Preserve current usage filters and metric in the page URL. */
   function bookmark() {
@@ -115,6 +179,9 @@ function initializeUsage() {
     document.getElementById("usage-stack-control").classList.toggle("d-none", view !== "user");
     if (trend) drawTrend(); else drawBars();
     chart.resize();
+    figures();
+    // A page can show more of the same report beside the chart, kept current with it and with the mock rates.
+    place.dispatchEvent(new CustomEvent("weightroom:usage", {bubbles: true, detail: {report, view, metric: metric()}}));
   }
 
   /** Render daily or cumulative usage trends for the selected metric. */
@@ -190,7 +257,9 @@ function initializeUsage() {
     document.getElementById(id).addEventListener("change", draw);
   }
   draw();
+  shares();
   new ResizeObserver(() => chart.resize()).observe(place);
+  document.addEventListener("weightroom:theme", () => { if (place.isConnected) { paint(); draw(); } });
 }
 initializeUsage();
 document.addEventListener('htmx:afterSwap', initializeUsage);
