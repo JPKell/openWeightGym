@@ -1,8 +1,18 @@
 {% from "parts.html" import card, section_title, more, swaps %}
+{% macro loading_defaults() %}
+{% if llama_settings %}
+<section class="mt-3" aria-label="llama.cpp loading defaults">
+{{ section_title('Model defaults & KV cache', level=3) }}
+<p class="form-hint">Inherited loading flags, including K/V cache types, used when loading a model. Per-model flags override these defaults.</p>
+{% with program={'program': 'loadcoach', 'settings': llama_settings}, fragment=true %}{% include 'settings_program.html' %}{% endwith %}
+</section>
+{% endif %}
+{% endmacro %}
 {% call card('Inference runtimes', id='inference-engines') %}
 {% if engine_error %}<p class="text-secondary small">{{ engine_error }}</p>{% endif %}
 {% for engine in engine_choices %}
-<form method="post" action="/compute-nodes/engines" class="compute-runtime" aria-label="{{ engine.label }} engine settings" data-node-draft data-hold-refresh {{ swaps() }}>
+<section class="compute-runtime" aria-label="{{ engine.label }} runtime">
+<form method="post" action="/compute-nodes/engines" aria-label="{{ engine.label }} engine settings" data-node-draft data-hold-refresh {{ swaps() }}>
 <input type="hidden" name="machine" value="{{ selected_machine }}"><input type="hidden" name="engine" value="{{ engine.id }}">
 <div class="d-flex flex-wrap align-items-center gap-2 mb-2">{{ section_title(engine.label, level=3, wrapper_class='compute-runtime-title') }}<span class="badge bg-{{ 'green' if engine.available and engine.enabled else 'secondary' }}-lt">{{ 'Available' if engine.available and engine.enabled else 'Unavailable' }}</span><label class="form-check form-switch ms-auto mb-0"><input name="enabled" type="checkbox" class="form-check-input" aria-label="Enable {{ engine.label }}"{{ ' checked' if engine.configured.enabled }}><span class="form-check-label">Enabled</span></label></div>
 {% if engine.pending %}<p class="mb-2"><span class="badge bg-orange-lt">Changes pending restart</span></p>{% endif %}
@@ -17,6 +27,9 @@
 <div class="d-flex flex-wrap align-items-center gap-2 mt-3"><button class="btn btn-primary" name="do" value="save">Save {{ engine.label }}</button><button class="btn btn-outline-secondary" name="do" value="reset" formnovalidate>Revert to file</button></div>
 {% endcall %}
 </form>
+{% if engine.id == 'llama_cpp' %}{{ loading_defaults() }}{% endif %}
+</section>
 {% else %}<p class="small text-secondary mb-0">No inference runtimes reported by this node.</p>{% endfor %}
-<p class="form-hint mb-0 mt-3">Applies after the compute service restarts. Saving paths does not install a runtime or stop loaded models.</p>
+{% if not engine_choices|selectattr('id', 'equalto', 'llama_cpp')|list %}{{ loading_defaults() }}{% endif %}
+<p class="form-hint mb-0 mt-3">Runtime paths and limits apply after the compute service restarts. Saving paths does not install a runtime or stop loaded models.</p>
 {% endcall %}

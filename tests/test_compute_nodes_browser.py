@@ -28,8 +28,8 @@ def nodes(tmp_path):
     (tmp_path / 'panel.key').write_text(panel)
     primary_key, remote_key = machine_key(tmp_path), str(tmp_path / 'remote.key')
     statement.replace_key(remote_key, 'r' * 40)
-    primary = {'loadcoach': {'host_ram_headroom_mib': 512, 'models_folder': '/srv/cache', 'models_storage_folder': '/srv/storage', 'keep_text': 50}, 'spotter': {'sleep_after': 0}}
-    secondary = {'loadcoach': {'host_ram_headroom_mib': 768, 'models_folder': '/remote/cache', 'models_storage_folder': '/remote/storage', 'keep_text': 20}, 'spotter': {'sleep_after': 45}}
+    primary = {'loadcoach': {'host_ram_headroom_mib': 512, 'card_margin': 1024, 'model_defaults': {'cache-type-k': 'q8_0', 'cache-type-v': 'q8_0', 'flash-attn': 'on'}, 'models_folder': '/srv/cache', 'models_storage_folder': '/srv/storage', 'keep_text': 50}, 'spotter': {'sleep_after': 0, 'files_every': 10}}
+    secondary = {'loadcoach': {'host_ram_headroom_mib': 768, 'card_margin': 1024, 'model_defaults': {'cache-type-k': 'f16'}, 'models_folder': '/remote/cache', 'models_storage_folder': '/remote/storage', 'keep_text': 20}, 'spotter': {'sleep_after': 45, 'files_every': 20}}
     async def identity(request):
         return JSONResponse({'models': [], 'chat': {'models': {}}})
 
@@ -57,6 +57,7 @@ def test_drafts_follow_nodes_and_section_saves_do_not_erase_other_edits(nodes):
         page.goto('http://console.test/compute-nodes')
         reserve = page.locator('[name="value-host_ram_headroom_mib"]')
         reserve.fill('4096')
+        page.locator('#manage-gpus [name="value-card_margin"]').fill('2048')
         page.locator('[name="value-models_folder"]').fill('/draft/cache')
         page.locator('[data-node-choice="remote"]').click()
         expect(page.locator('#selected-node-name')).to_have_text('remote')
@@ -68,6 +69,8 @@ def test_drafts_follow_nodes_and_section_saves_do_not_erase_other_edits(nodes):
         page.get_by_role('button', name='Save GPU and RAM policy').click()
         expect(page.locator('.said-box')).to_contain_text('Saved.')
         assert primary['loadcoach']['host_ram_headroom_mib'] == 4096
+        assert primary['loadcoach']['card_margin'] == 2048
+        assert secondary['loadcoach']['card_margin'] == 1024
         assert primary['loadcoach']['models_folder'] == '/srv/cache'
         assert secondary['loadcoach']['host_ram_headroom_mib'] == 768
         expect(page.locator('[name="value-models_folder"]')).to_have_value('/draft/cache')
@@ -76,6 +79,19 @@ def test_drafts_follow_nodes_and_section_saves_do_not_erase_other_edits(nodes):
         expect(reserve).to_have_value('2048')
         page.locator('[data-node-choice="compute"]').click()
         expect(reserve).to_have_value('4096')
+        defaults = page.locator('[aria-label="llama.cpp loading defaults"]')
+        defaults.locator('details').first.locator('summary').click()
+        defaults.locator('[name="value-model_defaults"]').fill('cache-type-k = "q4_0"\ncache-type-v = "q8_0"\nflash-attn = "on"')
+        defaults.get_by_role('button', name='Save loadcoach', exact=True).click()
+        expect(page.locator('.said-box')).to_contain_text('Saved.')
+        assert primary['loadcoach']['model_defaults'] == {'cache-type-k': 'q4_0', 'cache-type-v': 'q8_0', 'flash-attn': 'on'}
+        assert secondary['loadcoach']['model_defaults'] == {'cache-type-k': 'f16'}
+        logs = page.locator('[data-card-key="settings:Logs and retention"]')
+        logs.locator('[name="value-files_every"]').fill('15')
+        logs.get_by_role('button', name='Save spotter', exact=True).click()
+        expect(page.locator('.said-box')).to_contain_text('Saved.')
+        assert primary['spotter']['files_every'] == 15 and secondary['spotter']['files_every'] == 20
+        expect(page.locator('[name="value-models_folder"]')).to_have_value('/draft/cache')
         assert not errors
         browser.close()
 
@@ -192,11 +208,17 @@ def test_pairing_panel_generates_real_code_without_losing_node_drafts(desk):
 def test_live_layout_fits_each_width_theme_and_has_named_fields(desk, tmp_path):
     server, _, _ = desk
     sign_in(server, 'jordan')
+    # Prime the complete compute settings report, as the running worker does at startup.
+    server.post('/compute-nodes/gpus', data={'machine': 'compute'})
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/compute-nodes')
+        expect(page.locator('#manage-gpus [name="value-card_margin"]')).to_have_count(1)
+        expect(page.locator('[aria-label="llama.cpp runtime"] [name="value-model_defaults"]')).to_have_count(1)
+        expect(page.locator('[data-card-key="settings:Advanced"], [data-card-key="settings:RAM policy"]')).to_have_count(0)
+        assert page.locator('[name="value-model_defaults"]').evaluate('el => el.form.getAttribute("action")') == '/settings/loadcoach'
         page.screenshot(path=str(tmp_path / 'compute-nodes-default.png'), full_page=True)
         for theme in ('light', 'dark'):
             page.evaluate('(theme) => {document.documentElement.dataset.bsTheme = theme}', theme)

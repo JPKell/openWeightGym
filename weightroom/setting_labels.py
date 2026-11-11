@@ -38,7 +38,7 @@ LABELS = {
     'artifact_machine': ('File download node', 'Model files', '', 'text'),
     'models_folder': ('Active model cache', 'Model files', '', 'text'),
     'models_storage_folder': ('Model storage library', 'Model files', '', 'text'),
-    'files_every': ('Check model files every', 'Model files', 'min', 'number'),
+    'files_every': ('Check model files every', 'Logs and retention', 'min', 'number'),
     'host_ram_headroom_mib': ('Host RAM headroom', 'RAM policy', 'MiB', 'number'),
     'host_ram_limit_mib': ('Host RAM limit', 'RAM policy', 'MiB', 'number'),
     'disable_ram_offload': ('Disable RAM offload', 'RAM policy', '', 'switch'),
