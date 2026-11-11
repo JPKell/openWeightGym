@@ -33,7 +33,7 @@
     <div id="role-identity" class="mb-3">
       <label class="form-label mb-0" for="role-name">Role name:</label>
       <input id="role-name" name="name" form="role-editor" class="form-control" value="{{ role.name }}" readonly aria-describedby="role-name-hint">
-      <form method="post" action="/roles" id="role-removal" {{ swaps() }}>
+      <form method="post" action="/roles" id="role-removal" class="text-end" {{ swaps() }}>
         <input type="hidden" name="name" value="{{ role.name }}">
         <button class="btn btn-outline-danger" name="do" value="remove" {{ confirm_two() }}>Remove the role</button>
       </form>
