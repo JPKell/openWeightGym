@@ -108,6 +108,7 @@ from weightroom.schedules import Schedules, ScheduleWorker
 from loadcoach.schedule_time import validate as validate_schedule
 from weightroom.pagination import controls, pagination
 from engines import engine_for
+from engines.llama_cpp.model import FIRST_PLACE
 from weightroom import setting_labels
 from weightroom.model_settings import PARALLEL_FLAGS, UNUSABLE_MODEL_FLAGS, parallel_fields, usable_model_flags
 from loadcoach.cli import groups_cli, log_cli, users_cli
@@ -1985,12 +1986,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await models_page(request, person, why, failed=True, form={key: values[-1] for key, values in form.items()})
         return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(f"Added {name}. It can be asked for from now on."))
 
-    async def model_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None, review: dict | None = None, review_source: dict | None = None,
-                         typed_nodes: dict | None = None, reviews: list | None = None) -> Response:
+    async def model_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None,
+                         typed_nodes: dict | None = None) -> Response:
         """Render one model's settings on every node that has a copy, and its retained benchmark evidence.
 
-        `typed_nodes` holds what was typed for the other nodes when saving failed; `reviews` the
-        previews of several nodes' changes, applied together."""
+        `typed_in` and `typed_nodes` hold what was typed, or a loaded preset, for this node and the others."""
         known = await all_models(request, person)
         if isinstance(known, Response):
             return known
@@ -2063,12 +2063,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         setup = setups.json() if setups.status_code == 200 else {"presets": [], "undo": None, "can_undo": False, "why": setups.json().get("error", {}).get("message", "")}
         columns = matrix_columns(name, model, selected_node, showing, known, logical_nodes, node_choices, typed_nodes or {},
                                  (told or {}).get("facts", {}).get("trained_context"))
-        return page(request, "model.html", person, columns=columns, reviews=reviews,
-                    apply_changes=[{"machine": one["machine"], "name": one["name"], "configuration": one["review"]["candidate"],
-                                    "token": one["review"]["token"]} for one in reviews or [] if not one["review"].get("errors")],
+        return page(request, "model.html", person, columns=columns,
                     targets=[node for node in node_choices if node["name"] not in {column["machine"] for column in columns}], status=400 if failed else 200, model=model, build=known.get("build"), parts=parts, showing=showing, known=known, told=told, every=every,
                     selected_node=selected_node, node_choices=node_choices, global_flags=GLOBAL_FLAGS, engine_schema=engine_for(model).schema(),
-                    setup=setup, review=review, review_source=review_source or {},
+                    setup=setup,
                     **scores,
                     suggestions=suggested(showing, known["defaults"], known["cards"]),
                     parallel=parallel_fields({**known["defaults"], **showing["flags"]}, (told or {}).get("facts", {}).get("trained_context")),
@@ -2129,6 +2127,68 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             reviews.append({"machine": machine, "name": copy["name"], "review": answer.json()})
         return reviews, typed, " ".join(problems), drifted
 
+    async def apply_setup(request: Request, person: Person, name: str, source: dict) -> dict | str:
+        """Check a configuration, preset or undo on the selected node and apply it at once, keeping an undo receipt.
+        Returns what LoadCoach found, with a note of its warnings, or why it could not be applied."""
+        checked = await model_api(request, person, "POST", "/loadcoach/model-setup", json={"name": name, "action": "preview", **source})
+        if checked.status_code != 200:
+            return checked.json()["error"]["message"]
+        review = checked.json()
+        if review["errors"]:
+            return " ".join(review["errors"])
+        if not review.get("changes"):
+            return {**review, "note": "", "unchanged": True}
+        answer = await model_api(request, person, "POST", "/loadcoach/model-setup",
+                                 json={"name": name, "action": "apply", **source, "token": review["token"], "acknowledge": True})
+        if answer.status_code != 200:
+            return answer.json()["error"]["message"]
+        return {**review, "note": warned(review), "unchanged": False}
+
+    def warned(review: dict) -> str:
+        """The warnings of a check, to show after saving."""
+        return (" Note: " + " ".join(review["warnings"])) if review.get("warnings") else ""
+
+    async def save_settings(request: Request, person: Person, form: dict[str, list[str]], name: str, made: dict) -> Response:
+        """Save the node matrix: the selected node's column, and every other node whose column changed, together.
+        A shared setting that changes is saved on every copy."""
+        candidate = {"settings": {k: v for k, v in made.items() if k != "order"}, "order": FIRST_PLACE if made["order"] is None else made["order"]}
+        others = matrix_nodes(form)
+        def done(where: list[str], note: str = "") -> RedirectResponse:
+            text = "No changes to save." if not where else "Saved." if where == [here] else "Saved on " + (
+                where[0] if len(where) == 1 else ", ".join(where[:-1]) + " and " + where[-1]) + "."
+            return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(text + note))
+        here = request.query_params.get("node") or "compute"
+        if not others:
+            applied = await apply_setup(request, person, name, {"configuration": candidate})
+            if isinstance(applied, str):
+                return await model_page(request, person, applied, failed=True, typed_in=made)
+            return done([] if applied["unchanged"] else [here], applied["note"])
+        checked = await model_api(request, person, "POST", "/loadcoach/model-setup", json={"name": name, "action": "preview", "configuration": candidate})
+        if checked.status_code != 200:
+            return await model_page(request, person, checked.json()["error"]["message"], failed=True, typed_in=made)
+        reviewed, typed_nodes, problem, drifted = await preview_nodes(person, form, name, made, others, here)
+        if problem:
+            return await model_page(request, person, problem, failed=True, typed_in=made, typed_nodes=typed_nodes)
+        reviews = [{"machine": here, "name": name, "review": checked.json()}, *reviewed]
+        changed = [one for one in reviews if one["review"].get("changes")]
+        if drifted and any(one["machine"] != here for one in changed):  # a shared setting changes, so every copy is saved with it
+            changed = reviews
+        refused = [f"{one['machine']}: {' '.join(one['review']['errors'])}" for one in reviews if one["review"].get("errors")]
+        if refused:
+            return await model_page(request, person, " ".join(refused), failed=True, typed_in=made, typed_nodes=typed_nodes)
+        note = "".join(warned(one["review"]) for one in changed)
+        if not any(one["machine"] != here for one in changed):  # this node alone: turnstile keeps the shared settings in step
+            applied = await apply_setup(request, person, name, {"configuration": candidate})
+            if isinstance(applied, str):
+                return await model_page(request, person, applied, failed=True, typed_in=made, typed_nodes=typed_nodes)
+            return done([] if applied["unchanged"] else [here], applied["note"])
+        answer = await ask("POST", "/turnstile/models/configure", person.key, timeout=None, json={"acknowledge": True, "changes": [
+            {"machine": one["machine"], "name": one["name"], "configuration": one["review"]["candidate"], "token": one["review"]["token"]}
+            for one in changed]})
+        if answer.status_code != 200:
+            return await model_page(request, person, answer.json()["error"]["message"], failed=True, typed_in=made, typed_nodes=typed_nodes)
+        return done(answer.json()["applied"], note)
+
     async def change_model(request: Request, person: Person) -> Response:
         """Validate and submit one engine-specific model configuration update."""
         name, form = request.path_params["name"], await typed_lists(request)
@@ -2184,20 +2244,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 if answer.is_success:
                     return go(node_model_address(request, name) + ('&' if request.query_params.get('node') else '?') + 'said=Saved.')
             return await model_page(request, person, answer.json()['error']['message'], True)
-        if action == "apply-reviewed-nodes":
-            try:
-                changes = json.loads(form.get("changes", [""])[-1])
-                if not isinstance(changes, list) or not changes:
-                    raise ValueError("Invalid review")
-            except (ValueError, TypeError):
-                return await model_page(request, person, "Preview the configuration again.", failed=True)
-            answer = await ask("POST", "/turnstile/models/configure", person.key, timeout=None,
-                               json={"changes": changes, "acknowledge": bool(form.get("acknowledge"))})
-            if answer.status_code != 200:
-                return await model_page(request, person, answer.json()["error"]["message"], failed=True)
-            applied = answer.json()["applied"]
-            where = applied[0] if len(applied) == 1 else ", ".join(applied[:-1]) + " and " + applied[-1]
-            return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(f"Configuration applied on {where}."))
         if action in ("location-enable", "location-disable"):
             machine = form.get("machine", [""])[-1]
             model_id = form.get("model_id", [""])[-1]
@@ -2208,41 +2254,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return await model_page(request, person, answer.json()["error"]["message"], failed=True)
             state = "Enabled" if action == "location-enable" else "Disabled"
             return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(f"{state} {name} on {machine}."))
-        if action in ("preview-preset", "preview-undo", "apply-reviewed", "save-preset", "delete-preset"):
-            source = {}
-            if action == "preview-preset":
-                source["preset"] = form.get("preset", [""])[-1]
-            elif action == "preview-undo":
-                source["undo"] = form.get("undo", [""])[-1]
-            elif action != "delete-preset":
-                try:
-                    source = json.loads(form.get("review_source", [""])[-1])
-                    if not isinstance(source, dict) or source.keys() - {"configuration", "preset", "undo"}:
-                        raise ValueError("Invalid review")
-                except (ValueError, TypeError):
-                    return await model_page(request, person, "Preview the configuration again.", failed=True)
-            payload = {**source, "name": name, "action": "preview"}
-            if action in ("apply-reviewed", "save-preset", "delete-preset"):
-                payload.update(action={"apply-reviewed": "apply", "save-preset": "save-preset", "delete-preset": "delete-preset"}[action],
-                               token=form.get("token", [""])[-1], acknowledge=bool(form.get("acknowledge")))
-                if action in ("save-preset", "delete-preset"):
-                    # Save this reviewed candidate, including reviews from a preset or undo.
-                    # Compute adapts preset reads to each target's selected model artifacts.
-                    if action == "save-preset":
-                        try:
-                            payload = {"name": name, "action": "save-preset", "configuration": json.loads(form.get("configuration", [""])[-1]),
-                                       "token": payload["token"], "acknowledge": payload["acknowledge"], "replace": bool(form.get("replace"))}
-                        except ValueError:
-                            return await model_page(request, person, "Preview the configuration again.", failed=True)
-                    payload["preset"] = form.get("preset", [""])[-1]
-            answer = await model_api(request, person, "POST", "/loadcoach/model-setup", json=payload)
+        def said(text: str) -> RedirectResponse:
+            return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(text))
+        if action == "delete-preset":
+            answer = await model_api(request, person, "POST", "/loadcoach/model-setup",
+                                     json={"name": name, "action": "delete-preset", "preset": form.get("preset", [""])[-1]})
             if answer.status_code != 200:
                 return await model_page(request, person, answer.json()["error"]["message"], failed=True)
-            if payload["action"] == "preview":
-                review = answer.json()
-                candidate = review["candidate"]
-                return await model_page(request, person, typed_in={**candidate["settings"], "order": candidate["order"]}, review=review, review_source=source)
-            return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote("Preset saved." if action == "save-preset" else "Preset deleted." if action == "delete-preset" else "Configuration restored." if source.get("undo") else "Configuration applied. Undo is available below."))
+            return said("Preset deleted.")
+        if action == "load-preset":
+            # A preset fills the settings in, adapted to this model's own file, projector and adapters. Save applies it.
+            label = form.get("preset", [""])[-1]
+            answer = await model_api(request, person, "POST", "/loadcoach/model-setup", json={"name": name, "action": "preview", "preset": label})
+            if answer.status_code != 200:
+                return await model_page(request, person, answer.json()["error"]["message"], failed=True)
+            candidate = answer.json()["candidate"]
+            return await model_page(request, person, f"Loaded the preset {label}. Save to apply it.", typed_in={**candidate["settings"], "order": candidate["order"]})
+        if action == "undo":
+            applied = await apply_setup(request, person, name, {"undo": form.get("undo", [""])[-1]})
+            if isinstance(applied, str):
+                return await model_page(request, person, applied, failed=True)
+            return said("Configuration restored." + applied["note"])
         if form.get("do", [""])[-1] == "remove":
             answer = await model_api(request, person, "DELETE", where)
             if answer.status_code != 200:
@@ -2276,26 +2308,22 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             # negative pool flag so it cannot contradict the checkbox's chosen value.
             suppressed = ("no-kv-unified",) if form.get("parallel_enabled") else PARALLEL_FLAGS
             made["flags"].update({flag: None for flag in suppressed if flag in known["defaults"]})
-        if action == "setup-preview":
-            candidate = {"settings": {k: v for k, v in made.items() if k != "order"}, "order": 10 if made["order"] is None else made["order"]}
-            source = {"configuration": candidate}
-            answer = await model_api(request, person, "POST", "/loadcoach/model-setup", json={"name": name, "action": "preview", **source})
+        if action == "save-preset":
+            label = form.get("preset", [""])[-1].strip()
+            if not label:
+                return await model_page(request, person, "Give the preset a name.", failed=True, typed_in=made)
+            candidate = {"settings": {k: v for k, v in made.items() if k != "order"}, "order": FIRST_PLACE if made["order"] is None else made["order"]}
+            checked = await model_api(request, person, "POST", "/loadcoach/model-setup", json={"name": name, "action": "preview", "configuration": candidate})
+            if checked.status_code == 200 and checked.json()["errors"]:
+                return await model_page(request, person, " ".join(checked.json()["errors"]), failed=True, typed_in=made)
+            answer = checked if checked.status_code != 200 else await model_api(request, person, "POST", "/loadcoach/model-setup", json={
+                "name": name, "action": "save-preset", "preset": label, "configuration": candidate, "token": checked.json()["token"],
+                "acknowledge": True, "replace": bool(form.get("replace"))})
             if answer.status_code != 200:
                 return await model_page(request, person, answer.json()["error"]["message"], failed=True, typed_in=made)
-            others = matrix_nodes(form)
-            if not others:
-                return await model_page(request, person, typed_in=made, review=answer.json(), review_source=source)
-            here = request.query_params.get("node") or "compute"
-            reviewed, typed_nodes, problem, drifted = await preview_nodes(person, form, name, made, others, here)
-            if problem:
-                return await model_page(request, person, problem, failed=True, typed_in=made, typed_nodes=typed_nodes)
-            reviews = [{"machine": here, "name": name, "review": answer.json()}, *reviewed]
-            changed = [one for one in reviews if one["review"].get("changes") or one["review"].get("errors")]
-            if not any(one["machine"] != here for one in changed):  # only this node changed: its own review, as before
-                return await model_page(request, person, typed_in=made, review=answer.json(), review_source=source, typed_nodes=typed_nodes)
-            if drifted:  # a shared setting changes, so every copy is saved with it, changed or not
-                changed = reviews
-            return await model_page(request, person, typed_in=made, reviews=changed, typed_nodes=typed_nodes)
+            return await model_page(request, person, f"Saved the preset {label}.", typed_in=made)
+        if action == "save-settings":
+            return await save_settings(request, person, form, name, made)
         answer = await model_api(request, person, "POST", where, json=made)
         if answer.status_code != 200:
             return await model_page(request, person, answer.json()["error"]["message"], failed=True, typed_in=made)

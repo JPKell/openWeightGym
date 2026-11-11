@@ -69,6 +69,12 @@
       transfer(form);
     } else spread(event);
   });
+  // Enter in the preset name saves a preset, not the settings.
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.target.id !== 'preset-name') return;
+    event.preventDefault();
+    event.target.form.requestSubmit(event.target.form.querySelector('[name="do"][value="save-preset"]'));
+  });
   document.addEventListener('click', event => {
     const toggle = event.target.closest('[data-matrix-toggle]');
     if (!toggle) return;

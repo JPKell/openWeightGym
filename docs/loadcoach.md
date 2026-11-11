@@ -10424,33 +10424,29 @@ establish that weights will load, image input will work or a context size will p
 
 ### Operator workflow
 
-**Model presets** sits above Settings, after Benchmark results. A generated **Configuration preview**
-appears between presets and Settings as an always-expanded card; saved collapse preferences
-and telemetry refresh cannot hide its review controls.
+**Model presets** sits below Settings. There is no separate configuration preview: saving checks
+and applies in one step.
 
 Collapsible cards share open/closed preferences across all single-model pages, per signed-in
 account in the current browser.
 Benchmark results, Model presets, Settings and nested flag/metadata sections each keep their
 own state. Matching old per-page preferences from the first visited model seed shared states
 when they do not exist; later shared choices take precedence over other models' old preferences.
-Configuration preview remains permanently expanded.
 
-1. Open **Models → a local model**, edit Settings and choose **Preview and save**. This
-   reads metadata and installed engine help; it starts no inference. The refreshed page
-   scrolls to Configuration preview below the fixed header and moves keyboard focus to
-   that section. Later telemetry updates leave focus alone (desktop/390/320 px browser checks passed).
-2. Review before/after settings, full file paths and metadata, effective inherited flags,
-   total/per-request context, placement/protections, what stays/leaves and the candidate launch
-   command. Port `0` represents a port assigned at load time. Deferred GPU placement has no
-   command, rather than falsely showing CPU use.
-3. Acknowledge warnings and choose **Apply reviewed configuration**, or enter a name and
-   **Save as preset** without changing the model. Overwriting a preset requires the explicit
-   **Replace existing preset** checkbox. Each saved preset offers **Preview preset** and
-   **Delete preset**; applying always repeats the checks. **Preview preset** and **Preview
-   undo** land on and focus Configuration preview, as **Preview and save** does.
-4. After a reviewed apply, **Preview undo of last configuration change** reviews the previous
-   configuration before restoring it. Only the most recent reviewed change is undoable. A
-   later incompatible edit invalidates undo; restoring consumes the receipt without a redo.
+1. Open **Models → a local model**, edit Settings and choose **Save**. The settings are
+   checked on the node (metadata and installed engine help; no inference starts) and applied
+   at once. Errors are shown and nothing changes; warnings are noted after the save, which
+   says "No changes to save." when nothing differs. Changed columns of other nodes are saved
+   together with it, or none of them.
+2. Type a name beside **Save preset** to keep the settings as typed as a preset without
+   changing the model. An existing name is overwritten only with **Replace** ticked. Enter in
+   the name box saves the preset.
+3. Each saved preset offers **Load preset**, which fills the settings in, adapted to this
+   model's own file, projector and adapters, and **Delete preset**. Choose **Save** to apply
+   a loaded preset.
+4. After a save, **Undo last change** (asked twice) restores the previous configuration.
+   Only the most recent change is undoable. A later incompatible edit invalidates undo;
+   restoring consumes the receipt without a redo.
 
 Presets are shared across model entries with the same GGUF `general.name`,
 `general.size_label` and `general.architecture` (milestone 110, local **2026-10-15**).

@@ -115,23 +115,19 @@ def test_the_page_has_a_column_for_each_copy_with_shared_settings_once(matrix):
     assert 'id="copy-model"' in page and 'Every compute node already has a copy of this model.' in page
 
 
-def test_one_node_changed_keeps_the_single_review(matrix):
+def test_one_node_changed_is_saved_on_that_node(matrix):
     browser, two = matrix
     form = Form(browser.get('/models/qwen?node=compute').text, 'data-model-settings').set('ctx', '16384')
-    shown = browser.post('/models/qwen?node=compute', data=form.data(do='setup-preview'))
-    assert shown.status_code == 200, shown.text
-    assert 'value="apply-reviewed"' in shown.text and 'apply-reviewed-nodes' not in shown.text
+    saved = browser.post('/models/qwen?node=compute', data=form.data(do='save-settings'))
+    assert saved.status_code == 200 and 'Saved.' in saved.text, saved.text
+    assert two.models['compute']['qwen']['flags']['ctx-size'] == 16384 and two.models['rig']['qwen']['flags']['ctx-size'] == 4096
 
 
-def test_another_nodes_column_is_reviewed_and_applied_on_that_node_alone(matrix):
+def test_another_nodes_column_is_saved_on_that_node_alone(matrix):
     browser, two = matrix
-    page = browser.get('/models/qwen?node=compute').text
-    form = Form(page, 'data-model-settings').set('n:rig:ctx', '2048')
-    reviewed = browser.post('/models/qwen?node=compute', data=form.data(do='setup-preview'))
-    assert reviewed.status_code == 200, reviewed.text
-    assert 'value="apply-reviewed-nodes">Apply to rig</button>' in reviewed.text
-    applied = browser.post('/models/qwen?node=compute', data=Form(reviewed.text, 'data-apply-nodes').data(do='apply-reviewed-nodes'))
-    assert 'Configuration applied on rig.' in applied.text, applied.text
+    form = Form(browser.get('/models/qwen?node=compute').text, 'data-model-settings').set('n:rig:ctx', '2048')
+    saved = browser.post('/models/qwen?node=compute', data=form.data(do='save-settings'))
+    assert 'Saved on rig.' in saved.text, saved.text
     assert two.models['rig']['qwen']['flags']['ctx-size'] == 2048 and two.models['rig']['qwen']['flags']['threads'] == 8
     assert two.models['compute']['qwen']['flags']['ctx-size'] == 8192
 
@@ -141,19 +137,24 @@ def test_a_shared_change_and_a_local_one_are_saved_on_every_copy_together(matrix
     form = Form(browser.get('/models/qwen?node=compute').text, 'data-model-settings')
     form.fields[form.value_of('flag', 'temp')][1] = '0.2'
     form.set('n:rig:ctx', '1024')
-    reviewed = browser.post('/models/qwen?node=compute', data=form.data(do='setup-preview'))
-    assert 'Apply to 2 nodes' in reviewed.text, reviewed.text
-    applied = browser.post('/models/qwen?node=compute', data=Form(reviewed.text, 'data-apply-nodes').data(do='apply-reviewed-nodes'))
-    assert 'Configuration applied on compute and rig.' in applied.text, applied.text
+    saved = browser.post('/models/qwen?node=compute', data=form.data(do='save-settings'))
+    assert 'Saved on compute and rig.' in saved.text, saved.text
     assert two.models['compute']['qwen']['flags']['temp'] == two.models['rig']['qwen']['flags']['temp'] == .2
     assert two.models['rig']['qwen']['flags']['ctx-size'] == 1024 and two.models['rig']['qwen']['gpus'] == 0
+
+
+def test_nothing_changed_saves_nothing(matrix):
+    browser, two = matrix
+    before = {name: dict(models['qwen']) for name, models in two.models.items()}
+    saved = browser.post('/models/qwen?node=compute', data=Form(browser.get('/models/qwen?node=compute').text, 'data-model-settings').data(do='save-settings'))
+    assert 'No changes to save.' in saved.text and {name: models['qwen'] for name, models in two.models.items()} == before
 
 
 def test_a_shared_file_another_node_lacks_is_refused_before_any_preview(matrix):
     browser, two = matrix
     two.files['rig'] = ('m.gguf',)
     form = Form(browser.get('/models/qwen?node=compute').text, 'data-model-settings').set('projector', '/compute/cache/p.gguf')
-    refused = browser.post('/models/qwen?node=compute', data=form.data(do='setup-preview'))
+    refused = browser.post('/models/qwen?node=compute', data=form.data(do='save-settings'))
     assert refused.status_code == 400 and 'rig has no copy of /compute/cache/p.gguf. Copy it there in Files first.' in refused.text
 
 
