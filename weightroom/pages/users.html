@@ -12,7 +12,7 @@
 {% set adding = form or opened == 'add' %}
 {% set group = (known.groups|selectattr("name", "equalto", user.group)|first) or {} %}
 <div class="settings-page users-workspace usage-page" data-users data-user="{{ user.name }}">
-{% call page_header('Users', pretitle='SETTINGS / ACCESS') %}
+{% call page_header('Users') %}
   {% if "manage-groups" in person.can %}<a class="btn btn-outline-secondary btn-sm" href="/groups">Groups</a>{% endif %}
   <form method="get" action="{{ here }}" class="m-0"><input type="hidden" name="open" value="add"><button class="btn btn-primary btn-sm" data-toggle-add aria-expanded="{{ 'true' if adding else 'false' }}" aria-controls="add-account">+ Add account</button></form>
 {% endcall %}
