@@ -1,6 +1,6 @@
 {% extends "frame.html" %}
 {% block title %}{{ talk.title if talk else "Chat" }} · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/chat.js?v=12" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/chat.js?v=13" defer></script>{% endblock %}
 {% block main %}
 <section id="chat-main" class="chat-main{{ ' compare' if talk and talk.compare }}" data-chat-ref="{{ talk.id if talk else '' }}">
 {% include "chat_main.html" %}

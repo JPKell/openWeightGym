@@ -49,8 +49,8 @@
       </div>
       {% endif %}
       <div class="{{ 'col-12 col-sm-4' if not retry else 'col-12' }}">
-        {% if 'unlogged' in person.can %}<div class="form-check"><input id="{{ prefix }}-temporary" name="temporary" type="checkbox" class="form-check-input"{{ ' checked' if (talk.temporary if talk else typed_in.temporary is defined) }}{{ ' disabled' if talk }}><label for="{{ prefix }}-temporary" class="form-check-label">Temporary</label></div>{% endif %}
-        <div class="form-check"><input id="{{ prefix }}-thinking" name="thinking" type="checkbox" class="form-check-input" data-chat-setting{{ ' checked' if thinking }}><label for="{{ prefix }}-thinking" class="form-check-label">Reasoning</label></div>
+        <div class="form-check form-check-inline"><input id="{{ prefix }}-thinking" name="thinking" type="checkbox" class="form-check-input" data-chat-setting{{ ' checked' if thinking }}><label for="{{ prefix }}-thinking" class="form-check-label">Reasoning</label></div>
+        {% if 'unlogged' in person.can %}<div class="form-check form-check-inline"><input id="{{ prefix }}-temporary" name="temporary" type="checkbox" class="form-check-input"{{ ' checked' if (talk.temporary if talk else typed_in.temporary is defined) }}{{ ' disabled' if talk }}><label for="{{ prefix }}-temporary" class="form-check-label">Temporary</label></div>{% endif %}
       </div>
     </div>
     <label for="{{ prefix }}-system" class="form-label small fw-semibold mb-1">System prompt</label>
@@ -140,11 +140,12 @@
       {% if message.request %}<a href="/requests/{{ message.request }}">request {{ message.request }}</a>{% endif %}
       {% if message.content %}<button type="button" class="btn btn-link btn-sm p-0" data-copy="answer">Copy</button>{% endif %}
       {% if is_last %}
-      <form method="post" action="/chat/{{ talk.id }}" data-chat-form class="retry-options d-flex flex-wrap gap-2 align-items-start m-0">
-        <button class="btn btn-outline-secondary btn-sm" name="do" value="again">Ask again</button>
+      {# The model, Ask again (and Continue) and Options share a row; see .retry-options in static/style.css. #}
+      <form method="post" action="/chat/{{ talk.id }}" data-chat-form class="retry-options m-0">
         {{ answering_model(true) }}
-        {{ options('again', true) }}
+        <button class="btn btn-outline-secondary btn-sm" name="do" value="again">Ask again</button>
         {% if not message.error and message.content and message.finish != "stop" %}<button class="btn btn-outline-secondary btn-sm" name="do" value="continue">Continue</button>{% endif %}
+        {{ options('again', true) }}
       </form>
       {% endif %}
       {% with prompt_index=prompt.index %}{% include "chat_navigation.html" %}{% endwith %}

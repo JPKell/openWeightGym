@@ -212,8 +212,20 @@ html { scroll-padding-top: var(--top, 6rem); }
 #messages { flex: 1; }
 .composer { position: sticky; bottom: 0; background: var(--bs-body-bg); padding: .75rem 0 1rem; }
 .composer.composer-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
-.composer-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: start; }
-.option-fields { max-height: 45vh; overflow-y: auto; padding: 0 .25rem .25rem 0; }
+/* The answering model, Options and the actions (Send, or Ask again and Continue) share one row, in that
+   order; the options open beneath it at the row's full width. The details box takes no part in the row:
+   its summary is a row item, and its content (::details-content) a whole line of its own. */
+.composer-actions, .retry-options { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; min-width: 0; }
+.retry-options { width: 100%; }
+.composer-actions > .chat-primary-model, .retry-options > .chat-primary-model { flex: 1 1 12rem; min-width: 0; }
+.composer-actions > .composer-options, .retry-options > .composer-options { display: contents; }
+.composer-actions > .composer-options::details-content, .retry-options > .composer-options::details-content { flex: 0 0 100%; order: 1; min-width: 0; }
+.composer-options:not([open])::details-content { display: none; }
+.composer-actions > .composer-options > summary { min-height: var(--suite-control-height); display: inline-flex; align-items: center; }
+/* The bottom composer's options scroll within it. The margin and padding keep field edges in line with
+   the row while leaving room for the gutters' negative margins and focus rings. */
+.option-fields { max-height: 45vh; overflow-y: auto; margin: 0 -.25rem; padding: 0 .25rem .25rem; }
+.retry-options .option-fields { max-height: none; overflow: visible; }
 .option-fields select { max-width: 100%; }
 [data-prompt], #chat-main { scroll-margin-top: 1rem; } /* html already reserves the sticky header */
 .composer-box { --suite-frame-radius: 1.25rem; padding: .6rem .8rem; background: var(--bs-body-bg); }
@@ -400,15 +412,7 @@ html[data-sidebar="open"] .drawer-handle span { display: inline-block; transform
 }
 .chat-sidebar-row[hidden] { display: none !important; }
 .chat-models.single { grid-template-columns: auto minmax(0, 1fr); }
-.composer-actions > .composer-options { grid-column: 1 / -1; grid-row: 1; min-width: 0; }
-.composer-actions > .composer-options > summary { min-height: 2.4rem; padding-right: 5rem; }
-.composer-actions > button { grid-column: 2; grid-row: 1; }
 .attachment-help { font-size: .75rem; min-width: 0; }
-.retry-options { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; width: 100%; min-width: 0; }
-.retry-options > button { grid-row: 1; justify-self: start; }
-.retry-options > .composer-options { display: contents; }
-.retry-options > .composer-options > summary { grid-row: 1; grid-column: 2; justify-self: start; }
-.retry-options > .composer-options > .option-fields { grid-row: 3; grid-column: 1 / -1; min-width: 0; }
 
 /* Admin documentation map: SVG links remain keyboard-accessible and scroll on narrow screens. */
 .docs-page { max-width: 90rem; }
@@ -521,11 +525,6 @@ form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
 
 /* The answering model and Send stay visible; advanced controls occupy the next row. */
 .chat-primary-model { min-width: 0; }
-.composer-actions > .chat-primary-model { grid-column: 1; grid-row: 1; }
-.composer-actions > .composer-options { grid-row: 2; }
-.composer-actions > .composer-options > summary { min-height: var(--suite-control-compact-height); padding-right: .75rem; }
-.retry-options > button[value="continue"] { grid-row: 4; grid-column: 1; }
-.retry-options > .chat-primary-model { grid-column: 1 / -1; grid-row: 2; min-width: 0; max-width: 100%; }
 @media (max-width: 767.98px) { .user-menu > summary { max-width: 8rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } }
 
 @media (max-width: 767.98px) {

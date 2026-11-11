@@ -33,6 +33,23 @@ def history(desk, tmp_path):
     return store, numbers
 
 
+def lined_up(row, *controls):
+    """The controls sit left to right on one line, the opened options reach both of its ends, and
+    Reasoning comes before Temporary on one line. Measured at once, so a scroll cannot skew it."""
+    found = row.evaluate("""(row, controls) => {
+      const box = selector => { const r = row.querySelector(selector).getBoundingClientRect(); return [r.left, r.right, (r.top + r.bottom) / 2]; };
+      return {controls: controls.map(box), system: box('[name=system]'), temperature: box('[name=temperature]'), min_p: box('[name=min_p]'),
+              thinking: box('[name=thinking]'), temporary: box('[name=temporary]')};
+    }""", list(controls))
+    boxes = found['controls']
+    for before, after in zip(boxes, boxes[1:]):
+        assert before[1] < after[0] and abs(before[2] - after[2]) < 2, found
+    start, end = boxes[0][0], boxes[-1][1]
+    assert abs(found['system'][0] - start) < 1 and abs(found['system'][1] - end) < 1, found
+    assert abs(found['temperature'][0] - start) < 1 and abs(found['min_p'][1] - end) < 1, found
+    assert found['thinking'][1] < found['temporary'][0] and abs(found['thinking'][2] - found['temporary'][2]) < 1, found
+
+
 def test_chat_option_save_and_sidebar_actions_preserve_owner_checks(desk, tmp_path):
     server, _, _ = desk
     store, numbers = history(desk, tmp_path)
@@ -123,6 +140,7 @@ def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
         assert page.url.endswith(f'/chat/{ref}')
         main = page.locator('.composer')
         main.locator('[data-composer-options] > summary').click()
+        lined_up(main.locator('.composer-actions'), '.chat-primary-model', 'summary', 'button[value=say]')
         model_select = main.locator('[name=model]')
         picker = main.get_by_role('button', name='Model', exact=True)
         picker.click()
@@ -154,6 +172,7 @@ def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
         again = page.locator('.retry-options')
         expect(again.locator('[name=system]')).not_to_be_visible()
         again.locator('[data-composer-options] > summary').click()
+        lined_up(again, '.chat-primary-model', 'button[value=again]', 'summary')
         expect(again.locator('[name=system]')).to_have_value('Persisted without sending a message.')
         expect(again.locator('[name=thinking]')).not_to_be_checked()
         again.locator('[name=system]').fill('Changed beside Ask again.')
@@ -223,6 +242,7 @@ def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
         page.goto('http://chat.test/chat')
         page.locator('[data-composer-options] > summary').click()
         expect(page.get_by_role('button', name='Choose', exact=True)).to_be_visible()
+        lined_up(page.locator('.composer-actions'), '.chat-primary-model', 'summary', 'button:not([type=button])')
         assert page.locator('.option-fields').evaluate('el => el.scrollWidth <= el.clientWidth'), page.locator('.option-fields').evaluate(
             "el => [...el.querySelectorAll('*')].filter(node => node.getBoundingClientRect().right > el.getBoundingClientRect().right + 1).map(node => node.className)")
         page.locator('[data-files]').set_input_files({'name': 'notes.txt', 'mimeType': 'text/plain', 'buffer': b'Private attachment'})
