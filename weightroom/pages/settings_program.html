@@ -1,6 +1,6 @@
 {% from 'parts.html' import form_section, more, card %}
 {% macro settings_form() %}
-<form method="post" action="/settings/{{ program.program }}" class="row g-3 mb-3"{% if fragment|default(false) %} data-settings-fragment{% endif %} {{ swaps() }}>
+<form method="post" action="/settings/{{ program.program }}" class="row g-3 mb-3"{% if fragment|default(false) %} data-settings-fragment{% endif %}{% if selected_machine|default('') %} data-node-draft data-hold-refresh{% endif %} {{ swaps() }}>
 {% if voice_admin %}<input type="hidden" name="return_to" value="voice">{% endif %}
 {% if selected_machine|default('') and program.program in ('loadcoach','spotter') %}<input type="hidden" name="machine" value="{{ selected_machine }}">{% endif %}
 {% if fragment|default(false) %}

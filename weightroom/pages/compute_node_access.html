@@ -1,0 +1,27 @@
+{% from 'parts.html' import card, section_title, more, swaps, alert, confirm_two, confirm_loss, node_state %}
+{% call card('Security & lifecycle', id='node-lifecycle') %}
+{% if machine_key and selected_node.lifecycle|default('active') != 'retired' and selected_node.configured|default(true) %}
+<section id="machine-key" class="mb-3 pb-3 border-bottom" aria-label="Machine key">
+{{ section_title('Machine key', level=3) }}
+<p class="form-hint mb-2">Last rotated {{ machine_key.changed|timestamp }}.</p>
+{% if machine_key.last_error %}{% call alert('warning') %}Scheduled rotation: {{ machine_key.last_error }}{% endcall %}{% endif %}
+<form method="post" action="/compute-nodes/machine-key/schedule" class="row g-2 align-items-end mb-2" data-node-draft data-hold-refresh {{ swaps() }}>
+<input type="hidden" name="machine" value="{{ selected_machine }}">
+<div class="col-sm"><label class="form-label" for="rotation-days">Rotate every</label><div class="input-group"><input id="rotation-days" name="rotation_days" type="number" min="0" max="3650" value="{{ typed_in.rotation_days if typed_in.rotation_days is defined else machine_key.rotation_days }}" class="form-control" required><span class="input-group-text">days</span></div></div><div class="col-sm-auto"><button class="btn btn-primary">Save schedule</button></div>
+</form>
+<div class="d-flex flex-wrap align-items-center gap-2"><form method="post" action="/compute-nodes/machine-key" {{ swaps() }}><input type="hidden" name="machine" value="{{ selected_machine }}"><button class="btn btn-outline-danger btn-sm" {{ confirm_loss() }}>Rotate now</button></form><span class="form-hint">0 disables the schedule.{% if machine_key.next_rotation %} Next: {{ machine_key.next_rotation|timestamp }}.{% endif %}</span></div>
+{% call more('Rotation & key recovery') %}The gateway sends the replacement key to {{ selected_machine }} first, sealed with the current key. The old key remains valid for ten minutes. If the two sides fall out of step, run <code>loadcoach --replace-key</code> on that node.{% endcall %}
+</section>
+{% endif %}
+{{ section_title('Node lifecycle', level=3) }}
+<p class="small mb-2"><strong>{{ selected_machine }}</strong> is {{ selected_node.lifecycle|default('active') }}. Reachability: {{ node_state(selected_node.state) }}.</p>
+<p class="form-hint">Disable stops new work and wake requests while keeping telemetry visible. Retire stops monitoring and hides the node from telemetry. Historical logs are preserved. Existing work can finish.</p>
+<form method="post" action="/compute-nodes/lifecycle" class="d-flex flex-wrap gap-2" {{ swaps() }}>
+<input type="hidden" name="machine" value="{{ selected_machine }}">
+{% if selected_node.lifecycle|default('active') != 'active' and selected_node.configured|default(true) %}<button class="btn btn-primary" name="state" value="active">Enable node</button>{% endif %}
+{% if selected_node.lifecycle|default('active') == 'active' %}<button class="btn btn-outline-warning" name="state" value="disabled" {{ confirm_two() }}>Disable node</button>{% endif %}
+{% if selected_node.lifecycle|default('active') != 'retired' %}<button class="btn btn-outline-danger" name="state" value="retired" {{ confirm_two() }}>Retire node</button>{% endif %}
+</form>
+{% if selected_node.lifecycle_changed %}<p class="form-hint mt-2 mb-0">Changed by {{ selected_node.lifecycle_changed.changed_by }} · {{ selected_node.lifecycle_changed.changed_at|timestamp }}.</p>{% endif %}
+{% if not selected_node.configured|default(true) %}<p class="form-hint mt-2 mb-0">This is a retained registration. Pair or configure the node again before enabling it.</p>{% endif %}
+{% endcall %}

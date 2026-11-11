@@ -1,0 +1,17 @@
+{% from 'navigation_parts.html' import pill_link %}
+{% from 'parts.html' import node_state %}
+
+{# The navigator and its sample proposals share the same node choice markup. #}
+{% macro node_choice(host=None, selected='') %}
+{% set status = (host.lifecycle if host.lifecycle|default('active') != 'active' else node_state(host.state)) if host else '' %}
+{% set label %}
+  <span class="node-avatar" aria-hidden="true" data-initial>{{ host.name[0]|upper if host }}</span>
+  <span class="min-w-0 flex-grow-1"><strong data-node-name>{{ host.name if host }}</strong><small class="d-block text-secondary" data-node-spec>{% if host %}{% if host.cards is defined %}{{ host.cards|length }} GPU{{ 's' if host.cards|length != 1 }}{% else %}Hardware not reported{% endif %}{% if host.hostname and host.hostname != host.name %} · {{ host.hostname }}{% endif %}{% endif %}</small></span>
+  <span class="node-status" data-node-status{% if host %} data-state="{{ host.lifecycle if host.lifecycle|default('active') != 'active' else host.state }}" title="{{ status }}"{% endif %}>{{ status }}</span><span class="draft-mark" data-draft-mark hidden aria-label="Unsaved changes"></span>
+{% endset %}
+{% if host %}
+{{ pill_link(label, '/compute-nodes?machine=' ~ host.name|urlencode, host.name == selected, class_='node-choice', target='page-content', attrs={'aria-label': host.name ~ ' · ' ~ status, 'data-node-choice': host.name, 'data-node-state': host.lifecycle if host.lifecycle|default('active') != 'active' else host.state, 'data-node-search': host.name ~ ' ' ~ host.hostname|default('')}) }}
+{% else %}
+<button type="button" class="node-choice" data-node-choice aria-pressed="false">{{ label }}</button>
+{% endif %}
+{% endmacro %}

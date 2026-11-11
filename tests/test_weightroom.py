@@ -1099,9 +1099,10 @@ def test_the_settings_page_shows_every_program_and_changes_what_may_be_changed(l
     while 'action="/settings/weightroom"' not in (page := browser.get("/settings").text) and time.monotonic() < until:  # weightroom says what it runs with at its next look at compute
         time.sleep(0.05)
     assert ">loadcoach</summary>" not in page and ">spotter</summary>" not in page and 'action="/settings/weightroom"' in page and "Display and costs" in page
-    # Node-owned programs and hardware policy have a dedicated non-collapsible page.
+    # Node-owned programs and hardware policy are grouped by purpose in the navigator.
     compute_page = browser.get('/compute-nodes').text
-    assert compute_page.index('id="machine-key"') < compute_page.index('id="manage-gpus"') < compute_page.index('>loadcoach</h2>')
+    assert compute_page.index('id="manage-gpus"') < compute_page.index('id="inference-engines"') < compute_page.index('id="machine-key"')
+    assert 'data-compute-nodes' in compute_page and 'data-card-key="settings:Logs and retention"' in compute_page
     assert 'name="value-keep_text" class="form-control font-monospace" value="50"' in compute_page
     assert 'name="value-disabled_gpus"' not in compute_page and 'name="value-gpus"' not in compute_page
     assert 'name="value-disable_ram_offload"' in compute_page and 'name="value-host_ram_headroom_mib"' in compute_page and 'name="value-host_ram_limit_mib"' in compute_page
@@ -1117,7 +1118,7 @@ def test_the_settings_page_shows_every_program_and_changes_what_may_be_changed(l
 
     saved = browser.post("/settings/loadcoach", data={"machine": "compute", "value-keep_text": "7", "value-unlogged": "true", "value-gpus": '["A"]', "value-max_wait": "600"})
     assert "Saved." in saved.text and saved.text.count("Changed here by jordan") == 2 and "It is in force." not in saved.text  # what did not differ was not sent, nor the cards, which are the machine's
-    assert 'value="7"' in saved.text and '>loadcoach</h2>' in saved.text
+    assert 'value="7"' in saved.text and 'data-card-key="settings:Logs and retention"' in saved.text
     wrong = browser.post("/settings/loadcoach", data={"machine": "compute", "value-keep_text": '"many"'})
     assert wrong.status_code == 400 and "keep_text: It is a number, and this is text." in wrong.text and 'value="&quot;many&quot;"' in wrong.text  # refused in LoadCoach's words, what was typed kept
     assert "not written as a settings file would hold it" in browser.post("/settings/loadcoach", data={"machine": "compute", "value-keep_text": "many"}).text

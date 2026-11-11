@@ -1,27 +1,26 @@
-{% from "parts.html" import card, alert, empty_row %}
-{% call card("Manage GPUs and host RAM", id="manage-gpus") %}
+{% from "parts.html" import card, alert, empty_row, form_section, more, swaps %}
+{% call card("GPUs & host RAM", id="manage-gpus") %}
 {% if gpu_error %}{% call alert('warning', class_='mb-0') %}{{ gpu_error }}{% endcall %}{% else %}
-<p class="text-secondary">NVIDIA, AMD and Intel GPUs are detected from this node's hardware when compute starts, independently of llama.cpp. Disable a card for all engines, or choose which engines may use it. Models and benchmarks share these assignments. Idle models affected by a change unload when you save; loading, answering or held models must finish first.</p>
 {% set gpu_engines = gpu_inventory.engines|default([]) %}
 {% set assignments = typed_in.get('gpu_engines', gpu_inventory.engine_gpus|default({})) %}
-<form method="post" action="/compute-nodes/gpus"><input type="hidden" name="machine" value="{{ selected_machine }}">
+<form method="post" action="/compute-nodes/gpus" data-node-draft data-hold-refresh {{ swaps() }}><input type="hidden" name="machine" value="{{ selected_machine }}">
 {% for engine in gpu_engines %}<input type="hidden" name="gpu-engine-present" value="{{ engine.id }}">{% endfor %}
-<div class="table-responsive"><table class="sortable table align-middle">
-  <thead><tr><th>Card</th><th>Device</th><th>Loaded models</th><th>Disable</th>{% for engine in gpu_engines %}<th>{{ engine.label }}</th>{% endfor %}</tr></thead>
+<div class="table-responsive"><table class="sortable table table-sm align-middle" aria-label="GPU assignments">
+  <thead><tr><th>Card</th><th>Device / loaded models</th><th>Disable</th>{% for engine in gpu_engines %}<th>{{ engine.label }}</th>{% endfor %}</tr></thead>
   <tbody>{% for device in gpu_inventory.cards %}
     {% set device_key = device.key|default(device.id) %}
-    <tr><td><code>{{ device.id }}</code></td><td>{{ device.description or "Configured device" }}{% if device.vendor %}<small class="d-block text-secondary">{{ device.vendor }} · {{ device.pci }}</small>{% endif %}</td><td>{{ device.models|join(", ") or "none" }}</td>
+    <tr><td><code>{{ device.id }}</code></td><td>{{ device.description or "Configured device" }}{% if device.vendor %}<small class="d-block text-secondary">{{ device.vendor }} · {{ device.pci }}</small>{% endif %}<small class="d-block text-secondary">{{ device.models|join(", ") or "No loaded models" }}</small></td>
     <td><input class="form-check-input" type="checkbox" name="disabled" value="{{ device_key }}" aria-label="Disable {{ device.id }}" {{ "checked" if (device_key in gpu_disabled or device.id in gpu_disabled if gpu_disabled is not none else device.disabled) }}></td>
     {% for engine in gpu_engines %}<td>{% if engine.id in device.compatible_engines|default([]) %}<input class="form-check-input" type="checkbox" name="gpu-engine-{{ engine.id }}" value="{{ device_key }}" aria-label="Allow {{ device.id }} for {{ engine.label }}"{{ ' checked' if engine.id not in assignments or device.id in assignments[engine.id] or device_key in assignments[engine.id] }}>{% else %}<span class="small text-secondary">Unsupported backend</span>{% endif %}</td>{% endfor %}</tr>
-  {% else %}{% call empty_row(4 + gpu_engines|length) %}No NVIDIA, AMD or Intel GPUs were detected. Check hardware and driver access on this node, then restart compute.{% endcall %}{% endfor %}</tbody>
+  {% else %}{% call empty_row(3 + gpu_engines|length) %}No NVIDIA, AMD or Intel GPUs were detected. CPU inference is still available. Check hardware and driver access on this node, then restart compute.{% endcall %}{% endfor %}</tbody>
 </table></div>
 {% if gpu_inventory.missing_disabled %}<p class="text-secondary">Excluded cards currently missing: {{ gpu_inventory.missing_disabled|join(", ") }}. Their exclusions are kept if they return.</p>{% endif %}
 <button class="btn btn-primary">Save GPUs</button>
 </form>
-<p class="form-hint mt-2 mb-0">Hardware detection does not require an inference engine. GPU execution requires a compatible driver and engine build; image, audio and Strata currently use CUDA. A card with no engine selected stays available to other programs.</p>
+{% call more('Assignments, compatibility & model fit') %}NVIDIA, AMD and Intel GPUs are detected when compute starts, independently of llama.cpp. Disable a card for all engines, or choose which engines may use it. Models and benchmarks share these assignments. Idle models affected by a change unload when you save; loading, answering or held models must finish first. GPU execution requires a compatible driver and engine build; image, audio and Strata currently use CUDA. A card with no engine selected stays available to other programs. VRAM is per device; model fit also depends on context, cache and runtime overhead.{% endcall %}
 {% endif %}
 {% if resource_settings %}
-<form method="post" action="/settings/loadcoach" class="row g-3 mt-3"><input type="hidden" name="machine" value="{{ selected_machine }}">
+<form method="post" action="/settings/loadcoach" class="row g-3 mt-3" data-node-draft data-hold-refresh {{ swaps() }}><input type="hidden" name="machine" value="{{ selected_machine }}">
 {% call form_section('RAM policy', 'This node') %}
 {% set program = {'program': 'loadcoach'} %}
 {% for name in ('disable_ram_offload', 'host_ram_headroom_mib', 'host_ram_limit_mib') %}{% set setting = resource_settings.get(name) %}{% if setting %}{% include 'setting_row.html' %}{% endif %}{% endfor %}
