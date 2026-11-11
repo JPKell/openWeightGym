@@ -75,7 +75,7 @@ def test_benchmark_shares_presets_and_saves_are_scoped_to_one_role(desk, tmp_pat
         pills = page.get_by_role('navigation', name='Roles')
         assert pills.get_by_role('link').evaluate_all('(links) => links.map(link => link.dataset.roleChoice)') == ['code', 'chat']
         pills.get_by_role('link', name='code', exact=True).click()
-        playwright.expect(page.locator('#role-heading')).to_contain_text('code')
+        playwright.expect(page.locator('#role-name')).to_have_value('code')
         assert page.url.endswith('/roles?role=code')
         playwright.expect(page.locator('#bench-chat-code_retrieval')).to_have_count(0)
         page.locator('#role-tuning > summary').click()
@@ -99,7 +99,7 @@ def test_benchmark_shares_presets_and_saves_are_scoped_to_one_role(desk, tmp_pat
         assert roles.get('code')['loaded_bonus'] == 40 and roles.get('code')['fast_loaded_bonus'] == 200
         assert 'loaded_bonus' not in roles.get('chat')
         assert 'benchmarks' not in roles.get('chat')
-        playwright.expect(page.locator('#role-heading')).to_contain_text('code')  # saving stays on its role
+        playwright.expect(page.locator('#role-name')).to_have_value('code')  # saving stays on its role
         pills.get_by_role('link', name='chat', exact=True).click()
         playwright.expect(page.locator('#bench-chat-code_retrieval')).to_have_value('0')
         if page.locator('#role-tuning').get_attribute('open') is None:
@@ -232,13 +232,15 @@ def test_studio_populated_layout_uses_shared_sizes_in_all_states(studio, tmp_pat
 def test_studio_create_role_and_keyboard_copy(studio):
     page, roles = studio
     page.get_by_role('link', name='+ Create role', exact=True).click()
+    page.locator('#new-role').fill('invalid:role')
+    assert page.locator('#new-role').evaluate('(el) => el.validationMessage') == 'Letters, digits, dots, underscores, and dashes. Start with a letter or digit.'
     page.locator('#new-role').fill('research')
     page.locator('#first-model').select_option('quick')
     page.get_by_role('button', name='Create role', exact=True).click()
-    playwright.expect(page.locator('#role-heading')).to_have_text('research')
+    playwright.expect(page.locator('#role-name')).to_have_value('research')
     assert roles.get('research')['models'] == {'quick': 1}
     page.evaluate("() => { Object.defineProperty(navigator, 'clipboard', {value: {writeText: async text => {window.copiedRole = text;}}}); }")
-    page.get_by_role('button', name='Copy name', exact=True).focus()
+    page.get_by_role('button', name='Copy research', exact=True).focus()
     page.keyboard.press('Enter')
     playwright.expect(page.locator('[data-role-copy-status]')).to_contain_text('Copied research')
     assert page.evaluate('window.copiedRole') == 'research'

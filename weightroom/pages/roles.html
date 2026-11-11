@@ -3,18 +3,17 @@
 {% from 'navigation_parts.html' import pills %}
 {% from 'role_parts.html' import request_path, role_link, candidate %}
 {% block title %}Roles · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/roles.css?v=1"><script src="/static/role-preferences.js?v=2" defer></script><script src="/static/role-studio.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/roles.css?v=2"><script src="/static/role-preferences.js?v=2" defer></script><script src="/static/role-studio.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div class="role-studio" data-role-studio data-role="{{ role.name if role else '' }}" data-role-settings="{{ (role or {})|tojson|forceescape }}">
-{% call page_header('Roles', pretitle='MODELS / ROUTING') %}<a href="#create-role" class="btn btn-primary" data-create-role>+ Create role</a>{% endcall %}
-<p class="role-intro">Give your app one model name. Set your preferences. The system picks an eligible model each time a request arrives.</p>
+{% call page_header('Roles') %}<a href="#create-role" class="btn btn-primary" data-create-role>+ Create role</a>{% endcall %}
 {{ said_box(said, failed) }}
 {% if publication_warning %}{% call alert('warning', tag='p') %}{{ publication_warning }}{% endcall %}{% endif %}
 {{ request_path(role.name if role else 'your role') }}
 
-{% call card('Create a role', not names or (failed and not role), id='create-role', hint='Name the job, then choose its first model.') %}
+{% call card('Create a role', not names or (failed and not role), id='create-role') %}
 <form method="post" action="/roles" class="row g-3 align-items-end" data-role-create-form data-hold-refresh {{ swaps() }}>
-  <div class="col-md-5"><label class="form-label" for="new-role">New role</label><input id="new-role" name="name" class="form-control" autocapitalize="none" spellcheck="false" placeholder="such as chat" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" autocomplete="off"><small class="form-hint">Letters, digits, dots, underscores, and dashes. Start with a letter or digit.</small></div>
+  <div class="col-md-5"><label class="form-label" for="new-role">New role</label><input id="new-role" name="name" class="form-control" autocapitalize="none" spellcheck="false" placeholder="such as chat" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" autocomplete="off" data-name-validation="Letters, digits, dots, underscores, and dashes. Start with a letter or digit."></div>
   <div class="col-md-5"><label class="form-label" for="first-model">Its first model</label><select id="first-model" name="model" class="form-select" required>{% for model in models %}<option>{{ model }}</option>{% endfor %}</select><input type="hidden" name="weight" value="1"></div>
   <div class="col-md-2"><button class="btn btn-primary" name="do" value="add"{% if not models %} disabled{% endif %}>Create role</button></div>
   {% if not models %}<p class="small text-secondary mb-0">Add a model on the Models page before creating a role.</p>{% endif %}
@@ -31,14 +30,17 @@
   </aside>
 
   <div class="role-editor">
+    <div id="role-identity" class="d-flex flex-wrap align-items-end gap-3 mb-3">
+      <div class="flex-fill min-w-0"><label class="form-label" for="role-name">Role name:</label><input id="role-name" name="name" form="role-editor" class="form-control" value="{{ role.name }}" readonly aria-describedby="role-name-hint"><p id="role-name-hint" class="form-hint mb-0">Use this name in your app’s model field.</p></div>
+      <form method="post" action="/roles" id="role-removal" class="d-flex flex-wrap align-items-center gap-2" {{ swaps() }}>
+        <input type="hidden" name="name" value="{{ role.name }}">
+        {% set confirmation_label %}Yes, remove the role {{ role.name }}. Its models stay{% endset %}{{ confirm_check(confirmation_label, 'sure-role', framed=false) }}
+        <button class="btn btn-outline-danger" name="do" value="remove" {{ confirm_loss() }}>Remove the role</button>
+      </form>
+    </div>
     <form method="post" action="/roles" id="role-editor" data-role-editor data-hold-refresh {{ swaps() }}>
-      {% call card(role.name, id='role-identity', header_id='role-heading', hint='A role appears in calling apps just like a model.') %}
-        <div><label class="form-label" for="role-name">Role name</label><input id="role-name" name="name" class="form-control" value="{{ role.name }}" readonly><p class="form-hint mb-0">Use this name in your app’s model field.</p></div>
-        <div class="connection-example"><span class="small text-secondary">In your app’s model field</span><div class="d-flex align-items-center justify-content-between gap-2 mt-1"><code>{{ role.name }}</code><button type="button" class="btn btn-outline-secondary btn-sm" data-role-copy="{{ role.name }}" hidden>Copy name</button></div></div>
-      {% endcall %}
-
-      {% call card('Which models can answer?', id='role-models', hint='Higher weights make a model more preferred. A weight of 0 pauses it.') %}
-        <p class="small text-secondary">Weights rank models; they don’t split traffic. A model at 4 is preferred more strongly than one at 2.</p>
+      {% call card('Which models can answer?', id='role-models') %}
+        <p class="small text-secondary">Higher weights make a model more preferred. A weight of 0 pauses it.</p>
         <div class="role-candidates" data-role-candidates>
         {% for model in picks[role.name].models %}{{ candidate(model.name, model.weight, 'candidate-' ~ loop.index, model) }}{% endfor %}
         {% for name, weight in role.models.items() if name not in picks[role.name].models|map(attribute='name')|list %}{{ candidate(name, weight, 'unscored-' ~ loop.index) }}{% endfor %}
@@ -86,13 +88,6 @@
 {% call card('Behind the pick', false, id='role-evidence', hint='Optional · scores, reliability, measurements, and request modes') %}
   {% include 'role_evidence.html' %}
   {% include 'role_help.html' %}
-{% endcall %}
-{% call card('Remove this role', false, id='role-removal', hint='Models and their files are kept.') %}
-<form method="post" action="/roles" class="row g-3 align-items-center" {{ swaps() }}>
-  <input type="hidden" name="name" value="{{ role.name }}">
-  <div class="col-md-8">{% set confirmation_label %}Yes, remove the role {{ role.name }}. Its models stay{% endset %}{{ confirm_check(confirmation_label, 'sure-role') }}</div>
-  <div class="col-md-4"><button class="btn btn-outline-danger" name="do" value="remove" {{ confirm_loss() }}>Remove the role</button></div>
-</form>
 {% endcall %}
 <template id="role-candidate-template">{{ candidate() }}</template>
 {% else %}

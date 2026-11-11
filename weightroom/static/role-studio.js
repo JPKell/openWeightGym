@@ -139,6 +139,9 @@
   }
   document.addEventListener('input', event => {
     const page = root(), form = editor(page);
+    if (page?.contains(event.target) && event.target.matches('[data-name-validation]')) {
+      event.target.setCustomValidity(event.target.validity.patternMismatch ? event.target.dataset.nameValidation : '');
+    }
     if (!form?.contains(event.target)) return;
     if (event.target.matches('[data-weight-slider]')) {
       event.target.closest('[data-role-candidate]').querySelector('[data-weight]').value = event.target.value;
@@ -147,6 +150,11 @@
     if (row) enhanceRow(row);
     remember(page); show(page);
   });
+  document.addEventListener('invalid', event => {
+    if (root()?.contains(event.target) && event.target.matches('[data-name-validation]')) {
+      event.target.setCustomValidity(event.target.validity.patternMismatch ? event.target.dataset.nameValidation : '');
+    }
+  }, true);
   document.addEventListener('change', event => {
     const page = root();
     if (!page?.contains(event.target)) return;
