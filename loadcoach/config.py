@@ -16,6 +16,7 @@ from pathlib import Path
 from db import DatabaseConfigurationError, DatabaseRegistry, DatabaseSource
 from loadcoach.models import check_model, check_order, effective
 from loadcoach.devices import discover
+from loadcoach.gpu_type import is_integrated
 from engines import checked_installations
 from loadcoach.settings import changed_for, comments, laid_over
 
@@ -178,12 +179,28 @@ def config_from(path: Path, data: dict, file: dict) -> Config:
             raise ValueError("llama_server conflicts with engines.llama_cpp.executable; keep one path or matching values")
         data["llama_server"] = selected
         automatic = data.get("gpus", "auto") == "auto"
-        detected = discover(selected if options.get("enabled", True) else '', nvidia_smi=data.get('nvidia_smi', 'nvidia-smi')) if automatic else []
+        detected = discover(selected if options.get("enabled", True) else '', nvidia_smi=data.get('nvidia_smi', 'nvidia-smi'),
+                            include_integrated=True) if automatic or data.get('gpus') else []
+        usable = [card for card in detected if not is_integrated(card)]
+        excluded = {name for card in detected if is_integrated(card)
+                    for name in (card['id'], card.get('llama_device'), card.get('uuid'),
+                                 f"{card['vendor']}@{card['pci']}" if card.get('pci') else None) if name}
+        if isinstance(data.get('disabled_gpus'), list):
+            data['disabled_gpus'] = [card for card in data['disabled_gpus'] if card not in excluded]
+        if isinstance(data.get('engine_gpus'), dict):
+            data['engine_gpus'] = {engine: [card for card in cards if card not in excluded] if isinstance(cards, list) else cards
+                                   for engine, cards in data['engine_gpus'].items()}
+        if not automatic:
+            data['gpus'] = [card for card in data.get('gpus', ()) if card not in excluded]
+            # Preserve legacy names while attaching the exact matched device's classification.
+            usable = [{**card, 'id': name} for name in data['gpus'] for card in usable
+                      if name in (card['id'], card.get('llama_device'),
+                                  f"{card['vendor']}@{card['pci']}" if card.get('pci') else None)]
         config = Config(
             **{
                 **data,
-                "gpus": tuple(card["id"] for card in detected) if automatic else tuple(data.get("gpus", ())),
-                "gpu_details": detected,
+                "gpus": tuple(card["id"] for card in usable) if automatic else tuple(data.get("gpus", ())),
+                "gpu_details": usable,
                 "hub_token_file": str(Path(path).parent / data["hub_token_file"]) if data.get("hub_token_file") else "",  # counted from the settings file
                 "civitai_token_file": str(Path(path).parent / data["civitai_token_file"]) if data.get("civitai_token_file") else "",
                 "machine_key_file": str(Path(path).parent / data["machine_key_file"]) if data.get("machine_key_file") else "",  # counted from the settings file

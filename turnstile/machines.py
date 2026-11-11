@@ -159,8 +159,14 @@ class Machines:
             if telemetry and (not fingerprint or telemetry.get("machine_fingerprint") != fingerprint):
                 telemetry = None  # never join a reading to a different host merely by its configured name
             if telemetry:
-                telemetry = {key: telemetry[key] for key in ("at", "machine_fingerprint", "hostname", "cards", "processor", "memory", "disks")
+                from loadcoach.gpu_type import is_integrated
+                telemetry = {key: telemetry[key] for key in ("at", "machine_fingerprint", "hostname", "cards", "processor", "memory", "disks", "excluded_gpu_ids")
                              if key in telemetry}
+                rejected = [*telemetry.get('excluded_gpu_ids', []),
+                            *(card['card'] for card in telemetry.get('cards', []) if is_integrated(card))]
+                telemetry['cards'] = [card for card in telemetry.get('cards', []) if not is_integrated(card)]
+                if rejected:
+                    telemetry['excluded_gpu_ids'] = rejected
             if status is not None:
                 memory = status.get("memory", {})
                 last_telemetry = {key: previous[key] for key in ("telemetry", "telemetry_at") if key in previous} if previous.get("fingerprint") == fingerprint else {}

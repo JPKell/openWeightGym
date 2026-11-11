@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import subprocess
 
+from loadcoach.gpu_type import is_integrated, pci_integrated
+
 VENDORS = {0x10de: 'NVIDIA', 0x1002: 'AMD', 0x8086: 'Intel'}
 PCI_ROOT = Path('/sys/bus/pci/devices')
 
@@ -33,8 +35,8 @@ def pci_address(value):
     return f'{int(match[1], 16):04x}:{match[2].lower()}:{match[3].lower()}' if match else ''
 
 
-def hardware(pci_root=None, nvidia_smi='nvidia-smi'):
-    """Find NVIDIA, AMD and Intel display/accelerator devices even without user-space drivers."""
+def hardware(pci_root=None, nvidia_smi='nvidia-smi', include_integrated=False):
+    """Find discrete GPUs; integrated graphics never become model inventory."""
     found = {}
     for path in sorted((pci_root if pci_root is not None else PCI_ROOT).glob('*')):
         try:
@@ -51,7 +53,8 @@ def hardware(pci_root=None, nvidia_smi='nvidia-smi'):
             continue
         description = read(path / 'product_name') or f'{vendor} GPU ({read(path / "device")})'
         found[pci] = {'id': f'{vendor}@{pci}', 'vendor': vendor, 'pci': pci,
-                      'description': description, 'driver': driver}
+                      'description': description, 'driver': driver,
+                      'device_id': read(path / 'device'), 'integrated': pci_integrated(path, driver)}
     # nvidia-smi works on headless systems without DRM nodes and supplies useful names/UUIDs.
     printed = query([nvidia_smi, '--query-gpu=index,pci.bus_id,name,uuid', '--format=csv,noheader,nounits'])
     for row in csv.reader(printed.splitlines()):
@@ -69,29 +72,56 @@ def hardware(pci_root=None, nvidia_smi='nvidia-smi'):
         if device['vendor'] == 'NVIDIA' and ('smi_index' in device or device['driver'] == 'nvidia'):
             device.update(id=f'CUDA{ordinal}', cuda_index=ordinal)
             ordinal += 1
-    return sorted(found.values(), key=lambda one: one['pci'])
+    return [device for device in sorted(found.values(), key=lambda one: one['pci'])
+            if include_integrated or not is_integrated(device)]
 
 
-def discover(llama_server='', *, nvidia_smi='nvidia-smi'):
+def discover(llama_server='', *, nvidia_smi='nvidia-smi', include_integrated=False):
     """Hardware is authoritative; an optional llama device list only supplies backend aliases."""
-    found = hardware(nvidia_smi=nvidia_smi)
+    found = hardware(nvidia_smi=nvidia_smi, include_integrated=True)
     if llama_server:
         from engines.llama_cpp.devices import detect
-        aliases = detect(llama_server)
+        aliases = detect(llama_server, include_integrated=True)
         if not found:
-            return aliases  # legacy/custom devices and non-PCI backends remain supported
+            return [alias for alias in aliases if include_integrated or not is_integrated(alias)]
         # Bind non-CUDA aliases only when the physical PCI address is explicitly reported.
         # Matching an ordinal or a model name can silently select a different identical card.
         for device in found:
             matches = [alias for alias in aliases if device['pci'] in alias['description'].lower()]
             if len(matches) == 1:
                 device['llama_device'] = matches[0]['id']
-    return found
+        if include_integrated:
+            found.extend({**alias, 'integrated': True} for alias in aliases
+                         if is_integrated(alias) and alias['id'] not in {device['id'] for device in found})
+    return [device for device in found if include_integrated or not is_integrated(device)]
+
+
+def inventory(config):
+    """Keep legacy explicitly configured integrated devices out of every worker inventory."""
+    details = {device['id']: device for device in config.gpu_details}
+    return tuple(card for card in config.gpus if not is_integrated(details.get(card, {'id': card})))
+
+
+def without_integrated(config):
+    """Normalize programmatically supplied configurations before any API/report uses them."""
+    from dataclasses import replace
+    excluded = {name for device in config.gpu_details if is_integrated(device)
+                for name in (device['id'], device.get('uuid'), device.get('llama_device'),
+                             f"{device['vendor']}@{device['pci']}" if device.get('pci') else None) if name}
+    if not excluded:
+        return config
+    return replace(config, gpus=tuple(card for card in config.gpus if card not in excluded),
+                   gpu_details=[device for device in config.gpu_details if not is_integrated(device)],
+                   disabled_gpus=[card for card in config.disabled_gpus if card not in excluded],
+                   engine_gpus={engine: [card for card in cards if card not in excluded]
+                                for engine, cards in config.engine_gpus.items()})
 
 
 def compatible(config, engine, card):
     """Detection does not imply that every installed engine supports a vendor/backend."""
     device = next((one for one in config.gpu_details if one['id'] == card), {})
+    if is_integrated(device):
+        return False
     if not device.get('vendor'):
         return True  # explicitly configured legacy device names
     if engine == 'llama_cpp' and device.get('llama_device'):
@@ -102,7 +132,7 @@ def compatible(config, engine, card):
 def allowed(config, engine):
     """One policy for model admission, benchmarks, reloads and native launches."""
     assigned = config.engine_gpus.get(engine)
-    return tuple(card for card in config.gpus if not disabled(config, card)
+    return tuple(card for card in inventory(config) if not disabled(config, card)
                  and (assigned is None or card in assigned or identity(config, card) in assigned)
                  and compatible(config, engine, card))
 
@@ -123,6 +153,8 @@ def cuda_environment(config, cards):
     selectors = []
     for card in cards:
         device = next((one for one in config.gpu_details if one['id'] == card), {})
+        if is_integrated(device):
+            raise ValueError(f'{card} is integrated graphics and is not a model GPU.')
         if device.get('vendor') and (device['vendor'] != 'NVIDIA' or 'cuda_index' not in device):
             raise ValueError(f'{card} is detected, but this engine requires a CUDA GPU.')
         match = re.fullmatch(r'(?:CUDA|GPU)(\d+)', card)

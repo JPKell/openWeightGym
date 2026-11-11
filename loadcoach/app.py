@@ -160,6 +160,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     `web` is how it reaches Hugging Face, and `front` how it reaches turnstile. Tests hand in their own.
     In an `emergency`, the log is kept in memory only, and is gone when LoadCoach stops.
     """
+    from loadcoach.devices import without_integrated
+    config = without_integrated(config)
     databases = DatabaseRegistry.from_config(
         config.databases,
         Path(config.path).parent if config.path else Path.cwd(),
@@ -2539,17 +2541,23 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """Every discovered card, its description, exclusion and loaded models."""
         if denied := lacks(user, "manage-settings"):
             return denied
-        from loadcoach.devices import compatible, disabled, identity
+        from loadcoach.devices import compatible, disabled, identity, inventory
+        from loadcoach.gpu_type import is_integrated
         details = {card['id']: card for card in config.gpu_details}
+        cards = inventory(config)
+        excluded = {name for device in config.gpu_details if is_integrated(device)
+                    for name in (device['id'], device.get('uuid'),
+                                 f"{device['vendor']}@{device['pci']}" if device.get('pci') else None) if name}
         engines = [{'id': engine['id'], 'label': engine['label']} for engine in engine_catalogue(config)]
         return JSONResponse({"cards": [{**details.get(card, {}), "id": card, "description": details.get(card, {}).get('description', ''),
                                         'key': identity(config, card), 'disabled': disabled(config, card),
                                         'compatible_engines': [engine['id'] for engine in engines if compatible(config, engine['id'], card)],
                                         "models": [server.model for server in runner.servers.values() if card in server.cards]}
-                                       for card in config.gpus],
-                             'engines': engines, 'engine_gpus': config.engine_gpus,
-                             "missing_disabled": [card for card in config.disabled_gpus if card not in
-                                 set(config.gpus) | {identity(config, one) for one in config.gpus}]})
+                                       for card in cards],
+                             'engines': engines, 'engine_gpus': {engine: [card for card in assigned if card not in excluded]
+                                                               for engine, assigned in config.engine_gpus.items()},
+                             "missing_disabled": [card for card in config.disabled_gpus if card not in excluded and card not in
+                                 set(cards) | {identity(config, one) for one in cards}]})
 
     async def settings_change(request: Request, user: User) -> Response:
         """Change settings of one program. The body gives each by name, with its new value, or null to take a change away."""

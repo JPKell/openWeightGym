@@ -9332,6 +9332,14 @@ Existing explicit `gpus = "auto"` configurations remain supported; see
 [worker delivery evidence](#the-command-line).
 `loadcoach/devices.py` detects NVIDIA, AMD and Intel display/compute GPUs from Linux PCI
 sysfs, and enriches NVIDIA entries with names, PCI addresses and UUIDs from `nvidia-smi`.
+Integrated graphics are excluded from this application's GPU inventory, including explicit
+legacy selections and engine device-list fallbacks. `loadcoach/gpu_type.py` reads the
+AMD Fusion flag or Intel local-memory information through the public Linux DRM query APIs;
+positive PCI/name identities cover recognizable devices when a query is unavailable.
+Unknown devices remain eligible for discovery, so missing permissions, driver information,
+or memory readings do not hide discrete cards. Classification does not use a VRAM-size cutoff
+and never renumbers CUDA devices. The installer uses the same classifier. Current telemetry
+filters integrated readings before caching; retained history cannot recreate excluded GPU tiles.
 Discovery works without llama.cpp or any other inference engine. NVIDIA keeps `CUDA0`,
 `CUDA1`, etc. in PCI order; AMD/Intel hardware IDs include the PCI address. A llama device
 list can supply verified PCI/backend aliases; on systems without PCI inventory its legacy
@@ -9344,8 +9352,8 @@ unambiguous PCI/backend mapping; unmapped cards remain visible but cannot be all
 to that engine. Unknown AMD/Intel memory measurements reserve the entire card rather
 than borrowing NVIDIA memory readings from a coincidentally matching device number.
 
-Settings → Compute nodes puts a non-collapsible **Manage GPUs and host RAM** section immediately
-below the machine key. It uses each named node's proxied `GET/POST /loadcoach/cards` (both require
+Settings → Compute nodes groups discrete GPU assignments and memory policy in **GPUs & host RAM**.
+It uses each named node's proxied `GET/POST /loadcoach/cards` (both require
 `manage-settings`). POST accepts `disabled_gpus` and `engine_gpus`, persisted through the
 existing settings-change table. `engine_gpus` maps engine IDs to card lists: omitted engines
 may use all compatible enabled cards, while `[]` permits no GPU work for that engine.
@@ -9361,7 +9369,7 @@ An unavailable explicit placement gets 503 instead of blocking unrelated request
 CUDA children see exactly their assigned cards through `CUDA_VISIBLE_DEVICES`; llama.cpp
 receives the corresponding local device numbers. CPU-only launches see no CUDA device.
 The raw `gpus`, `disabled_gpus` and `engine_gpus` fields are not repeated in the generic settings renderer.
-The same section owns `disable_ram_offload`, `host_ram_headroom_mib` and `host_ram_limit_mib`.
+The same section owns `card_margin`, `disable_ram_offload`, `host_ram_headroom_mib` and `host_ram_limit_mib`.
 Old `/cards` bookmarks redirect to `/compute-nodes#manage-gpus`, and old GPU form posts remain compatible.
 
 The page also omits the one-time `models` seed, front-ownership cutover flags, and the

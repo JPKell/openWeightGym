@@ -3224,6 +3224,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         cards = await ask("GET", base + "/cards", person.key)
         if cards.is_success:
             gpu_inventory = cards.json()
+            # Older workers may still include integrated graphics in their PCI inventory.
+            from loadcoach.gpu_type import is_integrated
+            gpu_inventory['cards'] = [device for device in gpu_inventory.get('cards', []) if not is_integrated(device)]
         else:
             gpu_error = f"GPU controls are unavailable (HTTP {cards.status_code}). Check LoadCoach on {selected}."
         known = await ask("GET", base + "/machine-key", person.key)
