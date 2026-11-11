@@ -1,0 +1,144 @@
+{# One llama.cpp model's settings as a matrix: settings down, the nodes that have a copy across.
+   The selected node's column keeps the single-node form's names and ids; another node's fields are
+   named n:<node>:<field>. Shared settings appear once, two to a row, and apply to every copy. #}
+{% from "parts.html" import hardware, more, empty_row, card, section_title %}
+{% from "model_matrix_parts.html" import group, cell, shared_item, shared_row, node_head %}
+{% set preset_flags = ('temp', 'top-p', 'top-k', 'min-p', 'reasoning', 'reasoning-effort') %}
+{% set labels = {'temp':'Temperature', 'top-p':'Top-p', 'top-k':'Top-k', 'min-p':'Min-p', 'reasoning':'Reasoning', 'reasoning-effort':'Reasoning effort'} %}
+{% set owned = ("model", "ctx-size", "mmproj", "parallel", "kv-unified", "kv-unified-per-slot", "no-kv-unified") %}
+{% set width = columns|length %}
+{% set lead = columns|selectattr("selected")|first %}
+{% set ns = namespace(flags=[]) %}
+{% for column in columns %}{% for flag in column.showing.flags if flag not in owned and flag not in preset_flags and flag not in global_flags and flag not in unusable_flags and flag not in ns.flags %}{% set ns.flags = ns.flags + [flag] %}{% endfor %}{% endfor %}
+<div class="table-responsive model-matrix-scroll">
+<table class="table table-sm align-middle mb-0 model-matrix{{ ' is-single' if width == 1 }}" aria-label="Settings by node" data-model-matrix>
+  <thead><tr><th class="matrix-label" scope="col">Setting</th>{% for column in columns %}{{ node_head(column, loop.index, width) }}{% endfor %}</tr></thead>
+
+  {% call group('context', 'Context and requests', width) %}
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row">Context{% if told and told.facts.trained_context %}<small class="matrix-hint">trained for {{ "{:,}".format(told.facts.trained_context) }}</small>{% endif %}</th>
+    {% for column in columns %}{% call cell(column) %}
+      <div class="input-group input-group-flat input-group-sm">
+        <span class="input-group-text">min</span>
+        <input id="{{ column.idp }}min-context" name="{{ column.prefix }}min_context" type="number" min="1" step="1" class="form-control" value="{{ column.showing.min_context|default('') }}" aria-label="minimum context{{ column.on }}" inputmode="numeric">
+        <span class="input-group-text">max</span>
+        <input id="{{ column.idp }}ctx" name="{{ column.prefix }}ctx" class="form-control" value="{{ column.showing.flags["ctx-size"]|shown }}" type="number" min="1" step="1" aria-label="maximum context{{ column.on }}" inputmode="numeric" required>
+      </div>
+    {% endcall %}{% endfor %}</tr>
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row">Parallel requests<small class="matrix-hint">answer more than one at a time</small></th>
+    {% for column in columns %}{% call cell(column) %}
+      <input type="hidden" name="{{ column.prefix }}parallel_controls" value="yes">
+      <div class="form-check form-switch mb-0"><input id="{{ column.idp }}parallel-enabled" name="{{ column.prefix }}parallel_enabled" value="yes" type="checkbox" class="form-check-input" data-parallel-switch {{ "checked" if column.parallel.enabled }} aria-controls="{{ column.idp }}parallel-count {{ column.idp }}parallel-context {{ column.idp }}parallel-shared"><label for="{{ column.idp }}parallel-enabled" class="form-check-label">Enable parallel requests{% if width > 1 %}<span class="visually-hidden">{{ column.on }}</span>{% endif %}</label></div>
+    {% endcall %}{% endfor %}</tr>
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}parallel-count">Requests at once</label></th>
+    {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}parallel-count" name="{{ column.prefix }}parallel_count" type="number" min="1" step="1" class="form-control form-control-sm" value="{{ column.parallel.count }}" required aria-label="requests at once{{ column.on }}" data-parallel-field{{ ' disabled' if not column.parallel.enabled }}>{% endcall %}{% endfor %}</tr>
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}parallel-context">Context limit per request</label><small class="matrix-hint">prompt, history, tools and output share it</small></th>
+    {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}parallel-context" name="{{ column.prefix }}parallel_context" type="number" min="1" step="1" class="form-control form-control-sm" value="{{ column.parallel.context }}" required aria-label="context limit per request{{ column.on }}" data-parallel-field{{ ' disabled' if not column.parallel.enabled }}>{% if column.parallel.exceeds_total %}<p class="form-text text-warning-emphasis mb-0">This limit exceeds the total context; the total pool remains the upper limit.</p>{% endif %}{% endcall %}{% endfor %}</tr>
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row">Share the context pool{% call more() %}Sharing allocates context dynamically up to each request's limit. Without sharing, each request gets a fixed slot, even while it is idle.{% endcall %}</th>
+    {% for column in columns %}{% call cell(column) %}<div class="form-check form-switch mb-0"><input id="{{ column.idp }}parallel-shared" name="{{ column.prefix }}parallel_shared" value="yes" type="checkbox" class="form-check-input" {{ "checked" if column.parallel.shared }} data-parallel-field{{ ' disabled' if not column.parallel.enabled }}><label for="{{ column.idp }}parallel-shared" class="form-check-label">Shared<span class="visually-hidden">{{ column.on }}</span></label></div>{% endcall %}{% endfor %}</tr>
+  <tr class="matrix-row matrix-summary"><th class="matrix-label" scope="row">What this gives you</th>
+    {% for column in columns %}{% call cell(column) %}<p class="form-hint mb-0" data-context-summary data-prefix="{{ column.prefix }}" aria-live="polite"></p>{% endcall %}{% endfor %}</tr>
+  {% endcall %}
+
+  {% call group('generation', 'Generation defaults', width, shared=true) %}
+  {% call shared_row(width) %}<div class="matrix-shared">
+    {% for flag in preset_flags %}{% set value = showing.flags.get(flag, '') %}
+    {% call shared_item(labels[flag], 'generation-' ~ flag, '--' ~ flag) %}<input type="hidden" name="flag" value="{{ flag }}">
+      {% if flag in ('reasoning', 'reasoning-effort') %}<select id="generation-{{ flag }}" name="value" class="form-select" aria-label="value of {{ flag }}">
+      {# A blank choice leaves the flag unset, so llama-server's own default applies, as for every other generation default. #}
+      {% set choices = ['', 'on', 'off', 'auto'] if flag == 'reasoning' else ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] %}
+      {# Levels the running chat template reports are offered too, after the usual ones. #}
+      {% if flag == 'reasoning-effort' %}{% set choices = choices + ((model.get('chat_template_caps') or {}).get('reasoning_effort_levels') or [])|reject('in', choices)|list %}{% endif %}
+      {% if value not in choices %}<option selected value="{{ value }}">{{ value }}</option>{% endif %}
+      {% for choice in choices %}<option value="{{ choice }}"{{ ' selected' if value == choice }}>{{ 'No reasoning' if choice == 'none' else choice|capitalize if choice else 'Runtime default' }}</option>{% endfor %}</select>
+      {% else %}<input id="generation-{{ flag }}" type="number" step="{{ '1' if flag == 'top-k' else 'any' }}" min="{{ '-1' if flag == 'top-k' else '0' }}" name="value" class="form-control" value="{{ value|shown }}" aria-label="value of {{ flag }}" placeholder="Runtime default">{% endif %}
+    {% endcall %}{% endfor %}
+    {% for flag, value in showing.flags.items() if flag in global_flags and flag not in preset_flags %}
+    {% call shared_item(flag|replace('-', ' ')|capitalize, 'generation-' ~ flag, '--' ~ flag) %}<input type="hidden" name="flag" value="{{ flag }}"><input id="generation-{{ flag }}" name="value" class="form-control" value="{{ value|shown }}" aria-label="value of {{ flag }}">{% endcall %}
+    {% endfor %}
+  </div>{% endcall %}
+  {% endcall %}
+
+  {% call group('hardware', 'Hardware', width) %}
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row">Placement<small class="matrix-hint">GPUs, splitting and sharing</small></th>
+    {% for column in columns %}{% call cell(column) %}{{ hardware(column.idp ~ 'model', column.showing.gpus, column.cards, column.showing.alone, column.showing.allow_split, field=column.prefix, ids=column.idp) }}{% endcall %}{% endfor %}</tr>
+  {% endcall %}
+
+  {% call group('model', 'Model', width, shared=true) %}
+  {% call shared_row(width) %}<div class="matrix-shared">
+    {% call shared_item('Name', 'to') %}<div class="input-group"><input id="to" name="to" form="rename" class="form-control" value="{{ model.name }}" autocapitalize="none" spellcheck="false" required><button form="rename" class="btn btn-outline-primary" name="do" value="rename">Rename</button></div>{% endcall %}
+    {% call shared_item('Projector', 'projector') %}{{ part_choice("projector", "projector", showing.flags.mmproj or "", "projector", "projector") }}{% endcall %}
+    {% call shared_item('List position', 'order') %}<input id="order" name="order" type="number" step="1" class="form-control" value="{{ '' if showing.order is undefined or showing.order is none else showing.order }}" aria-describedby="order-help"><div id="order-help" class="form-hint">Lower numbers appear first; matching positions sort by name.</div>{% endcall %}
+    {% call shared_item('Engine') %}<span class="badge bg-secondary-lt">{{ engine_schema.label }}</span>{% endcall %}
+  </div>{% endcall %}
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}file">File</label><small class="matrix-hint">each node's own copy</small></th>
+    {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}file" name="{{ column.prefix }}file" class="form-control form-control-sm font-monospace" value="{{ column.showing.flags.model }}" autocapitalize="none" spellcheck="false" required aria-label="file{{ column.on }}">{% endcall %}{% endfor %}</tr>
+  {% endcall %}
+
+  {% call group('adapters', 'Adapters', width, shared=true) %}
+  {% call shared_row(width) %}
+    <div class="table-responsive"><table class="table table-sm sortable mb-2" aria-label="Adapters" data-empty-message="No adapters. Select Add adapter to configure one."><thead><tr><th>Name</th><th>File</th><th>Strength</th></tr></thead><tbody data-adapter-rows>
+    {% for short, adapter in (showing.adapters or {}).items() %}<tr><td><input name="adapter" class="form-control" value="{{ short }}" aria-label="adapter name"></td><td>{{ part_choice('adapter_file', 'adapter', adapter.file, 'file of ' ~ short) }}</td><td><input name="adapter_scale" class="form-control" type="number" step="any" value="{{ adapter.scale|default('') }}" placeholder="1" aria-label="strength of {{ short }}"></td></tr>{% else %}{{ empty_row(3, "No adapters. Select Add adapter to configure one.") }}{% endfor %}
+    </tbody></table></div><button class="btn btn-outline-secondary btn-sm" type="button" data-add-row="adapter">Add adapter</button>
+    <template data-row-template="adapter"><tr><td><input name="adapter" class="form-control" placeholder="Adapter name" aria-label="another adapter's name"></td><td>{{ part_choice('adapter_file', 'adapter', '', 'its file') }}</td><td><input name="adapter_scale" type="number" step="any" class="form-control" placeholder="1" aria-label="its strength"></td></tr></template>
+    <noscript><div class="input-group mt-2"><input name="adapter" class="form-control" placeholder="Adapter name" aria-label="New adapter name">{{ part_choice('adapter_file', 'adapter', '', 'New adapter file') }}<input name="adapter_scale" class="form-control" placeholder="1" aria-label="New adapter strength"></div></noscript>
+  {% endcall %}
+  {% endcall %}
+
+  {% call group('advanced', 'Advanced loading flags', width, rows='flag') %}
+  {% for flag in ns.flags %}
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><code>--{{ flag }}</code></th>
+    {% for column in columns %}{% call cell(column) %}{% set value = column.showing.flags.get(flag) %}<div class="input-group input-group-sm flag"><input name="{{ column.prefix }}flag" type="hidden" value="{{ flag }}"><input name="{{ column.prefix }}value" class="form-control" value="{{ '' if value is none else value|shown }}" placeholder="{{ 'not set' if flag not in column.showing.flags else '' }}" aria-label="value of {{ flag }}{{ column.on }}" autocapitalize="none" spellcheck="false"></div>{% endcall %}{% endfor %}</tr>
+  {% endfor %}
+  <tr class="matrix-row matrix-add-flag"><th class="matrix-label" scope="row">Add a flag<small class="matrix-hint">a blank value takes a flag away</small></th>
+    {% for column in columns %}{% call cell(column) %}<div class="input-group input-group-sm flag"><input name="{{ column.prefix }}flag" class="form-control" list="flags" placeholder="another flag" aria-label="another flag{{ column.on }}" autocapitalize="none" spellcheck="false"><input name="{{ column.prefix }}value" class="form-control" placeholder="its value" aria-label="its value{{ column.on }}" autocapitalize="none" spellcheck="false"></div>{% endcall %}{% endfor %}</tr>
+  {% if columns|selectattr('suggestions')|list %}
+  <tr class="matrix-row" data-row-anchor><th class="matrix-label" scope="row">Suggested</th>
+    {% for column in columns %}{% call cell(column) %}{% for one in column.suggestions %}<div class="form-check">
+      <input class="form-check-input" type="checkbox" name="{{ column.prefix }}suggested" value="{{ one.flag }}={{ one.value|shown }}" id="{{ column.idp }}suggested-{{ one.flag }}">
+      <label class="form-check-label" for="{{ column.idp }}suggested-{{ one.flag }}"><code>{{ one.flag }} = {{ one.value|shown }}</code>{% call more() %}{{ one.why }}{% endcall %}</label>
+    </div>{% else %}<span class="text-secondary small">None</span>{% endfor %}{% endcall %}{% endfor %}</tr>
+  {% endif %}
+  {% endcall %}
+</table>
+</div>
+<template data-row-template="flag"><tr class="matrix-row matrix-add-flag"><th class="matrix-label" scope="row">Add a flag</th>{% for column in columns %}<td class="matrix-cell" data-node="{{ column.machine }}"><div class="input-group input-group-sm flag"><input name="{{ column.prefix }}flag" class="form-control" list="flags" placeholder="another flag" aria-label="another flag{{ column.on }}"><input name="{{ column.prefix }}value" class="form-control" placeholder="its value" aria-label="its value{{ column.on }}"></div></td>{% endfor %}</tr></template>
+<button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-add-row="flag">Add flag</button>
+{# Offered as you type: every flag this llama-server knows, or a few that are often wanted if it could not be asked. #}
+{% set taken = every.ours + ["model", "ctx-size", "parallel", "kv-unified", "kv-unified-per-slot", "no-kv-unified"] + preset_flags|list %}
+<datalist id="flags">
+  {% for flag in every.flags|map(attribute="name")|reject("in", taken)|list or ("gpu-layers", "repeat-penalty", "reasoning-budget", "predict", "split-mode", "tensor-split", "cache-type-k", "cache-type-v", "flash-attn", "threads", "embedding", "mmproj", "chat-template-kwargs") %}
+  <option value="{{ flag }}">
+  {% endfor %}
+</datalist>
+{% if known.defaults %}
+<p class="small text-secondary mt-3 mb-0">Every model also gets these, unless it sets its own:
+  {% for flag, value in known.defaults.items() %}<code>{{ flag }} = {{ value|shown }}</code>{{ ", " if not loop.last }}{% endfor %}</p>
+{% endif %}
+<div class="mt-3">
+{% call card("Every flag this llama-server knows", false) %}
+  {% if every.flags %}
+  {# It has no name, so it is not sent with the form it sits in. static/sort.js does the finding. #}
+  <div class="d-flex align-items-center gap-3 mb-2">
+    <input type="search" class="form-control" data-filter="every-flag" placeholder="Find a flag: a name, a value, or a word of what it does" aria-label="Find a flag" autocapitalize="none" spellcheck="false">
+    <small class="text-secondary text-nowrap" data-count="every-flag"></small>
+  </div>
+  <div class="table-responsive">
+  <table id="every-flag" class="table table-sm align-top sortable flags">
+    <thead><tr><th data-sort="text">Flag</th><th data-sort="text">Takes</th><th data-sort="text">What llama-server says it does</th><th data-sort="text">Group</th></tr></thead>
+    <tbody>
+    {% for flag in every.flags if flag.name not in preset_flags %}
+    <tr class="{{ 'text-secondary' if flag.name in taken }}">
+      <td><code>{{ flag.name }}</code>{% if flag.also %}<br><small class="text-secondary">{{ flag.also|join(", ") }}</small>{% endif %}</td>
+      <td>{% if flag.name in every.ours %}<small>set by the compute service</small>{% elif flag.name in taken %}<small>has its own box above</small>{% elif flag.takes %}<code>{{ flag.takes }}</code>{% else %}<small>nothing: a switch</small>{% endif %}</td>
+      <td>{{ flag.says }}</td>
+      <td><small>{{ flag.group|replace(" params", "") }}</small></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-secondary mb-0">The list could not be had from compute. {{ every.why }}</p>
+  {% endif %}
+{% endcall %}
+</div>

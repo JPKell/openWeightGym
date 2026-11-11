@@ -599,7 +599,7 @@ def test_a_model_is_added_edited_and_removed_from_its_one_page(desk, tmp_path):
     assert 'name="gpu_card" value="A" type="checkbox" class="form-check-input" data-gpu-card checked' in saved.text
     assert 'name="gpu_card" value="B" type="checkbox" class="form-check-input" data-gpu-card checked' in saved.text
     assert 'value="[1, 1]"' in saved.text and 'value="true"' in saved.text
-    assert 'value="tensor-split" aria-label="flag" readonly' in saved.text
+    assert '<code>--tensor-split</code>' in saved.text and '<input name="flag" type="hidden" value="tensor-split">' in saved.text
 
     # What LoadCoach refuses is said in its words, and what was typed stays in the form.
     refused = browser.post("/models/org/small:v1", data={**form, "gpu_card": "C", "ctx": "16384"})
@@ -639,13 +639,15 @@ def test_a_model_page_lists_every_flag_llama_server_knows(live_desk):
     browser, _, _ = live_desk
     sign_in(browser, "jordan")
     page = browser.get("/models/small").text
-    assert page.index('class="card-heading">Compute locations</span>') < page.index('class="card-heading">Benchmark results</span>')
+    # The settings matrix took the place of the Compute locations card: one column per node holding a copy.
+    assert page.index('class="card-heading">Settings</span>') < page.index('data-model-matrix') < page.index('class="card-heading">Benchmark results</span>')
+    assert "Compute locations" not in page and page.count('class="matrix-node') == 1
     listed = page.split('<table id="every-flag"')[1].split("</table>")[0]
     assert "Every flag this llama-server knows" in page and "<code>flash-attn</code>" in listed and "<code>[on|off|auto]</code>" in listed
     assert "<code>help</code>" not in listed
     assert "--no-kv-offload" in listed and "nothing: a switch" in listed and "set by the compute service" in listed  # a switch, and a flag that is not the model's to set
     assert '<input type="hidden" name="flag" value="temp">' in page
-    assert 'name="value" class="form-select" aria-label="value of reasoning">' in page and '<option value="auto" selected>Auto</option>' in page
+    assert 'name="value" class="form-select" aria-label="value of reasoning">' in page and '<option value="" selected>Runtime default</option>' in page and '<option value="auto">Auto</option>' in page
     assert '<option value="temp">' not in page and '<option value="host">' not in page  # dedicated and owned flags are not offered as generic flags
     for dedicated in ("temp", "top-p", "top-k", "min-p", "reasoning", "reasoning-effort"):
         assert f"<code>{dedicated}</code>" not in listed and f'<option value="{dedicated}">' not in page

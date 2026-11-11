@@ -65,7 +65,8 @@
 <label class="form-check"><input name="{{ name }}" value="{{ value }}" type="{{ kind }}" class="form-check-input" data-gpu-card{{ ' checked' if checked }}><span class="form-check-label">{{ value }}</span></label>
 {%- endmacro %}
 
-{% macro hardware(prefix, gpus=1, cards=(), alone=false, allow_split=false, legacy='llm') %}
+{# `field` and `ids` prefix every name and id, so several nodes' placements can share one form. #}
+{% macro hardware(prefix, gpus=1, cards=(), alone=false, allow_split=false, legacy='llm', field='', ids='') %}
 {% set pinned = gpus if gpus is defined and gpus is sequence and gpus is not string else [] %}
 {% set mode = 'cpu' if gpus == 0 else 'pin' if pinned else 'auto' %}
 <div class="col-12" data-hardware data-hardware-prefix="{{ prefix }}" data-hardware-legacy="{{ legacy }}">
@@ -75,22 +76,22 @@
     {% endfor %}
   </div>
   {% if legacy == 'llm' %}
-  <input type="hidden" name="placement_controls" value="yes">
+  <input type="hidden" name="{{ field }}placement_controls" value="yes">
   <div data-hardware-fallback>
-    <div class="form-check"><input id="placement-cpu" name="cpu" value="yes" type="checkbox" class="form-check-input" data-placement-device="cpu"{{ ' checked' if mode == 'cpu' }}><label for="placement-cpu" class="form-check-label">CPU</label></div>
-    <div class="form-check"><input id="placement-gpu" name="gpu" value="yes" type="checkbox" class="form-check-input" data-placement-device="gpu" aria-controls="gpu-placement"{{ ' checked' if mode != 'cpu' }}><label for="placement-gpu" class="form-check-label">GPU</label></div>
-    {% if gpus is number and gpus > 0 %}<div class="form-check"><input id="keep-gpu-count" name="keep_gpu_count" value="{{ gpus }}" type="checkbox" class="form-check-input" data-gpu-compat checked><label for="keep-gpu-count" class="form-check-label">Keep the current {{ gpus }} GPU count</label></div>{% endif %}
-    {% if gpus is undefined %}<input type="checkbox" name="keep_default_gpus" value="yes" data-gpu-compat checked aria-label="Keep all enabled GPUs">{% endif %}
+    <div class="form-check"><input id="{{ ids }}placement-cpu" name="{{ field }}cpu" value="yes" type="checkbox" class="form-check-input" data-placement-device="cpu"{{ ' checked' if mode == 'cpu' }}><label for="{{ ids }}placement-cpu" class="form-check-label">CPU</label></div>
+    <div class="form-check"><input id="{{ ids }}placement-gpu" name="{{ field }}gpu" value="yes" type="checkbox" class="form-check-input" data-placement-device="gpu" aria-controls="{{ ids }}gpu-placement"{{ ' checked' if mode != 'cpu' }}><label for="{{ ids }}placement-gpu" class="form-check-label">GPU</label></div>
+    {% if gpus is number and gpus > 0 %}<div class="form-check"><input id="{{ ids }}keep-gpu-count" name="{{ field }}keep_gpu_count" value="{{ gpus }}" type="checkbox" class="form-check-input" data-gpu-compat checked><label for="{{ ids }}keep-gpu-count" class="form-check-label">Keep the current {{ gpus }} GPU count</label></div>{% endif %}
+    {% if gpus is undefined %}<input type="checkbox" name="{{ field }}keep_default_gpus" value="yes" data-gpu-compat checked aria-label="Keep all enabled GPUs">{% endif %}
   </div>
   {% endif %}
-  <fieldset id="{{ 'gpu-placement' if legacy == 'llm' else prefix ~ '-placement' }}" data-hardware-pins>
+  <fieldset id="{{ ids ~ 'gpu-placement' if legacy == 'llm' else prefix ~ '-placement' }}" data-hardware-pins>
     <legend class="form-label">GPUs</legend><div data-hardware-cards class="d-flex flex-wrap gap-3">
-    {% for gpu in (cards|list + pinned)|unique %}{{ hardware_card('gpu_card' if legacy == 'llm' else prefix ~ '-gpu', gpu, gpu in pinned, 'radio' if legacy == 'audio' else 'checkbox') }}{% endfor %}
+    {% for gpu in (cards|list + pinned)|unique %}{{ hardware_card(field ~ 'gpu_card' if legacy == 'llm' else prefix ~ '-gpu', gpu, gpu in pinned, 'radio' if legacy == 'audio' else 'checkbox') }}{% endfor %}
     </div><p class="form-hint" data-hardware-empty{% if cards or pinned %} hidden{% endif %}>No enabled GPUs reported for this node.</p>
   </fieldset>
-  <template data-hardware-card>{{ hardware_card('gpu_card' if legacy == 'llm' else prefix ~ '-gpu', kind='radio' if legacy == 'audio' else 'checkbox') }}</template>
-  {% if legacy == 'llm' %}<div class="form-check form-switch mt-2" data-hardware-split><input id="allow-split" name="allow_split" value="yes" type="checkbox" class="form-check-input" data-split-switch{{ ' checked' if allow_split }}><label for="allow-split" class="form-check-label">Allow split across GPUs</label></div>{% endif %}
-  <div class="form-check form-switch mt-3"><input id="{{ 'alone' if legacy == 'llm' else prefix ~ '-alone' }}" name="alone" value="yes" type="checkbox" class="form-check-input"{{ ' checked' if alone }}><label for="{{ 'alone' if legacy == 'llm' else prefix ~ '-alone' }}" class="form-check-label">Keep GPUs to itself</label></div>
+  <template data-hardware-card>{{ hardware_card(field ~ 'gpu_card' if legacy == 'llm' else prefix ~ '-gpu', kind='radio' if legacy == 'audio' else 'checkbox') }}</template>
+  {% if legacy == 'llm' %}<div class="form-check form-switch mt-2" data-hardware-split><input id="{{ ids }}allow-split" name="{{ field }}allow_split" value="yes" type="checkbox" class="form-check-input" data-split-switch{{ ' checked' if allow_split }}><label for="{{ ids }}allow-split" class="form-check-label">Allow split across GPUs</label></div>{% endif %}
+  <div class="form-check form-switch mt-3"><input id="{{ ids ~ 'alone' if legacy == 'llm' else prefix ~ '-alone' }}" name="{{ field }}alone" value="yes" type="checkbox" class="form-check-input"{{ ' checked' if alone }}><label for="{{ ids ~ 'alone' if legacy == 'llm' else prefix ~ '-alone' }}" class="form-check-label">Keep GPUs to itself</label></div>
 </div>
 {% endmacro %}
 

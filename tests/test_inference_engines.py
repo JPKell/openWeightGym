@@ -160,7 +160,7 @@ def test_console_model_and_node_forms_use_engine_schema_and_keep_changes_pending
     assert made.status_code == 200 and made.url.params.get("node") == "compute"
     # The engine is fixed on the page; generation defaults apply on every node, and the page says which node it configures.
     assert '<input type="hidden" name="engine" value="llama_cpp">' in made.text and 'Generation defaults' in made.text
-    assert 'Configuring <strong class="text-body">compute</strong>' in made.text
+    assert 'class="fw-semibold text-reset" aria-current="true">compute</a>' in made.text  # the node matrix's column for compute
     assert '?node=compute&amp;part=state' in made.text
     listing = browser.get("/models?node=compute&part=list").text
     assert '/models?part=list&amp;node=compute' in listing

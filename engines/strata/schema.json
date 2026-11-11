@@ -3,8 +3,7 @@
   "label": "Strata",
   "schema_version": 1,
   "selectable": true,
-  "model_template": "engines/strata/model_fields.html",
-  "options_template": "engines/strata/model_options.html",
+  "matrix_template": "engines/strata/model_matrix.html",
   "create_template": "engines/strata/create_fields.html",
   "node": [
     {"name": "enabled", "type": "boolean", "label": "Enabled", "default": false},

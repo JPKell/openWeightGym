@@ -1,8 +1,8 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, form_section, more, hardware, section_title , confirm_check, confirm_loss %}
+{% from "parts.html" import card, said_box, swaps, page_header, more, section_title, confirm_check, confirm_loss, node_state %}
 {% block title %}{{ model.name }} · openWeightGym{% endblock %}
 {% block main_attributes %}data-card-scope="model"{% endblock %}
-{% block scripts %}<script src="/static/model-settings.js?v=3" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/model-settings.js?v=4" defer></script><script src="/static/model-matrix.js?v=1" defer></script>{% endblock %}
 {% block main %}
 <nav class="mb-2"><a href="/models">Models</a></nav>
 {% call page_header(model.name, 'Configure this model and review its availability across nodes.') %}{% include "model_state.html" %}{% endcall %}
@@ -19,27 +19,39 @@
       </select>
 {% endmacro %}
 
-{# The box for a new name sits among the settings and belongs to this form of its own, so that Rename sends the name alone. #}
+{# The box for a new name sits among the settings and belongs to this form of its own, so that Rename sends the name alone.
+   So do each node's Enable/Disable buttons, in the node matrix's column headings. #}
 <form id="rename" method="post" action="{{ address(model.name) }}"></form>
-{% call card("Settings", true) %}
-  <nav class="d-flex flex-wrap align-items-center gap-2 mb-4" aria-label="Configure node"><span class="text-secondary">Configuring <strong class="text-body">{{ selected_node }}</strong></span>{% for location in model.locations|default([]) %}<a class="btn btn-sm {{ 'btn-primary' if location.machine == selected_node else 'btn-outline-secondary' }}" href="/models/{{ location.name|urlencode }}?node={{ location.machine|urlencode }}"{% if location.machine == selected_node %} aria-current="true"{% endif %}>{{ location.machine }}</a>{% endfor %}</nav>
-  <form method="post" action="{{ address(model.name) }}#configuration-preview" class="row g-3" data-model-settings>
+{% for column in columns %}{% if column.model_id %}<form id="location-{{ loop.index }}" method="post" action="{{ address(model.name) }}"><input type="hidden" name="machine" value="{{ column.machine }}"><input type="hidden" name="model_id" value="{{ column.model_id }}"></form>{% endif %}{% endfor %}
+{% set several = columns|length > 1 %}
+{% call card("Settings", true, hint='Settings marked "All nodes" are kept the same on every copy; the rest belong to each node.' if several else '') %}
+  {% if several %}<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <span class="small text-secondary">Tick node columns to edit them together. Highlighted cells differ between nodes.</span>
+    <label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" data-matrix-differences><span class="form-check-label">Only rows that differ</span></label>
+  </div>{% endif %}
+  <form method="post" action="{{ address(model.name) }}#configuration-preview" data-model-settings>
     <input type="hidden" name="engine" value="{{ engine_schema.id }}">
-    {% call form_section('Model', 'All nodes') %}
-    <div class="col-md-6"><span class="form-label d-block">Engine</span><span class="badge bg-secondary-lt">{{ engine_schema.label }}</span></div>
-    <div class="col-md-6"><label for="order" class="form-label">List position</label><input id="order" name="order" type="number" step="1" class="form-control" value="{{ '' if showing.order is undefined or showing.order is none else showing.order }}"><div class="form-hint">Lower numbers appear first; matching positions sort by name.</div></div>
-    {% include engine_schema.model_template %}
-    {% endcall %}
-    {% if engine_schema.id == 'llama_cpp' %}
-    {% include 'engines/llama_cpp/model_context.html' %}
-    {% call form_section('Hardware', 'This node') %}{{ hardware('model', showing.gpus, known.cards, showing.alone, showing.allow_split) }}{% endcall %}
-    {% else %}<div class="col-md-6 form-check form-switch"><input id="alone" name="alone" value="yes" type="checkbox" class="form-check-input"{{ ' checked' if showing.alone }}><label for="alone" class="form-check-label">Keep GPUs to itself</label></div>{% endif %}
-    {% include engine_schema.options_template %}
-    <div class="col-12 sticky-actions"><button class="btn btn-primary" name="do" value="setup-preview">Preview and save</button><span class="small text-secondary">Changes apply to {{ selected_node }} on next load.</span></div>
+    {% include engine_schema.matrix_template %}
+    <div class="sticky-actions mt-3"><button class="btn btn-primary" name="do" value="setup-preview">Preview and save</button><span class="small text-secondary">{% if several %}Each changed node is previewed, then saved together on its next load.{% else %}Changes apply to {{ selected_node }} on next load.{% endif %}</span></div>
+  </form>
+
+  <form method="post" action="{{ address(model.name) }}" id="copy-model" class="form-section mt-4" data-model-transfer>
+    {{ section_title('Copy or move', 'From ' ~ selected_node) }}
+    {% if targets %}
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4"><span class="form-label d-block" id="transfer-label">Action</span>
+        <div class="form-selectgroup" role="radiogroup" aria-labelledby="transfer-label">{% for value, label in [('copy', 'Copy'), ('move', 'Move')] %}<label class="form-selectgroup-item"><input type="radio" name="transfer" value="{{ value }}" class="form-selectgroup-input" data-transfer{{ ' checked' if value == 'copy' }}><span class="form-selectgroup-label">{{ label }}</span></label>{% endfor %}</div></div>
+      <fieldset class="col-md-8"><legend class="form-label">To</legend><div class="form-selectgroup">
+        {% for node in targets %}<label class="form-selectgroup-item"><input type="checkbox" name="machine" value="{{ node.name }}" class="form-selectgroup-input" data-transfer-target><span class="form-selectgroup-label">{{ node.name }} · {{ node_state(node.state) }}</span></label>{% endfor %}
+      </div></fieldset>
+      <div class="col-md-4"><label for="add-device" class="form-label">Device on destination</label><select id="add-device" name="device" class="form-select"><option value="gpu">GPU · automatic</option>{% if model.engine|default('llama_cpp') != 'strata' %}<option value="cpu">CPU</option>{% endif %}</select></div>
+      <div class="col-md-8"><button class="btn btn-outline-primary" name="do" value="location-add" data-transfer-submit>Copy to node</button></div>
+    </div>
+    <p class="form-text mb-0" data-transfer-note>Copy places the complete model bundle after cache space and hashes are checked, with this model's shared settings. Move does the same to one node, then removes the copy on {{ selected_node }} once the new one is verified; if anything fails, the original stays.</p>
+    {% else %}<p class="form-hint mb-0">Every compute node already has a copy of this model.</p>{% endif %}
   </form>
 {% endcall %}
 
-{% include "model_locations.html" %}
 {% include "model_setup.html" %}
 {% call card("Benchmark results", false) %}{% include "model_benchmark.html" %}{% endcall %}
 {% call card("File facts", false) %}{% include "file_says.html" %}

@@ -122,11 +122,15 @@ def test_model_options_suggest_reported_levels_and_escape_them():
     pages = Path(__file__).resolve().parents[1] / "weightroom" / "pages"
     environment = Environment(loader=FileSystemLoader(pages), autoescape=True)
     environment.filters["shown"] = str
-    template = environment.get_template("engines/llama_cpp/model_options.html")
-    rendered = template.render(model={"chat_template_caps": {"reasoning_effort_levels": ["brief", "<future>"]}},
-        showing={"flags": {}, "adapters": {}}, parallel={"enabled": False, "count": 2, "context": 2048},
+    template = environment.get_template("engines/llama_cpp/model_matrix.html")
+    showing = {"flags": {"model": "m.gguf", "ctx-size": 2048}, "adapters": {}}
+    column = {"machine": "compute", "selected": True, "name": "example", "logical": "example", "model_id": "", "enabled": True,
+              "state": "ready", "showing": showing, "cards": [], "prefix": "", "idp": "", "on": "", "link": "#",
+              "parallel": {"enabled": False, "count": 2, "context": 2048}, "suggestions": []}
+    rendered = template.render(model={"name": "example", "chat_template_caps": {"reasoning_effort_levels": ["brief", "<future>"]}},
+        showing=showing, columns=[column], engine_schema={"label": "llama.cpp"},
         global_flags=[], unusable_flags=[], every={"ours": [], "flags": [], "why": ""}, known={"defaults": {}},
-        part_choice=lambda *args: "", card=lambda *args, **kwargs: "", suggestions=[], selected_node="compute")
+        part_choice=lambda *args: "", selected_node="compute")
     effort = rendered.split('id="generation-reasoning-effort"', 1)[1].split('</select>', 1)[0]
     assert '<option value="brief">Brief</option>' in effort and '<option value="high">High</option>' in effort  # reported levels join the usual ones
     assert '&lt;future&gt;' in effort and '<future>' not in effort

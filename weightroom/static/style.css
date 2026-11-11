@@ -651,3 +651,43 @@ form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
 .docs-disclosure > summary { padding: .5rem .75rem; cursor: pointer; }
 .docs-disclosure[open] > summary { border-bottom: 1px solid var(--bs-border-color); }
 .docs-disclosure-body { padding: .75rem; }
+
+/* A model's node matrix: settings down, the nodes holding a copy across (model_matrix_parts.html). */
+.model-matrix-scroll { position: relative; }  /* the containing block of its hidden labels and inputs, so they scroll with it */
+.model-matrix:not(.is-single) { min-width: 640px; }  /* several nodes scroll sideways; one stacks on a phone */
+.model-matrix > :not(caption) > * > * { padding: .45rem .6rem; }
+.model-matrix .matrix-label { width: 200px; font-weight: 400; vertical-align: top; }
+.model-matrix thead th { vertical-align: top; text-transform: none; letter-spacing: 0; font-size: .85rem; }
+.model-matrix .matrix-node .btn { --bs-btn-padding-y: .1rem; --bs-btn-font-size: .75rem; }
+.model-matrix .matrix-group-head > th { background: var(--bs-tertiary-bg); }
+.model-matrix .matrix-group-title { position: sticky; left: .6rem; }
+.model-matrix .is-collapsed > tr:not(.matrix-group-head) { display: none; }
+.model-matrix .matrix-cell { vertical-align: top; }
+.model-matrix .matrix-cell.differs { background: var(--bs-warning-bg-subtle); }
+.model-matrix .is-picked { box-shadow: inset 0 3px 0 var(--suite-accent); }
+.model-matrix .matrix-cell .form-check { margin-bottom: 0; }
+.model-matrix .matrix-cell [data-hardware] { padding: 0; }
+.model-matrix.only-differences [data-matrix-row][data-differs="false"], .model-matrix.only-differences [data-matrix-shared],
+.model-matrix.only-differences tbody:not(:has([data-differs="true"])) { display: none; }
+/* Setting names stay in view while several node columns scroll sideways. */
+.model-matrix:not(.is-single) .matrix-label { position: sticky; left: 0; z-index: 3; background: var(--tblr-bg-surface, var(--bs-body-bg)); }
+.matrix-hint { display: block; font-size: .75rem; color: var(--bs-secondary-color); font-weight: 400; }
+.matrix-flag { display: block; width: fit-content; margin-top: .15rem; font-size: .75rem; }
+.matrix-shared { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem 2rem; }
+.matrix-shared-item { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: .75rem; align-items: center; }
+.matrix-shared-item.is-wide { grid-column: 1 / -1; }
+.matrix-item-label { font-size: .875rem; }
+.review-node > summary { cursor: pointer; }
+@media (max-width: 991.98px) { .matrix-shared { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767.98px) {
+  .model-matrix .matrix-label { width: 132px; }
+  .model-matrix:not(.is-single) { min-width: 560px; }
+  /* Shared settings span every node column; on a phone they stay within the visible width. */
+  .model-matrix:not(.is-single) [data-matrix-shared] > td > * { position: sticky; left: .6rem; width: calc(100vw - 5rem); }
+}
+@media (max-width: 575.98px) {
+  .matrix-shared-item { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+  .model-matrix.is-single :is(thead, tbody, tr, th, td) { display: block; width: auto; }
+  .model-matrix.is-single thead .matrix-label { display: none; }
+  .model-matrix.is-single .matrix-label { border-bottom: 0; padding-bottom: 0; }
+}
