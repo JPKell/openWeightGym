@@ -1423,6 +1423,41 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(403, "Model management is required.")
         return JSONResponse({"nodes": await model_file_inventory(user)}, headers={"cache-control": "no-store"})
 
+    async def image_model_check(request):
+        """Check a new image bundle using the owning nodes' cached header identities."""
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, 'Missing or wrong API key.')
+        if not user.can('manage-models'):
+            return error(403, 'Model management is required.')
+        try:
+            asked = json.loads(await request.body())
+            if not isinstance(asked, dict) or not isinstance(asked.get('settings'), dict):
+                raise ValueError('Send the draft image settings.')
+            source = asked.get('source_machine', '')
+            if not isinstance(source, str):
+                raise ValueError('Choose a source machine.')
+            nodes = await model_file_inventory(user)
+            def image_files():
+                """Match installation's source preference for paths present on several nodes."""
+                files = [(node, file) for node in nodes if node.get('answering') for file in node.get('files', [])
+                         if not file.get('moving') and (file.get('facts', {}).get('what') == 'image'
+                                                     or file.get('facts', {}).get('image_component'))]
+                return sorted(files, key=lambda pair: (pair[0]['name'] != source, pair[1].get('tier') == 'storage'))
+            # Upgrade older indexes once; unchanged language/audio file descriptions stay cached.
+            if any('image_identity' not in file['facts'] for _, file in image_files()):
+                nodes = await model_file_inventory(user, refresh=True)
+            inventory = {}
+            for _, file in image_files():
+                identity = file['facts'].get('image_identity')
+                if isinstance(identity, dict):
+                    inventory.setdefault(file['path'], {**identity, 'path':file['path']})
+            from mirrorwall.components import check
+            checked = check(asked['settings'], '', inventory=list(inventory.values()))
+        except (ValueError, TypeError, AttributeError, KeyError) as problem:
+            return error(400, str(problem))
+        return JSONResponse(checked, headers={'cache-control':'no-store'})
+
     async def managed_digest(user, machine, path):
         """Request the owning worker's full-file SHA-256, never infer equality from filenames."""
         answer = await ask_machine(user, "GET", "/loadcoach/files/hash?" + urlencode({"path": path}), machine=machine, timeout=None)
@@ -2797,6 +2832,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/artifacts/{suffix:path}", artifact_proxy, methods=["GET", "POST"]),
                             Route("/turnstile/models", logical_models),
                             Route("/turnstile/models/files", model_files_available),
+                            Route("/turnstile/models/image-check", image_model_check, methods=["POST"]),
                             Route("/turnstile/models/install", install_model, methods=["POST"]),
                             Route("/turnstile/models/location", model_location, methods=["POST"]),
                             Route("/turnstile/models/configure", configure_models, methods=["POST"]),

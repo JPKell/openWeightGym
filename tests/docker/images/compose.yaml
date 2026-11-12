@@ -1,0 +1,69 @@
+name: owg-image-install-test
+
+x-app: &app
+  build:
+    context: ../../..
+    dockerfile: tests/docker/images/Dockerfile
+  image: owg-image-install-test:local
+  init: true
+  networks: [qualification]
+
+services:
+  seed:
+    <<: *app
+    command: [seed]
+    volumes:
+      - front:/state/front
+      - compute:/state/compute
+      - rig:/state/rig
+  turnstile:
+    <<: *app
+    command: [turnstile]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["front:/state/front"]
+  console:
+    <<: *app
+    command: [console]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["front:/state/front"]
+    ports: ["127.0.0.1:${OWG_IMAGE_TEST_PORT:-18440}:8440"]
+    networks: [qualification, browser]
+  compute:
+    <<: *app
+    command: [loadcoach, compute]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["compute:/state/compute"]
+  compute-files:
+    image: owg-image-install-test:local
+    init: true
+    command: [spotter, compute]
+    network_mode: service:compute
+    depends_on:
+      compute: {condition: service_started}
+    volumes: ["compute:/state/compute"]
+  rig:
+    <<: *app
+    command: [loadcoach, rig]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["rig:/state/rig"]
+  rig-files:
+    image: owg-image-install-test:local
+    init: true
+    command: [spotter, rig]
+    network_mode: service:rig
+    depends_on:
+      rig: {condition: service_started}
+    volumes: ["rig:/state/rig"]
+
+networks:
+  browser:
+  qualification:
+    internal: true
+volumes:
+  front:
+  compute:
+  rig:

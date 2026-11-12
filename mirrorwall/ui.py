@@ -100,7 +100,7 @@ def routes(for_people, page, ask, model_api):
         return Response(answer.content, answer.status_code, media_type="application/json", headers={"cache-control": "no-store"})
 
     async def model_check(request, person):
-        """Ask the selected compute node what a draft profile's files are and what it is missing."""
+        """Check new bundles across the library, or existing profiles on their selected node."""
         if "manage-models" not in person.can:
             return JSONResponse({"error": {"message": "Model management is required."}}, 403)
         try:
@@ -109,7 +109,11 @@ def routes(for_people, page, ask, model_api):
                 raise ValueError("Send the draft image settings.")
         except (ValueError, TypeError) as problem:
             return JSONResponse({"error": {"message": str(problem)}}, 400)
-        answer = await model_api(request, person, "POST", "/loadcoach/images/check", json={"settings": body["settings"]})
+        if body.get('new'):
+            answer = await ask('POST', '/turnstile/models/image-check', person.key,
+                               json={'settings':body['settings'], 'source_machine':body.get('source_machine', '')})
+        else:
+            answer = await model_api(request, person, "POST", "/loadcoach/images/check", json={"settings": body["settings"]})
         return Response(answer.content, answer.status_code, media_type="application/json", headers={"cache-control": "no-store"})
 
     async def discovery_page(request, person):
