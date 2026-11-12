@@ -1,4 +1,4 @@
-{% from "parts.html" import confirm_loss %}
+{% from "parts.html" import confirm_two %}
 {% from "chat_parts.html" import rename_form %}
 {% from "icons.html" import icon %}
 <section class="chat-sidebar" aria-label="Your conversations">
@@ -11,7 +11,7 @@
       <div class="chat-sidebar-row">
         <a class="chat-link{{ ' active' if talk and one.id == talk.id }}" href="/chat/{{ one.id }}" data-chat-title title="Double-click to rename · {{ one.updated|clock }}">{{ one.title }}</a>
         <form method="post" action="/chat/{{ one.id }}" data-chat-delete class="m-0">
-          <button  type="submit" class="btn btn-link btn-sm text-secondary p-1" name="do" value="delete" aria-label="Delete {{ one.title }}" title="Delete conversation" {{ confirm_loss() }}>{{ icon('trash') }}</button>
+          <button  type="submit" class="btn btn-link btn-sm text-secondary p-1" name="do" value="delete" aria-label="Delete {{ one.title }}" title="Delete conversation" {{ confirm_two('Del?') }}>{{ icon('trash') }}</button>
         </form>
       </div>
       {{ rename_form(one) }}
