@@ -94,10 +94,10 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
         playwright.expect(page.locator('#mw-diffusion option')).to_have_count(2)
         for slot in ('diffusion','text_encoder','vae','clip_l','clip_g','upscaler'):
             option=page.locator('#mw-'+slot+' option').nth(1)
-            playwright.expect(option).to_have_text('front · image')
+            playwright.expect(option).to_have_text('front · image · model.safetensors')
             playwright.expect(option).to_have_attribute('value','/store/image/model.safetensors')
             playwright.expect(option).to_have_attribute('title','/store/image/model.safetensors')
-        page.locator('#mw-diffusion').select_option(label='front · image')
+        page.locator('#mw-diffusion').select_option(label='front · image · model.safetensors')
         page.locator('#mw-name').fill('picture')
         targets=page.locator('#mw-install-targets')
         playwright.expect(targets.locator('input[value=retired]')).to_be_disabled()
