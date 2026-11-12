@@ -203,7 +203,7 @@
       option.disabled = !selected && !accepting(one.name); return option;
     }));
     $('target-node').value=activeNode;
-    SuiteHardware.set('am',selected?.gpus ?? 1,inventory.cards || []);
+    SuiteHardware.set('am',selected?.gpus ?? (inventory.cards?.length ? 1 : 0),inventory.cards || []);
     filterFamilies(); familyChanged();
     $('name').readOnly=Boolean(selected);
     $('heading').textContent=selected?.name || 'Add an audio model';
@@ -360,7 +360,7 @@
     const target=$('target-node').value;
     // A new-model draft follows its chosen target without leaking hardware from another node.
     captureDraft(); const draft=drafts.get(key()); activeNode=target;
-    if (draft && !drafts.has(key('',target))) drafts.set(key('',target),{...draft,mode:'auto',pins:[],automatic:undefined});
+    if (draft && !drafts.has(key('',target))) drafts.set(key('',target),{...draft,mode:inventories.get(target)?.cards?.length ? 'auto' : 'cpu',pins:[],automatic:undefined});
     populate(); updateLocation(); renderProfiles();
   });
   $('reset').addEventListener('click',()=>{ drafts.delete(key()); populate(selected?.name || ''); renderProfiles(); });

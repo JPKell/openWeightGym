@@ -39,7 +39,8 @@ def studio(desk):
         dict(path=row['flags']['model'].rsplit('/',1)[0]+'/tokens.bin',tier='cache',facts={})]])
         for node,rows in inventories.items()]
     files.append(dict(name='vault',answering=True,files=[dict(path='/storage/voice.gguf',tier='storage',facts={'what':'audio','family':'kokoro'})]))
-    state = dict(inventories=inventories, files=files, failed=set(), posts=[], requests=[], install=False, file_error=False)
+    state = dict(inventories=inventories, files=files, failed=set(), posts=[], requests=[], install=False, file_error=False,
+                 cards={node:['A','B'] for node in inventories})
 
     def capture(route, path):
         parsed = urlsplit(path)
@@ -73,7 +74,7 @@ def studio(desk):
                     inventories[node].append(dict(name=body['name'],**body['settings']))
                 result = {'kind':'model-install','id':'audio-fixture'} if state['install'] else {'name':body['name']}
             else:
-                result = dict(models=copy.deepcopy(inventories[node]),cards=['A','B'],catalogue={'families':families},
+                result = dict(models=copy.deepcopy(inventories[node]),cards=state['cards'][node],catalogue={'families':families},
                               engines={'engines':[dict(id='audiocpp',available=True)]})
             route.fulfill(content_type='application/json',body=json.dumps(result))
             return True
@@ -188,6 +189,22 @@ def test_existing_companion_paths_survive_an_unavailable_file_scan(studio):
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
     assert state['posts'][0][1]['settings']['audiocpp']['files'] == ['tokens.bin']
+
+
+def test_new_model_destination_uses_cpu_when_target_has_no_audio_gpus(studio):
+    page,state=studio
+    state['cards']['scout']=[]
+    page.goto('http://console.test/models/audio?new=1')
+    page.locator('#am-file').select_option(label='vault · storage')
+    page.locator('#am-name').fill('cpu-destination')
+    page.locator('[data-section="hardware"]').click()
+    playwright.expect(page.locator('[data-hardware-mode][value="auto"]')).to_be_checked()
+    page.locator('#am-target-node').select_option('scout')
+    playwright.expect(page.locator('[data-hardware-mode][value="cpu"]')).to_be_checked()
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+    node,body=state['posts'][0]
+    assert node=='scout' and body['settings']['gpus']==0
 
 
 @pytest.mark.parametrize('suffix,facts',[

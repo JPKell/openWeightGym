@@ -112,8 +112,11 @@ async def metrics(wav):
 
 async def seamless(wav, length, fade):
     """Fold the tail over the head so the sound repeats without a seam: generate length + fade, keep length."""
-    graph = (f"[0:a]asplit=3[h][m][t];[h]atrim=0:{fade},asetpts=N/SR/TB[head];[m]atrim={fade}:{length},asetpts=N/SR/TB[middle];"
-             f"[t]atrim={length}:{length + fade},asetpts=N/SR/TB[tail];[tail][head]acrossfade=d={fade}:c1=tri:c2=tri[seam];[seam][middle]concat=n=2:v=0:a=1[out]")
+    # Older FFmpeg acrossfade drops a seam when both inputs are exactly one fade long.
+    graph = (f"[0:a]asplit=3[h][m][t];[h]atrim=0:{fade},asetpts=N/SR/TB,afade=t=in:d={fade}[head];"
+             f"[m]atrim={fade}:{length},asetpts=N/SR/TB[middle];"
+             f"[t]atrim={length}:{length + fade},asetpts=N/SR/TB,afade=t=out:d={fade}[tail];"
+             "[tail][head]amix=inputs=2:duration=longest:normalize=0[seam];[seam][middle]concat=n=2:v=0:a=1[out]")
     output, _ = await ffmpeg(["-i", "pipe:0", "-filter_complex", graph, "-map", "[out]", "-map_metadata", "-1", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"], wav)
     return output
 
