@@ -25,9 +25,7 @@
 {% call page_header('Databases', pretitle='SYSTEM / STORAGE') %}
 <button class="btn btn-outline-secondary" id="refresh">Refresh snapshot</button><button class="btn btn-primary" id="export-all">Dump all databases</button>
 {% endcall %}
-<div class="snapshot-bar border rounded d-flex flex-wrap align-items-center gap-3 px-3 py-2 mb-3" aria-label="Snapshot summary">
-<strong id="coverage"></strong><span id="totals"></span><span class="text-secondary small ms-md-auto" id="snapshot-time">Sample snapshot · 11 Nov 2026, 18:42 UTC</span>
-</div>
+{% from 'database_parts.html' import database_summary %}{{ database_summary('Sample snapshot · 11 Nov 2026, 18:42 UTC') }}
 <div id="coverage-note" hidden>{{ alert('warning', class_='py-2', attrs={'id': 'coverage-message'}) }}</div>
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="node-strip" role="group" aria-label="Node coverage"></div>
 <div id="status" role="status" aria-live="polite" class="small mb-2"></div>

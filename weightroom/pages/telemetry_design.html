@@ -15,7 +15,8 @@
   {{ page_header('Telemetry') }}
   <div class="d-flex flex-wrap align-items-center gap-2"><label for="fleet-size" class="small text-secondary">Sample hosts</label><select id="fleet-size" class="form-select form-select-sm w-auto"><option>0</option><option>1</option><option selected>4</option><option>12</option><option>48</option></select><select id="scenario" class="form-select form-select-sm w-auto" aria-label="Sample scenario"><option value="mixed">Mixed fleet</option><option value="healthy">All reporting</option><option value="dense">8 GPUs per worker</option><option value="stale">Stale readings</option></select><button class="btn btn-outline-secondary btn-sm" id="theme">Light mode</button></div>
 </div>
-<div class="tw-totals mb-3" id="fleet-totals" aria-label="Fleet hardware summary"></div>
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% call kpi_row('Fleet hardware summary', class_='tw-totals mb-3', attrs={'id':'fleet-totals'}) %}{% endcall %}
 <div class="tw-layout">
   <aside class="tw-sidebar" aria-label="Host navigation">
     {% call card('Physical hosts', body=false, class_='mb-0 tw-hosts') %}
@@ -70,7 +71,7 @@
   {% endcall %}
 </template>
 <template id="gpu-row"><tr><th scope="row"><button class="btn btn-link btn-sm p-0 text-start" data-gpu-open></button><small data-gpu-name class="d-block text-secondary"></small></th><td><strong data-gpu-load></strong><div class="progress progress-sm mt-1"><div class="progress-bar" data-gpu-bar></div></div></td><td class="text-nowrap"><span data-gpu-memory></span><small class="d-block text-secondary" data-gpu-capacity></small></td><td class="text-nowrap" data-gpu-temp></td></tr></template>
-<template id="summary-value"><div class="tw-total"><span class="small text-secondary" data-label></span><strong data-value></strong><small class="text-secondary" data-note></small><div class="progress progress-sm" data-reading-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" hidden><div class="progress-bar"></div></div></div></template>
+<template id="summary-value">{% call kpi(class_='tw-total', label_attrs={'data-label':''}, value_attrs={'data-value':''}, note_attrs={'data-note':''}) %}<div class="progress progress-sm" data-reading-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" hidden><div class="progress-bar"></div></div>{% endcall %}</template>
 <template id="viz-tab">{{ pill_button('Hardware', attrs={'role':'tab','aria-controls':'graph-panel'}) }}</template>
 <template id="chart-tile"><figure class="tw-chart border rounded p-2 mb-0"><figcaption class="d-flex justify-content-between align-items-center gap-2"><span class="small" data-title></span><strong class="small" data-current></strong></figcaption><div class="tw-plot" role="img"></div><div class="d-flex justify-content-between gap-2 align-items-center"><small class="text-secondary" data-extents></small><button class="btn btn-link btn-sm p-0" data-expand>Expand</button></div></figure></template>
 <template id="metric-choice">{{ pill_button('Metric', class_='py-1 px-2 small') }}</template>

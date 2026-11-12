@@ -1,8 +1,5 @@
-/* Live dispatch lanes above the node and model ledger. */
-.status-workspace .status-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); background:var(--bs-tertiary-bg); border:1px solid var(--bs-border-color); border-radius:var(--bs-border-radius); }
-.status-kpis > div { display:grid; gap:4px; padding:12px 16px; border-right:1px solid var(--bs-border-color); }
-.status-kpis > div:last-child { border-right:0; }
-.status-kpis strong { font-size:25px; font-variant-numeric:tabular-nums; line-height:1.2; }
+
+
 .status-lanes { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
 .status-ledger { display:grid; grid-template-columns:minmax(300px,.85fr) minmax(420px,1.15fr); gap:16px; align-items:start; }
 .status-lanes > *, .status-ledger > * { min-width:0; }
@@ -18,4 +15,3 @@
 .status-node-counts { display:inline-block; font-weight:normal; }
 @media(max-width:1200px) { .status-ledger { grid-template-columns:1fr; } }
 @media(max-width:1000px) { .status-lanes { grid-template-columns:1fr; } }
-@media(max-width:650px) { .status-workspace .status-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .status-kpis > div { border-bottom:1px solid var(--bs-border-color); } .status-kpis > div:last-child { grid-column:span 2; } }

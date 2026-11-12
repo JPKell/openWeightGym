@@ -1,11 +1,12 @@
 {% from 'benchmark_parts.html' import flags %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
 {% macro overview(nodes, models, coverage, current, total, sample=false) %}
-<div class="measurement-overview mb-4">
-  <div><span class="eyebrow">Fleet inventory</span><div class="measurement-headline mt-1"><strong id="node-total">{{ nodes }}</strong><span>configured nodes</span></div></div>
-  <div><span class="eyebrow">This model type</span><div class="measurement-headline mt-1"><strong id="model-total">{{ models }}</strong><span>unique models</span></div></div>
-  <div><span class="eyebrow">Evidence coverage</span><div class="measurement-headline mt-1"><strong id="coverage-total" title="{{ current }} of {{ total }} model + node + test combinations have current evidence">{{ coverage }}</strong><span>current tests</span></div></div>
-  <div class="small text-secondary measurement-snapshot">{% if sample %}Sample snapshot<br><strong class="text-body">11 Nov 2026 · 10:42 PST</strong><br>{% else %}Current evidence matches saved settings and benchmark requirements.<br>{% endif %}Each result belongs to one model + node.</div>
-</div>
+{% call kpi_row('Node measurement summary', class_='measurement-overview mb-3') %}
+  {{ kpi('Configured nodes', nodes, value_attrs={'id':'node-total'}) }}
+  {{ kpi('Unique models', models, 'This model type', value_attrs={'id':'model-total'}) }}
+  {{ kpi('Current tests', coverage, 'Evidence coverage', value_attrs={'id':'coverage-total', 'title': current ~ ' of ' ~ total ~ ' model + node + test combinations have current evidence'}) }}
+{% endcall %}
+<p class="small text-secondary mb-3">{% if sample %}Sample snapshot · 11 Nov 2026 · 10:42 PST. {% else %}Current evidence matches saved settings and benchmark requirements. {% endif %}Each result belongs to one model + node.</p>
 {% endmacro %}
 
 {% macro node_choice(node=None, column=0) %}

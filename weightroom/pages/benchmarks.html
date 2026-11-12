@@ -2,7 +2,7 @@
 {% from "navigation_parts.html" import pills, pill_link %}
 {% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
 {% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}{% if section in ('results','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=1"><script src="/static/node-measurements.js?v=2" defer></script>{% endif %}{% if section == 'runs' %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=7" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if section in ('results','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=2" defer></script>{% endif %}{% if section == 'runs' %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=7" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
 {% block page_class %}benchmark-page{% endblock %}
 {% from "parts.html" import card, said_box, page_header, alert %}
 {% block main %}

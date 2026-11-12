@@ -39,9 +39,11 @@
       const activeControl = activeRow && (document.activeElement.matches('[data-expand]') ? '[data-expand]' : document.activeElement.matches('[data-select]') ? '[data-select]' : null);
       const activeKey = activeRow?.dataset.database;
       const nodes = snapshot.nodes.filter(node => node.name !== 'front' && node.lifecycle !== 'retired' && node.configured !== false);
-      $('coverage').textContent = `${nodes.filter(node => node.answering).length} / ${nodes.length} compute nodes reachable · Front reachable`;
+      $('coverage').textContent = `${nodes.filter(node => node.answering).length} / ${nodes.length}`;
       const total = snapshot.databases.reduce((sum, db) => sum + (db.size || 0), 0);
-      $('totals').textContent = `${snapshot.databases.length} databases · ${size(total)} known on disk${snapshot.complete ? '' : ' · incomplete'}`;
+      $('totals').textContent = snapshot.databases.length;
+      $('disk-total').textContent = size(total);
+      $('disk-note').textContent = snapshot.complete ? '' : 'Incomplete inventory';
       $('snapshot-time').textContent = `Snapshot · ${when(snapshot.checked_at)}`;
       $('coverage-note').hidden = snapshot.complete;
       $('coverage-message').textContent = snapshot.inventory_error || snapshot.nodes.filter(node => !node.answering && node.lifecycle !== 'retired').map(node => node.error).join(' ') || 'One or more configured stores are unavailable. Complete export is blocked; inspect the affected node and binding.';

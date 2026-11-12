@@ -2,14 +2,14 @@
 {% from "parts.html" import page_header, card, said_box, alert, confirm_check, empty_row %}
 {% from "database_parts.html" import table_head, dom_templates %}
 {% block title %}DB · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/databases.css?v=1"><script src="/static/databases.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/databases.css?v=1"><script src="/static/databases.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div class="database-console" data-database-console>
 {% call page_header('Databases', pretitle='SYSTEM / STORAGE', help='/docs/data/engines') %}
 <button type="button" class="btn btn-outline-secondary btn-sm" id="refresh">Refresh snapshot</button><button type="button" class="btn btn-primary btn-sm" id="export-all">Dump all databases</button>
 {% endcall %}
 {{ said_box(said) }}
-<div class="d-flex flex-wrap align-items-center gap-3 border rounded px-3 py-2 mb-3" aria-label="Snapshot summary"><strong id="coverage"></strong><span id="totals"></span><span class="small text-secondary ms-md-auto" id="snapshot-time"></span></div>
+{% from 'database_parts.html' import database_summary %}{{ database_summary() }}
 <div id="coverage-note" hidden>{{ alert('warning', class_='py-2', attrs={'id': 'coverage-message'}) }}</div>
 <div id="node-strip" class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Node coverage"></div>
 <div id="status" role="status" aria-live="polite" class="small mb-2"></div>

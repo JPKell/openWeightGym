@@ -2,8 +2,9 @@
 {% from 'parts.html' import page_header, card, section_title, empty_row, alert, more %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'icons.html' import icon %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
 {% macro metric(label, key, hint) %}
-<div class="ops-stat"><span class="text-secondary small">{{ label }}</span><strong data-stat="{{ key }}">—</strong><span class="small text-secondary" data-stat-note="{{ key }}">{{ hint }}</span></div>
+{{ kpi(label, '—', hint, class_='ops-stat', value_attrs={'data-stat':key}, note_attrs={'data-stat-note':key}) }}
 {% endmacro %}
 {% macro resource(key, label) %}
 <div class="ops-resource"><div class="d-flex justify-content-between gap-2 small"><span class="text-secondary">{{ label }}</span><strong data-value="{{ key }}">—</strong></div><div class="progress progress-sm mt-1" role="progressbar" aria-label="{{ label }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" data-bar="{{ key }}"></div></div></div>
@@ -45,12 +46,12 @@
     <div class="ops-meta d-flex flex-wrap justify-content-between gap-2 small text-secondary mb-3"><span id="fleet-description"></span><span id="sample-age">Snapshot · sample data</span></div>
     <div id="ops-message" class="small mb-2" role="status" aria-live="polite"></div>
     {% call alert('warning', class_='py-2', attrs={'id':'monitor-warning', 'hidden':''}) %}<strong>Monitoring interrupted.</strong> Current values are unknown. Last readings and history remain available.<button class="btn btn-outline-secondary btn-sm ms-2" id="retry">Retry demo connection</button>{% endcall %}
-    <div class="ops-stats mb-3">
+    {% call kpi_row('Fleet summary', class_='ops-stats mb-3') %}
       {{ metric('Available', 'available', 'Compute services') }}
       {{ metric('Running', 'running', 'Known active requests') }}
       {{ metric('Waiting', 'waiting', 'Requests in queue') }}
       {{ metric('Needs attention', 'attention', 'Review affected nodes') }}
-    </div>
+    {% endcall %}
     <div class="ops-toolbar d-flex flex-wrap align-items-center gap-2 mb-3">
       <input id="search" class="form-control form-control-sm w-auto flex-grow-1" type="search" placeholder="Find a node, host, or model…" aria-label="Search fleet">
       <select id="filter" class="form-select form-select-sm w-auto" aria-label="Filter fleet"><option value="all">All states</option><option value="attention">Needs attention</option><option value="ready">Available</option><option value="offline">Offline</option><option value="disabled">Disabled</option></select>

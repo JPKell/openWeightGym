@@ -1,11 +1,12 @@
 {% from "parts.html" import confirm_two, alert, section_title %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
 {# Every configured the compute service is shown, including an unavailable one. #}
 {% set seen = now %}
 <div id="status" class="{{ '' if now or nodes else 'old' }}" hx-get="/status?part=status" hx-trigger="every 2s" hx-swap="outerHTML">
-<div class="status-kpis mb-3" aria-label="Request totals">
-{% for label, value in [('Processing', workspace.running), ('In queue', workspace.waiting)] %}<div><span class="text-secondary small">{{ label }}</span><strong>{{ value if value is not none else '—' }}{{ '+' if value is not none and workspace.partial else '' }}</strong><small class="text-secondary">Current requests</small></div>{% endfor %}
-{% for minutes in [5,15,60] %}<div><span class="text-secondary small">Last {{ minutes }} min</span><strong>{{ workspace.counts[loop.index0] if workspace.counts[loop.index0] is not none else '—' }}</strong><small class="text-secondary">{{ 'Your recorded arrivals' if workspace.count_scope == 'mine' else 'Recorded arrivals' }}</small></div>{% endfor %}
-</div>
+{% call kpi_row('Request totals', class_='status-kpis mb-3') %}
+{% for label, value in [('Processing', workspace.running), ('In queue', workspace.waiting)] %}{{ kpi(label, (value|string ~ ('+' if workspace.partial else '')) if value is not none else none, 'Current requests') }}{% endfor %}
+{% for minutes in [5,15,60] %}{{ kpi('Last ' ~ minutes ~ ' min', workspace.counts[loop.index0], 'Your recorded arrivals' if workspace.count_scope == 'mine' else 'Recorded arrivals') }}{% endfor %}
+{% endcall %}
 <div class="mb-3" id="status-search-control" hx-preserve><label for="status-search" class="visually-hidden">Find requests and nodes</label><input id="status-search" class="form-control form-control-sm" type="search" placeholder="Find a request, model, user or node…"></div>
 {% include 'current_requests.html' %}
 {% if not now %}

@@ -84,8 +84,10 @@
       button.classList.toggle('active', button.dataset.design === design);
       button.setAttribute('aria-pressed', button.dataset.design === design);
     });
-    $('coverage').textContent = `${scenario === 'offline' ? 3 : 4} / 4 compute nodes reachable · Front reachable`;
-    $('totals').textContent = `${data.length} databases · ${data.reduce((sum, db) => sum + db.tables.length, 0)} tables · ${size(data.reduce((sum, db) => sum + db.mb, 0))}${scenario === 'offline' ? ' last known' : ' on disk'}`;
+    $('coverage').textContent = `${scenario === 'offline' ? 3 : 4} / 4`;
+    $('totals').textContent = data.length;
+    $('disk-total').textContent = size(data.reduce((sum, db) => sum + db.mb, 0));
+    $('disk-note').textContent = `${data.reduce((sum, db) => sum + db.tables.length, 0)} tables${scenario === 'offline' ? ' · last known' : ''}`;
     $('coverage-note').hidden = !['offline', 'mismatch'].includes(scenario);
     $('coverage-message').textContent = scenario === 'offline'
       ? 'Compute 04 is unreachable. Its rows are last-known sample values; the snapshot is incomplete. Dump all is blocked until every database is reachable. Export reachable databases individually or by selection.'

@@ -9,10 +9,7 @@
 
 /* Figures. */
 .usage-label { display: flex; align-items: center; gap: .4rem; margin-bottom: .3rem; color: var(--tblr-secondary); font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
-.usage-value { display: block; color: var(--tblr-body-color); font-size: 1.75rem; font-weight: 650; line-height: 1.15; letter-spacing: -.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.usage-value-sm { font-size: 1.3rem; }
-.usage-value-lg { font-size: 2.25rem; }
-.usage-value-xl { font-size: clamp(2.25rem, 4vw, 3rem); }
+
 .usage-sub { min-height: 1.25em; margin-top: .25rem; color: var(--tblr-secondary); font-size: .8125rem; }
 .usage-swatch { display: inline-block; inline-size: .6rem; block-size: .6rem; border-radius: 2px; background: var(--usage-color, var(--tblr-secondary)); flex-shrink: 0; }
 [data-source="recorded"], [data-figure="input_tokens"], [data-side="input"], .usage-segment[data-source="input"] { --usage-color: var(--usage-input); }
@@ -59,14 +56,9 @@
 }
 
 /* Token totals in one band. */
-.usage-band { overflow: hidden; }
-.usage-band-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.usage-band-cell { padding: 1.1rem 1.25rem .9rem; }
-.usage-band-cell + .usage-band-cell { border-left: 1px solid var(--tblr-border-color); }
 
 /* The total cost, its sources and the mock rates. */
-.usage-cost-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, .9fr); gap: 1.5rem 2rem; align-items: start; }
-.usage-assumptions { min-inline-size: 0; margin: 0; padding: 0 0 0 2rem; border: 0; border-left: 1px solid var(--tblr-border-color); }
+
 .usage-assumptions legend { float: left; inline-size: 100%; padding: 0; }
 .usage-assumptions legend + * { clear: both; }
 .usage-sources { display: grid; gap: .7rem; }
@@ -74,7 +66,7 @@
 .usage-source:last-child { padding-bottom: 0; border-bottom: 0; }
 .usage-source dt { display: flex; align-items: center; gap: .45rem; font-size: .8125rem; font-weight: 500; }
 .usage-source dd { margin: 0; text-align: end; }
-.usage-source-value { font-weight: 650; font-variant-numeric: tabular-nums; }
+.usage-source-value { font-size: inherit; font-weight: 650; font-variant-numeric: tabular-nums; }
 .usage-source small { display: block; }
 
 /* Chart card: heading, then views and metric on one toolbar, then the chart. */
@@ -101,18 +93,12 @@
 
 /* A narrower report column: fewer columns in each band. */
 @container usage-main (max-width: 62rem) {
-  .usage-cost-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .usage-assumptions { grid-column: 1 / -1; padding: 1.25rem 0 0; border-left: 0; border-top: 1px solid var(--tblr-border-color); }
+
 }
 @container usage-main (max-width: 40rem) {
-  .usage-band-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .usage-band-cell:nth-child(3) { border-left: 0; }
-  .usage-band-cell:nth-child(n + 3) { border-top: 1px solid var(--tblr-border-color); }
-  .usage-cost-grid { grid-template-columns: minmax(0, 1fr); }
+
   .usage-chart-toolbar { flex-direction: column; align-items: stretch; }
 }
 @container usage-main (max-width: 22rem) {
-  .usage-band-grid { grid-template-columns: minmax(0, 1fr); }
-  .usage-band-cell + .usage-band-cell { border-left: 0; border-top: 1px solid var(--tblr-border-color); }
-  .usage-value-lg { font-size: 1.85rem; }
+
 }

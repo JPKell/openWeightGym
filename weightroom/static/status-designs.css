@@ -1,11 +1,7 @@
 /* Status design review, scoped to its standalone application-shell preview. */
 .sd-page { --sd-accent: #86adf0; }
 .sd-page [hidden] { display:none !important; }
-.sd-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); border:1px solid var(--bs-border-color); border-radius:var(--bs-border-radius); background:var(--bs-tertiary-bg); overflow:hidden; }
-.sd-kpis > div { padding:12px 16px; border-right:1px solid var(--bs-border-color); display:grid; gap:3px; }
-.sd-kpis > div:last-child { border:0; }
-.sd-kpis strong { font-size:25px; line-height:1.2; font-variant-numeric:tabular-nums; }
-.sd-kpis > div:first-child strong { color:var(--sd-accent); }
+
 .sd-page .table { font-size:12px; }
 .sd-page .table td { padding:7px 12px; }
 .sd-page .table th { white-space:nowrap; }
@@ -30,7 +26,10 @@
 .sd-dialog { width:min(460px,calc(100% - 24px)); color:var(--bs-body-color); background:var(--bs-body-bg); }
 .sd-dialog::backdrop { background:#0008; }
 @media(max-width:1150px) { .sd-lanes,.sd-ledger { grid-template-columns:1fr; } #capacity-section { grid-template-columns:185px minmax(0,1fr); } }
-@media(max-width:700px) { .sd-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .sd-kpis > div { border-bottom:1px solid var(--bs-border-color); } #capacity-section { grid-template-columns:1fr; } #node-list { max-height:165px; } .sd-kpis > div:last-child { grid-column:span 2; } }
+@media(max-width:700px) {
+
+ #capacity-section { grid-template-columns:1fr; } #node-list { max-height:165px; }
+ }
 
 .sd-requests td:first-child small { display:inline !important; margin-left:8px; }
 .sd-request-node { display:none; }

@@ -98,7 +98,11 @@ MEASURE = r"""() => {
   const named = field => [...field.labels || []].some(label => label.textContent.trim()) || field.getAttribute('aria-label')?.trim() ||
     field.getAttribute('aria-labelledby')?.split(/\s+/).some(id => document.getElementById(id)?.textContent.trim()) || field.getAttribute('title')?.trim();
   const namelessFields = fields.filter(field => !named(field)).map(describe);
-  return {titles, headers, sections, mismatches, invalidControls, rawValues, namelessFields,
+  const kpis = [...main.querySelectorAll('.kpi-row > .kpi')].filter(visible).map(el => ({
+    ...style(el), label: !!el.querySelector('.kpi-label'),
+    value: el.querySelector(':scope > .kpi-value') ? style(el.querySelector(':scope > .kpi-value')) : null,
+  }));
+  return {titles, headers, sections, mismatches, invalidControls, rawValues, namelessFields, kpis,
     headerDescriptions: [...main.querySelectorAll('.page-header > .d-flex > .min-w-0 > p')].map(e => e.textContent),
     overflow: document.documentElement.scrollWidth > innerWidth,
     theme: document.documentElement.dataset.bsTheme,
@@ -120,6 +124,8 @@ def test_templates_use_shared_components():
             # Mask Jinja before checking class tokens, including conditional attributes.
             markup = re.sub(r'{{.*?}}|{%.*?%}|{#.*?#}', 'template', source, flags=re.S)
             classes = re.findall(r'<[^>]+\bclass=["\']([^"\']*)["\']', markup)
+            if path.name != 'kpi_parts.html':
+                assert not any({'kpi-row', 'kpi', 'kpi-value'} & set(value.split()) for value in classes), path
             assert not any('alert' in value.split() for value in classes), path
             assert not re.search(r'<details\b[^>]*class=["\']more["\']', markup), path
             if path.name != 'navigation_parts.html':
@@ -263,6 +269,12 @@ def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, them
                 problems.append(('controls', result['mismatches'], result['invalidControls']))
             if result['namelessFields']:
                 problems.append(('fields without accessible names', result['namelessFields']))
+            wrong_kpis = [item for item in result['kpis'] if not item['label'] or not item['value'] or
+                          item['value']['weight'] != '600' or
+                          item['value']['size'] != ('27.2px' if width > 767 else '21.6px') or
+                          item['padding'] != ['10.4px', '14.4px', '10.4px', '14.4px']]
+            if wrong_kpis:
+                problems.append(('KPI presentation', wrong_kpis))
             if result['rawValues'] and not path.startswith('/docs'):
                 problems.append(('raw display values', result['rawValues']))
             if result['overflow']:

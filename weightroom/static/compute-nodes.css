@@ -2,8 +2,7 @@
 .compute-nodes { --suite-control-height: var(--suite-control-compact-height); }
 .compute-nodes [hidden] { display: none !important; }
 .compute-nodes .page-header { margin-bottom: .75rem !important; }
-.compute-fleet-summary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.5rem; }
-.compute-fleet-summary > span { display: inline-flex; gap: .3rem; }
+
 .compute-node-layout { display: grid; grid-template-columns: 215px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
 .compute-node-layout > *, .compute-node-panels > * { min-width: 0; }
 .compute-node-directory { position: sticky; top: 8rem; }

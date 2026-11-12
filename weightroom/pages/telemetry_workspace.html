@@ -1,6 +1,7 @@
 {% from 'parts.html' import page_header, section_title, card, alert, swaps %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'telemetry_parts.html' import amount, state, meter, snapshot, gpu_table, host_tile, host_header, service_pill %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
 <div id="telemetry-workspace" data-host-identity="{{ host.identity if host else '' }}" data-range="{{ hours }}:{{ until }}" hx-get="{{ refresh_url }}" hx-trigger="every {{ poll }}s" hx-target="this" hx-swap="outerHTML show:none" hx-push-url="false" hx-sync="this:replace">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
     {{ page_header('Telemetry') }}
@@ -8,12 +9,12 @@
   </div>
   {% if request.query_params.get('said') %}{% call alert('danger' if request.query_params.get('failed') else 'info', class_='py-2', role='status') %}{{ request.query_params.get('said') }}{% endcall %}{% endif %}
   {% call alert('warning', class_='py-2', role='status', attrs={'id':'telemetry-refresh-error','hidden':''}) %}Refresh failed. Values shown are from the previous snapshot. Retrying automatically.{% endcall %}
-  <div class="tw-totals mb-3" id="fleet-totals" aria-label="Fleet hardware summary">
-    <div class="tw-total"><span class="small text-secondary">Hosts reporting</span><strong>{{ summary.reporting }} / {{ summary.total }}</strong></div>
-    <div class="tw-total"><span class="small text-secondary">Known GPU devices</span><strong>{{ summary.gpus }}</strong>{% if summary.partial %}<small class="text-secondary">Some inventory unavailable</small>{% endif %}</div>
-    <div class="tw-total"><span class="small text-secondary">Known VRAM installed</span><strong>{{ amount(summary.vram, 'memory') }}</strong></div>
-    <div class="tw-total"><span class="small text-secondary">Needs attention</span><strong>{{ summary.attention }}</strong></div>
-  </div>
+  {% call kpi_row('Fleet hardware summary', class_='tw-totals mb-3', attrs={'id':'fleet-totals'}) %}
+    {{ kpi('Hosts reporting', summary.reporting ~ ' / ' ~ summary.total, class_='tw-total') }}
+    {{ kpi('Known GPU devices', summary.gpus, 'Some inventory unavailable' if summary.partial else '', class_='tw-total') }}
+    {{ kpi('Known VRAM installed', amount(summary.vram, 'memory'), class_='tw-total') }}
+    {{ kpi('Needs attention', summary.attention, class_='tw-total') }}
+  {% endcall %}
   <div class="tw-layout">
     <aside class="tw-sidebar" aria-label="Host navigation">
       {% call card('Physical hosts', body=false, class_='mb-0 tw-hosts') %}

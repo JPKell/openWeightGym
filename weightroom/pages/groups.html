@@ -4,7 +4,7 @@
 {% from "deferred.html" import loading %}
 {% from "user_parts.html" import group_choice, account_avatar, account_status, ability_categories %}
 {% block title %}{{ group.name ~ " · " if group }}Groups · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=1"><link rel="stylesheet" href="/static/users.css?v=3"><script src="/static/users.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=2"><link rel="stylesheet" href="/static/users.css?v=4"><script src="/static/users.js?v=2" defer></script>{% endblock %}
 {% block main %}
 {# The directory of groups beside the chosen one, laid out as Users is. /groups chooses the first.
    Every form names its group's address itself: the page is also shown at /groups, when adding a group was refused. #}
@@ -15,13 +15,14 @@
   {% if "manage-users" in person.can %}<a class="btn btn-outline-secondary btn-sm" href="/users">Users</a>{% endif %}
   {% if "manage-groups" in person.can %}<form method="get" action="{{ here }}" class="m-0"><input type="hidden" name="open" value="add"><button class="btn btn-primary btn-sm" data-toggle-add aria-expanded="{{ 'true' if adding else 'false' }}" aria-controls="add-group">+ Add group</button></form>{% endif %}
 {% endcall %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
 {% set locked = groups|selectattr('state', 'equalto', 'read-only')|list|length %}
-<div class="users-summary small text-secondary mb-3" aria-label="Groups summary">
-  <span><strong class="text-body">{{ groups|length }}</strong> {{ 'group' if groups|length == 1 else 'groups' }}</span>
-  <span><strong class="text-body">{{ groups|map(attribute='members')|map('length')|sum }}</strong> members in all</span>
-  <span><strong class="text-body">{{ groups|selectattr('superuser')|list|length }}</strong> with superuser</span>
-  {% if locked %}<span><strong class="text-body">{{ locked }}</strong> read only to you</span>{% endif %}
-</div>
+{% call kpi_row('Groups summary', class_='users-summary mb-3') %}
+  {{ kpi('Groups', groups|length) }}
+  {{ kpi('Members in all', groups|map(attribute='members')|map('length')|sum) }}
+  {{ kpi('With superuser', groups|selectattr('superuser')|list|length) }}
+  {% if locked %}{{ kpi('Read only to you', locked) }}{% endif %}
+{% endcall %}
 {{ said_box(said, failed) }}
 
 {% if "manage-groups" in person.can %}
@@ -66,12 +67,12 @@
 
   <div class="account-panels group-panels">
     {% call card('Overview', id='group-overview', class_='account-panel', attrs={'data-panel': 'activity'}, hint='What the group allows its members. The full report is on Usage.') %}
-      <div class="account-figures">
-        <div data-figure="requests"><span class="usage-label">Members</span><strong class="usage-value usage-value-sm">{{ group.members|length }}</strong><span class="usage-sub">{{ "nobody yet" if not group.members else "account" if group.members|length == 1 else "accounts" }}</span></div>
-        <div data-figure="input_tokens"><span class="usage-label">Abilities</span><strong class="usage-value usage-value-sm">{{ "All" if group.superuser else group.can|length }}</strong><span class="usage-sub">{{ "superuser" if group.superuser else "ticked" }}</span></div>
-        <div data-figure="output_tokens"><span class="usage-label">Models</span><strong class="usage-value usage-value-sm">{{ "All" if group.models == "*" else group.models|length }}</strong><span class="usage-sub">{{ "also those added later" if group.models == "*" else "chosen" }}</span></div>
-        <div data-figure="requests"><span class="usage-label">At once</span><strong class="usage-value usage-value-sm">{{ group.max_requests or "∞" }}</strong><span class="usage-sub">{{ "requests a member" if group.max_requests else "no limit" }}</span></div>
-      </div>
+      {% call kpi_row('Group overview', class_='account-figures') %}
+        {{ kpi('Members', group.members|length, 'nobody yet' if not group.members else 'account' if group.members|length == 1 else 'accounts', attrs={'data-figure':'requests'}) }}
+        {{ kpi('Abilities', 'All' if group.superuser else group.can|length, 'superuser' if group.superuser else 'ticked', attrs={'data-figure':'input_tokens'}) }}
+        {{ kpi('Models', 'All' if group.models == '*' else group.models|length, 'also those added later' if group.models == '*' else 'chosen', attrs={'data-figure':'output_tokens'}) }}
+        {{ kpi('At once', group.max_requests or '∞', 'requests a member' if group.max_requests else 'no limit', attrs={'data-figure':'requests'}) }}
+      {% endcall %}
       {% if "see-log" in person.can %}{{ loading('account-trend', trend_url, 'Loading the last 30 days…') }}
       <div class="d-flex flex-wrap justify-content-end gap-3 small mt-2"><a href="/usage?group={{ group.name|urlencode }}">Open in Usage</a></div>{% endif %}
     {% endcall %}
