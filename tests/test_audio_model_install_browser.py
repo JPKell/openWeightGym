@@ -120,6 +120,7 @@ def test_add_reopen_edit_and_reject_duplicate_audio_model(audio_install_console,
         page.set_viewport_size({'width':width,'height':1100})
         errors=[]; page.on('pageerror',lambda error:errors.append(str(error)))
         page.goto('http://console.test/models/audio?new=1')
+        page.locator('#am-kind').select_option('speech')
         option=page.locator(f'#am-file option[data-path="{main}"]')
         playwright.expect(option).to_have_text(('front' if tier.startswith('front-') else 'compute')+' · '+name)
         page.locator('#am-file').select_option(value=option.get_attribute('value'))

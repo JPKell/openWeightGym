@@ -64,10 +64,46 @@
     if (selected && !list.some(one => one.family === selected.audiocpp.family)) list.push({family:selected.audiocpp.family, name:selected.audiocpp.family, kinds:[selected.audiocpp.kind], description:'Current model family; runtime catalogue unavailable.'});
     return list;
   }
+  function fileKinds(file) {
+    if (file.facts?.kinds?.length) return file.facts.kinds;
+    const profiles=(inventories.get(file.machine)?.models || []).filter(row=>row.flags.model === file.path);
+    const family=audioFamily(file) || profiles[0]?.audiocpp.family;
+    const declared=[...inventories.values()].flatMap(known=>known.catalogue?.families || []).find(one=>one.family === family)?.kinds || [];
+    return declared.length ? declared : profiles.map(row=>row.audiocpp.kind);
+  }
+  function modelKinds() {
+    const declared=chosen() ? fileKinds(chosen()) : [];
+    return (families().find(one=>one.family === $('family').value)?.kinds || []).filter(kind=>!declared.length || declared.includes(kind));
+  }
+  function modelKind() {
+    const supported=modelKinds();
+    return $('kind').value || (supported.includes(selected?.audiocpp.kind) ? selected.audiocpp.kind : supported[0]) || '';
+  }
+  function filterFiles(preferred=chosen()) {
+    const kind=$('kind').value;
+    const options=choices.flatMap((file,index)=>{
+      if (kind && !fileKinds(file).includes(kind)) return [];
+      const folder=file.path.split('/').filter(Boolean).at(-2) || '/';
+      const option=new Option(file.machine + ' · ' + folder,String(index));
+      option.dataset.path=file.path; option.dataset.machine=file.machine; option.dataset.tier=file.tier;
+      option.disabled=Boolean(selected && (file.machine !== activeNode || file.tier === 'storage') && file.path !== selected.flags.model);
+      return [option];
+    });
+    $('file').replaceChildren(new Option(options.length ? 'Choose an audio model file' : kind ? 'No model files for this task' : 'No audio model files available',''),...options);
+    const index=choices.findIndex(file=>file.path === preferred?.path && file.machine === preferred?.machine);
+    $('file').value=options.some(option=>option.value === String(index)) ? String(index) : '';
+  }
+  function taskChanged() {
+    const previous=chosen();
+    filterFiles();
+    if (previous && !chosen()) { $('root').value=''; $('companions').replaceChildren(); }
+    filterFamilies(); familyChanged();
+  }
   function filterFamilies() {
     const file = chosen(), previous = $('family').value;
     const known = audioFamily(file);
-    const choices = families().filter(one => one.kinds.length && (!known || one.family === known));
+    const declared=file ? fileKinds(file) : [];
+    const choices = families().filter(one => one.kinds.length && (!known || one.family === known) && (!$('kind').value || one.kinds.includes($('kind').value)) && (!declared.length || one.kinds.some(kind=>declared.includes(kind))));
     $('family').replaceChildren(new Option('Choose a compatible model family',''), ...choices.map(one => new Option(one.name || one.family, one.family)));
     $('family').value = known || (choices.some(one => one.family === previous) ? previous : '');
   }
@@ -100,15 +136,12 @@
     SuiteModelFields.load('am-defaults', values);
   }
   function exclusive() {
-    const required = ['music','sound'].includes($('kind').value);
+    const required = ['music','sound'].includes(modelKind());
     $('alone').disabled = required; if (required) $('alone').checked = true;
     $('exclusive-hint').hidden = !required;
   }
   function familyChanged() {
     const family = families().find(one => one.family === $('family').value);
-    const previous = $('kind').value;
-    $('kind').replaceChildren(...(family?.kinds || []).map(kind => new Option(kinds[kind] || kind,kind)));
-    if (family?.kinds.includes(previous)) $('kind').value = previous;
     $('family-note').textContent = [family?.description, family?.note].filter(Boolean).join(' ');
     $('session').title = family?.note || ''; defaultFields(family); exclusive();
   }
@@ -144,7 +177,7 @@
     $('save-summary').textContent = ($('name').value || 'New audio model') + ' → ' + (destinations.join(', ') || 'Choose nodes');
     const mode = root.querySelector('[data-hardware-mode]:checked')?.value;
     const device = mode === 'cpu' ? 'CPU' : mode === 'pin' ? [...root.querySelectorAll('[data-gpu-card]:checked')].map(one=>one.value).join(', ') || 'Choose GPUs' : 'Automatic GPU';
-    $('save-detail').textContent = [device,Number($('ram').value || 0).toLocaleString() + ' MiB host RAM',kinds[$('kind').value] || 'Choose a task'].join(' · ');
+    $('save-detail').textContent = [device,Number($('ram').value || 0).toLocaleString() + ' MiB host RAM',kinds[modelKind()] || 'Choose a task'].join(' · ');
     $('draft-status').textContent = dirty ? 'Unsaved draft' : selected ? 'Saved configuration' : 'Review setup, then add model';
     const reachable = available(activeNode);
     $('editor-state').textContent = !reachable ? 'Node unavailable' : selected ? 'Installed' : 'New model';
@@ -156,7 +189,7 @@
     const runtime = (inventory.engines?.engines || []).find(one => one.id === 'audiocpp');
     $('runtime').textContent = !reachable ? 'This node is unavailable. Saved settings and drafts remain visible; retry to reconnect.' : runtime?.available ? 'audio.cpp is installed on ' + activeNode + '.' : runtime?.why || inventory.catalogue?.error || '';
     const file = chosen();
-    $('file-note').textContent = file ? file.machine + ' · ' + file.tier + '. ' + (file.tier === 'storage' ? 'Stored files are promoted and copied after space checks when adding a model.' : 'Managed model file.') : 'Choose a compatible audio model from managed cache or storage.';
+    $('file-note').textContent = file ? file.machine + ' · ' + file.tier + '. ' + (file.tier === 'storage' ? 'Stored files are promoted and copied after space checks when adding a model.' : 'Managed model file.') : $('kind').value ? 'Showing files for ' + kinds[$('kind').value] + '. Choose All tasks to include files with unknown task metadata.' : 'Choose an audio task to filter model files in cache or storage.';
     $('session-note').textContent = families().find(one=>one.family === $('family').value)?.note || 'Optional runtime-specific session settings. Saved keys are preserved.';
     $('model-actions').hidden = !selected;
     $('test-button').hidden = !selected || !['music','sound'].includes(selected.audiocpp.kind);
@@ -183,9 +216,9 @@
   function restoreDraft(draft) {
     if (!draft) return;
     renderTargets(selected ? [activeNode] : draft.targets);
-    if (draft.file) $('file').value = String(choices.findIndex(file=>file.path === draft.file.path && file.machine === draft.file.machine));
-    else $('file').value = '';
     const fieldValue = id => draft.fields.find(one=>one.id === 'am-' + id)?.value;
+    $('kind').value=fieldValue('kind') || '';
+    filterFiles(draft.file);
     $('defaults').value = '{}';
     filterFamilies(); $('family').value = fieldValue('family'); familyChanged();
     for (const saved of draft.fields) {
@@ -217,13 +250,9 @@
     if (selected && !choices.some(file=>file.machine === activeNode && file.path === selected.flags.model)) {
       choices.push({path:selected.flags.model,machine:activeNode,tier:'current',facts:{what:'audio',family:selected.audiocpp.family,kinds:[selected.audiocpp.kind]}});
     }
-    $('file').replaceChildren(new Option('Choose an audio model file',''),...choices.map((file,index)=>{
-      const folder = file.path.split('/').filter(Boolean).at(-2) || '/';
-      const option = new Option(file.machine + ' · ' + folder,String(index));
-      option.dataset.path = file.path; option.dataset.machine = file.machine; option.dataset.tier = file.tier;
-      option.disabled = Boolean(selected && (file.machine !== activeNode || file.tier === 'storage') && file.path !== selected.flags.model);
-      return option;
-    }));
+    $('kind').replaceChildren(new Option('All tasks',''),...Object.entries(kinds).map(([kind,label])=>new Option(label,kind)));
+    $('kind').value=selected?.audiocpp.kind || '';
+    filterFiles(selected ? {path:selected.flags.model,machine:activeNode} : null);
     renderTargets();
     SuiteHardware.set('am',selected?.gpus ?? (inventory.cards?.length ? 1 : 0),inventory.cards || []);
     filterFamilies(); familyChanged();
@@ -357,7 +386,7 @@
       if (answer.take?.asset_id) $('test-audio').src='/soundroom-api/assets/' + encodeURIComponent(answer.take.asset_id) + '/content';
     } finally { updateSummary(); }
   }
-  $('file').addEventListener('change',fileChanged); $('family').addEventListener('change',familyChanged); $('root').addEventListener('change',companions); $('kind').addEventListener('change',exclusive);
+  $('file').addEventListener('change',fileChanged); $('family').addEventListener('change',familyChanged); $('root').addEventListener('change',companions); $('kind').addEventListener('change',taskChanged);
   root.querySelectorAll('[data-section]').forEach(button=>button.addEventListener('click',()=>showSection(button.dataset.section)));
   root.querySelectorAll('[data-audio-task]').forEach(button=>button.addEventListener('click',()=>{ task=button.dataset.audioTask; renderProfiles(); }));
   $('add').addEventListener('click',startNew);
@@ -389,8 +418,9 @@
       const panel=input.closest('[data-panel]'); if (panel) showSection(panel.dataset.panel);
       input.reportValidity(); return;
     }
-    const file=chosen(),family=$('family').value,root=$('root').value.trim().replace(/\/$/,'');
+    const file=chosen(),family=$('family').value,kind=modelKind(),root=$('root').value.trim().replace(/\/$/,'');
     if (!file || !family) throw new Error('Choose an audio model file and its compatible runtime family.');
+    if (!modelKinds().includes(kind)) throw new Error('Choose an audio task supported by this model file and family.');
     if (!file.path.startsWith(root + '/')) throw new Error('The model file must be inside its package folder.');
     const parse=name=>{
       const value=JSON.parse($(name).value || '{}');
@@ -403,8 +433,8 @@
     const device=SuiteHardware.read('am');
     const preserved=Object.fromEntries(['allow_split','adapters','min_context','order'].filter(name=>Object.hasOwn(selected || {},name)).map(name=>[name,selected[name]]));
     const settings={...preserved,engine:'audiocpp',flags:{...selected?.flags,model:file.path,'ctx-size':0},gpus:device,
-      alone:['music','sound'].includes($('kind').value) || $('alone').checked,
-      audiocpp:{...selected?.audiocpp,family,kind:$('kind').value,package:selected?.audiocpp.package || '',
+      alone:['music','sound'].includes(kind) || $('alone').checked,
+      audiocpp:{...selected?.audiocpp,family,kind,package:selected?.audiocpp.package || '',
         path:file.path.endsWith('.gguf') ? file.path : root,files:[...$('companions').selectedOptions].map(option=>option.value.slice(root.length+1)),
         session_options:session,defaults,
         limits:{...selected?.audiocpp.limits,max_seconds:Number($('seconds').value),max_takes:Number($('takes').value),max_text_chars:Number($('text').value),max_audio_mib:Number($('audio').value)},host_ram_mib:Number($('ram').value)}};
