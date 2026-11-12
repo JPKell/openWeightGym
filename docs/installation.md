@@ -206,7 +206,7 @@ the `pg_hba.conf` lines to add.
 | `owg start`, `stop`, `restart [PROGRAM…]` | controls the services, all of them by default |
 | `owg restart --host USER@HOST [PROGRAM…]` | restarts services over SSH using that host's OWG installation; all installed services by default |
 | `owg logs [PROGRAM] [-f] [-n LINES]` | the latest from the programs' journals (80 lines unless `-n` says otherwise); `-f` follows them |
-| `owg update [--yes] [--plain]` | fetches the latest code and selects this checkout ahead of older runtime source overrides, including when an installation is unfinished |
+| `owg update [--yes] [--plain]` | fetches the latest code, rebuilds the console's Voice desktop ZIP and selects this checkout ahead of older runtime source overrides, including when an installation is unfinished |
 | `owg repair [--yes] [--plain]` | reinstalls packages and services as they are |
 | `owg install [OPTIONS]` | adds omitted services and model engines; equivalent to `install.sh --components` |
 | `owg doctor` | checks the environment, services, settings, llama.cpp, key permissions, linger, the console and disk space, and says what to fix |
