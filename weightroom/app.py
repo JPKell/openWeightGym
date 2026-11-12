@@ -1486,18 +1486,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def all_models(request: Request, person: Person) -> dict | Response:
         """One logical model with all verified compute locations, with an old-server fallback."""
-        def enabled(known):
-            if isinstance(known, dict):
-                known['models'] = [model for model in known.get('models', []) if platform().model_enabled(model)]
-            return known
         if request.query_params.get("node"):
-            return enabled(await fetch(request, person, node_model_path(request, "/loadcoach/models")))
+            return await fetch(request, person, node_model_path(request, "/loadcoach/models"))
         answer = await ask("GET", "/turnstile/models", person.key)
         if answer.status_code == 404:
-            return enabled(await fetch(request, person, "/loadcoach/models"))
+            return await fetch(request, person, "/loadcoach/models")
         if answer.status_code != 200:
             return page(request, "refused.html", person, status=answer.status_code, why=answer.json()["error"]["message"])
-        return enabled(answer.json())
+        return answer.json()
 
     async def retry_model_install(request: Request, person: Person) -> Response:
         """Replay a saved installation through its normal authenticated preflight."""
