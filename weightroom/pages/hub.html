@@ -56,7 +56,7 @@
 {% endif %}</div>
 {% if words and found.found is defined %}
 {% set result_actions %}<span class="text-secondary small">{{ hub_sort.description }} · 20 per page</span>{% endset %}
-{% call card('Repositories', actions=result_actions, hint='Choose a repository to view its files. Click a column heading to sort all matching models.', class_='discovery-results') %}
+{% call card('Repositories', actions=result_actions, hint='Sort all matching models by downloads, likes or creation date. Downloads and likes show highest first; click Created again to reverse date order.', class_='discovery-results') %}
 {% if found.found %}
 <div class="table-responsive">
 <table id="hub-results" class="table table-hover align-middle discovery-table mb-0">

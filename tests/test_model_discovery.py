@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -40,7 +41,7 @@ def test_provider_cursor_pages_keep_requests_on_the_provider():
                 for direction in ('-1', '1', 'invalid'):
                     await hub.search_page(client, 'model', sort=sort, direction=direction)
                     assert seen[-1].url.params['sort'] == ('downloads' if sort == 'invalid' else sort)
-                    assert seen[-1].url.params['direction'] == ('1' if direction == '1' else '-1')
+                    assert seen[-1].url.params['direction'] == ('1' if sort == 'createdAt' and direction == '1' else '-1')
                     assert seen[-1].url.params['limit'] == '20'
             second = await civitai.search_page(client, 'landscape', 'private', cursor='previous-civitai', kind='LORA', base='SDXL 1.0')
             assert second['next_cursor'] == 'next-civitai'
@@ -60,7 +61,7 @@ def test_hub_sort_reaches_both_storage_authorities(desk, tmp_path, monkeypatch):
     calls = []
     async def source(http, words, token='', cursor='', sort='downloads', direction='-1'):
         calls.append((words, cursor, sort, direction))
-        return {'found': [], 'next_cursor': ''}
+        return {'found': [], 'next_cursor': '', 'paging': {'limit': 20, 'sort': sort, 'direction': direction}}
     monkeypatch.setattr(hub, 'search_page', source)
     sign_in(server, 'jordan')
     for front_storage in (False, True):
@@ -69,7 +70,60 @@ def test_hub_sort_reaches_both_storage_authorities(desk, tmp_path, monkeypatch):
         for sort in ('downloads', 'likes', 'createdAt'):
             response = server.get('/hub', params={'q': 'model', 'sort': sort, 'direction': '1', 'cursor': 'older'})
             assert response.status_code == 200
-            assert calls[-1] == ('model', 'older', sort, '1')
+            assert calls[-1] == ('model', 'older', sort, '1' if sort == 'createdAt' else '-1')
+
+
+@pytest.mark.parametrize('front_storage', [False, True])
+def test_hub_sorts_full_provider_catalogue_before_pagination(desk, tmp_path, monkeypatch, front_storage):  # noqa: F811
+    """Exercise real HTTP helpers and proxies, with winners outside the old first 40."""
+    server, wire, _ = desk
+    catalogue = [{'id': f'acme/model-{i}', 'downloads': 8000-i*100, 'likes': i,
+                  'createdAt': f'2026-{1+i//28:02}-{1+i%28:02}T00:00:00Z'} for i in range(80)]
+    seen = []
+    original = type(wire.hub).__call__
+    def provider(self, request):
+        if request.url.path != '/api/models':
+            return original(self, request)
+        params = request.url.params
+        seen.append(dict(params))
+        key, direction = params.get('sort'), params.get('direction')
+        if direction == '1' and key in ('downloads', 'likes'):
+            return httpx.Response(400, json={'error': 'Only descending sort is supported.'})
+        ordered = sorted(catalogue, key=lambda row: row[key], reverse=direction == '-1')
+        offset, limit = int(params.get('cursor', 0)), int(params.get('limit', 40))
+        return httpx.Response(200, json=ordered[offset:offset+limit],
+            headers={'link': f'<https://huggingface.co/api/models?cursor={offset+limit}>; rel="next"'} if offset+limit < len(ordered) else {})
+    monkeypatch.setattr(type(wire.hub), '__call__', provider)
+    sign_in(server, 'jordan')
+    if front_storage:
+        server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '', 'models_storage_folder': str(tmp_path / 'storage')})
+        store = wire.front.state.front_files
+        server.portal.call(store.web.aclose)
+        store.web = wire.hub.client()
+    for sort, direction in [('downloads', '-1'), ('likes', '-1'), ('createdAt', '-1'), ('createdAt', '1')]:
+        ordered = sorted(catalogue, key=lambda row: row[sort], reverse=direction == '-1')
+        for cursor, offset in [('', 0), ('20', 20)]:
+            response = server.get('/hub', params={'q': 'model', 'sort': sort, 'direction': direction, 'cursor': cursor})
+            assert response.status_code == 200
+            names = re.findall(r'class="discovery-repository"[^>]*>([^<]+)</a>', response.text)
+            assert names == [row['id'] for row in ordered[offset:offset+20]]
+            assert seen[-1]['limit'] == '20'
+            assert seen[-1]['sort'] == sort and seen[-1]['direction'] == direction
+        if sort in ('likes', 'createdAt') and direction == '-1':
+            assert ordered[0]['id'] not in {row['id'] for row in catalogue[:40]}
+
+
+def test_hub_refuses_legacy_unpaged_search_response(desk, monkeypatch):  # noqa: F811
+    """An outdated artifact worker must not silently claim to apply the new controls."""
+    server, _, _ = desk
+    async def legacy(*args, **kwargs):
+        return {'found': [{'repository': f'acme/model-{i}'} for i in range(40)]}
+    monkeypatch.setattr(hub, 'search_page', legacy)
+    sign_in(server, 'jordan')
+    response = server.get('/hub?q=model&sort=likes')
+    assert response.status_code == 502
+    assert 'did not apply the requested ordering or page size' in response.text
+    assert 'class="discovery-repository"' not in response.text
 
 
 def test_paginated_discovery_proxies_keep_filters_and_access_checks(desk, tmp_path, monkeypatch):  # noqa: F811
@@ -98,7 +152,8 @@ def test_hub_pages_and_repository_fragment(desk, monkeypatch, tmp_path, width, t
         calls.append((cursor, sort, direction))
         rows = [{'repository': 'acme/tiny-GGUF' if i == 0 else f'acme/model-{i}',
                  'downloads': 123456, 'likes': 1200, 'made': '2026-11-10'} for i in range(20)]
-        return {'found': rows if not cursor else [], 'next_cursor': 'next-hf' if not cursor else ''}
+        return {'found': rows if not cursor else [], 'next_cursor': 'next-hf' if not cursor else '',
+                'paging': {'limit': 20, 'sort': sort, 'direction': direction}}
     monkeypatch.setattr(hub, 'search_page', search)
     sign_in(server, 'jordan')
     with playwright.sync_playwright() as driver:
@@ -129,17 +184,19 @@ def test_hub_pages_and_repository_fragment(desk, monkeypatch, tmp_path, width, t
             assert calls[-1] == ('', sort, '-1')
             assert page.locator('[name=sort]').input_value() == sort
             page.locator('#hub-results thead').get_by_role('link', name=label, exact=True).click()
-            playwright.expect(page.locator('#hub-results th[aria-sort="ascending"]')).to_contain_text(label)
-            assert calls[-1] == ('', sort, '1')
+            expected_direction = '1' if sort == 'createdAt' else '-1'
+            expected_order = 'ascending' if sort == 'createdAt' else 'descending'
+            playwright.expect(page.locator(f'#hub-results th[aria-sort="{expected_order}"]')).to_contain_text(label)
+            assert calls[-1] == ('', sort, expected_direction)
         page.get_by_role('link', name='Next', exact=True).click()
         playwright.expect(page.locator('#hub-found')).to_contain_text('Page 2')
-        assert calls[-1] == ('next-hf', 'downloads', '1')
+        assert calls[-1] == ('next-hf', 'downloads', '-1')
         page.get_by_role('link', name='Previous', exact=True).click()
         playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(20)
         page.locator('[name=q]').fill('another model')
         page.get_by_role('button', name='Search', exact=True).click()
         playwright.expect(page.locator('[name=q]')).to_have_value('another model')
-        assert calls[-1] == ('', 'downloads', '1')
+        assert calls[-1] == ('', 'downloads', '-1')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not errors, errors
         browser.close()

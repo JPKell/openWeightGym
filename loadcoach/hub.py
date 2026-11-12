@@ -72,8 +72,9 @@ async def search(http: httpx.AsyncClient, words: str, token: str = "") -> list[d
 def search_order(params) -> tuple[str, str]:
     """Keep model discovery ordering within the supported provider fields."""
     sort = params.get('sort', 'downloads')
-    return (sort if sort in ('downloads', 'likes', 'createdAt') else 'downloads',
-            '1' if params.get('direction') == '1' else '-1')
+    sort = sort if sort in ('downloads', 'likes', 'createdAt') else 'downloads'
+    # The Hub rejects ascending downloads/likes; creation time supports either order.
+    return sort, '1' if sort == 'createdAt' and params.get('direction') == '1' else '-1'
 
 
 async def search_page(http: httpx.AsyncClient, words: str, token: str = "", cursor: str = "",
@@ -92,7 +93,8 @@ async def search_page(http: httpx.AsyncClient, words: str, token: str = "", curs
     next_cursor = parse_qs(urlsplit(next_url).query).get('cursor', [''])[0]
     return {'found': [{"repository": one['id'], "downloads": one.get('downloads', 0),
                        "likes": one.get('likes', 0), "made": one.get('createdAt', '')[:10]}
-                      for one in answer.json()], 'next_cursor': next_cursor}
+                      for one in answer.json()], 'next_cursor': next_cursor,
+            'paging': {'limit': 20, 'sort': sort, 'direction': direction}}
 
 
 async def files(http: httpx.AsyncClient, repository: str, token: str = "") -> list[dict]:
