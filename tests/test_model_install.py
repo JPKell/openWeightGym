@@ -96,7 +96,7 @@ def test_install_promotes_storage_only_after_space_check_and_creates_model_last(
     if not enough:
         monkeypatch.setattr('loadcoach.app.room', lambda folder: {'total': 10 * SPARE, 'free': SPARE, 'filesystem':'same'})
     with loadcoach_through(tmp_path, users, places={'llm': str(cache), 'storage_llm': str(storage)},
-                           llama_server='/bin/true', gpus=('CUDA0',)) as front:
+                           llama_server='/bin/true', gpus=('CUDA0',), data=str(tmp_path)) as front:
         response = front.post('/turnstile/models/install', headers=headers, json={'name':'tiny', 'machine':'compute',
                               'source_machine':'compute', 'settings':{'flags':{'model':str(file), 'ctx-size':2048}, 'gpus':0}})
         if not enough:
