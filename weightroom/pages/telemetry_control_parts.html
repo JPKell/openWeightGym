@@ -29,25 +29,6 @@
 {% endif %}
 {% endmacro %}
 
-{% macro service_controls(now, return_to) %}
-{% if now.may_act %}
-<p class="text-secondary small">Restarting or stopping the compute service unloads every model and cuts off whatever is being answered.</p>
-<div class="d-flex flex-column gap-3">
-  {% for service in now.services %}
-  <form method="post" action="/machine/services/{{ service.name|urlencode }}/restart" class="small" data-hold-refresh>
-    <input type="hidden" name="return_to" value="{{ return_to }}">
-    {{ confirm_check('Yes, act on ' ~ service.name, 'sure-' ~ service.name, framed=false) }}
-    <div class="d-flex flex-wrap gap-2 mt-2">
-      <button class="btn btn-outline-danger btn-sm" {{ confirm_two() }}>Restart {{ service.name }}</button>
-      <button class="btn btn-outline-danger btn-sm" formaction="/machine/services/{{ service.name|urlencode }}/stop" {{ confirm_two() }}>Stop</button>
-      <button class="btn btn-outline-primary btn-sm" formaction="/machine/services/{{ service.name|urlencode }}/start">Start</button>
-    </div>
-  </form>
-  {% endfor %}
-</div>
-{% endif %}
-{% endmacro %}
-
 {% macro power_status(now, return_to) %}
 {% set power = now.power %}
 <div id="power-now">

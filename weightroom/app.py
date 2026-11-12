@@ -4669,12 +4669,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             answer = await ask_spotter('GET', '/spotter/now', person.key,
                                        params={'system_services': ','.join(settings.third_party_services)}, timeout=5)
         except MachineOff:
-            return None, 'Service and power controls are unavailable while Spotter is not answering.'
+            return None, 'Host controls are unavailable while Spotter is not answering.'
         if answer.status_code != 200:
-            return None, 'Service and power controls are unavailable for this account.'
+            return None, 'Host controls are unavailable for this account.'
         now = answer.json()
         if now.get('machine_fingerprint') != fingerprint:
-            return None, 'Service and power controls could not verify this physical host. Refresh its inventory.'
+            return None, 'Host controls could not verify this physical host. Refresh its inventory.'
         return now, ''
 
     def machine_action_destination(form):
@@ -4690,7 +4690,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def telemetry_workspace_page(request: Request, person: Person) -> Response:
         """One physical-host workspace, with bounded history only for the selected host."""
-        from weightroom.telemetry_workspace import hosts_view, fleet_summary, history_groups, number, service_states
+        from weightroom.telemetry_workspace import hosts_view, fleet_summary, history_groups, number, component_pills
         found = await fetch(request, person, "/turnstile/machines")
         if isinstance(found, Response):
             return found
@@ -4733,7 +4733,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if machine_controls:
                 uptime = number(machine_controls.get('up_for'))
                 host['uptime'] = uptime if uptime is not None and uptime >= 0 else None
-                host['services'] = service_states(machine_controls.get('services'), True)
+        if host:
+            host['components'] = None
+            if 'manage-settings' in person.can:
+                try:
+                    components, _ = await component_inventory(person)
+                except ComputeOff:
+                    components = None
+                if components is not None:
+                    host['components'] = component_pills(host, components)
         control_return_to = host['href'] + ('?' + urlencode(query) if query else '') if host else ''
         return page(request, template, person, hosts=hosts, host=host, summary=summary, graph_data=graph_data,
                     poll=poll, hours=hours, until=asked.get("until", ""), refresh_url=refresh_url,
@@ -4783,18 +4791,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """The user guide is now the Web app section of the docs; old links and bookmarks arrive there."""
         return RedirectResponse("/docs/web-app", status_code=308)
 
-    async def components_page(request: Request, person: Person) -> Response:
-        """Every service and engine on front and on each compute node, installed or not. Changes nothing and wakes nothing."""
-        if "manage-settings" not in person.can:
-            return page(request, "refused.html", person, status=403, why="Seeing what each machine has installed requires manage-settings.")
-        if initial_page(request):
-            return page(request, "components.html", person, deferred=True, fragment_url=fragment_url(request, "page"))
-        part = request.query_params.get("part") == "page" and request.query_params.get("complete") != "1"
-        answer = await ask("GET", "/turnstile/components", person.key)
+    async def component_inventory(person: Person):
+        """Read and normalize the same caller-authorized inventory for Components and Telemetry."""
+        answer = await ask('GET', '/turnstile/components', person.key)
         if answer.status_code != 200:
-            if part:
-                return fragment_error(request, person, "components-report", "page", answer)
-            return page(request, "refused.html", person, status=answer.status_code, why=answer.json()["error"]["message"])
+            return None, answer
         found = answer.json()
         from loadcoach.components import SERVICES
         service_order = {name: index for index, (name, _, _) in enumerate(SERVICES)}
@@ -4806,6 +4807,20 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 for row in node["services"]:
                     if row["id"] == "weightroom" and not row["installed"]:
                         row.update(installed=True, state="running", detail="running without a systemd unit")
+        return found, None
+
+    async def components_page(request: Request, person: Person) -> Response:
+        """Every service and engine on front and on each compute node, installed or not. Changes nothing and wakes nothing."""
+        if "manage-settings" not in person.can:
+            return page(request, "refused.html", person, status=403, why="Seeing what each machine has installed requires manage-settings.")
+        if initial_page(request):
+            return page(request, "components.html", person, deferred=True, fragment_url=fragment_url(request, "page"))
+        part = request.query_params.get("part") == "page" and request.query_params.get("complete") != "1"
+        found, answer = await component_inventory(person)
+        if answer is not None:
+            if part:
+                return fragment_error(request, person, "components-report", "page", answer)
+            return page(request, "refused.html", person, status=answer.status_code, why=answer.json()["error"]["message"])
         return page(request, "components_content.html" if part else "components.html", person, found=found, deferred=False)
 
     async def act_on_service(request: Request, person: Person) -> Response:

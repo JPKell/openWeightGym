@@ -18,26 +18,46 @@ def percentage(value, total):
     return max(0, min(100, value / total * 100)) if value is not None and total and total > 0 else None
 
 
-def service_states(services, fresh):
-    """Show installed or unconfirmed services, without presenting stale state as live."""
-    if not isinstance(services, list):
-        return None
-    labels = {'active': ('Running', 'green'), 'running': ('Running', 'green'),
-              'inactive': ('Stopped', 'secondary'), 'failed': ('Failed', 'red'),
-              'activating': ('Starting', 'blue'), 'deactivating': ('Stopping', 'yellow'),
-              'reloading': ('Reloading', 'blue')}
-    rows = []
-    for service in services:
-        if not isinstance(service, dict) or not isinstance(service.get('name'), str) or service.get('installed') is False:
+def component_pills(host, inventory):
+    """Select installed Components entries for this physical host, preserving conflicting node states."""
+    from loadcoach.components import everything
+    catalogue = everything()
+    nodes = [node for node in inventory.get('nodes', []) if node.get('name') in host.get('machines', [])]
+    if any(node.get('with_front') for node in nodes):
+        nodes += [node for node in inventory.get('nodes', []) if node.get('name') == 'front' and node not in nodes]
+    labels = {'running': ('Running', 'green'), 'stopped': ('Stopped', 'secondary'),
+              'failed': ('Failed', 'red'), 'starting': ('Starting', 'blue'),
+              'stopping': ('Stopping', 'yellow'), 'reloading': ('Reloading', 'blue'),
+              'masked': ('Masked', 'secondary')}
+    rows, seen = [], set()
+    for node in nodes:
+        if not node.get('answering'):
             continue
-        state = service.get('state')
-        label, tone = labels.get(state, ('Unknown', 'secondary')) if fresh else ('Unknown', 'secondary')
-        if fresh and state == 'active' and service.get('detail') == 'exited':
-            label, tone = 'Not running', 'secondary'
-        if service.get('installed') is not True and state == 'inactive':
-            label, tone = 'Unknown', 'secondary'
-        rows.append({**service, 'label': label, 'tone': tone})
-    return rows
+        for kind in ('services', 'engines'):
+            allowed = {row['id']: row for row in catalogue[kind]}
+            for source in node.get(kind, []):
+                identity = source.get('id')
+                if identity not in allowed or source.get('installed') is not True:
+                    continue
+                if kind == 'services':
+                    label, tone = labels.get(source.get('state'), ('Unknown', 'secondary'))
+                    if source.get('state') == 'running' and source.get('detail') == 'exited':
+                        label, tone = 'Not running', 'secondary'
+                else:
+                    label, tone = (('Ready', 'green') if source.get('available') else
+                                   ('Turned off', 'secondary') if not source.get('enabled') else ('Not usable', 'red'))
+                key = (kind, identity, label, tone, source.get('unit', ''))
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append({'id': identity, 'kind': kind, 'node': node['name'],
+                             'name': identity if kind == 'services' else allowed[identity]['label'],
+                             'unit': source.get('unit') or source.get('why') or identity,
+                             'state': source.get('state', ''), 'label': label, 'tone': tone})
+    for row in rows:
+        if sum((one['kind'], one['id']) == (row['kind'], row['id']) for one in rows) > 1:
+            row['name'] += ' at ' + row['node']
+    return rows if any(node.get('answering') for node in nodes) else None
 
 
 def hosts_view(hosts, poll):
@@ -66,7 +86,6 @@ def hosts_view(hosts, poll):
         identity = source.get('fingerprint') or 'unidentified:' + ','.join(source.get('machines', []))
         host.update(identity=identity, fresh=fresh, age=age, has_inventory=bool(snapshot),
                     uptime=uptime if uptime is not None and uptime >= 0 else None,
-                    services=service_states(snapshot.get('services'), fresh),
                     gpu_inventory_known=isinstance(snapshot.get('cards'), list), gpus=cards, disks=disks,
                     excluded_gpu_ids=[*snapshot.get('excluded_gpu_ids', []),
                                       *(gpu['card'] for gpu in snapshot.get('cards', []) if is_integrated(gpu))],
@@ -76,8 +95,6 @@ def hosts_view(hosts, poll):
                     label='Reporting' if fresh else ('Stale' if snapshot else 'No readings') if source.get('state') == 'ready'
                     else {'not answering': 'Offline', 'sleeping': 'Sleeping', 'unknown': 'Unknown'}.get(source.get('state'), 'Unknown'),
                     href='/telemetry/' + source['fingerprint'] if source.get('fingerprint') else '/telemetry?node=' + quote(identity, safe=''))
-        host['search'] = ' '.join([source.get('hostname', ''), *source.get('machines', []),
-                                 *(f"GPU {gpu['card']} {gpu['model']}" for gpu in cards)]).lower()
         result.append(host)
     return sorted(result, key=lambda host: (host.get('hostname', '').casefold(), host['identity']))
 

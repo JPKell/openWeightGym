@@ -25,8 +25,9 @@
       const total = index === 0 ? 16 : 24;
       return { id: `host-${index}`, name, cores: front ? 8 : index % 2 ? 32 : 24,
         uptime: `${index + 2}d 3h 12m`,
-        installedServices: (front ? ['weightroom', 'turnstile', 'toollocker', 'spotter'] : ['loadcoach', 'spotter', 'voice'])
-          .map((name, service) => ({name, running: scenario === 'healthy' || service !== 2})),
+        installedComponents: (front ? ['weightroom', 'turnstile', 'toollocker', 'spotter'] : ['loadcoach', 'spotter', 'voice'])
+          .map((name, service) => ({id:name, name, kind:'services', running: scenario === 'healthy' || service !== 2}))
+          .concat(front ? [] : [{id:'llama_cpp', name:'llama.cpp', kind:'engines', label:'Ready'}]),
         services: front ? ['Front'] : index === 0 ? ['GPU compute', 'CPU compute'] : ['Compute'],
         state: scenario === 'stale' ? 'stale' : scenario === 'healthy' ? 'reporting' : index === 2 ? 'offline' : 'reporting',
         cpu: front ? 12 : index === 0 ? 1 : 31 + index * 13 % 49,
@@ -59,7 +60,8 @@
       const element = clone('#summary-value');
       $('[data-label]', element).textContent = label;
       $('[data-value]', element).textContent = value;
-      $('[data-note]', element).textContent = note;
+      if (note) $('[data-note]', element).textContent = note;
+      else $('[data-note]', element).remove();
       container.append(element);
     });
   }
@@ -85,15 +87,10 @@
     });
   }
   function inventory() {
-    const query = $('#host-search').value.trim().toLowerCase();
-    const filter = $('#host-filter').value;
-    const hosts = state.hosts.filter(host => `${host.name} ${host.services.join(' ')} ${host.gpus.map(gpu => `GPU ${gpu.slot} ${gpu.name}`).join(' ')}`.toLowerCase().includes(query) &&
-      (filter === 'all' || (filter === 'attention' ? !fresh(host) : host.state === filter)))
-      .sort((a, b) => ($('#host-sort').value === 'attention' ? Number(fresh(a)) - Number(fresh(b)) :
-        $('#host-sort').value === 'gpus' ? b.gpus.length - a.gpus.length : 0) || a.name.localeCompare(b.name));
+    const hosts = [...state.hosts].sort((a, b) => a.name.localeCompare(b.name));
     const devices = hosts.flatMap(host => host.gpus);
     $('#host-total').textContent = state.hosts.length;
-    $('#host-count').textContent = hosts.length === state.hosts.length ? String(hosts.length) : `${hosts.length}/${state.hosts.length}`;
+    $('#host-count').textContent = hosts.length;
     $('#inventory-total').textContent = `${hosts.length} hosts · ${devices.length} GPUs`;
     $('#all-hosts').setAttribute('aria-pressed', String(state.selected == null));
     $('#host-list').replaceChildren();
@@ -127,15 +124,12 @@
     });
     const allDevices = state.hosts.flatMap(host => host.gpus);
     totals($('#fleet-totals'), [
-      ['Hosts reporting', `${state.hosts.filter(fresh).length} / ${state.hosts.length}`, 'Fleet · fresh telemetry'],
-      ['GPU devices', allDevices.length, 'Fleet · all discovered devices'],
-      ['VRAM installed', `${allDevices.reduce((sum, gpu) => sum + gpu.total, 0)} GiB`, 'Includes offline inventory'],
-      ['Needs attention', state.hosts.filter(host => !fresh(host)).length, 'Offline or stale hosts']
+      ['Hosts reporting', `${state.hosts.filter(fresh).length} / ${state.hosts.length}`],
+      ['GPU devices', allDevices.length],
+      ['VRAM installed', `${allDevices.reduce((sum, gpu) => sum + gpu.total, 0)} GiB`],
+      ['Needs attention', state.hosts.filter(host => !fresh(host)).length]
     ]);
-    $('#no-host-match').hidden = !!hosts.length;
     $('#fleet-empty').hidden = !!hosts.length;
-    $('#empty-title').textContent = state.hosts.length ? 'No matching hosts' : 'No hosts registered';
-    $('#empty-note').textContent = state.hosts.length ? 'Try a different host name or GPU model.' : 'Hardware will appear here when a host reports telemetry.';
   }
   function selectHost(id, tab = 'processor') {
     state.selected = id;
@@ -183,14 +177,16 @@
     $('#host-subtitle').textContent = fresh(host) ? 'Reading 4s ago' : hostAge(host);
     $('#host-uptime-value').textContent = fresh(host) ? host.uptime : 'Unknown';
     $('#host-services').replaceChildren();
-    host.installedServices.forEach(service => {
+    host.installedComponents.forEach(service => {
       const pill = clone('#telemetry-service-pill');
-      const label = fresh(host) ? service.running ? 'Running' : 'Stopped' : 'Unknown';
+      const label = fresh(host) ? service.kind === 'engines' ? service.label : service.running ? 'Running' : 'Stopped' : 'Unknown';
       pill.dataset.service = service.name;
+      pill.dataset.component = service.id;
+      pill.dataset.componentKind = service.kind;
       pill.textContent = `${service.name} · ${label}`;
-      pill.title = `${service.name}.service · ${label}`;
-      pill.classList.toggle('bg-secondary-lt', label !== 'Running');
-      pill.classList.toggle('bg-green-lt', label === 'Running');
+      pill.title = `${service.id}${service.kind === 'services' ? '.service' : ''} · ${label}`;
+      pill.classList.toggle('bg-secondary-lt', !['Running', 'Ready'].includes(label));
+      pill.classList.toggle('bg-green-lt', ['Running', 'Ready'].includes(label));
       $('#host-services').append(pill);
     });
     badge($('#host-state'), host);
@@ -303,7 +299,7 @@
     $('#graph-title').textContent = gpu ? `GPU ${gpu.slot} · ${gpu.name} · ${gpu.total} GiB` :
       state.tab === 'compare' ? `All ${host.gpus.length} GPUs · one line per device` : state.tab === 'storage' ? 'Storage volumes' : 'Processor and memory';
     $('#graph-note').textContent = fresh(host) ? 'Current readings in each graph header' : 'Current values unknown · retained samples shown';
-    $('#chart-context').textContent = `${$('#range').selectedOptions[0].textContent} · ${Intl.DateTimeFormat().resolvedOptions().timeZone} · gaps indicate missing samples · drag a graph to zoom`;
+    $('#chart-context').textContent = `${$('#range').selectedOptions[0].textContent} · ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
     const options = specs(host);
     if (!options.some(spec => spec.title === state.metric)) state.metric = options[0].title;
     $('#metric-choices').replaceChildren();
@@ -347,9 +343,6 @@
   function allHosts() { state.selected = null; render(); }
   $('#all-hosts').onclick = allHosts;
   $('#back-to-grid').onclick = () => { allHosts(); $('#all-hosts').focus({ preventScroll: true }); };
-  $('#host-search').oninput = inventory;
-  $('#host-filter').onchange = inventory;
-  $('#host-sort').onchange = inventory;
   $('#fleet-size').onchange = makeFleet;
   $('#scenario').onchange = makeFleet;
   $('#range').onchange = () => { state.hours = +$('#range').value; state.zoom = [0, 100]; renderGraphs(); };

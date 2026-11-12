@@ -1,7 +1,7 @@
 {% from 'parts.html' import page_header, section_title, card, alert, swaps %}
 {% from 'navigation_parts.html' import pills, pill_button %}
-{% from 'telemetry_parts.html' import amount, state, meter, snapshot, gpu_table, host_tile, host_header, uptime, service_pill %}
-{% from 'telemetry_control_parts.html' import power_controls, service_controls %}
+{% from 'telemetry_parts.html' import amount, state, meter, snapshot, gpu_table, host_tile, host_header, service_pill %}
+{% from 'telemetry_control_parts.html' import power_controls %}
 <div id="telemetry-workspace" data-host-identity="{{ host.identity if host else '' }}" data-range="{{ hours }}:{{ until }}" hx-get="{{ refresh_url }}" hx-trigger="every {{ poll }}s" hx-target="this" hx-swap="outerHTML show:none" hx-push-url="false" hx-sync="this:replace">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
     {{ page_header('Telemetry') }}
@@ -10,24 +10,18 @@
   {% if request.query_params.get('said') %}{% call alert('danger' if request.query_params.get('failed') else 'info', class_='py-2', role='status') %}{{ request.query_params.get('said') }}{% endcall %}{% endif %}
   {% call alert('warning', class_='py-2', role='status', attrs={'id':'telemetry-refresh-error','hidden':''}) %}Refresh failed. Values shown are from the previous snapshot. Retrying automatically.{% endcall %}
   <div class="tw-totals mb-3" id="fleet-totals" aria-label="Fleet hardware summary">
-    <div class="tw-total"><span class="small text-secondary">Hosts reporting</span><strong>{{ summary.reporting }} / {{ summary.total }}</strong><small class="text-secondary">Fresh telemetry</small></div>
-    <div class="tw-total"><span class="small text-secondary">Known GPU devices</span><strong>{{ summary.gpus }}</strong><small class="text-secondary">{{ 'Some inventory unavailable' if summary.partial else 'One count per physical device' }}</small></div>
-    <div class="tw-total"><span class="small text-secondary">Known VRAM installed</span><strong>{{ amount(summary.vram, 'memory') }}</strong><small class="text-secondary">Includes retained inventory</small></div>
-    <div class="tw-total"><span class="small text-secondary">Needs attention</span><strong>{{ summary.attention }}</strong><small class="text-secondary">Offline, stale, or unknown</small></div>
-  </div>
-  <div class="tw-filters d-flex flex-wrap align-items-center gap-2 mb-3">
-    <label class="visually-hidden" for="host-search">Find a host or GPU</label><input id="host-search" type="search" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Find a host or GPU…">
-    <select id="host-filter" class="form-select form-select-sm w-auto" aria-label="Filter hosts"><option value="all">All states</option><option value="attention">Needs attention</option><option value="reporting">Reporting</option><option value="offline">Offline</option></select>
-    <select id="host-sort" class="form-select form-select-sm w-auto" aria-label="Sort hosts"><option value="name">Name A–Z</option><option value="attention">Attention first</option><option value="gpus">Most GPUs</option></select>
+    <div class="tw-total"><span class="small text-secondary">Hosts reporting</span><strong>{{ summary.reporting }} / {{ summary.total }}</strong></div>
+    <div class="tw-total"><span class="small text-secondary">Known GPU devices</span><strong>{{ summary.gpus }}</strong>{% if summary.partial %}<small class="text-secondary">Some inventory unavailable</small>{% endif %}</div>
+    <div class="tw-total"><span class="small text-secondary">Known VRAM installed</span><strong>{{ amount(summary.vram, 'memory') }}</strong></div>
+    <div class="tw-total"><span class="small text-secondary">Needs attention</span><strong>{{ summary.attention }}</strong></div>
   </div>
   <div class="tw-layout">
     <aside class="tw-sidebar" aria-label="Host navigation">
       {% call card('Physical hosts', body=false, class_='mb-0 tw-hosts') %}
         <a class="tw-host-link text-decoration-none" href="/telemetry"{% if not host %} aria-current="page"{% endif %} {{ swaps('telemetry-workspace', true) }}><span><strong>All hosts</strong><small class="d-block text-secondary">Fleet overview</small></span><span class="badge bg-blue-lt">{{ hosts|length }}</span></a>
         <div id="host-list">
-        {% for one in hosts %}<a class="tw-host-link text-decoration-none" href="{{ one.href }}"{% if host and host.identity == one.identity %} aria-current="page"{% endif %} data-host="{{ one.identity }}" data-search="{{ one.search }}" data-fresh="{{ 'true' if one.fresh else 'false' }}" data-state="{{ one.state }}" data-gpus="{{ one.gpus|length }}" data-name="{{ one.hostname|lower }}" {{ swaps('telemetry-workspace', true) }}><span class="tw-host-name"><strong>{{ one.hostname }}</strong><small class="d-block text-secondary">{{ one.gpus|length }} known GPUs · {{ one.label }}</small></span><span class="tw-indicator" data-state="{{ 'reporting' if one.fresh else 'offline' }}" aria-hidden="true"></span></a>{% endfor %}
+        {% for one in hosts %}<a class="tw-host-link text-decoration-none" href="{{ one.href }}"{% if host and host.identity == one.identity %} aria-current="page"{% endif %} data-host="{{ one.identity }}" {{ swaps('telemetry-workspace', true) }}><span class="tw-host-name"><strong>{{ one.hostname }}</strong><small class="d-block text-secondary">{{ one.gpus|length }} known GPUs · {{ one.label }}</small></span><span class="tw-indicator" data-state="{{ 'reporting' if one.fresh else 'offline' }}" aria-hidden="true"></span></a>{% endfor %}
         </div>
-        <p id="no-host-match" class="text-secondary small p-2 mb-0" hidden>No matching hosts.</p>
         <div class="small text-secondary border-top p-3"><span id="host-count">{{ hosts|length }}</span> hosts</div>
       {% endcall %}
     </aside>
@@ -35,11 +29,11 @@
     {% if not host %}
       {% call card('Fleet overview', class_='mb-0', body_class='p-3', actions='<span class="small text-secondary">Select a host or GPU</span>'|safe) %}
         <div id="host-grid" class="tw-grid">{% for one in hosts %}{{ host_tile(one) }}{% endfor %}</div>
-        <div id="fleet-empty" class="p-3"{% if hosts %} hidden{% endif %}><strong>{{ 'No matching hosts' if hosts else 'No hosts registered' }}</strong><p class="text-secondary mb-0 mt-1">{{ 'Try a different search or filter.' if hosts else 'Telemetry appears when a host reports its hardware.' }}</p></div>
+        <div id="fleet-empty" class="p-3"{% if hosts %} hidden{% endif %}><strong>No hosts registered</strong><p class="text-secondary mb-0 mt-1">Telemetry appears when a host reports its hardware.</p></div>
       {% endcall %}
     {% else %}
       {% call card(class_='mb-0 tw-focus', body=false, attrs={'id':'host-view'}) %}
-        {% call host_header(host.hostname, snapshot(host)) %}{{ state(host) }}<a href="/telemetry" class="btn btn-outline-secondary btn-sm" {{ swaps('telemetry-workspace', true) }}>All hosts</a>{% endcall %}
+        {% call host_header(host.hostname, snapshot(host), host.uptime) %}{{ state(host) }}<a href="/telemetry" class="btn btn-outline-secondary btn-sm" {{ swaps('telemetry-workspace', true) }}>All hosts</a>{% endcall %}
         <div class="p-3">
           {% if not host.fresh %}{% call alert('warning', class_='py-2', role='status') %}Current readings are unknown. Retained history and known device capacity remain available.{% endcall %}{% endif %}
           <div class="tw-readings mb-3" id="host-totals" aria-label="Selected host readings">
@@ -67,11 +61,10 @@
             </section>
             <aside class="tw-inventory" aria-label="Device capacity">
               <div class="mb-3">{% include 'host_models.html' %}</div>
-              <p class="small mb-3" id="host-uptime">Uptime <strong>{{ uptime(host.uptime) }}</strong></p>
-              {{ section_title('Services', wrapper_class='mb-2') }}
-              <div class="d-flex flex-wrap gap-1 mb-3" role="list" aria-label="Installed services">
-                {% for service in host.services or [] %}{{ service_pill(service) }}
-                {% else %}<span class="small text-secondary">{{ 'Service status unavailable' if host.services is none else 'No installed services reported' }}</span>{% endfor %}
+              {{ section_title('Services and engines', wrapper_class='mb-2') }}
+              <div class="d-flex flex-wrap gap-1 mb-3" role="list" aria-label="Installed services and engines">
+                {% for service in host.components or [] %}{{ service_pill(service) }}
+                {% else %}<span class="small text-secondary">{{ 'Component status unavailable' if host.components is none else 'No installed components reported' }}</span>{% endfor %}
               </div>
               {{ section_title('Device capacity', wrapper_class='mb-1') }}<p class="small text-secondary mb-2">{{ host.gpus|length }} known GPU devices</p>
               {% if host.gpus %}{{ gpu_table(host, true) }}{% else %}<p class="small text-secondary">{{ 'No GPU devices reported' if host.has_inventory else 'Device inventory unavailable' }}</p>{% endif %}
@@ -80,10 +73,6 @@
               {% if machine_controls %}
                 {{ section_title('Power', wrapper_class='mt-3 mb-2') }}
                 {{ power_controls(machine_controls, control_return_to) }}
-                {% if machine_controls.may_act %}
-                  {{ section_title('Service controls', wrapper_class='mt-3 mb-2') }}
-                  {{ service_controls(machine_controls, control_return_to) }}
-                {% endif %}
               {% elif controls_error %}<p class="small text-warning" role="status">{{ controls_error }}</p>{% endif %}
             </aside>
           </div>

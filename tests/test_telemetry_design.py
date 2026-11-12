@@ -134,13 +134,10 @@ def test_unknown_sensors_offline_and_real_zero_are_distinct(preview):
     assert set(page.locator('#host-grid [data-gpu-load]').all_text_contents()) == {'—'}
 
 
-def test_filter_empty_and_cpu_only_hosts(preview):
+def test_empty_and_cpu_only_hosts(preview):
     page = preview
-    page.locator('#host-search').fill('RTX A4000')
-    playwright.expect(page.locator('#host-grid [data-host]')).to_have_count(1)
-    page.locator('#host-search').fill('not-a-host')
-    playwright.expect(page.locator('#empty-title')).to_have_text('No matching hosts')
-    page.locator('#host-search').fill('')
+    playwright.expect(page.locator('#host-grid [data-host]')).to_have_count(4)
+    playwright.expect(page.locator('#host-search, #host-filter, #host-sort')).to_have_count(0)
     page.get_by_role('button', name='Open front telemetry', exact=True).click()
     playwright.expect(page.locator('#cpu-only')).to_be_visible()
     playwright.expect(page.get_by_role('tab')).to_have_count(2)
@@ -190,12 +187,7 @@ def test_real_shell_kpis_and_workspace_stay_aligned(preview):
     page.get_by_role('button', name='Inspect orion GPU 1', exact=True).click()
     assert page.locator('#fleet-totals').inner_text() == before
     assert page.locator('#fleet-totals').bounding_box() == kpis
-    page.locator('#host-filter').select_option('offline')
-    assert page.locator('#fleet-totals').inner_text() == before
-    playwright.expect(page.locator('#host-list [data-host-open]')).to_have_count(1)
-    page.locator('#host-filter').select_option('all')
-    page.locator('#host-sort').select_option('gpus')
-    playwright.expect(page.locator('#host-list [data-name]').first).to_have_text('orion')
+    playwright.expect(page.locator('#host-list [data-host-open]')).to_have_count(4)
     page.locator('#sidebar-toggle').click()
     playwright.expect(page.locator('#site-sidebar')).to_be_hidden()
     assert page.locator('#main-view').bounding_box()['width'] > workspace['width']
