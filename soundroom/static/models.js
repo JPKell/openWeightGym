@@ -6,17 +6,20 @@
   const $ = name => document.getElementById('am-' + name);
   const params = new URLSearchParams(location.search);
   const computeNodes = JSON.parse($('nodes').textContent);
-  const inventories = new Map(), failures = new Set(), drafts = new Map();
+  const inventories = new Map(), failures = new Set(), drafts = new Map(), installations = new Map();
   const kinds = {music:'Music',sound:'Sound effects',speech:'Speech',clone:'Voice cloning',design:'Voice design',transcription:'Transcription',alignment:'Alignment',diarization:'Speaker detection'};
   let activeNode = params.get('node') || computeNodes[0]?.name || '';
   let inventory = {}, nodes = [], choices = [], selected = null, task = 'all', section = 'files';
   let editing = false, dirty = false, busy = false, loading = true, initialized = false;
+  let installTimer, checkingInstallations=false, installRefreshNeeded=false;
+  const terminal = job => ['complete','failed'].includes(job.state);
   const element = (tag, text, className) => { const one = document.createElement(tag); if (text !== undefined) one.textContent = text; if (className) one.className = className; return one; };
   const message = error => { $('message').hidden = !error; $('message').textContent = error || ''; };
   const key = (name=selected?.name || '', node=activeNode) => JSON.stringify([name ? node : '',name]);
   const available = name => inventories.has(name) && !failures.has(name);
   const accepting = name => available(name) && computeNodes.find(one => one.name === name)?.accepting_work !== false;
   const targets = () => [...$('install-targets').querySelectorAll('input:checked')].map(input=>input.value);
+  const installing = () => !selected && [...installations.values()].some(job=>!terminal(job) && job.name === $('name').value.trim() && targets().includes(job.destination));
   const targetCards = () => selected ? inventory.cards || [] : (inventories.get(targets()[0])?.cards || []).filter(card=>targets().every(node=>(inventories.get(node)?.cards || []).includes(card)));
   function renderTargets(names=[activeNode]) {
     const area=$('install-targets').querySelector('[data-target-choices]');
@@ -182,8 +185,8 @@
     const reachable = available(activeNode);
     $('editor-state').textContent = !reachable ? 'Node unavailable' : selected ? 'Installed' : 'New model';
     $('editor-context').textContent = selected ? 'Editing ' + selected.name + ' on ' + activeNode + '. Changes apply to this installation.' : 'Choose a managed file, assign hardware and review the output defaults.';
-    $('submit').textContent = busy ? 'Saving…' : selected ? 'Save model' : destinations.length > 1 ? 'Install on ' + destinations.length + ' nodes' : 'Add model';
-    $('submit').disabled = busy || !reachable || (!selected && (!destinations.length || destinations.some(node=>!accepting(node))));
+    $('submit').textContent = busy ? 'Saving…' : installing() ? 'Installing…' : selected ? 'Save model' : destinations.length > 1 ? 'Install on ' + destinations.length + ' nodes' : 'Add model';
+    $('submit').disabled = busy || installing() || !reachable || (!selected && (!destinations.length || destinations.some(node=>!accepting(node))));
     $('install-targets').querySelectorAll('input').forEach(input=>{ input.disabled=Boolean(selected) || busy || (!input.checked && !accepting(input.value)); });
     $('target-note').textContent = selected ? 'Changes apply to this installation on ' + activeNode + '.' : hardwareError() || (!destinations.length ? 'Select at least one destination node.' : destinations.some(node=>!accepting(node)) ? 'A selected node is unavailable. Deselect it or retry to reconnect.' : destinations.some(node=>!(inventories.get(node)?.cards || []).length) ? 'CPU only is the default when a selected node has no audio GPUs. The same configuration applies to every selected node.' : 'Select one or more nodes. The same configuration applies to every selected node.');
     const runtime = (inventory.engines?.engines || []).find(one => one.id === 'audiocpp');
@@ -346,11 +349,12 @@
     activeNode=(accepting(activeNode) ? activeNode : computeNodes.find(one=>accepting(one.name))?.name) || activeNode;
     section='files'; populate(); updateLocation(); renderProfiles(); $('install-targets').querySelector('input:not(:disabled)')?.focus();
   }
-  async function refresh() {
-    if (busy) return;
+  async function refresh(background=false) {
+    if (busy) return false;
     captureDraft(); $('retry').disabled=true;
     try {
       const outcomes=await Promise.allSettled([call('/model-files'),...computeNodes.map(one=>call('/soundroom-models',undefined,one.name))]);
+      if (!root.isConnected) return false;
       const files=outcomes[0];
       let fileError='';
       if (files.status === 'fulfilled') nodes=files.value.nodes || [];
@@ -362,7 +366,11 @@
       }
       const warning=[fileError,failures.size ? 'Unavailable nodes: ' + [...failures].join(', ') + '. Last known configurations remain visible.' : '',!computeNodes.length ? 'No compute nodes are configured. Add one under Compute nodes first.' : ''].filter(Boolean).join(' ');
       $('load-error').hidden=!warning; $('load-error-text').textContent=warning;
-      if (!initialized) {
+      if (background === true) {
+        // Completion updates the library without replacing a form the user is filling in.
+        $('controls').disabled=busy || !available(activeNode);
+        updateSummary();
+      } else if (!initialized) {
         const requested=params.get('model');
         if (!params.get('node') && requested) activeNode=computeNodes.find(one=>(inventories.get(one.name)?.models || []).some(row=>row.name === requested))?.name || activeNode;
         if (!params.get('node') && !available(activeNode)) activeNode=computeNodes.find(one=>available(one.name))?.name || activeNode;
@@ -372,7 +380,44 @@
       } else populate(selected?.name || '');
       renderProfiles();
       $('add').disabled=!computeNodes.some(one=>accepting(one.name));
-    } finally { $('retry').disabled=false; }
+      return true;
+    } finally { if (root.isConnected) $('retry').disabled=false; }
+  }
+  function showInstallations(error='') {
+    const jobs=[...installations.values()];
+    $('install-status').hidden=!jobs.length;
+    const kind=error ? 'warning' : jobs.some(job=>job.state === 'failed') ? 'danger' : jobs.every(terminal) ? 'success' : 'info';
+    for (const value of ['info','warning','danger','success']) $('install-status').classList.toggle('alert-' + value,value === kind);
+    const states={queued:'Queued',promoting:'Preparing files',copying:'Copying files',complete:'Installed',failed:'Failed'};
+    $('install-text').textContent=jobs.map(job=>job.name + ' on ' + job.destination + ': ' + (states[job.state] || job.state) +
+      (job.state === 'copying' && job.of ? ' (' + Math.round(100 * (job.done || 0) / job.of) + '%)' : '') + (job.why ? ' · ' + job.why : '')).join('; ') + (error ? '. Progress unavailable: ' + error : '');
+    $('install-retry').hidden=!error;
+  }
+  async function checkInstallations() {
+    if (!root.isConnected || checkingInstallations) return;
+    clearTimeout(installTimer);
+    const pending=[...installations.values()].filter(job=>!terminal(job));
+    if (!pending.length && !installRefreshNeeded) return;
+    checkingInstallations=true;
+    try {
+      if (pending.length) {
+        const query=new URLSearchParams(); pending.forEach(job=>query.append('install',job.id));
+        const answer=await call('/soundroom-installations?' + query);
+        if (!root.isConnected) return;
+        const found=new Map((answer.installations || []).map(job=>[job.id,job]));
+        if (pending.some(job=>!found.has(job.id))) throw new Error('Some jobs could not be found. Retry to check their status.');
+        for (const prior of pending) {
+          const job=found.get(prior.id);
+          Object.assign(prior,job);
+          if (job.state === 'complete') installRefreshNeeded=true;
+        }
+      }
+      showInstallations(); updateSummary();
+      if (installRefreshNeeded && !busy) installRefreshNeeded=!(await refresh(true));
+      if (!root.isConnected) return;
+      if (installRefreshNeeded || [...installations.values()].some(job=>!terminal(job))) installTimer=setTimeout(checkInstallations,1000);
+    } catch (error) { if (root.isConnected) showInstallations(error.message); }
+    finally { checkingInstallations=false; }
   }
   async function runTest() {
     if (!selected || dirty) return;
@@ -413,6 +458,7 @@
   $('form').addEventListener('submit',safe(async event=>{
     event.preventDefault(); message('');
     const machines=targets();
+    if (installing()) throw new Error('This model is already being installed on a selected node.');
     if (!selected && (!machines.length || machines.some(node=>!accepting(node)))) throw new Error('Choose at least one available destination node.');
     if (hardwareError()) { showSection('hardware'); throw new Error(hardwareError()); }
     for (const input of $('form').querySelectorAll('input,select,textarea')) if (!input.checkValidity()) {
@@ -444,10 +490,16 @@
     try {
       const answer=await call('/soundroom-models',{name,settings,new:!selected,source_machine:file.machine,...(!selected ? {machines} : {})});
       if (Array.isArray(answer.jobs) || answer.kind === 'model-install') {
+        const jobs=answer.jobs || [answer];
+        if (!jobs.length) throw new Error('The server did not return an installation job.');
+        jobs.forEach((job,index)=>installations.set(job.id,{...job,name:job.name || name,destination:machines[index] || job.machine || activeNode,state:job.state || 'queued'}));
+        installRefreshNeeded ||= jobs.some(job=>job.state === 'complete');
         drafts.delete(draftKey); dirty=false;
-        const query=new URLSearchParams({kind:'audio'});
-        (answer.jobs || [answer]).forEach(job=>query.append('install',job.id));
-        location.href='/models?' + query; return;
+        const kindFilter=$('kind').value;
+        populate(); renderTargets(machines); $('kind').value=kindFilter; taskChanged(); SuiteHardware.set('am',device,targetCards());
+        updateLocation(); renderProfiles(); showInstallations();
+        clearTimeout(installTimer); installTimer=setTimeout(checkInstallations,0);
+        return;
       }
       drafts.delete(draftKey); dirty=false;
       const savedName=answer.name || name;
@@ -459,9 +511,10 @@
     } finally { busy=false; $('controls').disabled=!available(activeNode); updateSummary(); }
   }));
   $('retry').addEventListener('click',safe(refresh));
+  $('install-retry').addEventListener('click',checkInstallations);
   $('test-button').addEventListener('click',safe(runTest));
   window.addEventListener('beforeunload',event=>{
-    if (!dirty && !drafts.size) return;
+    if (!root.isConnected || !dirty && !drafts.size) return;
     event.preventDefault(); event.returnValue='';
   });
   refresh().catch(error=>{ $('load-error').hidden=false; $('load-error-text').textContent=error.message; });

@@ -40,7 +40,9 @@ def studio(desk):
         for node,rows in inventories.items()]
     files.append(dict(name='vault',answering=True,files=[dict(path='/storage/voice.gguf',tier='storage',facts={'what':'audio','family':'kokoro'})]))
     state = dict(inventories=inventories, files=files, failed=set(), posts=[], requests=[], install=False, file_error=False,
-                 cards={node:['A','B'] for node in inventories}, nodes=nodes, families=families)
+                 cards={node:['A','B'] for node in inventories}, nodes=nodes, families=families,
+                 jobs={}, advance_installs=True, progress_error=False)
+    waiting={}
 
     def capture(route, path):
         parsed = urlsplit(path)
@@ -54,6 +56,19 @@ def studio(desk):
             route.fulfill(status=503 if state['file_error'] else 200,content_type='application/json',
                           body=json.dumps({'error':{'message':'File scan unavailable'}} if state['file_error'] else {'nodes':state['files']}))
             return True
+        if parsed.path == '/soundroom-installations':
+            jobs=[]
+            for number in parse_qs(parsed.query).get('install',[]):
+                job=state['jobs'][number]
+                if state['advance_installs']:
+                    job['state']='complete'
+                if job['state']=='complete' and number in waiting:
+                    target,body=waiting.pop(number)
+                    inventories[target].append(dict(name=body['name'],**copy.deepcopy(body['settings'])))
+                jobs.append(job)
+            route.fulfill(status=503 if state['progress_error'] else 200,content_type='application/json',
+                          body=json.dumps({'error':{'message':'Progress temporarily unavailable'}} if state['progress_error'] else {'installations':jobs}))
+            return True
         if parsed.path == '/soundroom-models':
             node = parse_qs(parsed.query).get('node',[''])[0]
             state['requests'].append(node)
@@ -65,12 +80,21 @@ def studio(desk):
                 body = route.request.post_data_json
                 state['posts'].append((node,copy.deepcopy(body)))
                 assert body['settings'].keys() <= {'engine','flags','audiocpp','gpus','alone','allow_split','adapters','min_context','order'}
-                row = next((one for one in inventories[node] if one['name'] == body['name']),None)
-                if row:
-                    row.update(body['settings'])
+                if state['install']:
+                    jobs=[]
+                    for target in body.get('machines',[node]):
+                        job=dict(kind='model-install',id=f'audio-{target}-{len(state["posts"])}',name=body['name'],machine=target,state='queued')
+                        state['jobs'][job['id']]=job
+                        waiting[job['id']]=(target,copy.deepcopy(body))
+                        jobs.append(copy.deepcopy(job))
+                    result={'jobs':jobs}
                 else:
-                    inventories[node].append(dict(name=body['name'],**body['settings']))
-                result = {'jobs':[{'kind':'model-install','id':'audio-'+target} for target in body.get('machines',[node])]} if state['install'] else {'name':body['name']}
+                    row = next((one for one in inventories[node] if one['name'] == body['name']),None)
+                    if row:
+                        row.update(body['settings'])
+                    else:
+                        inventories[node].append(dict(name=body['name'],**body['settings']))
+                    result={'name':body['name']}
             else:
                 result = dict(models=copy.deepcopy(inventories[node]),cards=state['cards'][node],catalogue={'families':families},
                               engines={'engines':[dict(id='audiocpp',available=True)]})
@@ -317,6 +341,8 @@ def test_multiple_node_pills_retain_drafts_and_track_every_install(studio):
     page.locator('#am-file').select_option(label='vault · storage')
     page.locator('#am-name').fill('fleet-voice')
     page.locator('#am-profiles [data-model="speaker"] [data-identity]').click()
+    page.locator('[data-section="output"]').click()
+    page.locator('#am-option-speed').fill('1.75')
     playwright.expect(targets.locator('input[value="atlas"]')).to_be_disabled()
     page.locator('#am-add').click()
     playwright.expect(page.locator('#am-name')).to_have_value('fleet-voice')
@@ -325,11 +351,65 @@ def test_multiple_node_pills_retain_drafts_and_track_every_install(studio):
     page.locator('#am-retry').evaluate('button=>button.click()')
     playwright.expect(page.locator('#am-submit')).to_have_text('Install on 2 nodes')
     playwright.expect(page.locator('#am-save-summary')).to_have_text('fleet-voice → atlas, nova')
+    dialogs=[]
+    page.on('dialog',lambda dialog:(dialogs.append(dialog.type),dialog.dismiss()))
+    page.evaluate('window.audioStudioDocument=true')
     page.locator('#am-submit').click()
-    page.wait_for_url('**/models?kind=audio&install=audio-atlas&install=audio-nova')
+    playwright.expect(page.locator('#am-install-text')).to_contain_text('fleet-voice on atlas: Installed')
+    playwright.expect(page.locator('#am-install-text')).to_contain_text('fleet-voice on nova: Installed')
+    playwright.expect(page.locator('#am-profiles [data-model="fleet-voice"] [data-placements] button')).to_have_count(2)
+    playwright.expect(page.locator('#am-name')).to_have_value('')
+    assert urlsplit(page.url).path=='/models/audio' and page.evaluate('window.audioStudioDocument')
+    assert not dialogs
     assert len(state['posts'])==1
     body=state['posts'][0][1]
     assert body['machines']==['atlas','nova'] and body['source_machine']=='vault'
+    page.locator('#am-profiles [data-model="speaker"] [data-identity]').click()
+    page.locator('[data-section="output"]').click()
+    playwright.expect(page.locator('#am-option-speed')).to_have_value('1.75')
+
+
+def test_background_installs_preserve_the_next_draft_and_report_partial_failure(studio):
+    page,state=studio
+    state['install']=True; state['advance_installs']=False
+    page.goto('http://console.test/models/audio?new=1')
+    page.locator('#am-install-targets input[value="nova"]').locator('..').click()
+    page.locator('#am-file').select_option(label='vault · storage')
+    page.locator('#am-name').fill('pending-voice')
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-install-text')).to_contain_text('pending-voice on atlas: Queued')
+    playwright.expect(page.locator('#am-name')).to_have_value('')
+    page.locator('#am-file').select_option(label='vault · storage')
+    page.locator('#am-name').fill('pending-voice')
+    playwright.expect(page.locator('#am-submit')).to_be_disabled()
+    page.locator('#am-name').fill('next-voice')
+    page.locator('#am-kind').select_option('speech')
+    for job in state['jobs'].values():
+        job.update(state='complete' if job['machine']=='atlas' else 'failed',why='' if job['machine']=='atlas' else 'Destination stopped answering')
+    playwright.expect(page.locator('#am-install-text')).to_contain_text('nova: Failed · Destination stopped answering')
+    playwright.expect(page.locator('#am-profiles [data-model="pending-voice"]')).to_be_visible()
+    playwright.expect(page.locator('#am-name')).to_have_value('next-voice')
+    playwright.expect(page.locator('#am-kind')).to_have_value('speech')
+    playwright.expect(page.locator('#am-file option:checked')).to_have_text('vault · storage')
+    playwright.expect(page.locator('#am-submit')).to_be_enabled()
+    assert len(state['posts'])==1 and urlsplit(page.url).path=='/models/audio'
+
+
+def test_install_progress_can_reconnect_without_resubmitting_or_losing_a_draft(studio):
+    page,state=studio
+    state['install']=True; state['progress_error']=True
+    page.goto('http://console.test/models/audio?new=1')
+    page.locator('#am-file').select_option(label='vault · storage')
+    page.locator('#am-name').fill('reconnect-voice')
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-install-retry')).to_be_visible()
+    page.locator('#am-name').fill('next-model-draft')
+    state['progress_error']=False
+    page.locator('#am-install-retry').click()
+    playwright.expect(page.locator('#am-install-text')).to_contain_text('reconnect-voice on atlas: Installed')
+    playwright.expect(page.locator('#am-install-retry')).not_to_be_visible()
+    playwright.expect(page.locator('#am-name')).to_have_value('next-model-draft')
+    assert len(state['posts'])==1
 
 
 def test_destination_validation_preserves_selections_when_node_goes_offline(studio):

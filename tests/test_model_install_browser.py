@@ -1,6 +1,7 @@
 """Models pills and cache/storage pickers in Chromium; no real model loads."""
 import json
 import re
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -75,6 +76,7 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
             value = {'models':[],'cards':['CUDA0'],'nodes':[{'name':'compute','state':'ready'},{'name':'rig','state':'ready'},
                 {'name':'retired','state':'offline','accepting_work':False,'lifecycle':'disabled'}],'engines':{'engines':[{'id':'sdcpp','available':True}]}}
         if base == '/mirrorwall-models/check': value = {'ready':False,'slots':[],'loras':[],'get_diffusion':[]}
+        if base == '/soundroom-installations': value = {'installations':[{'id':'fixture','name':'song','machine':'compute','state':'complete'}]}
         if base == '/soundroom-models' and route.request.method == 'GET':
             value = {'models':[],'cards':['CUDA0'],'catalogue':{'families':[{'family':'ace_step','name':'ACE','kinds':['music'],
                 'licence':'MIT','commercial':'yes','packages':[{'id':'ace','name':'ACE','folder':'/cache/audio/ace',
@@ -123,7 +125,9 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
         page.wait_for_timeout(200)
         assert not page.locator('#am-message').is_visible(), page.locator('#am-message').text_content()
         assert len(sent) == 2, page.locator('#am-form').evaluate('form => [...form.elements].filter(one => !one.checkValidity()).map(one => ({id:one.id,value:one.value,message:one.validationMessage}))')
-        page.wait_for_url('**/models?kind=audio&install=fixture',timeout=5000)
+        playwright.expect(page.locator('#am-install-text')).to_contain_text('song on compute: Installed')
+        assert urlsplit(page.url).path=='/models/audio'
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         assert sent[-1]['source_machine']=='front' and sent[-1]['settings']['flags']['model']=='/store/audio/ace/ace.gguf'
         assert not errors
         browser.close()

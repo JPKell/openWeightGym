@@ -5,7 +5,7 @@
 {% from 'audio_model_parts.html' import editor, studio_choice %}
 {% from 'models_parts.html' import placement, node_target %}
 {% block title %}Audio models · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><link rel="stylesheet" href="/static/audio-models.css?v=1"><script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/soundroom-static/models.js?v=13" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><link rel="stylesheet" href="/static/audio-models.css?v=1"><script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/soundroom-static/models.js?v=14" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom-models" data-audio-studio>
 {% call page_header('Audio models') %}<a href="/models?kind=audio" class="btn btn-outline-secondary">Catalogue</a><button type="button" class="btn btn-primary" id="am-add" disabled>Add audio model</button>{% endcall %}
@@ -16,6 +16,7 @@
 {{ kpi('Audio tasks','—',value_attrs={'id':'am-total-kinds'}) }}
 {% endcall %}
 {% call alert('warning',attrs={'id':'am-load-error','hidden':''}) %}<span id="am-load-error-text"></span><button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="am-retry">Retry</button>{% endcall %}
+{% call alert('info',attrs={'id':'am-install-status','hidden':''}) %}<span id="am-install-text" class="text-break"></span><button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="am-install-retry" hidden>Retry progress</button>{% endcall %}
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
 {% call pills('Audio task',buttons=true,class_='gap-1 mb-0') %}{% for key,label in [('all','All tasks'),('music','Music'),('voice','Voices'),('sound','Sound effects'),('understand','Understanding')] %}{{ pill_button(label,key == 'all',attrs={'data-audio-task':key}) }}{% endfor %}{% endcall %}
 <span class="small text-secondary" id="am-result-count" role="status" aria-live="polite">Loading audio models…</span>
