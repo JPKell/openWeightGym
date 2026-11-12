@@ -23,6 +23,22 @@ Current installation addresses, documented **2026-10-20**:
 | Browser voice | [Private HTTPS voice app](https://k-srv.tailaf60c6.ts.net/) |
 | Desktop voice | Front server, port `8447`; [download](https://10.77.10.42/static/LoadCoach-Voice.zip) |
 
+### Users page PostgreSQL totals (2026-11-12)
+
+Request `b68fbb54542836a05c510fd0a68f4f77` failed in the account-detail API because
+PostgreSQL token sums returned `Decimal` values. `Log.usage` now returns integer totals.
+Six local checks passed, including a real PostgreSQL account-detail response; authenticated
+live checks returned 200 for `/users` and all six account-detail APIs, then revoked the test sessions.
+
+Only front Turnstile was restarted, after confirming no active requests, batches or queued/running
+benchmarks. Its `99-users-usage.conf` drop-in pins `PYTHONPATH` to
+`~/.local/share/ai-suite/releases/users-usage-5c29ff29-066adbe1/source`: runtime commit
+`5c29ff29` plus the reviewed `loadcoach/log.py` fix. Dependencies, settings and data stay in place.
+Recovery preimages and activation results are under
+`~/.local/share/ai-suite/recovery/users-usage-5c29ff29-066adbe1/`. After work drains, removing
+that drop-in, reloading systemd and restarting Turnstile restores the previous runtime and its bug.
+Remove the pin during a subsequent deployment only when that runtime includes the fix.
+
 ### Offline page latency (2026-11-03)
 
 Console reads now skip workers the passive node monitor has found unavailable. Accounts,

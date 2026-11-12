@@ -1213,3 +1213,64 @@ def test_routine_polls_are_swept_but_polls_inside_real_work_and_failures_are_kep
     assert sum(g["count"] for g in metrics(log.db, "alice", now=now)["groups"] if g["metric"] == "seconds") == 8
     prune(log.db, now=now + 2 * 86400)
     assert log.db.execute("SELECT COUNT(*) FROM observation_quiet").fetchone()[0] == 0
+
+
+def test_numeric_sums_from_postgresql_still_answer_as_json(tmp_path):
+    """PostgreSQL sums a BIGINT as NUMERIC, a Decimal in Python. /loadcoach/me (the caller's usage) and the
+    metrics must still be plain numbers: a Decimal made every /loadcoach/me of anyone with recent requests a 500."""
+    from decimal import Decimal
+    from loadcoach.log import Log
+    from loadcoach.observation_store import ingest, metrics
+    import time
+
+    class Rows(list):
+        """What a cursor gives back, already read."""
+
+        def fetchone(self):
+            """The first row, or None."""
+            return self[0] if self else None
+
+        def fetchall(self):
+            """Every row."""
+            return list(self)
+
+    class Numeric:
+        """The log's connection, giving every whole number back as PostgreSQL gives a sum of BIGINTs."""
+
+        def __init__(self, db):
+            """Wrap `db`."""
+            self.db = db
+
+        def __getattr__(self, name):
+            """Everything else as the wrapped connection has it."""
+            return getattr(self.db, name)
+
+        def execute(self, sql, *args):
+            """Run the statement, with each whole-number SUM(...) column as a Decimal."""
+            chosen, depth, column, sums = sql.split("SELECT", 1)[1].split(" FROM ", 1)[0], 0, "", []
+            for letter in chosen + ",":  # the columns, split at the commas outside brackets
+                depth += (letter == "(") - (letter == ")")
+                if letter == "," and not depth:
+                    sums.append(column.strip().upper().startswith("SUM("))
+                    column = ""
+                else:
+                    column += letter
+            return Rows(tuple(Decimal(value) if summed and type(value) is int else value for value, summed in zip(row, sums))
+                        for row in self.db.execute(sql, *args).fetchall())
+
+    log = Log(str(tmp_path / "log.db"))
+    log.add("request", "done", "jpk", model="m", prompt_tokens=20, answer_tokens=11)
+    log.add("request", "done", "jpk", model="m", prompt_tokens=11, answer_tokens=4)
+    record = {"request_id": "a" * 32, "trace_id": "b" * 32, "id": "c" * 16, "service": "loadcoach", "operation": "http",
+              "owner_id": "jpk", "at": time.time(), "seconds": 0.03, "status": 200, "outcome": "success", "finished": True, "ingress": False}
+    with log.db:
+        ingest(log.db, [record, {**record, "id": "d" * 16}], "compute")
+    plain = log.db
+    log.db = Numeric(plain)
+    usage = log.usage("jpk")
+    assert usage == {"requests": 2, "prompt_tokens": 31, "answer_tokens": 15}
+    assert all(type(value) is int for value in usage.values()) and json.loads(json.dumps(usage)) == usage
+    group = metrics(log.db, None)["groups"][0]
+    assert group["count"] == 2 and type(group["count"]) is int
+    json.dumps(metrics(log.db, None))
+    plain.close()

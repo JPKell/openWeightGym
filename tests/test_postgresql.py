@@ -631,3 +631,33 @@ def test_postgresql_private_migration_acceptance_rollback_and_recovery(postgres,
         assert result['recovery']['combined']['verification']['state'] == 'verified'
     assert not migration._marker(tmp_path).exists()
     assert source.path.is_file()
+
+
+def test_postgresql_usage_sums_are_plain_numbers(postgres):
+    """PostgreSQL sums BIGINTs as NUMERIC; the usage /loadcoach/me sends must still be plain integers."""
+    log = Log(postgres)
+    log.add("request", "done", "jpk", model="m", prompt_tokens=20, answer_tokens=11)
+    usage = log.usage("jpk")
+    assert usage == {"requests": 1, "prompt_tokens": 20, "answer_tokens": 11}
+    assert all(type(value) is int for value in usage.values()) and json.dumps(usage)
+
+
+def test_postgresql_user_details_serialize_nonzero_usage(postgres, tmp_path):
+    import httpx
+    from turnstile.app import Settings as TurnstileSettings, build_app as build_turnstile
+
+    settings = TurnstileSettings(
+        compute='127.0.0.1', data=str(tmp_path / 'data'), plugins_dir=str(tmp_path / 'plugins'),
+        groups={'admin': read_group('admin', {'can': ['superuser']})},
+        databases={'stores': {'accounts': {'engine': 'postgresql', 'dsn_file': os.environ['SUITE_TEST_POSTGRES_DSN_FILE']}},
+                   'bindings': {'weightroom.accounts': 'accounts'}})
+    wire = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})))
+    with TestClient(build_turnstile(settings, client=wire)) as client:
+        users, log = client.app.state.users, client.app.state.log
+        users.add('owner', 'admin')
+        key = users.new_key('owner', 'test')
+        log.add('request', 'done', 'owner', model='sample', prompt_tokens=20, answer_tokens=11)
+        response = client.get('/loadcoach/users/owner', headers={'authorization': 'Bearer ' + key})
+        assert response.status_code == 200, response.text
+        for row in response.json()['usage']:
+            assert row['requests'] == 1 and row['prompt_tokens'] == 20 and row['answer_tokens'] == 11

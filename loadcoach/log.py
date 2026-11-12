@@ -559,7 +559,8 @@ class Log:
             " FROM events WHERE user = ? AND kind = 'request' AND what != 'asked' AND at > ?",
             (user, time.time() - seconds),
         ).fetchone()
-        return {"requests": requests, "prompt_tokens": prompt or 0, "answer_tokens": answer or 0}
+        # PostgreSQL sums a BIGINT as NUMERIC, which arrives as a Decimal that JSON cannot carry.
+        return {"requests": int(requests), "prompt_tokens": int(prompt or 0), "answer_tokens": int(answer or 0)}
 
     def last_used(self) -> dict[str, str]:
         """When each model was last asked for, as far back as the log goes."""
