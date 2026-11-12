@@ -10,7 +10,7 @@ import pytest
 
 from test_weightroom import desk, desk_with_machine, sign_in  # noqa: F401
 from weightroom.app import chart
-from weightroom.telemetry_workspace import fleet_summary, history_groups, hosts_view
+from weightroom.telemetry_workspace import component_pills, fleet_summary, history_groups, hosts_view
 
 ROOT = Path(__file__).resolve().parents[1]
 HOST = 'a' * 64
@@ -101,12 +101,30 @@ def test_live_telemetry_chart_uses_browser_zone_and_utc_tooltips(telemetry_serve
             return chart.getOption().tooltip[0].formatter([{value:[at,5], seriesName:'Processor load'}]);
         }''', instant)
         assert hour in tooltip and '12:00' in tooltip and 'UTC' in tooltip and '5%' in tooltip
-        assert zone in page.locator('#chart-context').inner_text()
+        assert page.locator('#chart-context').inner_text() == zone
         browser.close()
 
 
 @pytest.fixture
-def control_server(fleet, desk_with_machine, monkeypatch):
+def component_reports(monkeypatch):
+    from loadcoach import components
+
+    async def inventory(config=None, running_here=(), **kwargs):
+        front = 'turnstile' in running_here
+        services = ([{'id': 'turnstile', 'installed': True, 'state': 'running'}] if front else
+                    [{'id': identity, 'installed': True, 'state': state} for identity, state in
+                     [('loadcoach', 'running'), ('voice', 'stopped'), ('spotter', 'failed'), ('docker', 'running')]])
+        return {'hostname': 'atlas', 'receipt': {}, 'services': services,
+                'engines': [] if front else [
+                    {'id': 'llama_cpp', 'installed': True, 'available': True, 'enabled': True},
+                    {'id': 'strata', 'installed': True, 'available': False, 'enabled': False},
+                    {'id': 'audiocpp', 'installed': False, 'available': False, 'enabled': False}]}
+
+    monkeypatch.setattr(components, 'here', inventory)
+
+
+@pytest.fixture
+def control_server(fleet, desk_with_machine, monkeypatch, component_reports):
     monkeypatch.setattr('loadcoach.machine_identity.fingerprint', lambda: HOST)
     rows, _ = fleet
     rows[0]['loaded'] = [{'model': 'test-model', 'machine': 'compute', 'state': 'ready'}]
@@ -116,20 +134,43 @@ def control_server(fleet, desk_with_machine, monkeypatch):
     return server, compute, machine, asked
 
 
+def test_component_pills_use_only_this_hosts_installed_components():
+    host = {'machines': ['compute', 'cpu']}
+    services = [{'id': 'loadcoach', 'installed': True, 'state': 'running'},
+                {'id': 'docker', 'installed': True, 'state': 'running'},
+                {'id': 'voice', 'installed': False, 'state': 'stopped'}]
+    report = {'nodes': [
+        {'name': 'front', 'answering': True, 'services': [{'id': 'turnstile', 'installed': True, 'state': 'running'}]},
+        {'name': 'compute', 'answering': True, 'with_front': True, 'services': services, 'engines': [
+            {'id': 'llama_cpp', 'installed': True, 'available': True, 'enabled': True},
+            {'id': 'strata', 'installed': False, 'available': False, 'enabled': False}]},
+        {'name': 'cpu', 'answering': True, 'services': services},
+        {'name': 'other-host', 'answering': True, 'services': [{'id': 'voice', 'installed': True, 'state': 'running'}]}]}
+    pills = component_pills(host, report)
+    assert [(row['id'], row['label']) for row in pills] == [
+        ('loadcoach', 'Running'), ('llama_cpp', 'Ready'), ('turnstile', 'Running')]
+    report['nodes'][2]['services'] = [{'id': 'loadcoach', 'installed': True, 'state': 'stopped'}]
+    names = [row['name'] for row in component_pills(host, report) if row['id'] == 'loadcoach']
+    assert names == ['loadcoach at compute', 'loadcoach at cpu']
+    assert component_pills({'machines': ['offline']}, {'nodes': [{'name': 'offline', 'answering': False}]}) is None
+
+
 def test_host_controls_and_models_are_in_the_inventory_column(control_server):
     server, _, _, _ = control_server
     response = server.get('/telemetry/' + HOST + '?hours=6&gpu=2')
     assert response.status_code == 200
     column = response.text.split('<aside class="tw-inventory"', 1)[1].split('</aside>', 1)[0]
     assert column.index('test-model') < column.index('>Device capacity</h2>')
-    assert 'Wake compute' in column and 'Restart loadcoach' in column and '>Sleep</button>' in column
+    assert 'Wake compute' in column and '>Sleep</button>' in column
+    assert 'Restart loadcoach' not in response.text and 'Service controls' not in response.text
+    assert '/machine/services/' not in response.text
     assert 'Services and power' not in response.text and 'Compute service and power controls' not in response.text
     assert f'name="return_to" value="/telemetry/{HOST}?hours=6&amp;gpu=2"' in column
     assert 'data-hold-refresh' in column
     sign_in(server, 'pat')
     restricted = server.get('/telemetry/' + HOST).text
     assert 'test-model' in restricted and 'Restart loadcoach' not in restricted and '>Sleep</button>' not in restricted
-    assert 'loadcoach · Running' in restricted and 'id="host-uptime"' in restricted
+    assert 'Component status unavailable' in restricted and 'id="host-uptime"' in restricted
 
 
 def test_host_actions_return_to_telemetry_and_refuse_another_physical_host(control_server):
@@ -156,7 +197,7 @@ def test_host_power_and_spotter_failure_stay_on_the_selected_host(control_server
     assert wrong_host.status_code == 400 and 'could not verify this physical host' in wrong_host.text
     assert 'poweroff' not in asked.read_text()
     compute.off = True
-    assert 'Restart loadcoach' in server.get(destination).text
+    assert '>Sleep</button>' in server.get(destination).text
     result = server.post('/machine/power/sleep', data={'return_to': destination, 'force': 'on'}, follow_redirects=False)
     assert result.status_code == 303 and result.headers['location'].startswith(destination + '?said=')
     machine.off = True
@@ -172,7 +213,12 @@ def test_host_controls_fit_and_preserve_confirmation_during_refresh(control_serv
         browser, page = browser_context(engine, server)
         page.goto('http://console.test/telemetry/' + HOST)
         column = page.locator('.tw-inventory')
-        playwright.expect(column.get_by_role('button', name='Restart loadcoach', exact=True)).to_be_visible()
+        playwright.expect(column.get_by_role('button', name='Sleep', exact=True)).to_be_visible()
+        playwright.expect(column.locator('[data-component=llama_cpp]')).to_have_text('llama.cpp · Ready')
+        assert page.get_by_role('button', name='Restart loadcoach', exact=True).count() == 0
+        assert column.locator('#host-uptime').count() == 0
+        positions = [page.locator(selector).bounding_box() for selector in ('#host-title', '#host-subtitle', '#host-uptime')]
+        assert max(box['y'] for box in positions) < min(box['y'] + box['height'] for box in positions)
         assert column.locator('.host-models').bounding_box()['y'] < column.get_by_role('heading', name='Device capacity').bounding_box()['y']
         force = column.get_by_label('Do not wait. Cut off whatever the compute service is answering', exact=True)
         force.check()
@@ -198,9 +244,7 @@ def test_inventory_freshness_zero_and_unknown_are_distinct(fleet):
     assert [gpu['card'] for gpu in online['gpus']] == [0, 2]
     assert online['gpus'][0]['load'] == 0
     assert online['uptime'] == 90061
-    assert [(service['name'], service['label']) for service in online['services']] == [
-        ('loadcoach', 'Running'), ('voice', 'Stopped'), ('spotter', 'Failed')]
-    assert offline['uptime'] is None and all(service['label'] == 'Unknown' for service in offline['services'])
+    assert offline['uptime'] is None
     assert offline['cpu'] is None and offline['gpus'][0]['memory_used'] is None
     assert offline['gpus'][0]['memory_total'] == 8 * 2**30
     summary = fleet_summary(views)
@@ -211,25 +255,25 @@ def test_inventory_freshness_zero_and_unknown_are_distinct(fleet):
 
 
 @pytest.mark.parametrize('uptime', [None, -1, float('nan'), float('inf'), '90061'])
-def test_unknown_uptime_and_legacy_service_evidence_stay_unknown(fleet, uptime):
+def test_unknown_uptime_stays_unknown(fleet, uptime):
     rows, _ = fleet
     rows[0]['telemetry']['up_for'] = uptime
-    rows[0]['telemetry']['services'] = [{'name': 'old-worker', 'state': 'inactive'},
-                                      {'name': 'old-running-worker', 'state': 'active'},
-                                      {'name': 'one-shot', 'state': 'active', 'detail': 'exited', 'installed': True}]
     host = hosts_view(rows, 10)[0]
     assert host['uptime'] is None
-    assert [service['label'] for service in host['services']] == ['Unknown', 'Running', 'Not running']
 
 
-def test_telemetry_renders_read_only_uptime_and_service_states(telemetry_server):
+def test_telemetry_renders_components_inventory_and_header_uptime(telemetry_server, component_reports):
     server, _, _ = telemetry_server
+    sign_in(server, 'jordan')
     detail = server.get('/telemetry/' + HOST).text
-    assert 'Uptime <strong>1d 1h 1m</strong>' in detail
+    header = detail.split('id="host-view"', 1)[1].split('id="host-totals"', 1)[0]
+    assert 'id="host-uptime-value">1d 1h 1m</span>' in header
     assert 'loadcoach · Running' in detail and 'voice · Stopped' in detail and 'spotter · Failed' in detail
+    assert 'llama.cpp · Ready' in detail and 'Strata · Turned off' in detail
+    assert 'data-component="docker"' not in detail and 'data-component="audiocpp"' not in detail
     assert 'data-service="missing"' not in detail and 'Restart loadcoach' not in detail
     offline = server.get('/telemetry/' + 'b' * 64).text
-    assert 'Uptime <strong>Unknown</strong>' in offline and 'loadcoach · Unknown' in offline
+    assert 'id="host-uptime-value">Unknown</span>' in offline and 'Component status unavailable' in offline
 
 
 def test_history_only_devices_and_heat_thresholds(fleet):
@@ -329,16 +373,15 @@ def test_live_browser_tabs_coloring_refresh_and_navigation(telemetry_server, tmp
         browser.close()
 
 
-def test_polling_preserves_filters_and_unsent_time_range(telemetry_server):
+def test_polling_preserves_unsent_time_range(telemetry_server):
     from test_console_browser import browser_context, playwright
     server, _, _ = telemetry_server
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         page.goto('http://console.test/telemetry/' + HOST)
-        page.locator('#host-search').fill('atlas')
         page.get_by_role('button', name='Refresh', exact=True).click()
-        playwright.expect(page.locator('#host-search')).to_have_value('atlas')
-        playwright.expect(page.locator('#host-list [data-host]:visible')).to_have_count(1)
+        playwright.expect(page.locator('#host-search, #host-filter, #host-sort')).to_have_count(0)
+        playwright.expect(page.locator('#host-list [data-host]:visible')).to_have_count(3)
         page.locator('#hours').fill('12')
         page.locator('#host-title').click()
         page.evaluate("document.querySelector('#telemetry-workspace').dataset.retained = 'yes'; htmx.trigger('#telemetry-workspace','htmx:poll:trigger')")

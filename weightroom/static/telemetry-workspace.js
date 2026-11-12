@@ -3,7 +3,7 @@
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const state = { identity: null, range: null, group: null, metric: null, zoom: [0, 100], search: '', filter: 'all', sort: 'name' };
+  const state = { identity: null, range: null, group: null, metric: null, zoom: [0, 100] };
   const heatColors = [120, 90, 60, 30, 0].map(hue => `hsl(${hue},60%,42%)`);
   let root, data, groups = [], chart, expanded, observer, opener, selected, dragging = false;
   const format = (value, unit) => value == null ? '—' : `${unit === ' GB' ? value.toFixed(1) : Math.round(value)}${unit}`;
@@ -12,27 +12,6 @@
   function dispose() {
     chart?.dispose(); expanded?.dispose(); observer?.disconnect();
     chart = expanded = observer = null;
-  }
-  function filter() {
-    state.search = $('#host-search', root).value;
-    state.filter = $('#host-filter', root).value;
-    state.sort = $('#host-sort', root).value;
-    const query = state.search.trim().toLowerCase();
-    const matches = element => element.dataset.search.includes(query) && (state.filter === 'all' ||
-      (state.filter === 'attention' ? element.dataset.fresh !== 'true' : state.filter === 'reporting' ?
-        element.dataset.fresh === 'true' : ['not answering', 'sleeping'].includes(element.dataset.state)));
-    ['#host-list', '#host-grid'].forEach(selector => {
-      const container = $(selector, root);
-      if (!container) return;
-      const rows = $$('[data-host]', container);
-      rows.sort((a, b) => (state.sort === 'gpus' ? +b.dataset.gpus - +a.dataset.gpus : state.sort === 'attention' ?
-        Number(a.dataset.fresh === 'true') - Number(b.dataset.fresh === 'true') : 0) || a.dataset.name.localeCompare(b.dataset.name));
-      rows.forEach(row => { row.hidden = !matches(row); container.append(row); });
-    });
-    const visible = $$('#host-list [data-host]', root).filter(matches).length;
-    $('#host-count', root).textContent = visible;
-    $('#no-host-match', root).hidden = !!visible;
-    if ($('#fleet-empty', root)) $('#fleet-empty', root).hidden = !!visible;
   }
   function prepareGroups() {
     groups = data.groups.map(group => ({ ...group, charts: group.charts.map(item => ({ ...item, lines: [{ name: group.title, ...item.told }] })) }));
@@ -179,7 +158,7 @@
     observer = new ResizeObserver(() => { chart?.resize(); expanded?.resize(); });
     observer.observe($('.tw-history', root));
     observer.observe($('#main-view', root));
-    $('#chart-context', root).textContent = `${Intl.DateTimeFormat().resolvedOptions().timeZone} · lines connect available readings · green to red as usage or temperature rises`;
+    $('#chart-context', root).textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;
     $('#reset-zoom', root).disabled = !values.length;
   }
   function initialize() {
@@ -190,13 +169,7 @@
     if (state.identity !== data.identity) { state.group = data.initial_group; state.metric = null; state.zoom = [0, 100]; }
     if (state.range !== root.dataset.range) state.zoom = [0, 100];
     state.identity = data.identity; state.range = root.dataset.range;
-    $('#host-search', root).value = state.search;
-    $('#host-filter', root).value = state.filter;
-    $('#host-sort', root).value = state.sort;
-    $('#host-search', root).oninput = filter;
-    $('#host-filter', root).onchange = filter;
-    $('#host-sort', root).onchange = filter;
-    filter(); prepareGroups(); hardwareTabs(); renderGraph();
+    prepareGroups(); hardwareTabs(); renderGraph();
     $$('[data-open-gpu]', root).forEach(button => button.onclick = () => {
       state.group = button.dataset.openGpu;
       hardwareTabs(); renderGraph();

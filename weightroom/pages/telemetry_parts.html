@@ -1,10 +1,11 @@
 {% from 'parts.html' import card, swaps, section_title %}
 
-{% macro host_header(hostname, reading) %}
+{% macro host_header(hostname, reading, up_for=none) %}
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 border-bottom">
   <div class="d-flex flex-wrap align-items-center gap-2 min-w-0">
     {{ section_title(hostname, id='host-title', wrapper_class='mb-0') }}
     <span id="host-subtitle" class="small text-secondary">{{ reading }}</span>
+    <span id="host-uptime" class="small text-secondary">Uptime <span id="host-uptime-value">{{ uptime(up_for) }}</span></span>
   </div>
   <div class="d-flex align-items-center gap-2 ms-auto">{{ caller() }}</div>
 </div>
@@ -22,7 +23,7 @@
 {%- endmacro %}
 
 {% macro service_pill(service) -%}
-<span class="badge text-wrap text-break text-start bg-{{ service.tone }}-lt" role="listitem" data-service="{{ service.name }}" title="{{ service.unit or service.name }}{% if service.state %} · {{ service.state }}{% endif %}">{{ service.name }} · {{ service.label }}</span>
+<span class="badge text-wrap text-break text-start bg-{{ service.tone }}-lt" role="listitem" data-service="{{ service.name }}" data-component="{{ service.id }}" data-component-kind="{{ service.kind }}" title="{{ service.unit or service.name }}{% if service.state %} · {{ service.state }}{% endif %}">{{ service.name }} · {{ service.label }}</span>
 {%- endmacro %}
 
 {% macro meter(label, value, maximum=100, unit='load', note='') %}
@@ -41,7 +42,7 @@
 {% macro snapshot(host) %}{% if host.age is not none %}Reading {{ host.age|round|int }}s ago{% else %}No readings yet{% endif %}{% endmacro %}
 
 {% macro host_tile(host) %}
-{% call card(tag='article', class_='tw-host-card mb-0', body=false, attrs={'data-host':host.identity, 'data-search':host.search, 'data-fresh':'true' if host.fresh else 'false', 'data-gpus':host.gpus|length, 'data-name':host.hostname|lower, 'data-state':host.state}) %}
+{% call card(tag='article', class_='tw-host-card mb-0', body=false, attrs={'data-host':host.identity}) %}
   <div class="d-flex justify-content-between align-items-center gap-2 p-3 pb-2"><div><a class="fw-bold" href="{{ host.href }}" {{ swaps('telemetry-workspace', true) }}>{{ host.hostname }}</a><small class="d-block text-secondary">{{ host.machines|join(' · ') }}</small></div>{{ state(host) }}</div>
   <div class="tw-host-summary px-3 pb-2"><span>CPU {{ amount(host.cpu) }}</span><span>RAM {{ amount(host.ram, 'memory') }}</span><span>Disk {{ amount(host.disk_percent) }}</span><span>Uptime {{ uptime(host.uptime) }}</span></div>
   {% if host.gpus %}{{ gpu_table(host) }}{% elif host.has_inventory %}<p class="small text-secondary px-3 py-2 mb-0">No GPU devices reported</p>{% else %}<p class="small text-secondary px-3 py-2 mb-0">No telemetry is available from this host yet.</p>{% endif %}
