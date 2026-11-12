@@ -1,0 +1,33 @@
+{% from 'parts.html' import card, empty_row, section_title, alert %}
+{% from 'navigation_parts.html' import pills, pill_link %}
+{% from 'node_measurement_parts.html' import node_choice, measurement_cell %}
+<div id="node-measurements" class="measurement-fleet" data-measurement-matrix data-value-higher="{{ 'true' if matrix.higher else 'false' }}" data-score-higher="{{ 'true' if matrix.score_higher else 'false' }}" data-benchmark-name="{{ resource_selected.name }}" data-formula="{{ resource_selected.formula }}">
+{% if inventory_warning %}{{ alert('warning', inventory_warning, class_='py-2') }}{% endif %}
+<section aria-label="All configured nodes" class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2"><strong>All nodes</strong><span class="badge bg-secondary-lt">{{ matrix.nodes|length }}</span></div>
+  <p class="small text-secondary mb-3">Every configured node. Choose one to inspect its column; saved evidence stays visible on unreachable or disabled nodes.</p>
+  <div class="measurement-node-list">{% for node in matrix.nodes %}{{ node_choice(node, loop.index0) }}{% endfor %}</div>
+</section>
+<div class="measurement-context mb-3"><div><div class="eyebrow">FLEET / ONE TEST, EVERY NODE</div>{{ section_title(resource_selected.name ~ ' across nodes', wrapper_class='mb-1 mt-1') }}<p class="small text-secondary mb-0">One row per model. One column per node, including nodes with no matching models.</p></div></div>
+<div class="measurement-toolbar mb-3">
+  <div><label class="form-label small" for="measurement-search">Find a model</label><input type="search" class="form-control" id="measurement-search" placeholder="Name, runtime or quantization…" data-matrix-search></div>
+  <div><label class="form-label small" for="measurement-evidence">Evidence</label><select class="form-select" id="measurement-evidence" data-matrix-filter><option value="all">All evidence</option><option value="gaps">Needs measurement</option><option value="stale">Settings changed</option><option value="rerun">Rerun recommended</option><option value="failed">Failed tests</option></select></div>
+  <div><label class="form-label small" for="measurement-sort">Order</label><select class="form-select" id="measurement-sort" data-matrix-sort><option value="name">Model name A–Z</option><option value="best">Best selected metric</option>{% for node in matrix.nodes %}<option value="node-{{ loop.index0 }}">Best on {{ node.id }}</option>{% endfor %}</select></div>
+</div>
+<div class="measurement-metric-toolbar mb-3">
+{% call pills('Resource benchmark', class_='gap-1 mb-0') %}{% for bench in resource_benchmarks %}{{ pill_link(bench.name, '/benchmarks/node-measurements?benchmark=' ~ bench.id ~ '&kind=' ~ kind ~ '#node-measurements', bench.id == resource_selected.id, attrs={'data-matrix-navigation':''}) }}{% endfor %}{% endcall %}
+  <label class="d-flex align-items-center gap-2 small">Display<select class="form-select form-select-sm w-auto" data-matrix-display><option value="values">Measured values</option><option value="scores">Benchmark scores</option></select></label>
+</div>
+<p class="small text-secondary mb-3"><span data-matrix-explanation>{{ resource_selected.summary }}</span> <span data-matrix-direction>{{ 'Higher' if matrix.higher else 'Lower' }} is better.</span> Highlighted cells are the best current result for that model; review the recorded configuration before comparing nodes.</p>
+{% call card('Recorded measurements', key='benchmark-resources', body_class='p-0', actions='<span class="small text-secondary" data-matrix-count></span>'|safe) %}
+<div id="benchmark-resource-table" class="measurement-table-scroll" role="region" aria-label="Scrollable fleet measurements" tabindex="0"><table class="table table-hover align-middle mb-0 measurement-table">
+<caption class="visually-hidden">{{ resource_selected.name }} by model and configured node</caption>
+<thead><tr><th scope="col">Model</th>{% for node in matrix.nodes %}<th scope="col" id="measurement-column-{{ loop.index0 }}" data-label="{{ node.id }}"><button type="button" class="btn btn-link btn-sm p-0" data-matrix-column="{{ loop.index0 }}" title="Sort {{ node.id }} best to worst">{{ node.id }}</button><small class="d-block text-secondary fw-normal">{{ node.state_label }}</small></th>{% endfor %}</tr></thead>
+<tbody>{% for row in matrix.rows %}<tr data-measurement-row data-model="{{ row.id }}" data-search="{{ (row.id ~ ' ' ~ row.engine ~ ' ' ~ row.quant)|lower }}"><th scope="row"><a class="measurement-subject" href="/models/{{ row.id|urlencode }}">{{ row.id }}</a><small class="d-block text-secondary">{% if row.engine %}{{ row.engine }} · {% endif %}{% if row.quant %}{{ row.quant }} · {% endif %}{{ row.placements }} node{{ '' if row.placements == 1 else 's' }}</small></th>{% for cell in row.cells %}{{ measurement_cell(cell, row.id, resource_selected.name) }}{% endfor %}</tr>{% endfor %}
+{% call empty_row(matrix.nodes|length + 1, attrs={'data-matrix-empty':'', 'hidden':''} if matrix.rows else {'data-matrix-empty':''}) %}<strong class="d-block">{{ 'No matching models' if matrix.rows else 'No local models are available to your account.' }}</strong><span>{{ 'Clear the search or choose All evidence to see more models.' if matrix.rows else 'Configured nodes remain visible. Choose another model type or add an authorized model.' }}</span>{% endcall %}
+</tbody></table></div>
+<div class="measurement-table-footer small text-secondary"><span>Open a saved value to inspect its score, settings and evidence.</span><span>All matching rows · scroll to browse</span></div>
+{% endcall %}
+<div class="measurement-legend small text-secondary mt-3"><span>† Settings changed</span><span>* Rerun recommended</span><span>Not run</span><span>Failed</span><span>Not on node</span><span>Inventory unavailable</span></div>
+<div class="small text-secondary mt-3" data-matrix-status role="status" aria-live="polite"></div>
+</div>

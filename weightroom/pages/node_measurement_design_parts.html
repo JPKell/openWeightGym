@@ -1,0 +1,17 @@
+{# One set of cells, rows and choices for every proposal and replacement. #}
+{% from 'parts.html' import empty_row %}
+{% from 'node_measurement_parts.html' import node_choice, measurement_cell %}
+{% macro templates() %}
+<template id="measurement-node-template">
+  {{ node_choice() }}
+</template>
+<template id="measurement-model-template">
+  <button type="button" class="measurement-model text-start" data-model><strong class="d-block" data-name></strong><small class="text-secondary" data-meta></small></button>
+</template>
+<template id="measurement-row-template"><tr><th scope="row"><button type="button" class="measurement-subject text-start" data-subject></button><small class="d-block text-secondary" data-meta></small></th></tr></template>
+<template id="measurement-cell-template">{{ measurement_cell() }}</template>
+<template id="measurement-node-heading-template"><th scope="col"><button type="button" class="btn btn-link p-0" data-node></button><small class="d-block text-secondary fw-normal" data-meta></small></th></template>
+<template id="measurement-empty-template">{% call empty_row(9) %}<strong class="d-block" data-empty-title></strong><span data-empty-note></span>{% endcall %}</template>
+<template id="measurement-bar-template"><div class="measurement-bar-row"><span data-name></span><div class="measurement-bar-track"><div class="measurement-bar-fill" data-bar></div></div><strong data-value></strong></div></template>
+<template id="measurement-detail-template"><div class="measurement-evidence"><div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><strong data-test></strong><span class="badge" data-state></span></div><div class="measurement-detail-value" data-value></div><p class="text-secondary small mt-2" data-score></p><dl class="measurement-detail-grid mb-0" data-facts></dl></div></template>
+{% endmacro %}

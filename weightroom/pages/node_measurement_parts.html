@@ -1,0 +1,32 @@
+{% from 'benchmark_parts.html' import flags %}
+{% macro overview(nodes, models, coverage, current, total, sample=false) %}
+<div class="measurement-overview mb-4">
+  <div><span class="eyebrow">Fleet inventory</span><div class="measurement-headline mt-1"><strong id="node-total">{{ nodes }}</strong><span>configured nodes</span></div></div>
+  <div><span class="eyebrow">This model type</span><div class="measurement-headline mt-1"><strong id="model-total">{{ models }}</strong><span>unique models</span></div></div>
+  <div><span class="eyebrow">Evidence coverage</span><div class="measurement-headline mt-1"><strong id="coverage-total" title="{{ current }} of {{ total }} model + node + test combinations have current evidence">{{ coverage }}</strong><span>current tests</span></div></div>
+  <div class="small text-secondary measurement-snapshot">{% if sample %}Sample snapshot<br><strong class="text-body">11 Nov 2026 · 10:42 PST</strong><br>{% else %}Current evidence matches saved settings and benchmark requirements.<br>{% endif %}Each result belongs to one model + node.</div>
+</div>
+{% endmacro %}
+
+{% macro node_choice(node=None, column=0) %}
+{% set tag = 'a' if node else 'button' %}
+<{{ tag }} {% if node %}href="#measurement-column-{{ column }}" data-matrix-node="{{ column }}" aria-label="Inspect {{ node.id }} column"{% else %}type="button"{% endif %} class="measurement-node" data-node="{{ node.id if node else '' }}">
+  <span class="d-flex justify-content-between align-items-center gap-2"><strong data-name>{{ node.id if node }}</strong><span class="small" data-state>{{ node.state_label if node }}</span></span>
+  <small class="d-block text-secondary mt-1" data-hardware>{{ node.hardware if node }}</small>
+  <span class="d-flex justify-content-between align-items-center small mt-3 gap-2"><span data-count>{% if node %}{{ node.models }} models{% endif %}</span><span class="text-secondary" data-coverage>{% if node %}{{ node.current }}/{{ node.total }} current{% endif %}</span></span>
+  <progress class="measurement-progress mt-2" max="100" data-progress{% if node %} value="{{ 100 * node.current / node.total if node.total else 0 }}" aria-label="Current evidence on {{ node.id }}"{% endif %}></progress>
+</{{ tag }}>
+{% endmacro %}
+
+{% macro measurement_cell(cell=None, model='', benchmark='') %}
+<td{% if cell %} data-state="{{ cell.state }}" data-node="{{ cell.node }}" data-value="{{ cell.value if cell.value is not none else '' }}" data-score="{{ cell.score if cell.score is not none else '' }}" data-best-values="{{ 'true' if cell.best_value else 'false' }}" data-best-scores="{{ 'true' if cell.best_score else 'false' }}"{% if cell.best_value %} data-best{% endif %}{% endif %}>
+{% if not cell or cell.result %}
+  {% set tag = 'a' if cell else 'button' %}
+  <{{ tag }} {% if cell %}href="/benchmarks/run/{{ cell.result.id }}" data-score="{{ cell.score if cell.score is not none else '' }}" aria-label="{{ model }}, {{ cell.node }}, {{ benchmark }}: {% if cell.value is not none %}{{ cell.value_text }} {{ cell.unit }}; {% endif %}{% if cell.score is not none %}score {{ cell.score_text }} {{ cell.score_unit }}; {% endif %}{{ cell.note }}. View evidence"{% else %}type="button"{% endif %} class="measurement-value" data-evidence{% if cell %} data-status="{{ cell.state }}"{% endif %}>
+    <strong data-value>{% if cell %}<span data-matrix-values>{{ cell.value_text if cell.value is not none else 'Not recorded' if cell.score is not none else cell.note }}</span><span data-matrix-scores hidden>{{ cell.score_text if cell.score is not none else cell.note }}</span>{{ flags(cell.result) }}{% endif %}</strong>
+    <small data-note>{% if cell %}<span data-matrix-values>{{ cell.unit if cell.value is not none else 'View evidence' }}</span><span data-matrix-scores hidden>{{ cell.score_unit if cell.score is not none else 'View evidence' }}</span>{% if cell.state in ('stale', 'rerun') %} · {{ cell.note|lower }}{% endif %}<span data-best-note{% if not cell.best_value %} hidden{% endif %}> · best</span>{% endif %}</small>
+  </{{ tag }}>
+{% endif %}
+<span class="small text-secondary" data-unavailable{% if not cell or cell.result %} hidden{% endif %}>{% if cell and not cell.result %}{{ cell.note }}{% endif %}</span>
+</td>
+{% endmacro %}

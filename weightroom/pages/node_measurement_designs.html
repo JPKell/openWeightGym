@@ -1,0 +1,78 @@
+{% from 'parts.html' import page_header, card, alert, section_title %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'icons.html' import icon %}
+{% from 'node_measurement_design_parts.html' import templates %}
+{% from 'node_measurement_parts.html' import overview %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Node measurements · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to node measurements</a>
+<header class="measurement-review border-bottom">
+  <div class="d-flex align-items-center gap-2"><span class="measurement-brand">{{ icon('barbell') }} weightRoom</span><span class="text-secondary small">/ Design review</span></div>
+  <div class="d-flex flex-wrap align-items-center gap-2"><span class="badge bg-blue-lt">Sample data</span><button type="button" class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button></div>
+</header>
+<main class="measurement-page">
+<section class="measurement-proposal mb-4" aria-label="Design proposals">
+  {% call pills('Design options', buttons=true, class_='gap-2 mb-0') %}
+  {{ pill_button('01 / Node ledger', true, attrs={'data-design':'ledger'}) }}
+  {{ pill_button('02 / Fleet matrix', attrs={'data-design':'matrix'}) }}
+  {{ pill_button('03 / Model lens', attrs={'data-design':'lens'}) }}
+  {% endcall %}
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3"><p class="small mb-0 text-secondary" id="design-description"></p><label class="d-flex align-items-center gap-2 small">Preview state<select class="form-select form-select-sm w-auto" id="scenario"><option value="normal">Mixed measurements</option><option value="unmeasured">No measurements yet</option><option value="empty">No models</option><option value="offline">Connection lost</option></select></label></div>
+</section>
+<div id="workspace" data-layout="ledger">
+{% call page_header('Node measurements', pretitle='BENCHMARK / MACHINE PERFORMANCE') %}<button type="button" class="btn btn-outline-secondary" id="export">Export view</button>{% endcall %}
+{{ overview(8, 30, '', 0, 0, sample=true) }}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+{% call pills('Model type', buttons=true, class_='gap-1 mb-0') %}{% for kind,label in [('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')] %}{{ pill_button(label, kind == 'llm', attrs={'data-kind':kind}) }}{% endfor %}{% endcall %}
+<span class="text-secondary small" id="type-note">Context, load and speed tests · every configured node stays visible.</span>
+</div>
+<div id="connection-note" hidden>{{ alert('warning', 'Connection lost. Showing the last saved snapshot; measurements may be out of date.', class_='py-2') }}</div>
+<div id="feedback" class="small mb-2" role="status" aria-live="polite"></div>
+<div class="measurement-workspace">
+<aside class="measurement-node-panel" aria-label="Configured nodes">
+  <div class="d-flex justify-content-between align-items-center mb-2"><strong>All nodes</strong><span class="badge bg-secondary-lt" id="node-count">8</span></div>
+  <p class="small text-secondary mb-3" id="node-navigation-note">Choose a node to inspect its models.</p>
+  <div id="node-list" class="measurement-node-list"></div>
+</aside>
+<div class="measurement-main">
+<div id="node-heading" class="measurement-context mb-3"><div><span class="eyebrow" id="context-eyebrow">NODE / ATLAS</span>{{ section_title('Models on atlas', id='context-title', wrapper_class='mb-1 mt-1') }}<p class="text-secondary small mb-0" id="context-note"></p></div><span class="badge bg-blue-lt" id="context-count"></span></div>
+<div class="measurement-toolbar mb-3">
+  <div class="measurement-search"><label class="form-label small" for="model-search">Find a model</label><input type="search" id="model-search" class="form-control" placeholder="Name, size or quantization…"></div>
+  <div><label class="form-label small" for="evidence-filter">Evidence</label><select class="form-select" id="evidence-filter"><option value="all">All evidence</option><option value="gaps">Needs measurement</option><option value="stale">Settings changed</option><option value="failed">Failed tests</option></select></div>
+  <div><label class="form-label small" for="sort">Order</label><select class="form-select" id="sort"><option value="name">Model name A–Z</option><option value="best">Best selected metric</option></select></div>
+</div>
+<div class="measurement-metric-toolbar mb-3">
+  {% call pills('Measurement', buttons=true, class_='gap-1 mb-0') %}{% for metric,label in [('context','Max context'),('load','Load time'),('speed','Generation speed')] %}{{ pill_button(label, metric == 'context', attrs={'data-metric':metric}) }}{% endfor %}{% endcall %}
+  <label class="d-flex align-items-center gap-2 small">Display<select class="form-select form-select-sm w-auto" id="display"><option value="values">Measured values</option><option value="scores">Benchmark scores</option></select></label>
+</div>
+<p class="small text-secondary mb-3" id="metric-note"></p>
+<div id="model-lens" class="measurement-lens" hidden>
+  {% call card('Model catalogue', hint='Choose a model to compare its nodes.', body_class='p-0') %}<div id="model-list" class="measurement-model-list" aria-label="Available models"></div>{% endcall %}
+  <div id="model-analysis">
+    {% call card('Across the fleet', hint='Same model, separate node measurements.', body_class='p-3') %}<strong class="d-block mb-3" id="lens-model-name"></strong><div id="lens-bars"></div><p class="small text-secondary mb-0 mt-3">Bars compare current evidence for the selected metric. Changed settings stay in the table for review.</p>{% endcall %}
+  </div>
+</div>
+{% call card('Recorded measurements', id='measurement-table-panel', body_class='p-0', actions='<span class="small text-secondary" id="row-count"></span>'|safe) %}
+<div class="measurement-table-scroll" tabindex="0" role="region" aria-label="Scrollable measurements; all rows are available">
+<table class="table table-hover align-middle mb-0 measurement-table"><caption class="visually-hidden" id="table-caption">Measurements for the chosen node</caption><thead id="measurement-head"></thead><tbody id="measurement-rows"></tbody></table>
+</div>
+<div class="measurement-table-footer small text-secondary"><span>Click any saved value for its score, test settings and evidence.</span><span id="table-range"></span></div>
+{% endcall %}
+<div class="measurement-legend small text-secondary mt-3"><span><span class="measurement-dot" aria-hidden="true"></span> Current</span><span>† Settings changed</span><span>Not run</span><span>Failed</span><span>Not on node</span></div>
+<p class="small text-secondary mt-3 mb-0" id="measurement-methods"></p>
+</div>
+</div>
+</div>
+</main>
+<dialog id="evidence-dialog" class="measurement-dialog" aria-labelledby="evidence-title">
+<div class="d-flex align-items-start justify-content-between gap-3 p-4 border-bottom"><div><div class="eyebrow mb-2">SAVED EVIDENCE / SAMPLE</div><strong id="evidence-title"></strong><p class="text-secondary small mt-1 mb-0" id="evidence-subtitle"></p></div><button type="button" class="btn btn-outline-secondary btn-sm" id="close-evidence">Close</button></div>
+<div id="evidence-body" class="p-4"></div>
+</dialog>
+{{ templates() }}
+<script id="measurement-data" type="application/json">{{ data|tojson }}</script>
+<script>{{ javascript|safe }}</script>
+</body></html>

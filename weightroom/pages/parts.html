@@ -117,8 +117,8 @@
 {% endmacro %}
 
 
-{% macro empty_row(columns, message='No items to show.', class_='text-secondary') -%}
-<tr data-empty-row><td colspan="{{ columns }}"{% if class_ %} class="{{ class_ }}"{% endif %}>{% if caller is defined %}{{ caller() }}{% else %}{{ message }}{% endif %}</td></tr>
+{% macro empty_row(columns, message='No items to show.', class_='text-secondary', attrs={}) -%}
+<tr data-empty-row{{ attrs|xmlattr }}><td colspan="{{ columns }}"{% if class_ %} class="{{ class_ }}"{% endif %}>{% if caller is defined %}{{ caller() }}{% else %}{{ message }}{% endif %}</td></tr>
 {%- endmacro %}
 
 {% macro node_state(state) %}{{ {'ready':'available', 'unknown':'status not reported', 'offline':'not reachable', 'unavailable':'not reachable', 'sleeping':'asleep'}.get(state, state|replace('_', ' ')) }}{% endmacro %}

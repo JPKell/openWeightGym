@@ -43,7 +43,7 @@ def test_results_type_pills_and_node_page_preserve_selected_models(desk, typed_m
         playwright.expect(page.locator('#benchmark-resource-table')).to_be_visible()
         page.locator('nav[aria-label="Model type"]').get_by_role('link', name='Audio', exact=True).click()
         playwright.expect(page.locator('#benchmark-resource-table tbody')).to_contain_text('audio-model')
-        assert page.locator('#benchmark-resource-table tbody tr').count() == 1
+        assert page.locator('#benchmark-resource-table [data-measurement-row]').count() == 1
         page.get_by_role('link', name='Load time', exact=True).click()
         playwright.expect(page).to_have_url('http://console.test/benchmarks/node-measurements?benchmark=load&kind=audio#node-measurements')
         page.get_by_role('link', name='Runs', exact=True).click()
@@ -149,8 +149,9 @@ def test_cards_survive_navigation_oob_refresh_accounts_and_sample_anchors(desk, 
         assert page.locator('#benchmark-resource-table').count() == 0
         page.screenshot(path=str(images / 'results.png'))
         page.get_by_role('link', name='Node measurements', exact=True).click()
-        playwright.expect(page.locator('#benchmark-resource-heatmap svg')).to_have_count(1)
-        assert page.locator('#benchmark-resource-table tbody tr').count() == 2
+        playwright.expect(page.locator('[data-measurement-matrix]')).to_be_visible()
+        assert page.locator('#benchmark-resource-heatmap').count() == 0
+        assert page.locator('#benchmark-resource-table [data-measurement-row]').count() == 2
         page.screenshot(path=str(images / 'node-measurements.png'))
         # Auto comparison refreshes the chooser too, retaining one active filter.
         page.goto('http://benchmark.test/benchmarks/compare')

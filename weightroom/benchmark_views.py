@@ -142,3 +142,105 @@ def run_model_rows(nodes):
             row['targets'].append({'node': node, 'choice': choice})
             row['selectable'] += not choice['reason']
     return list(rows.values())
+
+
+def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs, location_latest):
+    """Build a caller-scoped fleet matrix without borrowing evidence from another node."""
+    import math
+    from benchmarks.eligibility import compatible
+
+    def numeric(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+    def formatted(value, score=False):
+        if not numeric(value):
+            return '—'
+        if value == int(value):
+            return f'{int(value):,}'
+        if score:
+            return f'{value:.6g}'
+        return f'{value:,.2f}'.rstrip('0').rstrip('.') if abs(value) >= .01 else f'{value:.4g}'
+
+    nodes = run_lanes(catalogue, inventory, models, selected, runs, location_latest, {}, False)
+    reports = {node['name']: node for node in inventory.get('machines', [])}
+    labels = {'ready': 'Ready', 'unknown': 'Status unknown', 'unavailable': 'Unreachable',
+              'disabled': 'Disabled', 'front': 'Front host'}
+    for node in nodes:
+        report = reports.get(node['name'], {})
+        cards = report.get('cards') or []
+        total = sum(card.get('total') or 0 for card in cards)
+        node.update(id=node['name'], state_label=labels[node['state']], models=0, current=0, total=0,
+                    hardware=(f'{len(cards)} GPU' + ('s' if len(cards) != 1 else '') +
+                              (f' · {total / 1024:g} GiB VRAM' if total else '')) if cards else
+                             report.get('hostname') or ('Front host' if node['state'] == 'front' else 'Hardware not reported'))
+    measurement = selected['id'].removeprefix('embedding_')
+    metric = {'context': 'max_context_tokens', 'load': 'load_seconds',
+              'speed': 'embedding_tokens_per_second' if selected.get('embedding') else 'generation_tokens_per_second'}[measurement]
+    value_unit = 'tokens' if measurement == 'context' else 's' if measurement == 'load' else 'tokens/s'
+    # Legacy evidence without a location belongs only to implicit compute, never to a named copy.
+    legacy = latest_results([run for run in runs if not run.get('location')])
+    attempts = {}
+    for run in runs:
+        if not run.get('retired'):
+            attempts.setdefault((run['model'], run.get('location') or 'compute', run['benchmark']), run)
+    rows = []
+    for model in models:
+        placements = {place['machine']: {**model, **place} for place in model.get('locations') or [{'machine': 'compute'}]}
+        cells = []
+        for node in nodes:
+            name = node['name']
+            local = placements.get(name)
+            if local:
+                node['models'] += 1
+                for bench in benchmarks:
+                    if not compatible(local, bench):
+                        continue
+                    node['total'] += 1
+                    saved = location_latest.get((model['id'], name, bench['id']))
+                    if not model.get('locations') and name == 'compute':
+                        saved = saved or legacy.get(model['id'], {}).get(bench['id'])
+                    node['current'] += bool(saved and saved.get('current_fingerprint') and not saved.get('rerun')
+                                            and (numeric(saved.get('score')) or any(numeric(value) for value in saved.get('metrics', {}).values())))
+            result = location_latest.get((model['id'], name, selected['id']))
+            if not model.get('locations') and name == 'compute':
+                result = result or legacy.get(model['id'], {}).get(selected['id'])
+            attempt = attempts.get((model['id'], name, selected['id']))
+            if model.get('locations') and attempt and not attempt.get('location'):
+                attempt = None
+            value = result.get('metrics', {}).get(metric) if result else None
+            score = result.get('score') if result else None
+            value, score = (value if numeric(value) else None), (score if numeric(score) else None)
+            if result:
+                state = ('unavailable' if value is None and score is None else 'stale' if not result.get('current_fingerprint')
+                         else 'rerun' if result.get('rerun') else 'current')
+            elif attempt and attempt['state'] in ('failed', 'cancelled'):
+                state = attempt['state']
+            elif attempt and attempt['state'] not in ('completed', 'failed', 'cancelled'):
+                state = 'active'
+            elif local and not compatible(local, selected):
+                state = 'unsupported'
+            elif local:
+                state = 'missing'
+            elif node['state'] in ('unavailable', 'unknown'):
+                state = 'unknown'
+            else:
+                state = 'absent'
+            note = {'current': 'Current', 'stale': 'Settings changed', 'rerun': 'Rerun recommended',
+                    'unavailable': 'No measurement recorded', 'failed': 'Failed', 'cancelled': 'Cancelled',
+                    'active': 'Queued or running', 'unsupported': 'Not applicable', 'missing': 'Not run',
+                    'unknown': 'Inventory unavailable', 'absent': 'Not on node'}[state]
+            cells.append(dict(node=name, state=state, note=note, result=result or attempt,
+                              value=value, score=score, value_text=formatted(value), score_text=formatted(score, score=True),
+                              unit=value_unit, score_unit=selected['score_unit'], best_value=False, best_score=False))
+        for field, higher in (('value', measurement != 'load'), ('score', selected.get('green') != 'low')):
+            current = [cell[field] for cell in cells if cell['state'] == 'current' and cell[field] is not None]
+            if current:
+                best = (max if higher else min)(current)
+                for cell in cells:
+                    cell['best_' + field] = cell['state'] == 'current' and cell[field] == best
+        rows.append(dict(id=model['id'], engine=model.get('engine_id') or model.get('engine') or '',
+                         quant=model.get('quant') or '', placements=len(placements), cells=cells))
+    total, current = sum(node['total'] for node in nodes), sum(node['current'] for node in nodes)
+    return dict(nodes=nodes, rows=rows, metric=metric, unit=value_unit, higher=measurement != 'load',
+                score_higher=selected.get('green') != 'low', current=current, total=total,
+                coverage=f'{round(100 * current / total)}%' if total else '—')
