@@ -97,6 +97,38 @@ def test_mixed_selection_filters_overcommit_autofit_and_locks(preview):
     expect(page.locator('#auto-fit')).to_be_disabled()
 
 
+def test_context_limit_switches_preserve_custom_saved_values(preview):
+    page = preview
+    first = model(page, 'qwen8')
+    context = first.locator('[data-context]')
+    switch = first.locator('[data-context-override]')
+    context.fill('99999')
+    expect(page.locator('#save')).to_be_disabled()
+    switch.check()
+    expect(context).to_have_value('99999')
+    expect(page.locator('#save')).to_be_enabled()
+    expect(model(page, 'gemma4').locator('[data-context-override]')).not_to_be_checked()
+    expect(model(page, 'whisper').locator('[data-context-override]')).to_have_count(0)
+    context.fill('512')
+    switch.uncheck()
+    expect(context).to_have_value('512')
+    expect(page.locator('#save')).to_be_disabled()
+    first.locator('[data-select]').click()
+    expect(page.locator('#save')).to_be_enabled()
+    pick(page, 'qwen8')
+    expect(context).to_have_value('512')
+    expect(page.locator('#save')).to_be_disabled()
+    switch.check()
+    context.fill('99999')
+    page.locator('#set-name').fill('Custom context')
+    page.locator('#save').click()
+    page.reload()
+    page.locator('#restore').click()
+    expect(context).to_have_value('99999')
+    expect(switch).to_be_checked()
+    expect(page.locator('#save')).to_be_enabled()
+
+
 def test_cpu_context_hybrid_reservations_and_unknown_profiles(preview):
     page = preview
     page.locator('#clear').click()

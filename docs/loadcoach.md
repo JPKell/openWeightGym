@@ -7723,7 +7723,6 @@ it was.
 | `/benchmarks` | Home: active run, or Start a run when idle, then per-node resource results and quality scores |
 | `/benchmarks/results` | Language quality-score heatmap and selected benchmark KPI details, filtered by model type |
 | `/benchmarks/node-measurements` | Fleet matrix with all configured nodes; see the [page contract](../benchmarks/README.md#pages-scores-and-result-identity) |
-| `/benchmarks/embedders` | Embedding Context, Speed and Load time pills with node columns and embedding-only run selection |
 | `/benchmarks/runs` | Eleven available benchmark definitions in the local implementation (nine deployed before progression P4), model checkboxes, durable queue, pause/stop controls, live log and samples, and run history |
 | `/benchmarks/compare` | Multiple current models or recorded fingerprint/engine/machine identities, with models in columns and selected benchmark KPIs in rows |
 | `/benchmarks/manage` | Saved enabled flags and score formulas, available operands, and installed IFEval details; requires `manage-settings` |
@@ -10736,7 +10735,13 @@ attempt's set holds and retains guarded configuration undo.
 
 The live `/dry-fit` split browser searches/sorts a 15–30-model node catalogue beside compact
 selected rows. Exact context numbers, sliders and auto-fit locks share one draft per account/node
-in browser session storage; node and type switches do not discard selections. Auto-fit honors
+in browser session storage; node and type switches do not discard selections. Each LLM's
+**Override limits** switch allows the context number to go below its configured minimum or above
+its maximum (positive 32-bit whole tokens). It is off by default and retained in the draft;
+selecting a saved set with an out-of-range context enables it for that model. Turning it off
+preserves the typed value but blocks saving until the value is corrected or the switch is enabled.
+The override changes planning values only; applying a set still requires the usual review.
+Lock a custom value to preserve it during auto-fit. Auto-fit honors
 configured minima and fixed reservations, reporting impossible minima without lowering them.
 CPU context curves use current-profile RSS measurements plus admission growth margin, falling back
 to an explicitly provisional fixed first-load bound. VRAM and system RAM remain separate pools;
