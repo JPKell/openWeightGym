@@ -11,7 +11,7 @@
 .sc-page { max-width:1640px; margin:auto; padding:1.5rem 2rem 3rem; }
 .sc-design-review { padding-bottom:1rem; margin-bottom:1.5rem; border-bottom:1px solid var(--bs-border-color); }
 .sc-toolbar { display:grid; grid-template-columns:minmax(180px,1fr) 160px 230px auto; gap:.75rem; align-items:center; }
-.sc-body { display:grid; grid-template-columns:minmax(0,1fr) 370px; grid-template-areas:'inventory inspector' 'history inspector'; gap:1.5rem; align-items:start; }
+.sc-body { display:grid; grid-template-columns:minmax(0,1fr) 370px; grid-template-rows:auto 1fr; grid-template-areas:'inventory inspector' 'history inspector'; gap:1.5rem; align-items:start; }
 .sc-body > .card { margin-bottom:0 !important; min-width:0; }
 #inventory, #schedule-list { grid-area:inventory; }
 #history-panel { grid-area:history; }
@@ -67,7 +67,7 @@
 .sc-table-cron { display:inline-block; margin-top:.4rem; padding:0; background:transparent; }
 .sc-editor-dialog { margin:0 0 0 auto; width:min(470px,100%); max-width:100%; height:100dvh; max-height:100dvh; padding:1.5rem; border:0; border-left:1px solid var(--bs-border-color); background:var(--tblr-bg-surface); color:var(--bs-body-color); overflow-y:auto; }
 .sc-editor-dialog::backdrop { background:color-mix(in srgb,var(--bs-body-color) 28%,transparent); }
-[data-layout='ledger'] .sc-body { grid-template-columns:minmax(0,1fr) 300px; grid-template-areas:'inventory history'; }
+[data-layout='ledger'] .sc-body { grid-template-columns:minmax(0,1fr) 300px; grid-template-rows:auto; grid-template-areas:'inventory history'; }
 [data-layout='ledger'] #history-list { max-height:38rem; }
 [data-layout='ledger'] .sc-history-row .d-flex:first-child { flex-direction:column; gap:.4rem !important; }
 [data-layout='planner'] .sc-body { display:block; }
@@ -122,7 +122,7 @@ button:focus-visible { outline:2px solid var(--bs-primary); outline-offset:3px; 
   .sc-page { padding:1rem .85rem 2rem; }
   .sc-review { padding:1rem; }
   .sc-review > div:first-child { flex-wrap:wrap; gap:.4rem 1rem !important; }
-  .sc-body { grid-template-columns:minmax(0,1fr); grid-template-areas:'inventory' 'inspector' 'history'; }
+  .sc-body { grid-template-columns:minmax(0,1fr); grid-template-rows:auto; grid-template-areas:'inventory' 'inspector' 'history'; }
   .sc-toolbar { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; }
   #search, #schedule-search { grid-column:1 / -1; }
   .sc-design-review .nav { display:grid; grid-template-columns:1fr; }

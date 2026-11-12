@@ -41,6 +41,13 @@ def test_layouts_states_themes_and_editor_fit_phone(preview):
                 for scenario in ('normal', 'empty', 'attention'):
                     page.locator('#scenario').select_option(scenario)
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (width, theme, layout, scenario)
+                    if width > 800 and layout == 'studio':
+                        spacing = page.locator('.sc-body').evaluate('''body => ({
+                            actual: body.querySelector('#history-panel').getBoundingClientRect().top -
+                                    body.querySelector('#inventory').getBoundingClientRect().bottom,
+                            intended: parseFloat(getComputedStyle(body).rowGap)
+                        })''')
+                        assert abs(spacing['actual'] - spacing['intended']) < 1, (theme, scenario, spacing)
                 page.locator('#scenario').select_option('normal')
                 page.locator('[data-new]').first.click()
                 assert page.evaluate('''() => [...document.querySelectorAll('input,select')]

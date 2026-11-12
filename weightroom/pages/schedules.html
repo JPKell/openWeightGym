@@ -5,7 +5,7 @@
 {% block title %}Schedules · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/schedules.js?v=2" defer></script>{% endblock %}
 {% block main %}
-<link rel="stylesheet" href="/static/schedules.css?v=1">
+<link rel="stylesheet" href="/static/schedules.css?v=2">
 <div id="schedule-studio" data-schedule-studio data-selected="{{ selected.id if selected else 'new' }}" data-save-failed="{{ 'yes' if failed else 'no' }}">
 {% call page_header('Schedules') %}<a class="btn btn-primary" href="/schedules?new=1" {{ swaps('page-content', true) }}>＋ New schedule</a>{% endcall %}
 {{ said_box(said, failed) }}
