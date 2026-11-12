@@ -162,6 +162,15 @@ def test_studio_sizes_accessibility_empty_and_populated_states(studio, width):
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         page.set_viewport_size(dict(width=width, height=1000))
+        def check_card_spacing():
+            if width <= 800:
+                return
+            spacing = page.locator('.sc-body').evaluate('''body => ({
+                actual: body.querySelector('#history-panel').getBoundingClientRect().top -
+                        body.querySelector('#schedule-list').getBoundingClientRect().bottom,
+                intended: parseFloat(getComputedStyle(body).rowGap)
+            })''')
+            assert abs(spacing['actual'] - spacing['intended']) < 1, spacing
         for theme in ('light','dark'):
             page.emulate_media(color_scheme=theme)
             for path in ('/schedules', '/schedules?new=1'):
@@ -172,9 +181,11 @@ def test_studio_sizes_accessibility_empty_and_populated_states(studio, width):
                 assert not result['invalidControls'], result
                 assert not result['mismatches'], result
                 assert all(item['size'] == '14.4px' for item in result['sections'])
+                check_card_spacing()
         with server.app.state.schedules.db:
             server.app.state.schedules.db.execute('UPDATE recurring_schedules SET deleted=1')
         page.goto('http://console.test/schedules')
         expect(page.locator('#schedule-list')).to_contain_text('No schedules yet.')
         assert not page.evaluate(MEASURE)['overflow']
+        check_card_spacing()
         browser.close()
