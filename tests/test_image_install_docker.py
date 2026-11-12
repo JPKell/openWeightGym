@@ -61,6 +61,13 @@ print(json.dumps({'status':r.status_code,'body':r.json()}))
             except (httpx.HTTPError, ValueError):
                 return False
         until(ready)
+        # LoadCoach readiness does not imply its separate file receiver is listening yet.
+        for node in ('compute', 'rig'):
+            until(lambda node=node: inside('turnstile', """
+import httpx,sys
+try: print(httpx.get('http://'+sys.argv[1]+':8444/spotter/now',timeout=2).status_code==401)
+except httpx.HTTPError: print(False)
+""", node) == 'True')
         yield SimpleNamespace(compose=compose, inside=inside, api=api, client=client, key=key,
                               origin=str(client.base_url).rstrip('/'))
         client.close()
@@ -79,6 +86,8 @@ def installations(cluster, jobs):
         assert answer['status'] == 200, answer
         rows = [row for row in answer['body']['distributions'] if row['id'] in ids]
         if len(rows) == len(ids) and all(row['state'] in ('complete', 'failed') for row in rows):
+            if any(row['state'] != 'complete' for row in rows):
+                print(cluster.compose('logs', '--tail', '40', 'turnstile', 'compute-files', 'rig-files'))
             assert all(row['state'] == 'complete' for row in rows), [
                 {key:row.get(key) for key in ('name','machine','state','why')} for row in rows]
             return rows
