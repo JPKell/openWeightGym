@@ -111,8 +111,10 @@ OWG_IMAGE_DOCKER=1 .venv/bin/pytest tests/test_image_install_docker.py -n 0 -q
 ```
 
 It tests single-node and simultaneous multi-node creation, storage promotion, every selected
-component's SHA-256 and relocated settings, concurrent installs sharing files, and failed
-preflight with no partial model creation. To remove a manually started qualification deployment:
+component's SHA-256 and relocated settings, concurrent installs sharing files, failed preflight
+with no partial model creation, and a killed gateway followed by a browser retry of its saved
+request. See [installation recovery](operations.md#model-installation-progress-and-restart-recovery-2026-11-12).
+To remove a manually started qualification deployment:
 
 ```bash
 docker compose -f tests/docker/images/compose.yaml down -v

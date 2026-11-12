@@ -715,14 +715,22 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
         now = time.time()
         for expired in [token for token, transfer in uploads.items() if transfer["until"] < now and not transfer.get("receiving")]:
             uploads.pop(expired, None)
-        if any(transfer["target"] == target for transfer in uploads.values()):
+        for token,transfer in uploads.items():
+            if transfer['target'] != target:
+                continue
+            # A gateway can restart after prepare but before PUT. Reuse only its
+            # owner's identical, unused capability; never interrupt a live upload.
+            if (not transfer.get('receiving') and transfer.get('owner') == (user.identity or user.name)
+                    and transfer['size'] == size and transfer['sha256'] == digest):
+                transfer['until']=now+900
+                return JSONResponse({'upload':f'/spotter/files/{token}'},status_code=201)
             return error(409, "That file is already being received.")
         reserved = sum(transfer["size"] for transfer in uploads.values()
                        if transfer.get("filesystem") == os.stat(root).st_dev)
         if room(str(root))["free"] < size + reserved + SPARE:
             return error(409, f"{place} does not have enough free space while leaving 1 GiB spare.")
         token = secrets.token_urlsafe(32)
-        uploads[token] = {"target": target, "size": size, "sha256": digest, "by": user.name,
+        uploads[token] = {"target": target, "size": size, "sha256": digest, "by": user.name,'owner':user.identity or user.name,
                           "caller": address(request), "until": now + 900, "filesystem": os.stat(root).st_dev}
         return JSONResponse({"upload": f"/spotter/files/{token}"}, status_code=201)
 

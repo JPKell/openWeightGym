@@ -79,7 +79,8 @@ def installations(cluster, jobs):
         assert answer['status'] == 200, answer
         rows = [row for row in answer['body']['distributions'] if row['id'] in ids]
         if len(rows) == len(ids) and all(row['state'] in ('complete', 'failed') for row in rows):
-            assert all(row['state'] == 'complete' for row in rows), rows
+            assert all(row['state'] == 'complete' for row in rows), [
+                {key:row.get(key) for key in ('name','machine','state','why')} for row in rows]
             return rows
     return until(finished)
 
@@ -224,3 +225,45 @@ def test_preflight_failure_starts_no_partial_multi_node_install(cluster):
         assert name not in saved(cluster, 'rig')
     after = cluster.api('GET', '/turnstile/artifacts/distributions')['body']['distributions']
     assert {j['id'] for j in after} == {j['id'] for j in before}
+
+
+def test_killed_front_retains_request_and_browser_can_retry(cluster):
+    """Stop a real transfer at its receiver, kill Turnstile, then retry its saved request."""
+    settings=qwen_settings();settings['flags']['model']=SOURCE+'restart/diffusion.safetensors'
+    cluster.compose('pause','compute-files')
+    try:
+        answer=cluster.client.post('/mirrorwall-models',json={
+            'new':True,'name':'restart-recovery','machines':['compute'],'source_machine':'front','settings':settings})
+        assert answer.status_code==202,answer.text
+        original=answer.json()['jobs'][0]['id']
+        def copying():
+            jobs=cluster.api('GET','/turnstile/artifacts/distributions')['body']['distributions']
+            return next(j for j in jobs if j['id']==original)['state']=='copying'
+        until(copying,seconds=20)
+        time.sleep(2.2)  # Include an in-flight progress checkpoint, not only acceptance.
+        cluster.compose('kill','-s','SIGKILL','turnstile')
+    finally:
+        cluster.compose('unpause','compute-files')
+    cluster.compose('up','-d','--no-deps','turnstile')
+    def ready():
+        try:return cluster.client.get('/mirrorwall-models').is_success
+        except httpx.HTTPError:return False
+    until(ready)
+    jobs=cluster.api('GET','/turnstile/artifacts/distributions')['body']['distributions']
+    interrupted=next(j for j in jobs if j['id']==original)
+    assert interrupted['state']=='failed' and interrupted['interrupted'] and interrupted['can_retry']
+    from playwright.sync_api import sync_playwright,expect
+    with sync_playwright() as driver:
+        browser=driver.chromium.launch(headless=True,args=['--disable-gpu'])
+        context=browser.new_context(viewport={'width':390,'height':1000})
+        context.add_cookies([{'name':'weightroom','value':cluster.key,'url':cluster.origin}])
+        page=context.new_page()
+        page.goto(cluster.origin+'/models?kind=image&install='+original)
+        expect(page.get_by_role('button',name='Retry installation',exact=True)).to_be_visible()
+        page.get_by_role('button',name='Retry installation',exact=True).click()
+        page.wait_for_url(lambda url:parse_qs(urlsplit(url).query).get('install') not in (None,[original]))
+        retried=parse_qs(urlsplit(page.url).query)['install'][0]
+        installations(cluster,[{'id':retried}])
+        verify_bundle(cluster,'restart-recovery',['compute'],[
+            'restart/diffusion.safetensors','qwen/encoder.safetensors','qwen/vae.safetensors','adapters/style.safetensors'])
+        browser.close()

@@ -9,7 +9,19 @@
 {% if measure_oob|default(false) %}{{ overview(catalogue, oob=true) }}{% endif %}
 {% if catalogue.offline %}{{ alert('warning', 'Unavailable nodes: ' ~ catalogue.offline|join(', ') ~ '. Live availability excludes these nodes; any retained installations remain listed.', class_='py-2') }}{% endif %}
 {# One line for each node a model is being added to. #}
-{% for installation in installations|default([]) %}{% call alert(('danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info'), role='status') %}<strong>{{ installation.name }}</strong> on {{ installation.machine }}: {{ installation.state }}{% if installation.why %} · {{ installation.why }}{% endif %}{% if installation.of %} · {{ installation.done|size }} / {{ installation.of|size }}{% endif %}{% if installation.moved_from %} · moved from {{ installation.moved_from }}{% endif %}{% if installation.state == 'complete' %} · <a href="{{ catalogue.links.get((installation.machine, installation.name), '/models/' ~ installation.name|urlencode ~ '?node=' ~ installation.machine|urlencode) }}">Open model</a>{% endif %}{% endcall %}{% endfor %}
+{% set install_states = {'queued':'Preparing and verifying model bundle', 'verifying':'Verifying SHA-256', 'waiting':'Waiting for shared file copy', 'promoting':'Preparing files in cache', 'copying':'Copying files to node', 'creating':'Registering model', 'complete':'Installed', 'failed':'Failed'} %}
+{% for installation in installations|default([]) %}
+{% call alert(('danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info'), role='status') %}
+<strong>{{ installation.name }}</strong> on {{ installation.destination|default(installation.machine) }}: {{ install_states.get(installation.state, installation.state) }}
+{% if installation.file and installation.state not in ('queued', 'complete') %} · {{ installation.file }}{% endif %}
+{% if installation.working_machine and installation.working_machine != installation.machine %} · on {{ installation.working_machine }}{% endif %}
+{% if installation.why %} · {{ installation.why }}{% endif %}
+{% if installation.of and installation.progress_available|default(true) %} · {{ installation.done|size }} / {{ installation.of|size }}{% endif %}
+{% if installation.moved_from %} · moved from {{ installation.moved_from }}{% endif %}
+{% if installation.state == 'complete' %} · <a href="{{ catalogue.links.get((installation.machine, installation.name), '/models/' ~ installation.name|urlencode ~ '?node=' ~ installation.machine|urlencode) }}">Open model</a>{% endif %}
+{% if installation.can_retry %}<form method="post" action="/model-installations/{{ installation.id|urlencode }}/retry?kind={{ kind|default('all')|urlencode }}" class="d-inline"><button class="btn btn-sm btn-outline-primary ms-2">Retry installation</button></form>{% endif %}
+{% endcall %}
+{% endfor %}
 {# How far measuring has got on each node, or how its last run there ended. The button that starts it is at the top of the page (models_measure.html). #}
 {% if measure_oob|default(false) and kind|default('llm') == 'llm' %}{% include 'models_measure.html' %}{% endif %}
 {% set runs = measuring.runs if measuring is defined and measuring else [] %}

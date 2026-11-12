@@ -26,7 +26,7 @@ def model_files_in(folder: str) -> list[Path]:
     return sorted(file for pattern in ('*','*/*') for file in root.glob(pattern) if file.is_file() and not file.is_symlink() and supported(file))
 
 
-def sha256_of(path: str, stop=None) -> str:
+def sha256_of(path: str, stop=None, progress=None) -> str:
     """The SHA-256 of a whole file. Raises InterruptedError if `stop`, a threading.Event, is set meanwhile.
 
     A model file takes seconds to read through, and this runs on a thread of its own. A thread
@@ -35,10 +35,14 @@ def sha256_of(path: str, stop=None) -> str:
     """
     digest = hashlib.sha256()
     with open(path, "rb") as file:
+        if progress is not None:
+            progress.update(done=0, of=os.fstat(file.fileno()).st_size)
         while piece := file.read(PIECE):
             if stop is not None and stop.is_set():
                 raise InterruptedError
             digest.update(piece)
+            if progress is not None:
+                progress['done'] += len(piece)
     return digest.hexdigest()
 
 

@@ -1396,7 +1396,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     machines = Machines(["compute", *settings.machines], machine_says, settings.machines_poll_seconds,
                         ask_telemetry=telemetry_says, store=log.db)
     artifact_machine = settings.artifact_machine or ("front_cpu" if "front_cpu" in settings.machines else "compute")
-    distributions: dict[str, dict] = {}
+    from turnstile.installation_store import Installations
+    installation_store = Installations(stores.database('weightroom.accounts'))
+    distributions: dict[str, dict] = installation_store.recover()
     distribution_tasks: set[asyncio.Task] = set()
     installation_lock = asyncio.Lock()
     configuration_lock = asyncio.Lock()
@@ -1458,8 +1460,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(400, str(problem))
         return JSONResponse(checked, headers={'cache-control':'no-store'})
 
-    async def managed_digest(user, machine, path):
+    async def managed_digest(user, machine, path, progress=None):
         """Request the owning worker's full-file SHA-256, never infer equality from filenames."""
+        if machine == 'front' and progress is not None:
+            source = front_files.path(path)
+            progress['progress_available'] = True
+            try:
+                return await asyncio.to_thread(sha256_of, str(source), front_files.stopping, progress)
+            except OSError as problem:
+                raise ValueError(f'Could not verify {path} on {machine}: {problem}') from problem
         answer = await ask_machine(user, "GET", "/loadcoach/files/hash?" + urlencode({"path": path}), machine=machine, timeout=None)
         if answer is None or answer.status_code != 200:
             raise ValueError(f"Could not verify {path} on {machine}.")
@@ -1533,7 +1542,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 raise ValueError("The source file stream could not be authenticated.")
             yield upstream
 
-    async def install_model(request):
+    async def install_model(request, saved_request=None):
         """Preflight a complete model bundle before queueing verified file placement and creation.
 
         `machine` names one destination; `machines` names several, which are all checked before any
@@ -1546,7 +1555,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if not user.can("manage-models"):
             return error(403, "Model management is required.")
         try:
-            asked = json.loads(await request.body())
+            asked = saved_request if saved_request is not None else json.loads(await request.body())
             name, wanted = asked["name"], asked["settings"]
             several = "machines" in asked
             destinations = list(dict.fromkeys(asked["machines"] if several else [asked["machine"]]))
@@ -1562,6 +1571,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                     raise ValueError(f"Compute node {destination} is {machines.state(destination)}. Enable it before installing a model.")
             planned, problems, placing = [], [], Counter()
             async with installation_lock:
+                active = [job for job in distributions.values() if job.get('kind') == 'model-install'
+                          and job.get('name') == name and job.get('destination', job.get('machine')) in destinations
+                          and job.get('state') not in ('complete', 'failed', 'cancelled')]
+                if active:
+                    raise ValueError(f'{name} is already being installed. Open Models to follow its progress; another copy was not started.')
                 nodes = await model_file_inventory(user)
                 for destination in destinations:
                     try:
@@ -1574,8 +1588,31 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                     claim_installation(one["prepared"], 1)
         except (ValueError, KeyError, TypeError) as problem:
             return error(409, str(problem))
-        jobs = [start_installation(user, name, asked, **one) for one in planned]
+        jobs = []
+        try:
+            for one in planned:
+                jobs.append(start_installation(user, name, asked, **one))
+        except Exception:
+            for one in planned[len(jobs):]:
+                claim_installation(one['prepared'], -1)
+            raise
         return JSONResponse({"jobs": jobs} if several else jobs[0], status_code=202)
+
+    async def retry_installation(request):
+        user=caller(key_of(request))
+        if user is None:return error(401,'Missing or wrong API key.')
+        if not user.can('manage-models'):return error(403,'Model management is required.')
+        number=request.path_params['number']
+        try:
+            asked=installation_store.retry_request(number,user)
+        except KeyError as problem:return error(404,str(problem))
+        except PermissionError as problem:return error(403,str(problem))
+        except ValueError as problem:return error(409,str(problem))
+        answer=await install_model(request,asked)
+        if answer.status_code==202:
+            distributions[number]['retry_id']=json.loads(answer.body)['id']
+            installation_store.checkpoint([distributions[number]])
+        return answer
 
     async def prepare_installation(user, name, destination, candidate, asked, nodes, placing):
         """Check one destination and plan its files. `placing` counts the files that destinations
@@ -1623,15 +1660,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     def start_installation(user, name, asked, *, destination, candidate, selected, inventory, prepared):
         """Queue one destination's verified file placement, then its model configuration."""
         number = secrets.token_urlsafe(8)
-        job = distributions[number] = {"id": number, "kind": "model-install", "name": name, "machine": destination,
-                                       "state": "queued", "file": Path(candidate["flags"]["model"]).name, "targets": {}}
+        job = {"id": number, "kind": "model-install", "name": name, "machine": destination,
+                                       "destination": destination, "state": "queued", "file": Path(candidate["flags"]["model"]).name, "targets": {}}
+        installation_store.add(job,user,asked)
+        distributions[number] = job
         async def run():
             """Place a verified bundle, then publish its model configuration."""
             try:
-                placed = await install_files(prepared, lambda machine, path: managed_digest(user, machine, path),
-                                             lambda step: promote_model_file(user, step),
+                placed = await install_files(prepared, lambda machine, path: managed_digest(user, machine, path, job),
+                                             lambda step: promote_model_file(user, step, job),
                                              lambda step, digest, progress: transfer_model_file(user, step, digest, progress), job,
                                              claim=placement_claim)
+                job.update(state='creating', working_machine=destination, done=0, of=0, progress_available=False)
                 async with configuration_lock:
                     if asked.get('source_model_id'):
                         source = await ask_machine(user, 'GET', '/loadcoach/models', machine=asked.get('source_machine') or 'compute', timeout=5)
@@ -1659,10 +1699,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 job.update(state="complete", path=placed["flags"]["model"])
                 facts_seen.clear()
                 log.add("model", "moved" if asked.get("move") else "installed", user.name, "console", name, machine=destination)
+            except asyncio.CancelledError:
+                job.update(state='failed',interrupted=True,why='Installation interrupted by a service restart. Retry to verify retained files and continue with the saved settings.')
+                raise
             except (ValueError, OSError, httpx.HTTPError) as problem:
                 job.update(state="failed", why=str(problem))
+                if front_files.stopping.is_set():job['interrupted']=True
             finally:
                 claim_installation(prepared, -1)
+                installation_store.checkpoint([job])
         task = asyncio.create_task(run())
         distribution_tasks.add(task)
         task.add_done_callback(distribution_tasks.discard)
@@ -1940,7 +1985,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-models"):
             return error(403, "Your account may not manage model files.")
-        return JSONResponse({"distributions": list(distributions.values())}, headers={"cache-control": "no-store"})
+        return JSONResponse({"distributions": [{**job,'can_retry':job.get('kind')=='model-install' and
+            job.get('state')=='failed' and not job.get('retry_id') and installation_store.can_retry(job['id'],user)}
+            for job in distributions.values()]}, headers={"cache-control": "no-store"})
 
     def arranging() -> dict | None:
         """The bulk change of files running now. There is one at a time."""
@@ -2772,12 +2819,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 
+    async def checkpoint_installations():
+        while True:
+            installation_store.checkpoint(job for job in distributions.values() if job.get('kind')=='model-install')
+            await asyncio.sleep(2)
+
     @asynccontextmanager
     async def lifespan(app):
         """Keep the plugin synchronization and the daily tidying with turnstile, independent of the weightroom page process."""
         own = Path(settings.auth_key_file) if settings.auth_key_file else None
         batch_work.door = httpx.AsyncClient(transport=httpx.ASGITransport(app=observation.internal(app), client=("127.0.0.1", 1)), base_url=f"http://turnstile.internal:{settings.ports[0]}")
-        tasks = [asyncio.create_task(tidy()), asyncio.create_task(machines.run()), asyncio.create_task(rotate_due_keys())]
+        tasks = [asyncio.create_task(tidy()), asyncio.create_task(machines.run()), asyncio.create_task(rotate_due_keys()),
+                 asyncio.create_task(checkpoint_installations())]
         await task_records.retry_publication()
         batch_work.resume(users.by_name)
         if plugins:
@@ -2804,6 +2857,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             await batch_work.door.aclose()
             console_settings.changes.db.close()
             model_locations.db.close()
+            installation_store.db.close()
             component_versions.db.close()
             if plugins:
                 plugins.registry.db.close()
@@ -2834,6 +2888,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/models/files", model_files_available),
                             Route("/turnstile/models/image-check", image_model_check, methods=["POST"]),
                             Route("/turnstile/models/install", install_model, methods=["POST"]),
+                            Route('/turnstile/models/install/{number}/retry', retry_installation, methods=['POST']),
                             Route("/turnstile/models/location", model_location, methods=["POST"]),
                             Route("/turnstile/models/configure", configure_models, methods=["POST"]),
                             Route("/turnstile/machines/{name}/settings", machine_settings),

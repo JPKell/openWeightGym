@@ -209,6 +209,22 @@ def test_a_prepared_model_file_is_verified_and_installed_atomically(tmp_path, mo
     assert refused.status_code == 403 and prepared.status_code == 201 and received.status_code == 201
     assert target.read_bytes() == content and not target.with_name("model.gguf.part").exists()
 
+
+def test_identical_unused_upload_can_be_retried_only_by_its_owner(tmp_path,monkeypatch):
+    models=tmp_path/'models';models.mkdir()
+    content=b'complete retry bytes';digest=__import__('hashlib').sha256(content).hexdigest()
+    body={'place':'models','relative':'retry.gguf','size':len(content),'sha256':digest}
+    with made_up(tmp_path,monkeypatch,places={'models':str(models)}) as (caller,keys,_,users,_):
+        first=caller.post('/spotter/files/prepare',headers=keys['jordan'],json=body)
+        again=caller.post('/spotter/files/prepare',headers=keys['jordan'],json=body)
+        assert first.status_code==again.status_code==201 and first.json()['upload']==again.json()['upload']
+        assert caller.post('/spotter/files/prepare',headers=keys['jordan'],json={**body,'sha256':'a'*64}).status_code==409
+        users.add('other','admin')
+        other={'authorization':'Bearer '+users.new_key('other')}
+        assert caller.post('/spotter/files/prepare',headers=other,json=body).status_code==409
+        assert caller.put(again.json()['upload'],content=content).status_code==201
+        assert (models/'retry.gguf').read_bytes()==content
+
 def test_the_machine_sleeps_once_loadcoach_has_emptied_unless_told_not_to_wait(tmp_path, monkeypatch):
     with made_up(tmp_path, monkeypatch) as (caller, keys, asked, _, coach):
         ran = lambda: [line for line in asked.read_text().splitlines() if " show " not in line] if asked.exists() else []  # noqa: E731

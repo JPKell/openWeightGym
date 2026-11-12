@@ -23,6 +23,17 @@ Current installation addresses, documented **2026-10-20**:
 | Browser voice | [Private HTTPS voice app](https://k-srv.tailaf60c6.ts.net/) |
 | Desktop voice | Front server, port `8447`; [download](https://10.77.10.42/static/LoadCoach-Voice.zip) |
 
+### Model installation progress and restart recovery (2026-11-12)
+
+Large bundles are verified before copying starts; this phase now reports **Verifying SHA-256**,
+with the filename and byte progress when hashing front's files. Models shows active installations
+without requiring the original progress URL. Requests and progress are kept in the front accounts
+database without caller API keys. After a restart, an interrupted request shows **Retry installation**;
+its owner or a superuser can retry the saved settings through fresh permission, node, space and
+checksum checks. Verified existing files are reused. A second request for the same pending model
+and destination is refused. Identical unused receiver reservations can be reused by their owner;
+active uploads remain protected.
+
 ### Normal update source selection restored (2026-11-12)
 
 Repair `7a55847` makes `owg update` and start/restart put the installed checkout before old

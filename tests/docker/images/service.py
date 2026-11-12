@@ -64,6 +64,9 @@ def seed():
     tensor_file(image / 'concurrent/diffusion.safetensors', {
         'img_in.weight': (4096, 64), 'transformer_blocks.0.img_mod.1.weight': (12288, 4096),
     }, b'OWG concurrent transfer fixture\n' * 131072)
+    tensor_file(image / 'restart/diffusion.safetensors', {
+        'img_in.weight': (4096, 64), 'transformer_blocks.0.img_mod.1.weight': (12288, 4096),
+    }, b'OWG interrupted transfer fixture\n' * 131072)
     tensor_file(image / 'qwen/encoder.safetensors', {
         'model.language_model.embed_tokens.weight': (152064, 3584),
     })
