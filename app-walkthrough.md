@@ -18,7 +18,7 @@
 - [ ] Audio models
 - [ ] Dry fit
 - [ ] Roles
-- [ ] Files
+- [x] Files
 - [ ] File specific page
 - [ ] HuggingFace
 - [ ] Civitai
@@ -54,13 +54,13 @@
 
 ## System
 
-- [ ] Status
-- [ ] Telemetry
-- [ ] Physical host telemetry
-- [ ] Components
+- [x] Status
+- [x] Telemetry
+- [x] Physical host telemetry
+- [x] Components
 - [ ] Voice
 - [ ] Alerts
-- [ ] Schedules
+- [x] Schedules
 - [ ] DB
 - [ ] Database migration preview
 - [ ] Backups

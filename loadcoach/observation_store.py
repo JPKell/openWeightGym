@@ -781,6 +781,8 @@ def metrics(connection, owner: str | None, seconds: int = 3600, now=None) -> dic
     ).fetchall()
     groups = {}
     for service, machine, operation, outcome, metric, bucket, count, total in rows:
+        # PostgreSQL sums a BIGINT as NUMERIC, which arrives as a Decimal: JSON cannot carry it, nor float arithmetic mix with it.
+        count, total = int(count or 0), float(total or 0)
         key = (service, operation, metric)
         group = groups.setdefault(
             key,
