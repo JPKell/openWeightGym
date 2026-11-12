@@ -128,7 +128,9 @@
   }
   function identity(el, model) {
     el.querySelector('[data-name]').textContent = model.name;
-    el.querySelector('[data-meta]').textContent = model.family + ' · audio.cpp';
+    const family=el.querySelector('[data-family]');
+    if (family) family.textContent=model.family;
+    else el.querySelector('[data-meta]').textContent = model.family + ' · audio.cpp';
     el.querySelector('[data-initial]').textContent = model.name[0].toUpperCase();
   }
   function decorate(el, model) {

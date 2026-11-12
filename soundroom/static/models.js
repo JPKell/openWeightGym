@@ -299,7 +299,7 @@
       const place=places.find(one=>one.node === activeNode) || places[0], row=place.row;
       choice.dataset.model=name;
       choice.querySelector('[data-name]').textContent=name;
-      choice.querySelector('[data-meta]').textContent=row.audiocpp.family + ' · audio.cpp';
+      choice.querySelector('[data-family]').textContent=row.audiocpp.family;
       choice.querySelector('[data-initial]').textContent=name[0].toUpperCase();
       choice.querySelector('[data-kind]').textContent=kinds[row.audiocpp.kind] || row.audiocpp.kind;
       const active=selected?.name === name && places.some(one=>one.node === activeNode);

@@ -57,5 +57,6 @@
 {% endmacro %}
 
 {% macro studio_choice(id='audio-choice', live=false) %}
-<template id="{{ id }}"><div class="audio-choice">{{ subject(attrs={'data-identity':''}) }}<span class="badge" data-kind></span>{% if live %}<div class="inventory-placements" data-placements></div><small class="text-secondary" data-draft></small>{% endif %}</div></template>
+{% set meta %}<span data-family></span> <span class="badge ms-1" data-kind></span>{% endset %}
+<template id="{{ id }}"><div class="audio-choice">{{ subject(meta=meta,attrs={'data-identity':''}) }}{% if live %}<div class="inventory-placements" data-placements></div><small class="text-secondary" data-draft></small>{% endif %}</div></template>
 {% endmacro %}
