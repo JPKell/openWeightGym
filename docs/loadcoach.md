@@ -9516,8 +9516,15 @@ offline recovery checks, maintenance-window restore, identity portability and le
 `loadcoach/backup_crypto.py` delegates authenticated encryption to the maintained age tools.
 `loadcoach/backup_restore.py` supplies offline verification and private staging through
 `suite-backup-verify`. All callers, including schedules and database migration recovery,
-require public recipients in the host's actual `data/backups/recipients.txt`. Private recovery
-keys stay off the application hosts. Missing configuration fails closed before snapshots.
+require public recipients in the host's own `DATA/backups/recipients.txt`, where `DATA` is the
+`data` setting of that host's settings file counted from the settings folder (`../data` as
+installed). For the default per-account install that is
+`/home/ACCOUNT/openWeightGym/data/backups/recipients.txt` on the front and on every compute node;
+for `--system` it is `/var/lib/openweightgym/data/backups/recipients.txt`, owned by
+`openweightgym`. The folder is mode 700 and the file 600, owned by the service account.
+[Where recipients.txt goes](../weightroom/pages/docs/data/backups.html) has the commands and a
+readiness check. Private recovery keys stay off the application hosts. Missing configuration
+fails closed before snapshots.
 
 The Backups page and compute's `GET/POST /loadcoach/backups` and
 `GET /loadcoach/backups/{id}` remain restricted to `manage-settings`. Browser restore views
