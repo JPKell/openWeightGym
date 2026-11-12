@@ -5,8 +5,8 @@
 {% block scripts %}
 <link rel="stylesheet" href="/mirrorwall-static/images.css?v=4"><link rel="stylesheet" href="/static/image-studio.css?v=1">
 <script src="/mirrorwall-static/image-profiles.js?v=1" defer></script>
-{% if studio_manage %}<script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/mirrorwall-static/models.js?v=12" defer></script>{% endif %}
-<script src="/mirrorwall-static/workflows.js?v=1" defer></script>
+{% if studio_manage %}<script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/mirrorwall-static/models.js?v=13" defer></script>{% endif %}
+<script src="/mirrorwall-static/workflows.js?v=2" defer></script>
 {% endblock %}
 {% block main %}
 <div id="image-studio" data-manage="{{ 'true' if studio_manage else 'false' }}">
@@ -19,8 +19,8 @@
 <p id="studio-status" class="small" role="status" aria-live="polite"></p>
 <div class="image-workspace">
 <aside id="models-panel" aria-label="Image model library">
-{% call card('Models', hint='One setup, many workflows') %}
-{% if studio_manage %}<form method="get" class="mb-3"><label for="mw-node" class="form-label">Compute node</label><select id="mw-node" name="node" class="form-select mb-2"><option value="compute">Default</option></select><button class="btn btn-outline-secondary btn-sm">Browse node</button></form>{% endif %}
+{% call card('Models') %}
+{% if studio_manage %}<label for="mw-node" class="visually-hidden">Compute node</label><select id="mw-node" name="node" class="form-select mb-3"><option value="">All</option></select>{% endif %}
 <label class="visually-hidden" for="studio-model-search">Search models</label><input id="studio-model-search" type="search" class="form-control mb-3" placeholder="Find a model…"><div id="studio-model-list" class="model-list"></div><p id="studio-models-empty" class="small text-secondary" hidden>No image models on this node. Add an image model to begin.</p>
 {% endcall %}
 </aside>
@@ -49,7 +49,6 @@
 {% call alert('danger', role='alert', attrs={'id':'mw-message','hidden':''}) %}{% endcall %}{% call alert('secondary', attrs={'id':'mw-runtime','hidden':''}) %}{% endcall %}
 {% include 'mirrorwall_model_setup.html' %}
 </dialog>
-<div id="mw-list" hidden></div>
 </div>
 {% endif %}
 {{ templates() }}

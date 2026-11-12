@@ -1,4 +1,5 @@
 """Browser pages and narrow authenticated proxies into openWeightGym's existing APIs."""
+import asyncio
 from urllib.parse import quote, urlsplit
 
 from starlette.responses import JSONResponse, Response
@@ -62,18 +63,29 @@ def routes(for_people, page, ask, model_api):
         return Response(answer.content, answer.status_code, headers=headers)
 
     async def inventory(request, person):
-        """Read the selected node image catalogue and runtime availability."""
+        """List image setups across nodes while retaining each copy's settings and identity."""
         if "manage-models" not in person.can:
             return JSONResponse({"error": {"message": "Model management is required."}}, 403)
-        answer = await model_api(request, person, "GET", "/loadcoach/models")
+        answer = await ask('GET', '/turnstile/models', person.key)
         if answer.is_error:
             return Response(answer.content, answer.status_code, media_type="application/json")
         value = answer.json()
-        value['cards'] = value.get('engine_cards', {}).get('sdcpp', value.get('cards', []))
-        value["models"] = [one for one in value["models"] if one.get("engine") == "sdcpp"]
-        selected_node=request.query_params.get('node') or 'compute'
-        engines = await ask('GET','/turnstile/machines/'+quote(selected_node,safe='')+'/engines',person.key)
-        value["engines"] = engines.json() if engines.is_success else {}
+        facts = value.get('nodes', {})
+        value['node_cards'] = {name: (one.get('engine_cards') or {}).get('sdcpp', one.get('cards') or [])
+                               for name, one in facts.items()}
+        value['default_node'] = 'compute' if 'compute' in facts else next(iter(facts), 'compute')
+        selected_node = request.query_params.get('node', '')
+        value['models'] = [{**copy, 'node':copy.get('machine', 'compute'),
+                            'workflow_model':one['name'], 'workflow_model_id':one.get('model_id')}
+                           for one in value['models'] if one.get('engine') == 'sdcpp'
+                           for copy in one.get('locations') or [one]
+                           if not selected_node or copy.get('machine', 'compute') == selected_node]
+        value['cards'] = value['node_cards'].get(selected_node or value['default_node'],
+                            (value.get('engine_cards') or {}).get('sdcpp', value.get('cards') or []))
+        names = list(facts) or [value['default_node']]
+        engines = await asyncio.gather(*(ask('GET','/turnstile/machines/'+quote(name,safe='')+'/engines',person.key) for name in names))
+        value['node_engines'] = {name: answer.json() if answer.is_success else {} for name, answer in zip(names, engines)}
+        value['engines'] = value['node_engines'].get(selected_node or value['default_node'], {})
         nodes = await ask("GET", "/turnstile/machines", person.key)
         value["nodes"] = nodes.json().get("machines", []) if nodes.is_success else []
         return JSONResponse(value, headers={"cache-control": "no-store"})
