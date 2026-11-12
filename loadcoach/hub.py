@@ -69,9 +69,18 @@ async def search(http: httpx.AsyncClient, words: str, token: str = "") -> list[d
     return [{"repository": one["id"], "downloads": one.get("downloads", 0), "likes": one.get("likes", 0), "made": one.get("createdAt", "")[:10]} for one in found]
 
 
-async def search_page(http: httpx.AsyncClient, words: str, token: str = "", cursor: str = "") -> dict:
+def search_order(params) -> tuple[str, str]:
+    """Keep model discovery ordering within the supported provider fields."""
+    sort = params.get('sort', 'downloads')
+    return (sort if sort in ('downloads', 'likes', 'createdAt') else 'downloads',
+            '1' if params.get('direction') == '1' else '-1')
+
+
+async def search_page(http: httpx.AsyncClient, words: str, token: str = "", cursor: str = "",
+                      sort: str = 'downloads', direction: str = '-1') -> dict:
     """Read one bounded result page; only forward the provider's opaque cursor."""
-    params = {'search': words, 'filter': 'gguf', 'sort': 'downloads', 'direction': '-1', 'limit': '12'}
+    sort, direction = search_order({'sort': sort, 'direction': direction})
+    params = {'search': words, 'filter': 'gguf', 'sort': sort, 'direction': direction, 'limit': '20'}
     if cursor:
         params['cursor'] = cursor[:4096]
     try:

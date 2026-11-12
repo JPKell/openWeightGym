@@ -66,6 +66,7 @@ from db.maintenance import Barrier, Gate
 from db.migration import (MigrationError, load_profile as migration_profile, profile_names as migration_profiles,
                           preview as migration_preview, launch as migration_launch, reports as migration_reports)
 from loadcoach.config import CLI, read_settings, said_in
+from loadcoach.hub import search_order as hub_search_order
 from loadcoach.backups import (
     backup_root,
     create_backup,
@@ -4549,20 +4550,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if not repository and "/" in words and " " not in words:  # a repository typed out goes straight to its files
             repository = words
         cursors = request.query_params.getlist('cursor')
+        sort, direction = hub_search_order(request.query_params)
         answer = await ask("GET", "/turnstile/artifacts/hub", person.key, params={"repository": repository} if repository else
-                           {"search": words, "paged": "1", "cursor": cursors[-1] if cursors else ""})
+                           {"search": words, "paged": "1", "cursor": cursors[-1] if cursors else "", "sort": sort, "direction": direction})
         found, status = answer.json(), 400 if failed else answer.status_code
         if answer.status_code != 200:  # LoadCoach's own words: not allowed, no such repository, or Hugging Face not answering
             said, failed, found = found["error"]["message"], True, {}
-        def result_link(trail):
+        def result_link(trail, order=sort, way=direction):
             """Keep previous provider cursors in bookmarkable local result URLs."""
-            return '/hub?' + urlencode([('q', words), *(('cursor', value) for value in trail)])
+            return '/hub?' + urlencode([('q', words), ('sort', order), ('direction', way), *(('cursor', value) for value in trail)])
         next_cursor = found.get('next_cursor', '')
         hub_paging = {'previous': result_link(cursors[:-1]) if cursors else '',
                       'next': result_link([*cursors, next_cursor]) if next_cursor and next_cursor not in cursors else '',
                       'page': len(cursors) + 1}
+        hub_sort = {'key': sort, 'direction': direction,
+                    'links': {key: result_link([], key, '1' if key == sort and direction == '-1' else '-1')
+                              for key in ('downloads', 'likes', 'createdAt')},
+                    'description': {'downloads': ('Most downloaded first', 'Least downloaded first'),
+                                    'likes': ('Most liked first', 'Least liked first'),
+                                    'createdAt': ('Newest first', 'Oldest first')}[sort][direction == '1']}
         return page(request, "hub.html", person, status=status, found=found, words=words or repository, downloads=await coming(person),
-                    said=said or request.query_params.get("said", ""), failed=failed, hub_paging=hub_paging)  # fmt: skip
+                    said=said or request.query_params.get("said", ""), failed=failed, hub_paging=hub_paging, hub_sort=hub_sort)  # fmt: skip
 
     async def hub_start(request: Request, person: Person) -> Response:
         """Bring the ticked files down."""
