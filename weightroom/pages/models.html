@@ -4,7 +4,7 @@
 {% from "parts.html" import page_header, form_section, more, node_state %}
 {% from 'models_parts.html' import overview %}
 {% block title %}Models · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=1"><script src="/static/model-files.js?v=4" defer></script><script src="/static/models.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><script src="/static/model-files.js?v=4" defer></script><script src="/static/models.js?v=2" defer></script>{% endblock %}
 {% block main %}
 {% call page_header('Models', 'Choose a model type to manage its files, settings and availability.') %}{% if kind == 'llm' %}{% include 'models_measure.html' %}{% endif %}<a class="btn btn-primary" href="{{ '#add-model' if kind in ('all', 'llm') else '/models/images?new=1' if kind == 'image' else '/models/audio?new=1' }}">Add a model</a>{% endcall %}
 {{ said_box(said, failed) }}

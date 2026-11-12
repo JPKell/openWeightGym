@@ -29,6 +29,7 @@
       if (!row.hidden) visible++;
       const detail = row.querySelector('details');
       if (restore && detail && expanded.has(row.dataset.name)) detail.open = true;
+      if (detail) row.setAttribute('aria-expanded',String(detail.open));
     }
     const empty = table.querySelector('[data-catalogue-empty]');
     if (empty) empty.hidden = visible > 0 || !rows.length;
@@ -40,10 +41,31 @@
     }
   }
   for (const name of ['search','status','sort']) field(name)?.addEventListener(name === 'search' ? 'input' : 'change',() => apply());
+  function toggle(row) {
+    const detail = row.querySelector('[data-catalogue-details]');
+    if (!detail) return;
+    detail.open = !detail.open;
+    row.setAttribute('aria-expanded',String(detail.open));
+  }
   document.addEventListener('click',event => {
-    if (!event.target.closest('[data-catalogue-clear]')) return;
-    field('search').value = ''; field('status').value = 'all'; apply(); field('search').focus();
+    if (event.target.closest('[data-catalogue-clear]')) {
+      field('search').value = ''; field('status').value = 'all'; apply(); field('search').focus();
+      return;
+    }
+    const row = event.target.closest('#models-table [data-catalogue-row]');
+    if (!row || event.defaultPrevented || event.target.closest('a, button, input, select, textarea, label, summary, [contenteditable]')) return;
+    if (window.getSelection()?.toString()) return;
+    toggle(row);
   });
+  document.addEventListener('keydown',event => {
+    const row = event.target.closest('#models-table [data-catalogue-row]');
+    if (!row || event.target !== row || !['Enter',' '].includes(event.key)) return;
+    event.preventDefault(); toggle(row);
+  });
+  document.addEventListener('toggle',event => {
+    if (!event.target.matches('[data-catalogue-details]')) return;
+    event.target.closest('[data-catalogue-row]')?.setAttribute('aria-expanded',String(event.target.open));
+  },true);
   document.addEventListener('htmx:beforeSwap',event => {
     if (event.detail.target?.id !== 'models') return;
     const region = document.querySelector('#models .inventory-table-scroll');
