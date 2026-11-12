@@ -1486,14 +1486,29 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def all_models(request: Request, person: Person) -> dict | Response:
         """One logical model with all verified compute locations, with an old-server fallback."""
+        def enabled(known):
+            if isinstance(known, dict):
+                known['models'] = [model for model in known.get('models', []) if platform().model_enabled(model)]
+            return known
         if request.query_params.get("node"):
-            return await fetch(request, person, node_model_path(request, "/loadcoach/models"))
+            return enabled(await fetch(request, person, node_model_path(request, "/loadcoach/models")))
         answer = await ask("GET", "/turnstile/models", person.key)
         if answer.status_code == 404:
-            return await fetch(request, person, "/loadcoach/models")
+            return enabled(await fetch(request, person, "/loadcoach/models"))
         if answer.status_code != 200:
             return page(request, "refused.html", person, status=answer.status_code, why=answer.json()["error"]["message"])
-        return answer.json()
+        return enabled(answer.json())
+
+    async def retry_model_install(request: Request, person: Person) -> Response:
+        """Replay a saved installation through its normal authenticated preflight."""
+        if 'manage-models' not in person.can:
+            return page(request,'refused.html',person,status=403,why='Model management is required.')
+        answer=await ask('POST','/turnstile/models/install/'+quote(request.path_params['number'],safe='')+'/retry',person.key,json={})
+        if not answer.is_success:
+            return page(request,'refused.html',person,status=answer.status_code,why=answer.json()['error']['message'])
+        kind=request.query_params.get('kind','all')
+        if kind not in ('llm','image','audio','all'):kind='all'
+        return go('/models?'+urlencode({'kind':kind,'install':answer.json()['id']}))
 
     def settings_from(form: dict[str, list[str]]) -> dict:
         """Read model settings from the selected compute node's catalogue."""
@@ -1835,8 +1850,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         measuring = measure_button([one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == 'llm'],
                                    node_measuring(known, shown_node), shown_node)
         wanted_jobs = asked.getlist("install")
-        progress = await ask("GET", "/turnstile/artifacts/distributions", person.key) if wanted_jobs else None
-        installations = [job for job in progress.json().get("distributions", []) if job["id"] in wanted_jobs] if progress and progress.is_success else []
+        try:
+            progress = await ask("GET", "/turnstile/artifacts/distributions", person.key) if 'manage-models' in person.can else None
+        except ComputeOff:
+            progress = None
+        installations = [job for job in progress.json().get("distributions", []) if job.get('kind') == 'model-install' and
+                         (job["id"] in wanted_jobs or job.get('state') not in ('complete', 'failed', 'cancelled') or
+                          job.get('interrupted') and job.get('can_retry'))] if progress and progress.is_success else []
         if part == "list":  # the list asking for itself again
             return page(request, "models_list.html", person, known=known, address=lambda label: node_model_address(request, label),
                         kind=kind, installations=installations, adaptor_models=plugins.models(person.me) if kind in ('all', 'llm') else [],
@@ -5226,6 +5246,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route("/models", models_page),
             route("/model-files", model_files_picker),
             route("/models", add_model, "POST"),
+            route('/model-installations/{number}/retry', retry_model_install, 'POST'),
             route("/measure-models", measure_models, "POST"),  # not under /models/, where everything after is a model's name
             route("/dry-fit", fit_page),  # nor is this
             route('/dry-fit', fit_do, 'POST'),

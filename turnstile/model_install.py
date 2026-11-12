@@ -82,31 +82,38 @@ async def execute(prepared, digest, promote, transfer, job, claim=None):
     the file there already, with the same SHA-256, and goes on without placing it again.
     """
     hashes = {}
+    async def verify(machine, path, size):
+        """Publish hashing before its first await; large bundles must not look queued."""
+        job.update(state='verifying', working_machine=machine, file=Path(path).name,
+                   done=0, of=size, progress_available=False)
+        return await digest(machine, path)
     # Resolve original hashes first; a promoted source may not exist yet.
     for step in prepared["steps"]:
         key = (step["source"], step["file"]["path"])
         if key not in hashes:
             prior = next((one for one in prepared["steps"] if (one["node"], one["path"]) == key), None)
-            hashes[key] = hashes[(prior["source"], prior["file"]["path"])] if prior else await digest(*key)
-        if step["existing"] and await digest(step["node"], step["path"]) != hashes[key]:
+            hashes[key] = hashes[(prior["source"], prior["file"]["path"])] if prior else await verify(*key, step['file']['size'])
+        if step["existing"] and await verify(step["node"], step["path"], step['existing']['size']) != hashes[key]:
             raise ValueError(f"The cache file on {step['node']} does not match the selected file's SHA-256: {step['path']}.")
     for step in prepared["steps"]:
         if step["existing"]:
             continue
         wanted = hashes[(step["source"], step["file"]["path"])]
+        job.update(state='waiting', working_machine=step['node'], file=Path(step['path']).name,
+                   done=0, of=0, progress_available=False)
         async with claim(step["node"], step["path"]) if claim else contextlib.nullcontext():
             if claim:
                 try:
-                    if await digest(step["node"], step["path"]) == wanted:
+                    if await verify(step["node"], step["path"], step['file']['size']) == wanted:
                         continue  # another installation placed this file while this one waited
                 except ValueError:
                     pass  # not there yet
             job.update(state="promoting" if step["promotion"] else "copying", file=Path(step["path"]).name,
-                       machine=step["node"], done=0, of=step["file"]["size"])
+                       working_machine=step["node"], done=0, of=step["file"]["size"], progress_available=True)
             if step["promotion"]:
                 await promote(step)
             else:
                 await transfer(step, wanted, job)
-            if await digest(step["node"], step["path"]) != wanted:
+            if await verify(step["node"], step["path"], step['file']['size']) != wanted:
                 raise ValueError(f"The installed file failed SHA-256 verification: {step['path']}.")
     return prepared["settings"]
