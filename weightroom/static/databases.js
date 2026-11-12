@@ -130,7 +130,7 @@
           const tr = clone('table-row'); text(tr, '[data-table-name]', item.name); text(tr, '[data-records]', number(item.records));
           text(tr, '[data-size]', size(item.size)); text(tr, '[data-indexes]', number(item.indexes));
           text(tr, '[data-retention]', db.bindings.includes('spotter.history') && ['readings', 'public.readings'].includes(item.name) ? 'Eligible · readings.at' : 'Protected / policy required');
-          tr.querySelector('[data-table-dump]').onclick = () => { notice('A table-only dump may depend on other tables.'); location.href = db.dump_url + '?table=' + encodeURIComponent(item.name); };
+          tr.querySelector('[data-table-dump]').onclick = () => { location.href = db.dump_url + '?table=' + encodeURIComponent(item.name); };
           row.querySelector('[data-table-rows]').append(tr);
         }
       }
