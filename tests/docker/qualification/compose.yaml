@@ -1,0 +1,73 @@
+name: owg-qualification
+
+x-app: &app
+  build:
+    context: ../../..
+    dockerfile: tests/docker/qualification/Dockerfile
+  image: owg-qualification:local
+  init: true
+
+services:
+  seed:
+    <<: *app
+    command: [seed]
+    volumes: ["front:/state/front", "alpha:/state/alpha", "beta:/state/beta", "gamma:/state/gamma"]
+  turnstile:
+    <<: *app
+    command: [turnstile]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["front:/state/front"]
+  console:
+    <<: *app
+    command: [console]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["front:/state/front"]
+    ports: ["127.0.0.1:${OWG_QUALIFICATION_PORT:-19440}:8440"]
+  alpha:
+    <<: *app
+    command: [loadcoach, alpha]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["alpha:/state/alpha", "runtimes:/opt/owg-runtimes"]
+  alpha-files:
+    <<: *app
+    command: [spotter, alpha]
+    network_mode: service:alpha
+    depends_on:
+      alpha: {condition: service_started}
+    volumes: ["alpha:/state/alpha"]
+  beta:
+    <<: *app
+    command: [loadcoach, beta]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["beta:/state/beta", "runtimes:/opt/owg-runtimes"]
+  beta-files:
+    <<: *app
+    command: [spotter, beta]
+    network_mode: service:beta
+    depends_on:
+      beta: {condition: service_started}
+    volumes: ["beta:/state/beta"]
+  gamma:
+    <<: *app
+    command: [loadcoach, gamma]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["gamma:/state/gamma", "runtimes:/opt/owg-runtimes"]
+  gamma-files:
+    <<: *app
+    command: [spotter, gamma]
+    network_mode: service:gamma
+    depends_on:
+      gamma: {condition: service_started}
+    volumes: ["gamma:/state/gamma"]
+
+volumes:
+  front:
+  alpha:
+  beta:
+  gamma:
+  runtimes:
