@@ -3830,32 +3830,30 @@ readings and links to `/telemetry`. Each account can show or hide it under My ac
 `/telemetry` lists physical hosts; `/telemetry/{fingerprint}` selects one host, its devices and
 retained history. The standalone Machine page has been removed. The selected host's top row
 shows its name, reading age and uptime. Its right column holds model pills, installed services
-and engines from the same authorized inventory as Components, device capacity, Wake and compute
-power controls. Service action buttons are removed. Engine pills show readiness/configuration,
-not inferred running processes. Graph range, hardware tabs and zoom survive polling.
+and engines from the same authorized inventory as Components, device capacity and Wake. The
+right column ends at Wake; service and power action buttons are removed. Engine pills show
+readiness/configuration, not inferred running processes. Graph range, hardware tabs and zoom survive polling.
 
 `history_groups()` in `weightroom/telemetry_workspace.py` arranges device series; `chart()` in
 `weightroom/app.py` prepares samples, units and heat limits. `telemetry-workspace.js` draws them
 with ECharts. Chart labels use the browser's timezone and tooltips include UTC. Missing samples
 remain absent while lines connect surrounding readings; low usage is green and high usage red.
 
-Power actions require `power`. Confirmation boxes
-and interruption notices remain in `telemetry_control_parts.html`. Unless forced, LoadCoach first
+Power actions require `power`. Unless forced, LoadCoach first
 stops taking new requests and finishes its current work before a power change. Models unload before
 sleep and load again when requested. Wake from a switched-off machine requires hardware support.
-Pending actions show who requested them, remaining work, failures and cancellation. The workspace
-polls their state, deferring replacements while a marked form has unsent changes.
+The workspace defers polling replacements while a marked form has unsent changes.
 
 The Components inventory retains its `manage-settings` permission. Only installed entries for
 the selected physical host are shown; third-party services outside that catalogue are excluded.
-Signed `POST /machine/power/{action}` handlers remain active for Telemetry's forms. The service
+Signed `POST /machine/power/{action}` handlers remain active without Telemetry buttons. The service
 action API at `/machine/services/{name}/{action}` remains available with `restart-services`,
 but has no Telemetry buttons. GET `/machine` and its separate power polling endpoint are gone.
 System logs remain on `/output` and still require `restart-services`.
 
 When LoadCoach is down but Spotter is answering, signed-in operators can still inspect host
-telemetry and use its power controls. Starting compute uses the terminal or the retained
-authenticated service-action API. Physical-host identity is verified before Telemetry actions.
+telemetry. Starting compute uses the terminal or the retained authenticated service-action API.
+Physical-host identity is verified before service and power API actions.
 
 ### The Files pages
 

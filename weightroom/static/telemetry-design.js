@@ -197,7 +197,7 @@
     totals($('#host-totals'), [
       ['CPU load', fmt(read(host, host.cpu)), `${host.cores} cores`],
       ['CPU temperature', fmt(read(host, host.cpuTemp), '°C'), host.cpuTemp == null ? 'Sensor unavailable' : 'Processor sensor'],
-      ['Memory used', fmt(read(host, host.ram), ' GiB'), `of ${host.ramTotal} GiB`],
+      [`Memory used of ${host.ramTotal} GiB`, fmt(read(host, host.ram), ' GiB')],
       ['Disk used', fmt(read(host, 100 * diskUsed / diskTotal)), `${host.disks.length} volumes · ${(diskTotal / 1024).toFixed(1)} TiB total`]
     ]);
     const percentages = [host.cpu, host.cpuTemp == null ? null : host.cpuTemp / 110 * 100, host.ram / host.ramTotal * 100, diskUsed / diskTotal * 100];

@@ -4727,11 +4727,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                       "identity": identity or "", "hours": hours, "until": asked.get("until", ""),
                       "initial_group": 'gpu-' + asked['gpu'] if asked.get('gpu', '').isdigit() else 'processor'}
         template = "telemetry_workspace.html" if asked.get("part") == "workspace" else "telemetry_host.html" if host else "machines.html"
-        machine_controls, controls_error = None, ''
         if host and 'compute' in host['machines'] and host.get('fingerprint'):
-            machine_controls, controls_error = await physical_host_controls(person, host['fingerprint'])
-            if machine_controls:
-                uptime = number(machine_controls.get('up_for'))
+            snapshot, _ = await physical_host_controls(person, host['fingerprint'])
+            if snapshot:
+                uptime = number(snapshot.get('up_for'))
                 host['uptime'] = uptime if uptime is not None and uptime >= 0 else None
         if host:
             host['components'] = None
@@ -4742,11 +4741,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     components = None
                 if components is not None:
                     host['components'] = component_pills(host, components)
-        control_return_to = host['href'] + ('?' + urlencode(query) if query else '') if host else ''
         return page(request, template, person, hosts=hosts, host=host, summary=summary, graph_data=graph_data,
                     poll=poll, hours=hours, until=asked.get("until", ""), refresh_url=refresh_url,
-                    history_error=history_error, snapshot_at=time.time(), machine_controls=machine_controls,
-                    controls_error=controls_error, control_return_to=control_return_to)
+                    history_error=history_error, snapshot_at=time.time())
 
     async def machines_page(request: Request, person: Person) -> Response:
         """Open the fleet grid without automatically selecting a host."""

@@ -150,7 +150,7 @@ def test_host_wake_controls_are_node_specific_and_explain_missing_configuration(
     rendered = template.render(host=host, person=SimpleNamespace(can={"front-wake"}))
     assert '/telemetry/nodes/rig/wake' in rendered and 'Wake rig</button>' in rendered
     assert 'disabled title="Configure Wake-on-LAN for this node"' in rendered
-    assert 'node is not answering' in rendered
+    assert '<p' not in rendered
     assert '<form' not in template.render(host=host, person=SimpleNamespace(can=set()))
     assert '{% include "host_wake.html" %}' in (pages / 'telemetry_workspace.html').read_text()
     assert "extends 'machines.html'" in (pages / 'telemetry_host.html').read_text()
