@@ -1,0 +1,37 @@
+/* The model overview reuses the console's cards, KPI band, controls and node matrices. */
+[data-model-configuration] [hidden] { display: none !important; }
+.model-config-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
+.model-config-group { min-width: 0; margin-bottom: 0 !important; }
+.model-config-group [data-model-edit], [data-model-discard], .model-workspace-views, .model-node-scope { display: none; }
+.model-configuration-enhanced .model-workspace-views, .model-configuration-enhanced .model-node-scope { display: flex; }
+.model-configuration-enhanced [data-model-edit], .model-configuration-enhanced [data-model-discard] { display: inline-flex; }
+.model-configuration-enhanced .model-config-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.model-configuration-enhanced .model-config-group.is-open { grid-column: 1 / -1; order: -1; border-color: var(--suite-accent); }
+.model-config-group.is-changed { border-color: var(--suite-accent); }
+.model-config-group .card-actions { margin-left: auto; }
+.model-config-summary { display: grid; gap: .45rem; }
+.model-summary-line { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: .5rem; }
+.model-summary-line dd { overflow-wrap: anywhere; }
+.model-workspace-views { border-bottom: 1px solid var(--bs-border-color); padding-bottom: .6rem; }
+.model-workspace-views .nav-link { font-size: .875rem; padding: .4rem .75rem; }
+.model-node-scope { background: var(--tblr-bg-surface); }
+.model-node-scope .form-selectgroup-label { min-height: 0; font-size: .85rem; }
+.model-configuration-enhanced .model-matrix-scroll { max-height: 60dvh; }
+.model-configuration-enhanced .model-matrix.is-single { min-width: 0; }
+.model-configuration-enhanced .model-config-group[data-shared="true"]:not([data-model-group="model"]) thead { display: none; }
+.model-configuration-enhanced [data-matrix-pick] { display: none; }
+.model-config-save { border: 1px solid var(--bs-border-color); border-radius: var(--suite-frame-radius); }
+.model-config-save.has-changes { border-color: var(--suite-accent); }
+.model-config-group .matrix-shared { gap: .75rem 1.5rem; }
+.model-config-group .matrix-shared-item { grid-template-columns: minmax(8rem, 160px) minmax(0, 1fr); }
+.model-generation-add { grid-column: 1 / -1; }
+.model-config-group [data-model-defaults-list] { overflow-wrap: anywhere; }
+@media (max-width: 1199.98px) { .model-configuration-enhanced .model-config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767.98px) {
+  .model-configuration-enhanced .model-config-grid { grid-template-columns: minmax(0, 1fr); }
+  .model-config-group .matrix-shared { grid-template-columns: minmax(0, 1fr); }
+  .model-config-group .matrix-shared-item { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+  .model-configuration-enhanced .model-matrix.is-single [data-matrix-shared] > td > * { position: static; width: auto; }
+  .model-config-save > .ms-md-auto { width: 100%; }
+  .model-config-save .input-group { flex: 1 1 10rem; min-width: 0; }
+}

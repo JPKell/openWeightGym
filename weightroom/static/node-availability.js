@@ -12,7 +12,9 @@
       const node = fields.get('machine') || fields.get('node') || url.searchParams.get('node') || new URL(location.href).searchParams.get('node') || new URL(location.href).searchParams.get('machine') || 'compute';
       if (!offline.has(node)) continue;
       form.dataset.nodeUnavailable = 'true';
-      for (const control of form.querySelectorAll('button, input[type="submit"]')) {
+      // form.elements also includes submit buttons associated through form="...".
+      // Local editors and navigation remain usable while a node is offline.
+      for (const control of [...form.elements].filter(field => field.type === 'submit')) {
         control.disabled = true;
         control.title = `${node} is unavailable`;
       }

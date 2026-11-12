@@ -19,16 +19,27 @@
     });
   }
 
-  // A change in a ticked column is made in the other ticked columns too, control by control.
+  // Match field names and GPU identities: nodes can have different numbers of cards or
+  // legacy count controls, so their controls do not necessarily share DOM positions.
+  const fieldName = (control, cell) => control.name.startsWith(`n:${cell.dataset.node}:`)
+    ? control.name.slice(`n:${cell.dataset.node}:`.length) : control.name;
+  function counterpart(control, cell, other) {
+    if (control.matches('[data-hardware-mode]')) return controls(other).find(input => input.matches('[data-hardware-mode]') && input.value === control.value);
+    const name = fieldName(control, cell), peers = controls(other).filter(input => fieldName(input, other) === name);
+    if (name === 'gpu_card' && control.type !== 'select-one' || name === 'suggested') return peers.find(input => input.value === control.value);
+    const index = controls(cell).filter(input => fieldName(input, cell) === name).indexOf(control);
+    return peers[index];
+  }
+
+  // A change in a ticked column is made in the other ticked columns too.
   function spread(event) {
     const cell = event.target.closest('.matrix-cell[data-node]'), table = cell?.closest('[data-model-matrix]');
     if (!table) return;
     const nodes = picked(table);
     if (nodes.size > 1 && nodes.has(cell.dataset.node)) {
-      const position = controls(cell).indexOf(event.target);
       cell.closest('tr').querySelectorAll('.matrix-cell[data-node]').forEach(other => {
         if (other === cell || !nodes.has(other.dataset.node)) return;
-        const twin = controls(other)[position];
+        const twin = counterpart(event.target, cell, other);
         if (!twin || twin.type !== event.target.type) return;
         if (twin.type === 'checkbox' || twin.type === 'radio') {
           if (twin.checked === event.target.checked) return;
@@ -73,7 +84,8 @@
   document.addEventListener('keydown', event => {
     if (event.key !== 'Enter' || event.target.id !== 'preset-name') return;
     event.preventDefault();
-    event.target.form.requestSubmit(event.target.form.querySelector('[name="do"][value="save-preset"]'));
+    const form = event.target.form;
+    form.requestSubmit([...form.elements].find(control => control.name === 'do' && control.value === 'save-preset'));
   });
   document.addEventListener('click', event => {
     const toggle = event.target.closest('[data-matrix-toggle]');
@@ -87,5 +99,6 @@
     document.querySelectorAll('[data-model-transfer]').forEach(transfer);
   };
   document.addEventListener('htmx:afterSwap', update);
+  document.addEventListener('reset', () => queueMicrotask(update));
   update();
 })();

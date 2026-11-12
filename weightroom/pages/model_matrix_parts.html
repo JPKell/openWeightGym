@@ -1,11 +1,11 @@
-{# The node matrix on a model's page: settings down, the nodes holding a copy across. Each engine's
-   engines/<id>/model_matrix.html lays out its rows with these. static/model-matrix.js adds editing
-   ticked columns together, the differences filter and collapsing a group. #}
-{% from "parts.html" import node_state, confirm_two %}
+{# Model Configuration overview: shared group cards with summary slots and node matrices inside
+   their editors. Engine templates provide the rows; model-configuration.js retains every
+   field while switching groups and node scope. model-matrix.js handles bulk edits. #}
+{% from "parts.html" import node_state, confirm_two, card %}
 
 {# A node's column heading. Its enable/disable button belongs to the form location-<index>, which the page puts outside
    the settings form, so the settings form never sends it. #}
-{% macro node_head(column, index, width) %}
+{% macro node_head(column, index, width, actions=true) %}
 <th scope="col" class="matrix-node{{ ' is-selected' if column.selected }}" data-node="{{ column.machine }}">
   <div class="d-flex align-items-center gap-2">
     {% if width > 1 %}<input type="checkbox" class="form-check-input m-0" data-matrix-pick value="{{ column.machine }}" aria-label="Edit {{ column.machine }} together with the other ticked nodes">{% endif %}
@@ -13,19 +13,37 @@
   </div>
   {% if column.name != column.logical %}<code class="matrix-hint">{{ column.name }}</code>{% endif %}
   <span class="matrix-hint">{{ node_state(column.state) }} · {{ 'enabled' if column.enabled else 'disabled' }}</span>
-  {% if column.model_id %}<button form="location-{{ index }}" class="btn btn-outline-{{ 'danger' if column.enabled else 'success' }} btn-sm mt-1" name="do" value="{{ 'location-disable' if column.enabled else 'location-enable' }}" {{ confirm_two() }}>{{ 'Disable' if column.enabled else 'Enable' }}<span class="visually-hidden"> on {{ column.machine }}</span></button>{% endif %}
+  {% if actions and column.model_id %}<button form="location-{{ index }}" class="btn btn-outline-{{ 'danger' if column.enabled else 'success' }} btn-sm mt-1" name="do" value="{{ 'location-disable' if column.enabled else 'location-enable' }}" {{ confirm_two() }}>{{ 'Disable' if column.enabled else 'Enable' }}<span class="visually-hidden"> on {{ column.machine }}</span></button>{% endif %}
 </th>
 {% endmacro %}
 
 {# A group of rows with a heading that says whether its settings belong to each node or to all of them. #}
-{% macro group(key, title, width, shared=false, rows='') %}
-<tbody class="matrix-group" data-matrix-group="{{ key }}"{% if rows %} data-{{ rows }}-rows{% endif %}>
-  <tr class="matrix-group-head"><th colspan="{{ width + 1 }}" scope="rowgroup"><span class="matrix-group-title">
-    <button type="button" class="btn btn-link btn-sm p-0 fw-semibold text-reset" data-matrix-toggle aria-expanded="true">{{ title }}</button>
-    <span class="scope-badge badge bg-{{ 'azure' if shared else 'secondary' }}-lt ms-2">{{ 'All nodes' if shared else 'Each node' }}</span>
-  </span></th></tr>
-  {{ caller() }}
-</tbody>
+{% macro group(key, title, columns, shared=false, rows='') %}
+{% set width = columns|length %}
+{% set content = caller() %}
+{% set edit %}<button type="button" class="btn btn-outline-secondary btn-sm" data-model-edit aria-expanded="true" aria-controls="model-editor-{{ key }}" aria-label="Edit {{ title }}">Edit</button>{% endset %}
+{% call card(title, id='model-group-' ~ key, actions=edit|safe, class_='model-config-group', attrs={'data-model-group': key, 'data-shared': 'true' if shared else 'false'}) %}
+  <span class="scope-badge badge bg-{{ 'azure' if shared else 'secondary' }}-lt mb-2" data-model-scope>{{ 'Shared & per node' if key == 'model' else 'All nodes' if shared else 'Each node' }}</span>
+  <dl class="model-config-summary small mb-0" data-model-summary hidden></dl>
+  <div id="model-editor-{{ key }}" data-model-group-editor>
+    <div class="table-responsive model-matrix-scroll" tabindex="0" role="region" aria-label="{{ title }} settings">
+    <table class="table table-sm align-middle mb-0 model-matrix{{ ' is-single' if width == 1 }}" aria-label="{{ title }} by node" data-model-matrix>
+      <thead><tr><th class="matrix-label" scope="col">Setting</th>{% for column in columns %}{{ node_head(column, loop.index, width, actions=false) }}{% endfor %}</tr></thead>
+      <tbody class="matrix-group" data-matrix-group="{{ key }}"{% if rows %} data-{{ rows }}-rows{% endif %}>{{ content }}</tbody>
+    </table>
+    </div>
+    <p class="small text-secondary mt-2 mb-0" data-model-no-differences hidden>No differences in this group. Turn off “Only rows that differ” to see its settings.</p>
+  </div>
+{% endcall %}
+{% endmacro %}
+
+{% macro suppress_flag(flag, prefix='', checked=false) %}
+<label class="form-check mb-0 small mt-1"><input class="form-check-input" type="checkbox" name="{{ prefix }}suppress_flag" value="{{ flag }}"{{ ' checked' if checked }}{% if not flag %} data-suppress-follow{% endif %}><span class="form-check-label">Ignore inherited default<span class="visually-hidden"> for {{ flag }}</span></span></label>
+{% endmacro %}
+
+{% macro loading_flag(column, flag='', value=none, present=false) %}
+<div class="input-group input-group-sm flag"><input name="{{ column.prefix }}flag" class="form-control"{% if flag %} type="hidden" value="{{ flag }}"{% else %} list="flags" placeholder="another flag" aria-label="another flag{{ column.on }}" autocapitalize="none" spellcheck="false"{% endif %}><input name="{{ column.prefix }}value" class="form-control" value="{{ '' if value is none else value|shown }}" placeholder="{{ 'its value' if not flag else 'not set' if not present else '' }}" aria-label="{{ 'value of ' ~ flag if flag else 'its value' }}{{ column.on }}" autocapitalize="none" spellcheck="false"></div>
+{{ suppress_flag(flag, column.prefix, present and value is none) }}
 {% endmacro %}
 
 {# One node's value of a setting. #}

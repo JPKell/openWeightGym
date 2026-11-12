@@ -1,6 +1,7 @@
 {# Standalone sample-data review of three model settings layouts. The live page stays model.html. #}
 {% from 'parts.html' import page_header, card, section_title, empty_row, alert, more, confirm_check %}
 {% from 'navigation_parts.html' import pills, pill_button, pill_choices %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
 <!doctype html>
 <html lang="en" data-bs-theme="light" data-site-theme="slate">
 <head>
@@ -23,20 +24,34 @@
 </div>
 <main class="design-page">
   {% call pills('Design options', buttons=true, class_='design-options gap-2 mb-3') %}
-    {{ pill_button('01 / Priority sheet', true, attrs={'data-design': 'sheet'}) }}
-    {{ pill_button('02 / Summary cards', attrs={'data-design': 'summary'}) }}
-    {{ pill_button('03 / Node matrix', attrs={'data-design': 'matrix'}) }}
+    {{ pill_button('01 / Model studio', true, attrs={'data-design': 'sheet'}) }}
+    {{ pill_button('02 / Configuration overview', attrs={'data-design': 'summary'}) }}
+    {{ pill_button('03 / Node workbench', attrs={'data-design': 'matrix'}) }}
   {% endcall %}
-  <p class="text-secondary mb-4" id="design-description"></p>
+  <p class="text-secondary small mb-3" id="design-description"></p>
 
   <div id="workspace" data-design="sheet">
-    {% call page_header('qwen3-32b', pretitle='MODELS', back=('#workspace', 'Models'), id='model-header') %}
+    {% call page_header('qwen3-32b', pretitle='MODELS / CONFIGURATION', id='model-header') %}
       <button class="btn btn-outline-secondary" id="open-presets">Presets</button>
       <button class="btn btn-primary" id="open-transfer">Copy or move…</button>
     {% endcall %}
     <div id="model-state" class="model-state d-flex flex-wrap align-items-center gap-2 gap-md-3 small mb-3"></div>
     <div id="said" role="status" aria-live="polite"></div>
 
+    {% call kpi_row('Selected node configuration', class_='mb-3 model-overview') %}
+      {{ kpi('Context window', '32,768', note='tokens · atlas', value_attrs={'data-overview': 'context'}, note_attrs={'data-overview-note': 'context'}) }}
+      {{ kpi('Requests at once', '4', note='8,192 tokens per request', value_attrs={'data-overview': 'requests'}, note_attrs={'data-overview-note': 'requests'}) }}
+      {{ kpi('Placement', 'Automatic GPU', note='May split across GPUs', value_attrs={'data-overview': 'placement'}, note_attrs={'data-overview-note': 'placement'}) }}
+      {{ kpi('Estimated memory', '24.3 GB', note='of 48 GB on atlas · sample estimate', value_attrs={'data-overview': 'memory'}, note_attrs={'data-overview-note': 'memory'}) }}
+    {% endcall %}
+
+    {% call pills('Model workspace', buttons=true, class_='workspace-views gap-1 mb-3') %}
+      {% for value, label in [('configuration', 'Configuration'), ('locations', 'Compute nodes'), ('presets', 'Presets'), ('facts', 'File & benchmarks'), ('maintenance', 'Maintenance')] %}
+        {{ pill_button(label, value == 'configuration', attrs={'data-view': value, 'aria-controls': 'view-' ~ value}) }}
+      {% endfor %}
+    {% endcall %}
+
+    <section id="view-configuration" data-view-panel="configuration" aria-label="Configuration">
     {# Which nodes the per-node settings change. Shared settings ignore it and say so. #}
     {% call card(tag='section', id='scope', class_='scope-bar', attrs={'aria-labelledby': 'scope-title'}, body_class='py-2 d-flex flex-wrap align-items-center gap-2') %}
         <strong id="scope-title" class="small me-1">Editing on</strong>
@@ -48,25 +63,38 @@
     <div class="settings-layout">
       <nav id="section-index" class="section-index" aria-label="Settings sections"></nav>
       <form id="editor" class="settings-editor" novalidate aria-label="Model settings"></form>
+      <aside id="setup-summary" aria-label="Configuration at a glance">
+        {% call card('At a glance', class_='mb-0', hint='Your draft · selected nodes') %}
+          <div id="setup-summary-groups"></div>
+        {% endcall %}
+      </aside>
     </div>
 
     <section id="matrix-panel" aria-label="Settings by node" hidden>
       {% call card(class_='matrix-card', body=false) %}
+        <div class="d-flex flex-wrap align-items-center gap-2 p-3 border-bottom">
+          <label class="form-label mb-0" for="matrix-group">Settings group</label><select id="matrix-group" class="form-select form-select-sm w-auto"></select>
+          <span class="small text-secondary ms-md-auto">Shared values appear once across all nodes.</span>
+        </div>
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 border-bottom">
           <span class="small text-secondary" id="matrix-note">Tick node columns to edit them together. Highlighted cells differ from the other nodes.</span>
           <div class="d-flex flex-wrap align-items-center gap-3"><label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="matrix-differences"><span class="form-check-label">Only rows that differ</span></label><button type="button" class="btn btn-outline-primary btn-sm" data-transfer-from="">Add to node</button></div>
         </div>
-        <div class="table-responsive"><table class="table table-sm align-middle mb-0 matrix-table" aria-label="Settings by node"><thead id="matrix-head"></thead><tbody id="matrix-body"></tbody></table></div>
+        <div class="table-responsive matrix-scroll" tabindex="0" role="region" aria-label="Scrollable node settings"><table class="table table-sm align-middle mb-0 matrix-table" aria-label="Settings by node"><thead id="matrix-head"></thead><tbody id="matrix-body"></tbody></table></div>
+        <p class="small text-secondary p-3 mb-0" id="matrix-empty" role="status" hidden>No differences in this group. Turn off “Only rows that differ” to see its settings.</p>
       {% endcall %}
     </section>
+    </section>
 
-    <div class="secondary-grid">
+    <section id="view-locations" data-view-panel="locations" hidden>
       {% call card('Compute nodes', id='locations-card', hint='Where this model is installed. Disabling a node keeps its settings and file.', actions='<button type="button" class="btn btn-outline-secondary btn-sm" data-transfer-from="">Add to node</button>'|safe, body=false) %}
         <div class="table-responsive"><table class="table table-sm align-middle mb-0" aria-label="Compute nodes for this model">
           <thead><tr><th>Node</th><th class="location-detail">Device · context · parallel</th><th>Offered</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
           <tbody id="locations"></tbody>
         </table></div>
       {% endcall %}
+    </section>
+    <section id="view-presets" data-view-panel="presets" hidden>
       {% call card('Presets', id='presets-card', hint='Named snapshots shared by every quant of this model.', body=false) %}
         <div class="table-responsive"><table class="table table-sm align-middle mb-0" aria-label="Model presets">
           <thead><tr><th>Preset</th><th>Context</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -74,9 +102,10 @@
         </table></div>
         <div class="p-3 border-top small d-flex flex-wrap align-items-center justify-content-between gap-2"><span class="text-secondary" id="undo-note">No reviewed change to undo yet.</span><button type="button" class="btn btn-outline-secondary btn-sm" id="undo" disabled>Undo last change</button></div>
       {% endcall %}
-    </div>
+    </section>
 
-    {% call card('Benchmarks and file facts', false, id='facts') %}
+    <section id="view-facts" data-view-panel="facts" hidden>
+    {% call card('Benchmarks and file facts', id='facts') %}
       <div class="table-responsive mb-3"><table class="table table-sm mb-0" aria-label="Benchmark results"><thead><tr><th>Node</th><th>Prompt</th><th>Generation</th><th>Measured</th></tr></thead><tbody id="benchmarks"></tbody></table></div>
       <dl class="row facts small mb-0">
         <dt class="col-md-3">Fingerprint</dt><dd class="col-md-9 wrap"><a href="#facts"><code data-fact="fingerprint"></code></a></dd>
@@ -84,7 +113,9 @@
         <dt class="col-md-3" data-fact="runtime-label">llama-server</dt><dd class="col-md-9" data-fact="runtime"></dd>
       </dl>
     {% endcall %}
+    </section>
 
+    <section id="view-maintenance" data-view-panel="maintenance" hidden>
     {% call card('Danger zone', class_='border-danger-subtle') %}
       <div class="d-flex flex-wrap align-items-center gap-3">
         <button type="button" class="btn btn-outline-danger btn-sm" id="forget">Forget measurements</button>
@@ -95,6 +126,7 @@
         <div class="col-md-4"><button type="button" class="btn btn-danger" id="remove">Remove</button></div>
       </div>
     {% endcall %}
+    </section>
 
     <div class="sticky-actions save-bar" id="save-bar">
       <button type="button" class="btn btn-primary" id="preview" disabled>Preview and save</button>
@@ -143,6 +175,7 @@
       <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">{{ section_title('', scope='All nodes', wrapper_class='mb-0') }}<button type="button" class="btn btn-link btn-sm p-0" data-collapse aria-expanded="true" hidden></button></div>
       <p class="form-hint mb-3" data-group-hint hidden></p>
       <div class="row g-3" data-fields></div>
+      {% call more('Setting help', attrs={'data-setting-help': '', 'hidden': 'hidden'}) %}<ul class="mb-0 ps-3" data-help-items></ul>{% endcall %}
   {% endcall %}
 </template>
 <template id="tpl-summary">
@@ -155,7 +188,8 @@
       <div class="row g-3 mt-1" data-fields hidden></div>
   {% endcall %}
 </template>
-<template id="tpl-index-link"><a class="section-link" href="#"><span data-label></span><span class="change-dot" data-dot hidden aria-label="changed"></span></a></template>
+<template id="tpl-index-link"><button type="button" class="section-link text-start" aria-pressed="false"><span class="min-w-0"><span class="d-block fw-semibold" data-label></span><small class="d-block text-secondary" data-detail></small></span><span class="change-dot" data-dot hidden aria-label="changed"></span></button></template>
+<template id="tpl-glance-group"><div class="glance-group"><span class="eyebrow small" data-title></span><p class="small mb-0 mt-1" data-value></p></div></template>
 <template id="tpl-scope-node"><label class="form-selectgroup-item"><input type="checkbox" class="form-selectgroup-input" data-scope-node><span class="form-selectgroup-label py-1 px-2"><span data-name></span> <small class="text-secondary" data-state></small></span></label></template>
 <template id="tpl-target-node"><label class="form-selectgroup-item"><input type="checkbox" class="form-selectgroup-input" data-target-node><span class="form-selectgroup-label py-1 px-2"><span data-name></span> <small class="text-secondary" data-state></small></span></label></template>
 
