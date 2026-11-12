@@ -715,11 +715,38 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     facts_seen: dict[str, tuple[float, dict]] = {}
 
+    def monitoring_user() -> User | None:
+        """Resolve front's current monitoring account without retaining its key or policy."""
+        keyed = Path(settings.auth_key_file) if settings.auth_key_file else None
+        # This lookup must not replace the active request's observation identity.
+        return users.by_key(keyed.read_text().strip()) if keyed and keyed.is_file() else None
+
+    def retained_facts(user: User, name: str, own: User | None) -> dict | None:
+        """Read placement hints locally, filtered by the caller's current model policy."""
+        sources = [user] if own is None else [user, own]
+        found = []
+        for source in sources:
+            row = log.db.execute("SELECT at, data FROM node_discovery WHERE scope=?",
+                                 (discovery_key(source, name, "/loadcoach/facts"),)).fetchone()
+            if row:
+                found.append((row[0], source, json.loads(row[1])))
+        if not found:
+            return None
+        _, source, told = max(found, key=lambda item: item[0])
+        models = {alias: dict(fact) for alias, fact in told.get("models", {}).items()
+                  if user.group.may_use(alias)}
+        if source.group.priority != user.group.priority:
+            # Queue estimates depend on the priority of the account that asked.
+            # Compute rechecks admission under the actual caller when dispatched.
+            for fact in models.values():
+                fact.pop("wait", None)
+        return {**told, "models": models}
+
     async def facts_for(request: Request, user: User) -> dict | Response:
-        """What compute says of the models this user may use, kept roles.FACTS_FOR seconds. Compute is woken for it if this caller may wake it."""
+        """Choose from front's retained fleet inventory; single-node facts keep their live path."""
         scope = discovery_key(user, "", "/loadcoach/facts")
         seen = facts_seen.get(scope)
-        if seen and time.monotonic() - seen[0] < roles.FACTS_FOR:
+        if not settings.machines and seen and time.monotonic() - seen[0] < roles.FACTS_FOR:
             return seen[1]
         if not machines.active_names:
             return {"models": hosted.facts(user), "environment": {}, "compute_unavailable": True,
@@ -736,16 +763,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return said
         reports = {one["name"]: one for one in machines.report()}
         names = machines.active_names
-        answers = await asyncio.gather(*(ask_live(user, "GET", "/loadcoach/facts", machine="" if name == "compute" else name)
-                                         for name in names))
-        fresh = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
+        own = monitoring_user()
+        fresh = {name: told for name in names if (told := retained_facts(user, name, own)) is not None}
         if not fresh:
-            answer = await woken(request, user, lambda: ask_live(user, "GET", "/loadcoach/facts"))
-            if isinstance(answer, Response):
-                return answer
-            if answer.status_code != 200:
-                return JSONResponse(answer.json(), status_code=answer.status_code)
-            fresh = {"compute": answer.json()}
+            return error(503, "Compute model inventory is not ready. Retry shortly.", {"retry-after": "5"})
         catalogue = logical_catalogue({machine_name: {"data": [
             {"id": name, "owned_by": "loadcoach",
              "content_sha256": next((one["content"] for one in reports.get(machine_name, {}).get("models", []) if one["name"] == name), None),
@@ -766,8 +787,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                     location_models.setdefault(name, {})[location["machine"]] = location["id"]
             if choices:
                 variants[name] = choices
-        live = {name for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200
-                and not answer.headers.get("x-suite-retained")}
+        live = {name for name in fresh if machines.available(name) is not False}
         ordered = {name: sorted(placement_order(choices, reports), key=lambda item: item[0] not in live)
                    for name, choices in variants.items()}
         models = {name: {**choices[0][1], "machine": choices[0][0],
@@ -783,7 +803,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         known = {model["name"] for report in reports.values() for model in report.get("models", [])
                  if isinstance(model.get("name"), str) and user.group.may_use(model["name"])}
         said["unavailable_models"] = sorted(known - said["models"].keys())
-        facts_seen[scope] = (time.monotonic(), said)
         return said
 
     routing = roles.Routing(stores.database("weightroom.roles"), log, caller, facts_for, through, relay, placed=bool(settings.machines))
@@ -1408,11 +1427,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     async def machine_says(name: str, path: str) -> dict | None:
         """What a machine answers to `path`, asked as front's own account (the one weightroom signs in with), or None. Nothing is woken."""
-        keyed = Path(settings.auth_key_file) if settings.auth_key_file else None
-        user = caller(keyed.read_text().strip()) if keyed and keyed.is_file() else None
+        user = monitoring_user()
         if user is None:
             return None
-        answer = await ask_live(user, "GET", path, machine="" if name == "compute" else name)
+        answer = await ask_live(user, "GET", path, machine="" if name == "compute" else name,
+                                prime=bool(settings.machines) and path == "/v1/models")
         return answer.json() if answer is not None and answer.status_code == 200 else None
 
     async def telemetry_says(name: str, path: str) -> dict | None:

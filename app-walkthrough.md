@@ -1,7 +1,7 @@
 ## Chat
 
-- [ ] Conversations
-- [ ] Conversation
+- [x] Conversations
+- [x] Conversation
 - [ ] Image generation
 - [ ] Music
 - [ ] Sounds
@@ -11,17 +11,16 @@
 
 ## Models
 
-- [ ] Models
-- [ ] Model specific page
+- [x] Models
+- [x] Model specific page
 - [ ] Images
-- [ ] Image workflows
-- [ ] Audio models
-- [ ] Dry fit
-- [ ] Roles
+- [x] Audio models
+- [x] Dry fit
+- [x] Roles
 - [x] Files
-- [ ] File specific page
-- [ ] HuggingFace
-- [ ] Civitai
+- [x] File specific page
+- [x] HuggingFace
+- [x] Civitai
 - [ ] Fingerprints
 - [ ] Cloud APIs
 
@@ -29,7 +28,7 @@
 
 - [ ] Runs
 - [ ] Run specific page
-- [ ] Results
+- [x] Results
 - [ ] Node measurements
 - [ ] Compare
 - [ ] Collections
@@ -41,7 +40,7 @@
 
 ## Logs
 
-- [ ] Usage
+- [x] Usage
 - [ ] Requests
 - [ ] Request specific page
 - [ ] Batches
@@ -82,53 +81,6 @@
 - [ ] Audio
 - [ ] Image
 - [ ] General
-
-## Docs
-
-- [ ] System reference
-- [ ] System reference — Models
-- [ ] System reference — Accounts and groups
-- [ ] System reference — Logs
-- [ ] System reference — Hosted providers
-- [ ] API reference
-- [ ] API reference — OpenAI compatibility
-- [ ] API reference — Custom endpoints
-- [ ] API reference — Headers
-- [ ] API reference — Code reference
-- [ ] Web app
-- [ ] Web app — Chat
-- [ ] Web app — Collections
-- [ ] Web app — Workflows
-- [ ] Web app — Voice and media
-- [ ] Web app — Tools
-- [ ] Web app — API keys
-- [ ] Modules
-- [ ] Modules — WeightRoom
-- [ ] Modules — Turnstile
-- [ ] Modules — LoadCoach
-- [ ] Modules — ToolLocker
-- [ ] Modules — Voice
-- [ ] Modules — Spotter
-- [ ] Modules — Plugins
-- [ ] Modules — Mirror Wall
-- [ ] Modules — SoundRoom
-- [ ] Benchmarks
-- [ ] Benchmarks — How a run works
-- [ ] Benchmarks — What is measured
-- [ ] Benchmarks — Scores and results
-- [ ] Benchmarks — Files and operation
-- [ ] Benchmarks — Code reference
-- [ ] Data and backups
-- [ ] Data and backups — Stores and ownership
-- [ ] Data and backups — Backups and restore
-- [ ] Data and backups — SQLite and PostgreSQL
-- [ ] Data and backups — Code reference
-- [ ] Deployment and operations
-- [ ] Deployment and operations — Installation
-- [ ] Deployment and operations — Where things run
-- [ ] Deployment and operations — Settings
-- [ ] Deployment and operations — Node installation and updates
-- [ ] Deployment and operations — Code reference
 
 ## My account
 

@@ -3,9 +3,10 @@
 A caller may name a role, such as `chat` or `code:fast`, where a model's name would go. What a role
 is, and the rule that picks one of its models, are in loadcoach/roles.py. Turnstile picks here,
 before anything is sent on: from the roles, the benchmark evidence and the reliability kept on this
-machine, and from what compute says of each model at this moment (`/loadcoach/facts`), kept a few
-seconds. Compute is sent a plain model name. If compute is asleep it is woken first, and the pick
-waits for its facts, so that it is the pick it would have made awake.
+machine, and retained model facts (`/loadcoach/facts`). In a fleet, the background node monitor
+refreshes these facts; a chat selects its node locally without querying the fleet. Single-node
+installations retain their short live-facts cache. Compute is sent a plain model name, and the
+chosen node is woken if needed and permitted.
 
 Every answer to a model request passes through here and is judged on its way with the rule compute
 used to judge it by (reliability.answer_outcome). Compute says with each answer which request it

@@ -223,6 +223,47 @@ def test_metadata_refresh_is_deduplicated_and_does_not_block_authentication(meta
     front.portal.call(reads)
 
 
+def test_chat_and_roles_use_background_inventory_without_request_fanout(metadata_front, monkeypatch, tmp_path):
+    front, wire, users, _, _ = metadata_front
+    # A monitor refresh sees a different resident without any chat asking the fleet.
+    wire.wires[9442] = httpx.ASGITransport(app=worker(str(tmp_path / "rig.key"), "rig", True))
+    front.app.state.log.db.execute("UPDATE node_discovery SET at=0")
+    front.portal.call(front.app.state.machines.poll)
+    users.add("newcomer", "plain")
+    headers = {"authorization": "Bearer " + users.new_key("newcomer")}
+    # This user has never fetched model metadata. Expiring the old short cache
+    # must not make either direct-model or role requests contact the other node.
+    monkeypatch.setattr("turnstile.roles.FACTS_FOR", 0)
+    role = front.post("/loadcoach/roles/chat", headers=headers, json={"models": {"small": 1}})
+    assert role.status_code == 201
+    wire.calls.clear()
+    spans = []
+    monkeypatch.setattr(front.app.state.observations, "submit", spans.append)
+    for model in ("small", "small", "chat", "chat:fast"):
+        answer = front.post("/v1/chat/completions", headers=headers, json={"model": model, "messages": []})
+        assert answer.status_code == 200 and answer.json()["machine"] == "rig"
+    assert wire.calls and {port for port, _ in wire.calls} == {9442}
+    assert all(path != "/loadcoach/facts" for _, path in wire.calls)
+    assert sum(path == "/v1/chat/completions" for _, path in wire.calls) == 4
+    assert spans and all(span["user"] == "newcomer" for span in spans)
+
+    # Shared monitoring metadata never grants the caller additional models.
+    users.groups.put("plain", {"can": ["load"], "models": []})
+    wire.calls.clear()
+    assert front.get("/loadcoach/pick?model=chat", headers=headers).status_code == 404
+    assert wire.calls == []
+
+
+def test_missing_routing_inventory_waits_for_monitor_without_probing_fleet(metadata_front):
+    front, wire, _, key, _ = metadata_front
+    front.app.state.log.db.execute("DELETE FROM node_discovery")
+    wire.calls.clear()
+    answer = front.post("/v1/chat/completions", headers={"authorization": "Bearer " + key},
+                        json={"model": "small", "messages": []})
+    assert answer.status_code == 503 and answer.headers["retry-after"] == "5"
+    assert "inventory is not ready" in answer.text and wire.calls == []
+
+
 def test_required_file_store_gets_one_longer_retry_after_a_short_timeout(tmp_path):
     users = Users(str(tmp_path / "accounts.db"), {
         "manager": Group(can=frozenset({"manage-models"})),

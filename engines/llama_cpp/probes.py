@@ -95,8 +95,6 @@ class Probes:
         if settings is None or not Path(settings['flags']['model']).is_file():
             raise ValueError('The model file is not available.')
         multimedia = adapter.id in ('sdcpp', 'audiocpp')
-        if not multimedia and not self.runner.needs(settings) and not settings['flags'].get('embedding'):
-            raise ValueError('CPU probes require an embedding model.')
         mark = self.runner.models.fingerprint(settings, model)
         if not mark:
             raise ValueError('The model files are still being fingerprinted. Try again shortly.')
@@ -310,10 +308,6 @@ class Probes:
             raise ValueError('Model fingerprint changed; discard this probe.')
         needs = self.runner.needs(original)
         cpu = not needs
-        if cpu and (not original['flags'].get('embedding') or not options.get('embedding')
-                    or outputs or warmup_outputs or options.get('evaluation') is not None
-                    or options.get('dialogue') is not None):
-            raise ValueError('CPU probes support embedding inputs or embedding-model load only.')
         cards = tuple(needs if isinstance(needs, list) else self.runner.cards[:needs])
         if not set(cards) <= set(self.runner.cards) or (not isinstance(needs, list) and len(cards) != needs):
             raise ValueError("This model requires a disabled or unavailable card.")

@@ -858,6 +858,12 @@ machine_key_file = "../keys/rig.key"
 ```
 
 Primary and rig keys must differ. Front's account key must permit status/models/facts on both.
+The existing node monitor refreshes placement facts at `machines_poll_seconds` (default 10).
+Fleet chats and role requests select locally from retained facts, filtered by the caller's current
+model permissions, then contact the selected node. Admission is checked there; a failure before
+output can still try another eligible copy. Until inventory is available, requests return retryable
+503 without probing the fleet. Without a monitoring account, explicit model discovery primes the
+caller-scoped inventory; configure front's account key for automatic refreshes.
 Deploy matching code to front and both workers, start the rig and restart Turnstile in the
 drained window. Verify both nodes become ready; route requests with each copy resident and
 check public request IDs, Requests/capture, Status, Peek, Diagnostics and Stop. Check fallback
