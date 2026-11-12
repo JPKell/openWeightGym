@@ -168,6 +168,28 @@ def apply(changes, backup_root):
     print(f'Updated {len(changes)} source override(s). Rollback copies: {backup}')
 
 
+def renamed_settings(root):
+    """Rename settings keys that changed names, in this checkout's settings files.
+
+    This runs from the newly fetched code during `owg update`, so a rename reaches the files on the
+    first update that knows about it. Comments are kept and the old file is copied beside it.
+    The module is loaded from its file, so nothing else of the checkout is imported. A checkout
+    without it has nothing to rename. A file that can't be renamed is only reported: the services
+    still read the old names.
+    """
+    import importlib.util
+    source = root / 'loadcoach/setting_names.py'
+    if not source.is_file():
+        return
+    spec = importlib.util.spec_from_file_location('owg_setting_names', source)
+    names = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(names)
+    try:
+        names.rename_installation(root / 'settings', say=print)
+    except (OSError, UnicodeError) as problem:
+        print(f'Settings keys were not renamed ({problem}); the services read the old names until they are.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -183,6 +205,7 @@ def main():
         if args.apply:
             state = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state')))
             apply(changes, state / 'openweightgym/runtime-source-updates')
+            renamed_settings(root)
         else:
             for path in changes:
                 print(f'Would select current checkout in {path}')

@@ -22,7 +22,7 @@ def test_image_policy_uses_existing_authority_and_does_not_opt_users_in(desk):
     sign_in(server,'pat')
     assert server.get('/settings/image').status_code==403
     assert server.post('/settings/image',data={'adult_previews':'yes'}).status_code==403
-    wire.front.state.front_settings.changes.seen('turnstile',{'image_adult_previews':{'value':False}})
+    wire.front.state.console_settings.changes.seen('turnstile',{'image_adult_previews':{'value':False}})
     sign_in(server,'jordan')
     assert server.get('/settings/image').status_code==200
     assert server.post('/settings/image',data={'adult_previews':'yes'}).status_code==200

@@ -1,4 +1,4 @@
-"""Private front-owned audio files and metadata, using the existing accounts store.
+"""Private audio files, kept on the front, and metadata, using the existing accounts store.
 
 The batch executor remains openWeightGym's existing front executor; this store binds its audio
 jobs to immutable account IDs and keeps audio bytes out of the database. An owner may

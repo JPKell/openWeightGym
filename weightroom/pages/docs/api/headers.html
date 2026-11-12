@@ -9,7 +9,7 @@
     <dt><code>traceparent</code></dt><dd>Optional valid W3C trace context on instrumented HTTP/WebSocket entry points; an invalid value is not adopted. <code>baggage</code> and <code>tracestate</code> are stripped.</dd>
     <dt><code>X-Suite-Application</code></dt><dd>Optional observation label, at most 128 characters from letters, digits, dot, underscore, colon or dash. Invalid labels are not recorded. This grants no permissions.</dd>
     <dt><code>X-LoadCoach-Trace</code> on management routes</dt><dd>The same bounded label syntax groups observation metadata. Inference adds the validation and sticky-sensitivity rules below; this header does not otherwise change a management operation.</dd>
-    <dt><code>X-Turnstile-No-Wake</code></dt><dd>Any presence prevents the proxy's wake-and-wait path when a worker is unavailable. It does not prevent model loading on an awake node, and front-owned handlers already avoid that wake path. No direct-worker effect.</dd>
+    <dt><code>X-Turnstile-No-Wake</code></dt><dd>Any presence prevents the proxy's wake-and-wait path when a worker is unavailable. It does not prevent model loading on an awake node, and handlers answered by the front itself already avoid that wake path. No direct-worker effect.</dd>
   </dl>
   {{ doc_heading("Inference", id="api-inference-headers") }}
   <p>These headers are interpreted for local model inference; they are not general settings for every management endpoint.</p>
@@ -34,7 +34,7 @@
     <dt><code>Idempotency-Key</code></dt><dd>1–128 characters without control characters, scoped by adapter ownership. Reuse with different input returns 409. Not a general openWeightGym inference idempotency guarantee.</dd>
   </dl>
   {{ doc_heading("Special and internal headers") }}
-  <p><code>X-LoadCoach-Task</code> is a scoped external-task token, not general API access. <code>X-LoadCoach-Probe-ID</code> identifies a front-owned probe attempt.
+  <p><code>X-LoadCoach-Task</code> is a scoped external-task token, not general API access. <code>X-LoadCoach-Probe-ID</code> identifies one probe attempt of a benchmark task the front dispatched.
     <code>X-ToolLocker-Sets</code> is a comma-separated tool-set filter, further restricted by caller permissions.
     MCP accepts <code>X-LoadCoach-Sensitivity</code> and <code>X-LoadCoach-Trace</code>; absent a trace, <code>Mcp-Session-Id</code> supplies its work grouping.</p>
   <p><code>X-MirrorWall-Job</code>/<code>X-MirrorWall-Line</code> and <code>X-SoundRoom-Job</code>/<code>X-SoundRoom-Line</code>
@@ -52,6 +52,6 @@
     <code>X-LoadCoach-Fingerprint</code>, <code>X-LoadCoach-Build</code>, <code>X-LoadCoach-Role</code>, <code>X-LoadCoach-Picked</code>,
     <code>X-LoadCoach-Because</code>, hosted-provider/routing metadata, advisory estimated-wait headers, and <code>X-Turnstile</code> refusal state.
     <code>Retry-After</code> is standard HTTP. Unlogged work has no retained request number.</p>
-  <p><code>X-Suite-Proof</code> is worker-response verification, <code>X-Suite-Data-Owner</code> describes front-owned responses,
+  <p><code>X-Suite-Proof</code> is worker-response verification, <code>X-Suite-Data-Owner</code> marks responses the front answered from its own records,
     and adapter session/request IDs are returned for plugin work. Sending these response headers as request headers does not enable those behaviours.</p>
 {% endcall %}

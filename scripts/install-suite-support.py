@@ -199,7 +199,7 @@ SCHEMAS = {
     "loadcoach.role_evidence": "ROLE_EVIDENCE",
     "loadcoach.batches": "BATCHES",
     "loadcoach.tasks": "TASKS",
-    "turnstile.tasks": "FRONT_TASKS",
+    "turnstile.benchmark_tasks": "TASK_RECORDS",
     "mirrorwall.front": "MIRRORWALL",
     "soundroom.front": "SOUNDROOM",
     "weightroom.chat": "CHAT",
@@ -297,7 +297,7 @@ def path_from(base: Path, value: str) -> Path:
     return path if path.is_absolute() else (base / path).resolve()
 
 
-def front_toollocker_target(config: Path, told: dict) -> tuple[str, str, Path]:
+def toollocker_on_front_target(config: Path, told: dict) -> tuple[str, str, Path]:
     """Resolve front's authoritative store before the gateway's runtime packages are installed."""
     if 'loadcoach' in told:
         raise ValueError('Choose front or loadcoach for ToolLocker, not both')
@@ -352,7 +352,7 @@ def configured_targets(config: Path, service: str) -> list[tuple[str, str, Path]
         return [("core", "sqlite", path_from(config.parent, legacy) if legacy else data / "loadcoach.db")]
     if service in {"spotter", "toollocker"}:
         if service == "toollocker" and told.get("front"):
-            return [front_toollocker_target(config, told)]
+            return [toollocker_on_front_target(config, told)]
         loadcoach = path_from(config.parent, str(told.get("loadcoach", "loadcoach.toml")))
         main = tomllib.loads(loadcoach.read_text()) if loadcoach.exists() else {}
         main_data = path_from(loadcoach.parent, str(main.get("data", "../data")))
@@ -571,7 +571,7 @@ def configure(config: Path, service: str, engine: str, dsn_values: list[str]) ->
         name, raw = value.split("=", 1)
         dsns[name] = Path(raw).expanduser().resolve()
     if service == "toollocker" and config.exists() and tomllib.loads(config.read_text()).get("front"):
-        if front_toollocker_target(config, tomllib.loads(config.read_text()))[1] != engine:
+        if toollocker_on_front_target(config, tomllib.loads(config.read_text()))[1] != engine:
             raise ValueError("Configure WeightRoom's owning database before its front ToolLocker")
         return 0
     block = database_block(service, engine, config, dsns)
@@ -688,7 +688,7 @@ def prepare_voice(root: Path, services: list[str], install_models=None) -> int:
     if not key_file.is_absolute():
         key_file = root / "settings" / key_file
     if not key_file.is_file() or not key_file.read_text().strip():
-        raise ValueError("Voice needs its front-owned service key; join with a pairing code or pass --voice-key-file.")
+        raise ValueError("Voice needs the service key the front issues; join with a pairing code or pass --voice-key-file.")
     key_file.chmod(0o600)
     manifest = json.loads((root / "voice/models.json").read_text())
     names = {bundle["name"] for bundle in manifest["bundles"]}

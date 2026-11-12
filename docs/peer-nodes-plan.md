@@ -90,32 +90,34 @@ Before any behaviour changes. Code and findings done 2026-11-12; backups are blo
 
 ## Phase 1: the setting and task ownership
 
-This phase alone fixes the CPU-node benchmark runs.
+This phase alone fixes the CPU-node benchmark runs. Built on branch `peer-nodes-phase1` (2026-11-12); not yet deployed (see the blocked backups in Phase 0).
+
+Found while building: once the front keeps the task record, Status no longer listed a running benchmark probe, because turnstile dropped node entries whose ID is in its own batch store. It now keeps a node's benchmark entry while the front's record is in progress. Task creation also passes the node's own reason through when it can't freeze a model (for example "still being fingerprinted").
 
 ### Setting
 
-- [ ] Add `allow_caller_to_specify_destination: bool = True` to turnstile's `Settings` ([turnstile/app.py](../turnstile/app.py)). Mark it `NOW` under `turnstile` in `CHANGEABLE` ([loadcoach/settings.py](../loadcoach/settings.py)).
-- [ ] Label it in [weightroom/setting_labels.py](../weightroom/setting_labels.py): "Allow callers to choose the node", section `Requests and queue`. It then appears on the General settings page (`/settings`, [settings.html](../weightroom/pages/settings.html) via `settings_sections.html` and `settings_program.html`); no new markup. Help text: "Callers such as Node measurements and API requests with a `node` field may send work to a named node. When off, the front picks the node."
-- [ ] Keep it off System pages and out of the Compute nodes page (`hidden` set in `weightroom/app.py`).
-- [ ] Turnstile reads the current value from its settings-change store (`console_settings.changes` after the rename below), so a change applies without a restart.
+- [x] Add `allow_caller_to_specify_destination: bool = True` to turnstile's `Settings` ([turnstile/app.py](../turnstile/app.py)). Mark it `NOW` under `turnstile` in `CHANGEABLE` ([loadcoach/settings.py](../loadcoach/settings.py)).
+- [x] Label it in [weightroom/setting_labels.py](../weightroom/setting_labels.py): "Allow callers to choose the node", section `Requests and queue`. It then appears on the General settings page (`/settings`, [settings.html](../weightroom/pages/settings.html) via `settings_sections.html` and `settings_program.html`); no new markup. Help text: "Callers such as Node measurements and API requests with a `node` field may send work to a named node. When off, the front picks the node."
+- [x] Keep it off System pages and out of the Compute nodes page (`hidden` set in `weightroom/app.py`).
+- [x] Turnstile reads the current value from its settings-change store (`console_settings.changes` after the rename below), so a change applies without a restart.
 
 ### Task records always on the front
 
-- [ ] `FrontTasks.handle` always creates tasks; remove the `enabled` gate. Task IDs already owned by a node keep resolving there (existing rule: unknown IDs go to the legacy route).
-- [ ] Compute derives its mode from having a `front` address, not from `front_tasks`. A node with a front never creates durable task, batch or schedule-grant records.
-- [ ] Replace `FrontOwnedBatches`' empty reads with read-only reads of the legacy tables when they exist and are not retired. Old runs, tasks and batches stay viewable. Writes to them stay refused.
-- [ ] Old `front_tasks` keys (front `[turnstile]` and compute root) are ignored, with one startup log line saying so. Settings files are not rewritten.
-- [ ] Keep the `front-probe` dispatch and frozen subject checks unchanged.
+- [x] `FrontTasks.handle` always creates tasks; remove the `enabled` gate. Task IDs already owned by a node keep resolving there (existing rule: unknown IDs go to the legacy route).
+- [x] Changed while building: a node's mode comes from its store, not from having a `front` address. A store with the `loadcoach.retirement` migration (jpk-main today) keeps no task, batch or schedule records and refuses to create them; any other store keeps serving its older records. jpk-main has a front address and still holds older tasks and two schedules, so a front-address rule would have hidden them. Turnstile never sends new task creation to a node either way.
+- [x] Done without new read code: a store that is not retired keeps its normal `Batches`, so old runs, tasks and batches stay viewable, and turnstile forwards IDs it doesn't know to the node that has them. `FrontOwnedBatches` is now `NoLocalBatches`, used only by retired stores.
+- [x] Old `front_tasks` keys (front `[turnstile]` and compute root) are ignored, with one startup log line saying so. They are left in the files.
+- [x] Keep the `front-probe` dispatch and frozen subject checks unchanged.
 
 ### Pinned destinations
 
-- [ ] `benchmarks/app.py` and `FrontTasks.create`: if the setting is off and a target names a node, refuse with 400: "Choosing a node is turned off. Turn on 'Allow callers to choose the node' in Settings → General." Show it in the same `said` banner the run forms use now.
-- [ ] Fix the fallback in `start`/`queue_runs`: a location without its own `model_id` must never borrow the logical model's ID from another node.
+- [x] `benchmarks/app.py` and `FrontTasks.create`: if the setting is off and a target names a node, refuse with 400: "Choosing a node is turned off. Turn on 'Allow callers to choose the node' in Settings → General." Show it in the same `said` banner the run forms use now.
+- [x] Fix the fallback in `start`/`queue_runs`: a location without its own `model_id` must never borrow the logical model's ID from another node.
 
 ### Wording
 
-- [ ] Remove "front-owned" from user-facing messages, settings help and docs ([operations.md](operations.md), [loadcoach.md](loadcoach.md), [installation.md](installation.md), `settings/examples/*.toml`). Say what happens instead, e.g. "the front keeps task records".
-- [ ] Rename code identifiers to say what they do. Proposed names:
+- [x] Remove "front-owned" from user-facing messages, settings help and docs ([operations.md](operations.md), [loadcoach.md](loadcoach.md), [installation.md](installation.md), `settings/examples/*.toml`). Say what happens instead, e.g. "the front keeps task records".
+- [x] Rename code identifiers to say what they do. Proposed names:
 
   | Now | New |
   |---|---|
@@ -136,10 +138,10 @@ unclear "front" wording. They are renamed the same way:
 | `front_toollocker` (compute `loadcoach.toml`; WeightRoom's derived field) | `toollocker_runs_on_front` | ToolLocker runs on the front. Compute refuses ToolLocker settings and reports and doesn't manage `toollocker.service`. |
 | `FrontSettings` (turnstile/settings.py), `app.state.front_settings` | `ConsoleSettings`, `app.state.console_settings` | Code names. |
 
-- [ ] Both keys keep their current meaning and values. Only the names change.
-- [ ] The update renames each key in place in the settings file after writing a `.before-peer-nodes` copy. Comments and every other line are kept.
-- [ ] The old key is still read if the new one is absent, with one startup log line. Rollback and hand edits keep working. If both are present and differ, startup stops and names both.
-- [ ] Update the startup checks and their messages (e.g. "toollocker_url requires port 8443 and keep_console_settings_on_front"), [operations.md](operations.md), [database-storage.md](database-storage.md), `settings/examples/*.toml`, `tests/test_source_docs.py` and the tests that use these names.
+- [x] Both keys keep their current meaning and values. Only the names change.
+- [x] The update renames each key in place in the settings file after writing a `.before-peer-nodes` copy. Comments and every other line are kept.
+- [x] The old key is still read if the new one is absent, with one startup log line. Rollback and hand edits keep working. If both are present and differ, startup stops and names both.
+- [x] Update the startup checks and their messages (e.g. "toollocker_url requires port 8443 and keep_console_settings_on_front"), [operations.md](operations.md), [database-storage.md](database-storage.md), `settings/examples/*.toml`, `tests/test_source_docs.py` and the tests that use these names.
 - [ ] Phase 2 removes the default node, so no compute node is left to hold the console's settings. From then on `keep_console_settings_on_front` is always true: the key is ignored, with a log line, and an explicit `false` stops startup with an explanation.
 
 ### Stored names
@@ -155,13 +157,15 @@ verified backup, idempotent, on SQLite and PostgreSQL:
 | table `external_task_reservations` | `benchmark_task_reservations` |
 | migration stream `turnstile.tasks` | `turnstile.benchmark_tasks` |
 
-- [ ] The migration renames the tables in place (`ALTER TABLE … RENAME TO`) and moves the stream's recorded version to the new key in the same transaction, so existing migrations 1–3 are not run again.
-- [ ] The same tables on a node's legacy store (read-only history from Phase 1) are renamed the same way when that node updates.
-- [ ] Update every reader: `turnstile/tasks.py`, `loadcoach/tasks.py`, `loadcoach/batches.py`, `db/transfer.py`, `db/consolidation*.py`, `scripts/install-suite-support.py` and the tests.
-- [ ] Backups taken before the migration must still restore: restore detects the old names and runs the rename after loading.
-- [ ] Rows inside hash-chained tables are not rewritten (Phase 0). Renaming a table doesn't change its rows, so chains stay valid; the test checks this.
+- [x] The migration renames the tables in place (`ALTER TABLE … RENAME TO`) and moves the stream's recorded version to the new key in the same transaction, so existing migrations 1–3 are not run again.
+- [x] The same tables on a node's legacy store (read-only history from Phase 1) are renamed the same way when that node updates.
+- [x] Update every reader: `turnstile/tasks.py`, `loadcoach/tasks.py`, `loadcoach/batches.py`, `db/transfer.py`, `db/consolidation*.py`, `scripts/install-suite-support.py` and the tests.
+- [x] Backups taken before the migration still restore: the rename is a migration (front stream migration 4, node `loadcoach.tasks` migration 3), so a restored older store is renamed at its next start. Tested on SQLite.
+- [x] Rows inside hash-chained tables are not rewritten (Phase 0). Renaming a table doesn't change its rows, so chains stay valid; the test checks this.
 
 ### Tests
+
+Done in [tests/test_node_choice.py](../tests/test_node_choice.py), with the two-node and legacy-ID cases in [tests/test_front_tasks.py](../tests/test_front_tasks.py). The PostgreSQL contract tests in `tests/test_postgresql.py` use the new names but were not run: they need `SUITE_TEST_POSTGRES_DSN_FILE`, and this machine has no PostgreSQL role for the test user.
 
 - Task creation with targets on several nodes reaches each node (fake nodes), with the setting on.
 - Setting off: pinned target refused with the new message; unpinned run placed.

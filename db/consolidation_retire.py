@@ -11,7 +11,7 @@ import time
 
 from db import Database, local_path, migrate, schema_version
 from db.consolidation import audit, digest, normalized, readonly, rows, tables
-from db.schemas import COMPUTE_RETIREMENT, RETIRED_COMPUTE_TABLES
+from db.schemas import COMPUTE_RETIREMENT, RETIRED_COMPUTE_TABLES, stored_table
 
 
 def checksum(path):
@@ -22,7 +22,9 @@ def checksum(path):
 
 def stamp(connection, table):
     """Return the retained store's file size and modification timestamp."""
-    if table not in tables(connection):
+    present = tables(connection)
+    table = stored_table(present, table)  # a snapshot from before the benchmark task tables were renamed
+    if table not in present:
         return None
     values = rows(connection, table)
     return {'rows': len(values), 'sha256': digest(sorted(
@@ -171,8 +173,8 @@ def main():
     args = parser.parse_args()
     told, store, _ = kept_by_loadcoach(args.config)
     target = local_path(store)
-    if not told.get('front_tasks') or not told.get('front') or target is None or not target.is_file():
-        parser.error('A front-owned task configuration and existing SQLite compute store are required')
+    if not told.get('front') or target is None or not target.is_file():
+        parser.error('A compute configuration with a front address and an existing SQLite compute store are required')
     if args.action == 'prepare':
         if not all((args.recovery, args.outside, args.approved_audit)):
             parser.error('prepare needs --recovery, --outside and --approved-audit')

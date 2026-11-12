@@ -7,7 +7,7 @@ may do at that moment, so compute asks turnstile for every account, at most ever
 with the machine key. The reports that name accounts other than the caller's ask the same.
 
 Nothing is written down. If front has not answered for a minute, no account is known, and work in
-anyone's name waits or is refused. Front-owned history and worker-side execution boundaries are
+anyone's name waits or is refused. History the front keeps and worker-side execution boundaries are
 documented in docs/database-storage.md.
 
 The event log is front's too (milestone 91). Compute writes its entries as before, and

@@ -91,7 +91,7 @@ def outcome(batches, batch):
 
 
 class Front:
-    """SoundRoom's front-owned assets and voices, and ordinary batch execution hooks."""
+    """SoundRoom's assets and voices, kept on the front,, and ordinary batch execution hooks."""
 
     def __init__(self, store, batches, users, log=None):
         """Initialize private audio state without loading model weights."""
@@ -582,7 +582,7 @@ class Front:
             return error(400, str(problem))
 
     def routes(self, caller, log):
-        """Expose front-owned audio operations through the existing API-key authority."""
+        """Expose the front's audio operations through the existing API-key authority."""
         from turnstile.accounts import signed_in
         self.log = self.log or log
 

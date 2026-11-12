@@ -42,14 +42,14 @@ def test_installer_generated_gateway_lists_and_calls_tools_without_compute(tmp_p
             name, topology, tmp_path, '192.168.1.10', '', 'http://offline-compute:8442', '')
         support.render(ROOT / f'settings/examples/{name}.toml', settings / f'{name}.toml', tmp_path, tmp_path, values)
     front = load_settings(settings / 'weightroom.toml')
-    assert front.front_settings and front.toollocker_url == 'http://127.0.0.1:9443'
+    assert front.keep_console_settings_on_front and front.toollocker_url == 'http://127.0.0.1:9443'
     gateway = load_config(settings / 'toollocker.toml')
     assert gateway.host == '127.0.0.1' and gateway.port == 9443
     users = Users(gateway.database, {'reader': Group(tools=('files__*',))})
     users.add('reader', 'reader')
     headers = {'authorization': 'Bearer ' + users.new_key('reader')}
     with front_of(lambda _: build_app(gateway), users, tmp_path / 'keys', port=8443,
-                  front_settings=front.front_settings, toollocker_url=front.toollocker_url) as client:
+                  keep_console_settings_on_front=front.keep_console_settings_on_front, toollocker_url=front.toollocker_url) as client:
         listed = client.post('/mcp', headers=headers, json={'id': 1, 'method': 'tools/list'})
         assert listed.status_code == 200
         assert {tool['name'] for tool in listed.json()['result']['tools']} == {'files__list_folder', 'files__read_file'}
@@ -93,12 +93,12 @@ def test_front_tools_survive_compute_loss_with_permissions_settings_and_chain(tm
     config = Config(servers={'fake': {'command': [sys.executable, str(Path(__file__).with_name('fake_tool_server.py'))]}},
                     database=source, machine_key_file=str(tmp_path / 'machine.key'))
     with front_of(lambda _: build_app(config), users, tmp_path, port=8443,
-                  toollocker_url='http://front-tools:9443', front_settings=True) as client:
+                  toollocker_url='http://front-tools:9443', keep_console_settings_on_front=True) as client:
 
         async def offline(*args, **kwargs):
             return None
 
-        client.front.state.front_settings.ask = offline
+        client.front.state.console_settings.ask = offline
         response = client.post('/mcp', headers=owner, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
         assert response.status_code == 200
         assert any(t['name'] == 'fake__echo' for t in response.json()['result']['tools'])
@@ -139,7 +139,7 @@ def test_front_tool_route_targets_front_and_never_wakes_compute(tmp_path):
         raise httpx.ConnectError('offline', request=request)
 
     front = build_front(Settings(compute='compute', data=str(tmp_path), ports=(8443,), machine_key_file=str(key),
-                                 wake_mac='aa:bb:cc:dd:ee:ff', toollocker_url='http://127.0.0.1:9443', front_settings=True),
+                                 wake_mac='aa:bb:cc:dd:ee:ff', toollocker_url='http://127.0.0.1:9443', keep_console_settings_on_front=True),
                         users=users, client=httpx.AsyncClient(transport=httpx.MockTransport(failed)),
                         waker=lambda *args: wakes.append(args))
     with TestClient(front, base_url='http://front:8443') as client:
@@ -173,7 +173,7 @@ def test_toollocker_import_is_exact_idempotent_and_conflicts_are_atomic(tmp_path
 
 
 def test_stale_compute_gateway_cannot_restart_after_relocation(tmp_path):
-    (tmp_path / 'loadcoach.toml').write_text('front_toollocker = true\ndata = "."\n')
+    (tmp_path / 'loadcoach.toml').write_text('toollocker_runs_on_front = true\ndata = "."\n')
     config = tmp_path / 'toollocker.toml'
     config.write_text('port = 8443\n')
     with pytest.raises(SystemExit, match='ToolLocker moved to front'):
@@ -186,7 +186,7 @@ def test_weightroom_keeps_gateway_recovery_ownership_after_splitting_shared_sett
     path = tmp_path / 'weightroom.toml'
     path.write_text('compute = "http://compute:8442"\nkey_file = "front.key"\n[turnstile]\ntoollocker_url = "http://127.0.0.1:9443"\n')
     config = load_front(path)
-    assert config.front_toollocker
+    assert config.toollocker_runs_on_front
     assert 'turnstile' not in config.file
     path.write_text('compute = "http://compute:8442"\nkey_file = "front.key"\n')
-    assert not load_front(path).front_toollocker
+    assert not load_front(path).toollocker_runs_on_front

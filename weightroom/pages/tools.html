@@ -15,7 +15,7 @@
 <div class="table-responsive"><table class="sortable table table-sm"><thead><tr><th>Name</th><th>Description</th><th>Command or address</th><th>Sensitivity</th></tr></thead><tbody>
 {% for name, server in tool_config.get('servers', {}).items() %}<tr><td>{{ name }}</td><td>{{ server.description or '' }}</td><td><code>{{ server.url if server.url else server.command|join(' ') }}</code></td><td>{{ server.get('level', 'normal') }}</td></tr>{% else %}{% call empty_row(4) %}No reported servers.{% endcall %}{% endfor %}
 </tbody></table></div>
-<p class="text-secondary small mb-0">Servers and their descriptions are set in <code>settings/toollocker.toml</code> on the gateway host (front for a front-owned ToolLocker), and change when the tool service restarts.</p>
+<p class="text-secondary small mb-0">Servers and their descriptions are set in <code>settings/toollocker.toml</code> on the gateway host (the front, when ToolLocker runs there), and change when the tool service restarts.</p>
 <a class="btn btn-outline-secondary btn-sm mt-3" href="/settings?open=toollocker">Tool service settings</a>
 {% endcall %}
 {% set servers = tool_config.get('servers', {}) %}

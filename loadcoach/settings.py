@@ -32,9 +32,19 @@ from db import DatabaseSource, database, migrate
 from db.schemas import SETTINGS
 
 
-def front_programs(config) -> frozenset[str]:
-    """Settings excluded from this compute instance after explicit ownership cutovers."""
-    return (FRONT_PROGRAMS if config.front_tasks else frozenset()) | ({'toollocker'} if config.front_toollocker else frozenset())
+def front_programs(config, retired: bool = False) -> frozenset[str]:
+    """Programs whose settings this node refuses because the front keeps them.
+
+    `retired` is whether the node's store went through the DB1 retirement (`store_retired`).
+    """
+    return (FRONT_PROGRAMS if retired else frozenset()) | ({'toollocker'} if config.toollocker_runs_on_front else frozenset())
+
+
+def store_retired(source) -> bool:
+    """Whether a node's store has retired its copies of the records the front keeps (DB1)."""
+    from db import schema_version
+    with database(source).connection() as connection:
+        return bool(schema_version(connection, "loadcoach.retirement"))
 
 
 NOW, RESTART = "now", "restart"
@@ -67,7 +77,7 @@ CHANGEABLE: dict[str, dict[str, str]] = {
                    "observation_window_seconds": NOW, "observation_alert_hold_seconds": NOW,
                    **{f"audio_{kind}_model": RESTART for kind in ("lyrics", "music", "sound", "speech", "transcription")}},
     "turnstile": {"wait": RESTART, "artifact_machine": RESTART, "image_adult_previews": NOW, "files_every": NOW,
-                  "models_folder": NOW, "models_storage_folder": NOW},
+                  "models_folder": NOW, "models_storage_folder": NOW, "allow_caller_to_specify_destination": NOW},
 }
 SECRET = re.compile(r"(^|_)(key|token|secret|password)$")  # a setting with such a name is never handed out
 

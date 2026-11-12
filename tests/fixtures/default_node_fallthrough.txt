@@ -25,10 +25,8 @@ POST /loadcoach/model-rename 8442
 POST /loadcoach/model-setup 8442
 POST /loadcoach/models/sample 8442
 POST /loadcoach/requests/sample/feedback 8442
-POST /loadcoach/schedules 8442
 POST /loadcoach/schedules/sample 8442
 POST /loadcoach/settings/sample/seen 8442
 POST /loadcoach/stop-unlogged 8442
 POST /loadcoach/stop/sample 8442
-POST /loadcoach/tasks 8442
 POST /v1/batches/sample/cancel 8442

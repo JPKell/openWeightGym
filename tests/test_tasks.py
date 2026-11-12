@@ -26,7 +26,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def create(caller, owner):
     body={'id':'batch_'+secrets.token_hex(12),'token':secrets.token_urlsafe(32),'model':'small'}
-    for _ in range(100):
+    deadline=time.monotonic()+10  # fingerprinting the model file can take seconds while other tests run
+    while time.monotonic()<deadline:
         response=caller.post('/loadcoach/tasks',headers=owner,json=body)
         if response.status_code==201:
             return body
@@ -228,7 +229,7 @@ def test_task_tokens_are_scoped_and_permissions_are_rechecked(fake_llama_server,
         path='/loadcoach/tasks/'+first['id']
         assert caller.get(path,headers=scoped).json()['allowed']
         assert caller.post('/loadcoach/tasks',headers=owner,json=first).json()['id']==first['id']
-        assert caller.get('/loadcoach/tasks/'+second['id'],headers=scoped).status_code==401
+        assert caller.get('/loadcoach/tasks/'+second['id'],headers=scoped).status_code==404  # the front never says whether another task exists
         assert caller.get('/v1/models',headers={'authorization':'Bearer '+first['token']}).status_code==401
         assert caller.post('/loadcoach/tasks',headers=plain,json=first).status_code==403
         assert caller.post(path+'/probe',headers=scoped,json={'context':128,'inputs':120,'outputs':16}).status_code==400
@@ -269,7 +270,7 @@ def test_task_tracks_renames_without_following_a_reused_name(fake_llama_server,f
         assert caller.post('/loadcoach/models/small',headers=owner,json=models['small']).status_code==201
         removed=caller.get(path,headers=scoped).json()
         assert removed['model'] is None and not removed['allowed']
-        assert caller.post('/loadcoach/tasks',headers=owner,json=retry).status_code==404
+        assert caller.post('/loadcoach/tasks',headers=owner,json=retry).status_code==200  # a repeat only replays the receipt
         assert caller.post(path+'/probe',headers=scoped,json={'context':128}).status_code==403
     for path in (ROOT/'loadcoach').glob('*.py'):
         for node in ast.walk(ast.parse(path.read_text())):

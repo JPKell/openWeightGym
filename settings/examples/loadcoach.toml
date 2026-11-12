@@ -28,11 +28,9 @@ machine_name = "compute"
 # in someone's name: a batch, a benchmark task, a recurring schedule, and for the reports.
 front = "http://front.lan:8442"
 
-# DB1 cutover only: native probes still run here, but task/batch storage is front's.
-# After ToolLocker relocates, set front_toollocker = true to refuse stale settings/tool reports here.
-# Enable after terminal legacy history is verified on front and rollback is ready.
-# This does not delete old tables; leaving it false preserves legacy task routing.
-# front_tasks = false
+# Set to true once ToolLocker runs on the front machine. This node then refuses ToolLocker settings and
+# tool reports, and stops managing toollocker.service. (Formerly front_toollocker.)
+# toollocker_runs_on_front = false
 
 # Compatibility path for llama.cpp. A service does not always have your shell's PATH.
 # Prefer [engines.llama_cpp] below for new configuration; if both paths exist they must match.

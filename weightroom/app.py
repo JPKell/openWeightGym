@@ -152,7 +152,7 @@ class Settings:
     spotter: str = ""  # spotter's address on compute, such as http://10.77.10.84:8444. Empty: primary service/power controls and logs unavailable. Asked through turnstile
     chat_model_url: str = ""  # model door for web chat; turnstile on this machine unless said
     toollocker: str = ""  # MCP service base URL; empty uses turnstile on this machine, port 8443
-    front_toollocker: bool = False  # derived from Turnstile routing for recovery ownership
+    toollocker_runs_on_front: bool = False  # derived from Turnstile routing for recovery ownership
     plugins_dir: str = ""  # root plugin folder; defaults beside this installation's data folder
     voice_gateway: str = "http://127.0.0.1:8446"  # private gateway administration; never its public/Twilio listener
     timezone: str = ""  # the zone times are shown in, such as America/Vancouver. Empty: this machine's own
@@ -209,7 +209,7 @@ def load_settings(path: Path) -> Settings:
                 ZoneInfo(some["timezone"])  # a zone that does not exist is found here, not when a page is asked for
             rest = {name: value for name, value in some.items() if name != "key_file"}
             loaded = Settings(**{**rest, "key": key, "data": str(data), "file": told, "says": said_in(path), "path": str(path),
-                                 "front_toollocker": bool(turnstile.get('toollocker_url'))})
+                                 "toollocker_runs_on_front": bool(turnstile.get('toollocker_url'))})
             if any(type(rate) not in (int, float) or not 0 <= rate <= 1_000_000
                    for rate in (loaded.mock_input_rate, loaded.mock_output_rate)):
                 raise ValueError("mock token rates must be numbers from 0 to 1,000,000 USD per million tokens")
@@ -2581,7 +2581,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     # ---- backup and recovery ---------------------------------------------------------------
 
     def front_recovery_stores() -> list[RecoveryStore]:
-        """Enumerate configured front-owned stores for paired recovery sets."""
+        """Enumerate the configured stores the front keeps, for paired recovery sets."""
         stores = []
         for bound in database_registry.bound_stores():
             if not bound.bindings:
@@ -2590,7 +2590,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if bound.database.path is not None and bound.database.path.parent.resolve() == data.resolve():
                 archive = f"data/{bound.database.path.name}"
             bindings = bound.bindings
-            if 'weightroom.accounts' in bindings and settings.front_toollocker:
+            if 'weightroom.accounts' in bindings and settings.toollocker_runs_on_front:
                 bindings = (*bindings, 'toollocker.identity')
             stores.append(RecoveryStore(f"weightroom.{bound.name}", bound.database, bindings, archive))
         return stores
@@ -2694,7 +2694,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 rows,
                 excluded,
                 ["weightroom.service", "turnstile.service", "voice-gateway.service",
-                 *(["toollocker.service"] if settings.front_toollocker else [])],
+                 *(["toollocker.service"] if settings.toollocker_runs_on_front else [])],
                 settings.backup_retention,
                 stores=stores,
             )
@@ -3196,7 +3196,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if settings_answer.status_code not in (200, 503):
             return page(request, "refused.html", person, status=settings_answer.status_code, why=settings_answer.json()["error"]["message"])
         found = settings_answer.json() if settings_answer.is_success else {"programs": []}
-        hidden = {"engines", "llama_server", "disabled_gpus", "engine_gpus", "gpus", "models", "hub_token_file", "front_tasks", "front_toollocker"}
+        hidden = {"engines", "llama_server", "disabled_gpus", "engine_gpus", "gpus", "models", "hub_token_file", "toollocker_runs_on_front",
+                  "front_tasks", "front_toollocker"}  # the last two: names before the rename, still in older node reports
         resources, llama_settings = {}, []
         engine_setting = next((setting for program in found["programs"] if program["program"] == "loadcoach"
                                for setting in program["settings"] if setting["name"] == "engines"), None)
@@ -4860,7 +4861,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "pulse.html")
 
     async def scheduled_front_backup(identifier, retention):
-        """Create the front-owned half of a scheduled paired recovery set."""
+        """Create the front's half of a scheduled paired recovery set."""
         root, files, excluded, rows, stores = front_backup_context()
         existing = backup_manifest(root, identifier)
         if existing and existing.get('verification', {}).get('state') == 'verified':

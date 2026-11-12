@@ -78,7 +78,7 @@ def test_postgresql_front_task_creation_finish_and_transfer(postgres, tmp_path):
     import httpx
     import secrets
     from starlette.requests import Request
-    from turnstile.tasks import FrontTasks
+    from turnstile.tasks import TaskRecords
     from db.transfer import copy_store
 
     users = Users(postgres, {"admin": read_group("admin", {"can": ["superuser"]})})
@@ -92,7 +92,7 @@ def test_postgresql_front_task_creation_finish_and_transfer(postgres, tmp_path):
         return httpx.Response(200, json=values[path]) if path in values else httpx.Response(404, json={})
     async def dispatch(*args):
         return None
-    tasks = FrontTasks(batches, users, log, evidence, ask, dispatch, ['compute'], True)
+    tasks = TaskRecords(batches, users, log, evidence, ask, dispatch, ['compute'])
     def request(path, body, headers=()):
         content = json.dumps(body).encode()
         async def receive():
@@ -107,14 +107,14 @@ def test_postgresql_front_task_creation_finish_and_transfer(postgres, tmp_path):
         assert (await tasks.finish(request('', finish), tasks.get(number))).status_code == 200
         assert (await tasks.finish(request('', finish), tasks.get(number))).status_code == 200
         assert batches.db.execute('SELECT COUNT(*) FROM files').fetchone()[0] == 2
-        assert batches.db.execute('SELECT COUNT(*) FROM front_task_finishes').fetchone()[0] == 1
+        assert batches.db.execute('SELECT COUNT(*) FROM benchmark_task_finishes').fetchone()[0] == 1
     asyncio.run(run())
     batches.db.close(); log.db.close(); users.db.close()
     target = Database.sqlite(tmp_path / 'front-copy.db')
     assert copy_store(postgres, target)['state'] == 'verified'
     with target.connection() as copied:
-        assert copied.execute('SELECT machine FROM external_tasks WHERE id=?', (number,)).fetchone() == ('compute',)
-        assert copied.execute('SELECT COUNT(*) FROM front_task_finishes').fetchone() == (1,)
+        assert copied.execute('SELECT machine FROM benchmark_tasks WHERE id=?', (number,)).fetchone() == ('compute',)
+        assert copied.execute('SELECT COUNT(*) FROM benchmark_task_finishes').fetchone() == (1,)
 
 
 def test_postgresql_recurring_schedules_grants_and_transfer(postgres, tmp_path):
@@ -334,7 +334,7 @@ def test_postgresql_loadcoach_repositories(postgres, tmp_path):
     assert batches.get(batch["id"])["request_counts"] == {"total": 1, "completed": 1, "failed": 0}
     assert batches.db.execute("SELECT data_type FROM information_schema.columns WHERE table_name='batch_lines' AND column_name='body'").fetchone()[0] == "jsonb"
     migrate(postgres, batches.db, "loadcoach.tasks", TASKS)
-    batches.db.execute("INSERT INTO external_tasks VALUES(?,?,?,?,?,?,?)",
+    batches.db.execute("INSERT INTO benchmark_tasks VALUES(?,?,?,?,?,?,?)",
                        (batch["id"], "hash", "small", "fp", "{}", "{}", identity))
     batches.db.commit()
 

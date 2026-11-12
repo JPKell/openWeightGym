@@ -47,23 +47,23 @@ class Tasks:
         """Bind durable task storage, native probes and current account authorization."""
         self.batches, self.runner, self.users, self.who, self.log = batches, runner, users, who, log
         self.on_result = on_result
-        self.dispatched = {}  # front-owned work: in memory only, never a compute batch
+        self.dispatched = {}  # work the front keeps records for: in memory only here, never a compute batch
         self.front_kept = {}  # permission snapshot while the same probe server is kept
         self.receipts = {}  # bounded completed probe receipts, indexed by task/attempt
         if batches.db is not None:
             migrate(batches.db.database, batches.db, "loadcoach.tasks", TASKS)
             with batches.db:
-                for number, name, subject, created in batches.db.execute('SELECT e.id,e.model,e.subject,b.created FROM external_tasks e JOIN batches b ON b.id=e.id WHERE e.model_id IS NULL').fetchall():
+                for number, name, subject, created in batches.db.execute('SELECT e.id,e.model,e.subject,b.created FROM benchmark_tasks e JOIN batches b ON b.id=e.id WHERE e.model_id IS NULL').fetchall():
                     identity = json.loads(subject).get('model_id') or runner.models.legacy_identity(name,created)
                     if identity:
-                        batches.db.execute('UPDATE external_tasks SET model_id=? WHERE id=?',(identity,number))
+                        batches.db.execute('UPDATE benchmark_tasks SET model_id=? WHERE id=?',(identity,number))
         self.probes = Probes(runner, draining, self.allowed)
 
     def get(self, number):
         """Return one durable compute task, or None when the task is absent."""
         if self.batches.db is None:
             return None
-        row = self.batches.db.execute('SELECT model,fingerprint,subject,environment,model_id FROM external_tasks WHERE id=?', (number,)).fetchone()
+        row = self.batches.db.execute('SELECT model,fingerprint,subject,environment,model_id FROM benchmark_tasks WHERE id=?', (number,)).fetchone()
         batch = self.batches.get(number)
         if not row or not batch:
             return None
@@ -97,7 +97,7 @@ class Tasks:
             return error(404, 'No such external task.')
         token = request.headers.get('x-loadcoach-task', '')
         if token:
-            saved = self.batches.db.execute('SELECT token_hash FROM external_tasks WHERE id=?', (number,)).fetchone()[0]
+            saved = self.batches.db.execute('SELECT token_hash FROM benchmark_tasks WHERE id=?', (number,)).fetchone()[0]
             if secrets.compare_digest(hashlib.sha256(token.encode()).hexdigest(), saved):
                 return task
         user = await self.who(request)
@@ -168,7 +168,7 @@ class Tasks:
     async def create(self, request, user=None):
         """Create an idempotent, one-item batch for an external tool under the caller's identity."""
         if self.batches.db is None:
-            return error(410, 'External tasks are front-owned; submit through turnstile.')
+            return error(410, 'The front keeps benchmark tasks for this node; submit them through turnstile.')
         user = await self.who(request) if user is None else user
         if isinstance(user, Response):
             return user
@@ -190,7 +190,7 @@ class Tasks:
                 return error(404, 'The selected local model is not available.')
             found = self.get(number)
             if found:
-                digest = self.batches.db.execute('SELECT token_hash FROM external_tasks WHERE id=?', (number,)).fetchone()[0]
+                digest = self.batches.db.execute('SELECT token_hash FROM benchmark_tasks WHERE id=?', (number,)).fetchone()[0]
                 if found['user'] != user.name or found['model'] != model or digest != hashlib.sha256(token.encode()).hexdigest():
                     return error(409, 'That task ID is already in use.')
                 return JSONResponse(self.public(found))
@@ -207,7 +207,7 @@ class Tasks:
             file = self.batches.put_file(user.name, 'task.jsonl', 'batch', content)
             self.batches.start(user.name, ENDPOINT, file['id'], [line], metadata, number=number)
             with self.batches.db:
-                self.batches.db.execute('INSERT INTO external_tasks(id,token_hash,model,fingerprint,subject,environment,model_id) VALUES(?,?,?,?,?,?,?)',
+                self.batches.db.execute('INSERT INTO benchmark_tasks(id,token_hash,model,fingerprint,subject,environment,model_id) VALUES(?,?,?,?,?,?,?)',
                     (number, hashlib.sha256(token.encode()).hexdigest(), model, fingerprint, json.dumps(subject), json.dumps(environment), subject.get('model_id')))
             self.log.add('task', 'created', user.name, '', task=number, model=model, model_id=subject.get('model_id'))
             return JSONResponse(self.public(self.get(number)), status_code=201)
@@ -237,7 +237,7 @@ class Tasks:
         return await self.run_probe(request, task)
 
     async def run_probe(self, request, task, body=None):
-        """Common native validation/admission for legacy and signed front-owned probes."""
+        """Common native validation/admission for legacy and signed front-dispatched probes."""
         if not self.allowed(task['id']):
             return error(403, 'The task ended or its owner no longer has model-measurement permission.')
         try:

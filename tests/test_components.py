@@ -21,7 +21,7 @@ from loadcoach.users import Users
 from test_app import add_user, fake_llama_server, gateway  # noqa: F401
 from test_two_machines import Two
 from test_weightroom import desk, sign_in  # noqa: F401
-from turnstile.app import Settings as FrontSettings, build_app as build_front
+from turnstile.app import Settings as FrontConfig, build_app as build_front
 
 
 def told(**units) -> dict:
@@ -179,7 +179,7 @@ def test_front_lists_itself_and_every_node_and_says_why_one_cannot_be_checked(tm
                 return await httpx.ASGITransport(app=worker("old", old_key, knows=False)).handle_async_request(request)
             return await super().handle_async_request(request)
 
-    settings = FrontSettings(compute="compute", data=str(tmp_path), machine_key_file=primary_key, machines_poll_seconds=3600,
+    settings = FrontConfig(compute="compute", data=str(tmp_path), machine_key_file=primary_key, machines_poll_seconds=3600,
                              auth_key_file=str(tmp_path / "weightroom.key"), machines={
         "rig": {"compute": "http://rig:9442", "machine_key_file": rig_key},
         "asleep": {"compute": "http://127.0.0.1:9542", "machine_key_file": str(tmp_path / "asleep.key")},

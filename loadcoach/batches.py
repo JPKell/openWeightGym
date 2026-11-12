@@ -32,32 +32,32 @@ OPEN = ("in_progress", "cancelling")  # the states of a batch that has not ended
 AGAIN_AFTER = 30  # seconds before a request that was turned away for now is tried again
 
 
-class FrontOwnedBatches:
-    """Stateless compute compatibility reads after the verified DB1 cutover."""
+class NoLocalBatches:
+    """A node that keeps no batch or task records: its store was retired after the DB1 cutover, and the front keeps them."""
     db = None
 
     def bind_models(self, models):
-        """Leave model binding to the front-owned batch authority."""
+        """Leave model binding to the front, which keeps the batches."""
         pass
 
     def get(self, number):
-        """Return no local batch because front owns durable batch state."""
+        """Return no local batch: the front keeps batch records."""
         return None
 
     def listing(self, user=None):
-        """Return an empty local batch list under front ownership."""
+        """Return an empty local batch list: the front keeps batch records."""
         return []
 
     def unfinished(self):
-        """Return no locally resumable batches under front ownership."""
+        """Return no locally resumable batches: the front keeps batch records."""
         return []
 
     def open(self):
-        """Report zero local open batches under front ownership."""
+        """Report zero local open batches: the front keeps batch records."""
         return 0
 
     def prune(self, days):
-        """Leave batch retention to the front-owned store."""
+        """Leave batch retention to the front, which keeps the batches."""
         pass
 
 

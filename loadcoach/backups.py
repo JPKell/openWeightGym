@@ -538,7 +538,7 @@ def settings_aliases(path: str) -> list[dict]:
 
 def front_plan(data: str | Path, settings_path: str = "", plugins_dir: str = "",
                skip_databases: Iterable[Path] = ()) -> tuple[list[BackupFile], list[dict]]:
-    """Inventory front-owned backup files and explain excluded inputs."""
+    """Inventory the backup files the front keeps and explain excluded inputs."""
     data = Path(data)
     skipped = {Path(path).resolve() for path in skip_databases}
     files = [

@@ -19,7 +19,7 @@ from loadcoach.models import Models
 def test_cold_settings_and_files_are_accessible_without_compute(desk, front_settings):
     browser, compute, _ = desk
     compute.off = True
-    compute.front.state.front_settings.enabled = front_settings
+    compute.front.state.console_settings.enabled = front_settings
     sign_in(browser, 'jordan')
     for path in ('/files', '/settings', '/compute-nodes', '/users', '/groups', '/tools',
                  '/plugins', '/system/voice', '/system/audio', '/settings/image', '/models'):
@@ -48,7 +48,7 @@ def test_front_locations_work_without_compute_and_persist(desk, tmp_path):
     assert 'No model-file locations are available yet' not in listing.text
     detail = browser.get('/file', params={'path': file})
     assert detail.status_code == 200 and 'Front model' in detail.text
-    changed = compute.front.state.front_settings.changes.of('turnstile')
+    changed = compute.front.state.console_settings.changes.of('turnstile')
     assert changed['models_folder'] == str(cache) and changed['models_storage_folder'] == str(storage)
     sign_in(browser, 'pat')
     assert browser.get('/files').status_code == 403
@@ -216,16 +216,16 @@ def test_offline_node_locations_are_queued_then_delivered_only_to_that_node(desk
     response = browser.post('/settings/model-files', data={
         'file_machine': 'compute', 'models_folder': cache, 'models_storage_folder': storage})
     assert response.status_code == 200 and 'Locations saved on front' in response.text
-    pending = compute.front.state.front_settings.changes.of('node-files:compute')['pending']
+    pending = compute.front.state.console_settings.changes.of('node-files:compute')['pending']
     assert pending['locations'] == {'models_folder': cache, 'models_storage_folder': storage}
-    assert compute.front.state.front_settings.changes.of('turnstile').get('models_folder', '') == ''
+    assert compute.front.state.console_settings.changes.of('turnstile').get('models_folder', '') == ''
     compute.off = False
     Changes(str(tmp_path / 'loadcoach.db')).seen('loadcoach', said(
         {'models_folder': '', 'models_storage_folder': ''}, {}, {}))
     response = browser.get('/settings?file_machine=compute')
     assert response.status_code == 200 and 'Locations saved on front' not in response.text, compute.front.state.log.db.execute("SELECT what, detail FROM events WHERE kind='settings'").fetchall()
     assert cache in response.text and storage in response.text
-    assert not compute.front.state.front_settings.changes.of('node-files:compute')
+    assert not compute.front.state.console_settings.changes.of('node-files:compute')
 
 
 def test_front_paths_validate_before_creating_or_saving_folders(desk, tmp_path):
@@ -237,7 +237,7 @@ def test_front_paths_validate_before_creating_or_saving_folders(desk, tmp_path):
             'file_machine': 'front', 'models_folder': cache, 'models_storage_folder': storage})
         assert response.status_code == 400
     assert not (tmp_path / 'nested').exists()
-    assert compute.front.state.front_settings.changes.of('turnstile').get('models_folder', '') == ''
+    assert compute.front.state.console_settings.changes.of('turnstile').get('models_folder', '') == ''
 
 
 def test_front_library_promotes_without_overwriting_and_disabling_preserves_files(desk, tmp_path):
@@ -402,7 +402,7 @@ def test_queued_node_paths_recheck_permissions_before_delivery(desk, tmp_path):
     users.change('jordan', group='plain')
     compute.off = False
     browser.portal.call(compute.front.state.publish_file_settings)
-    assert compute.front.state.front_settings.changes.of('node-files:compute').get('pending')
+    assert compute.front.state.console_settings.changes.of('node-files:compute').get('pending')
     assert not Changes(str(tmp_path / 'loadcoach.db')).of('loadcoach')
 
 
@@ -415,7 +415,7 @@ def test_offline_node_folder_reset_preserves_other_queued_locations(desk, tmp_pa
                                               'models_storage_folder': storage})
     reset = browser.post('/settings/loadcoach', data={'machine': 'compute', 'reset': 'models_folder'})
     assert reset.status_code == 200 and 'File locations are saved on front' in reset.text
-    queued = compute.front.state.front_settings.changes.of('node-files:compute')['pending']['locations']
+    queued = compute.front.state.console_settings.changes.of('node-files:compute')['pending']['locations']
     assert queued == {'models_folder': None, 'models_storage_folder': storage}
     local = Changes(str(tmp_path / 'loadcoach.db'))
     local.seen('loadcoach', said({'models_folder': '', 'models_storage_folder': ''}, {}, {}))
@@ -423,7 +423,7 @@ def test_offline_node_folder_reset_preserves_other_queued_locations(desk, tmp_pa
     compute.off = False
     browser.get('/settings?file_machine=compute')
     assert local.of('loadcoach') == {'models_storage_folder': storage}
-    assert not compute.front.state.front_settings.changes.of('node-files:compute')
+    assert not compute.front.state.console_settings.changes.of('node-files:compute')
 
 
 def test_front_downloads_use_the_existing_verified_hub_contract(desk, tmp_path):

@@ -13,6 +13,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+from db.schemas import current_table, stored_table
 
 
 # Even an identical front copy does not make these tables disposable. In particular
@@ -32,7 +33,7 @@ DESTINATIONS = {
                     "reliability_state", "reliability_outcomes"), "roles"),
     **dict.fromkeys(("benchmark_definitions", "benchmark_state", "benchmark_runs",
                     "benchmark_samples"), "benchmarks"),
-    "external_tasks": "accounts",
+    **dict.fromkeys(("benchmark_tasks", "external_tasks"), "accounts"),  # external_tasks: the name before the rename
 }
 JSON_COLUMNS = {
     "settings", "choices", "own", "detail", "text", "asked", "said", "definition",
@@ -99,25 +100,27 @@ def digest(value):
                                      ensure_ascii=True).encode()).hexdigest()
 
 
-def compare(source, target, table, *, machine="compute"):
+def compare(source, target, table, *, machine="compute", target_table=None):
     """Every source row appears once, including unmatched rows and conflicts.
 
     Additional destination columns are reported but cannot erase a source column.
     Event hashes are re-chained by front; identity is (machine, source sequence).
     Text entry IDs use the same forwarding map rather than accidentally matching
     an unrelated front-local request with the same integer ID.
+    `target_table` is the table's name in `target` when it differs (a renamed table).
     """
+    target_table = target_table or table
     source_columns = columns(source, table)
     key_columns = [one[1] for one in sorted(source_columns, key=lambda one: one[5]) if one[5]]
     if not key_columns:
         key_columns = [one[1] for one in source_columns]
     source_names = {one[1] for one in source_columns}
-    present = target is not None and table in tables(target)
-    target_names = {one[1] for one in columns(target, table)} if present else set()
+    present = target is not None and target_table in tables(target)
+    target_names = {one[1] for one in columns(target, target_table)} if present else set()
     mapped = table in ("events", "texts")
     ignored = {"hash", "machine", "source", "id"} if table == "events" else {"entry"} if table == "texts" else set()
     comparing = source_names - ignored
-    target_rows = rows(target, table) if present else []
+    target_rows = rows(target, target_table) if present else []
     event_map = {}
     if mapped and target is not None and "events" in tables(target):
         event_map = {entry: original for entry, original in target.execute(
@@ -173,11 +176,13 @@ def audit(compute, accounts, roles, benchmarks, spotter=None, *, machine="comput
             with Path(path).open("rb") as stream:
                 result["inputs"][name] = hashlib.file_digest(stream, "sha256").hexdigest()
         for table in tables(source):
-            destination = DESTINATIONS.get(table)
-            comparison = compare(source, connections.get(destination), table, machine=machine)
+            destination, current = DESTINATIONS.get(table), current_table(table)
+            target = connections.get(destination)
+            comparison = compare(source, target, table, machine=machine,
+                                 target_table=stored_table(tables(target), current) if target is not None else current)
             comparison["ownership"] = "retain_compute" if table in RETAIN else "review_candidate" if destination else "unclassified"
             comparison["destination"] = destination
-            result["tables"][table] = comparison
+            result["tables"][current] = comparison  # keyed by current name, whatever the snapshot calls it
         source_tables = tables(source)
         checks = result["checks"] = {}
         if "batches" in source_tables:
@@ -197,10 +202,11 @@ def audit(compute, accounts, roles, benchmarks, spotter=None, *, machine="comput
                             missing.append({"batch": number, "column": column, "file": link})
             checks["missing_batch_files"] = missing
             checks["unreferenced_files"] = len(file_ids - referenced)
-        if "external_tasks" in source_tables:
+        task_table = stored_table(source_tables, "benchmark_tasks")
+        if task_table in source_tables:
             known_runs = {number for number, in connections["benchmarks"].execute("SELECT id FROM benchmark_runs")}
             checks["tasks_without_front_run"] = sorted(number for number, in source.execute(
-                "SELECT id FROM external_tasks") if number not in known_runs)
+                f"SELECT id FROM {quoted(task_table)}") if number not in known_runs)
         for table in ("settings_changed", "settings_seen"):
             if table in source_tables:
                 checks[table + "_programs"] = dict(source.execute(

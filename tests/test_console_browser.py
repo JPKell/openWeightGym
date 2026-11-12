@@ -130,7 +130,7 @@ def test_expired_telemetry_session_opens_one_login_and_keeps_password_focus(desk
 
 def test_file_settings_stay_independent_across_polling_and_reload(desk, tmp_path):
     server, switch, _ = desk
-    settings = switch.front.state.front_settings.changes
+    settings = switch.front.state.console_settings.changes
     for name in ('toollocker', 'turnstile'):
         settings.seen(name, {'fixture_path': {'value': 'fixture', 'file': 'fixture'}})
     sign_in(server, 'jordan')

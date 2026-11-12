@@ -45,7 +45,7 @@ backup/export/verified transfer; native runtime leases stay volatile and do not 
 No new store or production data move is introduced.
 
 Local **2026-10-15**, C04 / milestone 94: `weightroom.benchmarks` migration 4 adds immutable
-`benchmark_datasets` to the existing front-owned benchmark store, keyed by suite/version with
+`benchmark_datasets` to the existing benchmark store on the front, keyed by suite/version with
 canonical data, SHA-256, display name, timestamp and author. Runs freeze their chosen version
 before remote task creation; old versions remain available for history and restart. Existing
 full-store backup/restore, SQL exports and verified transfer discover this table automatically.
@@ -157,7 +157,7 @@ The existing front HTTP tool host and its private key remain in use. No hosted t
 Exact imports preserved 11 recorded tool schemas and the program report; there were no
 site overrides to move. All nine currently offered tool schemas matched before/after.
 Compute's former records remain frozen recovery originals: the disabled gateway refuses
-startup with `front_toollocker = true`, and compute API/CLI refuse their settings/reports.
+startup with `toollocker_runs_on_front = true` (formerly `front_toollocker`), and compute API/CLI refuse their settings/reports.
 Front backup inventory identifies ToolLocker as an accounts-store writer. Production
 bindings remain SQLite; a PostgreSQL engine switch is separately authorized work.
 
@@ -267,7 +267,7 @@ bind to the same store. Services sharing authoritative identity, permissions, ev
 other consistency-sensitive records must either use that same store or access the owner through
 an API; openWeightGym must not copy or silently synchronize those records between independent databases.
 
-Progression P5 / milestone 70 adds the front-owned `weightroom.alerts` binding, defaulting to
+Progression P5 / milestone 70 adds the `weightroom.alerts` binding on the front, defaulting to
 `data/alerts.db`. Its `weightroom.alerts` migration stream owns operational episodes and source
 freshness. It supports SQLite or PostgreSQL independently and is included in named-store health,
 exports, verified recovery, offline transfer and installer compatibility checks. Its collector
@@ -401,7 +401,7 @@ dump and isolated restore, and the target database remains empty. An initial 16 
 that restore because the available 18 client emitted `transaction_timeout`; it was replaced
 before any openWeightGym data was copied. No production binding has changed. PostgreSQL 18 repository
 contracts and isolated 13-store qualification have since passed; a fresh reviewed maintenance
-preview still precedes any separately selected live cutover. This loopback target is for front-owned
+preview still precedes any separately selected live cutover. This loopback target is for front
 stores; compute-owned stores require their own target or a deliberately networked database.
 
 The isolated G14 qualification on **2026-10-16** completed the current inventory and both

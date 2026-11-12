@@ -127,7 +127,7 @@ In `settings/weightroom.toml`, add or update these keys **inside the existing `[
 
 ```toml
 [turnstile]
-front_settings = true
+keep_console_settings_on_front = true
 toollocker_url = "http://127.0.0.1:9443"
 ```
 
@@ -310,7 +310,7 @@ SSH access to the file-owning host.
 | Symptom | Check |
 |---|---|
 | Unit not found | Add ToolLocker with the installer command above; Update/Repair of an older console-only selection does not add a missing service. |
-| Tool service has not reported configuration | Check `systemctl --user status toollocker` and its journal, then `front_settings`, `toollocker_url` and port 8443 in the console configuration. |
+| Tool service has not reported configuration | Check `systemctl --user status toollocker` and its journal, then `keep_console_settings_on_front`, `toollocker_url` and port 8443 in the console configuration. |
 | Gateway will not start | Check absolute command paths, Python/server dependencies, database access and the shared machine-key path. A legacy `loadcoach` setting must be replaced by `front` for a front-owned gateway. |
 | Address already in use | Turnstile uses 8443; the private gateway uses loopback 9443. Check `ss -ltnp`. |
 | No tools for one account | Check group/account tool patterns, hidden tools, sensitivity and the selected tool set. Refresh the client's list. |

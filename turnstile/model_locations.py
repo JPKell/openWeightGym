@@ -1,4 +1,4 @@
-"""Front-owned eligibility for a logical model's per-node copies."""
+"""Which of a logical model's per-node copies may be used, kept on the front."""
 
 import time
 
@@ -9,7 +9,7 @@ from db.schemas import MODEL_LOCATIONS
 class ModelLocations:
     """Persisted per-machine enablement of model placements."""
     def __init__(self, source):
-        """Bind model-location enablement to the front-owned configuration store."""
+        """Bind model-location enablement to the configuration store the front keeps."""
         self.source = database(source)
         self.db = self.source.connect(check_same_thread=False)
         migrate(self.source, self.db, "weightroom.model_locations", MODEL_LOCATIONS)

@@ -241,7 +241,7 @@ LOG = (
     Migration(10, "caller scoped node discovery", """
         CREATE TABLE node_discovery (scope TEXT PRIMARY KEY, at DOUBLE PRECISION NOT NULL, data TEXT NOT NULL);
     """),
-    Migration(11, "front owned compute node lifecycle", """
+    Migration(11, "compute node lifecycle kept on the front", formerly="front owned compute node lifecycle", sqlite="""
         CREATE TABLE machine_lifecycle (
             name TEXT PRIMARY KEY, state TEXT NOT NULL,
             changed_at DOUBLE PRECISION NOT NULL, changed_by TEXT NOT NULL);
@@ -426,9 +426,49 @@ TASKS = (
     Migration(2, "stable task model identities", _task_model_id),
 )
 
+# Old name -> new name of the benchmark task tables (docs/peer-nodes-plan.md, Phase 1).
+BENCHMARK_TASK_TABLES = {
+    "external_tasks": "benchmark_tasks",
+    "front_task_evidence": "benchmark_task_evidence",
+    "front_task_finishes": "benchmark_task_finishes",
+    "external_task_reservations": "benchmark_task_reservations",
+}
 
-def _front_task_owners(database, connection) -> None:
-    """Upgrade an already deployed front-task schema using its frozen identities only."""
+
+def current_table(name: str) -> str:
+    """A table's current name, for a name that may be one of the old benchmark task names."""
+    return BENCHMARK_TASK_TABLES.get(name, name)
+
+
+def stored_table(present, name: str) -> str:
+    """The name table `name` has in a store whose tables are `present`.
+
+    That is `name` itself, or its old name in a store or snapshot made before the rename.
+    """
+    if name in present:
+        return name
+    return next((old for old, new in BENCHMARK_TASK_TABLES.items() if new == name and old in present), name)
+
+
+def _benchmark_task_names(database, connection) -> None:
+    """Rename the benchmark task tables wherever the old name exists and the new one does not.
+
+    The front's stream and a node's legacy stream both run this, in either order and on a shared
+    or separate store. Renaming keeps every row as it is.
+    """
+    present = set(database.tables(connection))
+    for old, new in BENCHMARK_TASK_TABLES.items():
+        if old in present and new not in present:
+            connection.execute(f"ALTER TABLE {database.quote_identifier(old)} RENAME TO {database.quote_identifier(new)}")
+
+
+TASKS += (Migration(3, "benchmark task table names", _benchmark_task_names),)
+
+
+def _task_record_owners(database, connection) -> None:
+    """Upgrade an already deployed task-record schema using its frozen identities only.
+
+    This runs before the tables are renamed (migration 4), so it uses their old names."""
     import json
     add_column(database, connection, "external_tasks", "owner_id", "TEXT")
     for number, subject in connection.execute("SELECT id,subject FROM external_tasks WHERE owner_id IS NULL").fetchall():
@@ -436,7 +476,9 @@ def _front_task_owners(database, connection) -> None:
             connection.execute("UPDATE external_tasks SET owner_id=? WHERE id=?", (owner, number))
 
 
-FRONT_TASKS = (Migration(1, "front-owned external tasks and evidence outbox", """
+# Benchmark task records the front keeps for every node. Migrations 1-3 create the tables under
+# their old names; migration 4 renames them.
+TASK_RECORDS = (Migration(1, "benchmark task records and evidence outbox", """
     CREATE TABLE IF NOT EXISTS external_tasks (
         id TEXT PRIMARY KEY, token_hash TEXT NOT NULL, model TEXT NOT NULL,
         fingerprint TEXT NOT NULL, subject TEXT NOT NULL, environment TEXT NOT NULL,
@@ -445,7 +487,8 @@ FRONT_TASKS = (Migration(1, "front-owned external tasks and evidence outbox", ""
         task TEXT PRIMARY KEY, snapshot TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS front_task_finishes (
         task TEXT PRIMARY KEY, payload TEXT NOT NULL);
-"""), Migration(2, "immutable front task ownership", _front_task_owners))
+""", formerly="front-owned external tasks and evidence outbox"),
+    Migration(2, "immutable benchmark task ownership", _task_record_owners, formerly="immutable front task ownership"))
 
 
 def _chat_columns(database, connection) -> None:
@@ -615,10 +658,10 @@ BENCHMARKS += (Migration(8, "atomic native benchmark reservations", """
     CREATE TABLE IF NOT EXISTS benchmark_reservations (
         key TEXT PRIMARY KEY, run TEXT NOT NULL UNIQUE);
 """),)
-FRONT_TASKS += (Migration(3, "cross-submitter native task reservations", """
+TASK_RECORDS += (Migration(3, "cross-submitter native task reservations", """
     CREATE TABLE IF NOT EXISTS external_task_reservations (
         key TEXT PRIMARY KEY, task TEXT NOT NULL UNIQUE);
-"""),)
+"""), Migration(4, "benchmark task table names", _benchmark_task_names))
 
 
 PLUGINS = (Migration(1, "plugin use log", """
@@ -663,7 +706,7 @@ TOOL_SCHEMAS = (Migration(1, "tool schemas", """
 RETIRED_COMPUTE_TABLES = (
     "keys", "users", "groups", "machine_key_rotations", "roles", "role_benchmarks", "role_evidence",
     "reliability_outcomes", "reliability_state", "benchmark_samples", "benchmark_runs",
-    "benchmark_definitions", "benchmark_state", "services", "external_tasks",
+    "benchmark_definitions", "benchmark_state", "services", "benchmark_tasks",
     "batch_lines", "batches", "files",
 )
 
@@ -676,11 +719,13 @@ RETIRED_COMPUTE_STREAMS = frozenset({
 
 def _retire_compute_copies(database, connection) -> None:
     """Only the explicit DB1 command or an empty-target engine transfer applies this stream."""
+    present = set(database.tables(connection))
     for table in RETIRED_COMPUTE_TABLES:
-        connection.execute(f"DROP TABLE IF EXISTS {database.quote_identifier(table)}")
+        connection.execute(f"DROP TABLE IF EXISTS {database.quote_identifier(stored_table(present, table))}")
 
 
-COMPUTE_RETIREMENT = (Migration(1, "retire verified front-owned compute copies", _retire_compute_copies),)
+COMPUTE_RETIREMENT = (Migration(1, "retire verified compute copies of records the front keeps", _retire_compute_copies,
+                                formerly="retire verified front-owned compute copies"),)
 
 
 STREAMS = {
@@ -691,7 +736,7 @@ STREAMS = {
     "loadcoach.log": LOG, "loadcoach.models": MODELS, "loadcoach.roles": ROLES,
     "weightroom.model_locations": MODEL_LOCATIONS,
     "loadcoach.reliability": RELIABILITY, "loadcoach.role_evidence": ROLE_EVIDENCE,
-    "loadcoach.batches": BATCHES, "loadcoach.tasks": TASKS, "turnstile.tasks": FRONT_TASKS, "loadcoach.schedules": SCHEDULE_GRANTS,
+    "loadcoach.batches": BATCHES, "loadcoach.tasks": TASKS, "turnstile.benchmark_tasks": TASK_RECORDS, "loadcoach.schedules": SCHEDULE_GRANTS,
     "weightroom.chat": CHAT, "weightroom.benchmarks": BENCHMARKS,
     "weightroom.plugins": PLUGINS, "weightroom.alerts": ALERTS, "weightroom.schedules": SCHEDULES, "plugins.runtime": PLUGIN_RUNTIME,
     "spotter.history": SPOTTER, "toollocker.tools": TOOL_SCHEMAS,

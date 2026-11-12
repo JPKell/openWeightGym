@@ -8,6 +8,7 @@ TIMEZONES = [(json.dumps(name), name) for name in sorted(available_timezones())]
 # Unknown keys retain their current editor under Additional settings.
 LABELS = {
     'wait': ('Wait for a node', 'Requests and queue', 's', 'number'),
+    'allow_caller_to_specify_destination': ('Allow callers to choose the node', 'Requests and queue', '', 'switch'),
     'max_wait': ('Queue wait limit', 'Requests and queue', 's', 'number'),
     'max_estimated_wait': ('Estimated wait limit', 'Requests and queue', 's', 'number'),
     'load_timeout': ('Model load timeout', 'Requests and queue', 's', 'number'),

@@ -19,6 +19,7 @@ from loadcoach.devices import discover
 from loadcoach.gpu_type import is_integrated
 from engines import checked_installations
 from loadcoach.settings import changed_for, comments, laid_over
+from loadcoach.setting_names import current_names
 
 @dataclass
 class Config:
@@ -47,8 +48,7 @@ class Config:
     machine_key_file: str = ""  # the key compute shares with front: turnstile signs what it sends on with it. Empty: only this machine may ask, as anyone
     machine_name: str = "compute"  # the stable name this instance uses when it sends logs and asks front for accounts
     front: str = ""  # turnstile's address, such as http://10.77.10.42:8442, which compute asks for the accounts
-    front_tasks: bool = False  # DB1: native dispatch only; legacy task/batch tables are not opened or created
-    front_toollocker: bool = False  # ToolLocker's settings belong to front after its gateway moves
+    toollocker_runs_on_front: bool = False  # ToolLocker runs on the front: this node refuses its settings and reports. Formerly front_toollocker
     database: DatabaseSource = ":memory:"  # resolved core store; a path remains accepted for compatibility
     databases: dict = field(default_factory=dict)  # named stores and logical bindings
     token_file: str = ""  # where a running LoadCoach leaves a token for the `loadcoach` command
@@ -153,7 +153,10 @@ def load_config(path: Path) -> Config:
 
 def config_from(path: Path, data: dict, file: dict) -> Config:
     """The settings that `data` makes, checked. `file` is what the file itself says, kept to be shown."""
-    data = dict(data)
+    try:
+        data = current_names(data, str(path))  # renamed and retired keys (docs/peer-nodes-plan.md)
+    except ValueError as problem:
+        raise SystemExit(str(problem)) from None
     if "groups" in data:
         raise SystemExit(f"{path}: [groups] is kept on the front machine since milestone 76. Remove it here; add groups there with: weightroom group add NAME")
     if "api_keys" in data:
@@ -266,10 +269,8 @@ def checked(config: Config, path) -> Config:
             raise ValueError("llama_server conflicts with engines.llama_cpp.executable")
     except ValueError as problem:
         raise SystemExit(f"{path}: {problem}") from None
-    if type(config.front_tasks) is not bool or config.front_tasks and not config.front:
-        raise SystemExit(f"{path}: front_tasks is a boolean and requires a front address")
-    if type(config.front_toollocker) is not bool or config.front_toollocker and not config.front:
-        raise SystemExit(f"{path}: front_toollocker is a boolean and requires a front address")
+    if type(config.toollocker_runs_on_front) is not bool or config.toollocker_runs_on_front and not config.front:
+        raise SystemExit(f"{path}: toollocker_runs_on_front is a boolean and requires a front address")
     for name in ("load_timeout", "max_wait", "keep_days", "model_idle_minutes", "cpu_idle_minutes", "batch_keep_days"):
         if type(getattr(config, name)) not in (int, float) or getattr(config, name) < 0:
             raise SystemExit(f"{path}: {name} is a number, 0 or more")

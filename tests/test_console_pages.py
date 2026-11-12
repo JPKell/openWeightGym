@@ -261,7 +261,7 @@ def test_tools_configuration_and_access(desk):
     browser, switch, _ = desk
     config = {'call_timeout': 30, 'servers': {'files': {'command': ['python', '-m', 'toollocker.tools.files']}},
               'toolsets': {'reading': {'tools': ['files__*']}}}
-    store = switch.front.state.front_settings.changes
+    store = switch.front.state.console_settings.changes
     store.seen('toollocker', said(config, {}, {}))
     with store.db:
         store.db.execute('CREATE TABLE IF NOT EXISTS tool_schemas (tool TEXT PRIMARY KEY, schema TEXT NOT NULL)')

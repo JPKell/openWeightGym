@@ -57,6 +57,7 @@ from loadcoach.groups import read_group
 from loadcoach.log import FRONT, Log, machine_slot, public_number, origin_number
 from loadcoach.files import PIECE, SPARE, sha256_of
 from loadcoach.settings import FRONT_PROGRAMS, comments, copy_of, laid_over, said
+from loadcoach.setting_names import current_names
 from loadcoach.users import ANONYMOUS, User, Users
 from plugins._registry import Registry
 from plugins._sdk import AdapterError
@@ -65,8 +66,8 @@ from turnstile import accounts, events, roles, allowances
 from loadcoach.outside import Services
 from loadcoach.batches import Batches
 from turnstile.batches import FrontBatches
-from turnstile.tasks import FrontTasks
-from turnstile.settings import FrontSettings
+from turnstile.tasks import TaskRecords
+from turnstile.settings import ConsoleSettings
 from turnstile.artifacts import FrontFiles, checked_roots
 from loadcoach.file_index import FRONT_INDEX
 from turnstile.hosted import Hosted
@@ -112,8 +113,8 @@ class Settings:
     path: str = ""  # shared settings path for the persistent maintenance barrier
     databases: dict = field(default_factory=dict)  # shares weightroom's named accounts and plugin stores
     groups: dict = field(default_factory=dict)  # the first groups, taken into the accounts once, while there are none
-    front_tasks: bool = False  # DB1: new task ownership; existing front IDs stay local during rollback
-    front_settings: bool = False  # DB1: settings for front's own programs
+    keep_console_settings_on_front: bool = False  # the front stores and serves the settings of its own programs (weightroom, turnstile, voice-gateway); formerly front_settings
+    allow_caller_to_specify_destination: bool = True  # callers may name the node a task or request runs on. Off: the front picks. Settings → General
     toollocker_url: str = ""  # optional front ToolLocker upstream; port 8443 never wakes compute
     artifact_machine: str = ""  # front-side LoadCoach that owns downloads; empty prefers front_cpu
     models_folder: str = ""  # optional model cache on front; no inference service is required
@@ -130,7 +131,11 @@ class Settings:
 def load_settings(path: Path) -> Settings:
     """Read the front machine's TOML file. Anything wrong with it stops startup with a message naming the cause."""
     told = read_settings(path)
-    file, data = told.get("turnstile", {}), path.parent / told.get("data", ".")
+    data = path.parent / told.get("data", ".")
+    try:
+        file = current_names(told.get("turnstile", {}), f"{path} [turnstile]")
+    except ValueError as problem:
+        raise SystemExit(str(problem)) from None
     # What was changed on the site is kept on compute. weightroom keeps a copy in the folder the two share.
     changed = copy_of(data / "settings.json").get("turnstile", {})
     for mine in ([laid_over(file, changed, "turnstile")] if changed else []) + [file]:  # with the changes, and failing that as the file has it
@@ -162,10 +167,10 @@ def load_settings(path: Path) -> Settings:
             )
             if type(settings.wait) not in (int, float) or settings.wait <= 0:
                 raise TypeError("wait is a number of seconds above 0")
-            if type(settings.front_tasks) is not bool:
-                raise TypeError("front_tasks must be a boolean")
-            if type(settings.front_settings) is not bool:
-                raise TypeError("front_settings must be a boolean")
+            if type(settings.keep_console_settings_on_front) is not bool:
+                raise TypeError("keep_console_settings_on_front must be a boolean")
+            if type(settings.allow_caller_to_specify_destination) is not bool:
+                raise TypeError("allow_caller_to_specify_destination must be a boolean")
             if type(settings.image_adult_previews) is not bool:
                 raise TypeError("image_adult_previews must be a boolean")
             if type(settings.files_every) not in (int, float) or settings.files_every < 0:
@@ -176,8 +181,8 @@ def load_settings(path: Path) -> Settings:
                 url = urlsplit(settings.toollocker_url)
                 if url.scheme not in ("http", "https") or not url.hostname or url.username or url.password or url.path not in ("", "/") or url.query or url.fragment:
                     raise TypeError("toollocker_url must be an HTTP service base URL without credentials, path or query")
-                if 8443 not in settings.ports or not settings.front_settings:
-                    raise TypeError("toollocker_url requires port 8443 and front_settings")
+                if 8443 not in settings.ports or not settings.keep_console_settings_on_front:
+                    raise TypeError("toollocker_url requires port 8443 and keep_console_settings_on_front")
             if type(settings.keep_days) not in (int, float) or settings.keep_days < 0:
                 raise TypeError("keep_days is a number of days, 0 or more")
             if type(settings.max_in_flight) is not int or settings.max_in_flight < 1:
@@ -206,12 +211,13 @@ def say_what_runs(path: Path, settings: Settings) -> None:
     """Leave what turnstile runs with in the folder it shares with weightroom, which passes it on to LoadCoach for the Settings page."""
     defaults = path.parent / "defaults" / path.name
     text = (defaults.read_text() if defaults.is_file() else "") + path.read_text()  # its settings are explained in either file
-    file = read_settings(path).get("turnstile", {})
+    file = current_names(read_settings(path).get("turnstile", {}), str(path), say=lambda text: None)
     artifact_machine = settings.artifact_machine or ("front_cpu" if "front_cpu" in settings.machines else "compute")
     running = {**file, "host": settings.host, "ports": list(settings.ports), "wait": settings.wait,
                "voice_port": settings.voice_port, "artifact_machine": artifact_machine,
                "models_folder": settings.models_folder, "models_storage_folder": settings.models_storage_folder,
-               "image_adult_previews": settings.image_adult_previews, "files_every": settings.files_every}
+               "image_adult_previews": settings.image_adult_previews, "files_every": settings.files_every,
+               "allow_caller_to_specify_destination": settings.allow_caller_to_specify_destination}
     (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))))
 
 
@@ -819,7 +825,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if not machines.enabled(name):
             return error(409, f'Compute node {name} is {machines.state(name)}; wake is disabled.')
         try:
-            current, _ = front_tasks.grants.authorized(identifier, token, due)
+            current, _ = task_records.grants.authorized(identifier, token, due)
         except PermissionError as problem:
             return error(403, str(problem))
         if not current.can('front-wake'):
@@ -838,12 +844,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             log.add('schedule', 'wake-requested', current.name, 'scheduler', schedule=identifier, due_at=due, machine=name)
         return error(503, f'Asked {name} to wake; waiting for the node to answer before submitting scheduled work.', {'retry-after': '15'})
 
-    front_tasks = FrontTasks(batch_work.store, users, log, routing.evidence, ask_compute,
-                             dispatch_probe, ["compute", *settings.machines], settings.front_tasks, scheduled_node_ready)
-    front_tasks.locations = model_locations
+    task_records = TaskRecords(batch_work.store, users, log, routing.evidence, ask_compute,
+                               dispatch_probe, ["compute", *settings.machines], scheduled_node_ready,
+                               destination_allowed=lambda: console_settings.changes.of('turnstile').get(
+                                   'allow_caller_to_specify_destination', settings.allow_caller_to_specify_destination) is True)
+    task_records.locations = model_locations
     from mirrorwall.store import Store as ImageStore
     from mirrorwall.front import Front as ImageFront
-    front_settings = FrontSettings(stores.database('weightroom.accounts'), log, ask_compute, settings.front_settings,
+    console_settings = ConsoleSettings(stores.database('weightroom.accounts'), log, ask_compute, settings.keep_console_settings_on_front,
                                    programs=FRONT_PROGRAMS | {'toollocker'} if settings.toollocker_url else FRONT_PROGRAMS)
 
     configured_file_roots = {name: getattr(settings, name) for name in ('models_folder', 'models_storage_folder')}
@@ -853,12 +861,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     def front_file_roots():
         """Read current front storage settings without depending on any compute node."""
-        changed = front_settings.changes.of('turnstile')
+        changed = console_settings.changes.of('turnstile')
         return {name: changed.get(name, value) for name, value in configured_file_roots.items()}
 
     def front_files_every() -> float:
         """Seconds between looks through front's own folders, as saved on the site now."""
-        minutes = front_settings.changes.of('turnstile').get('files_every', settings.files_every)
+        minutes = console_settings.changes.of('turnstile').get('files_every', settings.files_every)
         return float(minutes) * 60 if type(minutes) in (int, float) and minutes >= 0 else settings.files_every * 60
 
     front_files = FrontFiles(front_file_roots, log, index=Path(settings.data) / FRONT_INDEX, every=front_files_every)
@@ -867,14 +875,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Prefer an explicitly selected store, then optional front storage, then legacy workers."""
         return settings.artifact_machine or ('front' if any(front_file_roots().values()) else artifact_machine)
     image_work=ImageFront(ImageStore(batch_work.store.db,settings.data),batch_work,users,
-                         adult_previews_allowed=lambda: front_settings.changes.of('turnstile').get(
+                         adult_previews_allowed=lambda: console_settings.changes.of('turnstile').get(
                              'image_adult_previews', settings.image_adult_previews) is True)
     batch_work.image_work=image_work
     from soundroom.store import Store as AudioStore
     from soundroom.front import Front as AudioFront
     audio_work = AudioFront(AudioStore(batch_work.store.db, settings.data), batch_work, users, log)
     batch_work.audio_work = audio_work
-    batch_work.task_owner = lambda user,row: front_tasks.visible(user,row) and image_work.visible(user,row) and audio_work.visible(user,row)
+    batch_work.task_owner = lambda user,row: task_records.visible(user,row) and image_work.visible(user,row) and audio_work.visible(user,row)
 
     def identify(authorization: str) -> dict:
         """For the plugin path: the caller this key belongs to, as the plugins describe a user."""
@@ -1168,11 +1176,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         where = statement.address((request.scope.get("raw_path") or request.url.path.encode()).decode(), query)
         path = request.url.path
         if port == settings.ports[0]:
-            handled = await front_settings.handle(request, user)
+            handled = await console_settings.handle(request, user)
             if handled is not None:
                 handled.headers['x-suite-data-owner'] = 'front'
                 return handled
-            handled = await front_tasks.handle(request, user)
+            handled = await task_records.handle(request, user)
             if handled is not None:
                 handled.headers['x-suite-data-owner'] = 'front'
                 return handled
@@ -1277,9 +1285,23 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         batched = batch_work.status([*combined["running"], *combined["hosted"]])
         mine = [one for one in batched["active"] if user.can("see-all") or one["user"] == user.name]
         combined["batches"] += batched["open"]
-        combined["active_batches"] = [one for one in combined["active_batches"] if batch_work.store.get(one["id"]) is None] + mine
+        combined["active_batches"] = active_with(combined["active_batches"], mine)
         combined["busy"] = sum(result.get("busy", 0) for result in found.values()) + len(outside["hosted"])
         return JSONResponse(combined, headers={"cache-control": "no-store"})
+
+    def active_with(listed: list[dict], mine: list[dict]) -> list[dict]:
+        """The nodes' running work beside the front's own batches, each listed once.
+
+        A batch the front runs is listed from `mine`. A benchmark probe is listed as its node
+        reports it while its task record here is still in progress: the record is kept here, but
+        only the node knows the probe is running.
+        """
+        own = {one["id"] for one in mine}
+
+        def shown(one: dict) -> bool:
+            kept = batch_work.store.get(one["id"])
+            return kept is None or one.get("caller") == "benchmark" and kept.get("status") == "in_progress"
+        return [one for one in listed if one["id"] not in own and shown(one)] + mine
 
     async def read_on(request: Request, user: User | None, body: bytes, upstream: httpx.Response) -> Response:
         """Three answers of compute's that what is kept here follows.
@@ -1301,7 +1323,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 batched = batch_work.status([*said.get("running", []), *said.get("hosted", [])])  # a hosted answer is executing too
                 mine = [one for one in batched["active"] if user.can("see-all") or one["user"] == user.name]
                 said["batches"] = said.get("batches", 0) + batched["open"]
-                said["active_batches"] = [one for one in said.get("active_batches", []) if batch_work.store.get(one["id"]) is None] + mine
+                said["active_batches"] = active_with(said.get("active_batches", []), mine)
                 said["busy"] = said.get("busy", 0) + len(outside["hosted"])
             return JSONResponse(said, headers={"cache-control": "no-store"})  # as compute said it: this page is never kept
         if request.url.path.endswith("/finish"):
@@ -1339,7 +1361,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Once a day, remove the session keys that have ended, which no longer work either way, outcomes older than reliability looks back, and log entries older than keep_days."""
         last_pruned = None  # the monotonic clock starts at boot, so a 0 here skipped the first day after a restart
         while True:
-            await front_tasks.retry_publication()
+            await task_records.retry_publication()
             await publish_file_settings()
             if last_pruned is None or time.monotonic() - last_pruned >= 86400:
                 users.forget_sessions()
@@ -1623,7 +1645,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                  port=settings.ports[2] if spotter else None, timeout=timeout)
 
     async def artifact_proxy(request: Request) -> Response:
-        """Send front-owned file/download operations to the designated front LoadCoach."""
+        """Send the front's file/download operations to the designated front LoadCoach."""
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
@@ -1656,7 +1678,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
 
     async def file_inventory(user, refresh: bool = False) -> dict:
-        """Front-owned files plus available storage at every configured compute node, from each one's kept
+        """The front's files plus available storage at every configured compute node, from each one's kept
         index. `refresh` has every node and front look through their folders again first."""
         names, store = ['front', *machines.names], file_store()
         listing = "/loadcoach/files" + ("?refresh=1" if refresh else "")
@@ -1683,7 +1705,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 "nodes": nodes, "distributions": shown_jobs()}
 
     async def artifact_files(request: Request) -> Response:
-        """Front-owned files plus available storage at every configured compute node. `refresh=1` looks again first."""
+        """The front's files plus available storage at every configured compute node. `refresh=1` looks again first."""
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
@@ -2014,7 +2036,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             log.add("file", "arranged", user.name, done=sum(step["state"] == "done" for step in job["steps"]), failed=len(failed))
 
     async def batch_start(request: Request, user: User) -> Response:
-        """Create a front-owned durable batch through the existing scoped APIs."""
+        """Create a durable batch, kept on the front, through the existing scoped APIs."""
         return await batch_work.batch_start(request, user, users.by_name)
 
     async def batch_one(request: Request, user: User) -> Response:
@@ -2172,14 +2194,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             except (OSError, ValueError, TypeError) as problem:
                 return error(400, str(problem))
             for name, value in paths.items():
-                front_settings.changes.put('turnstile', name, value, user.name)
+                console_settings.changes.put('turnstile', name, value, user.name)
             log.add('settings', 'changed', user.name, machine='front', program='model-files', **paths)
         return JSONResponse({'machine': 'front', 'locations': front_file_roots(), 'pending': False},
                             headers={'cache-control': 'no-store'})
 
     def pending_file_settings(name):
         """Read durable model-folder changes queued for exactly one configured node."""
-        return front_settings.changes.of('node-files:' + name).get('pending')
+        return console_settings.changes.of('node-files:' + name).get('pending')
 
     publication_lock = asyncio.Lock()
 
@@ -2199,12 +2221,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                            json.dumps(pending['locations']).encode(),
                                            machine='' if name == 'compute' else name, timeout=5)
                 if answer is not None and answer.status_code == 200 and pending_file_settings(name) == pending:
-                    front_settings.changes.take_away('node-files:' + name, 'pending')
+                    console_settings.changes.take_away('node-files:' + name, 'pending')
                     log.add('settings', 'delivered', owner.name, machine=name, program='model-files')
                 elif answer is not None and answer.status_code >= 400:
                     why = answer.json().get('error', {}).get('message', 'Node refused the saved locations.')
                     if why != pending.get('error'):
-                        front_settings.changes.put('node-files:' + name, 'pending', {**pending, 'error': why}, owner.name)
+                        console_settings.changes.put('node-files:' + name, 'pending', {**pending, 'error': why}, owner.name)
                         log.add('settings', 'delivery-failed', owner.name, machine=name, program='model-files', why=why)
 
     def settings_with_pending(name, result):
@@ -2268,12 +2290,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 answer = await ask_compute(user, request.method, path, raw,
                                            machine='' if name == 'compute' else name, timeout=5)
                 if answer is None:
-                    front_settings.changes.put('node-files:' + name, 'pending',
+                    console_settings.changes.put('node-files:' + name, 'pending',
                                               {'locations': locations, 'owner': user.identity, 'by': user.name,
                                                'at': datetime.now().isoformat(timespec='seconds')}, user.name)
                     return JSONResponse({'machine': name, 'pending': True, 'locations': locations}, status_code=202)
                 if answer.status_code == 200:
-                    front_settings.changes.take_away('node-files:' + name, 'pending')
+                    console_settings.changes.take_away('node-files:' + name, 'pending')
         else:
             answer = (await ask_live(user, "GET", path, machine=name) if request.method == "GET" else
                       await ask_compute(user, request.method, path, raw,
@@ -2721,7 +2743,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         own = Path(settings.auth_key_file) if settings.auth_key_file else None
         batch_work.door = httpx.AsyncClient(transport=httpx.ASGITransport(app=observation.internal(app), client=("127.0.0.1", 1)), base_url=f"http://turnstile.internal:{settings.ports[0]}")
         tasks = [asyncio.create_task(tidy()), asyncio.create_task(machines.run()), asyncio.create_task(rotate_due_keys())]
-        await front_tasks.retry_publication()
+        await task_records.retry_publication()
         batch_work.resume(users.by_name)
         if plugins:
             tasks += [asyncio.create_task(plugins.controller.run())]
@@ -2734,9 +2756,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         finally:
             await front_files.close()
             maintenance_stop.set()
-            for work in list(front_tasks.working.values()):
+            for work in list(task_records.working.values()):
                 work.cancel()
-            await asyncio.gather(*list(front_tasks.working.values()), return_exceptions=True)
+            await asyncio.gather(*list(task_records.working.values()), return_exceptions=True)
             for task in [*tasks, *batch_work.carrying]:
                 task.cancel()
             for task in distribution_tasks:
@@ -2745,7 +2767,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 task.cancel()
             await asyncio.gather(*tasks, *batch_work.carrying, *distribution_tasks, *list(discovery_refreshes.values()), return_exceptions=True)
             await batch_work.door.aclose()
-            front_settings.changes.db.close()
+            console_settings.changes.db.close()
             model_locations.db.close()
             component_versions.db.close()
             if plugins:
@@ -2819,10 +2841,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     app.add_middleware(PassiveReads, current=passive_reads)
     if plugins:
         plugins.controller.observation_log = log
-    app.state.front_tasks = front_tasks
+    app.state.task_records = task_records
     app.state.mirrorwall = image_work
     app.state.soundroom = audio_work
-    app.state.front_settings = front_settings
+    app.state.console_settings = console_settings
     app.state.fallthrough = fallthrough
     app.state.front_files = front_files
     app.state.publish_file_settings = publish_file_settings
