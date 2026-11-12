@@ -4486,9 +4486,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         names = [one["name"] for one in models.json()["models"]] if models is not None and models.status_code == 200 else []
         fits = {name for one in file.get("goes_with", []) for name in one["models"]}
         names = [name for name in names if name in fits] + [name for name in names if name not in fits]
+        from weightroom.file_views import destinations
         return page(request, "file.html", person, status=400 if failed else 200, file=file, places=found["places"], told=told, unread=unread, models=names, fits=fits,
                     said=said or request.query_params.get("said", ""), failed=failed, nodes=found.get("nodes", []), artifact_machine=found.get("artifact_machine", "front"),
-                    address=model_address, file_address=file_address)  # fmt: skip
+                    destinations=destinations(file, found), address=model_address, file_address=file_address)  # fmt: skip
 
     async def change_file(request: Request, person: Person) -> Response:
         """Validate and dispatch the selected model-file action."""
@@ -4522,6 +4523,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return go(model_address(new) + "?said=" + quote(f"Made {new}: {base['name']} with the projector {name}, so that it can be sent pictures. {base['name']} stays as it was."))
         if form.get("do") == "distribute":
             machines = fields.get("machine", [])
+            if not machines:
+                return await file_page(request, person, "Choose at least one destination node.", failed=True, path=path)
             answer = await ask("POST", "/turnstile/artifacts/distribute", person.key, json={"path": path, "machines": machines})
             if answer.status_code != 202:
                 return await file_page(request, person, answer.json()["error"]["message"], failed=True, path=path)

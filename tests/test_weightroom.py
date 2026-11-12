@@ -792,7 +792,8 @@ def test_a_file_is_moved_and_deleted_from_its_own_page(desk, tmp_path):
     sign_in(browser, "jordan")
 
     page = browser.get("/file?path=" + used).text
-    assert f'name="to" value="{slow}" title="' in page and f'free there">{slow}</button>' in page and "<details class=\"card" not in page  # one button for the other place, and no cards
+    assert 'name="to" class="form-select form-select-sm"' in page and f'<option value="{slow}">' in page
+    assert 'value="move"' in page and 'value="copy"' in page and 'data-layout="inspector"' in page
     moved = browser.post("/file", data={"path": used, "to": str(slow), "do": "move"})
     assert f"Moving used.gguf to {slow}." in moved.text, re.findall(r'<div[^>]*class="[^"]*alert[^>]*>(.*?)</div>', moved.text, re.S)
     deadline = time.monotonic() + 5
@@ -1744,13 +1745,11 @@ def test_adapters_and_projectors_are_listed_with_the_model_each_is_for_and_put_o
     kept.put("base", {"gpus": 1, "flags": {"model": base, "ctx-size": 2048}})
     sign_in(browser, "jordan")
 
-    # Files has a part for each kind. A part's row says which model it was made for and which model here that is, or that there is none.
-    listed = browser.get("/files?complete=1").text
-    adapters, projectors = listed[listed.index('id="files-adapters"') : listed.index('id="files-projectors"')], listed[listed.index('id="files-projectors"') :]
-    assert listed.index('id="files-models"') < listed.index("base.gguf</a>") < listed.index('id="files-adapters"') and "terse.gguf" not in listed[: listed.index('id="files-adapters"')]
-    assert "<td>Base</td>" in adapters and '<a href="/models/base">base</a>' in adapters and ">Make a model</a>" in adapters
-    assert "<td>Another Model</td>" in adapters and adapters.count("no model for it here") == 1
-    assert "eyes.gguf</a>" in projectors and '<a href="/models/base">base</a>' in projectors and ">Make a model</a>" in projectors and "no model for it here" not in projectors
+    # The library matrix filters by file kind; compatibility is inspected on the file page.
+    adapters = browser.get('/files?complete=1&type=adapter').text
+    projectors = browser.get('/files?complete=1&type=projector').text
+    assert 'terse.gguf' in adapters and 'stray.gguf' in adapters and 'eyes.gguf' not in adapters
+    assert 'eyes.gguf' in projectors and 'terse.gguf' not in projectors
 
     # A model is made with an adapter from the adapter's own page. The model its file names comes first in the list, and a file that names none here is marked.
     page, other = browser.get("/file?path=" + terse).text, browser.get("/file?path=" + stray).text
@@ -1763,7 +1762,8 @@ def test_adapters_and_projectors_are_listed_with_the_model_each_is_for_and_put_o
     # A copy of the model with the adapter attached. The model it was made from is as it was.
     assert kept.stored("base-terse") == {"flags": {"model": base, "ctx-size": 2048}, "gpus": 1, "adapters": {"terse": {"file": terse}}}
     assert kept.stored("base") == {"gpus": 1, "flags": {"model": base, "ctx-size": 2048}}
-    assert "with terse</small>" in browser.get("/models?complete=1").text and '<a href="/models/base-terse">base-terse</a>' in browser.get("/files?complete=1").text  # the file is one of the model's now
+    assert "with terse</small>" in browser.get("/models?complete=1").text
+    assert 'href="/models/base-terse"' in browser.get('/file', params={'path': terse}).text
 
     # On a model's page an adapter is chosen from the adapters there are, not typed. A row with its word emptied is an adapter taken away.
     assert f'<option value="{terse}" selected>{terse} · metadata names agree</option>' in made.text and f'<option value="{stray}" >{stray} · says it is for Another Model</option>' in made.text

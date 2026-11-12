@@ -1,0 +1,94 @@
+{% from 'parts.html' import page_header, card, alert, more %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'file_design_parts.html' import file_record, placement_row, empty_metadata %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Individual file · Three designs · openWeightGym</title>
+<style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#file-workspace" class="visually-hidden-focusable">Skip to file</a>
+<div class="file-review border-bottom">
+  <div class="d-flex align-items-center gap-2"><strong>openWeightGym</strong><span class="text-secondary">/ Individual file</span><span class="badge bg-azure-lt">Design preview</span></div>
+  <div class="d-flex align-items-center gap-2"><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset sample</button></div>
+</div>
+<main class="file-design-page">
+  <div class="file-review-controls">
+    {% call pills('File page designs', buttons=true, class_='file-options gap-2 mb-0') %}
+      {{ pill_button('01 / File dossier', true, attrs={'data-design': 'dossier'}) }}
+      {{ pill_button('02 / Metadata inspector', attrs={'data-design': 'inspector'}) }}
+      {{ pill_button('03 / Placement desk', attrs={'data-design': 'placement'}) }}
+    {% endcall %}
+    <select id="scenario" class="form-select form-select-sm" aria-label="Sample file state">
+      <option value="model">Model · in use</option><option value="unused">Unused file</option>
+      <option value="adapter">Adapter</option><option value="projector">Vision projector</option>
+      <option value="unreadable">Metadata unavailable</option><option value="failure">Transfer failed</option>
+    </select>
+  </div>
+  <p id="design-description" class="text-secondary small my-2">Recommended · A complete file at a glance, with metadata and actions side by side.</p>
+  <div id="file-workspace" data-layout="dossier">
+    {% set header_actions %}<button class="btn btn-outline-secondary btn-sm" id="copy-path">Copy path</button><button class="btn btn-primary btn-sm" id="jump-transfer">Distribute to nodes</button>{% endset %}
+    {{ page_header('Qwen3-32B-Q6_K.gguf', pretitle='FILES / FRONT / ACTIVE CACHE', actions=header_actions, id='file-heading') }}
+    <div class="file-path"><span class="badge bg-azure-lt" id="file-kind">Language model</span><code id="file-path">/srv/models/cache/Qwen3-32B-Q6_K.gguf</code></div>
+    {% call kpi_row('File summary', class_='file-summary mb-3') %}
+      {{ kpi('File size', '24.6 GiB', 'Q6_K · GGUF', value_attrs={'id': 'summary-size'}, note_attrs={'id': 'summary-format'}) }}
+      {{ kpi('Parameters', '32B', '64 transformer layers', value_attrs={'id': 'summary-parameters'}, note_attrs={'id': 'summary-layers'}) }}
+      {{ kpi('Trained context', '40,960', 'tokens', value_attrs={'id': 'summary-context'}) }}
+      {{ kpi('Used by', '2 models', 'File protected from deletion', value_attrs={'id': 'summary-usage'}, note_attrs={'id': 'summary-protection'}) }}
+    {% endcall %}
+    <div id="action-status" role="status" aria-live="polite" class="small"></div>
+    {% call alert('danger', class_='py-2 mb-3', attrs={'id': 'failure-notice', 'hidden': true}) %}Transfer to Nova failed: not enough free space. Choose another destination and retry.{% endcall %}
+    <div class="file-layout">
+      <div class="file-identity">
+        {% call card('File record', class_='file-record-card') %}
+          {{ file_record() }}
+        {% endcall %}
+        {% call card('Models using this file', attrs={'id': 'usage-card'}) %}
+          <div id="model-uses" class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary btn-sm" data-model="qwen3-32b">qwen3-32b ↗</button><button class="btn btn-outline-primary btn-sm" data-model="qwen3-32b-fast">qwen3-32b-fast ↗</button></div>
+          <p class="small text-secondary mb-0 mt-2" id="model-usage-note">Shared file · each model keeps its own settings.</p>
+          <button class="btn btn-outline-primary btn-sm mt-2" id="add-model" hidden>Add a model using this file</button>
+        {% endcall %}
+      </div>
+      <div class="file-metadata">
+        {% set metadata_actions %}<span class="badge bg-azure-lt" id="metadata-count">22 entries</span>{% endset %}
+        {% call card('Inside the file', actions=metadata_actions) %}
+          <div id="metadata-available">{% include 'file_says.html' %}</div>
+          <p id="metadata-unavailable" class="text-secondary mb-0" hidden>Metadata could not be read. File location, size and transfer controls are still available.</p>
+        {% endcall %}
+      </div>
+      <div class="file-operations" id="file-operations">
+        {% call card('Distribute to nodes', attrs={'id': 'distribution-card'}) %}
+          <form id="distribute-form" data-hold-refresh>
+            <input type="hidden" name="path" data-path-input value="/srv/models/cache/Qwen3-32B-Q6_K.gguf">
+            <div class="table-responsive"><table class="table table-sm align-middle mb-2" aria-label="File destinations"><thead><tr><th>Node</th><th>Copy</th><th class="text-end">Free</th><th><span class="visually-hidden">Select</span></th></tr></thead><tbody id="destinations"></tbody></table></div>
+            <div class="d-flex justify-content-between align-items-center gap-2"><span class="small text-secondary" id="destination-count">1 node selected</span><button class="btn btn-primary btn-sm" id="distribute" name="do" value="distribute">Distribute</button></div>
+            <p class="small text-secondary mt-2 mb-0">Each copy is SHA-256 verified before use.</p>
+          </form>
+        {% endcall %}
+        {% call card('Manage this file') %}
+          <form id="transfer-form" data-hold-refresh>
+            <input type="hidden" name="path" data-path-input value="/srv/models/cache/Qwen3-32B-Q6_K.gguf">
+            <div class="transfer-fields"><div><label class="form-label" for="operation">Action</label><select class="form-select form-select-sm" name="do" id="operation"><option value="copy">Copy</option><option value="move">Move</option></select></div><div><label class="form-label" for="place">Destination</label><select class="form-select form-select-sm" name="to" id="place"><option value="archive">archive · 1.8 TiB free</option><option value="nvme">nvme · current place</option><option value="small">scratch · 12 GiB free</option></select></div><button class="btn btn-outline-primary btn-sm" id="transfer">Copy file</button></div>
+            <p id="transfer-note" class="small text-secondary mt-2 mb-0">Copy keeps this original. Existing model paths stay the same.</p>
+          </form>
+          <div id="transfer-progress" class="mt-2" hidden><div class="d-flex justify-content-between small mb-1"><span id="progress-label">Copying…</span><span id="progress-percent">0%</span></div><div class="progress progress-sm" role="progressbar" aria-label="File transfer progress" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar"></div></div></div>
+          {% call more('How moving and distribution work') %}Move copies and verifies the file, updates model paths, then removes the original. Loaded models keep answering and use the new path on their next load. Stored files are promoted into the matching active cache and verified before distribution.{% endcall %}
+          <details class="file-delete border-top pt-2 mt-2"><summary class="text-danger">Delete file <span class="text-secondary small" id="delete-state">· protected</span></summary><p class="small mt-2 mb-2" id="delete-note">Remove the two model references before deleting this file.</p><form id="delete-form" hidden><label for="delete-name" class="form-label">Type the exact filename to confirm</label><input class="form-control form-control-sm mb-2" id="delete-name" name="name" autocomplete="off" spellcheck="false"><button class="btn btn-danger btn-sm" id="delete" disabled>Delete sample file</button></form></details>
+        {% endcall %}
+        {% call card('Create a model', attrs={'id': 'part-card', 'hidden': true}) %}
+          <p class="small text-secondary" id="part-explanation"></p>
+          <form id="part-form" data-hold-refresh><label for="model" class="form-label">Compatible base model</label><select class="form-select form-select-sm mb-2" id="model" name="model"><option>qwen3-32b</option><option>qwen3-32b-fast</option></select><div id="adapter-label"><label for="short" class="form-label">Adapter label</label><input class="form-control form-control-sm mb-2" name="short" id="short" value="terse" required></div><label for="new" class="form-label">New model name</label><input class="form-control form-control-sm mb-2" name="name" id="new" placeholder="qwen3-32b-terse" required><button class="btn btn-primary btn-sm">Make the model</button></form>
+        {% endcall %}
+      </div>
+    </div>
+    <p class="small text-secondary mb-0 file-preview-note">Sample data · all file operations are simulated in this browser.</p>
+  </div>
+</main>
+<dialog id="model-dialog" aria-labelledby="model-dialog-title">{% call card('Model reference', header_id='model-dialog-title', class_='mb-0') %}<p id="model-dialog-text"></p><form method="dialog"><button class="btn btn-outline-secondary btn-sm">Close</button></form>{% endcall %}</dialog>
+<template id="placement-row">{{ placement_row() }}</template>
+<template id="metadata-tools"><div class="metadata-tools"><input type="search" class="form-control form-control-sm" id="metadata-search" aria-label="Search metadata" placeholder="Find a key or value…"><select class="form-select form-select-sm" id="metadata-group" aria-label="Metadata group"><option value="all">All groups</option><option value="general.">General</option><option value="qwen3.">Architecture</option><option value="tokenizer.">Tokenizer</option></select></div></template>
+<template id="metadata-empty">{{ empty_metadata() }}</template>
+<script>{{ javascript|safe }}</script>
+</body></html>

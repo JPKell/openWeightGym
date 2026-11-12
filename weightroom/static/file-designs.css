@@ -1,0 +1,29 @@
+/* Individual-file proposals: one set of shared components, three spatial hierarchies. */
+.file-review { padding: .65rem 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: .65rem; background: var(--tblr-bg-surface); }
+.file-design-page { max-width: 1600px; margin: auto; padding: 1rem var(--suite-page-gutter); }
+.file-review-controls { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .75rem; }
+.file-review-controls > select { width: auto; max-width: 100%; }
+.file-options .nav-link { border: 1px solid var(--bs-border-color); font-weight: 600; }
+#file-workspace .page-header { margin-bottom: .5rem !important; }
+#file-workspace .page-title { font-size: clamp(1.2rem, 2vw, 1.8rem); letter-spacing: -.025em; }
+#file-workspace .card { margin-bottom: .85rem !important; }
+#file-workspace .card-header { padding: .7rem 1rem; min-height: 0; }
+#file-workspace .card-body { padding: .85rem 1rem; }
+#destinations td { padding-block: .55rem; }
+#action-status:not(:empty) { padding: .6rem .8rem; margin-bottom: .85rem; border: 1px solid var(--bs-border-color); border-left: 3px solid var(--bs-primary); background: var(--tblr-bg-surface); }
+.file-preview-note { padding-top: .1rem; }
+/* Placement puts distribution first and arranges the record as a quiet lower strip. */
+[data-layout="placement"] .file-layout { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+[data-layout="placement"] .file-operations { grid-column: 1; grid-row: 1; }
+[data-layout="placement"] .file-metadata { grid-column: 2; grid-row: 1 / span 2; }
+[data-layout="placement"] .file-identity { grid-column: 1; grid-row: 2; }
+[data-layout="placement"] #distribution-card { border-top: 3px solid var(--bs-primary); }
+[data-layout="placement"] .file-metadata .facts { grid-template-columns: 6rem minmax(0, 1fr) 5rem minmax(0, 1fr); }
+[data-layout="placement"] .metadata-scroll { max-height: 300px; }
+@media (max-width: 850px) {
+  .file-review { padding-inline: 1rem; }
+  .file-options { width: 100%; }
+  .file-options .nav-link { flex: 1 1 130px; font-size: .78rem; text-align: center; }
+  [data-layout="placement"] .file-operations { order: 0; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

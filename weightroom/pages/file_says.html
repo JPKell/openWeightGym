@@ -1,5 +1,6 @@
 {# What a model file says about itself. Shown on the file's own page and on the page of a model that uses it.
    On a model's page the list ends with what the model measured, which is known even of a file that cannot be read. #}
+{% from 'file_parts.html' import metadata_tools, empty_metadata %}
 {% if not told %}
 <p class="text-danger">{{ unread or "The file could not be read." }}</p>
 {% endif %}
@@ -26,15 +27,17 @@
   {% endif %}
 </dl>
 {% if told %}
-<details id="file-metadata">
+<details id="file-metadata"{% if file_inspector|default(false) %} open data-file-metadata{% endif %}>
   <summary class="mb-2">Everything it says, {{ told.metadata|length }} entries</summary>
-  <div class="table-responsive">
+  {% if file_inspector|default(false) %}{{ metadata_tools(told) }}{% endif %}
+  <div class="table-responsive{{ ' metadata-scroll' if file_inspector|default(false) }}">
   <table id="metadata" class="table table-sm sortable mb-0">
     <thead><tr><th data-sort="text">Name</th><th data-sort="text">Value</th></tr></thead>
     <tbody>
     {% for name, value in told.metadata.items() %}
-    <tr><td><code>{{ name }}</code></td><td class="wrap">{{ (value|shown)|truncate(400, true) }}</td></tr>
+    <tr{% if file_inspector|default(false) %} data-file-metadata-row data-group="{{ name.split('.')[0] }}"{% endif %}><td><code>{{ name }}</code></td><td class="wrap">{% if file_inspector|default(false) and (value|shown)|length > 400 %}<details><summary>{{ (value|shown)|truncate(140, true) }}</summary><pre class="text-wrap mb-0 mt-2"><code>{{ value|shown }}</code></pre></details>{% else %}{{ (value|shown)|truncate(400, true) }}{% endif %}</td></tr>
     {% endfor %}
+    {% if file_inspector|default(false) %}{{ empty_metadata() }}{% endif %}
     </tbody>
   </table>
   </div>
