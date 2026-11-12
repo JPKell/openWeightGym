@@ -19,18 +19,24 @@
   const available = name => inventories.has(name) && !failures.has(name);
   const accepting = name => available(name) && computeNodes.find(one => one.name === name)?.accepting_work !== false;
   const targets = () => [...$('install-targets').querySelectorAll('input:checked')].map(input=>input.value);
+  const installedOn = node => (inventories.get(node)?.models || []).some(model=>model.name === selected?.name);
+  const targetDisabled = input => busy || (selected ? !installedOn(input.value) : !input.checked && !accepting(input.value));
+  const targetState = name => !available(name) ? ' unavailable' : selected && !installedOn(name) ? ' not installed' : computeNodes.find(node=>node.name === name)?.accepting_work===false ? ' disabled' : '';
   const installing = () => !selected && [...installations.values()].some(job=>!terminal(job) && job.name === $('name').value.trim() && targets().includes(job.destination));
   const targetCards = () => selected ? inventory.cards || [] : (inventories.get(targets()[0])?.cards || []).filter(card=>targets().every(node=>(inventories.get(node)?.cards || []).includes(card)));
   function renderTargets(names=[activeNode]) {
     const area=$('install-targets').querySelector('[data-target-choices]');
     area.classList.remove('justify-content-end');
     $('install-targets').setAttribute('aria-labelledby','am-target-label');
+    $('install-targets').setAttribute('role',selected ? 'radiogroup' : 'group');
     area.replaceChildren(...computeNodes.map(node=>{
       const label=$('node-target').content.firstElementChild.cloneNode(true), input=label.querySelector('input');
+      input.type=selected ? 'radio' : 'checkbox';
+      input.name=selected ? 'am-configuration-node' : 'node';
       input.value=node.name; input.checked=names.includes(node.name);
-      input.disabled=Boolean(selected) || busy || (!input.checked && !accepting(node.name));
+      input.disabled=targetDisabled(input);
       label.querySelector('[data-node-name]').textContent=node.name;
-      label.querySelector('[data-node-state]').textContent=available(node.name) ? node.accepting_work===false ? ' disabled' : '' : ' unavailable';
+      label.querySelector('[data-node-state]').textContent=targetState(node.name);
       return label;
     }));
   }
@@ -184,11 +190,15 @@
     $('draft-status').textContent = dirty ? 'Unsaved draft' : selected ? 'Saved configuration' : 'Review setup, then add model';
     const reachable = available(activeNode);
     $('editor-state').textContent = !reachable ? 'Node unavailable' : selected ? 'Installed' : 'New model';
-    $('editor-context').textContent = selected ? 'Editing ' + selected.name + ' on ' + activeNode + '. Changes apply to this installation.' : 'Choose a managed file, assign hardware and review the output defaults.';
+    $('editor-context').textContent = selected ? 'Editing ' + selected.name + ' on ' + activeNode + '. Hardware applies to this node; output settings are shared.' : 'Choose a managed file, assign hardware and review the output defaults.';
     $('submit').textContent = busy ? 'Saving…' : installing() ? 'Installing…' : selected ? 'Save model' : destinations.length > 1 ? 'Install on ' + destinations.length + ' nodes' : 'Add model';
     $('submit').disabled = busy || installing() || !reachable || (!selected && (!destinations.length || destinations.some(node=>!accepting(node))));
-    $('install-targets').querySelectorAll('input').forEach(input=>{ input.disabled=Boolean(selected) || busy || (!input.checked && !accepting(input.value)); });
-    $('target-note').textContent = selected ? 'Changes apply to this installation on ' + activeNode + '.' : hardwareError() || (!destinations.length ? 'Select at least one destination node.' : destinations.some(node=>!accepting(node)) ? 'A selected node is unavailable. Deselect it or retry to reconnect.' : destinations.some(node=>!(inventories.get(node)?.cards || []).length) ? 'CPU only is the default when a selected node has no audio GPUs. The same configuration applies to every selected node.' : 'Select one or more nodes. The same configuration applies to every selected node.');
+    $('install-targets').querySelectorAll('input').forEach(input=>{
+      input.disabled=targetDisabled(input);
+      input.closest('label').querySelector('[data-node-state]').textContent=targetState(input.value);
+    });
+    $('target-label').textContent=selected ? 'Compute node' : 'Install on compute nodes';
+    $('target-note').textContent = selected ? 'Choose a node to configure this model.' : hardwareError() || (!destinations.length ? 'Select at least one destination node.' : destinations.some(node=>!accepting(node)) ? 'A selected node is unavailable. Deselect it or retry to reconnect.' : destinations.some(node=>!(inventories.get(node)?.cards || []).length) ? 'CPU only is the default when a selected node has no audio GPUs. The same configuration applies to every selected node.' : 'Select one or more nodes. The same configuration applies to every selected node.');
     const runtime = (inventory.engines?.engines || []).find(one => one.id === 'audiocpp');
     $('runtime').textContent = !reachable ? 'This node is unavailable. Saved settings and drafts remain visible; retry to reconnect.' : runtime?.available ? 'audio.cpp is installed on ' + activeNode + '.' : runtime?.why || inventory.catalogue?.error || '';
     $('runtime').hidden = !$('runtime').textContent;
@@ -277,7 +287,7 @@
       for (const option of $('companions').options) option.selected=(profile.files || []).includes(option.value.slice($('root').value.length+1));
     }
     dirty=false; restoreDraft(drafts.get(key())); editing=true;
-    $('controls').disabled=!available(activeNode);
+    $('controls').disabled=!selected && !available(activeNode);
     loading=false; showSection(section); updateSummary();
   }
   const kindGroup = kind => ['speech','clone','design'].includes(kind) ? 'voice' : ['transcription','alignment','diarization'].includes(kind) ? 'understand' : kind;
@@ -368,7 +378,7 @@
       $('load-error').hidden=!warning; $('load-error-text').textContent=warning;
       if (background === true) {
         // Completion updates the library without replacing a form the user is filling in.
-        $('controls').disabled=busy || !available(activeNode);
+        $('controls').disabled=busy || (!selected && !available(activeNode));
         updateSummary();
       } else if (!initialized) {
         const requested=params.get('model');
@@ -436,8 +446,13 @@
   root.querySelectorAll('[data-section]').forEach(button=>button.addEventListener('click',()=>showSection(button.dataset.section)));
   root.querySelectorAll('[data-audio-task]').forEach(button=>button.addEventListener('click',()=>{ task=button.dataset.audioTask; renderProfiles(); }));
   $('add').addEventListener('click',startNew);
-  $('install-targets').addEventListener('change',()=>{
-    if (selected || busy) return;
+  $('install-targets').addEventListener('change',event=>{
+    if (busy) return;
+    if (selected) {
+      if (installedOn(event.target.value)) selectModel(selected.name,event.target.value);
+      $('install-targets').querySelector('input:checked')?.focus({preventScroll:true});
+      return;
+    }
     // Retain the form while updating the GPUs shared by the selected destinations.
     const mode=root.querySelector('[data-hardware-mode]:checked')?.value;
     let gpus;
@@ -450,8 +465,9 @@
     }
   });
   $('reset').addEventListener('click',()=>{ drafts.delete(key()); populate(selected?.name || ''); renderProfiles(); });
-  const changed=()=>{
-    if (loading) return; dirty=true; $('saved').textContent='';
+  const changed=event=>{
+    if (loading || event.target.matches('[data-model-node][type="radio"]')) return;
+    dirty=true; $('saved').textContent='';
     queueMicrotask(()=>{ updateSummary(); captureDraft(); });
   };
   $('form').addEventListener('input',changed); $('form').addEventListener('change',changed);
@@ -508,7 +524,7 @@
       if (row) Object.assign(row,settings);
       else (known.models ||= []).push({...settings,name:savedName});
       populate(savedName); updateLocation(); renderProfiles(); $('saved').textContent='Saved.';
-    } finally { busy=false; $('controls').disabled=!available(activeNode); updateSummary(); }
+    } finally { busy=false; $('controls').disabled=!selected && !available(activeNode); updateSummary(); }
   }));
   $('retry').addEventListener('click',safe(refresh));
   $('install-retry').addEventListener('click',checkInstallations);

@@ -146,6 +146,83 @@ def test_model_and_node_drafts_preserve_unknown_settings_and_save_to_selected_no
     playwright.expect(page.locator('#am-option-speed')).to_have_value('1.5')
 
 
+@pytest.mark.parametrize('width',[1440,390])
+def test_main_node_pills_switch_configuration_and_preserve_per_node_drafts(studio,width):
+    page,state=studio
+    page.set_viewport_size({'width':width,'height':1100})
+    page.goto('http://console.test/models/audio?model=speaker')
+    nodes=page.get_by_role('radiogroup',name='Compute node',exact=True)
+    atlas,nova=nodes.locator('input[value="atlas"]'),nodes.locator('input[value="nova"]')
+    playwright.expect(nodes.locator('input[value="scout"]')).to_be_disabled()
+    playwright.expect(atlas).to_be_checked()
+    page.locator('[data-section="output"]').click()
+    atlas.focus(); atlas.press('ArrowRight')
+    playwright.expect(nova).to_be_checked()
+    playwright.expect(nova).to_be_focused()
+    playwright.expect(page.locator('#am-option-speed')).to_have_value('2')
+    playwright.expect(page.locator('#am-draft-status')).to_have_text('Saved configuration')
+    assert not page.evaluate('''()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented}''')
+    page.locator('#am-option-speed').fill('2.5')
+    atlas.locator('..').click()
+    playwright.expect(page.locator('#am-option-speed')).to_have_value('1')
+    page.locator('#am-option-speed').fill('1.5')
+    nova.locator('..').click()
+    playwright.expect(page.locator('#am-option-speed')).to_have_value('2.5')
+    assert parse_qs(urlsplit(page.url).query)['node']==['nova']
+    assert not state['posts']
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+    node,body=state['posts'][0]
+    assert node=='nova' and not body['new'] and 'machines' not in body
+    assert body['settings']['audiocpp']['defaults']['speed']==2.5
+    assert state['inventories']['atlas'][0]['audiocpp']['defaults']['speed']==1
+    atlas.locator('..').click()
+    playwright.expect(page.locator('#am-option-speed')).to_have_value('1.5')
+    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+
+
+def test_main_node_navigation_can_return_from_an_unavailable_installation(studio):
+    page,state=studio
+    page.goto('http://console.test/models/audio?model=speaker')
+    playwright.expect(page.locator('#am-name')).to_have_value('speaker')
+    state['failed'].add('nova')
+    page.locator('#am-retry').evaluate('button=>button.click()')
+    playwright.expect(page.locator('#am-load-error')).to_contain_text('nova')
+    nodes=page.get_by_role('radiogroup',name='Compute node',exact=True)
+    nodes.locator('input[value="nova"]').locator('..').click()
+    playwright.expect(nodes.locator('input[value="nova"]')).to_be_checked()
+    playwright.expect(page.locator('#am-submit')).to_be_disabled()
+    playwright.expect(nodes.locator('input[value="atlas"]')).to_be_enabled()
+    nodes.locator('input[value="atlas"]').locator('..').click()
+    playwright.expect(nodes.locator('input[value="atlas"]')).to_be_checked()
+    playwright.expect(page.locator('#am-submit')).to_be_enabled()
+    assert not state['posts']
+
+
+def test_main_node_pill_becomes_available_when_a_background_install_finishes(studio):
+    page,state=studio
+    state['install']=True; state['advance_installs']=False
+    page.goto('http://console.test/models/audio?new=1')
+    page.locator('#am-install-targets input[value="atlas"]').locator('..').click()
+    page.locator('#am-install-targets input[value="scout"]').locator('..').click()
+    page.locator('#am-file').select_option(label='vault · storage')
+    page.locator('#am-name').fill('speaker')
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-name')).to_have_value('')
+    page.locator('#am-profiles [data-model="speaker"] [data-identity]').click()
+    scout=page.locator('#am-install-targets input[value="scout"]')
+    playwright.expect(scout).to_be_disabled()
+    playwright.expect(scout.locator('..')).to_contain_text('not installed')
+    for job in state['jobs'].values():
+        job['state']='complete'
+    playwright.expect(scout).to_be_enabled()
+    playwright.expect(scout.locator('..')).not_to_contain_text('not installed')
+    scout.locator('..').click()
+    playwright.expect(scout).to_be_checked()
+    playwright.expect(page.locator('#am-editor-context')).to_contain_text('speaker on scout')
+    assert len(state['posts'])==1
+
+
 def test_task_choices_and_add_from_remote_storage_on_selected_node(studio):
     page,state = studio
     page.goto('http://console.test/models/audio')
@@ -335,7 +412,7 @@ def test_multiple_node_pills_retain_drafts_and_track_every_install(studio):
     state['install']=True
     state['nodes'][2]['accepting_work']=False
     page.goto('http://console.test/models/audio?new=1')
-    targets=page.get_by_role('group',name='Install on compute nodes')
+    targets=page.locator('#am-install-targets')
     playwright.expect(targets.locator('input[value="scout"]')).to_be_disabled()
     targets.locator('input[value="nova"]').locator('..').click()
     page.locator('#am-file').select_option(label='vault · storage')
@@ -343,7 +420,8 @@ def test_multiple_node_pills_retain_drafts_and_track_every_install(studio):
     page.locator('#am-profiles [data-model="speaker"] [data-identity]').click()
     page.locator('[data-section="output"]').click()
     page.locator('#am-option-speed').fill('1.75')
-    playwright.expect(targets.locator('input[value="atlas"]')).to_be_disabled()
+    playwright.expect(targets.locator('input[value="atlas"]')).to_be_enabled()
+    playwright.expect(targets.locator('input[value="atlas"]')).to_have_attribute('type','radio')
     page.locator('#am-add').click()
     playwright.expect(page.locator('#am-name')).to_have_value('fleet-voice')
     for node in ('atlas','nova'):
