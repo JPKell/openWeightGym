@@ -27,7 +27,7 @@
 {% if deferred %}{% from 'deferred.html' import loading %}{{ loading('models', list_url, 'Loading models…') }}{% else %}{% include 'models_list.html' %}{% endif %}
 {% if kind in ('all', 'llm') %}
 
-{% call card("Add a model", id="add-model", hint='Choose the compute nodes, a file from cache or storage, and the engine configuration.') %}
+{% call card("Add a model", id="add-model") %}
 {% if deferred %}
 {% from "deferred.html" import loading %}
 {{ loading('model-editor', editor_url, 'Loading node engines and model files…') }}
