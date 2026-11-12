@@ -7,7 +7,7 @@
 {% block main %}
 <link rel="stylesheet" href="/static/schedules.css?v=1">
 <div id="schedule-studio" data-schedule-studio data-selected="{{ selected.id if selected else 'new' }}" data-save-failed="{{ 'yes' if failed else 'no' }}">
-{% call page_header('Schedules', pretitle='AUTOMATION / ON YOUR TIME') %}<a class="btn btn-primary" href="/schedules?new=1" {{ swaps('page-content', true) }}>＋ New schedule</a>{% endcall %}
+{% call page_header('Schedules') %}<a class="btn btn-primary" href="/schedules?new=1" {{ swaps('page-content', true) }}>＋ New schedule</a>{% endcall %}
 {{ said_box(said, failed) }}
 {{ overview(active_count, paused_count, attention_count, upcoming) }}
 <div class="sc-toolbar mb-4"><input class="form-control" type="search" id="schedule-search" aria-label="Search schedules" placeholder="Find a schedule, function or node…"><select class="form-select" id="schedule-status-filter" aria-label="Schedule status"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option><option value="attention">Needs attention</option></select><select class="form-select" id="schedule-kind-filter" aria-label="Function filter"><option value="all">All functions</option><option value="backup">Paired backup</option><option value="benchmark">Benchmark rerun</option><option value="outstanding">Missing / outdated benchmark</option></select><span class="small text-secondary text-md-end" id="schedule-count" aria-live="polite">{{ schedules|length }} schedules</span></div>
