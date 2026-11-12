@@ -145,7 +145,8 @@ def test_benchmark_pages_filter_models_before_rendering_or_comparing(desk, tmp_p
     assert "First token" in results and "run-details" not in results
     assert 'id="benchmark-resource-heatmap"' not in results and 'id="benchmark-resource-table"' not in results
     nodes = browser.get('/benchmarks/node-measurements?benchmark=speed').text
-    assert 'id="benchmark-resource-heatmap"' in nodes and 'id="benchmark-resource-table"' in nodes
+    assert 'data-measurement-matrix' in nodes and 'id="benchmark-resource-table"' in nodes
+    assert 'id="benchmark-resource-heatmap"' not in nodes
     old_link = browser.get("/benchmarks?benchmark=speed&model=visible-model", follow_redirects=False)
     assert old_link.headers['location'] == '/benchmarks/results?benchmark=speed&model=visible-model'
     assert "Not run" in results and "score-missing" in results
@@ -391,7 +392,7 @@ def test_context_edits_keep_scores_details_comparison_and_model_results(desk, tm
     assert f'/benchmarks/run/{matching}' in browser.get('/benchmarks/results?benchmark=load&model=context-model').text
 
 
-def test_green_direction_saves_and_reverses_colours_without_changing_scores(desk,tmp_path,monkeypatch):
+def test_green_direction_saves_without_changing_matrix_scores(desk,tmp_path,monkeypatch):
     import re
     browser,_,_=desk
     models=Models(str(tmp_path/'loadcoach.db'))
@@ -403,22 +404,22 @@ def test_green_direction_saves_and_reverses_colours_without_changing_scores(desk
           for name,score in [('low-model',-5),('high-model',0)]]
     monkeypatch.setattr(store,'listing',lambda:[dict(r) for r in runs])
     sign_in(browser,'jordan')
-    def colours():
+    def matrix(direction):
         page=browser.get('/benchmarks/node-measurements');assert page.status_code==200
-        assert 'score-missing' in page.text
-        return {float(score):colour for score,colour in re.findall(r'data-score="([^"]+)"[^\n]*?style="background: ([^;]+)',page.text)}
-    assert colours()=={-5:'rgb(223,134,57)',0:'rgb(41,152,121)'}
+        assert 'Not run' in page.text and f'data-score-higher="{direction}"' in page.text
+        return {float(score) for score in re.findall(r'<td[^>]+data-score="([^"]+)"',page.text)}
+    assert matrix('true')=={-5,0}
     form={'benchmark':'context','formula':'max_context_tokens','enabled':'on','green':'low'}
     saved=browser.post('/benchmarks/manage',data=form)
     assert saved.status_code==200 and 'value="low" selected' in saved.text
-    assert colours()=={-5:'rgb(41,152,121)',0:'rgb(223,134,57)'}
+    assert matrix('false')=={-5,0}
     assert [r['score'] for r in runs]==[-5,0]
     refused=browser.post('/benchmarks/manage',data={**form,'green':'invalid'})
     assert refused.status_code==400 and 'role="alert"' in refused.text and 'value="max_context_tokens"' in refused.text
     assert next(d for d in store.definitions() if d['id']=='context')['green']=='low'
-    # Equal values stay neutral in either direction.
+    # Tied scores and real zeroes remain recorded evidence.
     runs[0]['score']=0
-    assert colours()=={0:'rgb(132,143,89)'}
+    assert matrix('false')=={0}
 
 
 def test_removed_history_is_visible_to_managers_without_name_reuse_or_private_leaks(desk, tmp_path):

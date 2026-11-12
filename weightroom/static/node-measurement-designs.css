@@ -1,0 +1,52 @@
+/* Sample proposals share the console's palette, type, controls and components. */
+.measurement-review { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem; padding: 1rem 2rem; background: var(--tblr-bg-surface); }
+.measurement-brand { display: inline-flex; align-items: center; gap: .5rem; font-weight: 700; font-size: 1.05rem; }
+.measurement-brand .suite-icon { width: 1.4rem; height: 1.4rem; color: var(--suite-accent); }
+.measurement-page { max-width: 1800px; margin: auto; padding: 1.5rem 2rem 3rem; }
+.measurement-proposal { padding-bottom: 1.25rem; border-bottom: 1px solid var(--bs-border-color); }
+.measurement-workspace { display: grid; grid-template-columns: 258px minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+.measurement-main, .measurement-node-panel, .measurement-search { min-width: 0; }
+[data-layout="matrix"] .measurement-workspace { display: block; }
+[data-layout="matrix"] .measurement-node-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+[data-layout="matrix"] .measurement-node-panel { margin-bottom: 1.5rem; }
+[data-layout="matrix"] .measurement-node { padding: .75rem 1rem; }
+[data-layout="matrix"] .measurement-table { min-width: 1350px; }
+[data-layout="matrix"] .measurement-table th:first-child { position: sticky; left: 0; z-index: 2; width: 230px; }
+[data-layout="matrix"] .measurement-table thead th:first-child { z-index: 4; }
+[data-layout="matrix"] .measurement-node [data-hardware] { font-size: .65rem; }
+.measurement-lens { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 1rem; }
+.measurement-model-list { max-height: 360px; overflow: auto; }
+.measurement-model { display: block; width: 100%; background: var(--tblr-bg-surface); color: var(--bs-body-color); border: 0; border-bottom: 1px solid var(--bs-border-color); border-left: 3px solid transparent; padding: .8rem 1rem; font-size: .8rem; }
+.measurement-model[aria-pressed="true"] { background: var(--suite-accent-bg); border-left-color: var(--bs-primary); }
+.measurement-model small { font-size: .65rem; }
+.measurement-bar-row { display: grid; grid-template-columns: 75px minmax(0, 1fr) 90px; gap: .8rem; align-items: center; margin-bottom: .9rem; font-size: .75rem; }
+.measurement-bar-row strong { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+.measurement-bar-track { height: 10px; background: var(--tblr-bg-surface-secondary); border-radius: 2px; overflow: hidden; }
+.measurement-bar-fill { height: 100%; background: var(--bs-primary); }
+[data-layout="lens"] #measurement-table-panel { margin-top: .3rem; }
+.measurement-dialog { padding: 0; width: min(680px, calc(100% - 2rem)); max-height: 90vh; overflow: auto; background: var(--tblr-bg-surface); color: var(--bs-body-color); border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius-lg); }
+.measurement-dialog::backdrop { background: #0008; }
+.measurement-detail-value { font-size: 2.5rem; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.measurement-detail-grid { display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: .65rem 1rem; font-size: .8rem; overflow-wrap: anywhere; }
+.measurement-detail-grid dt { color: var(--bs-secondary-color); font-weight: 400; }
+.measurement-detail-grid dd { margin: 0; }
+@media (min-width: 1800px) { [data-layout="matrix"] .measurement-node-list { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
+@media (max-width: 1100px) {
+  .measurement-workspace { grid-template-columns: 220px minmax(0, 1fr); gap: 1rem; }
+  .measurement-search { grid-column: 1 / -1; }
+  .measurement-lens { grid-template-columns: 1fr; }
+  .measurement-model-list { max-height: 205px; }
+  [data-layout="matrix"] .measurement-node-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  .measurement-page { padding: 1rem .85rem 2rem; }
+  .measurement-review { padding: .8rem 1rem; }
+  .measurement-workspace { display: block; }
+  .measurement-node-panel { margin-bottom: 1.5rem; }
+  .measurement-node-list, [data-layout="matrix"] .measurement-node-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .measurement-search { grid-column: auto; }
+  .measurement-metric-toolbar { align-items: stretch; }
+  .measurement-bar-row { grid-template-columns: 65px minmax(0, 1fr) 75px; gap: .4rem; font-size: .7rem; }
+  .measurement-detail-grid { grid-template-columns: 1fr; gap: .3rem; }
+  .measurement-detail-grid dd { margin-bottom: .6rem; }
+}

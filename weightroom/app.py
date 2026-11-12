@@ -84,7 +84,7 @@ from weightroom.database_console import DatabaseConsole, owner_of
 from weightroom.conversations import build_app as build_conversations
 from weightroom import pairing
 from weightroom.plugin_pages import build_routes as plugin_routes
-from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, run_lanes, run_model_rows, model_kind as benchmark_model_kind
+from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, run_lanes, run_model_rows, measurement_matrix, model_kind as benchmark_model_kind
 from benchmarks.identity import variant
 from turnstile.model_configuration import (configuration as model_configuration, generation as generation_settings, comparable, shared as shared_values,
                                            translate, GLOBAL_FLAGS, PROFILE_GLOBALS)
@@ -1561,6 +1561,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             prior = location_latest.get(key)
             if prior is None or run.get('current_fingerprint') and not prior.get('current_fingerprint'):
                 location_latest[key] = run
+        inventory = {'machines': list(benchmark_inventory.values())}
+        inventory_warning = ''
+        if section in ('runs', 'node-measurements', 'embedders'):
+            try:
+                answer = await ask('GET', '/turnstile/machines', person.key)
+                if answer.is_success:
+                    # The monitor's model/loaded lists are not caller-scoped. Only
+                    # public node topology is consumed; choices use the catalogue.
+                    inventory = {'machines': [{**{key: node[key] for key in
+                        ('name', 'state', 'hostname', 'lifecycle', 'accepting_work') if key in node},
+                        'cards': [{key: card[key] for key in ('card', 'total') if key in card} for card in node.get('cards') or []]}
+                        for node in answer.json().get('machines', [])]}
+                    benchmark_inventory.clear()
+                    benchmark_inventory.update({node['name']: node for node in inventory['machines']})
+                else:
+                    inventory_warning = 'Node inventory could not be refreshed. Showing last known nodes and saved evidence.'
+            except (ComputeOff, httpx.HTTPError):
+                inventory_warning = 'Node inventory could not be refreshed. Showing last known nodes and saved evidence.'
         resource_nodes = []
         for model in models:
             places = model.get('locations', [])
@@ -1694,21 +1712,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         targets[candidate['location'] or 'compute'] = candidate
                 start_rows.append({'model': model, 'targets': targets})
         may_run = ('benchmark' in person.can or 'superuser' in person.can) and not found['compute_unavailable']
-        inventory = {'machines': list(benchmark_inventory.values())}
-        if section == 'runs':
-            try:
-                answer = await ask('GET', '/turnstile/machines', person.key)
-                if answer.is_success:
-                    # The monitor's model/loaded lists are not caller-scoped. Only
-                    # public node topology is consumed; choices use the catalogue.
-                    inventory = {'machines': [{key: node[key] for key in
-                        ('name', 'state', 'hostname', 'lifecycle', 'accepting_work') if key in node}
-                        for node in answer.json().get('machines', [])]}
-                    benchmark_inventory.clear()
-                    benchmark_inventory.update({node['name']: node for node in inventory['machines']})
-            except ComputeOff:
-                pass
         lanes = run_lanes(catalogue, inventory, models, selected, runs, location_latest, latest, may_run)
+        matrix = measurement_matrix(catalogue, inventory, models, resource_benchmarks, resource_selected, runs, location_latest) if section == 'node-measurements' else None
         queue = sorted((run for run in runs if run['state'] not in ('running', 'completed', 'failed', 'cancelled')),
                        key=lambda run: run['created'])
         active_runs = [run for run in runs if run['state'] == 'running']
@@ -1731,7 +1736,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     resource_benchmarks=resource_benchmarks, score_benchmarks=score_benchmarks,
                     score_models=[model for model in models if benchmark_model_kind(model) == 'llm' and not model.get('embedding')],
                     resource_selected=resource_selected, resource_nodes=resource_nodes, resource_results=resource_results,
-                    resource_colours=resource_colours,
+                    resource_colours=resource_colours, matrix=matrix, inventory_warning=inventory_warning,
                     start_nodes=start_nodes, start_rows=start_rows, preferred_node=preferred_node, preferred_nodes=sorted(set(resource_nodes) | set(unavailable_nodes) | {preferred_node}), resource_ids=resource_ids,
                     colours=colours, runs=runs, paused=found['paused'], live=live,
                     embedding_family=embedding_family, kind=kind, type_benchmarks=type_benchmarks,

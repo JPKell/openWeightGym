@@ -7721,7 +7721,8 @@ it was.
 | Route | What it does |
 |---|---|
 | `/benchmarks` | Home: active run, or Start a run when idle, then per-node resource results and quality scores |
-| `/benchmarks/results` | Context, Speed and Load time as test pills with node columns, plus quality-score heatmap and selected quality KPI details |
+| `/benchmarks/results` | Language quality-score heatmap and selected benchmark KPI details, filtered by model type |
+| `/benchmarks/node-measurements` | Fleet matrix with all configured nodes; see the [page contract](../benchmarks/README.md#pages-scores-and-result-identity) |
 | `/benchmarks/embedders` | Embedding Context, Speed and Load time pills with node columns and embedding-only run selection |
 | `/benchmarks/runs` | Eleven available benchmark definitions in the local implementation (nine deployed before progression P4), model checkboxes, durable queue, pause/stop controls, live log and samples, and run history |
 | `/benchmarks/compare` | Multiple current models or recorded fingerprint/engine/machine identities, with models in columns and selected benchmark KPIs in rows |
@@ -7766,13 +7767,12 @@ form again.
 The page asks LoadCoach for `/v1/models` and its in-process benchmark handlers for `/benchmarks`,
 using the person's key. These tests
 concern local GPU models. Unauthorised model names cannot add rows or disclose fingerprints.
-Missing scores are grey dashes, not zero. Context, Speed and Load time are excluded from the score
-heatmap and shown in a Node measurements card: tests are pills, nodes are columns, and each model
-has one score row. The selected resource test is rendered as the same kind of heatmap, with
-models as rows and compute nodes as columns; component measurements remain on run detail pages.
-The run picker likewise gives each available model/node pair its own checkbox. Quality heatmap
-colours scale independently per benchmark, and resource colours independently per node. Overview,
-Results and Embedders use the existing vendored ECharts library to render the heatmaps.
+Missing scores are not zero. Context, Speed and Load time are excluded from the quality score
+heatmap; their live [Fleet matrix contract](../benchmarks/README.md#pages-scores-and-result-identity)
+defines node coverage, measured values, score display and evidence states. Component measurements
+remain on run detail pages. The run picker gives each available model/node pair its own checkbox.
+Quality heatmap colours scale independently per benchmark; the older Embedders resource chart
+scales per node. Results and Embedders use the existing vendored ECharts library for these charts.
 `benchmark-heatmap.js` reads each authorized server-rendered table's labels, colours and links;
 it does not fetch a second catalogue or score source. Cells show compact labels, full-score
 tooltips and rerun markers, and open their run details when clicked. The chart
@@ -7785,8 +7785,9 @@ and the selected chart header says “best first”. Table headers expose the nu
 to assistive technology and support Enter/Space. Cell links still open the matching run.
 The Measurements partial update leaves the chart in place and preserves scroll position.
 
-Displayed benchmark values use K, M, B and T suffixes with one decimal place instead of
-scientific notation. Recorded sample details retain their full precision.
+Compact benchmark displays use K, M, B and T suffixes with one decimal place. The Fleet matrix
+uses readable measured values and up to six significant digits for fractional scores; exports
+and recorded sample details retain full precision.
 Changing the Measurements selector updates its table and details in place, retaining scroll
 position; the heatmap stays in place and the URL follows the selected benchmark.
 On Runs, an active benchmark and its live log and measurements appear above Start a run.

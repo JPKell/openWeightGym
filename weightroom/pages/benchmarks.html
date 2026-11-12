@@ -2,17 +2,18 @@
 {% from "navigation_parts.html" import pills, pill_link %}
 {% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
 {% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}{% if section in ('results','node-measurements','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}{% if section == 'runs' %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=7" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if section in ('results','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=1"><script src="/static/node-measurements.js?v=1" defer></script>{% endif %}{% if section == 'runs' %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=7" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
 {% block page_class %}benchmark-page{% endblock %}
 {% from "parts.html" import card, said_box, page_header, alert %}
 {% block main %}
-{% call page_header('Run details · ' + detail.model if section == 'detail' else section_label, pretitle='Benchmark', id='benchmark-top', lead='Run benchmarks and inspect retained measurements and scores.') %}{% if section == 'detail' %}<a href="/benchmarks/runs" class="btn btn-outline-secondary btn-sm">Runs</a>{% endif %}{% endcall %}
+{% call page_header('Run details · ' + detail.model if section == 'detail' else section_label, pretitle='Benchmark', id='benchmark-top', lead='Run benchmarks and inspect retained measurements and scores.') %}{% if section == 'detail' %}<a href="/benchmarks/runs" class="btn btn-outline-secondary btn-sm">Runs</a>{% elif section == 'node-measurements' %}<button type="button" class="btn btn-outline-secondary" data-matrix-export hidden>Export view</button>{% endif %}{% endcall %}
 {{ said_box(said, failed, partial) }}
 {% if catalogue_warning %}{% call alert('warning', tag='p', role='status') %}{{ catalogue_warning }}{% endcall %}{% endif %}
+{% if section == 'node-measurements' %}{% from 'node_measurement_parts.html' import overview %}{{ overview(matrix.nodes|length, matrix.rows|length, matrix.coverage, matrix.current, matrix.total) }}{% endif %}
 {% if section in ('results', 'node-measurements') %}
 {% call pills('Model type') %}
 {% set model_types = [('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')] if section == 'node-measurements' else [('llm','LLM'),('image','Image'),('audio','Audio')] %}
-{% for value, label in model_types %}{{ pill_link(label, '/benchmarks/' ~ section ~ '?kind=' ~ value ~ ('&benchmark=' ~ type_benchmarks[value] if section == 'node-measurements' else ''), kind == value) }}{% endfor %}
+{% for value, label in model_types %}{{ pill_link(label, '/benchmarks/' ~ section ~ '?kind=' ~ value ~ ('&benchmark=' ~ type_benchmarks[value] if section == 'node-measurements' else ''), kind == value, attrs={'data-matrix-navigation':''} if section == 'node-measurements' else {}) }}{% endfor %}
 {% endcall %}
 {% if kind in ('image', 'audio') %}<p class="small text-secondary">Image and audio models have load-time measurements. Token context, token throughput and language quality scores are unavailable.</p>{% endif %}
 {% endif %}
@@ -22,7 +23,7 @@
 {% endif %}
 {% include "benchmark_measurements.html" %}
 {% elif section == 'node-measurements' %}
-{% include "benchmark_resources.html" %}
+{% include "node_measurements.html" %}
 {% elif section == 'detail' %}
 {% include "benchmark_regressions.html" %}
 {% include "benchmark_detail.html" %}
