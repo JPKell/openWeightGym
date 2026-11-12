@@ -514,7 +514,8 @@ class Log:
             f"SELECT SUM({self.json_value('detail', 'cost', 'number')}) FROM events WHERE user = ? AND kind = 'request' AND at > ?",
             (user, time.time() - seconds),
         ).fetchone()[0]
-        return total or 0.0
+        # PostgreSQL sums NUMERIC as a Decimal, which JSON cannot carry: /loadcoach/me sends this.
+        return float(total or 0.0)
 
     def paces(self) -> dict[str, dict[str, float]]:
         """How fast each model has been answering, and how long it last took to load, as the log has them.

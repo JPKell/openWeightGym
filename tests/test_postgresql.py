@@ -640,6 +640,9 @@ def test_postgresql_usage_sums_are_plain_numbers(postgres):
     usage = log.usage("jpk")
     assert usage == {"requests": 1, "prompt_tokens": 20, "answer_tokens": 11}
     assert all(type(value) is int for value in usage.values()) and json.dumps(usage)
+    log.add("request", "done", "jpk", model="hosted", cost=0.25, service="provider")
+    spent = log.spent("jpk")
+    assert spent == 0.25 and type(spent) is float and json.dumps(round(spent, 4))
 
 
 def test_postgresql_user_details_serialize_nonzero_usage(postgres, tmp_path):
