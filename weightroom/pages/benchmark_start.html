@@ -1,4 +1,4 @@
-{% if section == 'runs' %}{% include 'benchmark_studio.html' %}{% else %}
+{% if section in ('runs', 'node-measurements') %}{% include 'benchmark_studio.html' %}{% else %}
 {% from "benchmark_parts.html" import number, flags %}
 {% from "parts.html" import card, swaps, empty_row %}
 <div id="benchmark-choice">

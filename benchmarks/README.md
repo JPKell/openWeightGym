@@ -563,6 +563,10 @@ table for 15–30-model inventories.
 Node summaries show current-test coverage; selecting one focuses its column. Missing tests,
 failed attempts, unavailable inventory and absence are distinct; none is treated as zero.
 Saved values link to the existing run details. Without JavaScript the complete table remains visible.
+The top **Set up runs** link jumps to the shared Runs workspace below the matrix: Start a run on
+the left, Running now and Benchmark queue on the right. Setup offers resource tests for the selected
+model type and compute-only targets, with batch review before submission. Live monitor polling
+preserves unsent selections; submissions and queue controls return to this workspace and model type.
 Results shows individual run measurements and preserves the model-type selection
 when changing benchmarks. Scores and both Runs model selectors contain language models only.
 Saved image/audio load-time evidence remains accessible through Results, Node measurements and

@@ -127,14 +127,15 @@ document.addEventListener("toggle", () => requestAnimationFrame(refreshBenchmark
 window.addEventListener("resize", refreshBenchmarkPanels);
 refreshBenchmarkPanels();
 
-/** Keep polling scoped to the displayed history filters and current setup test. */
+/** Keep polling on this workspace, with its current setup test and history filters. */
 function refreshBenchmarkPoller() {
   const poller = document.querySelector('[data-benchmark-poller]');
-  const query = document.querySelector('#benchmark-history')?.dataset.liveQuery;
-  if (!poller || !query) return;
+  if (!poller) return;
+  const url = new URL(poller.getAttribute('hx-get'), location.href);
+  const query = document.querySelector('#benchmark-history')?.dataset.liveQuery || url.search;
   const params = new URLSearchParams(query);
   if (benchmarkId()) params.set('benchmark', benchmarkId());
-  poller.setAttribute('hx-get', '/benchmarks/runs?' + params);
+  poller.setAttribute('hx-get', url.pathname + '?' + params);
 }
 function filterBenchmarkModels(value) {
   const query = value.trim().toLocaleLowerCase();

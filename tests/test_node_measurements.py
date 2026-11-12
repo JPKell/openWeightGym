@@ -1,5 +1,6 @@
 """Live fleet matrix: complete topology, exact location evidence and bounded browsing."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -135,10 +136,16 @@ def test_browser_fleet_matrix_scale_units_and_navigation(fleet, monkeypatch, tmp
                 page.set_viewport_size({'width': width, 'height': 1000})
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (count, theme, width)
                 assert page.locator('.measurement-table-scroll').evaluate('(el) => el.clientHeight <= 602 && el.scrollHeight > el.clientHeight')
+                assert page.locator('#benchmark-models').evaluate('(el) => el.clientHeight <= 482 && el.scrollHeight > el.clientHeight')
                 for node in ('compute', 'rig', 'empty', 'offline', 'disabled'):
                     playwright.expect(page.locator(f'.measurement-node[data-node="{node}"]')).to_be_visible()
         page.set_viewport_size({'width': 1440, 'height': 1000})
         playwright.expect(page.locator('[data-measurement-row]:visible')).to_have_count(count)
+        playwright.expect(page.locator('[data-model-row]')).to_have_count(count)
+        assert page.evaluate('''() => {
+            const ids = [...document.querySelectorAll('[id]')].map(el => el.id);
+            return ids.length === new Set(ids).size;
+        }''')
         playwright.expect(page.locator('#node-total')).to_have_text('5')
         playwright.expect(page.locator('[data-matrix-search], [data-matrix-filter], [data-matrix-sort]')).to_have_count(0)
         playwright.expect(page.locator('.measurement-node[data-node="front"]')).to_have_count(0)
@@ -163,11 +170,129 @@ def test_browser_fleet_matrix_scale_units_and_navigation(fleet, monkeypatch, tmp
         playwright.expect(page.locator('#measurement-column-4 button')).to_be_focused()
         # Headers stay fixed while browsing the full model inventory.
         page.locator('.measurement-table-scroll').evaluate('(el) => { el.scrollTop = 200; el.scrollLeft = 250; }')
-        assert page.locator('thead').evaluate('(el) => getComputedStyle(el).position') == 'sticky'
-        assert page.locator('tbody th').first.evaluate('(el) => getComputedStyle(el).position') == 'sticky'
+        assert page.locator('#benchmark-resource-table thead').evaluate('(el) => getComputedStyle(el).position') == 'sticky'
+        assert page.locator('#benchmark-resource-table tbody th').first.evaluate('(el) => getComputedStyle(el).position') == 'sticky'
         images = Path('data/benchmark-previews'); images.mkdir(parents=True, exist_ok=True)
         page.goto('http://console.test/benchmarks/node-measurements?benchmark=load')
         page.emulate_media(color_scheme='light')
         page.screenshot(path=str(images / f'fleet-matrix-{count}.png'), full_page=True)
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.parametrize('kind,benchmark', [('llm', 'load'), ('embedding', 'embedding_load'), ('image', 'load'), ('audio', 'load')])
+def test_measurement_batch_and_controls_keep_workspace_context(fleet, monkeypatch, kind, benchmark):
+    server, _, _, _ = fleet
+    calls = []
+    routes = server.app.state.benchmarks.routes
+    for path in ('/benchmarks', '/benchmarks/control'):
+        route = next(route for route in routes if route.path == path and 'POST' in route.methods)
+        async def submit(request):
+            calls.append((request.url.path, await request.json()))
+            return JSONResponse({'runs': ['accepted']}, status_code=202)
+        monkeypatch.setattr(route, 'app', request_response(submit))
+    form = {'kind': kind, 'benchmark': benchmark, 'run-target': json.dumps({'model': 'local-model', 'machine': 'rig'})}
+    response = server.post('/benchmarks/node-measurements', data=form)
+    assert response.status_code == 200 and 'Queued 1 run.' in response.text
+    assert response.url.path == '/benchmarks/node-measurements' and response.url.params['kind'] == kind
+    assert response.url.params['benchmark'] == benchmark and response.url.fragment == 'measurement-runs'
+    assert calls == [('/benchmarks', {'benchmark': benchmark, 'targets': [{'model': 'local-model', 'machine': 'rig'}]})]
+    control = server.post('/benchmarks/control', data={'action': 'pause', 'return_page': 'node-measurements', 'kind': kind, 'benchmark': benchmark})
+    assert control.url.path == '/benchmarks/node-measurements' and control.url.params['kind'] == kind
+    assert control.url.fragment == 'measurement-runs'
+    assert calls[-1] == ('/benchmarks/control', {'action': 'pause'})
+    invalid = server.post('/benchmarks/node-measurements', data={**form, 'run-target': 'not JSON'})
+    assert invalid.status_code == 400 and 'No runs were submitted.' in invalid.text
+    assert f'name="kind" value="{kind}"' in invalid.text
+    assert f'name="benchmark" value="{benchmark}"' in invalid.text
+    assert len(calls) == 2
+
+
+def test_measurement_live_monitors_keep_outage_summary_and_scope(fleet):
+    server, library, _, state = fleet
+    store = server.app.state.benchmarks.state.store
+    active = store.create('jordan', 'local-model', 'load', library.identity('local-model'), location='rig')
+    store.activate(active, {'fingerprint': 'saved', 'subject': {}, 'environment': {}})
+    store.state(active, 'running')
+    queued = store.create('jordan', 'private-model', 'load', library.identity('private-model'), location='compute')
+    state['detail_error'] = True
+    response = server.get('/benchmarks/node-measurements?benchmark=load&part=live')
+    assert response.status_code == 200
+    html = response.text
+    assert active in html and queued in html and 'Live details could not be refreshed' in html
+    ids = [tag['id'] for tag in Tags(html).with_attribute('id')]
+    assert 'benchmark-active' in ids and 'benchmark-queue' in ids
+    assert not {'benchmark-choice', 'benchmark-nodes', 'benchmark-history', 'node-measurements'} & set(ids)
+    assert html.count('name="return_page" value="node-measurements"') >= 3
+
+
+def test_measurement_batch_error_keeps_type_and_test(fleet, monkeypatch):
+    server, _, _, _ = fleet
+    route = next(route for route in server.app.state.benchmarks.routes if route.path == '/benchmarks' and 'POST' in route.methods)
+    async def reject(request):
+        return JSONResponse({'error': {'message': 'Node unavailable'}}, status_code=503)
+    monkeypatch.setattr(route, 'app', request_response(reject))
+    response = server.post('/benchmarks/node-measurements', data={'kind': 'embedding', 'benchmark': 'embedding_load', 'run-target': json.dumps({'model': 'local-model', 'machine': 'rig'})})
+    assert response.status_code == 400 and 'Node unavailable' in response.text
+    assert 'name="kind" value="embedding"' in response.text
+    assert 'name="benchmark" value="embedding_load"' in response.text
+
+
+def test_browser_measurement_run_setup_review_and_live_drafts(fleet, monkeypatch):
+    playwright = pytest.importorskip('playwright.sync_api')
+    from test_console_browser import browser_context
+    server, _, _, _ = fleet
+    route = next(route for route in server.app.state.benchmarks.routes if route.path == '/benchmarks' and 'POST' in route.methods)
+    submitted = []
+    async def submit(request):
+        submitted.append(await request.json())
+        return JSONResponse({'runs': ['accepted']}, status_code=202)
+    monkeypatch.setattr(route, 'app', request_response(submit))
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/benchmarks/node-measurements?benchmark=load')
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        page.get_by_role('link', name='Set up runs', exact=True).click()
+        assert page.url.endswith('#measurement-runs')
+        assert page.locator('.benchmark-studio').evaluate('''el => {
+            const setup = el.querySelector('#benchmark-choice').getBoundingClientRect();
+            const monitor = el.querySelector('.benchmark-monitor').getBoundingClientRect();
+            return setup.right <= monitor.left + 1 && Math.abs(setup.top - monitor.top) <= 1;
+        }''')
+        setup = page.locator('#benchmark-choice').bounding_box()
+        assert page.locator('#node-measurements').bounding_box()['y'] < setup['y']
+        playwright.expect(page.locator('[data-machine-lane="front"]')).to_have_count(0)
+        playwright.expect(page.locator('#outstanding-model')).to_have_count(0)
+        assert set(page.locator('#benchmark option').evaluate_all('(els) => els.map(el => el.value)')) == {'context', 'speed', 'load'}
+        page.locator('[data-model-search]').fill('local')
+        box = page.get_by_role('checkbox', name='Select local-model at rig', exact=True)
+        box.check()
+        page.evaluate("window.setupBeforePoll = document.querySelector('#benchmark-choice'); window.queueBeforePoll = document.querySelector('#benchmark-queue')")
+        page.wait_for_function("document.querySelector('#benchmark-queue') !== window.queueBeforePoll", timeout=7000)
+        assert page.evaluate("document.querySelector('#benchmark-choice') === window.setupBeforePoll")
+        playwright.expect(box).to_be_checked()
+        playwright.expect(page.locator('[data-model-search]')).to_have_value('local')
+        page.locator('[data-matrix-display]').select_option('scores')
+        page.select_option('#benchmark', 'context')
+        playwright.expect(page.locator('#start-benchmark [name=benchmark]')).to_have_value('context')
+        playwright.expect(page.locator('#benchmark-resource-table caption')).to_contain_text('Context')
+        playwright.expect(page.locator('[data-matrix-display]')).to_have_value('scores')
+        page.select_option('#benchmark', 'load')
+        playwright.expect(page.locator('#start-benchmark [name=benchmark]')).to_have_value('load')
+        playwright.expect(box).to_be_checked()
+        for width in (390, 320):
+            page.set_viewport_size({'width': width, 'height': 1000})
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert page.locator('.benchmark-monitor').bounding_box()['y'] >= page.locator('#benchmark-choice').bounding_box()['y'] + page.locator('#benchmark-choice').bounding_box()['height']
+        page.locator('[data-queue-selected]').click()
+        playwright.expect(page.locator('[data-review-rows] tr')).to_have_count(1)
+        assert submitted == []
+        page.locator('[data-confirm-batch]').click()
+        playwright.expect(page.locator('.said-box')).to_contain_text('Queued 1 run.')
+        assert '/benchmarks/node-measurements' in page.url and page.url.endswith('#measurement-runs')
+        playwright.expect(page.locator('#start-benchmark [name=kind]')).to_have_value('llm')
+        playwright.expect(page.locator('#start-benchmark [name=benchmark]')).to_have_value('load')
+        assert submitted == [{'benchmark': 'load', 'targets': [{'model': 'local-model', 'machine': 'rig'}]}]
         assert not errors
         browser.close()

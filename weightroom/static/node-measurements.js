@@ -44,6 +44,8 @@
       matrix.querySelectorAll('[data-matrix-values]').forEach(el => { el.hidden = mode() !== 'values'; });
       matrix.querySelectorAll('[data-matrix-scores]').forEach(el => { el.hidden = mode() !== 'scores'; });
       columns.forEach((column, index) => column.setAttribute('aria-sort', sortColumn === index ? (higher() ? 'descending' : 'ascending') : 'none'));
+      const setupDisplay = document.querySelector('#benchmark-choice [name="display"]');
+      if (setupDisplay) setupDisplay.value = mode();
       const url = new URL(location.href);
       for (const name of ['q', 'evidence', 'order']) url.searchParams.delete(name);
       for (const [name, control] of Object.entries(controls)) {

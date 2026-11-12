@@ -1,5 +1,5 @@
 {% from "parts.html" import card %}
-{% if section == 'runs' %}
+{% if section in ('runs', 'node-measurements') %}
 {% from 'parts.html' import alert %}
 {% from 'benchmark_parts.html' import run_controls %}
 {% set actions %}<span class="badge bg-blue-lt">{{ live_runs|length }} active</span>{% endset %}
@@ -9,7 +9,7 @@
 <article aria-label="{{ item.run.model }} at {{ item.run.location or 'compute' }}">
 <div class="d-flex flex-wrap justify-content-between gap-2 mb-2"><a href="/benchmarks/run/{{ item.run.id }}"><strong>{{ item.run.model }}</strong></a><span class="badge bg-blue-lt">{{ item.run.location or 'compute' }}</span></div>
 <p class="small text-secondary">{{ item.run.benchmark }} · v{{ item.run.version }} · {{ item.run.state }}</p>
-<div class="mb-3">{{ run_controls(item.run) }}</div>
+<div class="mb-3">{{ run_controls(item.run, section, kind, benchmark.id) }}</div>
 {% if item.detail %}{% with live=item.detail %}{% include 'benchmark_active.html' %}{% endwith %}{% else %}{{ alert('warning', 'Live details could not be refreshed. Last known run is retained; retrying shortly.', class_='small py-2') }}{% endif %}
 </article>
 {% else %}<p class="small text-secondary mb-0">No benchmark is running.</p>{% endfor %}

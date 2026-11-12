@@ -1714,6 +1714,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 start_rows.append({'model': model, 'targets': targets})
         may_run = ('benchmark' in person.can or 'superuser' in person.can) and not found['compute_unavailable']
         lanes = run_lanes(catalogue, inventory, models, selected, runs, location_latest, latest, may_run)
+        if section == 'node-measurements':
+            lanes = [node for node in lanes if node['service']]
         matrix = measurement_matrix(catalogue, inventory, models, resource_benchmarks, resource_selected, runs, location_latest) if section == 'node-measurements' else None
         queue = sorted((run for run in runs if run['state'] not in ('running', 'completed', 'failed', 'cancelled')),
                        key=lambda run: run['created'])
@@ -1726,11 +1728,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         pagination = history_page(runs, request.query_params)
         history_query = urlencode({'benchmark': selected['id'], 'per_page': pagination['size'],
                                   'history_node': pagination['node'], 'outcome': pagination['outcome'], 'q': pagination['search']})
-        return page(request, 'benchmark_live.html' if section in ('embedders', 'runs') and request.query_params.get('part') == 'live' else 'benchmarks.html', person,
+        live_query = (urlencode({'benchmark': selected['id'], 'kind': kind, 'part': 'live'}) if section == 'node-measurements'
+                      else history_query + '&page=' + str(pagination['page']) + '&part=live')
+        return page(request, 'benchmark_live.html' if section in ('embedders', 'runs', 'node-measurements') and request.query_params.get('part') == 'live' else 'benchmarks.html', person,
                     section=section, benchmarks=definitions, benchmark=selected, models=models, selected_models=chosen,
                     comparisons=comparisons, columns=columns, history=filtered_history, history_filter=history_filter,
                     selected_runs=selected_runs, detail=detail, start_models=start_models, queue=queue, pagination=pagination,
-                    history_query=history_query, live_query=history_query + '&page=' + str(pagination['page']) + '&part=live',
+                    history_query=history_query, live_query=live_query,
                     lanes=lanes, run_models=run_model_rows(lanes), live_runs=live_runs, selected_target=(request.query_params.get('pick_model'), request.query_params.get('pick_node')),
                     regression=regression, regression_error=regression_error,
                     latest=latest, location_latest=location_latest, measurement_models=measurement_models,
@@ -1750,6 +1754,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         section = request.path_params['section']
         form = await typed_lists(request)
         one = lambda name: form.get(name, [''])[-1]
+        measurement_setup = section == 'node-measurements' or section == 'control' and one('return_page') == 'node-measurements'
+
+        def run_back(said, flag=''):
+            query = {'benchmark': one('benchmark'), **({flag: '1'} if flag else {}), 'said': said}
+            if measurement_setup:
+                query['kind'] = one('kind') if one('kind') in ('llm', 'embedding', 'image', 'audio') else 'llm'
+            return go('/benchmarks/' + ('node-measurements' if measurement_setup else 'runs') + '?' + urlencode(query)
+                      + ('#measurement-runs' if measurement_setup else ''))
+
         if section == 'manage' and one('action') == 'import':
             answer = await ask('POST', '/benchmarks/datasets', person.key, content=one('dataset').encode('utf-8'))
             if not answer.is_success:
@@ -1760,8 +1773,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if not answer.is_success:
                 return go('/benchmarks/manage?failed=1&benchmark=' + quote(one('benchmark')) + '&said=' + quote(answer.json()['error']['message']))
             return go('/benchmarks/manage?said=' + quote('Deleted the case set.'))
-        if section == 'runs':
-            if one('action') == 'outstanding':
+        if section in ('runs', 'node-measurements'):
+            if section == 'runs' and one('action') == 'outstanding':
                 path, body, back = '/benchmarks/outstanding', {'model': one('model')}, 'runs'
             else:
                 targets = []
@@ -1773,8 +1786,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     if targets and form.get('run-model'):
                         raise ValueError('Mixed target formats')
                 except (ValueError, TypeError):
-                    return go('/benchmarks/runs?failed=1&benchmark=' + quote(one('benchmark'), safe='') + '&said=' +
-                              quote('Choose one to 100 valid model and node targets. No runs were submitted.'))
+                    return run_back('Choose one to 100 valid model and node targets. No runs were submitted.', 'failed')
                 path, body, back = '/benchmarks', {'benchmark': one('benchmark'),
                                                     **({'targets': targets} if targets else {'models': form.get('run-model', [])})}, 'runs'
         elif section == 'control':
@@ -1785,6 +1797,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response('No such benchmark action.', status_code=404)
         answer = await ask('POST', path, person.key, json=body)
         if not answer.is_success:
+            if measurement_setup:
+                return run_back(answer.json()['error']['message'], 'failed')
             came = urlsplit(request.headers.get('referer', '')).path  # the page the form is on: Start a run is on two of them
             if came.rstrip('/') == '/benchmarks':
                 came = '/benchmarks/runs'
@@ -1808,7 +1822,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if pending:
                 said += f' {len(pending)} task acknowledgements pending; existing task IDs will be checked before retrying.'
             return go('/benchmarks/runs?' + ('partial=1&' if unavailable or errors or pending else '') + 'said=' + quote(said))
-        if section == 'runs':
+        if section in ('runs', 'node-measurements'):
             result = answer.json()
             count = len(result.get('runs', []))
             said = f"Queued {count} run{'s' if count != 1 else ''}."
@@ -1821,8 +1835,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     f"{item['model']} at {item['machine']}: {item['message']}" for item in result['errors']) + '.'
             if result.get('skipped'):
                 said += ' Incompatible model type: ' + ', '.join(result['skipped']) + '.'
-            flag = 'partial=1&' if result.get('errors') or result.get('pending') or result.get('skipped') else ''
-            return go('/benchmarks/runs?benchmark=' + quote(one('benchmark'), safe='') + '&' + flag + 'said=' + quote(said))
+            flag = 'partial' if result.get('errors') or result.get('pending') or result.get('skipped') else ''
+            return run_back(said, flag)
+        if measurement_setup:
+            return run_back('Saved.')
         return go('/benchmarks/' + back + '?said=' + quote('Saved.') + ('&benchmark=' + quote(one('benchmark'), safe='') if section == 'manage' else ''))
 
     async def models_page(request: Request, person: Person, said: str = "", failed: bool = False, form: dict | None = None) -> Response:
