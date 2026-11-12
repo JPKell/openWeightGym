@@ -70,6 +70,7 @@ from turnstile.settings import FrontSettings
 from turnstile.artifacts import FrontFiles, checked_roots
 from loadcoach.file_index import FRONT_INDEX
 from turnstile.hosted import Hosted
+from turnstile.fallthrough import Fallthrough
 from turnstile.machines import Machines, PassiveReads, logical_catalogue, placement_order
 from turnstile.model_locations import ModelLocations
 from engines import engine_for
@@ -289,6 +290,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     # The one event log: what was done here to the accounts, and since milestone 91 every entry compute sends.
     log = Log(stores.database("weightroom.accounts"), keep_days=settings.keep_days)
     log.machine_names = ("compute", *settings.machines)
+    fallthrough = Fallthrough()  # what still reaches the default node only because nothing routed it
 
     def machine_key() -> str:
         """Read the current shared key for the selected compute authority."""
@@ -1207,6 +1209,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if path == '/v1/audio/generations':
                 return await audio_work.capture(request, user, response, json.loads(body))
             return await image_work.capture(request,user,response) if path in ('/v1/images/generations','/v1/images/edits') else response
+        fallthrough.note(request.method, path, port)
         upstream = await through(request, user, request.method, where, body, list(request.headers.items()), port)
         if isinstance(upstream, Response):
             return upstream
@@ -2820,6 +2823,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     app.state.mirrorwall = image_work
     app.state.soundroom = audio_work
     app.state.front_settings = front_settings
+    app.state.fallthrough = fallthrough
     app.state.front_files = front_files
     app.state.publish_file_settings = publish_file_settings
     app.state.rotate_due_keys_once = rotate_due_keys_once
