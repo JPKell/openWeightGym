@@ -1711,7 +1711,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                         return JSONResponse(await image_search_page(web, words, download_token('civitai/'),
                             request.query_params.get('adult') == 'true', cursor,
                             request.query_params.get('kind', ''), request.query_params.get('base', '')))
-                    return JSONResponse(await hub.search_page(web, words, hub_token(), cursor) if words else {'found': [], 'next_cursor': ''})
+                    return JSONResponse(await hub.search_page(web, words, hub_token(), cursor,
+                        *hub.search_order(request.query_params)) if words else {'found': [], 'next_cursor': ''})
                 if request.query_params.get('source')=='civitai':
                     from mirrorwall.civitai import search as image_search
                     return JSONResponse({'found':await image_search(web,words,download_token('civitai/'),request.query_params.get('adult')=='true') if words else []})

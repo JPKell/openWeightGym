@@ -34,8 +34,14 @@ def test_provider_cursor_pages_keep_requests_on_the_provider():
             assert first['next_cursor'] == 'next-hf'
             assert first['found'][0]['repository'] == 'acme/model'
             assert seen[-1].url.params['cursor'] == 'previous-hf'
-            assert seen[-1].url.params['limit'] == '12'
+            assert seen[-1].url.params['limit'] == '20'
             assert seen[-1].headers['authorization'] == 'Bearer private'
+            for sort in ('downloads', 'likes', 'createdAt', 'invalid'):
+                for direction in ('-1', '1', 'invalid'):
+                    await hub.search_page(client, 'model', sort=sort, direction=direction)
+                    assert seen[-1].url.params['sort'] == ('downloads' if sort == 'invalid' else sort)
+                    assert seen[-1].url.params['direction'] == ('1' if direction == '1' else '-1')
+                    assert seen[-1].url.params['limit'] == '20'
             second = await civitai.search_page(client, 'landscape', 'private', cursor='previous-civitai', kind='LORA', base='SDXL 1.0')
             assert second['next_cursor'] == 'next-civitai'
             assert len(second['found']) == 1 and second['found'][0]['preview'] is None
@@ -47,6 +53,23 @@ def test_provider_cursor_pages_keep_requests_on_the_provider():
             await civitai.search_page(client, 'landscape', cursor=second['next_cursor'])
             assert {request.url.host for request in seen} == {'huggingface.co', 'civitai.com'}
     asyncio.run(check())
+
+
+def test_hub_sort_reaches_both_storage_authorities(desk, tmp_path, monkeypatch):  # noqa: F811
+    server, _, _ = desk
+    calls = []
+    async def source(http, words, token='', cursor='', sort='downloads', direction='-1'):
+        calls.append((words, cursor, sort, direction))
+        return {'found': [], 'next_cursor': ''}
+    monkeypatch.setattr(hub, 'search_page', source)
+    sign_in(server, 'jordan')
+    for front_storage in (False, True):
+        if front_storage:
+            server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '', 'models_storage_folder': str(tmp_path / 'storage')})
+        for sort in ('downloads', 'likes', 'createdAt'):
+            response = server.get('/hub', params={'q': 'model', 'sort': sort, 'direction': '1', 'cursor': 'older'})
+            assert response.status_code == 200
+            assert calls[-1] == ('model', 'older', sort, '1')
 
 
 def test_paginated_discovery_proxies_keep_filters_and_access_checks(desk, tmp_path, monkeypatch):  # noqa: F811
@@ -71,10 +94,10 @@ def test_paginated_discovery_proxies_keep_filters_and_access_checks(desk, tmp_pa
 def test_hub_pages_and_repository_fragment(desk, monkeypatch, tmp_path, width, theme, palette):  # noqa: F811
     server, _, _ = desk
     calls = []
-    async def search(http, words, token='', cursor=''):
-        calls.append(cursor)
+    async def search(http, words, token='', cursor='', sort='downloads', direction='-1'):
+        calls.append((cursor, sort, direction))
         rows = [{'repository': 'acme/tiny-GGUF' if i == 0 else f'acme/model-{i}',
-                 'downloads': 123456, 'likes': 1200, 'made': '2026-11-10'} for i in range(12)]
+                 'downloads': 123456, 'likes': 1200, 'made': '2026-11-10'} for i in range(20)]
         return {'found': rows if not cursor else [], 'next_cursor': 'next-hf' if not cursor else ''}
     monkeypatch.setattr(hub, 'search_page', search)
     sign_in(server, 'jordan')
@@ -84,10 +107,10 @@ def test_hub_pages_and_repository_fragment(desk, monkeypatch, tmp_path, width, t
         errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/hub'); change_theme(page, palette, theme)
         page.locator('[name=q]').fill('tiny'); page.get_by_role('button', name='Search', exact=True).click()
-        playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(12)
+        playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(20)
         page.get_by_role('link', name='acme/tiny-GGUF', exact=True).click()
         playwright.expect(page.locator('#hub-files')).to_be_visible()
-        playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(12)
+        playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(20)
         page.get_by_label('tiny-q4.gguf', exact=True).check()
         assert page.locator('[name=file]:checked').count() == 1
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
@@ -96,10 +119,28 @@ def test_hub_pages_and_repository_fragment(desk, monkeypatch, tmp_path, width, t
         page.get_by_role('link', name='Next', exact=True).click()
         playwright.expect(page.locator('#hub-found')).to_contain_text('Page 2')
         playwright.expect(page.locator('#hub-found')).to_contain_text('Nothing found')
-        assert calls[-1] == 'next-hf'
+        assert calls[-1] == ('next-hf', 'downloads', '-1')
         page.get_by_role('link', name='Previous', exact=True).click()
-        playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(12)
-        page.reload(); playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(12)
+        playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(20)
+        page.reload(); playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(20)
+        for sort, label in [('likes', 'Likes'), ('createdAt', 'Created'), ('downloads', 'Downloads')]:
+            page.locator('#hub-results thead').get_by_role('link', name=label, exact=True).click()
+            playwright.expect(page.locator('#hub-results th[aria-sort="descending"]')).to_contain_text(label)
+            assert calls[-1] == ('', sort, '-1')
+            assert page.locator('[name=sort]').input_value() == sort
+            page.locator('#hub-results thead').get_by_role('link', name=label, exact=True).click()
+            playwright.expect(page.locator('#hub-results th[aria-sort="ascending"]')).to_contain_text(label)
+            assert calls[-1] == ('', sort, '1')
+        page.get_by_role('link', name='Next', exact=True).click()
+        playwright.expect(page.locator('#hub-found')).to_contain_text('Page 2')
+        assert calls[-1] == ('next-hf', 'downloads', '1')
+        page.get_by_role('link', name='Previous', exact=True).click()
+        playwright.expect(page.locator('#hub-results tbody tr')).to_have_count(20)
+        page.locator('[name=q]').fill('another model')
+        page.get_by_role('button', name='Search', exact=True).click()
+        playwright.expect(page.locator('[name=q]')).to_have_value('another model')
+        assert calls[-1] == ('', 'downloads', '1')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not errors, errors
         browser.close()
 

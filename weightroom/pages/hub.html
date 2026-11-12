@@ -7,13 +7,14 @@
 {% block main %}
 {{ page_header('Hugging Face', actions=source_navigation('hub')) }}
 {{ said_box(said, failed) }}
+<div id="hub-found">
 {% call search_surface('Find your next model', 'Search GGUF repositories by name, or open a repository directly with owner/name.') %}
 <form method="get" action="/hub" class="row g-2" {{ swaps("hub-found", true) }}>
+  <input type="hidden" name="sort" value="{{ hub_sort.key }}"><input type="hidden" name="direction" value="{{ hub_sort.direction }}">
   <div class="col-12 col-sm"><label for="hub-query" class="visually-hidden">Search Hugging Face</label><input id="hub-query" name="q" class="form-control" value="{{ words }}" aria-label="what to look for" placeholder="Search models or enter owner/name" required autofocus></div>
   <div class="col-12 col-sm-auto"><button class="btn btn-primary w-100">Search</button></div>
 </form>
 {% endcall %}
-<div id="hub-found">
 <div id="hub-repository" class="hub-repository">{% if found.files is defined %}
 {% set repository_actions %}<a href="https://huggingface.co/{{ found.repository }}" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener noreferrer">Model page ↗</a>{% endset %}
 {% call card(found.repository, actions=repository_actions, hint='Select a file or quantization. Split weights download together as a complete set.') %}
@@ -54,12 +55,16 @@
 {% endcall %}
 {% endif %}</div>
 {% if words and found.found is defined %}
-{% set result_actions %}<span class="text-secondary small">Most downloaded first</span>{% endset %}
-{% call card('Repositories', actions=result_actions, hint='Choose a repository to view its available files.', class_='discovery-results') %}
+{% set result_actions %}<span class="text-secondary small">{{ hub_sort.description }} · 20 per page</span>{% endset %}
+{% call card('Repositories', actions=result_actions, hint='Choose a repository to view its files. Click a column heading to sort all matching models.', class_='discovery-results') %}
 {% if found.found %}
 <div class="table-responsive">
 <table id="hub-results" class="table table-hover align-middle discovery-table mb-0">
-  <thead><tr><th>Repository</th><th class="text-end">Downloads</th><th class="text-end">Likes</th><th>Created</th></tr></thead>
+  <thead><tr><th>Repository</th>
+  {% for key, label in [('downloads', 'Downloads'), ('likes', 'Likes'), ('createdAt', 'Created')] %}
+    <th{% if key != 'createdAt' %} class="text-end"{% endif %} aria-sort="{{ ('ascending' if hub_sort.direction == '1' else 'descending') if hub_sort.key == key else 'none' }}"><a class="text-reset text-decoration-none" href="{{ hub_sort.links[key] }}" {{ swaps('hub-found', true) }}>{{ label }}{% if hub_sort.key == key %} <span aria-hidden="true">{{ '▲' if hub_sort.direction == '1' else '▼' }}</span>{% endif %}</a></th>
+  {% endfor %}
+  </tr></thead>
   <tbody>
   {% for one in found.found %}
   <tr>

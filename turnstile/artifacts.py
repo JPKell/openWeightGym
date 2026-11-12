@@ -187,7 +187,8 @@ class FrontFiles:
                             return response(await search_page(self.web, query.get('search', ''),
                                 adult=query.get('adult') == 'true', cursor=query.get('cursor', ''),
                                 kind=query.get('kind', ''), base=query.get('base', '')))
-                        return response(await hub.search_page(self.web, query['search'], cursor=query.get('cursor', ''))
+                        sort, direction = hub.search_order(query)
+                        return response(await hub.search_page(self.web, query['search'], cursor=query.get('cursor', ''), sort=sort, direction=direction)
                                         if query.get('search') else {'found': [], 'next_cursor': ''})
                     if query.get('source') == 'civitai':
                         from mirrorwall.civitai import search
