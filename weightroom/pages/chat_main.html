@@ -83,7 +83,7 @@
 
 {% else %}
 {% set _page_title2 %}<span data-conversation-heading>{{ talk.title }}</span>{% if talk.temporary %} <span class="badge text-bg-secondary">temporary</span>{% endif %}{% endset %}
-{{ page_header(_page_title2, lead="Talk with your permitted models and keep your conversations.", help="/docs/web-app/chat") }}
+{{ page_header(_page_title2, lead="Talk with your permitted models and keep your conversations.") }}
 {{ said_box(said, true) }}
 
 {% if talk.memory and not talk.compare %}
