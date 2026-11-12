@@ -55,7 +55,8 @@ def test_model_type_pills_and_cache_warning_block_add(desk, tmp_path, monkeypatc
         browser.close()
 
 
-def test_image_and_audio_add_use_remote_storage_choices(desk):
+@pytest.mark.parametrize('width',[1440,390,320])
+def test_image_and_audio_add_use_remote_storage_choices(desk,width):
     server, _, _ = desk
     sign_in(server,'jordan')
     sent = []
@@ -71,7 +72,8 @@ def test_image_and_audio_add_use_remote_storage_choices(desk):
         value = None
         if base == '/model-files': value = inventory
         if base == '/mirrorwall-models' and route.request.method == 'GET':
-            value = {'models':[],'cards':['CUDA0'],'nodes':[{'name':'compute','state':'ready'}],'engines':{'engines':[{'id':'sdcpp','available':True}]}}
+            value = {'models':[],'cards':['CUDA0'],'nodes':[{'name':'compute','state':'ready'},{'name':'rig','state':'ready'},
+                {'name':'retired','state':'offline','accepting_work':False,'lifecycle':'disabled'}],'engines':{'engines':[{'id':'sdcpp','available':True}]}}
         if base == '/mirrorwall-models/check': value = {'ready':False,'slots':[],'loras':[],'get_diffusion':[]}
         if base == '/soundroom-models' and route.request.method == 'GET':
             value = {'models':[],'cards':['CUDA0'],'catalogue':{'families':[{'family':'ace_step','name':'ACE','kinds':['music'],
@@ -79,20 +81,32 @@ def test_image_and_audio_add_use_remote_storage_choices(desk):
                     'files':{'ace.gguf':'/cache/audio/ace/ace.gguf'},'installed':None}]}]}}
         if base in ('/mirrorwall-models','/soundroom-models') and route.request.method == 'POST':
             sent.append(json.loads(route.request.post_data))
-            route.fulfill(status=202,content_type='application/json',body='{"kind":"model-install","id":"fixture"}')
+            value={'jobs':[{'kind':'model-install','id':'primary'},{'kind':'model-install','id':'rig'}]} if base=='/mirrorwall-models' else {'kind':'model-install','id':'fixture'}
+            route.fulfill(status=202,content_type='application/json',body=json.dumps(value))
             return True
         if value is not None:
             route.fulfill(content_type='application/json',body=json.dumps(value)); return True
     with playwright.sync_playwright() as driver:
         browser,page = browser_context(driver,server,capture=capture)
+        page.set_viewport_size({'width':width,'height':1100})
         errors=[]; page.on('pageerror',lambda error: errors.append(str(error)))
         page.goto('http://console.test/models/images?new=1')
         playwright.expect(page.locator('#mw-diffusion option')).to_have_count(2)
         page.locator('#mw-diffusion').select_option('/store/image/model.safetensors')
         page.locator('#mw-name').fill('picture')
+        targets=page.locator('#mw-install-targets')
+        playwright.expect(targets.locator('input[value=retired]')).to_be_disabled()
+        targets.locator('.form-selectgroup-item').filter(has_text='compute').click()
         page.get_by_role('button',name='Save model',exact=True).click()
-        page.wait_for_url('**/models?kind=image&install=fixture')
+        playwright.expect(page.locator('#mw-message')).to_contain_text('Choose at least one destination node')
+        assert not sent
+        targets.locator('.form-selectgroup-item').filter(has_text='compute').click()
+        targets.locator('.form-selectgroup-item').filter(has_text='rig').click()
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        page.get_by_role('button',name='Save model',exact=True).click()
+        page.wait_for_url('**/models?kind=image&install=primary&install=rig')
         assert sent[-1]['source_machine']=='front' and sent[-1]['settings']['flags']['model']=='/store/image/model.safetensors'
+        assert sent[-1]['machines']==['compute','rig']
         page.goto('http://console.test/models/audio?new=1')
         playwright.expect(page.locator('#am-file option').filter(has_text='/store/audio/ace/ace.gguf')).to_have_count(1)
         page.locator('#am-file').select_option(label='/store/audio/ace/ace.gguf · front · storage')

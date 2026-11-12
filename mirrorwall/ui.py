@@ -84,13 +84,19 @@ def routes(for_people, page, ask, model_api):
         try:
             body = await Front.read_json(request)
             name, settings = body["name"], body["settings"]
-            if not isinstance(name, str) or settings.get("engine") != "sdcpp":
+            if not isinstance(name, str) or not isinstance(settings,dict) or settings.get("engine") != "sdcpp":
                 raise ValueError("Choose an image model name and settings.")
+            destinations=body.get('machines')
+            if destinations is not None and (not body.get('new') or not isinstance(destinations,list) or not destinations
+                or len(destinations)>100 or any(not isinstance(node,str) or not node.strip() for node in destinations)):
+                raise ValueError('Choose at least one destination node when adding an image model.')
+            if destinations is not None:
+                destinations=list(dict.fromkeys(destinations))
         except (ValueError, KeyError, TypeError) as problem:
             return JSONResponse({"error": {"message": str(problem)}}, 400)
         answer = await model_api(request, person, "POST", "/loadcoach/models/" + quote(name, safe=""),
                                  json=settings, params={"new": "1"} if body.get("new") else {},
-                                 prepare_files=bool(body.get("new")), source_machine=body.get("source_machine", ""))
+                                 prepare_files=bool(body.get("new")), source_machine=body.get("source_machine", ""), machines=destinations)
         return Response(answer.content, answer.status_code, media_type="application/json", headers={"cache-control": "no-store"})
 
     async def model_check(request, person):
