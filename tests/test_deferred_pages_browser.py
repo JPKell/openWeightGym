@@ -67,11 +67,15 @@ def test_model_files_load_after_the_model_list_into_the_open_add_model_card(defe
         assert '/turnstile/models/files' not in calls
         assert page.locator('#add-model').evaluate('el => el.tagName') == 'SECTION'
         playwright.expect(page.locator('#model-editor')).to_contain_text('Loading node engines and model files')
+        playwright.expect(page.locator('#add-model .card-header [data-model-node]')).to_be_checked()
+        page.locator('#model-nodes .form-selectgroup-label').click()
         response = server.get('/models?part=editor', headers={'HX-Request': 'true'})
         pending.pop('editor').fulfill(status=response.status_code, content_type='text/html', body=response.content)
         picker = page.locator('[data-model-file]')
         playwright.expect(picker).to_be_visible()
         playwright.expect(picker).to_have_attribute('data-initialized', 'true')
+        playwright.expect(page.locator('[data-model-node]')).not_to_be_checked()
+        playwright.expect(page.locator('[data-file-warning]')).to_have_text('Choose at least one compute node.')
         playwright.expect(page.locator('[data-file-submit]')).to_be_disabled()
         assert calls.count('/turnstile/models/files') == 1
         page.set_viewport_size({'width': 390, 'height': 844})

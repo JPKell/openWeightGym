@@ -73,7 +73,7 @@ def test_navigation_does_not_wait_for_reports_or_model_files(deferred_console):
     assert response.status_code == 200 and 'id="models-table"' in response.text and '<html' not in response.text
     assert '/turnstile/models/files' not in calls
     response = browser.get('/models?part=editor')
-    assert response.status_code == 200 and 'data-create-model' in response.text
+    assert response.status_code == 200 and 'id="model-editor"' in response.text and 'data-model-file' in response.text
     assert calls.count('/turnstile/models/files') == 1
 
 

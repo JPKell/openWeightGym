@@ -128,6 +128,12 @@ def test_node_pills_ticked_nodes_and_the_name_a_file_gives(desk, tmp_path):
         # Add a model is open, and ticks the node on view; there is no separate node browser.
         added = page.locator('#add-model')
         playwright.expect(added.locator('[data-model-node]')).to_be_checked()
+        header = added.locator('.card-header')
+        playwright.expect(header.locator('#model-nodes')).to_be_visible()
+        assert header.locator('legend').count() == 0
+        assert added.locator('#model-nodes').evaluate('el => new FormData(el.closest("form")).getAll("node")') == ['compute']
+        edge = header.locator('.card-actions').evaluate('el => el.getBoundingClientRect().right')
+        assert abs(added.locator('#model-nodes').bounding_box()['x'] + added.locator('#model-nodes').bounding_box()['width'] - edge) < 2
         assert added.get_by_role('button', name='Browse node files', exact=True).count() == 0
         assert added.locator('#projector option').first.inner_text() == 'None'
         # Files are labelled by where they are, then their own name; the full path is only the title.

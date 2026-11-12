@@ -27,12 +27,29 @@
 {% if deferred %}{% from 'deferred.html' import loading %}{{ loading('models', list_url, 'Loading models…') }}{% else %}{% include 'models_list.html' %}{% endif %}
 {% if kind in ('all', 'llm') %}
 
-{% call card("Add a model", id="add-model") %}
+{% if add_nodes is not defined %}
+{% set node_names = node_choices|map(attribute='name')|list %}
+{% set add_nodes = form.get('nodes') or request.query_params.getlist('add_to') or ([shown_node] if shown_node else node_names if node_names|length == 1 else []) %}
+{% endif %}
+{% set node_actions %}
+<fieldset id="model-nodes" class="m-0 p-0 border-0" aria-label="Compute nodes">
+  <div class="form-selectgroup justify-content-end">
+  {% for node in node_choices %}{% set accepting = node.accepting_work|default(true) %}
+    <label class="form-selectgroup-item"><input type="checkbox" name="node" value="{{ node.name }}" class="form-selectgroup-input" data-model-node{{ ' checked' if node.name in add_nodes and accepting }}{{ ' disabled' if not accepting }}><span class="form-selectgroup-label">{{ node.name }}{% if not accepting %} <small class="text-secondary">{{ node.lifecycle|default('disabled') }}</small>{% elif node.state != 'ready' %} <small class="text-secondary">{{ node_state(node.state) }}</small>{% endif %}</span></label>
+  {% else %}
+    <label class="form-selectgroup-item"><input type="checkbox" name="node" value="compute" class="form-selectgroup-input" data-model-node checked><span class="form-selectgroup-label">compute</span></label>
+  {% endfor %}
+  </div>
+</fieldset>
+{% endset %}
+<form method="post" action="/models" class="m-0" data-create-model data-hold-refresh>
+{% call card("Add a model", id="add-model", actions=node_actions) %}
 {% if deferred %}
 {% from "deferred.html" import loading %}
 {{ loading('model-editor', editor_url, 'Loading node engines and model files…') }}
 {% else %}{% include 'models_editor.html' %}{% endif %}
 {% endcall %}
+</form>
 {% else %}
 {% call card("") %}{{ section_title("Add a model") }}<p class="small text-secondary">Choose cached or stored files and configure the model on a compute node.</p><a class="btn btn-primary align-self-start" href="{{ '/models/images' if kind == 'image' else '/models/audio' }}?new=1">Add {{ kind }} model</a>{% endcall %}
 {% endif %}
