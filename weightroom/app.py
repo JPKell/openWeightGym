@@ -4558,6 +4558,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         found, status = answer.json(), 400 if failed else answer.status_code
         if answer.status_code != 200:  # LoadCoach's own words: not allowed, no such repository, or Hugging Face not answering
             said, failed, found = found["error"]["message"], True, {}
+        elif words and not repository and (found.get('paging') != {'limit': 20, 'sort': sort, 'direction': direction}
+                                           or len(found.get('found', [])) > 20):
+            said = 'The model search service did not apply the requested ordering or page size. Update the model-file service and retry.'
+            failed, found, status = True, {}, 502
         def result_link(trail, order=sort, way=direction):
             """Keep previous provider cursors in bookmarkable local result URLs."""
             return '/hub?' + urlencode([('q', words), ('sort', order), ('direction', way), *(('cursor', value) for value in trail)])
@@ -4566,11 +4570,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                       'next': result_link([*cursors, next_cursor]) if next_cursor and next_cursor not in cursors else '',
                       'page': len(cursors) + 1}
         hub_sort = {'key': sort, 'direction': direction,
-                    'links': {key: result_link([], key, '1' if key == sort and direction == '-1' else '-1')
+                    'links': {key: result_link([], key, '1' if key == sort == 'createdAt' and direction == '-1' else '-1')
                               for key in ('downloads', 'likes', 'createdAt')},
-                    'description': {'downloads': ('Most downloaded first', 'Least downloaded first'),
-                                    'likes': ('Most liked first', 'Least liked first'),
-                                    'createdAt': ('Newest first', 'Oldest first')}[sort][direction == '1']}
+                    'description': {'downloads': 'Most downloaded first', 'likes': 'Most liked first',
+                                    'createdAt': 'Oldest first' if direction == '1' else 'Newest first'}[sort]}
         return page(request, "hub.html", person, status=status, found=found, words=words or repository, downloads=await coming(person),
                     said=said or request.query_params.get("said", ""), failed=failed, hub_paging=hub_paging, hub_sort=hub_sort)  # fmt: skip
 
