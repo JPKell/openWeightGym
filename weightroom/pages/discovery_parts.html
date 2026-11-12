@@ -1,0 +1,32 @@
+{# Shared source navigation, search surface, empty state and transfer queue. #}
+{% from "parts.html" import card %}
+{% from "navigation_parts.html" import pills, pill_link %}
+{% from "icons.html" import icon %}
+
+{% macro source_navigation(active) %}
+{% call pills('Model sources', class_='gap-1 mb-0') %}
+{{ pill_link('Hugging Face', '/hub', active == 'hub') }}
+{{ pill_link('Civitai', '/civitai', active == 'civitai') }}
+{% endcall %}
+{% endmacro %}
+
+{% macro search_surface(title, hint) %}
+{% set content = caller() %}
+{% call card(title, class_='discovery-search', hint=hint) %}{{ content }}{% endcall %}
+{% endmacro %}
+
+{% macro empty_state(title, description, id='') %}
+<div class="discovery-empty"{% if id %} id="{{ id }}"{% endif %}>
+  <span class="discovery-symbol" aria-hidden="true">{{ icon('models') }}</span>
+  <p class="fw-semibold mb-1" data-empty-title>{{ title }}</p>
+  <p class="text-secondary mb-0" data-empty-description>{{ description }}</p>
+</div>
+{% endmacro %}
+
+{% macro download_queue() %}
+{% set content = caller() %}
+{% call card('Download activity', hint='Transfers continue while you browse. Manage downloaded files in your storage library.', class_='mt-4', actions='<a href="/files?tier=storage" class="btn btn-outline-secondary btn-sm">Open Files</a>'|safe) %}
+{{ content }}
+<p class="text-secondary small mb-0 discovery-queue-hint">Downloads go to model storage. Files are checked before they become available.</p>
+{% endcall %}
+{% endmacro %}

@@ -1,15 +1,47 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, form_section, more, section_title, card, alert %}
+{% from "parts.html" import page_header, more, card, alert %}
+{% from "navigation_parts.html" import pager %}
+{% from "discovery_parts.html" import source_navigation, search_surface, empty_state, download_queue %}
+{% from "icons.html" import icon %}
 {% block title %}Civitai · openWeightGym{% endblock %}
-{% block scripts %}<script src="/mirrorwall-static/discovery.js?v=5" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/discovery.css?v=1"><script src="/mirrorwall-static/discovery.js?v=6" defer></script>{% endblock %}
 {% block main %}
-{{ page_header('Civitai', 'Find image models, LoRAs and upscalers for your workflows.') }}{% call more('About these files') %}<p class="text-secondary">Find image models, LoRAs and upscalers. Compatibility, base model and license terms belong to each source version; downloading a file does not qualify it for a workflow.</p>{% endcall %}
-
-{% if 'manage-settings' in person.can %}<p class="small"><a href="/settings/image">Image preview settings</a></p>{% endif %}
-{% call alert('danger', role='alert', attrs={'id': 'mw-message', 'hidden': ''}) %}{% endcall %}{% call alert('success', role='status', attrs={'id': 'mw-success', 'hidden': ''}) %}{% endcall %}
-<form id="mw-search" class="d-flex flex-wrap gap-2 align-items-center mb-3"><label for="mw-q" class="visually-hidden">Search Civitai</label><input id="mw-q" class="form-control" style="max-width:32rem" placeholder="Search models, styles or a creator" required maxlength="200"><button class="btn btn-primary">Search</button>{% if adult_previews_allowed %}<label id="mw-adult-control" class="form-check-label ms-2"><input id="mw-adult" type="checkbox" class="form-check-input me-2"{% if adult_previews %} checked{% endif %}>Enable adult previews</label>{% endif %}</form>
-<div class="row g-3 mb-3">{% call form_section('Filter models') %}<div class="col-md-6"><label for="mw-type" class="form-label">Model type</label><select id="mw-type" class="form-select"><option value="">All types</option></select></div><div class="col-md-6"><label for="mw-base" class="form-label">Base model</label><select id="mw-base" class="form-select"><option value="">All base models</option></select></div><div class="col-md-6"><label for="mw-format" class="form-label">File format</label><select id="mw-format" class="form-select"><option value="">All supported formats</option><option value=".gguf">GGUF</option><option value=".safetensors">Safetensors</option><option value=".pth">PTH upscaler</option></select></div>{% endcall %}</div>
-<template id="mw-discovery-card">{% call card('Model', tag='article', class_='h-100', body_attrs={'data-discovery-body': ''}) %}{% endcall %}</template>
-<p id="mw-status" class="text-secondary" role="status"></p><div id="mw-found" class="row g-3"></div>
-<section class="mt-4">{{ section_title("Downloads") }}<div hx-get="/downloads" hx-trigger="load, every 3s" hx-swap="innerHTML"></div></section>
+{{ page_header('Civitai', actions=source_navigation('civitai')) }}
+{% call alert('danger', role='alert', attrs={'id': 'mw-message', 'hidden': ''}) %}{% endcall %}
+{% call alert('success', role='status', attrs={'id': 'mw-success', 'hidden': ''}) %}{% endcall %}
+{% call search_surface('Discover image models', 'Explore checkpoints, LoRAs and upscalers. Find the right base model, then choose a verified file.') %}
+<form id="mw-search" class="row g-2">
+  <div class="col-12 col-sm"><label for="mw-q" class="visually-hidden">Search Civitai</label><input id="mw-q" class="form-control" placeholder="Search models or styles" required maxlength="200"></div>
+  <div class="col-12 col-sm-auto"><button class="btn btn-primary w-100">Search</button></div>
+</form>
+{% endcall %}
+<div class="discovery-layout">
+<aside>
+{% call card('Refine discovery') %}
+<div class="discovery-filters">
+<div><label for="mw-type" class="form-label">Model type</label><select id="mw-type" class="form-select"><option value="">All types</option>{% for kind in ['Checkpoint', 'LORA', 'LoCon', 'TextualInversion', 'VAE', 'Controlnet', 'Upscaler', 'Embedding', 'Other'] %}<option>{{ kind }}</option>{% endfor %}</select></div>
+<div><label for="mw-base" class="form-label">Base model</label><select id="mw-base" class="form-select"><option value="">All base models</option>{% for base in ['SD 1.5', 'SD 2.1', 'SDXL 1.0', 'Pony', 'Illustrious', 'Flux.1 D', 'Flux.1 S', 'SD 3.5', 'Other'] %}<option>{{ base }}</option>{% endfor %}</select></div>
+<div><label for="mw-format" class="form-label">File format</label><select id="mw-format" class="form-select"><option value="">All supported formats</option><option value=".gguf">GGUF</option><option value=".safetensors">Safetensors</option><option value=".pth">PTH upscaler</option></select><p class="form-hint mb-0">Applies when choosing files.</p></div>
+<div class="discovery-filter-note border-top pt-3 mt-2">
+{% if adult_previews_allowed %}<label id="mw-adult-control" class="form-check-label"><input id="mw-adult" type="checkbox" class="form-check-input me-2"{% if adult_previews %} checked{% endif %}>Enable adult previews</label>{% else %}<p class="text-secondary small mb-2">Safe previews enabled</p>{% endif %}
+{% if 'manage-settings' in person.can %}<a class="small" href="/settings/image">Image preview settings</a>{% endif %}
+</div>
+</div>
+{% endcall %}
+{% call more('Before you download') %}<p class="mb-0">Check compatibility, base model and license terms on the source page. Downloading a file does not qualify it for a workflow.</p>{% endcall %}
+</aside>
+<section class="discovery-results" aria-label="Model results">
+<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3"><p id="mw-status" class="text-secondary small mb-0" role="status">Search to discover model versions</p><span class="text-secondary small">Most downloaded first</span></div>
+{{ empty_state('Find your next creative direction', 'Search for a model or style. Each result includes its base model, source page and available files.', id='mw-empty') }}
+<div id="mw-found" class="row g-3" aria-busy="false"></div>
+<div id="mw-paging" hidden>{{ pager('#previous', '#next', summary='<span id="mw-page-label"></span>'|safe, label='Model result pages') }}</div>
+</section>
+</div>
+<template id="mw-discovery-card">{% call card('Model', tag='article', class_='h-100 mb-0 discovery-model', body_attrs={'data-discovery-body': ''}) %}
+<p data-model-meta class="text-secondary small mb-2"></p>
+<p data-model-triggers class="small discovery-triggers mb-2" hidden></p>
+<div class="discovery-model-actions"><a data-model-source class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener noreferrer">Model page</a><button type="button" data-model-choose class="btn btn-primary btn-sm" aria-expanded="false">Choose file</button></div>
+<div data-model-files hidden class="border-top pt-3 mt-3"></div>
+{% endcall %}<div class="discovery-model-media" data-model-placeholder aria-hidden="true">{{ icon('models') }}</div></template>
+{% call download_queue() %}<div hx-get="/downloads" hx-trigger="load" hx-swap="outerHTML"></div>{% endcall %}
 {% endblock %}

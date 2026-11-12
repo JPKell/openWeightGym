@@ -17,7 +17,7 @@ import hashlib
 import re
 import time
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 import httpx
 
@@ -67,6 +67,23 @@ async def search(http: httpx.AsyncClient, words: str, token: str = "") -> list[d
     """The repositories that hold .gguf files and match these words, the most downloaded first."""
     found = await asked(http, "/api/models", token, search=words, filter="gguf", sort="downloads", direction="-1", limit="40")
     return [{"repository": one["id"], "downloads": one.get("downloads", 0), "likes": one.get("likes", 0), "made": one.get("createdAt", "")[:10]} for one in found]
+
+
+async def search_page(http: httpx.AsyncClient, words: str, token: str = "", cursor: str = "") -> dict:
+    """Read one bounded result page; only forward the provider's opaque cursor."""
+    params = {'search': words, 'filter': 'gguf', 'sort': 'downloads', 'direction': '-1', 'limit': '12'}
+    if cursor:
+        params['cursor'] = cursor[:4096]
+    try:
+        answer = await http.get(HUB + '/api/models', params=params, headers=signed(token))
+    except httpx.HTTPError as problem:
+        raise Refused(502, f"Hugging Face did not answer: {type(problem).__name__}.") from None
+    refused(answer, token)
+    next_url = answer.links.get('next', {}).get('url', '')
+    next_cursor = parse_qs(urlsplit(next_url).query).get('cursor', [''])[0]
+    return {'found': [{"repository": one['id'], "downloads": one.get('downloads', 0),
+                       "likes": one.get('likes', 0), "made": one.get('createdAt', '')[:10]}
+                      for one in answer.json()], 'next_cursor': next_cursor}
 
 
 async def files(http: httpx.AsyncClient, repository: str, token: str = "") -> list[dict]:

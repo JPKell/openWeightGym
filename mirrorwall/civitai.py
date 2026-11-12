@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import re
 import time
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from loadcoach import hub
 
@@ -38,6 +38,25 @@ def preview(one,adult=False):
 async def search(http,words,token='',adult=False):
     """Search bounded model versions, retaining compatibility and source attribution."""
     value=await get(http,'/api/v1/models',token,query=words[:200],limit=20,nsfw='true' if adult else 'false',sort='Most Downloaded')
+    return search_rows(value,adult)
+
+
+async def search_page(http,words,token='',adult=False,cursor='',kind='',base=''):
+    """Continue a provider search without following provider URLs or exposing credentials."""
+    params={'query':words[:200],'limit':12,'nsfw':'true' if adult else 'false','sort':'Most Downloaded'}
+    for key,value in [('cursor',cursor[:4096]),('types',kind[:80]),('baseModels',base[:80])]:
+        if value:
+            params[key]=value
+    value=await get(http,'/api/v1/models',token,**params)
+    metadata=value.get('metadata',{})
+    cursor=metadata.get('nextCursor')
+    if cursor is None:
+        cursor=parse_qs(urlsplit(metadata.get('nextPage') or '').query).get('cursor',[''])[0]
+    return {'found':search_rows(value,adult),'next_cursor':str(cursor) if cursor is not None else ''}
+
+
+def search_rows(value,adult=False):
+    """Apply the same preview policy and version metadata to every result page."""
     found=[]
     for model in value.get('items',[]):
         if model.get('nsfw') and not adult:

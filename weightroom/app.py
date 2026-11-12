@@ -4605,12 +4605,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         repository = repository or request.query_params.get("repository", "").strip()
         if not repository and "/" in words and " " not in words:  # a repository typed out goes straight to its files
             repository = words
-        answer = await ask("GET", "/turnstile/artifacts/hub", person.key, params={"repository": repository} if repository else {"search": words})
+        cursors = request.query_params.getlist('cursor')
+        answer = await ask("GET", "/turnstile/artifacts/hub", person.key, params={"repository": repository} if repository else
+                           {"search": words, "paged": "1", "cursor": cursors[-1] if cursors else ""})
         found, status = answer.json(), 400 if failed else answer.status_code
         if answer.status_code != 200:  # LoadCoach's own words: not allowed, no such repository, or Hugging Face not answering
             said, failed, found = found["error"]["message"], True, {}
+        def result_link(trail):
+            """Keep previous provider cursors in bookmarkable local result URLs."""
+            return '/hub?' + urlencode([('q', words), *(('cursor', value) for value in trail)])
+        next_cursor = found.get('next_cursor', '')
+        hub_paging = {'previous': result_link(cursors[:-1]) if cursors else '',
+                      'next': result_link([*cursors, next_cursor]) if next_cursor and next_cursor not in cursors else '',
+                      'page': len(cursors) + 1}
         return page(request, "hub.html", person, status=status, found=found, words=words or repository, downloads=await coming(person),
-                    said=said or request.query_params.get("said", ""), failed=failed)  # fmt: skip
+                    said=said or request.query_params.get("said", ""), failed=failed, hub_paging=hub_paging)  # fmt: skip
 
     async def hub_start(request: Request, person: Person) -> Response:
         """Bring the ticked files down."""
