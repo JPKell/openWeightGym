@@ -11,8 +11,8 @@
   const message = error => { $('message').hidden = !error; $('message').textContent = error || ''; };
   const element = (tag, text, className) => { const one = document.createElement(tag); if (text !== undefined) one.textContent = text; if (className) one.className = className; return one; };
   function fileOption(path, machine = node, tier = 'current') {
-    const folder=path.split('/').filter(Boolean).at(-2) || '/';
-    const option=new Option(machine+' · '+folder,path);
+    const parts=path.split('/').filter(Boolean), folder=parts.at(-2) || '/', filename=parts.at(-1) || path;
+    const option=new Option(machine+' · '+folder+' · '+filename,path);
     option.title=path; option.dataset.machine=machine; option.dataset.tier=tier;
     return option;
   }
