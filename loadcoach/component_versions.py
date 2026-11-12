@@ -80,6 +80,8 @@ class Versions:
         self.db = self.source.connect(check_same_thread=False)
         migrate(self.source, self.db, "components.versions", COMPONENT_VERSIONS)
         self.hostname = socket.gethostname()
+        # The database cache survives restarts; each new process must verify its checkout.
+        self.suite_checked = False
 
     def read(self) -> dict:
         return {name: {"version": version, "version_checked": checked, "version_error": error}
@@ -98,12 +100,13 @@ class Versions:
             self.save("suite", version, "Git tag/commit unavailable." if not version else "")
         except (OSError, subprocess.SubprocessError) as problem:
             self.save("suite", "", str(problem))
+        self.suite_checked = True
 
     async def refresh(self, config=None, settings: Path | None = None, force=False) -> None:
         """Refresh due versions; each failure is isolated so every engine gets checked."""
         before = self.read()
         due = lambda name: force or time.time() - before.get(name, {}).get("version_checked", 0) >= EVERY
-        if due("suite"):
+        if not self.suite_checked or due("suite"):
             await self.suite()
         if config is None:
             if settings is None or not settings.is_file():
@@ -134,7 +137,7 @@ class Versions:
     async def attach(self, report: dict) -> dict:
         """Add saved versions to a live inventory; page requests never invoke an engine."""
         saved = self.read()
-        if "suite" not in saved:
+        if not self.suite_checked or time.time() - saved.get("suite", {}).get("version_checked", 0) >= EVERY:
             await self.suite()
             saved = self.read()
         for kind in ("services", "engines"):
