@@ -42,6 +42,7 @@ GET.update({'qwen-image':('QuantStack/Qwen-Image-GGUF','Qwen_Image-Q4_K_M.gguf')
 SLOTS = (("diffusion", "Diffusion weights"), ("text_encoder", "Text encoder"), ("vae", "VAE"),
          ("clip_l", "CLIP L"), ("clip_g", "CLIP G"), ("upscaler", "Image upscaler"))
 FORMATS = (".gguf", ".safetensors", ".pth")
+IDENTITY_VERSION = 2  # SDXL GGUF checkpoints with converted CLIP names
 
 
 def shapes_of(path):
@@ -83,11 +84,16 @@ def classify(shapes):
             return "diffusion", "flux1", None  # 64 input channels: Flux 1, which Mirror Wall does not run
         variant = FLUX2.get(width)
         return "diffusion", "flux2-dev" if variant == "dev" else "flux2-klein" if variant else "flux2", variant
+    if "label_emb.0.0.weight" in flat or "add_embedding.linear_1.weight" in flat:
+        # sd.cpp's GGUF converter names SDXL's two CLIPs cond_stage_model and
+        # cond_stage_model.1; safetensors checkpoints use conditioner.embedders.
+        clips = any(name.startswith("conditioner.embedders.1") for name in names) or (
+            shapes.get('cond_stage_model.transformer.text_model.embeddings.token_embedding.weight') == (49408, 768)
+            and shapes.get('cond_stage_model.1.transformer.text_model.embeddings.token_embedding.weight') == (49408, 1280))
+        whole = clips and any(name.startswith("first_stage_model.") for name in names)
+        return "diffusion", "sdxl", "checkpoint" if whole else "unet"
     if any(name.startswith("cond_stage_model.") for name in names):
         return "diffusion", "sd1", None
-    if "label_emb.0.0.weight" in flat or "add_embedding.linear_1.weight" in flat:
-        whole = any(name.startswith("conditioner.embedders.1") for name in names) and any(name.startswith("first_stage_model.") for name in names)
-        return "diffusion", "sdxl", "checkpoint" if whole else "unet"
     conv = next((shape for name, shape in shapes.items() if name.endswith("decoder.conv_in.weight")), None)
     if conv and len(conv) in (4,5):
         return "vae", None, {32: "flux2-vae", 4: "sdxl-vae",16:'qwen-image-vae',64:'qwen-image-2.1-vae'}.get(conv[1], f"vae-{conv[1]}")

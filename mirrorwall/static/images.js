@@ -137,9 +137,9 @@
     $('reference-count').className = 'badge rounded-pill ' + (references.length > rules.most ? 'text-bg-danger' : references.length ? 'text-bg-success' : 'text-bg-light border');
     const help = !rules.known ? 'Choose a model to see whether it uses reference images.'
       : off ? '✗ This model does not use reference images.'
-      : (rules.editing ? '✓ Starts from 1 image and redraws it; strength sets how much changes.'
+      : (rules.editing ? 'Optional: add one starting image to redraw it. Strength controls how much changes; without a reference, generation uses the prompt.'
          : '✓ Up to ' + rules.most + ' image' + (rules.most === 1 ? '' : 's') + (rules.most > 1 ? '. Image 1 is the main one; say what to take from each, as in “the person from image 1 in the jacket from image 2”.' : '.'))
-        + (rules.upscaler ? ' Small images are enlarged first.' : ' No upscaler: each image needs at least ' + (rules.pixels / 1e6).toFixed(1) + ' MP.');
+        + (rules.upscaler ? ' Small reference images are enlarged first.' : ' No upscaler: each reference image needs at least ' + (rules.pixels / 1e6).toFixed(1) + ' MP.');
     $('reference-help').textContent = help;
     $('reference-help').className = 'mw-reference-help small mb-2 ' + (off ? 'text-danger-emphasis' : rules.known ? 'text-success-emphasis' : 'text-secondary');
     $('strength-wrap').hidden = !(rules.editing && references.length);
@@ -195,10 +195,11 @@
       jobsSignature = signature; $('jobs').replaceChildren();
       state.jobs.forEach(row => {
         const card = element('div', undefined, 'mw-job studio-job frame');
-        const status = row.progress?.stage === 'failed' ? 'failed' : row.status;
+        const failed = row.progress?.stage === 'failed' || row.error || row.progress?.error || row.request_counts?.failed > 0;
+        const status = failed ? 'failed' : row.status;
         card.append(element('span', row.model || row.settings?.model || row.settings?.request?.model || 'Image job', 'fw-medium me-auto'));
         const progress = row.progress || {};
-        card.append(element('span', status + (progress.stage ? ' · ' + progress.stage : '') + (progress.step ? ' ' + progress.step + '/' + progress.total_steps : ''), 'text-secondary small'));
+        card.append(element('span', status + (progress.stage && progress.stage !== status ? ' · ' + progress.stage : '') + (progress.step ? ' ' + progress.step + '/' + progress.total_steps : ''), 'text-secondary small'));
         if (row.error || progress.error) card.append(element('span', row.error || progress.error.message, 'text-danger small'));
         const action = (label, value) => {
           const button = element('button', label, 'btn btn-outline-secondary btn-sm');
