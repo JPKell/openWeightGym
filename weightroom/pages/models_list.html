@@ -29,6 +29,7 @@
 {% endcall %}
 {% endfor %}
 {% call card('Installed models', body_class='p-0', actions='<span class="small text-secondary" data-catalogue-count role="status" aria-live="polite"></span>'|safe) %}
+<div class="inventory-legend small text-secondary px-3 py-2" aria-label="Availability legend">{% for state,label in [('in-use','In use'),('loaded','Loaded'),('installed','Installed'),('loading','Loading'),('offline','Node unavailable'),('missing','File missing'),('disabled','Disabled')] %}<span class="inventory-state" data-state="{{ state }}"><span class="inventory-dot" aria-hidden="true"></span>{{ label }}</span>{% endfor %}</div>
 <div class="inventory-table-scroll" role="region" tabindex="0" aria-label="Installed models and compute nodes; scroll to browse all models">
 <table id="models-table" class="table table-hover align-middle mb-0 inventory-table">
   <thead><tr><th scope="col">Model</th><th scope="col">Installed on</th><th scope="col">{{ 'Context / family' if kind == 'all' else 'Max context' if kind == 'llm' else 'Family' }}</th><th scope="col">File size</th><th scope="col">In memory</th></tr></thead>
@@ -51,7 +52,6 @@
 </div>
 <div class="inventory-footer small text-secondary"><span>Click a row or press Enter or Space for node details. Model and node links open settings.</span><span>{{ catalogue.rows|length }} models · {{ catalogue.installations }} installations</span></div>
 {% endcall %}
-<div class="inventory-legend small text-secondary mb-3" aria-label="Availability legend">{% for state,label in [('in-use','In use'),('loaded','Loaded'),('installed','Installed'),('loading','Loading'),('offline','Node unavailable'),('missing','File missing'),('disabled','Disabled')] %}<span class="inventory-state" data-state="{{ state }}"><span class="inventory-dot" aria-hidden="true"></span>{{ label }}</span>{% endfor %}</div>
 {% if adaptor_models %}
 {% call card("", class_="mt-3") %}{{ section_title("Adaptor models") }}<div class="table-responsive"><table class="sortable table mb-0"><thead><tr><th>Model</th><th>Type</th><th>Plugin</th><th>Instance / profile</th><th>State</th></tr></thead><tbody>
 {% for model in adaptor_models %}<tr><td><code>{{ model.id }}</code></td><td><span class="badge text-bg-secondary">Adaptor</span></td><td>{{ model.adaptor.plugin }}</td><td>{% if "front-manage-plugins" in person.can %}<a href="/plugins/{{ model.adaptor.plugin }}/instances/{{ model.adaptor.instance }}">{{ model.adaptor.instance }}</a>{% else %}{{ model.adaptor.instance }}{% endif %} / {{ model.adaptor.profile }}</td><td>{{ "Available" if model.available else "Settings pending or service unavailable" }}</td></tr>{% endfor %}
