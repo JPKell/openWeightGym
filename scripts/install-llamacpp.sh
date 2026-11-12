@@ -91,7 +91,7 @@ asset_for() {
 # The libraries a build needs that this machine does not have, one per line.
 missing_libraries() {
   local folder=$1
-  LD_LIBRARY_PATH=$folder ldd "$folder/llama-server" "$folder"/libggml*.so* 2>/dev/null |
+  LD_LIBRARY_PATH="$folder${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$folder/llama-server" "$folder"/libggml*.so* 2>/dev/null |
     awk '/=> not found/ {print $1}' | sort -u
 }
 
@@ -99,7 +99,7 @@ missing_libraries() {
 # The prebuilt releases are made on a recent Ubuntu; older systems need a build made here.
 missing_versions() {
   local folder=$1
-  LD_LIBRARY_PATH=$folder ldd "$folder/llama-server" "$folder"/libggml*.so* 2>&1 |
+  LD_LIBRARY_PATH="$folder${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$folder/llama-server" "$folder"/libggml*.so* 2>&1 |
     grep -oE "(GLIBC|GLIBCXX|CXXABI)_[0-9.]+'? not found" | grep -oE '(GLIBC|GLIBCXX|CXXABI)_[0-9.]+' | sort -uV
 }
 
