@@ -134,7 +134,7 @@ def test_filters_clear_empty_nodes_and_add_from_remote_storage(studio):
     page.locator('#am-node').select_option('scout')
     playwright.expect(page.locator('#am-profiles [data-model]')).to_have_count(0)
     page.locator('#am-add').click()
-    page.locator('#am-file').select_option(label='/storage/voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='vault · storage')
     page.locator('#am-name').fill('new-voice')
     page.locator('[data-section="hardware"]').click()
     playwright.expect(page.locator('#am-target-node')).to_have_value('scout')
@@ -193,24 +193,30 @@ def test_existing_companion_paths_survive_an_unavailable_file_scan(studio):
 @pytest.mark.parametrize('suffix,facts',[
     ('gguf',{}),
     ('gguf',{'what':'model','architecture':'audiocpp'}),
-    ('safetensors',{'what':'image','family':'sdxl'}),
+    ('safetensors',{}),
     ('pt',{'what':'audio','family':'kokoro'}),
 ])
-def test_managed_cache_and_storage_weights_do_not_require_audio_classification(studio,suffix,facts):
+def test_audio_choices_show_machine_and_folder_and_exclude_other_models(studio,suffix,facts):
     page,state = studio
     for node,tier in [('atlas','cache'),('vault','storage')]:
         source=next(one for one in state['files'] if one['name'] == node)
         source['files'].extend([
-            dict(path=f'/custom/{tier}/voice.{suffix}',tier=tier,facts=facts),
-            dict(path=f'/custom/{tier}/moving.{suffix}',tier=tier,facts=facts,moving=True),
+            dict(path=f'/custom/{tier}/voice.{suffix}',place=('' if tier == 'cache' else 'storage_')+('weights' if facts else 'audio'),tier=tier,facts=facts),
+            dict(path=f'/custom/{tier}/moving.{suffix}',place='audio',tier=tier,facts=facts,moving=True),
             dict(path=f'/custom/{tier}/config.json',tier=tier,facts={'what':'audio'}),
+            dict(path=f'/custom/{tier}/llm.gguf',tier=tier,facts={'what':'model','architecture':'qwen3'}),
+            dict(path=f'/custom/{tier}/image.safetensors',tier=tier,facts={'what':'image','family':'sdxl'}),
+            dict(path=f'/custom/{tier}/unknown.gguf',tier=tier),
         ])
     page.goto('http://console.test/models/audio?new=1')
     for index,(tier,node) in enumerate([('cache','atlas'),('storage','vault')]):
         path=f'/custom/{tier}/voice.{suffix}'
-        option=page.locator('#am-file option').filter(has_text=f'{path} · {node} · {tier}')
+        option=page.locator(f'#am-file option[data-path="{path}"]')
         playwright.expect(option).to_have_count(1)
-        page.locator('#am-file').select_option(label=f'{path} · {node} · {tier}')
+        playwright.expect(option).to_have_text(f'{node} · {tier}')
+        assert '/' not in option.inner_text()
+        assert not option.get_attribute('title')
+        page.locator('#am-file').select_option(value=option.get_attribute('value'))
         if facts.get('what') == 'audio':
             playwright.expect(page.locator('#am-family')).to_have_value('kokoro')
         else:
@@ -219,8 +225,10 @@ def test_managed_cache_and_storage_weights_do_not_require_audio_classification(s
             playwright.expect(page.locator('#am-family option[value="sdxl"]')).to_have_count(0)
             page.locator('#am-family').select_option('kokoro')
         playwright.expect(page.locator('#am-root')).to_have_value(f'/custom/{tier}')
-    playwright.expect(page.locator('#am-file option').filter(has_text='/moving.')).to_have_count(0)
-    playwright.expect(page.locator('#am-file option').filter(has_text='/config.json')).to_have_count(0)
+    playwright.expect(page.locator('#am-file option[data-path*="/moving."]')).to_have_count(0)
+    playwright.expect(page.locator('#am-file option[data-path$="/config.json"]')).to_have_count(0)
+    for excluded in ('llm.gguf','image.safetensors','unknown.gguf'):
+        playwright.expect(page.locator(f'#am-file option[data-path$="/{excluded}"]')).to_have_count(0)
     page.locator('#am-name').fill('stored-voice')
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
@@ -268,7 +276,7 @@ def test_initial_empty_and_unreachable_fleets_remain_clear_and_recoverable(studi
         page.locator('#am-retry').click()
     playwright.expect(page.locator('#am-profiles')).to_contain_text('No audio models yet')
     playwright.expect(page.locator('#am-submit')).to_be_enabled()
-    page.locator('#am-file').select_option(label='/storage/voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='vault · storage')
     page.locator('#am-name').fill('invalid name with spaces')
     page.locator('#am-submit').click()
     assert not state['posts']

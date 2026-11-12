@@ -108,8 +108,8 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
         assert sent[-1]['source_machine']=='front' and sent[-1]['settings']['flags']['model']=='/store/image/model.safetensors'
         assert sent[-1]['machines']==['compute','rig']
         page.goto('http://console.test/models/audio?new=1')
-        playwright.expect(page.locator('#am-file option').filter(has_text='/store/audio/ace/ace.gguf')).to_have_count(1)
-        page.locator('#am-file').select_option(label='/store/audio/ace/ace.gguf · front · storage')
+        playwright.expect(page.locator('#am-file option[data-path="/store/audio/ace/ace.gguf"]')).to_have_count(1)
+        page.locator('#am-file').select_option(label='front · ace')
         page.locator('#am-family').select_option('ace_step')
         assert page.get_by_role('heading',name='Catalogue',exact=True).count() == 0
         assert page.get_by_role('button',name='Install',exact=True).count() == 0

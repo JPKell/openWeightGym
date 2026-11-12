@@ -32,6 +32,9 @@
   }
   const chosen = () => $('file').value === '' ? null : choices[Number($('file').value)];
   const audioFamily = file => file?.facts?.what === 'audio' ? file.facts.family : '';
+  const audioFile = (file,source) => file.facts?.what === 'audio' || file.facts?.architecture === 'audiocpp' ||
+    file.place?.replace(/^storage_/, '') === 'audio' || file.path.split('/').includes('audio') ||
+    (inventories.get(source.name)?.models || []).some(model=>model.flags.model === file.path);
   function families() {
     const list = [...(inventory.catalogue?.families || [])];
     for (const file of choices) if (audioFamily(file) && !list.some(one => one.family === file.facts.family))
@@ -183,13 +186,15 @@
     $('form').reset(); $('defaults').value = '{}'; $('session').value = '{}';
     $('default-fields').replaceChildren();
     // Always retain installed paths, even if a cache scan cannot currently see the file.
-    // Inventory classification is a hint: custom folders and older indexes may not label audio weights.
-    choices = nodes.flatMap(source=>(source.files || []).filter(file=>!file.moving && /\.(gguf|safetensors|pth|pt|bin|onnx)$/i.test(file.path)).map(file=>({...file,machine:source.name})));
+    // Audio locations and configured profiles also identify weights when an older index lacks audio metadata.
+    choices = nodes.flatMap(source=>(source.files || []).filter(file=>audioFile(file,source) && !file.moving && /\.(gguf|safetensors|pth|pt|bin|onnx)$/i.test(file.path)).map(file=>({...file,machine:source.name})));
     if (selected && !choices.some(file=>file.machine === activeNode && file.path === selected.flags.model)) {
       choices.push({path:selected.flags.model,machine:activeNode,tier:'current',facts:{what:'audio',family:selected.audiocpp.family,kinds:[selected.audiocpp.kind]}});
     }
     $('file').replaceChildren(new Option('Choose an audio model file',''),...choices.map((file,index)=>{
-      const option = new Option(file.path + ' · ' + file.machine + ' · ' + file.tier,String(index));
+      const folder = file.path.split('/').filter(Boolean).at(-2) || '/';
+      const option = new Option(file.machine + ' · ' + folder,String(index));
+      option.dataset.path = file.path; option.dataset.machine = file.machine; option.dataset.tier = file.tier;
       option.disabled = Boolean(selected && (file.machine !== activeNode || file.tier === 'storage') && file.path !== selected.flags.model);
       return option;
     }));
