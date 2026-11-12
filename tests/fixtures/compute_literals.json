@@ -13,8 +13,6 @@
  "loadcoach/observability.py": 1,
  "mirrorwall/static/models.js": 1,
  "mirrorwall/ui.py": 1,
- "soundroom/pages/soundroom_models.html": 1,
- "soundroom/static/models.js": 1,
  "soundroom/ui.py": 1,
  "spotter/app.py": 2,
  "turnstile/accounts.py": 2,

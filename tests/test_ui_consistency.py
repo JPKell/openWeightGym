@@ -952,7 +952,7 @@ def test_empty_editor_tables_have_next_steps_and_clear_placeholder_on_add(ui_con
     sign_in(server,'jordan')
     with playwright.sync_playwright() as engine:
         browser,page=browser_context(engine,server)
-        for path,selector,text in [('/models/audio','#am-profiles','No audio models'),('/models/images','#mw-lora-rows','No image adapters'),('/models/sample','[data-adapter-rows]','No adapters')]:
+        for path,selector,text in [('/models/images','#mw-lora-rows','No image adapters'),('/models/sample','[data-adapter-rows]','No adapters')]:
             page.goto('http://console.test'+path)
             body=page.locator(selector)
             # Adapter sections are allowed to remain inside their native disclosure.

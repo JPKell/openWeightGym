@@ -1,0 +1,55 @@
+{% from 'parts.html' import page_header, card, section_title, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'audio_model_parts.html' import wave, editor %}
+{% from 'audio_design_parts.html' import templates %}
+{% from 'icons.html' import icon %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="forest">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Audio models · Three designs · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a class="visually-hidden-focusable" href="#workspace">Skip to Audio models</a>
+<header class="audio-topbar"><strong class="audio-brand">{{ icon('barbell') }} weightRoom<span class="audio-brand-divider" aria-hidden="true"></span><span class="text-secondary fw-normal">Audio models</span></strong><div class="d-flex align-items-center flex-wrap gap-2"><span class="audio-preview-label">INTERACTIVE DESIGN PREVIEW</span><button type="button" id="theme" class="btn btn-outline-secondary btn-sm">Dark mode</button></div></header>
+<main class="audio-page">
+<section class="audio-review" aria-label="Compare designs">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3"><span class="audio-eyebrow">THREE WAYS TO MAKE ROOM FOR SOUND</span><label class="d-flex gap-2 align-items-center small text-secondary">Sample state<select id="scenario" class="form-select form-select-sm w-auto"><option value="normal">Installed models</option><option value="empty">Empty library</option><option value="offline">Connection lost</option></select></label></div>
+{% call pills('Design proposals', buttons=true, class_='audio-design-nav gap-2 mb-0') %}
+{{ pill_button('01 / Audio catalogue', true, attrs={'data-design':'catalogue'}) }}{{ pill_button('02 / Model studio', attrs={'data-design':'studio'}) }}{{ pill_button('03 / Sound library', attrs={'data-design':'library'}) }}
+{% endcall %}
+<p id="design-note" class="text-secondary small mt-3 mb-0"></p>
+</section>
+<div id="workspace" data-layout="catalogue">
+{% call page_header('Audio models', pretitle='SOUNDROOM / MODEL LIBRARY') %}<button type="button" class="btn btn-primary" id="add-model">{{ icon('plus') }} Add audio model</button>{% endcall %}
+<p class="audio-lead text-secondary">The right voice. The right sound. All your models, in one place.</p>
+{% call kpi_row('Audio inventory', class_='mb-4') %}
+{{ kpi('Installed models',8,'Across your compute fleet',value_attrs={'id':'total-models'}) }}
+{{ kpi('Installations',10,'Model and node pairs',value_attrs={'id':'total-installations'}) }}
+{{ kpi('In memory',2,'Loaded on reachable nodes',value_attrs={'id':'total-loaded'}) }}
+{{ kpi('Audio tasks',7,'Music, voices and understanding',value_attrs={'id':'total-kinds'}) }}
+{% endcall %}
+<div id="connection-note" hidden>{{ alert('warning','Connection lost. Showing the last known inventory; live availability is unverified.') }}</div>
+<div id="save-notice" hidden>{{ alert('success',attrs={'id':'save-notice-text'}) }}</div>
+<div class="audio-intro" id="catalogue-intro"><div><span class="audio-eyebrow">FROM FILE TO FIRST TAKE</span>{{ section_title('Bring your next model to life',level=2,wrapper_class='mt-2 mb-2') }}<p class="text-secondary small mb-0">Choose a stored file, assign compute, and set your defaults. Configure the rest when you need it.</p></div><div class="audio-intro-steps"><span><b>01</b> Choose files</span><span><b>02</b> Set hardware</span><span><b>03</b> Make it yours</span></div>{{ wave() }}</div>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="node-filters"><span class="text-secondary small me-2">Compute nodes</span>{% call pills('Compute node',buttons=true,class_='gap-1 mb-0') %}{{ pill_button('All nodes',true,attrs={'data-node':'all'}) }}{% for node in data.nodes %}{{ pill_button(node.id,attrs={'data-node':node.id}) }}{% endfor %}{% endcall %}</div>
+<div class="audio-toolbar mb-3"><div><label for="model-search" class="form-label small">Find a model</label><input id="model-search" class="form-control" type="search" placeholder="Search name, family or node…"></div><div><label for="availability" class="form-label small">Availability</label><select id="availability" class="form-select"><option value="all">All installed</option><option value="loaded">In memory</option><option value="offline">Node unavailable</option></select></div><div><label for="sort" class="form-label small">Sort by</label><select id="sort" class="form-select"><option value="name">Name A–Z</option><option value="size">Smallest file</option><option value="task">Audio task</option></select></div></div>
+<div class="audio-browser">
+<aside class="audio-task-rail" id="task-rail" aria-label="Audio task filters"><span class="audio-eyebrow d-block mb-3">YOUR TOOLKIT</span><div id="task-choices"></div><div class="audio-rail-note small text-secondary">Start with what you want to create. Each model keeps its own files, hardware and defaults.</div></aside>
+<div class="audio-main">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div id="task-pills">{% call pills('Audio task',buttons=true,class_='gap-1 mb-0') %}{% for key,label in [('all','All tasks'),('music','Music'),('voice','Voices'),('sound','Sound effects'),('understand','Understanding')] %}{{ pill_button(label,key == 'all',attrs={'data-task':key}) }}{% endfor %}{% endcall %}</div><span class="small text-secondary" id="result-count" role="status" aria-live="polite"></span><button type="button" class="btn btn-link btn-sm" id="clear-filters">Clear filters</button></div>
+<section id="catalogue-view">
+{% call card('Installed audio models',body_class='p-0',actions='<span class="audio-eyebrow">FLEET INVENTORY</span>'|safe) %}<div class="inventory-table-scroll" role="region" tabindex="0" aria-label="Installed audio models"><table class="table table-hover align-middle mb-0 inventory-table audio-table"><caption class="visually-hidden">Audio models, tasks, compute locations and availability</caption><thead><tr>{% for label in ['Model / family','Task','Installed on','Availability','File size',''] %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead><tbody id="audio-rows"></tbody></table></div><div class="inventory-footer small text-secondary"><span>Select a model to edit its configuration. Node chips open that installation.</span><span>○ Installed &nbsp; ● Loaded</span></div>{% endcall %}
+</section>
+<section id="studio-view" class="audio-studio" hidden><div>{% call card('Your models',body_class='p-2') %}<div id="model-choices" class="audio-model-choices"></div>{% endcall %}<p class="small text-secondary">Switch models freely. Unsaved drafts stay here while you explore.</p></div><div id="inline-editor"></div></section>
+<section id="library-view" hidden><div id="audio-cards" class="audio-card-grid"></div></section>
+<div id="empty-state" class="audio-empty" hidden>{{ wave() }}{{ section_title('A little quiet in here',id='empty-title',level=2,wrapper_class='mt-4 mb-2') }}<p class="text-secondary" id="empty-description">Add your first audio model to start building your sound library.</p><button type="button" class="btn btn-primary" data-add>Add your first model</button></div>
+</div></div>
+<p class="audio-preview-footer small text-secondary">Sample models and hardware · edits stay in this browser tab until reload · no downloads, model loading or audio generation.</p>
+</div>
+</main>
+<dialog id="model-dialog" aria-labelledby="editor-title"><div class="d-flex justify-content-end mb-2"><button type="button" class="btn btn-outline-secondary btn-sm" id="close-dialog">Close</button></div><div id="dialog-editor"></div></dialog>
+<div id="editor-parking" hidden>{{ editor(data) }}</div>
+{{ templates() }}
+<script id="audio-data" type="application/json">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>

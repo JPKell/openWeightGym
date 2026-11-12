@@ -75,7 +75,9 @@ def test_audio_family_filter_defaults_and_cpu_selection(desk):
         page.goto('http://console.test/models/audio?model=speaker')
         playwright.expect(page.locator('#am-name')).to_have_value('speaker')
         assert page.locator('#am-family option').all_text_contents() == ['Choose a compatible model family', 'Kokoro']
+        page.locator('[data-section="output"]').click()
         page.locator('#am-option-speed').fill('1.5')
+        page.locator('[data-section="hardware"]').click()
         page.locator('[data-gpu-card][value="B"]').check()
         assert page.locator('[data-gpu-card]:checked').count() == 1
         playwright.expect(page.locator('[data-gpu-card][value="A"]')).not_to_be_checked()
