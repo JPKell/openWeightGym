@@ -135,7 +135,8 @@ def routes(for_people, page, ask, model_api):
                 return JSONResponse({'error':{'message':'Choose a Civitai version.'}},400)
             answer=await ask('GET','/turnstile/artifacts/hub',person.key,
                              params={'repository':repository,'search':request.query_params.get('q',''),
-                                     'source':'civitai','adult':str(bool(adult)).lower()})
+                                     'source':'civitai','adult':str(bool(adult)).lower(),
+                                     **{key:request.query_params[key] for key in ('paged','cursor','kind','base') if key in request.query_params}})
         return Response(answer.content,answer.status_code,media_type='application/json',headers={'cache-control':'no-store'})
 
     return [Route("/chat/images", for_people(studio)),

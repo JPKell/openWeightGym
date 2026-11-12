@@ -181,6 +181,14 @@ class FrontFiles:
             if method == 'GET' and action == 'hub':
                 repository = query.get('repository', '')
                 if not repository:
+                    if query.get('paged') == '1':
+                        if query.get('source') == 'civitai':
+                            from mirrorwall.civitai import search_page
+                            return response(await search_page(self.web, query.get('search', ''),
+                                adult=query.get('adult') == 'true', cursor=query.get('cursor', ''),
+                                kind=query.get('kind', ''), base=query.get('base', '')))
+                        return response(await hub.search_page(self.web, query['search'], cursor=query.get('cursor', ''))
+                                        if query.get('search') else {'found': [], 'next_cursor': ''})
                     if query.get('source') == 'civitai':
                         from mirrorwall.civitai import search
                         return response({'found': await search(self.web, query['search'], adult=query.get('adult') == 'true')

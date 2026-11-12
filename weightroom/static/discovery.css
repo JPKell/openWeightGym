@@ -1,0 +1,44 @@
+/* Model source workspaces share the active console palette and control sizing. */
+.discovery-search { background: linear-gradient(115deg, rgba(var(--bs-primary-rgb), .07), transparent 72%), var(--bs-body-bg); }
+.discovery-search .card-header { background: transparent; }
+.discovery-search .card-body { padding-top: .25rem; }
+.discovery-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.discovery-layout > *, .discovery-results { min-width: 0; }
+.discovery-filters { display: grid; gap: 1rem; }
+.discovery-filters .form-label { font-size: .8125rem; }
+.discovery-empty { display: grid; justify-items: center; text-align: center; padding: 3.5rem 1rem; border: 1px dashed var(--bs-border-color); border-radius: var(--bs-border-radius-lg); background: var(--bs-tertiary-bg); }
+.discovery-empty p { max-width: 32rem; }
+.discovery-symbol { display: grid; place-items: center; width: 3rem; height: 3rem; margin-bottom: 1rem; border-radius: var(--bs-border-radius-lg); background: rgba(var(--bs-primary-rgb), .1); color: var(--bs-primary); }
+.discovery-symbol .suite-icon { width: 1.5rem; height: 1.5rem; }
+.discovery-repository { color: var(--bs-body-color); font-weight: 600; text-decoration: none; }
+.discovery-repository:hover { color: var(--bs-primary); }
+.discovery-table td { padding-top: 1rem; padding-bottom: 1rem; }
+.discovery-table th { white-space: nowrap; }
+.discovery-table .discovery-number { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.discovery-file-list { max-height: 30rem; overflow: auto; }
+.discovery-file-list thead { position: sticky; top: 0; z-index: 1; background: var(--bs-body-bg); }
+.discovery-file-actions { border-top: 1px solid var(--bs-border-color); padding-top: 1rem; }
+.discovery-model { overflow: hidden; transition: border-color .15s ease, box-shadow .15s ease; }
+.discovery-model:hover { border-color: var(--bs-primary); box-shadow: 0 .25rem 1rem rgba(var(--bs-primary-rgb), .08); }
+.discovery-model .card-heading { overflow-wrap: anywhere; }
+.discovery-model .card-header { align-items: start; }
+.discovery-model .card-body { display: flex; flex-direction: column; }
+.discovery-model-media { height: 180px; display: grid; place-items: center; background: linear-gradient(140deg, rgba(var(--bs-primary-rgb), .1), var(--bs-tertiary-bg)); color: var(--bs-secondary-color); order: -1; }
+.discovery-model-media .suite-icon { width: 2rem; height: 2rem; opacity: .65; }
+img.discovery-model-media { width: 100%; object-fit: cover; }
+.discovery-model-actions { margin-top: auto; padding-top: .75rem; display: flex; gap: .5rem; justify-content: space-between; flex-wrap: wrap; }
+.discovery-triggers { overflow-wrap: anywhere; }
+.discovery-queue-hint { display: block; }
+.card-body:has(#downloads tbody tr) > .discovery-queue-hint { display: none; }
+.discovery-results [aria-busy="true"] { opacity: .6; }
+@media (max-width: 991.98px) {
+  .discovery-layout { grid-template-columns: minmax(0, 1fr); }
+  .discovery-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+  .discovery-filter-note { grid-column: 1 / -1; }
+}
+@media (max-width: 575.98px) {
+  .discovery-filters { grid-template-columns: minmax(0, 1fr); }
+  .discovery-table td { padding-top: .75rem; padding-bottom: .75rem; }
+  .discovery-empty { padding: 2rem 1rem; }
+}
+@media (prefers-reduced-motion: reduce) { .discovery-model { transition: none; } }

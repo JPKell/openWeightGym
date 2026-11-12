@@ -1,29 +1,25 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, swaps, section_title, empty_row, alert %}
-{% from "parts.html" import page_header, form_section %}
-{% block title %}HuggingFace · openWeightGym{% endblock %}
+{% from "parts.html" import said_box, swaps, empty_row, alert, page_header, card %}
+{% from "navigation_parts.html" import pager %}
+{% from "discovery_parts.html" import source_navigation, search_surface, empty_state, download_queue %}
+{% block title %}Hugging Face · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/discovery.css?v=1">{% endblock %}
 {% block main %}
-{{ page_header('HuggingFace', 'Find model files and download them into the storage library.') }}
+{{ page_header('Hugging Face', actions=source_navigation('hub')) }}
 {{ said_box(said, failed) }}
-{% include "downloads.html" %}
-
-{# Search, and the name of a repository that was found, change this piece alone: what was found. #}
-<form method="get" action="/hub" class="row g-2 mb-4" {{ swaps("hub-found", true) }}>
-{% call form_section('Find files') %}
-  <div class="col"><input name="q" class="form-control" value="{{ words }}" aria-label="what to look for" placeholder="words, such as qwen 14b, or a repository as OWNER/NAME" required autofocus></div>
-  <div class="col-auto"><button class="btn btn-primary">Search</button></div>
-{% endcall %}
+{% call search_surface('Find your next model', 'Search GGUF repositories by name, or open a repository directly with owner/name.') %}
+<form method="get" action="/hub" class="row g-2" {{ swaps("hub-found", true) }}>
+  <div class="col-12 col-sm"><label for="hub-query" class="visually-hidden">Search Hugging Face</label><input id="hub-query" name="q" class="form-control" value="{{ words }}" aria-label="what to look for" placeholder="Search models or enter owner/name" required autofocus></div>
+  <div class="col-12 col-sm-auto"><button class="btn btn-primary w-100">Search</button></div>
 </form>
-
-{# What was found: the repository that is open, if any, and below it the search results. Opening a repository
-   from the results changes #hub-repository alone, so the results stay below it to choose another. #}
+{% endcall %}
 <div id="hub-found">
 <div id="hub-repository" class="hub-repository">{% if found.files is defined %}
-{% set _section_title1 %}{{ found.repository }} <small><a href="https://huggingface.co/{{ found.repository }}" rel="noreferrer">its page at Hugging Face</a></small>{% endset %}
-{{ section_title(_section_title1, class_="wrap") }}
+{% set repository_actions %}<a href="https://huggingface.co/{{ found.repository }}" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener noreferrer">Model page ↗</a>{% endset %}
+{% call card(found.repository, actions=repository_actions, hint='Select a file or quantization. Split weights download together as a complete set.') %}
 <form method="post" action="/hub">
   <input type="hidden" name="repository" value="{{ found.repository }}">
-  <div class="table-responsive">
+  <div class="table-responsive discovery-file-list">
   <table id="hub-files" class="table table-hover align-middle sortable">
     <thead><tr><th></th><th data-sort="text">File</th><th data-sort="value">Size</th><th></th></tr></thead>
     <tbody>
@@ -35,46 +31,53 @@
       <td>{% if row.here %}<span class="badge text-bg-secondary">in {{ row.here }}</span>{% endif %}</td>
     </tr>
     {% else %}
-    {% call empty_row(4) %}This repository holds no .gguf file.{% endcall %}
+    {% call empty_row(4) %}This repository has no supported model files.{% endcall %}
     {% endfor %}
     </tbody>
   </table>
   </div>
   {# Downloads are kept in storage alone; a model's file is promoted into the cache when it is used. #}
   {% if found.places %}
-  <div class="row g-2 align-items-center mt-2">
+  <div class="row g-2 align-items-center mt-2 discovery-file-actions">
     <div class="col-auto"><label for="place" class="col-form-label">Download to storage:</label></div>
     <div class="col col-md-6 col-xl-5">
       <select id="place" name="place" class="form-select">
         {% for place in found.places %}<option value="{{ place.name }}">{{ place.name }}, {{ place.free|size }} free</option>{% endfor %}
       </select>
     </div>
-    <div class="col-12 col-md-auto"><button class="btn btn-primary">Bring the ticked files down</button></div>
+    <div class="col-12 col-md-auto"><button class="btn btn-primary">Download selected files</button></div>
   </div>
   {% else %}
   {% call alert('info', class_='mt-2') %}Downloads go into model storage, never the cache. <a href="/settings#model-files">Set a model storage folder</a> to download files.{% endcall %}
   {% endif %}
 </form>
+{% endcall %}
 {% endif %}</div>
 {% if words and found.found is defined %}
-<div class="hub-results">
-<hr class="hub-divider">
+{% set result_actions %}<span class="text-secondary small">Most downloaded first</span>{% endset %}
+{% call card('Repositories', actions=result_actions, hint='Choose a repository to view its available files.', class_='discovery-results') %}
+{% if found.found %}
 <div class="table-responsive">
-<table id="hub-results" class="table table-hover align-middle sortable">
-  <thead><tr><th data-sort="text">Repository</th><th data-sort="value">Downloads</th><th data-sort="value">Likes</th><th data-sort="text">Made</th></tr></thead>
+<table id="hub-results" class="table table-hover align-middle discovery-table mb-0">
+  <thead><tr><th>Repository</th><th class="text-end">Downloads</th><th class="text-end">Likes</th><th>Created</th></tr></thead>
   <tbody>
   {% for one in found.found %}
   <tr>
-    <td class="wrap"><a {{ swaps("hub-repository", true) }} href="/hub?repository={{ one.repository|urlencode }}">{{ one.repository }}</a></td>
-    <td data-value="{{ one.downloads }}">{{ one.downloads }}</td><td data-value="{{ one.likes }}">{{ one.likes }}</td><td>{{ one.made }}</td>
+    <td class="wrap"><a class="discovery-repository" {{ swaps("hub-repository", true) }} href="/hub?repository={{ one.repository|urlencode }}">{{ one.repository }}</a><div class="text-secondary small mt-1">GGUF · {{ one.repository.split('/')[0] }}</div></td>
+    <td class="text-end discovery-number">{{ '{:,}'.format(one.downloads) }}</td><td class="text-end discovery-number">{{ '{:,}'.format(one.likes) }}</td><td class="text-secondary text-nowrap">{{ one.made or 'Unknown' }}</td>
   </tr>
-  {% else %}
-  {% call empty_row(4) %}Nothing found for those words.{% endcall %}
   {% endfor %}
   </tbody>
 </table>
 </div>
-</div>
+{% else %}
+{{ empty_state('Nothing found for those words.', 'Try a model family, publisher, or a shorter search. You can also enter an exact repository name.') }}
+{% endif %}
+{{ pager(hub_paging.previous, hub_paging.next, 'Page ' ~ hub_paging.page ~ ' · ' ~ found.found|length ~ ' repositories', target='hub-found') }}
+{% endcall %}
+{% elif not words %}
+{{ empty_state('A model library, ready to explore', 'Find a model family or paste a repository name. Choose the files you need and download them directly to your storage library.') }}
 {% endif %}
 </div>
+{% call download_queue() %}{% include "downloads.html" %}{% endcall %}
 {% endblock %}

@@ -1558,7 +1558,7 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
     assert 'href="/hub">HuggingFace</a>' in browser.get("/files").text
 
     found = browser.get("/hub?q=tiny").text
-    assert '<h1 class="page-title wrap">HuggingFace</h1>' in found
+    assert '<h1 class="page-title wrap">Hugging Face</h1>' in found
     assert 'href="/hub?repository=acme/tiny-GGUF">acme/tiny-GGUF</a>' in found and "Nothing found" in browser.get("/hub?q=llama").text
     files = browser.get("/hub?q=acme/tiny-GGUF").text  # a repository typed out goes straight to its files
     assert 'name="file" value="tiny-q4.gguf"' in files and "and the other 1 of its 2 parts" in files
