@@ -1,8 +1,11 @@
 {% from 'parts.html' import card, swaps, more, empty_row %}
-{% from 'benchmark_parts.html' import model_row, node_bulk_choice %}
+{% from 'benchmark_parts.html' import model_row, node_bulk_choice, run_return %}
+{% set measurement_setup = section == 'node-measurements' %}
+{% set setup_url = '/benchmarks/node-measurements#measurement-runs' if measurement_setup else '/benchmarks/runs' %}
 <div id="benchmark-choice">
 {% call card('Start a run', id='benchmark-start', key='benchmark-start', hint='Build a batch while following live work alongside it.', body_class='p-0') %}
-<form method="get" action="/benchmarks/runs" class="benchmark-setup-toolbar p-3 border-bottom" hx-sync="closest #benchmark-choice:replace" {{ swaps('benchmark-choice', true) }}>
+<form method="get" action="{{ setup_url }}" class="benchmark-setup-toolbar p-3 border-bottom" hx-sync="closest #benchmark-choice:replace" {{ swaps('page-content' if measurement_setup else 'benchmark-choice', true) }}>
+{% if measurement_setup %}<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="display" value="{{ 'scores' if request.query_params.get('display') == 'scores' else 'values' }}">{% endif %}
 <div><label for="benchmark" class="form-label">What to measure</label><select id="benchmark" name="benchmark" class="form-select" data-benchmark-select>{% for bench in benchmarks %}<option value="{{ bench.id }}"{{ ' selected' if benchmark.id == bench.id }}{% if not bench.enabled %} disabled{% endif %}>{{ bench.name }}{{ ' (disabled)' if not bench.enabled }}</option>{% endfor %}</select></div>
 <div><label for="benchmark-search" class="form-label">Find a model</label><input type="search" id="benchmark-search" class="form-control" placeholder="Search models…" data-model-search></div>
 </form>
@@ -12,7 +15,7 @@
 <fieldset class="mb-3"><legend class="form-label small mb-2">Choose nodes · applies to visible models</legend><div class="d-flex flex-wrap gap-2">{% for node in lanes %}{{ node_bulk_choice(node) }}{% endfor %}</div></fieldset>
 </div>
 {% if not may_run %}<p class="small text-warning-emphasis px-3">The benchmark ability and a reachable compute service are required to start runs.</p>{% endif %}
-<form id="start-benchmark" method="post" action="/benchmarks/runs" data-hold-refresh data-review-targets><input type="hidden" name="benchmark" value="{{ benchmark.id }}"></form>
+<form id="start-benchmark" method="post" action="{{ setup_url }}" data-hold-refresh data-review-targets>{{ run_return(section, kind, benchmark.id) }}{% if not measurement_setup %}<input type="hidden" name="benchmark" value="{{ benchmark.id }}">{% endif %}</form>
 <div class="benchmark-model-list table-responsive" id="benchmark-models" tabindex="0" role="region" aria-label="Models and node targets" aria-describedby="benchmark-list-hint">
 <table class="table table-sm align-middle mb-0 benchmark-target-table"><thead><tr><th scope="col"><label class="d-flex align-items-center gap-2"><input type="checkbox" class="form-check-input" data-select-models aria-label="Select all visible models"{% if not may_run or not run_models %} disabled{% endif %}>Model</label></th><th scope="col">Run on / saved score</th></tr></thead><tbody data-model-rows>
 {% for model in run_models %}{{ model_row(model, selected_target) }}{% else %}{{ empty_row(2, 'No compatible models available here. Choose another test or add a model to a compute node.') }}{% endfor %}
@@ -20,12 +23,14 @@
 </div>
 <p class="small text-secondary px-3 py-2 mb-0" id="benchmark-list-hint">Scroll the model list for more. Selections stay included across searches.</p>
 <div class="benchmark-selection d-flex flex-wrap align-items-center justify-content-between gap-3 p-3 border-top"><div><strong data-selected-count>0 runs selected</strong><small class="d-block text-secondary mt-1" data-selection-note>Exact targets · active pairs excluded · one to 100 runs per batch</small></div><button type="submit" form="start-benchmark" class="btn btn-primary" data-queue-selected data-may-run="{{ 'true' if may_run and benchmark.enabled else 'false' }}" disabled>Review & queue</button></div>
+{% if not measurement_setup %}
 <div class="px-3 pb-3">
 {% call more('Queue every outstanding benchmark for a model') %}
 <form method="post" action="/benchmarks/runs" class="d-flex flex-wrap align-items-end gap-2 mt-2"><input type="hidden" name="action" value="outstanding"><div class="flex-fill"><label for="outstanding-model" class="form-label">Model</label><select id="outstanding-model" name="model" class="form-select" required>{% for model in models if model.capabilities is not defined or model.capabilities.native_probes is not defined or model.capabilities.native_probes or model.capabilities.load_probes %}<option value="{{ model.id }}">{{ model.id }}</option>{% endfor %}</select></div><button class="btn btn-outline-primary"{% if not may_run or not models %} disabled{% endif %}>Queue outstanding benchmarks</button></form>
 <p class="small mt-2 mb-0">Queues missing or outdated enabled tests. Resource measurements are node-specific; quality work is queued once. Current and active evidence is excluded.</p>
 {% endcall %}
 </div>
+{% endif %}
 {% endcall %}
 <dialog id="benchmark-review" class="benchmark-review" aria-labelledby="benchmark-review-title">
 {% call card('Review this batch', header_id='benchmark-review-title', class_='mb-0') %}<p data-review-summary></p><div class="table-responsive"><table class="table table-sm" aria-label="Exact run targets"><thead><tr><th scope="col">Model</th><th scope="col">Node</th></tr></thead><tbody data-review-rows></tbody></table></div><p class="small text-secondary">Runs use the current settings on each selected node. Admission and permissions are rechecked before execution. Global pause applies to running work too.</p><div class="d-flex flex-wrap gap-2"><button type="submit" form="start-benchmark" class="btn btn-primary" data-confirm-batch>Queue reviewed runs</button><button type="button" class="btn btn-outline-secondary" data-review-close>Back to setup</button></div>{% endcall %}

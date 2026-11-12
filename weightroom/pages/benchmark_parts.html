@@ -36,10 +36,14 @@
 <span class="badge bg-{{ 'green' if node.state == 'ready' else 'orange' if node.state == 'unknown' else 'secondary' }}-lt">{{ {'ready':'Ready', 'unknown':'Status unknown', 'unavailable':'Unreachable', 'disabled':'Disabled', 'front':'Front host'}[node.state] }}</span>
 {%- endmacro %}
 
-{% macro run_controls(run) %}
+{% macro run_return(section, kind, benchmark) -%}
+{% if section == 'node-measurements' %}<input type="hidden" name="return_page" value="node-measurements"><input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="benchmark" value="{{ benchmark }}">{% endif %}
+{%- endmacro %}
+
+{% macro run_controls(run, section='', kind='', benchmark='') %}
 {% from 'parts.html' import confirm_two %}
 {% from 'icons.html' import icon %}
-{% if run.may_control %}<form method="post" action="/benchmarks/control" class="d-flex gap-1"><input type="hidden" name="run" value="{{ run.id }}">{% if run.state != 'creating' %}<button name="action" value="{{ 'resume' if run.state == 'paused' else 'pause' }}" class="btn btn-outline-secondary btn-sm benchmark-icon" title="{{ 'Resume' if run.state == 'paused' else 'Pause' }}" aria-label="{{ 'Resume' if run.state == 'paused' else 'Pause' }} {{ run.model }} at {{ run.location or 'compute' }}">{{ icon('play' if run.state == 'paused' else 'pause') }}</button>{% endif %}<button name="action" value="stop" class="btn btn-outline-danger btn-sm benchmark-icon" title="Stop" aria-label="Stop {{ run.model }} at {{ run.location or 'compute' }}" {{ confirm_two() }}>{{ icon('stop') }}</button></form>{% endif %}
+{% if run.may_control %}<form method="post" action="/benchmarks/control" class="d-flex gap-1">{{ run_return(section, kind, benchmark) }}<input type="hidden" name="run" value="{{ run.id }}">{% if run.state != 'creating' %}<button name="action" value="{{ 'resume' if run.state == 'paused' else 'pause' }}" class="btn btn-outline-secondary btn-sm benchmark-icon" title="{{ 'Resume' if run.state == 'paused' else 'Pause' }}" aria-label="{{ 'Resume' if run.state == 'paused' else 'Pause' }} {{ run.model }} at {{ run.location or 'compute' }}">{{ icon('play' if run.state == 'paused' else 'pause') }}</button>{% endif %}<button name="action" value="stop" class="btn btn-outline-danger btn-sm benchmark-icon" title="Stop" aria-label="Stop {{ run.model }} at {{ run.location or 'compute' }}" {{ confirm_two() }}>{{ icon('stop') }}</button></form>{% endif %}
 {% endmacro %}
 
 {% macro node_summary(node) %}
