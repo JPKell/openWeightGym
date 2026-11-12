@@ -16,6 +16,7 @@
 #fingerprints-table td:first-child, #fingerprints-table th:first-child { padding-left: 1.5rem; }
 #fingerprints-table td:last-child { padding-right: 1.5rem; font-variant-numeric: tabular-nums; }
 #fingerprints-table tr[data-selected="true"] td { background: var(--bs-primary-bg-subtle); }
+[data-fingerprint-page] #fingerprints-table [data-record] { cursor: pointer; }
 .fp-sort { appearance: none; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
 .fp-sort span { color: var(--bs-secondary-color); margin-left: .2rem; }
 .fp-record-link { display: inline-block; text-decoration: none; }

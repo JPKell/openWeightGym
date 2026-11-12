@@ -4,13 +4,13 @@
 {% from 'fingerprint_parts.html' import fingerprint_row %}
 {% block title %}Fingerprints · openWeightGym{% endblock %}
 {% block page_class %}fingerprint-page{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/fingerprint.css?v=1"><script src="/static/fingerprints.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/fingerprint.css?v=2"><script src="/static/fingerprints.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div data-fingerprint-page data-layout="explorer">
 {% if one %}
 <div id="found">{% include 'fingerprint_record.html' %}</div>
 {% else %}
-{% call page_header('Fingerprints', pretitle='Model provenance') %}<button type="button" class="btn btn-outline-secondary" data-fingerprint-export="archive-json"{% if not found %} disabled{% endif %} id="export-directory">Export results ↓</button>{% endcall %}
+{% call page_header('Fingerprints') %}<button type="button" class="btn btn-outline-secondary" data-fingerprint-export="archive-json"{% if not found %} disabled{% endif %} id="export-directory">Export results ↓</button>{% endcall %}
 <form method="get" action="/fingerprints" class="fp-search-form mb-2" id="lookup-form" role="search" hx-get="/fingerprints" hx-trigger="submit, input delay:300ms" hx-target="#found" hx-select="#found" hx-swap="outerHTML show:none" hx-replace-url="true">
   <input type="hidden" name="view" value="directory">
   <div class="fp-query"><label class="form-label" for="start">Fingerprint or model</label><input type="search" name="start" id="start" class="form-control" value="{{ start }}" placeholder="Paste a fingerprint or search…" aria-label="how the fingerprint begins" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
