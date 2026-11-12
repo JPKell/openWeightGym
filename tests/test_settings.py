@@ -149,3 +149,30 @@ def test_a_program_reads_its_defaults_under_its_own_file_and_keeps_what_it_write
     (folder / "weightroom.toml").write_text('compute = "http://10.0.0.1:8442"\ndata = "../data"\n[turnstile]\nhost = "0.0.0.0"\n')
     assert read_settings(folder / "weightroom.toml")["turnstile"] == {"wait": 180, "host": "0.0.0.0"}
     assert (turnstile.load_settings(folder / "weightroom.toml").wait, turnstile.load_settings(folder / "weightroom.toml").host) == (180, "0.0.0.0")
+
+
+@pytest.mark.parametrize("program", ["spotter", "turnstile"])
+def test_component_check_interval_is_configurable_and_validated(tmp_path, program):
+    from weightroom.setting_labels import sections
+    (tmp_path / "loadcoach.toml").write_text("")
+    path = tmp_path / ("spotter.toml" if program == "spotter" else "weightroom.toml")
+    prefix = "" if program == "spotter" else 'compute = "http://compute:8442"\n[turnstile]\n'
+    module = spotter if program == "spotter" else turnstile
+    path.write_text(prefix + "component_versions_every = 5\n")
+    initial = module.load_settings(path)
+    assert initial.component_versions_every == 5
+    if program == "spotter":
+        live, refused = taken(program, initial, {"component_versions_every": 2}, spotter.settings_from)
+        assert live.component_versions_every == 2 and not refused
+        refused_settings, refused = taken(program, live, {"component_versions_every": 0}, spotter.settings_from)
+        assert refused_settings is live and "component_versions_every" in refused
+        reset, refused = taken(program, live, {}, spotter.settings_from)
+        assert reset.component_versions_every == 5 and not refused
+    assert CHANGEABLE[program]["component_versions_every"] == "now"
+    for value in ("0", "-1", "true", '"five"', "nan", "inf"):
+        path.write_text(prefix + f"component_versions_every = {value}\n")
+        with pytest.raises(SystemExit, match="component_versions_every"):
+            module.load_settings(path)
+    setting = {"name": "component_versions_every", "value": 5, "when": "now"}
+    grouped = sections([{"program": program, "settings": [setting]}], compute_node=(program == "spotter"))
+    assert grouped[0]["title"] == ("Telemetry, power and idle" if program == "spotter" else "Alerts and monitoring")

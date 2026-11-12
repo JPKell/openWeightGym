@@ -86,6 +86,9 @@ class ConsoleSettings:
                     return error(403, 'This setting belongs in the program file.')
                 if value is not None and name in current and (why := wrong_kind(value, current[name])):
                     raise ValueError(f'{name}: {why}')
+                if name == 'component_versions_every' and value is not None:
+                    from loadcoach.component_versions import interval_seconds
+                    interval_seconds(value)
                 if program == 'turnstile' and name == 'image_adult_previews' and value is not None and type(value) is not bool:
                     raise ValueError('image_adult_previews must be true or false.')
                 if program == 'weightroom' and name == 'alert_gpu_temperature' and value is not None and (type(value) not in (int, float) or not 50 <= value <= 110):

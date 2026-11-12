@@ -29,6 +29,7 @@ LABELS = {
     'observation_window_seconds': ('Observation window', 'Alerts and monitoring', 's', 'number'),
     'observation_alert_hold_seconds': ('Alert hold time', 'Alerts and monitoring', 's', 'number'),
     'third_party_services': ('Third-party services to track', 'Alerts and monitoring', '', 'services'),
+    'component_versions_every': ('Component version check interval', 'Alerts and monitoring', 'min', 'number'),
     'sample_every': ('Sampling interval', 'Alerts and monitoring', 's', 'number'),
     'call_timeout': ('Tool call timeout', 'Tools', 's', 'number'),
     'toolsets': ('Tool collections', 'Tools', '', 'table'),
@@ -94,7 +95,7 @@ def sections(programs, *, compute_node=False):
                 continue
             title = describe(setting)['section']
             if compute_node:
-                if title == 'Power and idle' or setting['name'] == 'sample_every':
+                if title == 'Power and idle' or setting['name'] in ('sample_every', 'component_versions_every'):
                     title = 'Telemetry, power and idle'
                 elif title == 'Alerts and monitoring':
                     continue

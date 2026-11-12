@@ -4,6 +4,7 @@ from io import BytesIO
 import json
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 from zipfile import ZipFile
@@ -304,6 +305,7 @@ def test_restart_selects_source_before_restarting_services(tmp_path):
     source = 'source "$TEST_REPO/scripts/lib/ui.sh"\nui_init\n' + one_function('scripts/owg','control') + '''
 ROOT="$INSTALL"
 refresh_runtime_sources() { printf 'source:%s\\n' "$*" >> "$SOURCE_CALLS"; }
+refresh_component_versions() { printf 'versions:%s\\n' "$*" >> "$SOURCE_CALLS"; }
 owg_systemctl() { printf 'service:%s\\n' "$*" >> "$SOURCE_CALLS"; }
 control restart weightroom turnstile
 '''
@@ -312,7 +314,8 @@ control restart weightroom turnstile
     assert answer.returncode == 0, answer.stderr
     lines = calls.read_text().splitlines()
     assert lines == [f'source:{tmp_path}/installed weightroom turnstile',
-                     'service:restart weightroom.service','service:restart turnstile.service']
+                     'service:restart weightroom.service','service:restart turnstile.service',
+                     f'versions:{tmp_path}/installed']
 
 
 def test_restart_stops_if_source_selection_fails(tmp_path):
@@ -351,3 +354,48 @@ def test_update_selects_checkout_even_when_git_is_already_current(tmp_path, chec
         if index:
             assert 'Already up to date' in answer.stdout
     assert calls.read_text().splitlines() == ['--user daemon-reload','--user daemon-reload']
+
+
+def test_code_update_records_current_versions_in_the_node_store(tmp_path, checkout):
+    from loadcoach.component_versions import Versions, git_version
+    from test_component_versions import program
+
+    origin = checkout.parent / "origin"
+    module = origin / "loadcoach/component_versions.py"
+    module.parent.mkdir()
+    shutil.copyfile(ROOT / "loadcoach/component_versions.py", module)
+    git("-C", origin, "add", ".")
+    git("-C", origin, "commit", "-m", "publish component recorder")
+    interpreter = checkout / ".venv/bin/python"
+    interpreter.parent.mkdir(parents=True)
+    # Keep the test environment's dependencies; a bare interpreter symlink loses its venv.
+    interpreter.write_text(f'#!/bin/sh\nexec {shlex.quote(sys.executable)} "$@"\n')
+    interpreter.chmod(0o755)
+    (checkout / "settings").mkdir()
+    executable = program(tmp_path, "llama-server", "version: b2026")
+    store = checkout / "data/core.db"
+    (checkout / "settings/loadcoach.toml").write_text(f'llama_server = "{executable}"\ndatabase = "{store}"\n')
+    for _ in range(2):  # even an already-current checkout must refresh its recorded identities
+        answer = run_update(tmp_path, checkout)
+        assert answer.returncode == 0, answer.stdout + answer.stderr
+        versions = Versions(store)
+        assert versions.read()["suite"]["version"] == git_version(checkout)
+        assert versions.read()["llama_cpp"]["version"] == "b2026"
+        versions.db.close()
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+@pytest.mark.parametrize("action", ["start", "restart", "stop"])
+def test_service_control_records_versions_only_after_success(tmp_path, action):
+    source = 'source "$TEST_REPO/scripts/lib/ui.sh"\nui_init\n' + one_function("scripts/owg", "control") + '''
+ROOT="$INSTALL"
+refresh_runtime_sources() { :; }
+refresh_component_versions() { echo recorded; }
+owg_systemctl() { return "$SERVICE_STATUS"; }
+control "$TEST_ACTION" loadcoach
+'''
+    for status in (0, 1):
+        answer = shell(tmp_path, source, env={"INSTALL": str(tmp_path / "installed"),
+                       "TEST_ACTION": action, "SERVICE_STATUS": str(status)})
+        assert answer.returncode == status
+        assert ("recorded" in answer.stdout) == (status == 0 and action != "stop")

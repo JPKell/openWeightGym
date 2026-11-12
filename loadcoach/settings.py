@@ -66,7 +66,7 @@ def program_name(program: str) -> str:
 CHANGEABLE: dict[str, dict[str, str]] = {
     "loadcoach": {"engines": RESTART, "llama_server": RESTART, "disabled_gpus": NOW, "engine_gpus": NOW, "load_timeout": NOW, "max_wait": NOW, "max_estimated_wait": NOW, "keep_days": NOW, "keep_text": NOW, "batch_keep_days": NOW, "unlogged": NOW, "card_margin": NOW, "model_idle_minutes": NOW, "host_ram_headroom_mib": NOW, "host_ram_limit_mib": NOW, "cpu_idle_minutes": NOW, "disable_ram_offload": RESTART, "models_folder": RESTART, "models_storage_folder": RESTART, "model_defaults": NOW},
     "toollocker": {"call_timeout": NOW, "toolsets": NOW, "tool_levels": NOW},
-    "spotter": {"sample_every": NOW, "keep_days": NOW, "sleep_after": NOW, "busy_gpu": NOW, "busy_processor": NOW, "files_every": NOW},
+    "spotter": {"sample_every": NOW, "keep_days": NOW, "sleep_after": NOW, "busy_gpu": NOW, "busy_processor": NOW, "files_every": NOW, "component_versions_every": NOW},
     "voice": {"max_active_sessions": NOW, "max_starting_sessions": NOW, "max_session_minutes": NOW, "idle_seconds": NOW, "hold_seconds": NOW,
               "hold_every": NOW, "hold_after_last_call": NOW, "speech_threshold": NOW, "profiles": NOW, "greetings": NOW, "model_parallel": RESTART},  # fmt: skip
     "voice-gateway": {"modes": NOW, "profile": NOW, "soundroom_profile": NOW, "startup_seconds": NOW, "max_active_sessions": NOW, "max_starting_sessions": NOW,
@@ -76,7 +76,7 @@ CHANGEABLE: dict[str, dict[str, str]] = {
                    "observation_error_percent": NOW, "observation_p95_seconds": NOW, "observation_min_samples": NOW,
                    "observation_window_seconds": NOW, "observation_alert_hold_seconds": NOW,
                    **{f"audio_{kind}_model": RESTART for kind in ("lyrics", "music", "sound", "speech", "transcription")}},
-    "turnstile": {"wait": RESTART, "artifact_machine": RESTART, "image_adult_previews": NOW, "files_every": NOW,
+    "turnstile": {"wait": RESTART, "artifact_machine": RESTART, "image_adult_previews": NOW, "files_every": NOW, "component_versions_every": NOW,
                   "models_folder": NOW, "models_storage_folder": NOW, "allow_caller_to_specify_destination": NOW},
 }
 SECRET = re.compile(r"(^|_)(key|token|secret|password)$")  # a setting with such a name is never handed out

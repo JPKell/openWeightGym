@@ -1,9 +1,11 @@
 """Node-local installed versions, shared by Components, Spotter and the installer."""
 
 import asyncio
+import math
 import re
 import socket
 import subprocess
+import sys
 import time
 import tomllib
 from pathlib import Path
@@ -14,6 +16,13 @@ from db.schemas import COMPONENT_VERSIONS
 
 ROOT = Path(__file__).resolve().parents[1]
 EVERY = 60 * 60
+
+
+def interval_seconds(minutes) -> float:
+    """Validate the live version-check interval before using or saving it."""
+    if type(minutes) not in (int, float) or not math.isfinite(minutes) or minutes <= 0:
+        raise ValueError("component_versions_every must be a finite number of minutes above 0")
+    return minutes * 60
 
 
 def git_version(root: Path) -> str:
@@ -75,7 +84,8 @@ async def reported_version(executable: str) -> str:
 class Versions:
     """One persisted suite identity per host, and one reported identity per installed engine."""
 
-    def __init__(self, source, root: Path = ROOT):
+    def __init__(self, source, root: Path = ROOT, *, minutes=EVERY / 60):
+        self.every = interval_seconds(minutes)
         self.source, self.root = database(source), root
         self.db = self.source.connect(check_same_thread=False)
         migrate(self.source, self.db, "components.versions", COMPONENT_VERSIONS)
@@ -105,7 +115,7 @@ class Versions:
     async def refresh(self, config=None, settings: Path | None = None, force=False) -> None:
         """Refresh due versions; each failure is isolated so every engine gets checked."""
         before = self.read()
-        due = lambda name: force or time.time() - before.get(name, {}).get("version_checked", 0) >= EVERY
+        due = lambda name: force or time.time() - before.get(name, {}).get("version_checked", 0) >= self.every
         if not self.suite_checked or due("suite"):
             await self.suite()
         if config is None:
@@ -134,10 +144,22 @@ class Versions:
             except (OSError, ValueError, TimeoutError, subprocess.SubprocessError) as problem:
                 self.save(name, "", str(problem)[:512])
 
+    async def watch(self, *, settings=None, minutes, gate) -> None:
+        """Check independently of page visits, respecting maintenance and live settings."""
+        while True:
+            await gate.wait()
+            try:
+                self.every = interval_seconds(minutes())
+                await self.refresh(settings=settings)
+            except (OSError, ValueError) as problem:
+                print(f"Component versions could not be checked: {problem}", file=sys.stderr, flush=True)
+            # Re-read settings within a minute, even when the configured interval is longer.
+            await asyncio.sleep(min(self.every, 60))
+
     async def attach(self, report: dict) -> dict:
         """Add saved versions to a live inventory; page requests never invoke an engine."""
         saved = self.read()
-        if not self.suite_checked or time.time() - saved.get("suite", {}).get("version_checked", 0) >= EVERY:
+        if not self.suite_checked or time.time() - saved.get("suite", {}).get("version_checked", 0) >= self.every:
             await self.suite()
             saved = self.read()
         for kind in ("services", "engines"):

@@ -235,7 +235,8 @@ def test_the_console_page_shows_every_machine_with_each_component_installed_or_n
     assert shell.status_code == 200 and 'id="components-report"' in shell.text and "data-deferred-loader" in shell.text
     assert 'href="/system/components" aria-current="page"' in shell.text  # listed under System, and the page shown
     part = browser.get("/system/components?part=page")
-    assert part.status_code == 200 and part.text.lstrip().startswith('<div id="components-report">')
+    assert part.status_code == 200 and part.text.lstrip().startswith('<div id="components-report" ')
+    assert 'hx-get="/system/components?part=page" hx-trigger="every 30s" hx-swap="outerHTML"' in part.text
     cards = re.findall(r'<article class="card mb-3 component-card" aria-label="([^"]+)">(.*?)</article>', part.text, re.S)
     assert [title for title, _ in cards] == ["Front", "compute"]
     missing = {}
@@ -277,13 +278,15 @@ def test_component_versions_fit_and_survive_fragment_replacement(desk, systemd, 
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         page.set_viewport_size({"width": width, "height": 1000})
+        page.clock.install()
         page.goto("http://console.test/system/components")
         report = page.locator("#components-report")
         playwright.expect(report).to_contain_text("Version: " + version)
         playwright.expect(report).to_contain_text("Version: b1234 (deadbeef)")
         playwright.expect(report).to_contain_text("Version: Unknown")
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-        page.evaluate("async () => { await htmx.ajax('GET', '/system/components?part=page', {target: '#components-report', swap: 'outerHTML'}); }")
+        version = "v1.2.4 (updated123456)"
+        page.clock.fast_forward(30001)
         playwright.expect(report).to_contain_text("Version: " + version)
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         browser.close()

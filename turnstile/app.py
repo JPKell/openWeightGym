@@ -52,6 +52,7 @@ from starlette.routing import Route
 from db import DatabaseRegistry
 from db.maintenance import Barrier, Gate
 from loadcoach import statement
+from loadcoach.component_versions import interval_seconds
 from loadcoach.config import CLI, read_settings, model_places
 from loadcoach.groups import read_group
 from loadcoach.log import FRONT, Log, machine_slot, public_number, origin_number
@@ -121,6 +122,7 @@ class Settings:
     models_storage_folder: str = ""  # optional model library on front; empty disables this tier
     image_adult_previews: bool = False  # permit individual users to opt in to adult Civitai previews
     files_every: float = 10  # minutes between looks through front's own model folders for the Files page. 0: only when asked
+    component_versions_every: float = 60  # minutes between installed component version checks
     compute_offset: int = 0  # how far compute's ports sit from `ports`, from the port in compute's URL. 0 unless both run on one machine
 
     def upstream(self, port: int) -> str:
@@ -173,6 +175,7 @@ def load_settings(path: Path) -> Settings:
                 raise TypeError("allow_caller_to_specify_destination must be a boolean")
             if type(settings.image_adult_previews) is not bool:
                 raise TypeError("image_adult_previews must be a boolean")
+            interval_seconds(settings.component_versions_every)
             if type(settings.files_every) not in (int, float) or settings.files_every < 0:
                 raise TypeError("files_every is a number of minutes, 0 or more")
             if not isinstance(settings.toollocker_url, str):
@@ -217,6 +220,7 @@ def say_what_runs(path: Path, settings: Settings) -> None:
                "voice_port": settings.voice_port, "artifact_machine": artifact_machine,
                "models_folder": settings.models_folder, "models_storage_folder": settings.models_storage_folder,
                "image_adult_previews": settings.image_adult_previews, "files_every": settings.files_every,
+               "component_versions_every": settings.component_versions_every,
                "allow_caller_to_specify_destination": settings.allow_caller_to_specify_destination}
     (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))))
 
@@ -290,7 +294,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     component_settings = Path(settings.path).parent / "loadcoach.toml" if settings.path else None
     component_source = (kept_by_loadcoach(component_settings)[1] if component_settings and component_settings.is_file()
                         else stores.database("weightroom.accounts"))
-    component_versions = Versions(component_source)
+    component_versions = Versions(component_source, minutes=settings.component_versions_every)
     passive_reads = contextvars.ContextVar("turnstile_passive_reads", default=False)
     users = users or Users(stores.database("weightroom.accounts"), settings.groups)
     # The one event log: what was done here to the accounts, and since milestone 91 every entry compute sends.
@@ -854,15 +858,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     console_settings = ConsoleSettings(stores.database('weightroom.accounts'), log, ask_compute, settings.keep_console_settings_on_front,
                                    programs=FRONT_PROGRAMS | {'toollocker'} if settings.toollocker_url else FRONT_PROGRAMS)
 
+    configured_versions_every = settings.component_versions_every
     configured_file_roots = {name: getattr(settings, name) for name in ('models_folder', 'models_storage_folder')}
     if settings.path and Path(settings.path).is_file():
         configured = read_settings(Path(settings.path)).get('turnstile', {})
+        configured_versions_every = configured.get('component_versions_every', 60)
         configured_file_roots = {name: configured.get(name, '') for name in configured_file_roots}
 
     def front_file_roots():
         """Read current front storage settings without depending on any compute node."""
         changed = console_settings.changes.of('turnstile')
         return {name: changed.get(name, value) for name, value in configured_file_roots.items()}
+
+    def versions_every() -> float:
+        """Read Front's live interval, restoring the file default after a reset."""
+        return console_settings.changes.of('turnstile').get('component_versions_every', configured_versions_every)
 
     def front_files_every() -> float:
         """Seconds between looks through front's own folders, as saved on the site now."""
@@ -2832,6 +2842,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         tasks = [asyncio.create_task(tidy()), asyncio.create_task(machines.run()), asyncio.create_task(rotate_due_keys()),
                  asyncio.create_task(checkpoint_installations())]
         await task_records.retry_publication()
+        tasks.append(asyncio.create_task(component_versions.watch(
+            settings=component_settings, minutes=versions_every, gate=gate)))
         batch_work.resume(users.by_name)
         if plugins:
             tasks += [asyncio.create_task(plugins.controller.run())]

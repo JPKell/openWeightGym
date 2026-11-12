@@ -200,6 +200,9 @@ image_adult_previews = false
 # once, and the files the page moves, copies, deletes or downloads are put right straight away.
 # Only files that are new or have changed are read. 0 means only when asked. Changes apply immediately.
 files_every = 10
+
+# Check installed service and engine versions this often, in minutes (above 0). Changes apply immediately.
+component_versions_every = 60
 # Days the event log is kept on this machine: compute's requests and what was done here to the
 # accounts and roles. Older entries are removed once a day. 0 keeps everything.
 keep_days = 90

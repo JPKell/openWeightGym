@@ -62,8 +62,15 @@ def front(tmp_path, monkeypatch):
     compute, woken = Compute(machine_key(tmp_path)), []
     settings = Settings(compute="compute", data=str(tmp_path), wake_mac=MAC, wake_address="10.0.0.255", wait=0.5, machine_key_file=str(tmp_path / "machine.key"))
     app = build_app(settings, httpx.AsyncClient(transport=compute), lambda *sent: woken.append(sent), users=users)
-    with TestClient(app, base_url="http://front:8442") as coach, TestClient(app, base_url="http://front:8443") as door, TestClient(app, base_url="http://front:80") as other:
-        yield coach, door, other, compute, woken, good
+    # These ports belong to one process: start its lifespan once, not once per client.
+    with TestClient(app, base_url="http://front:8442") as coach:
+        door = TestClient(app, base_url="http://front:8443")
+        other = TestClient(app, base_url="http://front:80")
+        try:
+            yield coach, door, other, compute, woken, good
+        finally:
+            door.close()
+            other.close()
 
 
 def test_a_request_goes_on_with_a_statement_in_place_of_its_key(front):

@@ -120,6 +120,14 @@ refresh_runtime_sources() {
     "$root/scripts/update-runtime-source.py" "${options[@]}"
 }
 
+# Update the same node-local records returned by the Components API, without rebuilding engines.
+refresh_component_versions() {
+  local root=$1
+  [[ -x $root/.venv/bin/python && -f $root/loadcoach/component_versions.py ]] || return 0
+  ui_step "Recording component versions" -- as_owner "$root/.venv/bin/python" \
+    -m loadcoach.component_versions --root "$root"
+}
+
 # The journal of the installation's programs: owg_journalctl --user-unit X.service [options]
 owg_journalctl() {
   local owner=${OWG_OWNER:-${RECEIPT[service_user]:-}}

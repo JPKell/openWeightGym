@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from loadcoach.component_versions import EVERY, Versions, git_version, reported_version, update_installation
+from loadcoach.component_versions import EVERY, Versions, git_version, interval_seconds, reported_version, update_installation
 from test_setup_recovery import ROOT, one_function, shell
 
 
@@ -167,3 +167,105 @@ die() { printf '%s\\n' "$@" >&2; exit 1; }
         versions = Versions(tmp_path / "core.db")
         assert versions.read()["llama_cpp"]["version"] == "b2026 (abcd)"
         versions.db.close()
+
+
+@pytest.mark.parametrize("minutes", [0, -1, True, "5", float("nan"), float("inf")])
+def test_version_interval_rejects_invalid_values(minutes):
+    with pytest.raises(ValueError, match="component_versions_every"):
+        interval_seconds(minutes)
+
+
+def test_configured_interval_refreshes_both_suite_and_native_versions(tmp_path, monkeypatch, version_checkout):
+    root, advance = version_checkout
+    now = [10000]
+    monkeypatch.setattr("loadcoach.component_versions.time.time", lambda: now[0])
+    executable = program(tmp_path, "llama-server", "version: b77")
+    config = SimpleNamespace(engines={}, llama_server=executable)
+    versions = Versions(tmp_path / "versions.db", root, minutes=5)
+    asyncio.run(versions.refresh(config))
+    previous = versions.read()["suite"]["version"]
+    current = advance()
+    now[0] += 299
+    asyncio.run(versions.refresh(config))
+    assert versions.read()["suite"]["version"] == previous
+    assert len((tmp_path / "calls").read_text().splitlines()) == 1
+    now[0] += 1
+    asyncio.run(versions.refresh(config))
+    assert versions.read()["suite"]["version"] == current
+    assert len((tmp_path / "calls").read_text().splitlines()) == 2
+    versions.db.close()
+
+
+def test_background_checker_reads_live_interval_and_recovers_after_a_failed_check(tmp_path, monkeypatch, capsys):
+    versions = Versions(tmp_path / "versions.db")
+    minutes, checks, waits, sleeps = [60], [], [], []
+
+    async def wait():
+        waits.append(True)
+
+    async def refresh(**kwargs):
+        checks.append((versions.every, kwargs["settings"]))
+        if len(checks) == 1:
+            raise OSError("store unavailable")
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+        minutes[0] = 0.5
+        if len(sleeps) == 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(versions, "refresh", refresh)
+    monkeypatch.setattr("loadcoach.component_versions.asyncio.sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(versions.watch(settings=tmp_path / "loadcoach.toml", minutes=lambda: minutes[0],
+                                   gate=SimpleNamespace(wait=wait)))
+    assert [every for every, _ in checks] == [3600, 30]
+    assert all(path == tmp_path / "loadcoach.toml" for _, path in checks)
+    assert len(waits) == 2 and sleeps == [60, 30]
+    assert "store unavailable" in capsys.readouterr().err
+    versions.db.close()
+
+
+def test_front_runs_a_checker_and_applies_saved_interval_changes_and_resets(tmp_path, monkeypatch):
+    import threading
+    import httpx
+    from starlette.testclient import TestClient
+    from loadcoach.groups import Group
+    from loadcoach.settings import said
+    from loadcoach.users import Users
+    from test_turnstile import Compute
+    from front_helpers import machine_key
+    from turnstile.app import build_app, load_settings
+
+    path = tmp_path / "weightroom.toml"
+    path.write_text('compute = "http://compute:8442"\n[turnstile]\nkeep_console_settings_on_front = true\ncomponent_versions_every = 5\n')
+    entered, cancelled, captured = threading.Event(), threading.Event(), {}
+
+    async def watch(self, **kwargs):
+        captured.update(kwargs)
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(Versions, "watch", watch)
+    users = Users(str(tmp_path / "accounts.db"), {"admin": Group(can=frozenset({"manage-settings"}))})
+    users.add("pat", "admin")
+    headers = {"authorization": "Bearer " + users.new_key("pat")}
+    app = build_app(load_settings(path), httpx.AsyncClient(transport=Compute(machine_key(tmp_path))), users=users)
+    changes = app.state.console_settings.changes
+    changes.seen("turnstile", said({"component_versions_every": 5}, {"component_versions_every": 5}, {}))
+    with TestClient(app, base_url="http://front:8442") as client:
+        assert entered.wait(2)
+        assert captured["settings"] == tmp_path / "loadcoach.toml"
+        assert captured["minutes"]() == 5
+        for value in (0, -1, True, "invalid"):
+            assert client.post("/loadcoach/settings/turnstile", json={"component_versions_every": value}, headers=headers).status_code == 400
+        assert not changes.of("turnstile")
+        assert client.post("/loadcoach/settings/turnstile", json={"component_versions_every": 10}, headers=headers).status_code == 200
+        assert captured["minutes"]() == 10
+        assert client.post("/loadcoach/settings/turnstile", json={"component_versions_every": None}, headers=headers).status_code == 200
+        assert captured["minutes"]() == 5
+    assert cancelled.is_set()
+    users.db.close()
