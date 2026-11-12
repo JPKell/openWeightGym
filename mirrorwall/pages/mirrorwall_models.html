@@ -10,12 +10,11 @@
 {% endblock %}
 {% block main %}
 <div id="image-studio" data-manage="{{ 'true' if studio_manage else 'false' }}">
-{% call page_header('Images', pretitle='MODEL & WORKFLOW LIBRARY') %}
+{% call page_header('Images') %}
 <a href="/chat/images" class="btn btn-outline-secondary">Generate images</a>
 {% if studio_manage %}<button id="mw-new" class="btn btn-outline-secondary">Add image model</button>{% endif %}
 <button id="studio-new-workflow" class="btn btn-primary" disabled>New workflow</button>
 {% endcall %}
-<p class="mb-1">Set up a model once. Give every idea its own workflow.</p><p class="small text-secondary mb-4">Files and hardware belong to the model. Image settings live in named, versioned workflows.</p>
 {% call alert('danger', role='alert', attrs={'id':'studio-error','hidden':''}) %}{% endcall %}
 <p id="studio-status" class="small" role="status" aria-live="polite"></p>
 <div class="image-workspace">
