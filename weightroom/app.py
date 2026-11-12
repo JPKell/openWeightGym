@@ -1800,7 +1800,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, 'refused.html', person, status=403, why='Your account may not add, change and remove models.')
         asked = request.query_params
         kind = asked.get('kind', 'llm')
-        if kind not in ('llm', 'image', 'audio'):
+        if kind not in ('all', 'llm', 'image', 'audio'):
             kind = 'llm'
         part = asked.get('part') if asked.get('complete') != '1' else None
         shown_node = asked.get('node', '')
@@ -1828,14 +1828,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if isinstance(known, Response):
             return fragment_error(request, person, 'models', 'list', known) if part == 'list' else known
         kinds = {"sdcpp": "image", "audiocpp": "audio"}
-        known['models'] = [one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == kind]
-        measuring = measure_button(known['models'], node_measuring(known, shown_node), shown_node)
+        known['models'] = [one for one in known['models'] if kind == 'all' or kinds.get(one.get('engine'), 'llm') == kind]
+        measuring = measure_button([one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == 'llm'],
+                                   node_measuring(known, shown_node), shown_node)
         wanted_jobs = asked.getlist("install")
         progress = await ask("GET", "/turnstile/artifacts/distributions", person.key) if wanted_jobs else None
         installations = [job for job in progress.json().get("distributions", []) if job["id"] in wanted_jobs] if progress and progress.is_success else []
         if part == "list":  # the list asking for itself again
             return page(request, "models_list.html", person, known=known, address=lambda label: node_model_address(request, label),
-                        kind=kind, installations=installations, adaptor_models=plugins.models(person.me) if kind == 'llm' else [],
+                        kind=kind, installations=installations, adaptor_models=plugins.models(person.me) if kind in ('all', 'llm') else [],
                         measuring=measuring, measure_oob=True)
         names = [node["name"] for node in node_choices]
         add_nodes = ((form or {}).get("nodes") or asked.getlist("add_to") or ([shown_node] if shown_node else names if len(names) == 1 else []))
@@ -1866,7 +1867,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             chosen_engine, engine_schema = enabled_engines[0]["id"], enabled_engines[0]["schema"]
         chosen = next((row for row in engine_choices if row['id'] == chosen_engine), {})
         known['cards'] = chosen.get('cards') or [card['card'] for node in node_choices if node['name'] in (add_nodes or names) for card in node.get('cards', [])]
-        available = await ask("GET", "/turnstile/models/files", person.key) if kind == 'llm' else None
+        available = await ask("GET", "/turnstile/models/files", person.key) if kind in ('all', 'llm') else None
         file_nodes = available.json().get("nodes", []) if available and available.is_success else []
         # The chosen nodes' own files come first; a file anywhere else is copied to them.
         ordered = sorted(file_nodes, key=lambda row: row['name'] not in add_nodes)
@@ -1879,7 +1880,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     file_nodes=file_nodes, node_choices=node_choices, shown_node=shown_node, add_nodes=add_nodes,
                     engine_choices=engine_choices, selected_engine=chosen_engine, engine_schema=engine_schema,
                     said=said or asked.get("said", ""), failed=failed, form=form or {}, address=lambda label: node_model_address(request, label),
-                    adaptor_models=plugins.models(person.me) if kind == 'llm' else [], measuring=measuring)  # fmt: skip
+                    adaptor_models=plugins.models(person.me) if kind in ('all', 'llm') else [], measuring=measuring)  # fmt: skip
 
     async def measure_on_nodes(person: Person, nodes: dict[str, dict], stop: bool, copies: set[tuple[str, str]] | None = None,
                                merged: bool = True) -> str | None:

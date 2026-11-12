@@ -89,3 +89,52 @@ def test_live_catalogue_keeps_filters_details_scroll_and_add_draft_on_refresh(de
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not errors
         browser.close()
+
+
+@pytest.mark.parametrize('width', [1440,390])
+def test_search_between_pills_and_all_models_preserves_type_and_node_filters(desk, tmp_path, width):
+    server, _, _ = desk
+    library = Models(str(tmp_path / 'loadcoach.db'))
+    for name, engine in [('language','llama_cpp'),('picture','sdcpp'),('song','audiocpp')]:
+        settings = {'engine':engine, 'gpus':0, 'flags':{'model':gguf(tmp_path / (name+'.gguf')),
+                    'ctx-size':8192 if engine == 'llama_cpp' else 0}}
+        if engine == 'sdcpp':
+            settings['sdcpp'] = {'family':'sdxl','split_mode':'single'}
+        if engine == 'audiocpp':
+            settings['audiocpp'] = {'family':'ace_step','kind':'music','path':settings['flags']['model']}
+        library.put(name,settings)
+    sign_in(server,'jordan')
+    with playwright.sync_playwright() as engine:
+        browser,page = browser_context(engine,server)
+        page.set_viewport_size({'width':width,'height':1000})
+        errors = []
+        page.on('pageerror',lambda error:errors.append(str(error)))
+        page.goto('http://console.test/models')
+        nodes = page.get_by_role('navigation',name='Compute node',exact=True)
+        types = page.get_by_role('navigation',name='Model type',exact=True)
+        search = page.locator('[data-catalogue-filters]')
+        assert nodes.bounding_box()['y'] + nodes.bounding_box()['height'] <= search.bounding_box()['y']
+        assert search.bounding_box()['y'] + search.bounding_box()['height'] <= types.bounding_box()['y']
+        types.get_by_role('link',name='All models',exact=True).click()
+        playwright.expect(types.get_by_role('link',name='All models',exact=True)).to_have_attribute('aria-current','page')
+        rows = page.locator('#models-table [data-catalogue-row]')
+        playwright.expect(rows).to_have_count(3)
+        playwright.expect(page.locator('#models-overview .kpi-value').first).to_have_text('3')
+        playwright.expect(page.locator('#models-table')).to_contain_text('8,192')
+        playwright.expect(page.locator('#models-table')).to_contain_text('sdxl')
+        playwright.expect(page.locator('#models-table')).to_contain_text('ace_step')
+        playwright.expect(page.locator('#file')).to_be_visible()
+        nodes.get_by_role('link',name='compute',exact=True).click()
+        assert 'kind=all' in page.url and 'node=compute' in page.url
+        playwright.expect(rows).to_have_count(3)
+        page.evaluate('htmx.ajax("GET","/models?part=list&kind=all&node=compute",{target:"#models",swap:"outerHTML"})')
+        playwright.expect(rows).to_have_count(3)
+        playwright.expect(page.locator('#models')).to_have_attribute('hx-get','/models?part=list&node=compute&kind=all')
+        for label, name in [('LLM','language'),('Image','picture'),('Audio','song')]:
+            types.get_by_role('link',name=label,exact=True).click()
+            playwright.expect(rows).to_have_count(1)
+            playwright.expect(rows.first).to_have_attribute('data-name',name)
+            playwright.expect(types.get_by_role('link',name='All models',exact=True)).to_have_attribute('href','/models?kind=all&node=compute')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not errors
+        browser.close()
