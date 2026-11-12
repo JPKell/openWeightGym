@@ -7,7 +7,7 @@
   const drafts=new Map(), histories=new Map(), selections=new Map();
   const keys=['width','height','n','upscale','steps','seed','sampler','scheduler','guidance','cfg_scale','reference_megapixels','strength'];
   let library={models:[],presets:[],can_manage:false}, models=[], selected=null, workflowID=null, saving=false, historyEpoch=0;
-  let inventoryReady=!manage, workflowsReady=false;
+  let inventoryReady=!manage, workflowsReady=false, loading=false;
   const copy=value=>structuredClone(value);
   const template=id=>document.getElementById(id).content.firstElementChild.cloneNode(true);
   const text=(node,selector,value)=>{node.querySelector(selector).textContent=value;};
@@ -20,10 +20,12 @@
     const value=await response.json(); if(!response.ok) throw new Error(value.error?.message || 'Image workflows are unavailable.'); return value;
   }
   const current=()=>library.presets.find(row=>row.id===workflowID);
+  const modelKey=m=>m?.key || m?.id;
+  const catalogueModel=m=>library.models.find(row=>m.model_id && row.model_id?row.model_id===m.model_id:row.id===(m.workflow_id || m.id));
   const key=()=>selected?(selected.model_id || selected.id)+'/'+(workflowID || 'new'):null;
   function available() {
     if(!selected) return null;
-    return library.models.find(row=>selected.model_id && row.model_id?row.model_id===selected.model_id:row.id===selected.id);
+    return catalogueModel(selected);
   }
   function profile() { return selected?.image_workflow || {}; }
   function belongs(row) { return selected && (row.model_id && selected.model_id?row.model_id===selected.model_id:row.model===selected.id); }
@@ -67,16 +69,17 @@
   function rows() { return library.presets.filter(belongs); }
   function showModels() {
     const search=$('model-search').value.toLowerCase(); $('model-list').replaceChildren();
-    models.filter(m=>(m.id+' '+m.image_workflow?.family).toLowerCase().includes(search)).forEach(m=>{
+    models.filter(m=>(m.id+' '+(m.node || '')+' '+m.image_workflow?.family).toLowerCase().includes(search)).forEach(m=>{
       const button=template('model-option'); button.dataset.model=m.id; button.setAttribute('aria-pressed',String(m===selected));
-      text(button,'[data-name]',m.id); text(button,'[data-detail]',SuiteImageProfiles.spec(m.image_workflow?.family).label);
+      if(m.node) button.dataset.node=m.node;
+      text(button,'[data-name]',m.id); text(button,'[data-detail]',[SuiteImageProfiles.spec(m.image_workflow?.family).label,m.node].filter(Boolean).join(' · '));
       text(button,'.model-monogram',m.image_workflow?.family?.startsWith('qwen')?'Q':m.image_workflow?.family==='sdxl'?'SD':'F');
       const count=library.presets.filter(row=>row.model_id && m.model_id?row.model_id===m.model_id:row.model===m.id).length;
-      text(button,'[data-count]',count); button.onclick=()=>select(m); button.disabled=saving;
+      text(button,'[data-count]',count); button.onclick=()=>select(m); button.disabled=saving || loading;
       $('model-list').append(button);
     });
     $('models-empty').hidden=Boolean($('model-list').children.length);
-    $('models-empty').textContent=models.length?'No models match your search.':'No image models on this node. Add an image model to begin.';
+    $('models-empty').textContent=models.length?'No models match your search.':'No image models in this selection. Add an image model to begin.';
   }
   function showWorkflows() {
     const all=rows(), search=$('workflow-search').value.toLowerCase(), visibility=$('visibility').value;
@@ -87,7 +90,7 @@
       text(button,'[data-name]',w.name); text(button,'[data-version]','v'+w.version);
       const settings={...SuiteImageProfiles.spec(profile().family).defaults,...profile().defaults,...w.settings};
       text(button,'[data-detail]',`${settings.width} × ${settings.height} · ${settings.steps} steps · ${settings.n} image${settings.n===1?'':'s'}`);
-      text(button,'[data-sharing]',w.published?'↗ Shared workflow':'○ Personal workflow'); button.disabled=saving;
+      text(button,'[data-sharing]',w.published?'↗ Shared workflow':'○ Personal workflow'); button.disabled=saving || loading;
       button.onclick=()=>{remember(); workflowID=w.id; showWorkflows(); showEditor();}; $('workflow-list').append(button);
     });
     $('workflow-empty').hidden=!selected || all.length>0; $('no-match').hidden=!all.length || matching.length>0;
@@ -114,7 +117,7 @@
   function showEditor() {
     const p=profile(), rules=SuiteImageProfiles.spec(p.family), row=current();
     const draft=drafts.get(key()) || baseline();
-    $('workflow-fields').disabled=!selected || saving;
+    $('workflow-fields').disabled=!selected || saving || loading;
     field('name').value=draft.name; field('name').maxLength=100; field('shared').checked=draft.published;
     keys.forEach(name=>field(name).value=draft.settings[name] ?? '');
     field('negative_prompt').value=draft.settings.negative_prompt || '';
@@ -136,7 +139,7 @@
     field('shared').disabled=Boolean(row) || !library.can_manage;
     $('sharing-note').textContent=row?'Duplicate this workflow to change its visibility.':library.can_manage?'Shared workflows can be used by other authorized users.':'Personal workflows are visible only to you.';
     $('save').textContent=row?.published && !library.can_manage?'Save personal copy':row?'Save new version':'Save workflow';
-    $('save').disabled=!selected || !available() || saving; $('duplicate').disabled=!selected || !row || saving;
+    $('save').disabled=!selected || !available() || saving || loading; $('duplicate').disabled=!selected || !row || saving || loading;
     SuiteImageProfiles.help($('workflow-helper'),p.family,values=>{
       for(const [name,value] of Object.entries(values)) if(field(name) && !field(name).disabled && Number(value)<=Number(field(name).max || Infinity)) field(name).value=value;
       mark(); announce('Suggested settings applied to the draft. Review the model limits before saving.');
@@ -147,33 +150,52 @@
     if(saving) return; remember(); if(selected) selections.set(selected.model_id || selected.id,workflowID); selected=m;
     const remembered=selections.get(m.model_id || m.id);
     workflowID=remembered===null?null:rows().find(w=>w.id===(remembered || params.get('workflow')))?.id || rows()[0]?.id || null;
-    const next=new URL(location.href); next.searchParams.delete('new'); next.searchParams.set('model',m.id); history.replaceState(null,'',next);
+    const next=new URL(location.href); next.searchParams.delete('new'); next.searchParams.set('model',m.id);
+    if(m.node) next.searchParams.set('model_node',m.node); else next.searchParams.delete('model_node');
+    history.replaceState(null,'',next);
     $('model-name').textContent=m.id; $('family').textContent=SuiteImageProfiles.spec(profile().family).label;
     $('model-detail').textContent=m.node?`${m.node} · ${m.flags?.model?.split('/').pop() || ''}`:'Image model';
     $('unavailable').hidden=Boolean(available()); $('unavailable').textContent='This model is unavailable in your current image catalogue. Saved drafts are kept; workflow saves need a reachable, permitted model.';
     $('new-workflow').disabled=!available();
-    if(manage) { $('edit-model').disabled=false; document.dispatchEvent(new CustomEvent('weightroom:image-select',{detail:{name:m.id}})); }
+    if(manage) { $('edit-model').disabled=false; document.dispatchEvent(new CustomEvent('weightroom:image-select',{detail:{name:m.id,node:m.node}})); }
     showModels(); showWorkflows(); showEditor();
   }
   function mapInventory(items,node) {
-    return items.map(m=>({id:m.name,model_id:m.model_id || m.id,flags:m.flags,node,
+    return items.map(m=>({id:m.name,workflow_id:m.workflow_model || m.name,model_id:m.workflow_model_id || m.model_id || m.id,
+      flags:m.flags,node:m.node || node,key:JSON.stringify([m.node || node,m.name]),
       image_workflow:{family:m.sdcpp.family,defaults:m.sdcpp.defaults,limits:m.sdcpp.limits,reference_megapixels:m.sdcpp.reference_megapixels,
         loras:m.sdcpp.loras,upscaling:Boolean(m.sdcpp.upscaler),exclusive:m.alone}}));
   }
   function populate() {
-    if(!inventoryReady || !workflowsReady) return;
+    if(!inventoryReady || !workflowsReady || saving) return;
     const previous=selected; if(previous) selections.set(previous.model_id || previous.id,workflowID); selected=null;
-    const asked=models.find(m=>m.id===(previous?.id || params.get('model'))) || models[0];
-    if(asked) select(asked); else {showModels(); showWorkflows(); showEditor();}
+    const asked=models.find(m=>modelKey(m)===modelKey(previous)) || models.find(m=>m.id===(previous?.id || params.get('model')) &&
+      (!params.get('model_node') || m.node===params.get('model_node'))) || models[0];
+    if(asked) select(asked); else {
+      $('model-name').textContent='Choose an image model'; $('family').textContent=''; $('model-detail').textContent='';
+      $('new-workflow').disabled=true; $('unavailable').hidden=true;
+      if(manage) { $('edit-model').disabled=true; document.dispatchEvent(new CustomEvent('weightroom:image-select',{detail:{name:null}})); }
+      showModels(); showWorkflows(); showEditor();
+    }
   }
   document.addEventListener('weightroom:image-inventory',event=>{
-    remember(); models=mapInventory(event.detail.models,event.detail.node); inventoryReady=true;
-    for(const m of models) {const publicModel=library.models.find(row=>row.model_id && row.model_id===m.model_id || row.id===m.id); if(publicModel) m.image_workflow=publicModel.image_workflow;}
+    remember(); loading=false; error(''); models=mapInventory(event.detail.models,event.detail.node); inventoryReady=true;
+    if(manage) document.getElementById('mw-new').disabled=saving;
+    for(const m of models) {const publicModel=catalogueModel(m); if(publicModel) m.image_workflow=publicModel.image_workflow;}
     populate();
   });
+  document.addEventListener('weightroom:image-loading',()=>{
+    remember(); loading=true; $('new-workflow').disabled=true;
+    if(manage) { $('edit-model').disabled=true; document.getElementById('mw-new').disabled=true; }
+    showModels(); showEditor();
+  });
+  document.addEventListener('weightroom:image-error',event=>{
+    loading=false; if(manage) document.getElementById('mw-new').disabled=saving;
+    populate(); error(event.detail.message);
+  });
   document.addEventListener('weightroom:image-saved',async event=>{
-    try { library=await api('workflows'); const m=models.find(row=>row.id===event.detail.name);
-      if(m) {const actual=library.models.find(row=>row.id===m.id); if(actual) m.image_workflow=actual.image_workflow; select(m);}
+    try { library=await api('workflows'); const m=models.find(row=>row.id===event.detail.name && row.node===event.detail.node);
+      if(m) {const actual=catalogueModel(m); if(actual) m.image_workflow=actual.image_workflow; select(m);}
       announce('Model setup saved. Workflow settings are preserved.'); } catch(problem) {error(problem.message);}
   });
   $('new-workflow').onclick=()=>{remember(); workflowID=null; if(!drafts.has(key())) drafts.set(key(),baseline()); showWorkflows(); showEditor(); field('name').focus();};
@@ -184,11 +206,11 @@
   $('restore').onclick=()=>{const entry=histories.get(workflowID)?.find(row=>String(row.version)===$('history').value); if(!entry) return;
     const draft=baseline(); draft.settings={...draft.settings,...copy(entry.settings)}; drafts.set(key(),draft); showEditor(); announce('Earlier settings loaded as a draft. Saving creates a new version.');};
   $('workflow-form').onsubmit=async event=>{
-    event.preventDefault(); if(saving || !selected || !available()) return;
+    event.preventDefault(); if(saving || loading || !selected || !available()) return;
     const draft=read(), row=current(), model=selected, originalKey=key();
     if(!draft.name.trim()) {error('Enter a workflow name.',true); return;}
     saving=true; $('save').disabled=true; $('workflow-fields').disabled=true; $('duplicate').disabled=true; $('new-workflow').disabled=true; showModels(); showWorkflows();
-    if(manage) { $('edit-model').disabled=true; document.getElementById('mw-new').disabled=true; }
+    if(manage) { $('edit-model').disabled=true; document.getElementById('mw-new').disabled=true; document.getElementById('mw-node').disabled=true; }
     try {
       const ownCopy=row?.published && !library.can_manage;
       const saved=await api('presets',{...draft,model:available().id,id:ownCopy?undefined:row?.id,version:ownCopy?undefined:row?.version,published:ownCopy?false:draft.published});
@@ -197,18 +219,18 @@
       announce('Workflow saved. '+saved.name+' · version '+saved.version+'.'); error('');
     } catch(problem) { error(problem.message,true); }
     finally {saving=false; selected=model; $('workflow-fields').disabled=false; $('save').disabled=!available(); $('new-workflow').disabled=!available(); showModels(); showWorkflows();
-      if(manage) { $('edit-model').disabled=!selected; document.getElementById('mw-new').disabled=false; }
+      if(manage) { $('edit-model').disabled=!selected; document.getElementById('mw-new').disabled=false; document.getElementById('mw-node').disabled=false; }
       if(!drafts.has(originalKey)) showEditor(); else {field('shared').disabled=Boolean(current()) || !library.can_manage; $('duplicate').disabled=!current();}}
   };
   $('model-search').oninput=showModels; $('workflow-search').oninput=showWorkflows; $('visibility').onchange=showWorkflows;
   if(manage) {
-    $('edit-model').onclick=()=>document.dispatchEvent(new CustomEvent('weightroom:image-edit',{detail:{name:selected.id}}));
+    $('edit-model').onclick=()=>document.dispatchEvent(new CustomEvent('weightroom:image-edit',{detail:{name:selected.id,node:selected.node}}));
     $('close-model').onclick=()=>document.getElementById('model-dialog').close();
   }
   api('workflows').then(value=>{
     remember(); library=value; workflowsReady=true;
     if(!manage) models=library.models;
-    else for(const m of models) {const actual=library.models.find(row=>row.model_id && row.model_id===m.model_id || row.id===m.id); if(actual) m.image_workflow=actual.image_workflow;}
+    else for(const m of models) {const actual=catalogueModel(m); if(actual) m.image_workflow=actual.image_workflow;}
     populate();
   }).catch(problem=>{workflowsReady=true; populate(); error(problem.message);});
 })();

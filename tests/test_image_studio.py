@@ -1,5 +1,6 @@
 """Model studio uses real authenticated storage, independent drafts and immutable revisions."""
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,93 @@ def studio(desk,tmp_path):
     wire.front.state.mirrorwall.catalogue=catalogue
     sign_in(server,'jordan')
     return server,wire,users,library
+
+
+@pytest.mark.parametrize('width',[1440,390])
+def test_node_dropdown_filters_all_copies_and_edits_the_correct_node(studio,width):
+    server,_,_,library=studio
+    def copy(name,node,identity,ram=8192):
+        original=deepcopy(library.get(name))
+        return {**original,'name':'remote-qwen' if name=='qwen' else name,'node':node,
+            'model_id':node+'-'+name,'workflow_model':name,'workflow_model_id':identity,
+            'gpus':['C0' if node=='compute' else 'R1'],'flags':{'model':'/'+node+'/'+name+'.safetensors','ctx-size':0},
+            'sdcpp':{**original['sdcpp'],'host_ram_mib':ram}}
+    copies=[copy('sketch','compute',library.identity('sketch')),
+            copy('sketch','rig',library.identity('sketch'),16384),copy('qwen','rig',library.identity('qwen'))]
+    saved=[]; fail_next=[]
+    def capture(route,path):
+        base=path.partition('?')[0]
+        if base=='/mirrorwall-models' and route.request.method=='GET':
+            if fail_next:
+                fail_next.pop()
+                route.fulfill(status=503,content_type='application/json',body=json.dumps({'error':{'message':'Inventory temporarily unavailable.'}}));return True
+            route.fulfill(content_type='application/json',body=json.dumps({'models':copies,'cards':['C0'],
+                'node_cards':{'compute':['C0'],'rig':['R1'],'empty':[]},'default_node':'compute',
+                'nodes':[{'name':n,'state':'ready'} for n in ('compute','rig','empty')],
+                'engines':{'engines':[{'id':'sdcpp','available':True}]}}));return True
+        if base=='/mirrorwall-models' and route.request.method=='POST':
+            body=route.request.post_data_json
+            saved.append((path,body))
+            row=next(c for c in copies if c['node']=='rig' and c['name']==body['name'])
+            row.update(body['settings'])
+            route.fulfill(content_type='application/json',body=json.dumps({'name':body['name']}));return True
+        if base=='/mirrorwall-models/check':
+            route.fulfill(content_type='application/json',body=json.dumps({'ready':True,'slots':[
+                {'slot':'diffusion','need':'required','status':'ok','message':'Fixture'}],'loras':[],'get_diffusion':[]}));return True
+    with playwright.sync_playwright() as driver:
+        browser,page=browser_context(driver,server,capture=capture)
+        page.set_viewport_size({'width':width,'height':1100})
+        errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+        page.goto('http://console.test/models/images')
+        dropdown=page.get_by_label('Compute node',exact=True)
+        playwright.expect(dropdown).to_have_value('')
+        playwright.expect(dropdown.locator('option').first).to_have_text('All')
+        playwright.expect(page.locator('#studio-model-list [data-model]')).to_have_count(3)
+        assert page.get_by_text('One setup, many workflows',exact=True).count()==0
+        assert page.get_by_role('button',name='Browse node',exact=True).count()==0
+        page.evaluate('window.nodeFilterSentinel=true')
+        page.locator('#studio-edit-model').click()
+        page.locator('#mw-ram').fill('12000')
+        page.keyboard.press('Escape')
+        page.locator('#workflow-name').fill('Keep this draft')
+        dropdown.select_option('rig')
+        playwright.expect(page.locator('#studio-model-list [data-model]')).to_have_count(2)
+        assert page.evaluate('window.nodeFilterSentinel')
+        page.locator('#studio-model-list [data-model=sketch][data-node=rig]').click()
+        page.locator('#studio-edit-model').click()
+        playwright.expect(page.locator('#mw-ram')).to_have_value('16384')
+        playwright.expect(page.locator('#mw-diffusion')).to_have_value('/rig/sketch.safetensors')
+        page.locator('#mw-ram').fill('18000')
+        page.get_by_role('button',name='Save model',exact=True).click()
+        playwright.expect(page.locator('#model-dialog')).not_to_be_visible()
+        assert saved[-1][0]=='/mirrorwall-models?node=rig'
+        assert saved[-1][1]['settings']['gpus']==['R1']
+        assert saved[-1][1]['settings']['flags']['model']=='/rig/sketch.safetensors'
+        dropdown.select_option('')
+        page.locator('#studio-model-list [data-model=sketch][data-node=compute]').click()
+        playwright.expect(page.locator('#workflow-name')).to_have_value('Keep this draft')
+        page.locator('#studio-edit-model').click()
+        playwright.expect(page.locator('#mw-ram')).to_have_value('12000')
+        page.keyboard.press('Escape')
+        fail_next.append(True)
+        dropdown.select_option('empty')
+        playwright.expect(page.locator('#studio-model-list [data-model]')).to_have_count(0)
+        playwright.expect(page.locator('#studio-model-name')).to_have_text('Choose an image model')
+        playwright.expect(page.locator('#studio-edit-model')).to_be_disabled()
+        playwright.expect(page.locator('#studio-error')).to_contain_text('Inventory temporarily unavailable.')
+        dropdown.select_option('')
+        playwright.expect(page.locator('#studio-error')).not_to_be_visible()
+        playwright.expect(page.locator('#mw-new')).to_be_enabled()
+        page.locator('#studio-model-list [data-model=remote-qwen]').click()
+        page.reload()
+        playwright.expect(page.locator('#studio-model-name')).to_have_text('remote-qwen')
+        page.locator('#workflow-name').fill('Remote alias workflow')
+        page.locator('#studio-save').click()
+        playwright.expect(page.locator('#studio-status')).to_contain_text('Workflow saved.')
+        assert server.get('/mirrorwall-api/workflows').json()['presets'][0]['model']=='qwen'
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        assert not errors,errors
+        browser.close()
 
 
 def test_revision_migration_ownership_and_stale_edits(tmp_path):

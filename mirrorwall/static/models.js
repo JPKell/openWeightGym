@@ -2,22 +2,26 @@
   'use strict';
   const $ = id => document.getElementById('mw-' + id);
   const params = new URLSearchParams(location.search);
-  const node = params.get('node') || 'compute';
-  const query = node ? '?node=' + encodeURIComponent(node) : '';
+  let node = params.get('node') || '', defaultNode = 'compute';
   const SLOTS = ['diffusion', 'text_encoder', 'vae', 'clip_l', 'clip_g', 'upscaler'];
   const FAMILIES = SuiteImageProfiles.labels;
   const modelDrafts = new Map();
   const dialog = document.getElementById('model-dialog');
-  let nodeCards = [], models = [], selected = null, checking = 0, timer = null, initialized = false;
+  let nodeCards = [], nodeCardsByNode = {}, enginesByNode = {}, models = [], selected = null, checking = 0, timer = null, initialized = false, refreshing = 0, filtering = 0;
+  const modelKey = model => model ? JSON.stringify([model.node, model.name]) : '';
+  const activeNode = () => selected?.node || node || defaultNode;
+  const publish = () => document.dispatchEvent(new CustomEvent('weightroom:image-inventory',{
+    detail:{models:models.filter(model=>!node || model.node===node),node}}));
   const message = error => { $('message').hidden = !error; $('message').textContent = error || ''; };
   const element = (tag, text, className) => { const one = document.createElement(tag); if (text !== undefined) one.textContent = text; if (className) one.className = className; return one; };
-  function fileOption(path, machine = node, tier = 'current') {
+  function fileOption(path, machine = activeNode(), tier = 'current') {
     const parts=path.split('/').filter(Boolean), folder=parts.at(-2) || '/', filename=parts.at(-1) || path;
     const option=new Option(machine+' · '+folder+' · '+filename,path);
     option.title=path; option.dataset.machine=machine; option.dataset.tier=tier;
     return option;
   }
-  async function api(body, path = '') {
+  async function api(body, path = '', target = body ? activeNode() : '') {
+    const query = target ? '?node=' + encodeURIComponent(target) : '';
     const response = await fetch('/mirrorwall-models' + path + query, {method: body ? 'POST' : 'GET', cache: 'no-store', headers: body ? {'content-type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined});
     if (response.redirected) { location.href = '/sign-in'; throw new Error('Please sign in again.'); }
     const value = await response.json();
@@ -108,7 +112,7 @@
   async function check(mine) {
     try {
       const found = await api({settings: draft(false), new:!selected,
-        source_machine:$('diffusion').selectedOptions[0]?.dataset.machine || node}, '/check');
+        source_machine:$('diffusion').selectedOptions[0]?.dataset.machine || activeNode()}, '/check');
     if (mine === checking) render(found);
     } catch (error) { if (mine === checking) $('check').replaceChildren(element('p', 'The files could not be checked: ' + error.message, 'text-secondary small')); }
   }
@@ -117,18 +121,27 @@
     if (!dialog?.open) return;
     const controls=[...$('model-form').querySelectorAll('input,select,textarea')].filter(input=>input.id || input.name).map(input=>({id:input.id,name:input.name,value:input.value,checked:input.checked}));
     const loras=[...$('lora-rows').querySelectorAll('tr:not([data-empty-row])')].map(row=>Object.fromEntries([...row.querySelectorAll('[data-lora-field]')].map(input=>[input.dataset.loraField,input.value])));
-    modelDrafts.set(selected?.name || '',{controls,loras});
+    modelDrafts.set(modelKey(selected),{controls,loras});
   }
   function fill(model) {
     selected = model; const profile = model?.sdcpp || {};
+    $('cards').textContent = 'Enabled: ' + ((nodeCardsByNode[activeNode()] || nodeCards).join(', ') || 'none');
+    const runtime=(enginesByNode[activeNode()]?.engines || []).find(one=>one.id==='sdcpp');
+    $('runtime').hidden=Boolean(runtime?.available);
+    $('runtime').textContent=runtime?.why || 'Optional runtime: install with scripts/install-sdcpp.sh on this compute node. Manual directions are in Docs → Deployment and operations → Installation.';
     $('install-targets').hidden=Boolean(model); $('target-note').hidden=Boolean(model);
     $('model-form').querySelector('section[aria-label="Hardware"] .scope-badge').textContent=model?'This node':'Selected nodes';
     $('heading').textContent = model ? model.name : 'Add image model';
-    const choose = (name, value) => { if (value && !Array.from($(name).options).some(option => option.value === value)) $(name).add(fileOption(value)); $(name).value = value || ''; };
+    const choose = (name, value) => {
+      if (!value) { $(name).value=''; return; }
+      let option=[...$(name).options].find(option=>option.value===value && option.dataset.machine===activeNode());
+      if(!option) { option=fileOption(value); $(name).add(option); }
+      option.selected=true;
+    };
     $('name').value = model?.name || ''; $('name').readOnly = Boolean(model); choose('diffusion', model?.flags?.model);
     for (const name of ['text_encoder','vae','clip_l','clip_g']) choose(name, profile.components?.[name]);
     $('family').value = profile.family || 'flux2-klein'; $('split').value = profile.split_mode || 'single';
-    SuiteHardware.set('mw', model?.gpus ?? 1, nodeCards);
+    SuiteHardware.set('mw', model?.gpus ?? 1, nodeCardsByNode[activeNode()] || nodeCards);
     document.querySelector('[data-image-split]').hidden = model?.gpus === 0;
     $('ram').value = profile.host_ram_mib || 8192; $('vram').value = profile.vram_limit_gib?.join(',') || '';
     $('layer-weights').value = profile.layer_weights?.join(',') || ''; $('alone').checked = model?.alone || false;
@@ -136,15 +149,14 @@
     choose('upscaler', profile.upscaler); $('staged').checked = profile.staged !== false;
     SLOTS.forEach(name => Array.from($(name).options).forEach(option => {
       option.disabled = Boolean(model && option.value && option.value !== $(name).value &&
-        (option.dataset.machine !== node || option.dataset.tier === 'storage'));
+        (option.dataset.machine !== activeNode() || option.dataset.tier === 'storage'));
     }));
     SuiteModelFields.load('mw-defaults', profile.defaults || familyDefaults());
     SuiteModelFields.load('mw-limits', profile.limits || {max_width:1024,max_height:1024,max_pixels:1048576,max_steps:50,max_images:8,max_references:2});
     $('loras').value = JSON.stringify(profile.loras || {}, null, 2); renderLoras(); $('saved').textContent = '';
     $('measurement').textContent = model?.measured ? 'Reserved per GPU: ' + model.measured.mib.join(', ') + ' MiB · ' + model.measured.at : 'No qualified full-workflow memory envelope yet.';
     if (model?.image_profile) $('measurement').textContent += ' Observed GPU peaks: ' + model.image_profile.gpu_peak_mib.join(', ') + ' MiB; host RSS peak: ' + model.image_profile.rss_peak_mib + ' MiB.';
-    $('list').querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.name === model?.name));
-    const saved=modelDrafts.get(model?.name || '');
+    const saved=modelDrafts.get(modelKey(model));
     if(saved) {
       saved.controls.forEach(row=>{const input=row.id?document.getElementById(row.id):[...$('model-form').querySelectorAll('input')].find(input=>input.name===row.name && input.value===row.value); if(input) {input.value=row.value; if(row.checked!==undefined) input.checked=row.checked;}});
       document.querySelector('[data-hardware-prefix="mw"] [data-hardware-mode]:checked')?.dispatchEvent(new Event('change',{bubbles:true}));
@@ -154,13 +166,11 @@
     recheck(0);
   }
   async function refresh() {
-    const value = await api(); models = value.models; nodeCards = value.cards;
-    $('list').replaceChildren(); models.forEach(model => {
-      const button = document.createElement('button'); button.className = 'btn btn-outline-secondary'; button.textContent = model.name; button.dataset.name = model.name;
-      button.onclick = () => { location.href = '/models/images?model=' + encodeURIComponent(model.name) + '&node=' + encodeURIComponent(node); }; $('list').append(button);
-    });
-    $('cards').textContent = 'Enabled: ' + (value.cards.join(', ') || 'none');
-    $('node').replaceChildren(new Option('Default', ''));
+    const mine=++refreshing, value=await api(); if(mine!==refreshing) return;
+    models = value.models.map(model=>({...model,node:model.node || 'compute'})); nodeCards = value.cards;
+    nodeCardsByNode=value.node_cards || {}; defaultNode=value.default_node || 'compute';
+    enginesByNode=value.node_engines || Object.fromEntries(value.nodes.map(one=>[one.name,value.engines]));
+    $('node').replaceChildren(new Option('All', ''));
     value.nodes.forEach(one => $('node').add(new Option(one.name + ' · ' + ({unknown:'status not reported',offline:'not reachable',unavailable:'not reachable',ready:'available'}[one.state] || one.state || 'status not reported'), one.name))); $('node').value = node;
     const choices=$('install-targets').querySelector('[data-target-choices]');
     const before=[...choices.querySelectorAll('input:checked')].map(input=>input.value), first=!choices.children.length;
@@ -168,16 +178,12 @@
     value.nodes.forEach(one=>{
       const label=$('node-target').content.firstElementChild.cloneNode(true), input=label.querySelector('input');
       input.value=one.name; input.disabled=one.accepting_work===false;
-      input.checked=!input.disabled && (first?one.name===node:before.includes(one.name));
+      input.checked=!input.disabled && (first?one.name===(node || defaultNode):before.includes(one.name));
       label.querySelector('[data-node-name]').textContent=one.name;
       label.querySelector('[data-node-state]').textContent=input.disabled?' '+(one.lifecycle || 'disabled'):one.state==='ready'?'':' '+({unknown:'status not reported',offline:'not reachable',unavailable:'not reachable',sleeping:'asleep'}[one.state] || one.state || 'status not reported');
       choices.append(label);
     });
-    const engines = value.engines.engines || [];
-    const runtime = engines.find(one => one.id === 'sdcpp');
-    $('runtime').hidden = Boolean(runtime?.available);
-    $('runtime').textContent = runtime?.why || 'Optional runtime: install with scripts/install-sdcpp.sh on this compute node. Manual directions are in Docs → Deployment and operations → Installation.';
-    if(initialized) document.dispatchEvent(new CustomEvent('weightroom:image-inventory',{detail:{models,node}}));
+    if(initialized) publish();
   }
   async function files() {
     const response = await fetch('/model-files', {cache:'no-store'});
@@ -231,8 +237,24 @@
   });
   $('split').addEventListener('change', () => { delete document.querySelector('[data-hardware-prefix="mw"]').dataset.automaticGpus; });
   $('new').onclick = () => {remember(); fill(null); dialog.showModal(); $('name').focus();};
-  document.addEventListener('weightroom:image-select',event=>{if(!dialog.open) fill(models.find(model=>model.name===event.detail.name) || null);});
-  document.addEventListener('weightroom:image-edit',event=>{fill(models.find(model=>model.name===event.detail.name) || null); dialog.showModal();});
+  $('node').onchange = () => {
+    node=$('node').value;
+    const next=new URL(location.href);
+    if(node) next.searchParams.set('node',node); else next.searchParams.delete('node');
+    history.replaceState(null,'',next);
+    if(!modelDrafts.has('')) $('install-targets').querySelectorAll('input').forEach(input=>{
+      input.checked=!input.disabled && input.value===(node || defaultNode);
+    });
+    publish();
+    document.dispatchEvent(new CustomEvent('weightroom:image-loading'));
+    const mine=++filtering;
+    refresh().catch(error=>{
+      if(mine===filtering) document.dispatchEvent(new CustomEvent('weightroom:image-error',{detail:{message:error.message}}));
+    });
+  };
+  const eventModel = event => models.find(model=>model.name===event.detail.name && (!event.detail.node || model.node===event.detail.node)) || null;
+  document.addEventListener('weightroom:image-select',event=>{if(!dialog.open) fill(eventModel(event));});
+  document.addEventListener('weightroom:image-edit',event=>{fill(eventModel(event)); dialog.showModal();});
   dialog.addEventListener('close',remember);
   dialog.addEventListener('cancel',remember);
   $('model-form').addEventListener('input',remember);
@@ -246,21 +268,24 @@
       const machines=[...$('install-targets').querySelectorAll('input:checked:not(:disabled)')].map(input=>input.value);
       if(!selected && !machines.length) {message('Choose at least one destination node.'); $('install-targets').scrollIntoView({block:'center'}); return;}
       const answer = await api({name:$('name').value.trim(), settings:draft(), new:!selected,
-        source_machine:$('diffusion').selectedOptions[0]?.dataset.machine || node,...(!selected?{machines}:{})});
+        source_machine:$('diffusion').selectedOptions[0]?.dataset.machine || activeNode(),...(!selected?{machines}:{})});
       if(Array.isArray(answer.jobs)) {
         const query=new URLSearchParams({kind:'image'}); answer.jobs.forEach(job=>query.append('install',job.id));
         location.href='/models?'+query; return;
       }
       if (answer.kind === 'model-install') { location.href = '/models?kind=image&install=' + encodeURIComponent(answer.id); return; }
-      modelDrafts.delete(selected?.name || '');
-      await refresh(); fill(models.find(one => one.name === answer.name)); $('saved').textContent = 'Saved.'; message('');
-      dialog.close(); document.dispatchEvent(new CustomEvent('weightroom:image-saved',{detail:{name:answer.name}}));
+      const savedNode=activeNode(); modelDrafts.delete(modelKey(selected));
+      await refresh(); fill(models.find(one => one.name === answer.name && one.node===savedNode)); $('saved').textContent = 'Saved.'; message('');
+      dialog.close(); document.dispatchEvent(new CustomEvent('weightroom:image-saved',{detail:{name:answer.name,node:savedNode}}));
     } catch (error) { message(error.message); }
   };
   Promise.all([refresh(), files()]).then(() => {
     initialized=true;
-    document.dispatchEvent(new CustomEvent('weightroom:image-inventory',{detail:{models,node}}));
+    publish();
     if (params.has('new')) {fill(null); dialog.showModal();}
     if (params.has('file')) { fill(null); if (!Array.from($('diffusion').options).some(one => one.value === params.get('file'))) $('diffusion').add(fileOption(params.get('file'))); $('diffusion').value = params.get('file'); dialog.showModal(); recheck(0); }
-  }).catch(error => message(error.message));
+  }).catch(error => {
+    message(error.message);
+    document.dispatchEvent(new CustomEvent('weightroom:image-error',{detail:{message:error.message}}));
+  });
 })();

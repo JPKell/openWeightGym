@@ -167,6 +167,17 @@ def test_browser_adds_image_models_and_copies_the_bundle(cluster, nodes, family,
             assert name not in saved(cluster, 'rig')
         page.goto(cluster.origin + '/models/images?model=' + name)
         expect(page.locator('#studio-model-list')).to_contain_text(name)
+        expect(page.locator('#mw-node')).to_have_value('')
+        expect(page.locator('#studio-model-list [data-model="' + name + '"]')).to_have_count(len(nodes))
+        for node in nodes:
+            page.locator('#mw-node').select_option(node)
+            expect(page.locator('#studio-model-list [data-model="' + name + '"]')).to_have_count(1)
+            page.locator('#studio-model-list [data-model="' + name + '"]').click()
+            page.locator('#studio-edit-model').click()
+            expect(page.locator('#mw-diffusion')).to_have_value(f'/state/{node}/cache/image/' + files['diffusion'])
+            page.keyboard.press('Escape')
+        page.locator('#mw-node').select_option('')
+        expect(page.locator('#studio-model-list [data-model="' + name + '"]')).to_have_count(len(nodes))
         assert not errors, errors
         browser.close()
 
