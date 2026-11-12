@@ -35,7 +35,6 @@
 </aside>
 </div>
 {% call card('Diagnostics & migration', false, hint='Engine support, tool availability, store health and offline migration.') %}
-<p class="small">SQLite and PostgreSQL are supported per store. Engine labels do not represent compute nodes. Row counts are estimates where marked; expand a database for exact counts.</p>
 <div class="table-responsive mb-3"><table class="table table-sm" aria-label="Dump tools by node"><thead><tr><th>Node</th><th>sqlite3</th><th>pg_dump</th><th>pg_restore</th><th>psql</th><th>pgloader</th></tr></thead><tbody>{% for node in snapshot.nodes %}<tr><td>{{ node.name }}</td>{% for tool in ['sqlite3','pg_dump','pg_restore','psql','pgloader'] %}<td>{{ 'available' if node.tools.get(tool, {}).get('available') else 'unavailable' if node.answering else 'unknown' }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
 {% include "store_health.html" %}
 {% call card('Offline migration', false) %}
