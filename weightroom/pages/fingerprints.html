@@ -1,61 +1,45 @@
-{% extends "frame.html" %}
-{% from "parts.html" import page_header, section_title, empty_row %}
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, card, empty_row, more %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'fingerprint_parts.html' import fingerprint_row %}
 {% block title %}Fingerprints · openWeightGym{% endblock %}
+{% block page_class %}fingerprint-page{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/fingerprint.css?v=1"><script src="/static/fingerprints.js?v=1" defer></script>{% endblock %}
 {% block main %}
-<nav class="mb-2"><a href="/models">Models</a></nav>
-{{ page_header("Fingerprints", lead="A fingerprint says exactly which model gave an answer: its file, by what the file holds, and every one of its settings. Change either and the fingerprint is another.\n  Each one is written down here the first time it is seen, with what the model was then, and is never removed. So a fingerprint in the log, or kept with a benchmark's result, can be read back after the model and its file are gone.") }}
-
-{# What is found changes as the box is typed in, a third of a second after the last key, and the box itself is left alone.
-   The address follows, so that what is shown can be kept as a link. #}
-<form method="get" action="/fingerprints" class="row g-2 mb-4" hx-get="/fingerprints" hx-trigger="submit, input delay:300ms" hx-target="#found" hx-select="#found" hx-swap="outerHTML show:none" hx-replace-url="true">
-  <div class="col"><input name="start" class="form-control" value="{{ start }}" aria-label="how the fingerprint begins" placeholder="how the fingerprint begins" autocapitalize="none" spellcheck="false"></div>
-  <div class="col-auto"><button class="btn btn-primary">Find</button></div>
-</form>
-
-<div id="found">
-{% if found|length == 1 %}
-{# One fingerprint: everything that was written down of it. #}
-{% set one = found[0] %}
-<dl class="row facts mb-4">
-  <dt class="col-4 col-md-2">Fingerprint</dt><dd class="col-8 col-md-10 wrap"><code>{{ one.fingerprint }}</code></dd>
-  <dt class="col-4 col-md-2">First seen</dt><dd class="col-8 col-md-4">{{ one.first|timestamp }}</dd>
-  <dt class="col-4 col-md-2">Model, then</dt><dd class="col-8 col-md-4">{{ one.model or "not named" }}</dd>
-  {% if "see-log" in person.can %}<dt class="col-4 col-md-2">Answers</dt><dd class="col-8 col-md-10"><a href="/log?model={{ one.model|urlencode }}">What is on record for {{ one.model }}</a>. Each entry says which fingerprint answered.</dd>{% endif %}
-</dl>
-{% for flag, file in one.files.items() %}
-{{ section_title("Its file" if flag == "model" else "Its projector") }}
-<dl class="row facts mb-4">
-  {# A row is twelve wide. The two long values take a row each; the short ones go two to a row after them, so that every name stays left of its value. #}
-  <dt class="col-4 col-md-2">Was at</dt><dd class="col-8 col-md-10 wrap">{{ file.path }}</dd>
-  <dt class="col-4 col-md-2">SHA-256</dt><dd class="col-8 col-md-10 wrap"><code>{{ file.sha256 }}</code></dd>
-  <dt class="col-4 col-md-2">Size</dt><dd class="col-8 col-md-4">{{ file.size|size }}</dd>
-  {% for name, value in (file.says or {}).items() if value is not none %}<dt class="col-4 col-md-2">{{ name|replace("_", " ") }}</dt><dd class="col-8 col-md-4">{{ value|shown }}</dd>{% endfor %}
-</dl>
-{% endfor %}
-{{ section_title("Its settings, as they were used") }}
-<dl class="row facts">
-  {% for name, value in one.settings.items() if name != "flags" %}<dt class="col-4 col-md-2">{{ name }}</dt><dd class="col-8 col-md-10">{{ value|shown }}</dd>{% endfor %}
-  {% for flag, value in one.settings.flags.items() if flag not in one.files %}<dt class="col-4 col-md-2">{{ flag }}</dt><dd class="col-8 col-md-10 wrap">{{ value|shown }}</dd>{% endfor %}
-</dl>
+<div data-fingerprint-page data-layout="explorer">
+{% if one %}
+<div id="found">{% include 'fingerprint_record.html' %}</div>
 {% else %}
-<div class="table-responsive">
-<table id="fingerprints-table" class="table table-hover align-middle sortable">
-  <thead><tr><th data-sort="text">Fingerprint</th><th data-sort="value">First seen</th><th data-sort="text">Model, then</th><th data-sort="text">File</th><th data-sort="value">Context</th></tr></thead>
-  <tbody>
-  {% for one in found %}
-  <tr>
-    <td><a href="/fingerprints?start={{ one.fingerprint }}"><code>{{ one.fingerprint[:12] }}</code></a></td>
-    <td class="when" data-value="{{ one.first }}">{{ one.first|timestamp }}</td>
-    <td>{{ one.model }}</td>
-    <td class="wrap">{{ one.files.model.path.rsplit("/", 1)[-1] }} <small class="text-secondary">{{ one.files.model.size|size }}</small></td>
-    <td data-value="{{ one.settings.flags["ctx-size"] }}">{{ one.settings.flags["ctx-size"] }}</td>
-  </tr>
-  {% else %}
-  {% call empty_row(5) %}{{ "No fingerprint begins so." if start else "No fingerprint yet. One is made once a model's file has been read through." }}{% endcall %}
-  {% endfor %}
-  </tbody>
-</table>
+{% call page_header('Fingerprints', pretitle='Model provenance') %}<button type="button" class="btn btn-outline-secondary" data-fingerprint-export="archive-json"{% if not found %} disabled{% endif %} id="export-directory">Export results ↓</button>{% endcall %}
+<form method="get" action="/fingerprints" class="fp-search-form mb-2" id="lookup-form" role="search" hx-get="/fingerprints" hx-trigger="submit, input delay:300ms" hx-target="#found" hx-select="#found" hx-swap="outerHTML show:none" hx-replace-url="true">
+  <input type="hidden" name="view" value="directory">
+  <div class="fp-query"><label class="form-label" for="start">Fingerprint or model</label><input type="search" name="start" id="start" class="form-control" value="{{ start }}" placeholder="Paste a fingerprint or search…" aria-label="how the fingerprint begins" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+  <div><label class="form-label" for="model-filter">Model</label><select name="model" id="model-filter" class="form-select"><option value="">All model names</option>{% for name in model_names %}<option value="{{ name }}"{% if model_filter == name %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+  <div><label class="form-label" for="context-filter">Context</label><select name="context" id="context-filter" class="form-select"><option value="">Any context</option>{% for context in contexts %}<option value="{{ context }}"{% if context_filter == context %} selected{% endif %}>{{ context|count }} tokens</option>{% endfor %}</select></div>
+  <button type="submit" class="btn btn-primary">Find</button><a href="/fingerprints" class="btn btn-link text-secondary">Reset filters</a>
+</form>
+<div class="fp-retention mb-3">{% call more('What does a fingerprint identify?') %}The model file’s contents and every setting used. A change to either creates a different fingerprint. Records remain available after the model or file is removed.{% endcall %}</div>
+<div id="found">
+  {% call kpi_row('Fingerprint archive', class_='mb-4') %}
+    {{ kpi('Fingerprints', archive_count|count, 'immutable records') }}
+    {{ kpi('Model names', archive_models|count, 'as first recorded') }}
+    {{ kpi('Distinct files', archive_files|count, 'including projectors and adapters') }}
+    {{ kpi('Latest first seen', latest_seen|timestamp if latest_seen is not none else '—', 'archive') }}
+  {% endcall %}
+  <div class="fp-directory-grid">
+    {% set count %}<span class="small text-secondary fw-normal" id="match-count" role="status" aria-live="polite">{{ found|length|count }} of {{ archive_count|count }} records</span>{% endset %}
+    {% set footer %}<span class="small text-secondary" id="page-summary">{{ found|length|count }} records</span><label class="small ms-auto d-flex gap-2 align-items-center">Rows<select id="page-size" class="form-select form-select-sm"><option>12</option><option>24</option><option value="all">All</option></select></label><nav aria-label="Results pages" class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-fingerprint-page-step="-1">← Previous</button><button type="button" class="btn btn-outline-secondary btn-sm" data-fingerprint-page-step="1">Next →</button></nav>{% endset %}
+    {% call card('Fingerprint archive', id='archive', class_='fp-archive', body=false, actions=count, footer=footer) %}
+      <div class="table-responsive fp-table-scroll" tabindex="0" role="region" aria-label="Fingerprint results"><table class="table table-hover align-middle mb-0 sortable" id="fingerprints-table"><caption class="visually-hidden">Recorded fingerprints, model names, first seen dates, files and context sizes. Select a fingerprint to preview its recorded model weights.</caption><thead><tr><th scope="col" data-sort="text">Fingerprint</th><th scope="col" data-sort="text">Model, then</th><th scope="col" data-sort="value">First seen</th><th scope="col" data-sort="text">File</th><th scope="col" data-sort="value" class="text-end">Context</th></tr></thead><tbody id="fingerprint-rows">
+      {% for record in found %}{{ fingerprint_row(record, record_url(record), selected and selected.fingerprint == record.fingerprint) }}
+      {% else %}{% call empty_row(5) %}<div class="py-4 text-center"><strong class="d-block mb-2">{{ 'No matching fingerprints' if start or model_filter or context_filter else 'No fingerprints yet' }}</strong><span>{{ 'No fingerprint begins so.' if start else 'No records match these filters.' if model_filter or context_filter else "No fingerprint yet. One is made once a model's file has been read through." }}</span>{% if start or model_filter or context_filter %}<a class="d-block mt-2" href="/fingerprints">Clear the filters</a>{% endif %}</div>{% endcall %}{% endfor %}
+      </tbody></table></div>
+    {% endcall %}
+    {% include 'fingerprint_peek.html' %}
+  </div>
+  <script type="application/json" id="archive-json">{{ found|tojson }}</script>
 </div>
 {% endif %}
+<p class="small text-primary mt-3" id="fingerprint-feedback" role="status" aria-live="polite"></p>
 </div>
 {% endblock %}

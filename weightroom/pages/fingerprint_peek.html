@@ -1,0 +1,22 @@
+{% from 'parts.html' import card, section_title %}
+{% from 'fingerprint_parts.html' import fact_row, file_record, mosaic %}
+<aside class="fp-peek" id="record-peek" aria-label="Record preview"{% if selected %} data-selected-fingerprint="{{ selected.fingerprint }}"{% endif %}>
+{% if selected %}
+{% call card('At a glance') %}
+  {{ mosaic(selected.fingerprint) }}
+  <span class="eyebrow d-block mt-3 mb-2">Selected fingerprint</span>
+  <code id="peek-hash">{{ selected.fingerprint }}</code>
+  {{ section_title(selected.model or 'Not named', id='peek-model', wrapper_class='mt-3') }}
+  <dl class="fp-facts">
+    {{ fact_row('First seen', selected.first|timestamp) }}
+    {{ fact_row('Context', selected.settings.get('flags', {}).get('ctx-size')|count ~ ' tokens') }}
+    {{ fact_row('Files', selected.files|length) }}
+  </dl>
+  <a class="btn btn-primary w-100 mb-3" href="{{ record_url(selected) }}">Open complete record →</a>
+  <div class="fp-peek-weights">{% if selected.files.get('model') %}{{ file_record(selected.files.model, prefix='peek-model', compact=true) }}{% else %}<p class="text-secondary">No model weights were recorded.</p>{% endif %}</div>
+{% endcall %}
+<p class="small text-secondary">A permanent snapshot, retained independently of the model’s current configuration.</p>
+{% else %}
+{% call card('At a glance') %}<p class="text-secondary mb-0">{{ 'That fingerprint is not in this archive. Choose another record.' if peek_requested else 'Choose a fingerprint to inspect its recorded model weights.' }}</p>{% endcall %}
+{% endif %}
+</aside>
