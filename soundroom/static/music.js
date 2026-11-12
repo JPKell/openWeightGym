@@ -488,6 +488,7 @@
   });
   $('audio').addEventListener('loadedmetadata', updateRegion);
   addEventListener('resize', drawWave);
+  document.addEventListener('weightroom:theme', drawWave);
 
   async function uploadSource(file, kind = 'reference') {
     if (file.size > 32 * 1024 * 1024) throw new Error('Source audio is limited to 32 MiB.');

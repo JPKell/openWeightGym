@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% from "parts.html" import page_header, card, section_title, alert %}
 {% block title %}Speech · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=7" defer></script><script src="/soundroom-static/speech.js?v=3" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=8" defer></script><script src="/soundroom-static/speech.js?v=3" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom" data-mode="speech" data-defaults="{{ audio | tojson | forceescape }}">
   {{ page_header("Speech", lead="Generate speech, transcribe audio and manage speaker voices.") }}

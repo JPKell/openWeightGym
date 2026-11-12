@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% from "parts.html" import page_header, card, section_title, alert %}
 {% block title %}{{ 'Music' if mode == 'music' else 'Sounds' }} · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=7" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=8" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom" data-mode="{{ mode }}" data-defaults="{{ audio | tojson | forceescape }}">
   {{ page_header('Music' if mode == 'music' else 'Sounds', lead="Generate and compare music or sound effects with your audio models.") }}

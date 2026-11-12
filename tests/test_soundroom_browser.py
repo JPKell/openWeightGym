@@ -96,6 +96,30 @@ def test_speech_loops_whole_recordings_and_regions_that_reach_the_end(desk):
         browser.close()
 
 
+def test_paused_audio_waveform_repaints_when_the_palette_changes(desk):
+    from test_themes import change_theme
+
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(state(assets=[asset()]), []))
+        page.goto('http://console.test/chat/music')
+        page.locator('#sr-list button').click()
+        page.wait_for_function('''() => {
+            const wave = document.querySelector('#sr-wave');
+            return wave.getContext('2d').getImageData(5, wave.height / 2, 1, 1).data[3] > 0;
+        }''')
+        wave = page.locator('#sr-wave')
+        change_theme(page, 'slate', 'dark')
+        previous = wave.evaluate('canvas => canvas.toDataURL()')
+        for palette, mode in [('forest', 'dark'), ('clay', 'light')]:
+            change_theme(page, palette, mode)
+            current = wave.evaluate('canvas => canvas.toDataURL()')
+            assert current != previous, (palette, mode)
+            previous = current
+        browser.close()
+
+
 def test_music_reuse_restores_edit_range_source_and_musical_direction(desk):
     server, _, _ = desk
     sign_in(server, "jordan")

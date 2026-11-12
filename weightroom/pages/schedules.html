@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from 'parts.html' import card, said_box, page_header, section_title, more, swaps, confirm_loss, confirm_two, alert %}
+{% from 'parts.html' import card, said_box, page_header, section_title, more, swaps, confirm_two, alert %}
 {% from 'navigation_parts.html' import pager %}
 {% from 'schedule_parts.html' import overview, choice, state, form_fields, history_row, inventory_footer, behavior_notes %}
 {% block title %}Schedules · openWeightGym{% endblock %}
@@ -31,7 +31,7 @@
 </fieldset>
 <p class="small text-secondary mt-3 mb-0">Saving authorizes this recurring job after sign-out. The owner must remain enabled and retain manage-settings, plus benchmark and model access for reruns.</p>
 </form>
-{% if editing %}<form method="post" action="/schedules/{{ editing.id }}" class="mt-3" data-schedule-delete="{{ editing.id }}" {{ swaps('page-content') }} {{ confirm_two() }}><button name="do" value="delete" class="btn btn-outline-danger btn-sm" aria-label="Delete {{ editing.name }}" {{ confirm_loss() }}>Delete schedule</button></form>{% endif %}
+{% if editing %}<form method="post" action="/schedules/{{ editing.id }}" class="mt-3" data-schedule-delete="{{ editing.id }}" {{ swaps('page-content') }} {{ confirm_two() }}><button name="do" value="delete" class="btn btn-outline-danger btn-sm" aria-label="Delete {{ editing.name }}">Delete schedule</button></form>{% endif %}
 </aside>
 {% call card('Recent runs', id='history-panel', body_class='p-0') %}
 <div class="sc-history-list" role="region" aria-label="Scrollable recent runs" tabindex="0">{% for occurrence in history %}{{ history_row(occurrence) }}{% else %}<p class="text-secondary small p-4 mb-0">No occurrences yet.</p>{% endfor %}</div>

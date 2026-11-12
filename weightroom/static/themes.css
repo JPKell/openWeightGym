@@ -69,9 +69,13 @@
 /* Palette tokens replace presentation colours; status and heatmap colours keep their meaning. */
 html[data-site-theme] {
   --tblr-bg-surface: var(--theme-surface);
+  --tblr-bg-surface-primary: var(--theme-surface);
   --tblr-bg-surface-secondary: var(--theme-subtle);
   --tblr-bg-surface-tertiary: var(--theme-subtle);
+  --tblr-bg-surface-dark: var(--theme-subtle);
+  --tblr-bg-surface-inverted: var(--theme-text);
   --tblr-bg-forms: var(--theme-surface);
+  --tblr-code-bg: var(--theme-subtle);
   --tblr-secondary: var(--theme-muted);
   --tblr-secondary-rgb: var(--theme-muted-rgb);
   --tblr-muted: var(--theme-muted);
@@ -121,6 +125,8 @@ html[data-site-theme] .table thead th { color: var(--theme-text); }
 html[data-site-theme] .bg-primary, html[data-site-theme] .text-bg-primary { background-color: var(--theme-button) !important; }
 html[data-site-theme] .text-body, html[data-site-theme] .text-body-emphasis { color: var(--theme-text) !important; }
 html[data-site-theme] .text-secondary, html[data-site-theme] .text-body-secondary { color: var(--theme-muted) !important; }
+html[data-site-theme] .text-bg-light, html[data-site-theme] .text-bg-secondary { color: var(--theme-text) !important; background-color: var(--theme-subtle) !important; }
+html[data-site-theme] .text-bg-dark { color: var(--theme-bg) !important; background-color: var(--theme-text) !important; }
 html[data-site-theme] .card, html[data-site-theme] .comparison-answer {
   --tblr-card-bg: var(--theme-surface);
   --tblr-card-cap-bg: var(--theme-subtle);

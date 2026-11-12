@@ -36,7 +36,7 @@ def render():
     return pages.get_template('schedule_designs.html').render(
         css='\n'.join((static / name).read_text() for name in
                       ('tabler.min.css', 'style.css', 'themes.css', 'schedules.css')),
-        javascript=(static / 'schedule-designs.js').read_text(),
+        javascript='\n;\n'.join((static / name).read_text() for name in ('console.js', 'schedule-designs.js')),
         theme_javascript=(static / 'themes.js').read_text(), data=sample_data(),
         icons_svg=re.sub(r'\bid="([^"]+)"', r'id="schedule-icon-\1"', (static / 'icons.svg').read_text()),
     ).replace('/static/icons.svg?v=3#', '#schedule-icon-')

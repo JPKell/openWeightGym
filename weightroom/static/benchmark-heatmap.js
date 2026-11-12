@@ -119,6 +119,21 @@
       }
     });
     new ResizeObserver(() => chart.resize()).observe(place);
+    document.addEventListener('weightroom:theme', () => {
+      const current = chart.getOption().series[0].data;
+      chart.setOption({
+        xAxis: {axisLabel: {color: colour('--bs-secondary-color')}},
+        yAxis: {axisLabel: {color: colour('--bs-body-color')}},
+        tooltip: {backgroundColor: colour('--bs-body-bg'), borderColor: colour('--bs-border-color'),
+          textStyle: {color: colour('--bs-body-color')}},
+        series: [{
+          data: current.map(point => point.score === 'Not measured' ? {...point,
+            itemStyle: {color: colour('--bs-tertiary-bg')}, label: {color: colour('--bs-secondary-color')}} : point),
+          itemStyle: {borderColor: colour('--bs-body-bg')},
+          emphasis: {itemStyle: {borderColor: colour('--bs-primary')}},
+        }],
+      });
+    });
     document.getElementById(config.fallback).classList.add("score-keyboard-grid");
   }
 

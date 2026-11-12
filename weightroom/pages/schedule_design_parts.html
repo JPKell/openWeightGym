@@ -1,5 +1,5 @@
 {# Shared sample components for all three layouts and JavaScript replacements. #}
-{% from 'parts.html' import section_title, more, empty_row %}
+{% from 'parts.html' import section_title, more, empty_row, confirm_two %}
 {% from 'icons.html' import icon %}
 {% from 'schedule_parts.html' import task_mark, state, choice, form_fields, history_row %}
 
@@ -18,9 +18,10 @@
   catalogue=[{'model_id':'qwen3-32b','id':'Qwen3 32B'},{'model_id':'llama-3.3-70b','id':'Llama 3.3 70B'},{'model_id':'gemma3-27b','id':'Gemma 3 27B'}],
   definitions=[{'id':'ifeval','name':'IFEval'},{'id':'mmlu','name':'MMLU'},{'id':'speed','name':'Generation speed'}], nodes=['atlas','orion']) }}
 <p id="form-error" class="text-danger small mt-3" role="alert" hidden></p>
-<div class="sc-editor-actions border-top pt-3 mt-4"><button class="btn btn-primary" type="submit" id="save-schedule">Save changes</button><button class="btn btn-outline-secondary" type="button" id="discard">Discard</button><button type="button" class="btn btn-outline-danger btn-sm ms-auto" id="delete-schedule">Delete</button></div>
+<div class="sc-editor-actions border-top pt-3 mt-4"><button class="btn btn-primary" type="submit" id="save-schedule">Save changes</button><button class="btn btn-outline-secondary" type="button" id="discard">Discard</button></div>
 <p class="small text-secondary mt-3 mb-0">Demo changes stay in this page. A live save authorizes recurring work after sign-out, subject to the owner’s current permissions.</p>
 </form>
+<form id="schedule-delete-form" method="post" class="mt-3" {{ confirm_two() }}><button type="submit" class="btn btn-outline-danger btn-sm" id="delete-schedule">Delete schedule</button></form>
 </section>
 {% endmacro %}
 

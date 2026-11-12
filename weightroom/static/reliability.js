@@ -8,15 +8,19 @@
     const rows = JSON.parse(data.textContent);
     const css = getComputedStyle(document.documentElement);
     const text = css.getPropertyValue('--bs-body-color').trim();
+    const background = css.getPropertyValue('--bs-body-bg').trim();
+    const border = css.getPropertyValue('--bs-border-color').trim();
     const chart = echarts.getInstanceByDom(place) || echarts.init(place, null, {renderer: 'svg'});
     chart.setOption({animation: false,
       color: ['#41b89a', '#d76f88', '#d98e32', '#9478d1'],
       textStyle: {color: text},
-      tooltip: {trigger: 'axis', renderMode: 'richText', confine: true},
+      tooltip: {trigger: 'axis', renderMode: 'richText', confine: true,
+        backgroundColor: background, borderColor: border, textStyle: {color: text}},
       legend: {top: 0, textStyle: {color: text}},
       grid: {left: 15, right: 15, top: 45, bottom: 70, containLabel: true},
-      xAxis: {type: 'category', data: rows.map(r => `${r.model} · ${r.role || 'direct'} · ${r.fingerprint.slice(0, 8)}`), axisLabel: {color: text, width: 130, overflow: 'truncate'}},
-      yAxis: {type: 'value', min: 0, minInterval: 1, axisLabel: {color: text}},
+      xAxis: {type: 'category', data: rows.map(r => `${r.model} · ${r.role || 'direct'} · ${r.fingerprint.slice(0, 8)}`),
+        axisLabel: {color: text, width: 130, overflow: 'truncate'}, axisLine: {lineStyle: {color: border}}},
+      yAxis: {type: 'value', min: 0, minInterval: 1, axisLabel: {color: text}, splitLine: {lineStyle: {color: border}}},
       dataZoom: [{type: 'slider', bottom: 0, startValue: 0, endValue: Math.min(rows.length - 1, 5)}, {type: 'inside'}],
       series: [['success', 'Successful'], ['error', 'Errors'], ['timeout', 'Timeouts'], ['empty', 'Empty answers']].map(([key, name]) =>
         ({name, type: 'bar', stack: 'outcomes', barMaxWidth: 70, data: rows.map(r => r.counts[key])}))
@@ -27,8 +31,7 @@
     const place = document.getElementById('reliability-chart');
     if (place && event.detail?.elt?.contains(place)) draw();
   });
-  document.addEventListener('mw:theme', draw);
-  new MutationObserver(draw).observe(document.documentElement, {attributes: true, attributeFilter: ['data-bs-theme']});
+  document.addEventListener('weightroom:theme', draw);
   window.addEventListener('resize', () => {
     const place = document.getElementById('reliability-chart');
     if (place && window.echarts) echarts.getInstanceByDom(place)?.resize();

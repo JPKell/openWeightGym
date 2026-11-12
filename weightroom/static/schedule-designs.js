@@ -220,6 +220,7 @@
     }
   }
   function fillEditor() {
+    resetDelete();
     const job = current();
     for (const name of ['name', 'kind', 'time', 'timezone', 'model', 'benchmark', 'machine', 'missed', 'retention']) field(name).value = job[name];
     for (const input of $$('[name="weekdays"]')) input.checked = job.weekdays.includes(Number(input.value));
@@ -234,6 +235,7 @@
   }
   function newSchedule() { choose('new'); field('name').focus({preventScroll: true}); }
   function setLayout(value) {
+    resetDelete();
     if (dialog.open) dialog.close();
     layout = value; $('#workspace').dataset.layout = value;
     for (const button of $$('[data-design]')) { const active = button.dataset.design === value; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); }
@@ -243,7 +245,8 @@
     render();
     location.hash = value;
   }
-  function remember() { drafts.set(selected, readForm()); updateEditor(); }
+  function resetDelete() { document.dispatchEvent(new CustomEvent('suite:actionsChanged', {detail: {form: $('#schedule-delete-form')}})); }
+  function remember() { resetDelete(); drafts.set(selected, readForm()); updateEditor(); }
   form.addEventListener('input', remember);
   form.addEventListener('change', event => {
     if (event.target.id === 'repeat') {
@@ -268,15 +271,8 @@
   });
   $('#discard').addEventListener('click', () => { drafts.delete(selected); fillEditor(); announce('Draft discarded. Saved settings restored.'); });
   $('#close-editor').addEventListener('click', () => dialog.close());
-  $('#delete-schedule').addEventListener('click', () => {
-    const confirmation = $('#danger-confirmation');
-    confirmation.returnValue = '';
-    $('#danger-confirmation-check').checked = false;
-    $('#danger-confirmation-check').labels[0].textContent = `Delete ${savedJob().name} from this demo. History is kept.`;
-    confirmation.showModal();
-  });
-  $('#danger-confirmation').addEventListener('close', event => {
-    if (event.target.returnValue !== 'confirm') return;
+  $('#schedule-delete-form').addEventListener('submit', event => {
+    event.preventDefault();
     const name = savedJob().name; jobs = jobs.filter(job => job.id !== selected); drafts.delete(selected);
     if (dialog.open) dialog.close(); choose(jobs[0]?.id || 'new', false); announce(`Deleted ${name} in this demo. Existing run history is kept.`);
   });

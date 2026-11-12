@@ -293,6 +293,42 @@ def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, them
     assert not failures, '\n'.join(failures)
 
 
+@pytest.mark.parametrize('width', [1440, 390])
+def test_all_console_neutral_surfaces_retheme_without_reloading(ui_console, width):
+    from test_console_browser import browser_context, playwright
+    from test_themes import change_theme
+
+    server, paths = ui_console
+    failures = []
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.set_viewport_size({'width': width, 'height': 1000})
+        for path in paths:
+            sign_in(server, 'jordan')
+            response = page.goto('http://console.test' + path)
+            assert response.status == 200, path
+            page.wait_for_function('!document.querySelector("[data-deferred-loader][aria-busy=true], .htmx-settling")')
+            if not page.locator('html').get_attribute('data-theme-user'):
+                continue
+            change_theme(page, 'slate', 'dark')
+            page.evaluate('''() => {
+                const selector = 'main pre, main code, main kbd, main .kbd, main .frame, main .card, ' +
+                    'main .card-header, main .card-footer, main .form-control, main .form-select, ' +
+                    'main .input-group-text, main .text-bg-light, main .text-bg-dark, main .text-bg-secondary';
+                window.themeSurfaces = [...document.querySelectorAll(selector)].map(node => ({
+                    node, background: getComputedStyle(node).backgroundColor
+                })).filter(sample => sample.background !== 'rgba(0, 0, 0, 0)');
+            }''')
+            change_theme(page, 'forest', 'dark')
+            stuck = page.evaluate('''() => window.themeSurfaces.filter(({node, background}) =>
+                node.isConnected && getComputedStyle(node).backgroundColor === background
+            ).map(({node, background}) => ({tag: node.tagName, id: node.id, classes: node.className, background}))''')
+            if stuck:
+                failures.append({'path': path, 'surfaces': stuck})
+        browser.close()
+    assert not failures, json.dumps(failures, indent=2)
+
+
 @pytest.mark.parametrize('sidebar', ['closed', 'open'])
 def test_all_console_pages_share_outer_layout_when_resized(ui_console, tmp_path, sidebar):
     """Page gutters stay equal through navigation, rail toggles and breakpoint crossings."""
@@ -968,7 +1004,8 @@ def test_every_account_has_usage_help_but_source_reference_stays_private(desk):
     assert guide.status_code == 200 and 'Create a key' in guide.text
     assert 'http://testserver:8442/v1' in guide.text and 'href="/docs/api"' not in guide.text
     assert server.get('/docs/web-app').status_code == 200
-    assert 'href="/docs/web-app/chat"' in server.get('/chat').text
+    assert server.get('/docs/web-app/chat').status_code == 200
+    assert 'href="/docs/web-app/chat"' not in server.get('/chat').text
     assert 'href="/docs/web-app/collections"' in server.get('/collections').text
     assert 'href="/docs/web-app/workflows"' in server.get('/workflows').text
     assert 'href="/docs/web-app/api-keys"' in server.get('/account').text

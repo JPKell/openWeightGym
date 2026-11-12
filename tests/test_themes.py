@@ -10,6 +10,16 @@ from test_weightroom import desk, sign_in  # noqa: F401
 playwright = pytest.importorskip("playwright.sync_api")
 
 
+def change_theme(page, palette, mode):
+    """Exercise the same live update used when another tab saves an appearance choice."""
+    page.evaluate('''([palette, mode]) => {
+        const key = 'weightroom-theme-v1:' + encodeURIComponent(document.documentElement.dataset.themeUser);
+        const value = JSON.stringify({palette, mode});
+        localStorage.setItem(key, value);
+        window.dispatchEvent(new StorageEvent('storage', {key, newValue: value}));
+    }''', [palette, mode])
+
+
 def contrast(first, second):
     def luminance(color):
         values = [int(color[index:index + 2], 16) for index in (1, 3, 5)] if color.startswith("#") else [int(value) for value in re.findall(r"\d+", color)[:3]]
@@ -18,6 +28,74 @@ def contrast(first, second):
         return sum(value * factor for value, factor in zip(channels, (.2126, .7152, .0722)))
     bright, dim = sorted((luminance(first), luminance(second)), reverse=True)
     return (bright + .05) / (dim + .05)
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_chat_code_and_thinking_retheme_with_readable_text_in_every_palette(desk, width):
+    from test_console_browser import browser_context
+
+    server, _, users = desk
+    sign_in(server, 'jordan')
+    chats = server.app.state.conversations.state.chats
+    ref = chats.start(users.identity('jordan'), 'Theme review')
+    chats.say(ref, 'user', 'Review this example.')
+    chats.say(ref, 'assistant', 'Use `--temperature`:\n\n```python\nprint("Hello")\n```',
+              model='sample', reasoning='Thinking through the example.',
+              plugin_events=[{'type': 'tool_result', 'name': 'example', 'output': 'A tool result.'}])
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/account/appearance')
+        palettes = page.locator('[name=palette]').evaluate_all('fields => fields.map(field => field.value)')
+        page.goto(f'http://console.test/chat/{ref}')
+        page.locator('.thinking').evaluate_all('nodes => nodes.forEach(node => node.open = true)')
+        for mode in ('light', 'dark'):
+            for palette in palettes:
+                change_theme(page, palette, mode)
+                samples = page.locator('#chat-main pre, #chat-main code').evaluate_all('''nodes => nodes.map(node => {
+                    const style = getComputedStyle(node);
+                    let parent = node, background;
+                    do { background = getComputedStyle(parent).backgroundColor; parent = parent.parentElement; }
+                    while (background === 'rgba(0, 0, 0, 0)' && parent);
+                    return {tag: node.tagName, text: node.textContent, color: style.color, background};
+                })''')
+                assert len(samples) >= 4, samples
+                for sample in samples:
+                    assert contrast(sample['color'], sample['background']) >= 4.5, (palette, mode, sample)
+                assert page.locator('.thinking pre').first.evaluate('''node => {
+                    const sample = document.createElement('span');
+                    sample.style.background = 'var(--theme-subtle)';
+                    node.after(sample);
+                    const matches = getComputedStyle(node).backgroundColor === getComputedStyle(sample).backgroundColor;
+                    sample.remove(); return matches;
+                }'''), (palette, mode)
+        # Streamed answers and fragment replacements inherit the current theme immediately.
+        page.locator('.thinking').first.evaluate('node => node.replaceWith(node.cloneNode(true))')
+        change_theme(page, 'forest', 'light')
+        assert page.locator('.thinking pre').first.evaluate('node => getComputedStyle(node).color') == 'rgb(32, 54, 41)'
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        browser.close()
+
+
+def test_reliability_chart_rethemes_without_changing_appearance_mode(desk):
+    from test_console_browser import browser_context
+
+    server, switch, _ = desk
+    sign_in(server, 'jordan')
+    switch.front.state.routing.reliability.record(
+        999, 'jordan', 'sample', ('sample-id', 'sample-fingerprint', ''), 0, 'success')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/reliability')
+        for palette, mode in [('slate', 'dark'), ('forest', 'dark'), ('clay', 'light')]:
+            change_theme(page, palette, mode)
+            assert page.locator('#reliability-chart').evaluate('''node => {
+                const options = echarts.getInstanceByDom(node).getOption();
+                const css = getComputedStyle(document.documentElement);
+                return options.textStyle.color === css.getPropertyValue('--bs-body-color').trim() &&
+                    options.tooltip[0].backgroundColor === css.getPropertyValue('--bs-body-bg').trim() &&
+                    options.yAxis[0].splitLine.lineStyle.color === css.getPropertyValue('--bs-border-color').trim();
+            }'''), (palette, mode)
+        browser.close()
 
 
 @pytest.mark.parametrize('width', [1440, 390])

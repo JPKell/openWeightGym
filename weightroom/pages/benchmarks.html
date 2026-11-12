@@ -2,7 +2,7 @@
 {% from 'benchmark_parts.html' import model_type_navigation %}
 {% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
 {% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}{% if section in ('results','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=4" defer></script>{% endif %}{% if section in ('runs', 'node-measurements') %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=8" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if section in ('results','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=4" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=4" defer></script>{% endif %}{% if section in ('runs', 'node-measurements') %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=8" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
 {% block page_class %}benchmark-page{% endblock %}
 {% from "parts.html" import card, said_box, page_header, alert %}
 {% block main %}
@@ -12,7 +12,6 @@
 {% if section == 'node-measurements' %}{% from 'node_measurement_parts.html' import overview %}{{ overview(matrix.nodes|length, matrix.rows|length, matrix.coverage, matrix.current, matrix.total) }}{% endif %}
 {% if section == 'results' %}
 {{ model_type_navigation(section, kind) }}
-{% if kind in ('image', 'audio') %}<p class="small text-secondary">Image and audio models have load-time measurements. Token context, token throughput and language quality scores are unavailable.</p>{% endif %}
 {% endif %}
 {% if section == 'results' %}
 {% if kind == 'llm' and score_benchmarks %}

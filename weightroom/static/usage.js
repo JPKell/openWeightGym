@@ -25,6 +25,8 @@ function initializeUsage() {
     textStyle: { color: colour("--bs-body-color") },
     legend: { type: "scroll", top: 14, textStyle: { color: colour("--bs-body-color") } },
     tooltip: { trigger: "axis", renderMode: "richText", confine: true,
+      backgroundColor: colour('--bs-body-bg'), borderColor: colour('--bs-border-color'),
+      textStyle: {color: colour('--bs-body-color')},
       valueFormatter: value => Number(value).toLocaleString() },
   };
   axisLabel = { color: colour("--bs-secondary-color") };

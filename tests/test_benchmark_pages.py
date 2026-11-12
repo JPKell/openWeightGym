@@ -11,6 +11,7 @@ from weightroom.navigation import navigation
 from loadcoach.groups import read_group
 from loadcoach.models import Models
 from test_weightroom import desk, sign_in
+from test_benchmark_lanes import fleet  # noqa: F401
 
 
 @pytest.fixture
@@ -45,16 +46,18 @@ def test_result_model_types_and_node_comparisons_keep_evidence_separate(desk, ty
     for kind, (name, number) in typed_models.items():
         result = browser.get('/benchmarks/results', params={'kind': kind, 'benchmark': 'load'})
         assert result.status_code == 200
-        table = result.text.split('id="benchmark-results"', 1)[1].split('</table>', 1)[0]
-        assert name in table and number in table
-        assert all(other not in table for other, _ in typed_models.values() if other != name)
         assert 'id="benchmark-resource-table"' not in result.text
-        assert f'name="kind" value="{kind}"' in result.text
-        if kind != 'llm':
-            assert '>Context<' not in table
+        assert number not in result.text
+        if kind == 'llm':
+            table = result.text.split('id="benchmark-results"', 1)[1].split('</table>', 1)[0]
+            assert name in table
+            assert all(other not in table for other, _ in typed_models.values() if other != name)
             options = result.text.split('<select id="benchmark"', 1)[1].split('</select>', 1)[0]
-            assert 'value="load" selected' in options and 'value="context"' not in options and 'value="speed"' not in options
-            assert 'id="benchmark-score-table"' not in result.text
+            assert all(f'value="{resource}"' not in options for resource in ('context', 'speed', 'load'))
+        else:
+            assert 'No model benchmarks are available for this model type.' in result.text
+            assert f'href="/benchmarks/node-measurements?kind={kind}"' in result.text
+            assert 'id="benchmark-results"' not in result.text and 'id="benchmark-score-table"' not in result.text
         nodes = browser.get('/benchmarks/node-measurements', params={'kind': kind, 'benchmark': 'load'})
         grid = nodes.text.split('id="benchmark-resource-table"', 1)[1].split('</table>', 1)[0]
         assert name in grid and number in grid and 'data-label="compute"' in grid
@@ -142,7 +145,7 @@ def test_benchmark_pages_filter_models_before_rendering_or_comparing(desk, tmp_p
         assert "visible-model" in page.text and "private-model" not in page.text
         assert "Setup in progress" not in page.text
     results = browser.get("/benchmarks/results?benchmark=speed&model=visible-model").text
-    assert "First token" in results and "run-details" not in results
+    assert "First token" not in results and "Correct fields" in results and "run-details" not in results
     assert 'id="benchmark-resource-heatmap"' not in results and 'id="benchmark-resource-table"' not in results
     nodes = browser.get('/benchmarks/node-measurements?benchmark=speed').text
     assert 'data-measurement-matrix' in nodes and 'id="benchmark-resource-table"' in nodes
@@ -344,7 +347,7 @@ def test_a_model_page_has_a_card_with_its_result_on_each_benchmark(desk, tmp_pat
     subject["protocol"]["version"] = 0
     with store.db:
         store.db.execute("UPDATE benchmark_runs SET subject=? WHERE id=?", (json.dumps(subject), number))
-    assert "benchmark version 0, now 1" in browser.get("/models/scored-model?part=benchmark&benchmark=load").text and "benchmark version 0, now 1" in browser.get("/benchmarks/results?benchmark=load").text
+    assert "benchmark version 0, now 1" in browser.get("/models/scored-model?part=benchmark&benchmark=load").text and "benchmark version 0, now 1" in browser.get("/benchmarks/node-measurements?benchmark=load").text
 
 
 def test_context_edits_keep_scores_details_comparison_and_model_results(desk, tmp_path):
@@ -369,13 +372,13 @@ def test_context_edits_keep_scores_details_comparison_and_model_results(desk, tm
         store.finish(ref, state); store.synced(ref)
         return ref
     original = recorded(mark, 2048, 2)
-    assert 'Settings changed.' not in browser.get('/benchmarks/results?benchmark=load&model=context-model').text
+    assert 'Settings changed.' not in browser.get('/benchmarks/node-measurements?benchmark=load&model=context-model').text
     # Change only context: no run is added and raw evidence is unchanged.
     models.put('context-model', {'flags': {'model': str(file), 'ctx-size': 8192}})
     current = fingerprint()
     assert current != mark
     before = store.db.execute('SELECT * FROM benchmark_samples').fetchall()
-    for path in ('/benchmarks/results?benchmark=load&model=context-model', '/models/context-model?part=benchmark&benchmark=load'):
+    for path in ('/benchmarks/node-measurements?benchmark=load&model=context-model', '/models/context-model?part=benchmark&benchmark=load'):
         page = browser.get(path)
         assert page.status_code == 200 and 'Settings changed.' in page.text and ('configured context 2048' in page.text or 'configured context: 2048 tokens' in page.text)
         assert original in page.text and '>0.5' in page.text
@@ -386,10 +389,10 @@ def test_context_edits_keep_scores_details_comparison_and_model_results(desk, tm
     # A current completed measurement takes precedence, even over a newer historical run.
     matching = recorded(current, 8192, 4)
     recorded(mark, 2048, 8)
-    page = browser.get('/benchmarks/results?benchmark=load&model=context-model').text
+    page = browser.get('/benchmarks/node-measurements?benchmark=load&model=context-model').text
     assert f'/benchmarks/run/{matching}' in page and 'Settings changed.' not in page
     recorded(current, 8192, 10, 'failed')
-    assert f'/benchmarks/run/{matching}' in browser.get('/benchmarks/results?benchmark=load&model=context-model').text
+    assert f'/benchmarks/run/{matching}' in browser.get('/benchmarks/node-measurements?benchmark=load&model=context-model').text
 
 
 def test_green_direction_saves_without_changing_matrix_scores(desk,tmp_path,monkeypatch):
@@ -486,3 +489,30 @@ def test_quant_matching_preserves_base_version_size_and_history_pagination():
     assert page['total'] == 31 and len(page['items']) == 6 and page['page'] == 2
     assert history_page(runs, {'page': '-5', 'per_page': 'oops'})['page'] == 1
     assert history_page(runs, {'page': '999', 'per_page': '10'})['page'] == 4
+
+
+def test_results_show_one_quality_result_per_model_across_nodes(fleet):
+    browser, library, _, _ = fleet
+    store = browser.app.state.benchmarks.state.store
+    saved = []
+    for node, fingerprint in [('compute', 'saved-compute-settings'), ('rig', 'saved-rig-settings')]:
+        ref = store.create('jordan', 'local-model', 'extraction', library.identity('local-model'), location=node)
+        store.activate(ref, {'fingerprint': fingerprint, 'subject': {}, 'environment': {}})
+        store.keep(ref, 'extract-one', {'success': True, 'correct': 1, 'checks': 1, 'passed': True}, '', '')
+        store.finish(ref, 'completed'); store.synced(ref)
+        saved.append(ref)
+    for requested in ('extraction', 'context', 'speed', 'load', 'embedding_load'):
+        html = browser.get('/benchmarks/results', params={'benchmark': requested, 'kind': 'llm'}).text
+        if requested == 'embedding_load':
+            assert 'No model benchmarks are available for this model type.' in html
+            continue
+        table = html.split('id="benchmark-results"', 1)[1].split('</table>', 1)[0]
+        assert table.count('local-model') == 1 and table.count('private-model') == 1
+        if requested == 'extraction':
+            assert saved[1] in table and saved[0] not in table
+        options = html.split('<select id="benchmark"', 1)[1].split('</select>', 1)[0]
+        assert all(f'value="{key}"' not in options for key in ('context', 'speed', 'load'))
+        assert 'value="extraction"' in options
+    empty = browser.get('/benchmarks/results?family=embedding').text
+    assert 'No model benchmarks are available for this model type.' in empty
+    assert 'href="/benchmarks/node-measurements?kind=embedding"' in empty
