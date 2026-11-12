@@ -43,7 +43,7 @@
 </table>
 {% endmacro %}
 
-<div id="components-report">
+<div id="components-report" hx-get="/system/components?part=page" hx-trigger="every 30s" hx-swap="outerHTML">
 <div class="component-cards-frame"><div class="component-cards">
 {% for node in found.nodes or [] %}
 {% set title = 'Front' if node.name == 'front' else node.name %}

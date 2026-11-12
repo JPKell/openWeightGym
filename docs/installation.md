@@ -233,6 +233,15 @@ files are kept; enabling voice adds its missing gateway port and pairing updates
 with private backups before those changes. Replaced service units are backed up beside their
 originals as `NAME.service.before-suite-install-TIME`, including local edits to generated units.
 Service control commands return a nonzero status if any requested service fails.
+Components versions are recorded after installs, code updates and successful starts/restarts.
+Spotter on each compute node and Turnstile on Front recheck them independently of page visits.
+The **Component version check interval** setting is in minutes (60 by default, above zero);
+changes apply within a minute. Configure it per node under **Compute nodes**, and for Front
+under **Settings**. In files it is `component_versions_every` in `settings/spotter.toml` on
+compute, or `[turnstile]` in `settings/weightroom.toml` on Front. The Components page refreshes
+its display every 30 seconds, reading saved versions without waking sleeping nodes or running
+model workers. Engine version probes use bounded `--version` calls; Strata uses its source revision.
+
 Remote restarts need working SSH key authentication and `owg` installed on the destination.
 For example, `owg restart --host jpk@compute loadcoach spotter` restarts those two services.
 The remote installation handles its service account and any sudo prompt in an interactive terminal.

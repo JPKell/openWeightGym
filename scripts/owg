@@ -198,6 +198,9 @@ control() {
   for program in "${chosen[@]}"; do
     ui_step "${action^} $program" -- owg_systemctl "$action" "$program.service" || failed=1
   done
+  if ((failed == 0)) && [[ $action == start || $action == restart ]]; then
+    refresh_component_versions "$ROOT" || failed=1
+  fi
   return "$failed"
 }
 

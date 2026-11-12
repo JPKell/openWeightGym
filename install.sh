@@ -615,6 +615,8 @@ update() {
       ui_die 'Code was fetched, but the Voice desktop download could not be built.' \
         'Resolve the packaging error above, then run owg update again'
   fi
+  refresh_component_versions "$DIR" || ui_die 'Code was fetched, but component versions could not be recorded.' \
+    'Check the update log, then run owg restart to retry.'
   ui_info "${C_ERR}Code update complete. Restart running services when ready: owg restart${C_RESET}"
   if [[ $(receipt_get state) == pending ]]; then
     ui_note 'The unfinished installation is still saved. Run install.sh separately when you want to continue it.'

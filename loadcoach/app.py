@@ -2590,6 +2590,12 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if isinstance(asked, Response):
             return asked
         now = {setting["name"]: setting["value"] for setting in known["settings"]}
+        if asked.get('component_versions_every') is not None:
+            from loadcoach.component_versions import interval_seconds
+            try:
+                interval_seconds(asked['component_versions_every'])
+            except ValueError as problem:
+                return error(400, str(problem))
         if program == 'voice' and asked.get('greetings') is not None:
             from voice.prompt_recordings import texts
             try:

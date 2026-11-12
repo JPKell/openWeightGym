@@ -47,6 +47,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from loadcoach.config import CLI, data_folder, kept_by_loadcoach, model_places, read_settings, said_in
+from loadcoach.component_versions import interval_seconds
 from loadcoach.files import SPARE
 from loadcoach.file_index import NODE_INDEX, FileIndex
 from loadcoach.log import Log
@@ -99,6 +100,7 @@ class Settings:
     turnstile_notice: str = ""  # turnstile's /turnstile/power URL, empty disables the notice. Signed with the machine key
     places: dict[str, str] = field(default_factory=dict)  # LoadCoach's allowed model-file destinations
     files_every: float = 10  # minutes between looks through the places for the Files page's index. 0 means only when asked
+    component_versions_every: float = 60  # minutes between installed component version checks
     file_index: str = ""  # that index, in LoadCoach's data folder; empty keeps none
 
 
@@ -143,6 +145,7 @@ def settings_from(path: Path, told: dict, file: dict | None = None) -> Settings:
                 "says": said_in(path),
             }
         )
+        interval_seconds(settings.component_versions_every)
     except (TypeError, ValueError) as problem:
         raise SystemExit(f"{path}: {problem}") from None
     if settings.sample_every < 1 or min(settings.keep_days, settings.sleep_after, settings.busy_gpu, settings.busy_processor, settings.files_every) < 0:
@@ -277,7 +280,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
     from loadcoach.component_versions import Versions
     component_settings = Path(settings.path).parent / settings.file.get("loadcoach", "loadcoach.toml") if settings.path else None
     component_source = kept_by_loadcoach(component_settings)[1] if component_settings and component_settings.is_file() else identity
-    component_versions = Versions(component_source)
+    component_versions = Versions(component_source, minutes=settings.component_versions_every)
     gate = Gate(settings.path)
     log = Log(identity)
     loadcoach = client or httpx.AsyncClient(base_url=settings.compute, timeout=httpx.Timeout(15, connect=2))
@@ -304,7 +307,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
             return
         settings, refused = taken("spotter", settings, changed, settings_from)
         in_force["changed"] = changed
-        named = ("host", "port", "sample_every", "keep_days", "sleep_after", "busy_gpu", "busy_processor", "files_every", "services", "system_services")
+        named = ("host", "port", "sample_every", "keep_days", "sleep_after", "busy_gpu", "busy_processor", "files_every", "component_versions_every", "services", "system_services")
         running = {**settings.file, **{name: getattr(settings, name) for name in named}, "disks": list(settings.disks)}
         changes.seen("spotter", said(running, settings.file, settings.says), refused)
     reading_now = asyncio.Lock()  # so that two askers at once share one reading
@@ -434,15 +437,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
                         print(f"spotter: the model files could not be looked through: {problem}", file=sys.stderr, flush=True)
             await asyncio.sleep(min(every or 60, 60))  # a change to files_every is taken on within a minute
 
+    def versions_every() -> float:
+        """Read the interval after taking on live node settings."""
+        in_step()
+        return settings.component_versions_every
+
     async def keep_versions() -> None:
-        """Check installed suite and native engine versions every 60 minutes, independently of telemetry."""
-        while True:
-            await gate.wait()
-            try:
-                await component_versions.refresh(settings=component_settings)
-            except (OSError, ValueError) as problem:
-                print(f"spotter: component versions could not be checked: {problem}", file=sys.stderr, flush=True)
-            await asyncio.sleep(60)  # persisted timestamps determine which hourly checks are due
+        """Check versions independently of telemetry and page requests."""
+        await component_versions.watch(settings=component_settings, minutes=versions_every, gate=gate)
 
     async def systemctl(*arguments: str, own: bool = True) -> tuple[int, str]:
         """Run systemctl and return how it ended and what it said. `own` is for this account's services, otherwise root's.

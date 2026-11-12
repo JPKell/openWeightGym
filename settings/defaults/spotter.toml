@@ -31,3 +31,6 @@ busy_processor = 25
 # answers from that list; its Refresh button looks again at once, and the files the page moves,
 # copies, deletes or downloads are put right straight away. 0 means only when asked.
 files_every = 10
+
+# Check installed service and engine versions this often, in minutes (above 0). Changes apply immediately.
+component_versions_every = 60

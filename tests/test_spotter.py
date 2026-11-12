@@ -430,9 +430,11 @@ def test_spotter_refreshes_versions_in_its_background_worker(tmp_path, monkeypat
     refreshed = []
 
     async def refresh(self, **kwargs):
-        refreshed.append(kwargs)
+        refreshed.append((self.source.store.path, self.every, kwargs))
 
     monkeypatch.setattr(Versions, "refresh", refresh)
-    with made_up(tmp_path, monkeypatch):
-        wait_until(lambda: refreshed)
-        assert refreshed == [{"settings": None}]
+    with made_up(tmp_path, monkeypatch, component_versions_every=5):
+        # Front has its own checker; verify this node's configured store and interval.
+        own = lambda: [row for row in refreshed if row[0] == str(tmp_path / "loadcoach.db")]
+        wait_until(own)
+        assert own() == [(str(tmp_path / "loadcoach.db"), 300, {"settings": None})]
