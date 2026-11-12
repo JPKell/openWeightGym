@@ -5,19 +5,17 @@
     if (!matrix || matrix.dataset.initialized) return;
     matrix.dataset.initialized = 'true';
     const rows = [...matrix.querySelectorAll('[data-measurement-row]')];
-    const search = matrix.querySelector('[data-matrix-search]');
-    const filter = matrix.querySelector('[data-matrix-filter]');
-    const order = matrix.querySelector('[data-matrix-sort]');
+    let sortColumn = null;
     const display = matrix.querySelector('[data-matrix-display]');
     const table = matrix.querySelector('table');
     const columns = [...table.tHead.rows[0].cells].slice(1);
     const viewport = matrix.querySelector('.measurement-table-scroll');
-    const controls = {q: search, evidence: filter, order, display};
-    const defaults = {q: '', evidence: 'all', order: 'name', display: 'values'};
+    const controls = {display};
+    const defaults = {display: 'values'};
     const query = new URLSearchParams(location.search);
     for (const [name, control] of Object.entries(controls)) {
       const value = query.get(name);
-      if (value !== null && (control === search || [...control.options].some(option => option.value === value))) control.value = value;
+      if (value !== null && [...control.options].some(option => option.value === value)) control.value = value;
     }
     const mode = () => display.value;
     const higher = () => matrix.dataset[mode() === 'scores' ? 'scoreHigher' : 'valueHigher'] === 'true';
@@ -27,21 +25,13 @@
       return raw !== '' && Number.isFinite(Number(raw)) ? Number(raw) : null;
     }
     function rank(row) {
-      const cells = [...row.cells].slice(1);
-      const index = order.value.startsWith('node-') ? Number(order.value.slice(5)) : null;
-      const values = (index === null ? cells : [cells[index]]).map(numeric).filter(value => value !== null);
-      return values.length ? (higher() ? Math.max(...values) : -Math.min(...values)) : -Infinity;
+      const value = numeric(row.cells[sortColumn + 1]);
+      return value === null ? -Infinity : higher() ? value : -value;
     }
     function update() {
-      const query = search.value.trim().toLocaleLowerCase();
-      const sorted = [...rows].sort((a, b) => (order.value !== 'name' ? rank(b) - rank(a) : 0) || a.dataset.model.localeCompare(b.dataset.model));
-      let visible = 0;
+      const sorted = [...rows].sort((a, b) => (sortColumn !== null ? rank(b) - rank(a) : 0) || a.dataset.model.localeCompare(b.dataset.model));
       for (const row of sorted) {
         const cells = [...row.cells].slice(1);
-        const matches = filter.value === 'all' || cells.some(cell => filter.value === 'gaps'
-          ? ['missing', 'failed', 'cancelled', 'unavailable'].includes(cell.dataset.state) : cell.dataset.state === filter.value);
-        row.hidden = !row.dataset.search.includes(query) || !matches;
-        visible += !row.hidden;
         table.tBodies[0].append(row);
         for (const cell of cells) {
           const best = cell.dataset[mode() === 'scores' ? 'bestScores' : 'bestValues'] === 'true';
@@ -50,13 +40,12 @@
           if (note) note.hidden = !best;
         }
       }
-      matrix.querySelector('[data-matrix-empty]').hidden = visible > 0;
-      matrix.querySelector('[data-matrix-count]').textContent = `${visible} of ${rows.length} models`;
+      matrix.querySelector('[data-matrix-count]').textContent = `${rows.length} models`;
       matrix.querySelectorAll('[data-matrix-values]').forEach(el => { el.hidden = mode() !== 'values'; });
       matrix.querySelectorAll('[data-matrix-scores]').forEach(el => { el.hidden = mode() !== 'scores'; });
-      matrix.querySelector('[data-matrix-direction]').textContent = `${higher() ? 'Higher' : 'Lower'} is better.${mode() === 'scores' ? ` Score formula: ${matrix.dataset.formula}.` : ''}`;
-      columns.forEach((column, index) => column.setAttribute('aria-sort', order.value === `node-${index}` ? (higher() ? 'descending' : 'ascending') : 'none'));
+      columns.forEach((column, index) => column.setAttribute('aria-sort', sortColumn === index ? (higher() ? 'descending' : 'ascending') : 'none'));
       const url = new URL(location.href);
+      for (const name of ['q', 'evidence', 'order']) url.searchParams.delete(name);
       for (const [name, control] of Object.entries(controls)) {
         if (control.value !== defaults[name]) url.searchParams.set(name, control.value);
         else url.searchParams.delete(name);
@@ -64,6 +53,7 @@
       history.replaceState(null, '', url);
       document.querySelectorAll('[data-matrix-navigation]').forEach(link => {
         const target = new URL(link.href);
+        for (const name of ['q', 'evidence', 'order']) target.searchParams.delete(name);
         for (const [name, control] of Object.entries(controls)) {
           if (control.value !== defaults[name]) target.searchParams.set(name, control.value);
           else target.searchParams.delete(name);
@@ -71,10 +61,9 @@
         link.href = target.href;
       });
     }
-    search.addEventListener('input', update);
-    for (const control of [filter, order, display]) control.addEventListener('change', update);
+    display.addEventListener('change', update);
     matrix.querySelectorAll('[data-matrix-column]').forEach(button => button.addEventListener('click', () => {
-      order.value = `node-${button.dataset.matrixColumn}`; update();
+      sortColumn = Number(button.dataset.matrixColumn); update();
     }));
     matrix.querySelectorAll('[data-matrix-node]').forEach(link => link.addEventListener('click', event => {
       event.preventDefault();

@@ -1,8 +1,8 @@
 {% extends "frame.html" %}
-{% from "navigation_parts.html" import pills, pill_link %}
+{% from 'benchmark_parts.html' import model_type_navigation %}
 {% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
 {% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}{% if section in ('results','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=2" defer></script>{% endif %}{% if section == 'runs' %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=7" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if section in ('results','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=3" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=3" defer></script>{% endif %}{% if section == 'runs' %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=7" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
 {% block page_class %}benchmark-page{% endblock %}
 {% from "parts.html" import card, said_box, page_header, alert %}
 {% block main %}
@@ -10,11 +10,8 @@
 {{ said_box(said, failed, partial) }}
 {% if catalogue_warning %}{% call alert('warning', tag='p', role='status') %}{{ catalogue_warning }}{% endcall %}{% endif %}
 {% if section == 'node-measurements' %}{% from 'node_measurement_parts.html' import overview %}{{ overview(matrix.nodes|length, matrix.rows|length, matrix.coverage, matrix.current, matrix.total) }}{% endif %}
-{% if section in ('results', 'node-measurements') %}
-{% call pills('Model type') %}
-{% set model_types = [('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')] if section == 'node-measurements' else [('llm','LLM'),('image','Image'),('audio','Audio')] %}
-{% for value, label in model_types %}{{ pill_link(label, '/benchmarks/' ~ section ~ '?kind=' ~ value ~ ('&benchmark=' ~ type_benchmarks[value] if section == 'node-measurements' else ''), kind == value, attrs={'data-matrix-navigation':''} if section == 'node-measurements' else {}) }}{% endfor %}
-{% endcall %}
+{% if section == 'results' %}
+{{ model_type_navigation(section, kind) }}
 {% if kind in ('image', 'audio') %}<p class="small text-secondary">Image and audio models have load-time measurements. Token context, token throughput and language quality scores are unavailable.</p>{% endif %}
 {% endif %}
 {% if section == 'results' %}
