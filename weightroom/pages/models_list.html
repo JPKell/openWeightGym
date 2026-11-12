@@ -35,7 +35,7 @@
   <tbody>
   {% for row in catalogue.rows %}{% set model = row.model %}
   {% set model_kind = {'sdcpp':'image', 'audiocpp':'audio'}.get(model.engine, 'llm') %}
-  <tr data-catalogue-row data-name="{{ model.name }}" data-search="{{ row.search }}" data-order="{{ model.order }}" data-coverage="{{ row.placements|length }}" data-size="{{ row.sizes|first|default('') }}" data-states="{{ row.placements|map(attribute='state')|join(' ') }}{{ ' disabled' if row.placements|selectattr('disabled')|list }}">
+  <tr data-catalogue-row tabindex="0" aria-expanded="false" aria-controls="catalogue-details-{{ model.name|urlencode }}" data-name="{{ model.name }}" data-search="{{ row.search }}" data-order="{{ model.order }}" data-coverage="{{ row.placements|length }}" data-size="{{ row.sizes|first|default('') }}" data-states="{{ row.placements|map(attribute='state')|join(' ') }}{{ ' disabled' if row.placements|selectattr('disabled')|list }}">
     <th scope="row">{{ subject(model.name, model.engine|default('llama_cpp') ~ (' · vision' if model.flags.mmproj else ''), address(model.name)) }}{% if model.alone %} <small class="text-secondary">alone</small>{% endif %}{% if model.adapters %} <small class="text-secondary">with {{ model.adapters|join(', ') }}</small>{% endif %}{{ model_facts(row, model_kind) }}</th>
     <td data-column="placements"><div class="inventory-placements">{% for place in row.placements %}{{ placement(place.node, place.state, place.label, place.href) }}{% endfor %}</div></td>
     <td>{% if model_kind == 'llm' %}{% if row.contexts %}{{ '{:,}'.format(row.contexts[0]) }}{% if row.contexts|length > 1 %}–{{ '{:,}'.format(row.contexts[-1]) }}<small class="d-block text-secondary">Varies by node</small>{% endif %}{% else %}N/A{% endif %}{% else %}{{ model.get(model.engine, {}).get('family', 'Unknown') }}{% endif %}</td>
@@ -49,7 +49,7 @@
   </tbody>
 </table>
 </div>
-<div class="inventory-footer small text-secondary"><span>Open a model or node chip for settings. Details shows each node’s memory and configuration.</span><span>{{ catalogue.rows|length }} models · {{ catalogue.installations }} installations</span></div>
+<div class="inventory-footer small text-secondary"><span>Click a row or press Enter or Space for node details. Model and node links open settings.</span><span>{{ catalogue.rows|length }} models · {{ catalogue.installations }} installations</span></div>
 {% endcall %}
 <div class="inventory-legend small text-secondary mb-3" aria-label="Availability legend">{% for state,label in [('in-use','In use'),('loaded','Loaded'),('installed','Installed'),('loading','Loading'),('offline','Node unavailable'),('missing','File missing'),('disabled','Disabled')] %}<span class="inventory-state" data-state="{{ state }}"><span class="inventory-dot" aria-hidden="true"></span>{{ label }}</span>{% endfor %}</div>
 {% if adaptor_models %}

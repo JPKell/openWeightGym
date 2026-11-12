@@ -67,8 +67,17 @@ def test_live_catalogue_keeps_filters_details_scroll_and_add_draft_on_refresh(de
         playwright.expect(rows.first).to_have_attribute('data-name','sample-00')
         page.locator('#catalogue-search').fill('sample-0')
         playwright.expect(page.locator('[data-catalogue-count]')).to_have_text('10 of 30 models')
-        rows.first.locator('summary').click()
+        assert rows.first.bounding_box()['height'] <= 56
+        assert not rows.first.locator('summary').is_visible()
+        rows.first.locator('td').last.click()
         playwright.expect(rows.first.locator('details')).to_have_attribute('open','')
+        playwright.expect(rows.first).to_have_attribute('aria-expanded','true')
+        rows.first.focus()
+        page.keyboard.press('Space')
+        playwright.expect(rows.first).to_have_attribute('aria-expanded','false')
+        assert not rows.first.locator('details').evaluate('(el) => el.open')
+        page.keyboard.press('Enter')
+        playwright.expect(rows.first).to_have_attribute('aria-expanded','true')
         # Add remains the real file/engine/projector/context form, outside the inventory poll.
         page.locator('#file').select_option(index=1)
         page.locator('#name').fill('A draft that must survive')
@@ -81,11 +90,22 @@ def test_live_catalogue_keeps_filters_details_scroll_and_add_draft_on_refresh(de
         playwright.expect(page.locator('#catalogue-sort')).to_have_value('name')
         playwright.expect(page.locator('#name')).to_have_value('A draft that must survive')
         playwright.expect(rows.first.locator('details')).to_have_attribute('open','')
+        playwright.expect(rows.first).to_have_attribute('aria-expanded','true')
         assert region.evaluate('(el) => el.scrollTop > 0')
         page.locator('#catalogue-status').select_option('active')
         playwright.expect(page.locator('[data-catalogue-empty]')).to_be_visible()
         page.locator('[data-catalogue-clear]').click()
         playwright.expect(page.locator('[data-catalogue-count]')).to_have_text('30 of 30 models')
+        rows.first.locator('td').last.click()
+        playwright.expect(rows.first).to_have_attribute('aria-expanded','false')
+        assert rows.first.bounding_box()['height'] <= 56
+        # Cancel navigation after the row handler runs, so links must leave expansion unchanged.
+        page.evaluate('''document.addEventListener('click',event => {
+            if (event.target.closest('#models-table a')) event.preventDefault();
+        })''')
+        rows.first.locator('.inventory-placement').click()
+        rows.first.locator('.inventory-subject').click()
+        playwright.expect(rows.first).to_have_attribute('aria-expanded','false')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not errors
         browser.close()

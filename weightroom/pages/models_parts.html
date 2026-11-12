@@ -21,7 +21,7 @@
 </div>
 {% endmacro %}
 {% macro model_facts(row, kind) %}
-{% call more('Details', attrs={'id':'catalogue-details-' ~ row.model.name|urlencode}) %}
+{% call more('Details', attrs={'id':'catalogue-details-' ~ row.model.name|urlencode, 'data-catalogue-details':'', 'aria-label':row.model.name ~ ' installation details'}) %}
 <div class="small mb-2">Order {{ row.model.order }}{% if row.model.fingerprint %} · <a href="/fingerprints?start={{ row.model.fingerprint }}"><code>{{ row.model.fingerprint[:12] }}</code></a>{% else %} · <span class="text-secondary">{{ 'no file' if row.model.size is none else 'Reading file metadata' }}</span>{% endif %}</div>
 {% for place in row.placements %}{% set model = place['copy'] %}
 <div class="inventory-copy-facts"><strong>{{ place.node }}</strong>{% if model.name != row.model.name %}<small class="d-block text-secondary">{{ model.name }}</small>{% endif %}
