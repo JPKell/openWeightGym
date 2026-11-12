@@ -48,8 +48,6 @@ def studio(desk):
             html = server.get(path).text
             html = re.sub(r'(<script type="application/json" id="am-nodes">).*?(</script>)',
                           lambda match:match[1]+json.dumps(nodes)+match[2],html,flags=re.S)
-            html = re.sub(r'(<select id="am-node"[^>]*>).*?(</select>)',
-                          lambda match:match[1]+'<option value="">All nodes</option>'+''.join(f'<option>{node["name"]}</option>' for node in nodes)+match[2],html,flags=re.S)
             route.fulfill(content_type='text/html',body=html)
             return True
         if parsed.path == '/model-files':
@@ -124,17 +122,18 @@ def test_model_and_node_drafts_preserve_unknown_settings_and_save_to_selected_no
     playwright.expect(page.locator('#am-option-speed')).to_have_value('1.5')
 
 
-def test_filters_clear_empty_nodes_and_add_from_remote_storage(studio):
+def test_task_choices_and_add_from_remote_storage_on_selected_node(studio):
     page,state = studio
     page.goto('http://console.test/models/audio')
     page.locator('[data-audio-task="music"]').click()
     playwright.expect(page.locator('#am-profiles [data-model]')).to_have_count(1)
-    page.locator('#am-search').fill('no-match')
-    playwright.expect(page.locator('#am-profiles')).to_contain_text('No models match')
-    page.locator('#am-clear').click()
-    page.locator('#am-node').select_option('scout')
-    playwright.expect(page.locator('#am-profiles [data-model]')).to_have_count(0)
+    page.locator('[data-audio-task="sound"]').click()
+    playwright.expect(page.locator('#am-profiles')).to_contain_text('No models for this task')
+    page.locator('[data-audio-task="all"]').click()
+    playwright.expect(page.locator('#am-profiles [data-model]')).to_have_count(2)
     page.locator('#am-add').click()
+    page.locator('#am-install-targets input[value="atlas"]').locator('..').click()
+    page.locator('#am-install-targets input[value="scout"]').locator('..').click()
     page.locator('#am-file').select_option(label='vault · storage')
     page.locator('#am-name').fill('new-voice')
     page.locator('[data-section="hardware"]').click()
@@ -149,8 +148,8 @@ def test_filters_clear_empty_nodes_and_add_from_remote_storage(studio):
     page.locator('#am-seconds').fill('100')
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
-    node,body = state['posts'][0]
-    assert node == 'scout' and body['new'] and body['source_machine'] == 'vault'
+    _,body = state['posts'][0]
+    assert body['machines'] == ['scout'] and body['new'] and body['source_machine'] == 'vault'
     assert body['settings']['flags']['model'] == '/storage/voice.gguf'
     playwright.expect(page.locator('#am-profiles [data-model="new-voice"]')).to_be_visible()
 
@@ -167,8 +166,8 @@ def test_retry_retains_invalid_drafts_and_marks_last_known_offline_inventory(stu
     playwright.expect(page.locator('#am-load-error')).to_contain_text('File scan unavailable')
     playwright.expect(page.locator('#am-defaults')).to_have_value('{unfinished')
     playwright.expect(page.locator('#am-submit')).to_be_disabled()
-    page.locator('#am-availability').select_option('offline')
     playwright.expect(page.locator('#am-profiles [data-model]')).to_have_count(2)
+    playwright.expect(page.get_by_role('button',name='Configure speaker on atlas: Node unavailable',exact=True)).to_be_visible()
     state['failed'].clear(); state['file_error'] = False
     page.locator('#am-retry').click()
     playwright.expect(page.locator('#am-load-error')).not_to_be_visible()
@@ -362,7 +361,7 @@ def test_studio_sections_fit_both_appearances_and_have_accessible_controls(studi
             assert not result['invalidControls']
             assert not result['mismatches']
             assert page.evaluate('''() => {const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);return ids.length===new Set(ids).size}''')
-    page.locator('#am-search').fill('absent')
+    page.locator('[data-audio-task="sound"]').click()
     assert not page.evaluate(MEASURE)['overflow']
 
 
