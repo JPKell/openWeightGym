@@ -110,7 +110,8 @@ class FileIndex:
     def entry(self, file: Path, place: str, seen: os.stat_result, before: dict | None) -> dict:
         """One file's line: the one kept before if the file has not changed since, otherwise read again."""
         facts = (before or {}).get('facts', {})
-        needs_image_identity = (facts.get('what') == 'image' or facts.get('image_component')) and 'image_identity' not in facts
+        from mirrorwall.components import IDENTITY_VERSION
+        needs_image_identity = (facts.get('what') == 'image' or facts.get('image_component')) and facts.get('image_identity', {}).get('version') != IDENTITY_VERSION
         if (before and before.get("place") == place and before.get("size") == seen.st_size
                 and before.get("mtime") == seen.st_mtime and ("facts" in before or "unreadable" in before)
                 and not needs_image_identity):

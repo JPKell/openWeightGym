@@ -35,8 +35,8 @@ def facts(path):
     """Describe roles from library placement; format support is qualified at model load."""
     file = Path(path)
     role = next((part for part in ('diffusion','text_encoders','vae','upscalers','loras') if part in file.parts), 'image component')
-    from mirrorwall.components import identify
-    identity = identify(str(file))
+    from mirrorwall.components import identify, IDENTITY_VERSION
+    identity = {**identify(str(file)), 'version': IDENTITY_VERSION}
     if identity.get('kind') not in ('unknown','unreadable','missing'):
         role = identity['kind']
     if file.suffix.lower()=='.gguf' and role=='text_encoder':

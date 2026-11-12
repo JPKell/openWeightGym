@@ -84,7 +84,7 @@
   function showWorkflows() {
     const all=rows(), search=$('workflow-search').value.toLowerCase(), visibility=$('visibility').value;
     const matching=all.filter(w=>w.name.toLowerCase().includes(search) && (visibility==='all' || w.published===(visibility==='shared')));
-    $('count').textContent=all.length+' workflow'+(all.length===1?'':'s')+' · 1 model setup'; $('workflow-list').replaceChildren();
+    $('count').textContent=all.length+' workflow'+(all.length===1?'':'s')+' · '+(selected?'1 model setup':'0 model setups'); $('workflow-list').replaceChildren();
     matching.forEach(w=>{
       const button=template('workflow-option'); button.dataset.workflow=w.id; button.setAttribute('aria-pressed',String(w.id===workflowID));
       text(button,'[data-name]',w.name); text(button,'[data-version]','v'+w.version);
@@ -115,6 +115,8 @@
     } catch(problem) {if(epoch===historyEpoch) $('history-detail').textContent=problem.message;}
   }
   function showEditor() {
+    document.getElementById('editor-panel').hidden=!selected;
+    document.getElementById('workflows-panel').hidden=!selected;
     const p=profile(), rules=SuiteImageProfiles.spec(p.family), row=current();
     const draft=drafts.get(key()) || baseline();
     $('workflow-fields').disabled=!selected || saving || loading;
