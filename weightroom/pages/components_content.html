@@ -44,7 +44,6 @@
 {% endmacro %}
 
 <div id="components-report">
-<p class="text-secondary small mb-3">Every service and engine on each machine. Services share the node’s Git tag and commit; engines report their own versions. Versions are saved during installation and checked by Spotter every 60 minutes. No models are loaded and sleeping nodes are not woken.</p>
 <div class="component-cards-frame"><div class="component-cards">
 {% for node in found.nodes or [] %}
 {% set title = 'Front' if node.name == 'front' else node.name %}
