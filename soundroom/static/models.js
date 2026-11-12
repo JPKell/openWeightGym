@@ -205,14 +205,6 @@
     const file = chosen();
     $('file-note').textContent = file ? file.machine + ' · ' + file.tier + '. ' + (file.tier === 'storage' ? 'Stored files are promoted and copied after space checks when adding a model.' : 'Managed model file.') : $('kind').value ? 'Showing files for ' + kinds[$('kind').value] + '. Choose All tasks to include files with unknown task metadata.' : 'Choose an audio task to filter model files in cache or storage.';
     $('session-note').textContent = families().find(one=>one.family === $('family').value)?.note || 'Optional runtime-specific session settings. Saved keys are preserved.';
-    $('model-actions').hidden = !selected;
-    $('test-button').hidden = !selected || !['music','sound'].includes(selected.audiocpp.kind);
-    $('test-button').disabled = busy || !reachable || dirty;
-    $('test-button').title = dirty ? 'Save or discard changes before testing.' : '';
-    if (selected) {
-      $('details').href = '/models/' + encodeURIComponent(selected.name) + '?node=' + encodeURIComponent(activeNode);
-      $('measured').textContent = selected.measured?.mib?.length ? 'Peak seen: ' + selected.measured.mib.map(value=>value + ' MiB').join(' + ') : 'Memory not measured';
-    }
   }
   function captureDraft() {
     if (!editing || loading || !dirty) return;
@@ -429,19 +421,6 @@
     } catch (error) { if (root.isConnected) showInstallations(error.message); }
     finally { checkingInstallations=false; }
   }
-  async function runTest() {
-    if (!selected || dirty) return;
-    message('');
-    const row=selected, node=activeNode;
-    $('test-button').disabled=true; $('test').hidden=false; $('test-title').textContent='Testing ' + row.name + '…';
-    $('test-result').textContent=''; $('test-audio').removeAttribute('src');
-    try {
-      const answer=await call('/soundroom-test',{model:row.name,prompt:row.audiocpp.kind === 'music' ? 'short bright piano melody, gentle drums' : 'a single door knock',duration:10},node);
-      $('test-title').textContent=row.name + ' · ' + answer.seconds + ' s';
-      $('test-result').textContent=JSON.stringify(answer.take?.metrics || answer,null,2);
-      if (answer.take?.asset_id) $('test-audio').src='/soundroom-api/assets/' + encodeURIComponent(answer.take.asset_id) + '/content';
-    } finally { updateSummary(); }
-  }
   $('file').addEventListener('change',fileChanged); $('family').addEventListener('change',familyChanged); $('root').addEventListener('change',companions); $('kind').addEventListener('change',taskChanged);
   root.querySelectorAll('[data-section]').forEach(button=>button.addEventListener('click',()=>showSection(button.dataset.section)));
   root.querySelectorAll('[data-audio-task]').forEach(button=>button.addEventListener('click',()=>{ task=button.dataset.audioTask; renderProfiles(); }));
@@ -528,7 +507,6 @@
   }));
   $('retry').addEventListener('click',safe(refresh));
   $('install-retry').addEventListener('click',checkInstallations);
-  $('test-button').addEventListener('click',safe(runTest));
   window.addEventListener('beforeunload',event=>{
     if (!root.isConnected || !dirty && !drafts.size) return;
     event.preventDefault(); event.returnValue='';
