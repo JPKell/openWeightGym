@@ -13,9 +13,31 @@
   let editing = false, dirty = false, busy = false, loading = true, initialized = false;
   const element = (tag, text, className) => { const one = document.createElement(tag); if (text !== undefined) one.textContent = text; if (className) one.className = className; return one; };
   const message = error => { $('message').hidden = !error; $('message').textContent = error || ''; };
-  const key = (name=selected?.name || '', node=activeNode) => JSON.stringify([node,name]);
+  const key = (name=selected?.name || '', node=activeNode) => JSON.stringify([name ? node : '',name]);
   const available = name => inventories.has(name) && !failures.has(name);
   const accepting = name => available(name) && computeNodes.find(one => one.name === name)?.accepting_work !== false;
+  const targets = () => [...$('install-targets').querySelectorAll('input:checked')].map(input=>input.value);
+  const targetCards = () => selected ? inventory.cards || [] : (inventories.get(targets()[0])?.cards || []).filter(card=>targets().every(node=>(inventories.get(node)?.cards || []).includes(card)));
+  function renderTargets(names=[activeNode]) {
+    const area=$('install-targets').querySelector('[data-target-choices]');
+    area.classList.remove('justify-content-end');
+    $('install-targets').setAttribute('aria-labelledby','am-target-label');
+    area.replaceChildren(...computeNodes.map(node=>{
+      const label=$('node-target').content.firstElementChild.cloneNode(true), input=label.querySelector('input');
+      input.value=node.name; input.checked=names.includes(node.name);
+      input.disabled=Boolean(selected) || busy || (!input.checked && !accepting(node.name));
+      label.querySelector('[data-node-name]').textContent=node.name;
+      label.querySelector('[data-node-state]').textContent=available(node.name) ? node.accepting_work===false ? ' disabled' : '' : ' unavailable';
+      return label;
+    }));
+  }
+  function hardwareError() {
+    if (selected || !targets().length) return '';
+    const mode=root.querySelector('[data-hardware-mode]:checked')?.value;
+    const pins=[...root.querySelectorAll('[data-gpu-card]:checked')].map(input=>input.value);
+    const incompatible=targets().filter(node=> mode==='auto' ? !(inventories.get(node)?.cards || []).length : mode==='pin' && pins.some(card=>!(inventories.get(node)?.cards || []).includes(card)));
+    return incompatible.length ? 'Choose CPU only or GPUs available on every selected node. Incompatible nodes: ' + incompatible.join(', ') + '.' : '';
+  }
   const safe = action => async event => { try { await action(event); } catch (error) { message(error.message); } };
   async function call(path, body, node=activeNode) {
     if (path === '/soundroom-models') {
@@ -118,7 +140,8 @@
     });
   }
   function updateSummary() {
-    $('save-summary').textContent = ($('name').value || 'New audio model') + ' → ' + (activeNode || 'Choose a node');
+    const destinations=selected ? [activeNode] : targets();
+    $('save-summary').textContent = ($('name').value || 'New audio model') + ' → ' + (destinations.join(', ') || 'Choose nodes');
     const mode = root.querySelector('[data-hardware-mode]:checked')?.value;
     const device = mode === 'cpu' ? 'CPU' : mode === 'pin' ? [...root.querySelectorAll('[data-gpu-card]:checked')].map(one=>one.value).join(', ') || 'Choose GPUs' : 'Automatic GPU';
     $('save-detail').textContent = [device,Number($('ram').value || 0).toLocaleString() + ' MiB host RAM',kinds[$('kind').value] || 'Choose a task'].join(' · ');
@@ -126,9 +149,10 @@
     const reachable = available(activeNode);
     $('editor-state').textContent = !reachable ? 'Node unavailable' : selected ? 'Installed' : 'New model';
     $('editor-context').textContent = selected ? 'Editing ' + selected.name + ' on ' + activeNode + '. Changes apply to this installation.' : 'Choose a managed file, assign hardware and review the output defaults.';
-    $('submit').textContent = busy ? 'Saving…' : selected ? 'Save model' : 'Add model';
-    $('submit').disabled = busy || !reachable || (!selected && !accepting(activeNode));
-    $('target-node').disabled = Boolean(selected) || busy;
+    $('submit').textContent = busy ? 'Saving…' : selected ? 'Save model' : destinations.length > 1 ? 'Install on ' + destinations.length + ' nodes' : 'Add model';
+    $('submit').disabled = busy || !reachable || (!selected && (!destinations.length || destinations.some(node=>!accepting(node))));
+    $('install-targets').querySelectorAll('input').forEach(input=>{ input.disabled=Boolean(selected) || busy || (!input.checked && !accepting(input.value)); });
+    $('target-note').textContent = selected ? 'Changes apply to this installation on ' + activeNode + '.' : hardwareError() || (!destinations.length ? 'Select at least one destination node.' : destinations.some(node=>!accepting(node)) ? 'A selected node is unavailable. Deselect it or retry to reconnect.' : destinations.some(node=>!(inventories.get(node)?.cards || []).length) ? 'CPU only is the default when a selected node has no audio GPUs. The same configuration applies to every selected node.' : 'Select one or more nodes. The same configuration applies to every selected node.');
     const runtime = (inventory.engines?.engines || []).find(one => one.id === 'audiocpp');
     $('runtime').textContent = !reachable ? 'This node is unavailable. Saved settings and drafts remain visible; retry to reconnect.' : runtime?.available ? 'audio.cpp is installed on ' + activeNode + '.' : runtime?.why || inventory.catalogue?.error || '';
     const file = chosen();
@@ -150,6 +174,7 @@
       fields:[...$('form').querySelectorAll('input[id],select[id],textarea[id]')].map(input=>({id:input.id,value:input.value,checked:input.checked,jsonField:input.dataset.jsonField})),
       file:file ? {path:file.path,machine:file.machine} : null,
       companions:[...$('companions').selectedOptions].map(option=>option.value),
+      targets:targets(),
       mode:root.querySelector('[data-hardware-mode]:checked')?.value || 'auto',
       pins:[...root.querySelectorAll('[data-gpu-card]:checked')].map(input=>input.value),
       automatic:root.querySelector('[data-hardware]').dataset.automaticGpus
@@ -157,13 +182,14 @@
   }
   function restoreDraft(draft) {
     if (!draft) return;
+    renderTargets(selected ? [activeNode] : draft.targets);
     if (draft.file) $('file').value = String(choices.findIndex(file=>file.path === draft.file.path && file.machine === draft.file.machine));
     else $('file').value = '';
     const fieldValue = id => draft.fields.find(one=>one.id === 'am-' + id)?.value;
     $('defaults').value = '{}';
     filterFamilies(); $('family').value = fieldValue('family'); familyChanged();
     for (const saved of draft.fields) {
-      if (['am-file','am-target-node'].includes(saved.id)) continue;
+      if (saved.id === 'am-file') continue;
       const input = document.getElementById(saved.id);
       if (!input) continue;
       input.value = saved.value;
@@ -172,7 +198,7 @@
     }
     companions(draft.companions);
     for (const option of $('companions').options) option.selected = draft.companions.includes(option.value);
-    SuiteHardware.set('am',draft.mode === 'cpu' ? 0 : draft.mode === 'pin' ? draft.pins : Number(draft.automatic) || 1,inventory.cards || []);
+    SuiteHardware.set('am',draft.mode === 'cpu' ? 0 : draft.mode === 'pin' ? draft.pins : Number(draft.automatic) || 1,targetCards());
     if (draft.mode === 'pin' && !draft.pins.length) {
       root.querySelector('[data-hardware-mode][value="pin"]').checked = true;
       root.querySelector('[data-hardware-mode][value="pin"]').dispatchEvent(new Event('change',{bubbles:true}));
@@ -198,11 +224,7 @@
       option.disabled = Boolean(selected && (file.machine !== activeNode || file.tier === 'storage') && file.path !== selected.flags.model);
       return option;
     }));
-    $('target-node').replaceChildren(...computeNodes.map(one=>{
-      const option=new Option(one.name + (accepting(one.name) ? '' : ' · unavailable for new models'),one.name);
-      option.disabled = !selected && !accepting(one.name); return option;
-    }));
-    $('target-node').value=activeNode;
+    renderTargets();
     SuiteHardware.set('am',selected?.gpus ?? (inventory.cards?.length ? 1 : 0),inventory.cards || []);
     filterFamilies(); familyChanged();
     $('name').readOnly=Boolean(selected);
@@ -295,7 +317,7 @@
     captureDraft();
     const scope=$('node').value;
     activeNode=(scope && accepting(scope) ? scope : accepting(activeNode) ? activeNode : computeNodes.find(one=>accepting(one.name))?.name) || activeNode;
-    section='files'; populate(); updateLocation(); renderProfiles(); $('target-node').focus();
+    section='files'; populate(); updateLocation(); renderProfiles(); $('install-targets').querySelector('input:not(:disabled)')?.focus();
   }
   async function refresh() {
     if (busy) return;
@@ -355,13 +377,18 @@
   $('clear').addEventListener('click',()=>{ task='all'; $('search').value=''; $('availability').value='all'; $('node').value=''; renderProfiles(); });
   $('node').value=params.get('node') || '';
   $('add').addEventListener('click',startNew);
-  $('target-node').addEventListener('change',()=>{
+  $('install-targets').addEventListener('change',()=>{
     if (selected || busy) return;
-    const target=$('target-node').value;
-    // A new-model draft follows its chosen target without leaking hardware from another node.
-    captureDraft(); const draft=drafts.get(key()); activeNode=target;
-    if (draft && !drafts.has(key('',target))) drafts.set(key('',target),{...draft,mode:inventories.get(target)?.cards?.length ? 'auto' : 'cpu',pins:[],automatic:undefined});
-    populate(); updateLocation(); renderProfiles();
+    // Retain the form while updating the GPUs shared by the selected destinations.
+    const mode=root.querySelector('[data-hardware-mode]:checked')?.value;
+    let gpus;
+    try { gpus=SuiteHardware.read('am'); } catch { gpus=[]; }
+    if (mode==='auto' && targets().some(node=>!(inventories.get(node)?.cards || []).length)) gpus=0;
+    SuiteHardware.set('am',gpus,targetCards());
+    if (mode==='pin' && !gpus.length) {
+      root.querySelector('[data-hardware-mode][value="pin"]').checked=true;
+      root.querySelector('[data-hardware-mode][value="pin"]').dispatchEvent(new Event('change',{bubbles:true}));
+    }
   });
   $('reset').addEventListener('click',()=>{ drafts.delete(key()); populate(selected?.name || ''); renderProfiles(); });
   const changed=()=>{
@@ -371,6 +398,9 @@
   $('form').addEventListener('input',changed); $('form').addEventListener('change',changed);
   $('form').addEventListener('submit',safe(async event=>{
     event.preventDefault(); message('');
+    const machines=targets();
+    if (!selected && (!machines.length || machines.some(node=>!accepting(node)))) throw new Error('Choose at least one available destination node.');
+    if (hardwareError()) { showSection('hardware'); throw new Error(hardwareError()); }
     for (const input of $('form').querySelectorAll('input,select,textarea')) if (!input.checkValidity()) {
       const panel=input.closest('[data-panel]'); if (panel) showSection(panel.dataset.panel);
       input.reportValidity(); return;
@@ -397,10 +427,12 @@
     const name=$('name').value.trim(), draftKey=key();
     busy=true; $('controls').disabled=true; updateSummary();
     try {
-      const answer=await call('/soundroom-models',{name,settings,new:!selected,source_machine:file.machine});
-      if (answer.kind === 'model-install') {
+      const answer=await call('/soundroom-models',{name,settings,new:!selected,source_machine:file.machine,...(!selected ? {machines} : {})});
+      if (Array.isArray(answer.jobs) || answer.kind === 'model-install') {
         drafts.delete(draftKey); dirty=false;
-        location.href='/models?kind=audio&install=' + encodeURIComponent(answer.id); return;
+        const query=new URLSearchParams({kind:'audio'});
+        (answer.jobs || [answer]).forEach(job=>query.append('install',job.id));
+        location.href='/models?' + query; return;
       }
       drafts.delete(draftKey); dirty=false;
       const savedName=answer.name || name;

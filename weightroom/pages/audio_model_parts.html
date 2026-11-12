@@ -1,7 +1,7 @@
 {# Shared live Audio studio and preview editor, model choices and controls. #}
 {% from 'parts.html' import card, alert, hardware %}
 {% from 'model_form.html' import number %}
-{% from 'models_parts.html' import subject %}
+{% from 'models_parts.html' import subject, node_targets %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% macro field(id, label, value='', type='text', min=none, max=none, required=true, wide=false, pattern='', maxlength=128) %}
 <div class="{{ 'col-12' if wide else 'col-sm-6' }}"><label for="am-{{ id }}" class="form-label">{{ label }}</label><input{% if pattern %} pattern="{{ pattern }}"{% endif %} id="am-{{ id }}" name="{{ id }}" type="{{ type }}" value="{{ value }}" class="form-control"{% if required %} required{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if type == 'text' and maxlength is not none %} maxlength="{{ maxlength }}"{% endif %}></div>
@@ -18,7 +18,7 @@
 {% call card('Model configuration', class_='mb-0', header_id=heading, actions=('<span class="badge" id="' ~ ('am-editor-state' if live else 'editor-state') ~ '">' ~ ('Loading' if live else 'Installed') ~ '</span>')|safe) %}
 <p id="{{ 'am-editor-context' if live else 'editor-context' }}" class="text-secondary small"></p>
 <form id="am-form" novalidate data-hold-refresh>
-<div class="row g-3 mb-4">{{ select('target-node' if live else 'node','Install on compute node',wide=true,required=true) }}</div>
+{% if live %}<div class="mb-4"><p class="form-label" id="am-target-label">Install on compute nodes</p>{{ node_targets(id='am-install-targets',fallback=false) }}<p class="form-hint mt-2" id="am-target-note">Select one or more nodes. The same configuration applies to every selected node.</p></div>{% else %}<div class="row g-3 mb-4">{{ select('node','Install on compute node',wide=true,required=true) }}</div>{% endif %}
 {% call pills('Configuration sections', buttons=true, class_='gap-1 mb-4 audio-editor-tabs') %}
 {% for key,label in [('files','01 · Model & files'),('hardware','02 · Hardware'),('output','03 · Output'),('advanced','Advanced')] %}{{ pill_button(label, key == 'files', attrs={'data-section':key, 'aria-controls':'panel-' ~ key}) }}{% endfor %}
 {% endcall %}

@@ -40,7 +40,7 @@ def studio(desk):
         for node,rows in inventories.items()]
     files.append(dict(name='vault',answering=True,files=[dict(path='/storage/voice.gguf',tier='storage',facts={'what':'audio','family':'kokoro'})]))
     state = dict(inventories=inventories, files=files, failed=set(), posts=[], requests=[], install=False, file_error=False,
-                 cards={node:['A','B'] for node in inventories})
+                 cards={node:['A','B'] for node in inventories}, nodes=nodes)
 
     def capture(route, path):
         parsed = urlsplit(path)
@@ -72,7 +72,7 @@ def studio(desk):
                     row.update(body['settings'])
                 else:
                     inventories[node].append(dict(name=body['name'],**body['settings']))
-                result = {'kind':'model-install','id':'audio-fixture'} if state['install'] else {'name':body['name']}
+                result = {'jobs':[{'kind':'model-install','id':'audio-'+target} for target in body.get('machines',[node])]} if state['install'] else {'name':body['name']}
             else:
                 result = dict(models=copy.deepcopy(inventories[node]),cards=state['cards'][node],catalogue={'families':families},
                               engines={'engines':[dict(id='audiocpp',available=True)]})
@@ -138,7 +138,7 @@ def test_filters_clear_empty_nodes_and_add_from_remote_storage(studio):
     page.locator('#am-file').select_option(label='vault · storage')
     page.locator('#am-name').fill('new-voice')
     page.locator('[data-section="hardware"]').click()
-    playwright.expect(page.locator('#am-target-node')).to_have_value('scout')
+    playwright.expect(page.locator('#am-install-targets input[value="scout"]')).to_be_checked()
     page.get_by_text('CPU only',exact=True).click()
     page.locator('[data-section="output"]').click()
     page.locator('#am-seconds').fill('0')
@@ -197,9 +197,10 @@ def test_new_model_destination_uses_cpu_when_target_has_no_audio_gpus(studio):
     page.goto('http://console.test/models/audio?new=1')
     page.locator('#am-file').select_option(label='vault · storage')
     page.locator('#am-name').fill('cpu-destination')
-    playwright.expect(page.get_by_label('Install on compute node',exact=True)).to_be_visible()
+    playwright.expect(page.get_by_role('group',name='Install on compute nodes')).to_be_visible()
     playwright.expect(page.locator('#panel-files')).to_be_visible()
-    page.locator('#am-target-node').select_option('scout')
+    page.locator('#am-install-targets input[value="scout"]').locator('..').click()
+    page.locator('#am-install-targets input[value="atlas"]').locator('..').click()
     playwright.expect(page.locator('#am-file option:checked')).to_have_text('vault · storage')
     playwright.expect(page.locator('#am-name')).to_have_value('cpu-destination')
     page.locator('[data-section="hardware"]').click()
@@ -207,7 +208,75 @@ def test_new_model_destination_uses_cpu_when_target_has_no_audio_gpus(studio):
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
     node,body=state['posts'][0]
-    assert node=='scout' and body['settings']['gpus']==0
+    assert body['machines']==['scout'] and body['settings']['gpus']==0
+
+
+def test_multiple_node_pills_retain_drafts_and_track_every_install(studio):
+    page,state=studio
+    state['install']=True
+    state['nodes'][2]['accepting_work']=False
+    page.goto('http://console.test/models/audio?new=1')
+    targets=page.get_by_role('group',name='Install on compute nodes')
+    playwright.expect(targets.locator('input[value="scout"]')).to_be_disabled()
+    targets.locator('input[value="nova"]').locator('..').click()
+    page.locator('#am-file').select_option(label='vault · storage')
+    page.locator('#am-name').fill('fleet-voice')
+    page.locator('#am-profiles [data-model="speaker"] [data-identity]').click()
+    playwright.expect(targets.locator('input[value="atlas"]')).to_be_disabled()
+    page.locator('#am-add').click()
+    playwright.expect(page.locator('#am-name')).to_have_value('fleet-voice')
+    for node in ('atlas','nova'):
+        playwright.expect(targets.locator(f'input[value="{node}"]')).to_be_checked()
+    page.locator('#am-retry').evaluate('button=>button.click()')
+    playwright.expect(page.locator('#am-submit')).to_have_text('Install on 2 nodes')
+    playwright.expect(page.locator('#am-save-summary')).to_have_text('fleet-voice → atlas, nova')
+    page.locator('#am-submit').click()
+    page.wait_for_url('**/models?kind=audio&install=audio-atlas&install=audio-nova')
+    assert len(state['posts'])==1
+    body=state['posts'][0][1]
+    assert body['machines']==['atlas','nova'] and body['source_machine']=='vault'
+
+
+def test_destination_validation_preserves_selections_when_node_goes_offline(studio):
+    page,state=studio
+    page.goto('http://console.test/models/audio?new=1')
+    targets=page.get_by_role('group',name='Install on compute nodes')
+    targets.locator('input[value="atlas"]').locator('..').click()
+    playwright.expect(page.locator('#am-submit')).to_be_disabled()
+    playwright.expect(page.locator('#am-target-note')).to_have_text('Select at least one destination node.')
+    targets.locator('input[value="atlas"]').locator('..').click()
+    targets.locator('input[value="nova"]').locator('..').click()
+    state['failed'].add('nova')
+    page.locator('#am-retry').evaluate('button=>button.click()')
+    playwright.expect(targets.locator('input[value="nova"]')).to_be_enabled()
+    playwright.expect(targets.locator('input[value="nova"]')).to_be_checked()
+    playwright.expect(page.locator('#am-submit')).to_be_disabled()
+    assert not state['posts']
+    state['failed'].clear()
+    page.locator('#am-retry').click()
+    playwright.expect(targets.locator('input[value="nova"]')).to_be_enabled()
+    playwright.expect(targets.locator('input[value="nova"]')).to_be_checked()
+    playwright.expect(page.locator('#am-submit')).to_be_enabled()
+
+
+def test_pinned_gpus_must_exist_on_every_selected_destination(studio):
+    page,state=studio
+    state['cards']['nova']=['B']
+    page.goto('http://console.test/models/audio?new=1')
+    page.locator('#am-file').select_option(label='vault · storage')
+    page.locator('#am-name').fill('fleet-voice')
+    page.locator('[data-section="hardware"]').click()
+    page.get_by_text('Pin to GPUs',exact=True).click()
+    page.locator('[data-gpu-card][value="A"]').check()
+    page.locator('#am-install-targets input[value="nova"]').locator('..').click()
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-message')).to_contain_text('Incompatible nodes: nova')
+    assert not state['posts']
+    page.get_by_text('CPU only',exact=True).click()
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+    assert state['posts'][0][1]['machines']==['atlas','nova']
+    assert state['posts'][0][1]['settings']['gpus']==0
 
 
 @pytest.mark.parametrize('width',[1440,390,320])
@@ -215,10 +284,11 @@ def test_install_destination_stays_visible_in_every_configuration_section(studio
     page,_=studio
     page.set_viewport_size({'width':width,'height':1100})
     page.goto('http://console.test/models/audio?new=1')
-    target=page.get_by_label('Install on compute node',exact=True)
-    playwright.expect(target).to_be_enabled()
+    target=page.get_by_role('group',name='Install on compute nodes')
+    first=target.locator('input').first
+    playwright.expect(first).to_be_enabled()
     page.locator('#am-add').click()
-    playwright.expect(target).to_be_focused()
+    playwright.expect(first).to_be_focused()
     playwright.expect(target).to_be_in_viewport()
     for section in ('files','hardware','output','advanced'):
         page.locator(f'[data-section="{section}"]').click()

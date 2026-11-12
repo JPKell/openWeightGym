@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import sys
 import time
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from starlette.testclient import TestClient
@@ -206,13 +207,14 @@ def test_visible_destination_installs_on_the_selected_compute_node(audio_install
         browser,page=browser_context(engine,client)
         page.set_viewport_size({'width':390,'height':1100})
         page.goto('http://console.test/models/audio?new=1')
-        target=page.get_by_label('Install on compute node',exact=True)
+        target=page.get_by_role('group',name='Install on compute nodes')
         playwright.expect(target).to_be_visible()
         option=page.locator(f'#am-file option[data-path="{main}"]')
         page.locator('#am-file').select_option(value=option.get_attribute('value'))
         page.locator('#am-name').fill('chosen-destination')
         page.locator('#am-companions').select_option(str(companion))
-        target.select_option(destination['node'])
+        target.locator('input[value="compute"]').locator('..').click()
+        target.locator('input[value="'+destination['node']+'"]').locator('..').click()
         playwright.expect(page.locator('#panel-files')).to_be_visible()
         playwright.expect(page.locator('#am-name')).to_have_value('chosen-destination')
         page.locator('#am-submit').click()
@@ -231,3 +233,69 @@ def test_visible_destination_installs_on_the_selected_compute_node(audio_install
         source=Models(source_database)
         assert source.stored('chosen-destination') is None
         source.db.close(); library.db.close(); browser.close()
+
+
+@pytest.mark.parametrize('audio_install_console',[True],indirect=True)
+@pytest.mark.parametrize('taken',[False,True])
+def test_multi_node_audio_install_preflights_all_destinations_and_copies_companions(audio_install_console,taken):
+    client,packages,cache,database=audio_install_console
+    main,companion=packages['front-storage']
+    destination=client.audio_target
+    libraries=[Models(database),Models(destination['database'])]
+    name='fleet-voice'
+
+    def await_saved(library):
+        deadline=time.monotonic()+10
+        while time.monotonic()<deadline and library.stored(name) is None:
+            time.sleep(.05)
+        assert library.stored(name) is not None
+        return library.stored(name)
+
+    with playwright.sync_playwright() as engine:
+        browser,page=browser_context(engine,client)
+        page.set_viewport_size({'width':390,'height':1100})
+
+        def setup():
+            page.goto('http://console.test/models/audio?new=1')
+            option=page.locator(f'#am-file option[data-path="{main}"]')
+            page.locator('#am-file').select_option(value=option.get_attribute('value'))
+            page.locator('#am-name').fill(name)
+            page.locator('#am-companions').select_option(str(companion))
+            page.locator('#am-install-targets input[value="studio-cpu"]').locator('..').click()
+
+        if taken:
+            setup()
+            page.locator('#am-install-targets input[value="compute"]').locator('..').click()
+            page.locator('#am-submit').click()
+            page.wait_for_url('**/models?kind=audio&install=*')
+            await_saved(libraries[1])
+
+        setup()
+        playwright.expect(page.locator('#am-submit')).to_have_text('Install on 2 nodes')
+        with page.expect_response(lambda response:'/soundroom-models?' in response.url and response.request.method=='POST') as received:
+            page.locator('#am-submit').click()
+        response=received.value
+        if taken:
+            assert response.status==409
+            playwright.expect(page.locator('#am-message')).to_contain_text('Nothing was started')
+            assert libraries[0].stored(name) is None
+            assert not (cache/main.parent.name).exists()
+            for node in ('compute','studio-cpu'):
+                playwright.expect(page.locator(f'#am-install-targets input[value="{node}"]')).to_be_checked()
+        else:
+            assert response.status==202,response.text()
+            assert response.request.post_data_json['machines']==['compute','studio-cpu']
+            page.wait_for_url('**/models?kind=audio&install=*')
+            jobs=parse_qs(urlsplit(page.url).query)['install']
+            assert len(jobs)==len(set(jobs))==2
+            for library,folder in zip(libraries,[cache,destination['cache']]):
+                saved=await_saved(library)
+                target=folder/main.parent.name/main.name
+                assert saved['flags']['model']==saved['audiocpp']['path']==str(target)
+                assert saved['gpus']==0 and saved['audiocpp']['files']==['tokens.json']
+                assert target.read_bytes()==main.read_bytes()
+                assert (target.parent/companion.name).read_bytes()==companion.read_bytes()
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        for library in libraries:
+            library.db.close()
+        browser.close()
