@@ -4,7 +4,7 @@
 {% from "fit_parts.html" import dom_templates %}
 {% block title %}Dry fit · openWeightGym{% endblock %}
 {% block page_class %}fit-page{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/fit.css?v=1"><script src="/static/fit.js?v=4" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/fit.css?v=2"><script src="/static/fit.js?v=5" defer></script>{% endblock %}
 {% block main %}
 {{ page_header('Dry fit') }}
 {{ said_box(said, failed) }}
@@ -40,7 +40,7 @@
 <section id="tuning" class="fit-tuning" aria-label="Selected models and context tuning">
 {% call card(id='tuning-card', body_class='p-0') %}
 <div class="fit-tuning-toolbar p-3 border-bottom">
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><strong id="selection-count" class="small"></strong><button type="button" id="fit-auto" class="btn btn-sm btn-outline-primary">Fit unlocked contexts</button></div>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><strong id="selection-count" class="small"></strong><button type="button" id="fit-auto" class="btn btn-sm btn-outline-primary" title="Automatically fit within configured context limits; lock custom values to keep them.">Fit unlocked contexts</button></div>
 <div class="d-flex align-items-center flex-wrap gap-2">
 {% call pills('Selected model type', buttons=true, class_='gap-1') %}{% for kind,label in [('all','All'),('llm','LLM'),('audio','Audio'),('image','Image')] %}{{ pill_button(label, kind == 'all', attrs={'data-fit-kind': kind}) }}{% endfor %}{% endcall %}
 <input id="search" type="search" class="form-control form-control-sm" placeholder="Filter selected rows…" aria-label="Filter selected models">

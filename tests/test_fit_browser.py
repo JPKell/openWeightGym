@@ -82,6 +82,81 @@ def test_live_thirty_model_catalogue_exact_context_locks_and_drafts(cpu_fit_desk
         browser.close()
 
 
+@pytest.mark.parametrize('width', [1440, 390, 320])
+def test_context_limit_override_is_per_model_and_restores_exact_saved_values(cpu_fit_desk, width):
+    server, _, library = cpu_fit_desk
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server)
+        page.set_viewport_size({'width': width, 'height': 1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/dry-fit')
+        for name in ('model-00', 'model-01'):
+            page.get_by_label('Select ' + name, exact=True).check()
+        first = page.locator('#fit-picks [data-model="model-00"]')
+        second = page.locator('#fit-picks [data-model="model-01"]')
+        context = first.locator('[data-context]')
+        override = first.get_by_role('switch', name='Allow context outside limits for model-00')
+        save = page.get_by_role('button', name='Save current selection', exact=True)
+        playwright.expect(override).not_to_be_checked()
+        playwright.expect(context).to_have_attribute('min', '1024')
+        playwright.expect(context).to_have_attribute('max', '8192')
+        before = first.locator('[data-memory]').inner_text()
+        context.fill('9001')
+        playwright.expect(save).to_be_disabled()
+        override.check()
+        playwright.expect(context).to_have_value('9001')
+        playwright.expect(save).to_be_enabled()
+        assert first.locator('[data-memory]').inner_text() != before
+        playwright.expect(first.locator('[data-slider]')).to_have_value('9001')
+        first.locator('[data-slider]').press('End')
+        playwright.expect(context).to_have_value('16384')
+        first.locator('[data-slider]').press('Home')
+        playwright.expect(context).to_have_value('1')
+        context.fill('9001')
+        playwright.expect(second.locator('[data-context-override]')).not_to_be_checked()
+        second.locator('[data-context]').fill('9001')
+        playwright.expect(save).to_be_disabled()
+        second.locator('[data-context]').fill('8192')
+        for value in ('0', '-1', '1.5', '2147483648'):
+            context.fill(value)
+            playwright.expect(save).to_be_disabled()
+        context.fill('512')
+        playwright.expect(save).to_be_enabled()
+        override.uncheck()
+        playwright.expect(context).to_have_value('512')
+        playwright.expect(save).to_be_disabled()
+        page.reload()
+        playwright.expect(context).to_have_value('512')
+        playwright.expect(override).not_to_be_checked()
+        playwright.expect(save).to_be_disabled()
+        override.check()
+        playwright.expect(save).to_be_enabled()
+        context.fill('9001')
+        first.locator('[data-lock]').check()
+        page.locator('#fit-auto').click()
+        playwright.expect(context).to_have_value('9001')
+        page.reload()
+        playwright.expect(override).to_be_checked()
+        playwright.expect(context).to_have_value('9001')
+        playwright.expect(first.locator('[data-lock]')).to_be_checked()
+        page.locator('#fit-name').fill('Custom contexts')
+        save.click()
+        playwright.expect(page.locator('#fit-saved')).to_contain_text('Custom contexts')
+        page.locator('#clear').click()
+        page.reload()
+        playwright.expect(page.locator('#fit-picks tr')).to_have_count(0)
+        page.locator('[data-loadout-name="Custom contexts"] [data-loadout-edit]').click()
+        playwright.expect(context).to_have_value('9001')
+        playwright.expect(override).to_be_checked()
+        playwright.expect(second.locator('[data-context-override]')).not_to_be_checked()
+        assert library.get('model-00')['flags']['ctx-size'] == 8192
+        assert library.get('model-00')['min_context'] == 1024
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not errors, errors
+        browser.close()
+
+
 def test_named_set_member_limit_does_not_limit_the_catalogue(cpu_fit_desk):
     server, _, _ = cpu_fit_desk
     with playwright.sync_playwright() as driver:

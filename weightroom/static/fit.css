@@ -47,6 +47,7 @@
 .fit-model.is-selected { background: color-mix(in srgb, var(--fit-model-color) 5%, var(--tblr-bg-surface)); }
 .fit-model.is-selected td:first-child { box-shadow: inset 3px 0 var(--fit-model-color); }
 .fit-model:not(.is-selected) :is(.fit-model-placement select, .fit-model-tokens) { visibility: hidden; }
+.fit-model:not(.is-selected) [data-override-control] { display: none; }
 .fit-set-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem 2rem; }
 #save-set, .fit-saved-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; min-width: 0; }
 #save-set > div, .fit-saved-toolbar > div { flex: 1; min-width: 140px; }
@@ -86,7 +87,7 @@
 [data-design="matrix"] .fit-model-identity [data-kind] { display: none; }
 /* The all-model sheet keeps unselected entries to a single compact row. */
 [data-design="studio"] .fit-model:not(.is-selected) td { height: 44px; padding-block: .35rem; }
-[data-design="studio"] .fit-model:not(.is-selected) [data-detail] { display: none; }
+[data-design="studio"] .fit-model:not(.is-selected) [data-detail] { display: none !important; }
 @media (max-width: 1050px) {
   [data-design="matrix"] .fit-workspace { grid-template-columns: minmax(0, 1fr); }
   [data-design="matrix"] .fit-tuning { grid-column: 1; grid-row: 3; }

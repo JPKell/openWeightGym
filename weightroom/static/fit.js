@@ -9,6 +9,8 @@
   const number = value => value.toLocaleString('en-US');
   const color = model => `hsl(${models.indexOf(model) * 137.5 % 360} 55% 43%)`;
   const invalid = new Map();
+  const contextBounds = model => model.override_limits ? [1, 2 ** 31 - 1] : [model.min, model.max];
+  const validContext = (model, value) => Number.isInteger(value) && value >= contextBounds(model)[0] && value <= contextBounds(model)[1];
   let kind = 'all';
   const selected = () => models.filter(model => model.selected);
   const placement = model => model.placements[model.placement];
@@ -35,7 +37,7 @@
   }
   const memoryText = model => model.unknown ? 'Unknown / unqualified' : Object.entries(allocation(model))
     .map(([id, amount]) => `${size(amount)} ${id === '__cpu__' ? 'RAM' : id}`).join(' + ');
-  const definition = () => selected().map(model => ({id: model.id, placement: placement(model)?.cards || [], context: model.context, locked: model.locked}));
+  const definition = () => selected().map(model => ({id: model.id, placement: placement(model)?.cards || [], context: model.context, locked: model.locked, override_limits: Boolean(model.override_limits)}));
   function keepDraft() {
     if (!data.available) return;
     try {sessionStorage.setItem(storageKey, JSON.stringify({models: definition(), invalid: [...invalid]}));} catch { /* Planning remains available without storage. */ }
@@ -49,8 +51,11 @@
         const one = kept.models.find(entry => entry?.id === model.id);
         model.selected = Boolean(one && model.enabled);
         if (!one) continue;
+        model.override_limits = one.override_limits === true;
         const index = model.placements.findIndex(place => JSON.stringify(place.cards) === JSON.stringify(one.placement));
-        if (index < 0 || (!model.fixed && (!Number.isInteger(one.context) || one.context < model.min || one.context > model.max))) {
+        const pendingInvalid = Array.isArray(kept.invalid) && kept.invalid.some(entry => Array.isArray(entry) && entry[0] === model.id && typeof entry[1] === 'string');
+        if (index < 0 || (!model.fixed && !validContext(model, one.context) &&
+            !(pendingInvalid && Number.isInteger(one.context) && one.context >= 1 && one.context < 2 ** 31))) {
           model.selected = false; warnings.push(model.name); continue;
         }
         model.placement = index; model.locked = Boolean(one.locked);
@@ -73,7 +78,7 @@
       selected().some(model => model.exclusive && placement(model)?.cards.includes(resource.id)));
     if (!data.available) {state = 'unknown'; title = 'Node unavailable'; detail = 'Capacity is unknown. Your browser draft is retained until this node reconnects.';}
     else if (!selected().length) {state = 'empty'; title = 'Choose a combination'; detail = 'Select models from the catalogue to plan them together.';}
-    else if (invalid.size) {state = 'blocked'; title = 'Review context values'; detail = 'Use whole-number contexts within each model’s configured bounds.';}
+    else if (invalid.size) {state = 'blocked'; title = 'Review context values'; detail = 'Use positive whole-number contexts. Enable Override limits for values outside a model’s configured range.';}
     else if (exclusive.length) {state = 'blocked'; title = 'Exclusive placement conflict'; detail = `A selected model requires ${exclusive.map(resource => resource.name).join(', ')} to itself.`;}
     else if (selected().some(model => model.unknown) || resources.some(resource => needed(resource) && resource.budget === null)) {
       state = 'unknown'; title = 'Combined fit is unknown'; detail = 'A selected profile or memory pool is unmeasured. Known reservations are shown without assuming missing values are zero.';
@@ -101,18 +106,28 @@
       place.value = String(model.placement);
       row.querySelector('[data-fixed]').hidden = !model.fixed;
       row.querySelector('[data-profile]').textContent = `${model.profile_label || model.kind} · fixed envelope`;
-      if (model.fixed) row.querySelector('[data-context-controls]').remove();
+      if (model.fixed) {row.querySelector('[data-context-controls]').remove(); row.querySelector('[data-override-control]').remove();}
       else {
         const context = row.querySelector('[data-context]'), slider = row.querySelector('[data-slider]');
         context.id = prefix + '-context'; context.classList.add(placement(model)?.cards.length ? 'fit-context-number' : 'fit-cpu-context');
         row.querySelector('[data-context-label]').htmlFor = context.id;
         row.querySelector('[data-context-label]').textContent = `Context tokens for ${model.name}`;
-        for (const input of [context, slider]) {input.min = model.min; input.max = model.max; input.value = model.context || ''; input.title = `${number(model.min)}–${number(model.max)} total tokens`;}
+        const [minimum, maximum] = contextBounds(model);
+        context.min = minimum; context.max = maximum;
+        slider.min = model.override_limits ? 1 : model.min;
+        slider.max = model.override_limits ? Math.min(2 ** 31 - 1, Math.max(model.max * 2, model.context || 1)) : model.max;
+        slider.value = model.context;
+        context.title = slider.title = `Configured: ${number(model.min)}–${number(model.max)} total tokens${model.override_limits ? ' · limits overridden; enter a custom value in the number field' : ''}`;
         context.value = invalid.has(model.id) ? invalid.get(model.id) : model.context || '';
-        if (invalid.has(model.id)) context.setCustomValidity('Enter a whole-number context within the model bounds.');
+        if (invalid.has(model.id)) context.setCustomValidity(`Enter ${minimum}–${maximum} whole tokens.`);
         slider.classList.add('fit-context'); slider.setAttribute('aria-label', `Context slider for ${model.name}`);
         const lock = row.querySelector('[data-lock]'); lock.checked = model.locked; lock.setAttribute('aria-label', `Lock context for ${model.name}`);
-        row.querySelector('[data-bounds]').textContent = context.title;
+        const override = row.querySelector('[data-context-override]');
+        override.id = prefix + '-override'; override.checked = Boolean(model.override_limits);
+        override.setAttribute('aria-label', `Allow context outside limits for ${model.name}`);
+        override.title = `Allow custom context outside ${number(model.min)}–${number(model.max)} tokens. Auto fit still uses configured limits; lock custom values to keep them.`;
+        const bounds = row.querySelector('[data-bounds]'); bounds.id = prefix + '-bounds'; bounds.textContent = context.title;
+        context.setAttribute('aria-describedby', bounds.id); override.setAttribute('aria-describedby', bounds.id);
       }
       row.querySelector('[data-memory]').textContent = memoryText(model);
       row.querySelector('[data-memory]').title = model.ram_note + (model.guessed ? '; interpolated/estimated VRAM curve' : '');
@@ -209,6 +224,12 @@
     if (event.target.matches('[data-select]')) {model.selected = false; invalid.delete(model.id);}
     else if (event.target.matches('[data-placement]')) model.placement = Number(event.target.value);
     else if (event.target.matches('[data-lock]')) model.locked = event.target.checked;
+    else if (event.target.matches('[data-context-override]')) {
+      model.override_limits = event.target.checked;
+      const raw = invalid.get(model.id) ?? String(model.context), value = Number(raw);
+      if (raw && validContext(model, value)) {model.context = value; invalid.delete(model.id);}
+      else invalid.set(model.id, raw);
+    }
     else return;
     render(); roles();
   });
@@ -216,10 +237,14 @@
     if (!event.target.matches('[data-context], [data-slider]')) return;
     const row = event.target.closest('[data-model-id]'), model = models.find(one => one.id === row.dataset.modelId);
     const value = Number(event.target.value);
-    if (!event.target.value || !Number.isInteger(value) || value < model.min || value > model.max) {
-      invalid.set(model.id, event.target.value); event.target.setCustomValidity(`Enter ${model.min}–${model.max} whole tokens.`);
+    if (!event.target.value || !validContext(model, value)) {
+      const [minimum, maximum] = contextBounds(model);
+      invalid.set(model.id, event.target.value); event.target.setCustomValidity(`Enter ${minimum}–${maximum} whole tokens.`);
     } else {
       invalid.delete(model.id); model.context = value;
+      const slider = row.querySelector('[data-slider]');
+      slider.min = model.override_limits ? 1 : model.min;
+      slider.max = model.override_limits ? Math.min(2 ** 31 - 1, Math.max(model.max * 2, value)) : model.max;
       for (const input of row.querySelectorAll('[data-context], [data-slider]')) {input.setCustomValidity(''); input.value = value;}
       row.querySelector('[data-memory]').textContent = memoryText(model);
     }
@@ -269,8 +294,10 @@
     models.forEach(model => {
       const entry = saved.models.find(one => one.model_id === model.id); model.selected = Boolean(entry);
       if (!entry) return;
+      model.override_limits = !model.fixed && Number.isInteger(entry.context) && entry.context >= 1 && entry.context < 2 ** 31 &&
+        (entry.context < model.min || entry.context > model.max);
       const index = model.placements.findIndex(place => JSON.stringify(place.cards) === JSON.stringify(entry.cards));
-      if (index < 0 || (model.fixed ? entry.profile !== model.profile : !Number.isInteger(entry.context) || entry.context < model.min || entry.context > model.max)) {
+      if (index < 0 || (model.fixed ? entry.profile !== model.profile : !validContext(model, entry.context))) {
         model.selected = false; warnings.push(`${model.name}: placement, context bounds or fixed profile changed`); return;
       }
       model.placement = index; if (!model.fixed) model.context = entry.context;
