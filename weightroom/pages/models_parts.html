@@ -1,0 +1,44 @@
+{# Live inventory and sample proposals share model identities, node chips and catalogue surfaces. #}
+{% from 'parts.html' import more %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% macro subject(name='', meta='', href='', initial='', attrs={}) %}
+<{{ 'a' if href else 'button' }}{% if href %} href="{{ href }}"{% else %} type="button"{% endif %} class="inventory-subject"{{ attrs|xmlattr }}>
+  <span class="inventory-monogram" aria-hidden="true" data-initial>{{ initial or name[:1]|upper }}</span>
+  <span class="min-w-0"><strong class="d-block" data-name>{{ name }}</strong><small class="d-block text-secondary" data-meta>{{ meta }}</small></span>
+</{{ 'a' if href else 'button' }}>
+{% endmacro %}
+{% macro placement(node='', state='', label='', href='', attrs={}) %}
+<{{ 'a' if href else 'button' }}{% if href %} href="{{ href }}"{% else %} type="button"{% endif %} class="inventory-placement"{% if state %} data-state="{{ state }}"{% endif %}{% if label %} title="{{ node }} · {{ label }}" aria-label="{{ node }}: {{ label }}. Open model settings"{% endif %}{{ attrs|xmlattr }}><span class="inventory-dot" aria-hidden="true"></span><span data-node-name>{{ node }}</span><span class="visually-hidden" data-status>{{ ' · ' ~ label if label }}</span></{{ 'a' if href else 'button' }}>
+{% endmacro %}
+{% macro overview(catalogue, pending=false, oob=false) %}
+<div id="models-overview"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+{% call kpi_row('Model inventory', class_='mb-4') %}
+{{ kpi('Unique models', '—' if pending else catalogue.rows|length, 'In the selected type and node') }}
+{{ kpi('Installations', '—' if pending else catalogue.installations, 'One model on one compute node') }}
+{{ kpi('Nodes with models', '—' if pending else catalogue.nodes, 'Locations in this catalogue') }}
+{{ kpi('In memory', '—' if pending else catalogue.active, 'Live availability excludes unreachable nodes' if catalogue.offline else (catalogue.in_use|string ~ ' in use · ' ~ (catalogue.active - catalogue.in_use)|string ~ ' loaded')) }}
+{% endcall %}
+</div>
+{% endmacro %}
+{% macro model_facts(row, kind) %}
+{% call more('Details', attrs={'id':'catalogue-details-' ~ row.model.name|urlencode}) %}
+<div class="small mb-2">Order {{ row.model.order }}{% if row.model.fingerprint %} · <a href="/fingerprints?start={{ row.model.fingerprint }}"><code>{{ row.model.fingerprint[:12] }}</code></a>{% else %} · <span class="text-secondary">{{ 'no file' if row.model.size is none else 'Reading file metadata' }}</span>{% endif %}</div>
+{% for place in row.placements %}{% set model = place['copy'] %}
+<div class="inventory-copy-facts"><strong>{{ place.node }}</strong>{% if model.name != row.model.name %}<small class="d-block text-secondary">{{ model.name }}</small>{% endif %}
+<dl class="mb-0">
+{% set minimum = model.min_context|default(model.flags['ctx-size']) or 'N/A' %}
+{% if kind == 'llm' %}
+<dt>Min context</dt><dd>{{ '{:,}'.format(minimum) if minimum is number else minimum }}</dd>
+<dt>Max context</dt><dd>{{ '{:,}'.format(model.flags['ctx-size']) if model.flags['ctx-size'] else 'N/A' }}</dd>
+{% for context in [minimum, model.flags['ctx-size']] %}{% set point = model.measurements|default([])|selectattr('context', 'equalto', context)|first %}
+<dt>Memory at {{ 'min' if loop.first else 'max' }}</dt><dd>{% if point and point.mib %}{{ point.mib|map('mib')|join(' + ') }}{% elif point and point.error %}<span class="text-danger">load failed</span>{% else %}<span class="text-secondary">Not measured</span>{% endif %}</dd>
+{% endfor %}
+{% else %}<dt>Family</dt><dd>{{ model.get(model.engine, {}).get('family', 'Unknown') }}</dd>{% if kind == 'audio' %}<dt>Kind</dt><dd>{{ model.get('audiocpp', {}).get('kind', '')|capitalize }}</dd>{% endif %}
+{% set point = model.measured or model.measurements|default([])|selectattr('context', 'equalto', 0)|first %}<dt>Measured memory</dt><dd>{% if point and point.mib %}{{ point.mib|map('mib')|join(' + ') }}{% else %}<span class="text-secondary">Not measured</span>{% endif %}</dd>
+{% endif %}
+<dt>Now</dt><dd>{% include 'model_now.html' %}</dd>
+<dt>Last used</dt><dd>{{ model.last_used|timestamp if model.last_used else 'never' }}</dd>
+</dl></div>
+{% endfor %}
+{% endcall %}
+{% endmacro %}

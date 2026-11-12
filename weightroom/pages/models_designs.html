@@ -1,0 +1,78 @@
+{% from 'parts.html' import page_header, card, alert, section_title %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'icons.html' import icon %}
+{% from 'models_design_parts.html' import templates %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Models · Three inventory designs · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a class="visually-hidden-focusable" href="#workspace">Skip to models</a>
+<header class="inventory-topbar"><div class="d-flex align-items-center gap-3"><strong class="inventory-brand">{{ icon('barbell') }} weightRoom</strong><span class="text-secondary small">/ Models</span></div><div class="d-flex align-items-center gap-2"><span class="badge bg-blue-lt">Design preview</span><button type="button" class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button></div></header>
+<main class="inventory-page">
+<section class="inventory-review mb-4" aria-label="Design proposals">
+  {% call pills('Design options', buttons=true, class_='gap-2 mb-0') %}
+  {{ pill_button('01 / Model catalogue', true, attrs={'data-design':'catalogue'}) }}
+  {{ pill_button('02 / Placement matrix', attrs={'data-design':'matrix'}) }}
+  {{ pill_button('03 / Node explorer', attrs={'data-design':'explorer'}) }}
+  {% endcall %}
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3"><p class="small text-secondary mb-0" id="design-note"></p><label class="d-flex align-items-center gap-2 small">Sample state<select id="scenario" class="form-select form-select-sm w-auto"><option value="normal">Populated fleet</option><option value="empty">No models installed</option><option value="offline">Connection lost</option></select></label></div>
+</section>
+<div id="workspace" data-layout="catalogue">
+{% call page_header('Models', pretitle='YOUR MODEL LIBRARY') %}<button type="button" class="btn btn-primary" id="add-model">{{ icon('plus') }} Add a model</button>{% endcall %}
+{% call kpi_row('Fleet inventory', class_='mb-4') %}
+{{ kpi('Unique models', 40, 'One entry per model across the fleet', value_attrs={'id':'total-models'}) }}
+{{ kpi('Installations', 135, 'Model × node placements', value_attrs={'id':'total-placements'}) }}
+{{ kpi('Populated nodes', '6 / 7', '15–30 models per populated node', value_attrs={'id':'total-nodes'}) }}
+{{ kpi('In memory', 5, '1 in use · 4 loaded', value_attrs={'id':'total-active'}, note_attrs={'id':'active-note'}) }}
+{% endcall %}
+<div id="connection-note" hidden>{{ alert('warning', 'Connection lost. This is the last known inventory; live availability cannot be verified.', class_='py-2') }}</div>
+<div id="notice" hidden>{{ alert('success', class_='py-2', attrs={'id':'notice-text'}) }}</div>
+<div class="inventory-workspace">
+<aside id="node-panel" class="inventory-sidebar" aria-label="Browse compute nodes" hidden>
+{{ section_title('Compute nodes', level=2, wrapper_class='mb-2') }}<p class="small text-secondary mb-3">Choose a node to see its full inventory.</p><div id="node-list"></div>
+</aside>
+<div class="inventory-main">
+<div id="explorer-heading" class="inventory-context mb-3" hidden><div><span class="eyebrow" id="node-eyebrow">COMPUTE NODE</span>{{ section_title('atlas', id='node-title', wrapper_class='mt-1 mb-1') }}<p class="small text-secondary mb-0" id="node-hardware"></p></div><span class="badge bg-blue-lt" id="node-summary"></span></div>
+<div id="scope-panel" class="mb-3"><div class="d-flex align-items-center flex-wrap gap-2"><span class="small text-secondary me-1">Nodes</span>{% call pills('Node filter', buttons=true, class_='gap-1 mb-0') %}{{ pill_button('All nodes', true, attrs={'data-scope':'all'}) }}{% for node in data.nodes %}{{ pill_button(node.id, attrs={'data-scope':node.id}) }}{% endfor %}{% endcall %}</div></div>
+<div class="inventory-toolbar mb-3">
+  <div><label class="form-label small" for="model-search">Find a model</label><input id="model-search" type="search" class="form-control" placeholder="Name, family, quantization or node…"></div>
+  <div><label class="form-label small" for="status-filter">Availability</label><select id="status-filter" class="form-select"><option value="all">All installed</option><option value="active">In memory</option><option value="in-use">In use</option><option value="offline">Unreachable node</option></select></div>
+  <div><label class="form-label small" for="sort">Sort models</label><select id="sort" class="form-select"><option value="name">Name A–Z</option><option value="coverage">Most nodes</option><option value="size">Smallest file</option></select></div>
+</div>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+{% call pills('Model type', buttons=true, class_='gap-1 mb-0') %}{% for kind,label in [('all','All types'),('llm','LLM'),('image','Image'),('audio','Audio')] %}{{ pill_button(label, kind == 'all', attrs={'data-kind':kind}) }}{% endfor %}{% endcall %}
+<span id="result-count" role="status" aria-live="polite" class="small text-secondary"></span>
+</div>
+{% call card('Installed models', id='inventory-card', body_class='p-0', header_id='inventory-title', actions='<span class="small text-secondary" id="inventory-scope">ACROSS YOUR FLEET</span>'|safe) %}
+<div class="inventory-table-scroll" role="region" tabindex="0" aria-label="Installed models; scroll for all models and nodes">
+<table class="table table-hover align-middle mb-0 inventory-table"><caption class="visually-hidden" id="table-caption">Installed models and their compute nodes</caption><thead id="inventory-head"></thead><tbody id="inventory-rows"></tbody></table>
+</div>
+<div class="inventory-footer small text-secondary"><span id="table-note">Select a model or node chip to inspect its installation.</span><span id="table-total"></span></div>
+{% endcall %}
+<div class="inventory-legend small text-secondary" aria-label="Availability legend"><span class="inventory-state" data-state="in-use"><span class="inventory-dot" aria-hidden="true"></span>In use</span><span class="inventory-state" data-state="loaded"><span class="inventory-dot" aria-hidden="true"></span>Loaded</span><span class="inventory-state" data-state="installed"><span class="inventory-dot" aria-hidden="true"></span>Installed</span><span class="inventory-state" data-state="offline"><span class="inventory-dot" aria-hidden="true"></span>Unreachable · last known</span><span id="matrix-key" hidden>— Not installed</span></div>
+<p class="small text-secondary mt-3 mb-0">Sample fleet · 15–30 models per populated node. Installed models stay visible when a node is unreachable.</p>
+</div></div></div>
+</main>
+<dialog id="model-dialog" class="inventory-dialog" aria-labelledby="detail-title">
+{% call card('Model details', class_='mb-0', header_id='detail-title', actions='<button type="button" class="btn btn-outline-secondary btn-sm" data-close>Close</button>'|safe) %}
+<div class="d-flex flex-wrap gap-2 mb-3"><span id="detail-kind" class="badge bg-blue-lt"></span><span id="detail-quant" class="badge bg-secondary-lt"></span></div>
+<dl id="detail-facts" class="inventory-facts mb-4"></dl>
+{{ section_title('Installed on', level=3, id='detail-placement-title') }}
+<p class="small text-secondary" id="detail-note"></p>
+<div class="table-responsive"><table class="table table-sm align-middle"><caption class="visually-hidden">Model installations and saved configuration</caption><thead><tr><th scope="col">Node</th><th scope="col">Now</th><th scope="col">Context min / max</th><th scope="col">Memory at max</th><th scope="col">Last used</th></tr></thead><tbody id="detail-rows"></tbody></table></div>
+<p class="small text-secondary mb-0">Contexts and memory are specific to each node. Unreachable nodes show their last known configuration.</p>
+{% endcall %}
+</dialog>
+<dialog id="add-dialog" class="inventory-dialog inventory-add" aria-labelledby="add-title">
+{% call card('Add a model', class_='mb-0', header_id='add-title', actions='<button type="button" class="btn btn-outline-secondary btn-sm" data-close>Close</button>'|safe) %}
+<p class="text-secondary small">Try adding a sample entry. Changes stay in this preview until you reload.</p>
+<form id="add-form"><div class="mb-3"><label class="form-label" for="add-name">Model name</label><input id="add-name" name="name" class="form-control" required maxlength="100" placeholder="My model"></div><div class="row g-3 mb-4"><div class="col-sm-6"><label class="form-label" for="add-kind">Model type</label><select id="add-kind" name="kind" class="form-select"><option value="llm">LLM</option><option value="image">Image</option><option value="audio">Audio</option></select></div><div class="col-sm-6"><label class="form-label" for="add-node">Install on node</label><select id="add-node" name="node" class="form-select">{% for node in data.nodes %}<option value="{{ node.id }}"{% if not node.online %} disabled{% endif %}>{{ node.id }}{% if not node.online %} · unreachable{% endif %}</option>{% endfor %}</select></div></div><button class="btn btn-primary" type="submit">Add to preview</button></form>
+{% endcall %}
+</dialog>
+{{ templates() }}
+<script id="inventory-data" type="application/json">{{ data|tojson }}</script>
+<script>{{ javascript|safe }}</script>
+</body></html>

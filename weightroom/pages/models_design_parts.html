@@ -1,0 +1,14 @@
+{# Shared DOM templates for every Models inventory proposal and dynamic replacement. #}
+{% from 'parts.html' import empty_row %}
+{% from 'models_parts.html' import subject, placement %}
+{% macro templates() %}
+<template id="inventory-row-template"><tr><th scope="row">{{ subject(attrs={'data-model':''}) }}</th></tr></template>
+<template id="inventory-placement-template">{{ placement(attrs={'data-placement':''}) }}</template>
+<template id="inventory-cell-template"><td></td></template>
+<template id="inventory-node-template"><button type="button" class="inventory-node text-start" data-node><span class="d-flex align-items-center justify-content-between gap-2"><strong data-name></strong><span class="badge bg-secondary-lt" data-count></span></span><small class="d-block text-secondary mt-1" data-hardware></small><span class="d-flex justify-content-between gap-2 mt-2 small"><span data-state></span><span class="text-secondary" data-active></span></span></button></template>
+<template id="inventory-empty-template">{% call empty_row(9) %}<div class="py-5 text-center"><strong class="d-block mb-2" data-title></strong><p class="small text-secondary mb-3" data-note></p><button type="button" class="btn btn-outline-secondary btn-sm" data-clear>Clear filters</button></div>{% endcall %}</template>
+<template id="inventory-heading-template"><th scope="col"><button type="button" class="btn btn-link p-0" data-node></button><small class="d-block text-secondary fw-normal" data-count></small></th></template>
+<template id="inventory-status-template"><span class="inventory-state"><span class="inventory-dot" aria-hidden="true"></span><span data-label></span></span></template>
+<template id="inventory-fact-template"><div><dt class="small text-secondary fw-normal" data-label></dt><dd class="mb-0 mt-1" data-value></dd></div></template>
+<template id="inventory-detail-row-template"><tr><th scope="row" data-node></th><td data-state></td><td data-context></td><td data-memory></td><td data-used></td></tr></template>
+{% endmacro %}

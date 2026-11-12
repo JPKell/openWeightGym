@@ -622,7 +622,7 @@ def test_a_model_is_added_edited_and_removed_from_its_one_page(desk, tmp_path):
     kept.put("lost", {"gpus": 0, "flags": {"model": "/no/such/file.gguf", "ctx-size": 1}})
     whole, part = browser.get("/models?complete=1").text, browser.get("/models?part=list").text
     assert "<html" in whole and "<html" not in part and 'hx-get="/models?part=list"' in part
-    assert '<a href="/models/org/small:v1">org/small:v1</a>' in part and "8,192" in part and "its file is missing" in part
+    assert 'href="/models/org/small:v1"' in part and '<strong class="d-block" data-name>org/small:v1</strong>' in part and "8,192" in part and "its file is missing" in part
     state = browser.get("/models/org/small:v1?part=state").text
     assert "<html" not in state and "Last used" in state and str(file) in state and "Fingerprint" not in state
 
