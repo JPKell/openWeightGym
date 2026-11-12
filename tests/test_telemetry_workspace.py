@@ -161,12 +161,14 @@ def test_host_controls_and_models_are_in_the_inventory_column(control_server):
     assert response.status_code == 200
     column = response.text.split('<aside class="tw-inventory"', 1)[1].split('</aside>', 1)[0]
     assert column.index('test-model') < column.index('>Device capacity</h2>')
-    assert 'Wake compute' in column and '>Sleep</button>' in column
+    assert 'Wake compute' in column
+    assert '>Power</h2>' not in column and '/machine/power/' not in column
+    assert '>Sleep</button>' not in column and 'id="force"' not in column
+    assert column.rsplit('</form>', 1)[1].strip() == '</div>'
     assert 'Restart loadcoach' not in response.text and 'Service controls' not in response.text
     assert '/machine/services/' not in response.text
     assert 'Services and power' not in response.text and 'Compute service and power controls' not in response.text
-    assert f'name="return_to" value="/telemetry/{HOST}?hours=6&amp;gpu=2"' in column
-    assert 'data-hold-refresh' in column
+    assert f'name="return_to" value="/telemetry/{HOST}"' in column
     sign_in(server, 'pat')
     restricted = server.get('/telemetry/' + HOST).text
     assert 'test-model' in restricted and 'Restart loadcoach' not in restricted and '>Sleep</button>' not in restricted
@@ -197,42 +199,47 @@ def test_host_power_and_spotter_failure_stay_on_the_selected_host(control_server
     assert wrong_host.status_code == 400 and 'could not verify this physical host' in wrong_host.text
     assert 'poweroff' not in asked.read_text()
     compute.off = True
-    assert '>Sleep</button>' in server.get(destination).text
+    assert '/machine/power/' not in server.get(destination).text
     result = server.post('/machine/power/sleep', data={'return_to': destination, 'force': 'on'}, follow_redirects=False)
     assert result.status_code == 303 and result.headers['location'].startswith(destination + '?said=')
     machine.off = True
     unavailable = server.get(destination)
-    assert unavailable.status_code == 200 and 'Spotter is not answering' in unavailable.text
+    assert unavailable.status_code == 200 and 'Spotter is not answering' not in unavailable.text
+    assert '/machine/power/' not in unavailable.text and 'Wake compute' in unavailable.text
     assert 'Restart loadcoach' not in unavailable.text and 'test-model' in unavailable.text
 
 
-def test_host_controls_fit_and_preserve_confirmation_during_refresh(control_server):
+def test_host_inventory_and_wake_fit_narrow_layouts(control_server):
     from test_console_browser import browser_context, playwright
     server, _, _, _ = control_server
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         page.goto('http://console.test/telemetry/' + HOST)
         column = page.locator('.tw-inventory')
-        playwright.expect(column.get_by_role('button', name='Sleep', exact=True)).to_be_visible()
+        playwright.expect(column.get_by_role('button', name='Wake compute', exact=True)).to_be_visible()
+        assert column.locator('form[action^="/machine/power/"]').count() == 0
+        assert column.get_by_role('heading', name='Power', exact=True).count() == 0
+        assert column.locator('p').filter(has_text='logged in').count() == 0
         playwright.expect(column.locator('[data-component=llama_cpp]')).to_have_text('llama.cpp · Ready')
         assert page.get_by_role('button', name='Restart loadcoach', exact=True).count() == 0
         assert column.locator('#host-uptime').count() == 0
         positions = [page.locator(selector).bounding_box() for selector in ('#host-title', '#host-subtitle', '#host-uptime')]
         assert max(box['y'] for box in positions) < min(box['y'] + box['height'] for box in positions)
         assert column.locator('.host-models').bounding_box()['y'] < column.get_by_role('heading', name='Device capacity').bounding_box()['y']
-        force = column.get_by_label('Do not wait. Cut off whatever the compute service is answering', exact=True)
-        force.check()
-        assert page.evaluate("""() => {
-            const root = document.querySelector('#telemetry-workspace');
-            const event = new CustomEvent('htmx:beforeRequest', {cancelable:true, bubbles:true,
-                detail:{target:root, requestConfig:{elt:root, verb:'get'}}});
-            root.dispatchEvent(event);
-            return event.defaultPrevented;
-        }""")
-        playwright.expect(force).to_be_checked()
         for width in (1440, 1024, 390, 320):
             page.set_viewport_size({'width': width, 'height': 1000})
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), width
+            memory = page.locator('#host-totals .tw-total').nth(2)
+            playwright.expect(memory.locator('span')).to_have_text(re.compile(r'^Memory used of .+ GB$'))
+            assert memory.evaluate("""element => {
+                const label = element.querySelector('span');
+                const value = element.querySelector('strong');
+                const text = document.createRange();
+                text.selectNodeContents(label);
+                const left = label.getBoundingClientRect(), right = value.getBoundingClientRect();
+                return text.getClientRects().length === 1 && left.right <= right.left &&
+                    left.top < right.bottom && right.top < left.bottom;
+            }"""), width
         browser.close()
 
 
