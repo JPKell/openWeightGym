@@ -197,14 +197,34 @@ def test_new_model_destination_uses_cpu_when_target_has_no_audio_gpus(studio):
     page.goto('http://console.test/models/audio?new=1')
     page.locator('#am-file').select_option(label='vault · storage')
     page.locator('#am-name').fill('cpu-destination')
-    page.locator('[data-section="hardware"]').click()
-    playwright.expect(page.locator('[data-hardware-mode][value="auto"]')).to_be_checked()
+    playwright.expect(page.get_by_label('Install on compute node',exact=True)).to_be_visible()
+    playwright.expect(page.locator('#panel-files')).to_be_visible()
     page.locator('#am-target-node').select_option('scout')
+    playwright.expect(page.locator('#am-file option:checked')).to_have_text('vault · storage')
+    playwright.expect(page.locator('#am-name')).to_have_value('cpu-destination')
+    page.locator('[data-section="hardware"]').click()
     playwright.expect(page.locator('[data-hardware-mode][value="cpu"]')).to_be_checked()
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
     node,body=state['posts'][0]
     assert node=='scout' and body['settings']['gpus']==0
+
+
+@pytest.mark.parametrize('width',[1440,390,320])
+def test_install_destination_stays_visible_in_every_configuration_section(studio,width):
+    page,_=studio
+    page.set_viewport_size({'width':width,'height':1100})
+    page.goto('http://console.test/models/audio?new=1')
+    target=page.get_by_label('Install on compute node',exact=True)
+    playwright.expect(target).to_be_enabled()
+    page.locator('#am-add').click()
+    playwright.expect(target).to_be_focused()
+    playwright.expect(target).to_be_in_viewport()
+    for section in ('files','hardware','output','advanced'):
+        page.locator(f'[data-section="{section}"]').click()
+        playwright.expect(target).to_be_visible()
+        assert not target.evaluate('node=>Boolean(node.closest("[data-panel]"))')
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
 
 
 @pytest.mark.parametrize('suffix,facts',[
