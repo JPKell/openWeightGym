@@ -1,0 +1,24 @@
+{# File-page components shared with the standalone design review. #}
+{% from 'parts.html' import empty_row %}
+
+{% macro file_record(fields) %}
+<dl class="file-record mb-0">
+  {% for label, value, hook in fields %}<div><dt>{{ label }}</dt><dd data-fact="{{ hook }}">{{ value }}</dd></div>{% endfor %}
+</dl>
+{% endmacro %}
+
+{% macro metadata_tools(told) %}
+<div class="metadata-tools">
+  <input type="search" class="form-control form-control-sm" id="metadata-search" aria-label="Search metadata" placeholder="Find a key or value…" data-file-metadata-search>
+  <select class="form-select form-select-sm" id="metadata-group" aria-label="Metadata group" data-file-metadata-group>
+    <option value="all">All groups</option>
+    {% set groups = namespace(seen=[]) %}
+    {% for key in told.metadata %}{% set group = key.split('.')[0] %}{% if group not in groups.seen %}
+      {% set groups.seen = groups.seen + [group] %}<option value="{{ group }}">{{ group }}</option>
+    {% endif %}{% endfor %}
+  </select>
+</div>
+<p class="small text-secondary mb-2" id="metadata-count" role="status" aria-live="polite" data-file-metadata-count>{{ told.metadata|length }} entries</p>
+{% endmacro %}
+
+{% macro empty_metadata() %}{{ empty_row(2, 'No metadata matches. Clear the filters to see every entry.', attrs={'data-file-metadata-empty': '', 'hidden': true}) }}{% endmacro %}

@@ -1,0 +1,18 @@
+{# Preview components shared by all three individual-file layouts. #}
+{% from 'parts.html' import empty_row %}
+{% from 'file_parts.html' import file_record as record %}
+
+{% macro file_record() %}
+{{ record([
+    ('Location', 'Front · active cache', 'location'),
+    ('Place', 'nvme', 'place'),
+    ('Modified', '12 Nov 2026 · 09:14 PST', 'modified'),
+    ('Last used', '12 Nov 2026 · 10:42 PST', 'last-used')
+  ]) }}
+{% endmacro %}
+
+{% macro placement_row() %}
+<tr><td><strong data-node-name></strong><small class="d-block text-secondary" data-node-role></small></td><td><span class="badge" data-copy-state></span></td><td class="text-end text-nowrap" data-free></td><td class="text-end"><input type="checkbox" class="form-check-input" name="machine" data-node-select></td></tr>
+{% endmacro %}
+
+{% macro empty_metadata() %}{{ empty_row(2, 'No metadata matches this search. Clear the filter to see every entry.', attrs={'id': 'no-metadata', 'hidden': true}) }}{% endmacro %}
