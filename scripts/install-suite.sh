@@ -873,6 +873,13 @@ try_step 'Compiling' "$ROOT/.venv/bin/python" -m compileall -q "$ROOT/engines" "
     "If you have not changed that file, see what differs from the published code: git -C $(shell_path "$ROOT") status" \
     "Repair the installation, which fetches the code again and keeps your changes aside: owg repair"
 
+if has_service weightroom; then
+  try_step 'Building the Voice desktop download' "$ROOT/.venv/bin/python" \
+    "$ROOT/scripts/package-voice-desktop.py" "$ROOT/weightroom/static/LoadCoach-Voice.zip" ||
+    die 'The Voice desktop download could not be built.' \
+      'Resolve the packaging error above, then retry the installation'
+fi
+
 mkdir_if_real() { if ((DRY_RUN)); then ui_note "DRY RUN: mkdir -p $*"; else mkdir -p "$@"; fi; }
 mkdir_if_real "$ROOT/settings/defaults" "$ROOT/settings/examples" "$ROOT/data" "$ROOT/keys" "$UNIT_DIR"
 ((DRY_RUN)) || chmod 700 "$ROOT/keys"

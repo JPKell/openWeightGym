@@ -609,6 +609,12 @@ update() {
   fi
   refresh_runtime_sources "$DIR" || ui_die 'Code was fetched, but service source overrides could not be updated.' \
     'Resolve the override error above, then run owg update again before restarting services'
+  if [[ -f $DIR/settings/weightroom.toml ]]; then
+    ui_step 'Building the Voice desktop download' -- as_owner "$DIR/.venv/bin/python" \
+      "$DIR/scripts/package-voice-desktop.py" "$DIR/weightroom/static/LoadCoach-Voice.zip" ||
+      ui_die 'Code was fetched, but the Voice desktop download could not be built.' \
+        'Resolve the packaging error above, then run owg update again'
+  fi
   ui_info "${C_ERR}Code update complete. Restart running services when ready: owg restart${C_RESET}"
   if [[ $(receipt_get state) == pending ]]; then
     ui_note 'The unfinished installation is still saved. Run install.sh separately when you want to continue it.'

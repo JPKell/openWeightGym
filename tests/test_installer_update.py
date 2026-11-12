@@ -1,12 +1,18 @@
 """Code updates select current source without resuming setup or rebuilding engines."""
 import importlib.util
+from io import BytesIO
 import json
 import os
 import shutil
 import subprocess
 import sys
+from zipfile import ZipFile
 
 import pytest
+from starlette.applications import Starlette
+from starlette.routing import Mount
+from starlette.staticfiles import StaticFiles
+from starlette.testclient import TestClient
 
 from test_setup_recovery import ROOT, one_function, script_functions, shell
 
@@ -94,6 +100,91 @@ def test_installed_menu_update_does_not_reinstall(tmp_path, checkout):
     answer = run_update(tmp_path, checkout, menu=True)
     assert answer.returncode == 0, answer.stdout + answer.stderr
     assert (checkout / "code.txt").read_text() == "new code\n"
+
+
+def voice_download_sources(checkout):
+    """Publish the real packager inputs through the fixture's normal Git update."""
+    origin = checkout.parent / 'origin'
+    sources = ['scripts/package-voice-desktop.py']
+    sources += [f'voice/{name}.py' for name in ('__init__', 'desktop', 'desktop_audio', 'echo', 'protocol')]
+    sources += [f'desktop/{name}' for name in ('requirements.txt', 'README.txt', 'Voice.cmd', 'Voice.command')]
+    for name in sources:
+        target = origin / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / name, target)
+    git('-C', origin, 'add', '.')
+    git('-C', origin, 'commit', '-m', 'publish desktop client')
+    interpreter = checkout / '.venv/bin/python'
+    interpreter.parent.mkdir(parents=True)
+    interpreter.symlink_to(sys.executable)
+    settings = checkout / 'settings/weightroom.toml'
+    settings.parent.mkdir()
+    settings.write_text('data = "../data"\n')
+
+
+def test_update_builds_missing_and_stale_voice_download_from_installed_source(tmp_path, checkout):
+    voice_download_sources(checkout)
+    destination = checkout / 'weightroom/static/LoadCoach-Voice.zip'
+    for old_archive in (None, b'stale archive'):
+        if old_archive is not None:
+            destination.write_bytes(old_archive)
+        answer = run_update(tmp_path, checkout)
+        assert answer.returncode == 0, answer.stdout + answer.stderr
+        if old_archive is not None:
+            assert 'Already up to date' in answer.stdout
+        app = Starlette(routes=[Mount('/static', StaticFiles(directory=destination.parent))])
+        with TestClient(app) as client:
+            download = client.get('/static/LoadCoach-Voice.zip')
+        assert download.status_code == 200 and download.headers['content-type'] == 'application/zip'
+        with ZipFile(BytesIO(download.content)) as archive:
+            assert archive.testzip() is None
+            expected = {f'LoadCoach-Voice/voice/{name}' for name in (
+                '__init__.py', 'desktop.py', 'desktop_audio.py', 'echo.py', 'protocol.py')}
+            expected |= {f'LoadCoach-Voice/{name}' for name in (
+                'requirements.txt', 'README.txt', 'Voice.cmd', 'Voice.command')}
+            assert set(archive.namelist()) == expected
+            assert archive.read('LoadCoach-Voice/voice/desktop.py') == (checkout / 'voice/desktop.py').read_bytes()
+            assert archive.getinfo('LoadCoach-Voice/Voice.command').external_attr >> 16 == 0o100755
+
+
+def test_update_reports_packaging_failure_instead_of_success(tmp_path, checkout):
+    voice_download_sources(checkout)
+    destination = checkout / 'weightroom/static/LoadCoach-Voice.zip'
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b'previous download')
+    origin = checkout.parent / 'origin'
+    (origin / 'voice/desktop.py').unlink()
+    git('-C', origin, 'commit', '-am', 'simulate missing desktop source')
+    answer = run_update(tmp_path, checkout)
+    assert answer.returncode != 0
+    assert 'Voice desktop download could not be built' in answer.stderr
+    assert 'Code update complete' not in answer.stdout
+    assert destination.read_bytes() == b'previous download'
+    assert list(destination.parent.iterdir()) == [destination]
+
+
+@pytest.mark.parametrize('service,dry_run', [('weightroom', False), ('weightroom', True), ('loadcoach', False)])
+def test_install_and_repair_build_voice_download_only_for_console(tmp_path, checkout, service, dry_run):
+    voice_download_sources(checkout)
+    git('-C', checkout, 'pull', '--ff-only')
+    suite = (ROOT / 'scripts/install-suite.sh').read_text()
+    start = suite.index("\nif has_service weightroom; then\n  try_step 'Building the Voice desktop download'")
+    end = suite.index('\nmkdir_if_real()', start)
+    source = '''set -euo pipefail
+source "$TEST_REPO/scripts/lib/ui.sh"
+ui_init
+ROOT=$INSTALL DRY_RUN=$TEST_DRY_RUN
+has_service() { [[ $1 == "$TEST_SERVICE" ]]; }
+die() { ui_die "$@"; }
+''' + one_function('scripts/install-suite.sh', 'quote_command') + '\n' + \
+        one_function('scripts/install-suite.sh', 'run') + '\n' + \
+        one_function('scripts/install-suite.sh', 'try_step') + suite[start:end]
+    answer = shell(tmp_path, source, env={'INSTALL': str(checkout), 'TEST_SERVICE': service,
+                                         'TEST_DRY_RUN': str(int(dry_run))})
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    assert (checkout / 'weightroom/static/LoadCoach-Voice.zip').exists() == (service == 'weightroom' and not dry_run)
+    if dry_run:
+        assert 'DRY RUN:' in answer.stdout and 'package-voice-desktop.py' in answer.stdout
 
 
 @pytest.mark.parametrize("failure", ["local-edits", "unreachable-origin", "not-a-checkout"])
