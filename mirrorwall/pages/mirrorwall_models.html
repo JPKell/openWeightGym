@@ -32,7 +32,7 @@
 <p id="studio-unavailable" class="small text-secondary" hidden></p>
 </div>
 <section id="workflows-panel" aria-label="Workflows for selected model">
-{% call card('Workflows', hint='Choose a starting point') %}
+{% call card('Workflows') %}
 <input id="studio-workflow-search" type="search" class="form-control mb-2" aria-label="Search workflows" placeholder="Find a workflow…"><select id="studio-visibility" class="form-select mb-3" aria-label="Filter workflow visibility"><option value="all">All workflows</option><option value="personal">Personal</option><option value="shared">Shared</option></select>
 <p id="studio-count" class="small text-secondary"></p><div id="studio-workflow-list" class="workflow-list"></div>
 <p id="studio-workflow-empty" class="small text-secondary" hidden>No workflows yet. Create one from this model’s defaults.</p><p id="studio-no-match" class="small text-secondary" hidden>No workflows match your search.</p>
