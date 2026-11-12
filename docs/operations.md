@@ -23,6 +23,31 @@ Current installation addresses, documented **2026-10-20**:
 | Browser voice | [Private HTTPS voice app](https://k-srv.tailaf60c6.ts.net/) |
 | Desktop voice | Front server, port `8447`; [download](https://10.77.10.42/static/LoadCoach-Voice.zip) |
 
+### Model discovery runtime (2026-11-12)
+
+The old Turnstile runtime pin still executed the legacy 40-result search despite newer
+WeightRoom controls. Release `model-discovery-82e846b` preserves that runtime and its Users
+PostgreSQL fix, overlaying only `loadcoach/hub.py`, `turnstile/artifacts.py` and
+`mirrorwall/civitai.py`. WeightRoom runs immutable source `82e846b`, including the already
+deployed Models catalogue. Both use the existing virtualenv, settings and databases.
+
+Front `zz-model-discovery.conf` user-service drop-ins select each service's source beneath
+`~/.local/share/ai-suite/releases/model-discovery-82e846b/`. Only Turnstile and WeightRoom
+were restarted: requests, batches, benchmarks, downloads and file transfers were empty;
+benchmark pause state remained unchanged. Inference workers were not restarted.
+
+Fourteen focused checks passed. Authenticated live search matched Hugging Face's global
+rankings across two 20-result pages for downloads, likes, newest and oldest. Browser checks
+verified sorting, pagination and narrow layout; Users detail/activity still returned 200.
+Temporary verification sessions were revoked. Preflight, source hashes, activation and live
+result IDs are in front's `~/.local/share/ai-suite/recovery/model-discovery-82e846b/`.
+
+Rollback after work drains: remove only the two `zz-model-discovery.conf` drop-ins, run
+`systemctl --user daemon-reload`, then restart Turnstile and WeightRoom. Keep the original
+`99-users-usage.conf`, release sources, settings and data; restoring that old Turnstile pin
+also restores the 40-result search defect. The new console rejects legacy search responses
+rather than claiming their ordering and page size were applied.
+
 ### Users page PostgreSQL totals (2026-11-12)
 
 Request `b68fbb54542836a05c510fd0a68f4f77` failed in the account-detail API because
