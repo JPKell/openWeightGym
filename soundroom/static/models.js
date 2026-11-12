@@ -256,11 +256,9 @@
       if (!grouped.has(row.name)) grouped.set(row.name,[]);
       grouped.get(row.name).push({node,row});
     }
-    const all=[...grouped], search=$('search').value.trim().toLowerCase(), scope=$('node').value, status=$('availability').value;
-    const shown=all.map(([name,places])=>[name,places.filter(place=>(!scope || place.node === scope) &&
-      (task === 'all' || kindGroup(place.row.audiocpp.kind) === task) &&
-      (status === 'all' || status === 'loaded' && ['loaded','in-use'].includes(state(place.row,place.node)) || status === 'offline' && !available(place.node)))])
-      .filter(([name,places])=>places.length && (!search || [name,...places.flatMap(place=>[place.node,place.row.audiocpp.family])].join(' ').toLowerCase().includes(search)))
+    const all=[...grouped];
+    const shown=all.map(([name,places])=>[name,places.filter(place=>task === 'all' || kindGroup(place.row.audiocpp.kind) === task)])
+      .filter(([,places])=>places.length)
       .sort(([a],[b])=>a.localeCompare(b));
     const scroll=$('profiles').scrollTop;
     $('profiles').replaceChildren(...shown.map(([name,places])=>{
@@ -288,7 +286,7 @@
       }
       return choice;
     }));
-    if (!shown.length) $('profiles').append(element('p',all.length ? 'No models match. Clear your filters or add a model.' : failures.size ? 'Inventory is unavailable. Retry to reconnect to your compute nodes.' : 'No audio models yet. Choose a file to add your first model.','small text-secondary p-3 mb-0'));
+    if (!shown.length) $('profiles').append(element('p',all.length ? 'No models for this task. Choose All tasks or add a model.' : failures.size ? 'Inventory is unavailable. Retry to reconnect to your compute nodes.' : 'No audio models yet. Choose a file to add your first model.','small text-secondary p-3 mb-0'));
     $('profiles').scrollTop=scroll;
     $('total-models').textContent=all.length || (failures.size ? '—' : '0');
     $('total-installations').textContent=all.reduce((count,[,places])=>count+places.length,0) || (failures.size ? '—' : '0');
@@ -315,8 +313,7 @@
   function startNew() {
     if (busy) return;
     captureDraft();
-    const scope=$('node').value;
-    activeNode=(scope && accepting(scope) ? scope : accepting(activeNode) ? activeNode : computeNodes.find(one=>accepting(one.name))?.name) || activeNode;
+    activeNode=(accepting(activeNode) ? activeNode : computeNodes.find(one=>accepting(one.name))?.name) || activeNode;
     section='files'; populate(); updateLocation(); renderProfiles(); $('install-targets').querySelector('input:not(:disabled)')?.focus();
   }
   async function refresh() {
@@ -363,19 +360,6 @@
   $('file').addEventListener('change',fileChanged); $('family').addEventListener('change',familyChanged); $('root').addEventListener('change',companions); $('kind').addEventListener('change',exclusive);
   root.querySelectorAll('[data-section]').forEach(button=>button.addEventListener('click',()=>showSection(button.dataset.section)));
   root.querySelectorAll('[data-audio-task]').forEach(button=>button.addEventListener('click',()=>{ task=button.dataset.audioTask; renderProfiles(); }));
-  for (const [name,event] of [['search','input'],['availability','change']]) $(name).addEventListener(event,renderProfiles);
-  $('node').addEventListener('change',()=>{
-    const node=$('node').value;
-    if (node && !busy) {
-      captureDraft();
-      const rows=inventories.get(node)?.models || [];
-      const name=rows.find(row=>row.name === selected?.name)?.name || rows[0]?.name || '';
-      activeNode=node; populate(name); updateLocation();
-    }
-    renderProfiles();
-  });
-  $('clear').addEventListener('click',()=>{ task='all'; $('search').value=''; $('availability').value='all'; $('node').value=''; renderProfiles(); });
-  $('node').value=params.get('node') || '';
   $('add').addEventListener('click',startNew);
   $('install-targets').addEventListener('change',()=>{
     if (selected || busy) return;

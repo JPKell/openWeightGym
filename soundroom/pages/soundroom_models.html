@@ -5,27 +5,20 @@
 {% from 'audio_model_parts.html' import editor, studio_choice %}
 {% from 'models_parts.html' import placement, node_target %}
 {% block title %}Audio models · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><link rel="stylesheet" href="/static/audio-models.css?v=1"><script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/soundroom-static/models.js?v=10" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><link rel="stylesheet" href="/static/audio-models.css?v=1"><script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/soundroom-static/models.js?v=11" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom-models" data-audio-studio>
-{% call page_header('Audio models', pretitle='SOUNDROOM / MODEL STUDIO') %}<a href="/models?kind=audio" class="btn btn-outline-secondary">Catalogue</a><button type="button" class="btn btn-primary" id="am-add" disabled>Add audio model</button>{% endcall %}
-<p class="text-secondary mb-4">Browse installed models and configure their files, hardware and output in one place.</p>
+{% call page_header('Audio models') %}<a href="/models?kind=audio" class="btn btn-outline-secondary">Catalogue</a><button type="button" class="btn btn-primary" id="am-add" disabled>Add audio model</button>{% endcall %}
 {% call kpi_row('Audio inventory',class_='mb-4') %}
-{{ kpi('Installed models','—','Across your compute fleet',value_attrs={'id':'am-total-models'}) }}
-{{ kpi('Installations','—','One model on one compute node',value_attrs={'id':'am-total-installations'}) }}
-{{ kpi('In memory','—','Reachable nodes only',value_attrs={'id':'am-total-loaded'}) }}
-{{ kpi('Audio tasks','—','Tasks in the installed library',value_attrs={'id':'am-total-kinds'}) }}
+{{ kpi('Installed models','—',value_attrs={'id':'am-total-models'}) }}
+{{ kpi('Installations','—',value_attrs={'id':'am-total-installations'}) }}
+{{ kpi('In memory','—',value_attrs={'id':'am-total-loaded'}) }}
+{{ kpi('Audio tasks','—',value_attrs={'id':'am-total-kinds'}) }}
 {% endcall %}
 {% call alert('warning',attrs={'id':'am-load-error','hidden':''}) %}<span id="am-load-error-text"></span><button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="am-retry">Retry</button>{% endcall %}
-<div class="audio-toolbar mb-3">
-<div><label for="am-search" class="form-label small">Find a model</label><input id="am-search" type="search" class="form-control" placeholder="Name, family or node…"></div>
-<div><label for="am-node" class="form-label small">Compute node</label><select id="am-node" name="node" class="form-select"><option value="">All nodes</option>{% for node in audio_nodes %}<option value="{{ node.name }}">{{ node.name }}</option>{% endfor %}</select></div>
-<div><label for="am-availability" class="form-label small">Availability</label><select id="am-availability" class="form-select"><option value="all">All installed</option><option value="loaded">In memory</option><option value="offline">Node unavailable</option></select></div>
-</div>
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
 {% call pills('Audio task',buttons=true,class_='gap-1 mb-0') %}{% for key,label in [('all','All tasks'),('music','Music'),('voice','Voices'),('sound','Sound effects'),('understand','Understanding')] %}{{ pill_button(label,key == 'all',attrs={'data-audio-task':key}) }}{% endfor %}{% endcall %}
 <span class="small text-secondary" id="am-result-count" role="status" aria-live="polite">Loading audio models…</span>
-<button type="button" class="btn btn-link btn-sm" id="am-clear">Clear filters</button>
 </div>
 <div class="audio-studio">
 <aside aria-label="Installed audio models">
