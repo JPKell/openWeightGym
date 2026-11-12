@@ -1,0 +1,16 @@
+{% from "parts.html" import section_title, node_state %}
+  <form method="post" action="{{ address(model.name) }}" id="copy-model" class="form-section mt-4" data-model-transfer>
+    {{ section_title('Copy or move', 'From ' ~ selected_node) }}
+    {% if targets %}
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4"><span class="form-label d-block" id="transfer-label">Action</span>
+        <div class="form-selectgroup" role="radiogroup" aria-labelledby="transfer-label">{% for value, label in [('copy', 'Copy'), ('move', 'Move')] %}<label class="form-selectgroup-item"><input type="radio" name="transfer" value="{{ value }}" class="form-selectgroup-input" data-transfer{{ ' checked' if value == 'copy' }}><span class="form-selectgroup-label">{{ label }}</span></label>{% endfor %}</div></div>
+      <fieldset class="col-md-8"><legend class="form-label">To</legend><div class="form-selectgroup">
+        {% for node in targets %}<label class="form-selectgroup-item"><input type="checkbox" name="machine" value="{{ node.name }}" class="form-selectgroup-input" data-transfer-target><span class="form-selectgroup-label">{{ node.name }} · {{ node_state(node.state) }}</span></label>{% endfor %}
+      </div></fieldset>
+      <div class="col-md-4"><label for="add-device" class="form-label">Device on destination</label><select id="add-device" name="device" class="form-select"><option value="gpu">GPU · automatic</option>{% if model.engine|default('llama_cpp') != 'strata' %}<option value="cpu">CPU</option>{% endif %}</select></div>
+      <div class="col-md-8"><button class="btn btn-outline-primary" name="do" value="location-add" data-transfer-submit>Copy to node</button></div>
+    </div>
+    <p class="form-text mb-0" data-transfer-note>Copy places the complete model bundle after cache space and hashes are checked, with this model's shared settings. Move does the same to one node, then removes the copy on {{ selected_node }} once the new one is verified; if anything fails, the original stays.</p>
+    {% else %}<p class="form-hint mb-0">Every compute node already has a copy of this model.</p>{% endif %}
+  </form>

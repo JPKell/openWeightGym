@@ -6,7 +6,7 @@
   {% if setup.why %}<p class="text-warning">{{ setup.why }}</p>{% endif %}
   <div class="table-responsive"><table class="sortable table table-sm align-middle" aria-label="Model presets"><thead><tr><th>Preset</th><th>Context</th><th>Actions</th></tr></thead><tbody>
     {% for preset in setup.presets %}<tr><th class="wrap">{{ preset.name }}{% if preset.scope and preset.scope != preset_group.key %}<small class="d-block text-secondary">{{ 'This entry only' if preset.scope.startswith('entry:') else 'Same file only' }}</small>{% endif %}</th><td>{{ preset.configuration.settings.flags["ctx-size"] }}</td><td><form method="post" action="{{ address(model.name) }}" class="btn-group btn-group-sm"><input type="hidden" name="preset" value="{{ preset.name }}"><button class="btn btn-outline-primary btn-sm" name="do" value="load-preset">Load preset</button><button  class="btn btn-outline-danger btn-sm" name="do" value="delete-preset" {{ confirm_loss() }}>Delete preset</button></form></td></tr>
-    {% else %}{% call empty_row(3, class_='') %}No saved presets. Name the settings below and select Save preset.{% endcall %}{% endfor %}
+    {% else %}{% call empty_row(3, class_='') %}No saved presets. Name the current settings in the save bar and select Save preset.{% endcall %}{% endfor %}
   </tbody></table></div>
   {% if setup.can_undo %}<form method="post" action="{{ address(model.name) }}"><input type="hidden" name="undo" value="{{ setup.undo.receipt }}"><button class="btn btn-outline-secondary" name="do" value="undo" {{ confirm_two() }}>Undo last change</button></form>
   {% elif setup.undo %}<p class="text-secondary small mb-0">The model was edited after its last saved change. That undo cannot overwrite these settings.</p>{% endif %}

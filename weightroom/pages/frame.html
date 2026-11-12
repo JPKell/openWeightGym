@@ -87,7 +87,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {% if person and person.me.get('unavailable_machines') %}
 {% call alert('warning', class_='py-1 small', role='status', attrs={'id': 'node-availability', 'data-offline-nodes': person.me.unavailable_machines|tojson|forceescape}) %}Node unavailable: {{ person.me.unavailable_machines|join(', ') }}. Live node controls are disabled. Selecting a deployed model will request wake and wait for a response.{% endcall %}
 {% if wake_button and 'front-wake' in person.can and 'compute' in person.me.unavailable_machines %}<form method="post" action="/wake" class="mb-2"><button class="btn btn-sm btn-outline-primary">Wake compute</button></form>{% endif %}
-<script src="/static/node-availability.js" defer></script>
+<script src="/static/node-availability.js?v=2" defer></script>
 {% endif %}
 {% block main %}{% endblock %}
 </main>

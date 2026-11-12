@@ -49,6 +49,11 @@ def test_every_design_fits_both_themes_and_engines(preview):
                     page.locator(f'button[data-design="{design}"]').click()
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (engine, theme, width, design)
                     assert unique_ids(page), (engine, design)
+                    for view in ('locations', 'presets', 'facts', 'maintenance', 'configuration'):
+                        page.locator(f'[data-view="{view}"]').click()
+                        content = '#matrix-panel' if view == 'configuration' and design == 'matrix' else f'[data-view-panel="{view}"] > :first-child'
+                        expect(page.locator(content)).to_be_visible()
+                        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (engine, theme, width, design, view)
 
 
 def test_one_or_many_nodes_with_mixed_values(preview):
@@ -63,6 +68,7 @@ def test_one_or_many_nodes_with_mixed_values(preview):
     maximum.fill('24576')
     expect(page.locator('#change-count')).to_have_text('2 unsaved changes · atlas and orion')
     # Shared settings are one change for every node, whatever the selection.
+    page.locator('[data-section="generation"]').click()
     page.locator('#section-generation [data-key="temp"] input').fill('0.7')
     expect(page.locator('#change-count')).to_contain_text('3 unsaved changes')
     page.locator('#preview').click()
@@ -76,6 +82,7 @@ def test_one_or_many_nodes_with_mixed_values(preview):
     expect(page.locator('#said')).to_contain_text('Saved 3 changes for atlas and orion and shared settings')
     expect(page.locator('#model-state')).to_contain_text('old settings until it reloads')
     expect(page.locator('#change-count')).to_have_text('No unsaved changes.')
+    page.locator('#open-presets').click()
     page.locator('#undo').click()
     expect(page.locator('#change-count')).to_contain_text('3 unsaved changes')
 
@@ -89,6 +96,7 @@ def test_warnings_need_acknowledgement_and_errors_block(preview):
     page.locator('#review-acknowledge').check()
     expect(page.locator('#apply')).to_be_enabled()
     page.locator('#review [data-close]').click()
+    page.locator('[data-section="hardware"]').click()
     page.locator('#section-hardware').get_by_text('Pin to GPUs').click()
     page.locator('#preview').click()
     expect(page.locator('#review-errors')).to_contain_text('choose at least one GPU')
@@ -137,6 +145,7 @@ def test_copy_to_several_nodes_and_move_to_one(preview):
     expect(page.locator('#locations tr')).to_have_count(5)
     expect(page.locator('#change-count')).to_have_text('No unsaved changes.')
 
+    page.locator('[data-view="locations"]').click()
     page.locator('#locations tr').filter(has_text='orion').get_by_role('button', name='Copy or move from orion').click()
     page.locator('.transfer-action label').filter(has_text='Move').click()
     expect(page.locator('#transfer-targets input:not([disabled])')).to_have_count(0)
@@ -161,11 +170,13 @@ def test_move_removes_the_source_and_keeps_its_settings(preview):
 
 def test_presets_and_location_toggle_confirm(preview):
     page = preview
+    page.locator('#open-presets').click()
     page.get_by_role('button', name='Load preset Daily 16K').click()
     expect(page.locator('#section-context [data-input="ctx"]')).to_have_value('16384')
     expect(page.locator('#change-count')).to_contain_text('unsaved change')
     page.locator('#discard').click()
     expect(page.locator('#section-context [data-input="ctx"]')).to_have_value('32768')
+    page.locator('[data-view="locations"]').click()
     toggle = page.get_by_role('button', name='Disable on orion')
     toggle.click()
     expect(toggle).to_have_text('Confirm disable')
@@ -187,3 +198,51 @@ def test_strata_keeps_only_its_own_settings(preview):
     page.locator('#review [data-close]').click()
     page.locator('#open-transfer').click()
     expect(page.locator('#transfer-device option[value="cpu"]')).to_be_hidden()
+
+
+def test_studio_drafts_survive_sections_views_and_designs(preview):
+    page = preview
+    page.locator('#section-context [data-input="ctx"]').fill('24576')
+    expect(page.locator('[data-overview="context"]')).to_have_text('24,576')
+    page.locator('[data-section="generation"]').click()
+    expect(page.locator('#section-context')).to_be_hidden()
+    page.locator('#section-generation [data-key="temp"] input').fill('0.8')
+    expect(page.locator('#setup-summary')).to_contain_text('temp 0.8')
+    for view in ('locations', 'presets', 'facts', 'maintenance', 'configuration'):
+        page.locator(f'[data-view="{view}"]').click()
+        expect(page.locator(f'[data-view-panel="{view}"]')).to_be_visible()
+        assert page.locator('[data-view-panel]:visible').count() == 1
+    page.locator('button[data-design="summary"]').click()
+    expect(page.locator('#section-context [data-summary]')).to_contain_text('24,576')
+    page.locator('button[data-design="matrix"]').click()
+    expect(page.get_by_label('maximum context on atlas')).to_have_value('24576')
+    page.locator('button[data-design="sheet"]').click()
+    page.locator('[data-section="context"]').click()
+    expect(page.locator('#section-context [data-input="ctx"]')).to_have_value('24576')
+
+
+def test_group_filter_preserves_matrix_edits_and_explains_empty_differences(preview):
+    page = preview
+    page.locator('button[data-design="matrix"]').click()
+    page.locator('#matrix-group').select_option('advanced')
+    page.get_by_label('threads on atlas').fill('20')
+    page.locator('#matrix-group').select_option('generation')
+    expect(page.get_by_label('threads on atlas')).to_have_count(0)
+    page.locator('#matrix-differences').check()
+    expect(page.locator('#matrix-empty')).to_be_visible()
+    page.locator('#matrix-differences').uncheck()
+    expect(page.locator('#matrix-empty')).to_be_hidden()
+    page.locator('#matrix-group').select_option('advanced')
+    expect(page.get_by_label('threads on atlas')).to_have_value('20')
+
+
+def test_desktop_overview_and_primary_studio_controls_fit_one_screen(preview):
+    page = preview
+    for design in ('sheet', 'summary'):
+        page.locator(f'button[data-design="{design}"]').click()
+        # Keep the whole default configuration and save actions in one desktop viewport.
+        assert page.evaluate('document.documentElement.scrollHeight <= innerHeight'), design
+        expect(page.locator('#preview')).to_be_in_viewport()
+    page.locator('button[data-design="matrix"]').click()
+    assert page.locator('.matrix-scroll').evaluate('el => el.scrollHeight > el.clientHeight')
+    expect(page.locator('#preview')).to_be_in_viewport()

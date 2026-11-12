@@ -1,15 +1,27 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, more, section_title, confirm_check, confirm_loss, node_state %}
+{% from "parts.html" import card, said_box, swaps, page_header, more, section_title, confirm_check, confirm_loss, confirm_two, node_state %}
+{% from "navigation_parts.html" import pills, pill_button %}
+{% from "kpi_parts.html" import kpi_row, kpi %}
 {% block title %}{{ model.name }} · openWeightGym{% endblock %}
 {% block main_attributes %}data-card-scope="model"{% endblock %}
-{% block scripts %}<script src="/static/model-settings.js?v=4" defer></script><script src="/static/model-matrix.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/model-configuration.css?v=1"><script src="/static/model-settings.js?v=5" defer></script><script src="/static/model-matrix.js?v=3" defer></script><script src="/static/model-configuration.js?v=1" defer></script>{% endblock %}
 {% block main %}
 <nav class="mb-2"><a href="/models">Models</a></nav>
-{% call page_header(model.name, 'Configure this model and review its availability across nodes.') %}{% include "model_state.html" %}{% endcall %}
+{% call page_header(model.name) %}<a href="#model-view-presets" class="btn btn-outline-secondary" data-model-show="presets">Presets</a><a href="#model-view-nodes" class="btn btn-outline-primary" data-model-show="nodes">Copy or move…</a>{% endcall %}
+{% include "model_state.html" %}
 {{ said_box(said, failed) }}
-
-{# A list to choose an adapter or a projector from: those whose file says it was made for this model first, the others marked.
-   What is chosen now is kept in the list even if its file is in none of the places. #}
+<div data-model-configuration data-engine="{{ engine_schema.id }}" data-global-flags="{{ global_flags|list|tojson|forceescape }}" data-failed="{{ 'true' if failed else 'false' }}" data-model-draft="{{ 'true' if has_draft else 'false' }}">
+{% call kpi_row('Model configuration', class_='mb-3 mt-3') %}
+  {{ kpi('Context window', showing.flags['ctx-size']|shown, note='Configured maximum · tokens', value_attrs={'data-model-kpi': 'context'}, note_attrs={'data-model-kpi-note': 'context'}) }}
+  {{ kpi('Requests at once', parallel.count if parallel.enabled else 1, note='Configured concurrency', value_attrs={'data-model-kpi': 'requests'}, note_attrs={'data-model-kpi-note': 'requests'}) }}
+  {{ kpi('Placement', 'CPU' if showing.gpus == 0 else 'Pinned GPUs' if showing.gpus is sequence and showing.gpus is not string else 'Automatic GPU', note='Node-local placement', value_attrs={'data-model-kpi': 'placement'}, note_attrs={'data-model-kpi-note': 'placement'}) }}
+  {{ kpi('Model file size', model.size|size if model.size is not none else 'Unavailable', note='Weights on ' ~ selected_node) }}
+{% endcall %}
+{% call pills('Model workspace', buttons=true, class_='gap-1 mb-3 model-workspace-views') %}
+  {% for key, title in [('configuration', 'Configuration'), ('nodes', 'Compute nodes'), ('presets', 'Presets'), ('facts', 'File & benchmarks'), ('maintenance', 'Maintenance')] %}
+    {{ pill_button(title, key == 'configuration', attrs={'data-model-view': key, 'aria-controls': 'model-view-' ~ key}) }}
+  {% endfor %}
+{% endcall %}
 {% macro part_choice(field, what, chosen, label, id="") %}
       <select name="{{ field }}" class="form-select" aria-label="{{ label }}" {% if id %}id="{{ id }}"{% endif %}>
         <option value="">none</option>
@@ -19,64 +31,50 @@
       </select>
 {% endmacro %}
 
+<form id="rename" method="post" action="{{ address(model.name) }}"></form>
+{% for column in columns %}{% if column.model_id %}<form id="location-{{ loop.index }}" method="post" action="{{ address(model.name) }}"><input type="hidden" name="machine" value="{{ column.machine }}"><input type="hidden" name="model_id" value="{{ column.model_id }}"></form>{% endif %}{% endfor %}
+<section id="model-view-configuration" data-model-panel="configuration" aria-label="Configuration">
+  <div class="d-flex flex-wrap align-items-center gap-2 border rounded p-2 mb-3 model-node-scope">
+    <strong class="small" id="model-node-label">Editing on</strong>
+    <div class="form-selectgroup gap-1" role="group" aria-labelledby="model-node-label">
+      {% for column in columns %}<label class="form-selectgroup-item"><input type="checkbox" class="form-selectgroup-input" value="{{ column.machine }}" data-model-node data-prefix="{{ column.prefix }}" data-cards="{{ column.cards|tojson|forceescape }}" data-defaults="{{ column.defaults|tojson|forceescape }}"{{ ' checked' if column.selected }}><span class="form-selectgroup-label py-1 px-2">{{ column.machine }}{% if column.state != 'ready' %} <small class="text-secondary">{{ node_state(column.state) }}</small>{% endif %}</span></label>{% endfor %}
+    </div>
+    <span class="small text-secondary ms-md-auto" data-model-scope-note>Shared settings apply to all copies. Node settings apply on the next load.</span>
+    {% if columns|length > 1 %}<label class="form-check form-switch mb-0 small"><input class="form-check-input" type="checkbox" data-matrix-differences><span class="form-check-label">Only rows that differ</span></label>{% endif %}
+  </div>
+  <form id="model-settings" method="post" action="{{ address(model.name) }}" data-model-settings data-hold-refresh>
+    <input type="hidden" name="engine" value="{{ engine_schema.id }}">
+    {% include engine_schema.matrix_template %}
+  </form>
+</section>
+<section id="model-view-nodes" data-model-panel="nodes" aria-label="Compute nodes">
+  {% call card('Compute nodes', hint='Enabled copies can answer requests. Disabling keeps their settings and files.') %}
+    <div class="table-responsive"><table class="table table-sm align-middle" aria-label="Compute nodes for this model">
+      <thead><tr><th>Node</th><th>Local model</th><th>State</th><th>Offered</th><th>Actions</th></tr></thead><tbody>
+      {% for column in columns %}<tr><th scope="row"><a href="{{ column.link }}">{{ column.machine }}</a></th><td><code>{{ column.name }}</code></td><td>{{ node_state(column.state) }}</td><td>{{ 'Enabled' if column.enabled else 'Disabled' }}</td><td>{% if column.model_id %}<button form="location-{{ loop.index }}" class="btn btn-outline-{{ 'danger' if column.enabled else 'success' }} btn-sm" name="do" value="{{ 'location-disable' if column.enabled else 'location-enable' }}" {{ confirm_two() }}>{{ 'Disable' if column.enabled else 'Enable' }}<span class="visually-hidden"> on {{ column.machine }}</span></button>{% endif %}</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% include 'model_transfer.html' %}
+  {% endcall %}
+</section>
+<section id="model-view-presets" data-model-panel="presets" aria-label="Presets">{% include 'model_setup.html' %}</section>
+<section id="model-view-facts" data-model-panel="facts" aria-label="File facts and benchmarks">
 {# Measure memory: loads this model at its minimum and maximum context on every node whose copy has not been measured there.
    Greyed out when every copy is measured, or while measuring is under way. #}
 {% set _measure_actions %}<form method="post" action="{{ address(model.name) }}" class="m-0">
   <button class="btn btn-outline-primary btn-sm" name="do" value="measure"{{ ' disabled' if not measure.nodes or measure.busy }}
     title="{{ 'Measuring is under way; see the Models list.' if measure.busy else 'Every copy has its memory measured at its minimum and maximum context.' if not measure.nodes else 'Loads it in turn at its minimum and maximum context on ' ~ measure.nodes|join(', ') ~ ', unloading idle models as needed. A live request pauses measuring.' }}">Measure memory</button>
 </form>{% endset %}
-{% call card("File facts", false, actions=_measure_actions) %}{% include "file_says.html" %}
+{% call card("File facts", actions=_measure_actions) %}{% include "file_says.html" %}
 <dl class="row facts small mb-0">
   <dt class="col-md-3">Fingerprint</dt><dd class="col-md-9 wrap">{% if model.fingerprint %}<a href="/fingerprints?start={{ model.fingerprint }}"><code>{{ model.fingerprint }}</code></a>{% else %}Not available{% endif %}</dd>
   {% if model.sha256 %}<dt class="col-md-3">File SHA-256</dt><dd class="col-md-9 wrap"><code>{{ model.sha256 }}</code></dd>{% endif %}
-  {% if build %}<dt class="col-md-3">llama-server</dt><dd class="col-md-9">{{ build }}</dd>{% endif %}
+  {% if build and engine_schema.id == 'llama_cpp' %}<dt class="col-md-3">llama-server</dt><dd class="col-md-9">{{ build }}</dd>{% endif %}
 </dl>
 {% endcall %}
 
-{# The box for a new name sits among the settings and belongs to this form of its own, so that Rename sends the name alone.
-   So do each node's Enable/Disable buttons, in the node matrix's column headings. #}
-<form id="rename" method="post" action="{{ address(model.name) }}"></form>
-{% for column in columns %}{% if column.model_id %}<form id="location-{{ loop.index }}" method="post" action="{{ address(model.name) }}"><input type="hidden" name="machine" value="{{ column.machine }}"><input type="hidden" name="model_id" value="{{ column.model_id }}"></form>{% endif %}{% endfor %}
-{% set several = columns|length > 1 %}
-{% call card("Settings", true, hint='Settings marked "All nodes" are kept the same on every copy; the rest belong to each node.' if several else '') %}
-  {% if several %}<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-    <span class="small text-secondary">Tick node columns to edit them together. Highlighted cells differ between nodes.</span>
-    <label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" data-matrix-differences><span class="form-check-label">Only rows that differ</span></label>
-  </div>{% endif %}
-  <form method="post" action="{{ address(model.name) }}" data-model-settings>
-    <input type="hidden" name="engine" value="{{ engine_schema.id }}">
-    {% include engine_schema.matrix_template %}
-    <div class="sticky-actions mt-3">
-      <button class="btn btn-primary" name="do" value="save-settings">Save</button>
-      <span class="small text-secondary">{% if several %}Every changed node is saved together.{% else %}Applies to {{ selected_node }} on next load.{% endif %}</span>
-      {# The name is sent with every button and read only by Save preset. #}
-      <div class="d-flex flex-wrap align-items-center gap-2 ms-auto">
-        <div class="input-group input-group-sm w-auto"><input id="preset-name" name="preset" maxlength="80" class="form-control" placeholder="Preset name" aria-label="Preset name"><button class="btn btn-outline-primary" name="do" value="save-preset">Save preset</button></div>
-        <label class="form-check mb-0 small"><input id="replace-preset" type="checkbox" class="form-check-input" name="replace"><span class="form-check-label">Replace</span></label>
-      </div>
-    </div>
-  </form>
-
-  <form method="post" action="{{ address(model.name) }}" id="copy-model" class="form-section mt-4" data-model-transfer>
-    {{ section_title('Copy or move', 'From ' ~ selected_node) }}
-    {% if targets %}
-    <div class="row g-3 align-items-end">
-      <div class="col-md-4"><span class="form-label d-block" id="transfer-label">Action</span>
-        <div class="form-selectgroup" role="radiogroup" aria-labelledby="transfer-label">{% for value, label in [('copy', 'Copy'), ('move', 'Move')] %}<label class="form-selectgroup-item"><input type="radio" name="transfer" value="{{ value }}" class="form-selectgroup-input" data-transfer{{ ' checked' if value == 'copy' }}><span class="form-selectgroup-label">{{ label }}</span></label>{% endfor %}</div></div>
-      <fieldset class="col-md-8"><legend class="form-label">To</legend><div class="form-selectgroup">
-        {% for node in targets %}<label class="form-selectgroup-item"><input type="checkbox" name="machine" value="{{ node.name }}" class="form-selectgroup-input" data-transfer-target><span class="form-selectgroup-label">{{ node.name }} · {{ node_state(node.state) }}</span></label>{% endfor %}
-      </div></fieldset>
-      <div class="col-md-4"><label for="add-device" class="form-label">Device on destination</label><select id="add-device" name="device" class="form-select"><option value="gpu">GPU · automatic</option>{% if model.engine|default('llama_cpp') != 'strata' %}<option value="cpu">CPU</option>{% endif %}</select></div>
-      <div class="col-md-8"><button class="btn btn-outline-primary" name="do" value="location-add" data-transfer-submit>Copy to node</button></div>
-    </div>
-    <p class="form-text mb-0" data-transfer-note>Copy places the complete model bundle after cache space and hashes are checked, with this model's shared settings. Move does the same to one node, then removes the copy on {{ selected_node }} once the new one is verified; if anything fails, the original stays.</p>
-    {% else %}<p class="form-hint mb-0">Every compute node already has a copy of this model.</p>{% endif %}
-  </form>
-{% endcall %}
-
-{% include "model_setup.html" %}
-{% call card("Benchmark results", false) %}{% include "model_benchmark.html" %}{% endcall %}
-
+{% call card("Benchmark results", true) %}{% include "model_benchmark.html" %}{% endcall %}
+</section>
+<section id="model-view-maintenance" data-model-panel="maintenance" aria-label="Maintenance">
 {% call card("Danger zone") %}
     {% if model.measurements %}<form method="post" action="{{ address(model.name) }}" class="mb-3" {{ swaps() }}><button  class="btn btn-outline-danger btn-sm" name="do" value="forget-measure" {{ confirm_loss() }}>Forget measurements</button></form>{% endif %}
     <p class="text-secondary small">It stops being offered at once. Requests already being answered or waiting for it are completed, and then it is unloaded. Its file is left where it is.</p>
@@ -88,4 +86,18 @@
     </form>
   {% endcall %}
 
+
+</section>
+<div class="sticky-actions model-config-save mt-3">
+  <button form="model-settings" class="btn btn-primary" name="do" value="save-settings">Save</button>
+  <button type="button" class="btn btn-outline-secondary" data-model-discard>Discard changes</button>
+  <span class="small text-secondary" data-model-dirty role="status" aria-live="polite">No unsaved changes.</span>
+  <div class="d-flex flex-wrap align-items-center gap-2 ms-md-auto">
+    <div class="input-group input-group-sm w-auto"><input form="model-settings" id="preset-name" name="preset" maxlength="80" class="form-control" placeholder="Preset name" aria-label="Preset name"><button form="model-settings" class="btn btn-outline-primary" name="do" value="save-preset">Save preset</button></div>
+    <label class="form-check mb-0 small"><input form="model-settings" id="replace-preset" type="checkbox" class="form-check-input" name="replace"><span class="form-check-label">Replace</span></label>
+  </div>
+</div>
+</div>
+<template id="model-summary-line"><div class="model-summary-line"><dt class="text-secondary fw-normal" data-term></dt><dd class="mb-0" data-value></dd></div></template>
+<noscript><p class="small text-secondary">All settings are expanded. Enable JavaScript for the compact overview and node selection.</p></noscript>
 {% endblock %}

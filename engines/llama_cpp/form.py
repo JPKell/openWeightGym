@@ -107,4 +107,7 @@ def settings_from(form: dict[str, list[str]], read) -> dict:
             adapters[short.strip()] = {"file": file.strip()} | ({"scale": read(scale.strip())} if scale.strip() else {})
     if adapters:
         made["adapters"] = adapters
+    for flag in form.get("suppress_flag", []):
+        if flag.strip():
+            flags[flag.strip().lstrip("-")] = None
     return made

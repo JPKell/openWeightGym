@@ -63,11 +63,13 @@
       const form = summary.closest('form'), prefix = summary.dataset.prefix || '', field = name => form?.elements[prefix + name];
       const box = field('parallel_enabled');
       if (!box || !field('ctx')) return;
-      const count = box.checked ? Math.max(1, Number(field('parallel_count').value)) : 1;
+      const count = box.checked ? Number(field('parallel_count').value) : 1;
       const total = Math.max(1, Number(field('ctx').value));
       const shared = field('parallel_shared').checked;
-      const limit = box.checked ? Math.min(total, Math.max(1, Number(field('parallel_context').value)), shared ? total : Math.floor(total / count)) : total;
-      summary.textContent = `${count.toLocaleString()} request${count === 1 ? '' : 's'}, up to ${limit.toLocaleString()} tokens each`;
+      const cap = Number(field('parallel_context').value);
+      const limit = box.checked ? Math.min(total, cap > 0 ? cap : total, shared ? total : count > 0 ? Math.floor(total / count) : total) : total;
+      summary.textContent = count === -1 ? 'Server auto · concurrency is determined when the model loads.' : `${count.toLocaleString()} request${count === 1 ? '' : 's'}, up to ${limit.toLocaleString()} tokens each`;
+      if (field('parallel_count')) field('parallel_count').setCustomValidity(box.checked && count === 0 ? 'Choose a positive count, or -1 for server auto.' : '');
     });
   }
   document.addEventListener('change', event => {
@@ -85,12 +87,14 @@
     if (!button) return;
     const form = button.closest('form'), name = button.dataset.addRow;
     const row = form.querySelector(`[data-row-template="${name}"]`).content.cloneNode(true);
+    if (form.matches('[data-model-settings]')) [...row.children].forEach(item => { item.dataset.modelAdded = ''; });
     const first = row.querySelector('input');
     const rows = form.querySelector(`[data-${name}-rows]`), anchor = rows.querySelector(':scope > [data-row-anchor]');
     if (anchor) anchor.before(row); else rows.append(row);
     first?.focus();
   });
   const update = () => { document.querySelectorAll('[data-hardware]').forEach(box => updateHardware(box)); updateParallel(); };
+  document.addEventListener('reset', () => queueMicrotask(update));
   document.addEventListener('htmx:afterSwap', update);
   update();
 })();

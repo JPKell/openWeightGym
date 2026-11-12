@@ -92,15 +92,23 @@ other compatible weights through **Files → Hugging Face**, then select their r
 Families come from the installed audio.cpp release or the file's embedded contract; a model
 need not appear in a preselected download catalogue. The runtime must implement its architecture.
 
-A language model's **Settings** show one column for each node holding a copy. Context,
-parallel requests, hardware placement, the model file and loading flags belong to each node;
-tick several node columns to edit them together. Generation defaults (sampling and reasoning),
+A language model's **Configuration** overview groups settings into compact summary cards.
+Select **Edit** to open a group; **Done** returns to its summary without saving. Select node
+pills to inspect or edit several copies together. Context, parallel requests, hardware
+placement, the model file and loading flags belong to each node. Generation defaults (sampling and reasoning),
 the projector, adapters and list position are shared: they appear once and are kept the same on
 every copy, with each file named as its own node keeps it. A shared file a node lacks must be
 copied there in Files first. **Save** checks and applies each changed node; several are applied
 together or not at all, and all configured nodes must answer before shared settings change.
+**Additional generation default** offers the other shared options; Advanced loading flags
+retains arbitrary runtime flags, inherited node defaults and the installed runtime's flag reference.
+Blank values inherit defaults; **Ignore inherited default** explicitly omits a flag for this model.
+Request concurrency accepts **-1** for server auto, and a per-request context cap of **0** adds no cap.
+Drafts survive group, node and workspace-view switches and status polling. **Discard changes**
+restores the accepted configuration, including after a rejected save or loaded preset.
 
-**Copy or move** below the settings copies the complete model to one or more other nodes. A move
+**Compute nodes → Copy or move** copies the complete model to one or more other nodes. Presets,
+File & benchmarks, and Maintenance keep their actions in separate views. A move
 takes one destination: the copy is verified there before the original is removed, and if the
 removal fails the original stays. Image and audio models keep **Compute locations → Add model
 to node**.

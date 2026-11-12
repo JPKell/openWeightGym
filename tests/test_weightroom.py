@@ -652,8 +652,8 @@ def test_a_model_page_lists_every_flag_llama_server_knows(live_desk):
     sign_in(browser, "jordan")
     page = browser.get("/models/small").text
     # The settings matrix took the place of the Compute locations card: one column per node holding a copy.
-    assert page.index('class="card-heading">Settings</span>') < page.index('data-model-matrix') < page.index('class="card-heading">Benchmark results</span>')
-    assert "Compute locations" not in page and page.count('class="matrix-node') == 1
+    assert page.index('data-model-configuration') < page.index('data-model-matrix') < page.index('class="card-heading">Benchmark results</span>')
+    assert "Compute locations" not in page and page.count('data-model-group="') == 6
     listed = page.split('<table id="every-flag"')[1].split("</table>")[0]
     assert "Every flag this llama-server knows" in page and "<code>flash-attn</code>" in listed and "<code>[on|off|auto]</code>" in listed
     assert "<code>help</code>" not in listed

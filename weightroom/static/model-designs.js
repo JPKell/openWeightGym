@@ -14,9 +14,9 @@
   const basename = path => path ? path.split('/').pop() : 'none';
 
   const descriptions = {
-    sheet: 'Priority sheet · One compact page with the most-changed settings first and a section index. Best when you tune a model often.',
-    summary: 'Summary cards · Each group explained in a line; open one to edit it. Best for scanning and occasional changes.',
-    matrix: 'Node matrix · Settings down, nodes across. Best for keeping several nodes consistent and spotting differences.'
+    sheet: 'Model studio · A focused editor with grouped settings and a setup summary alongside. Recommended for everyday tuning.',
+    summary: 'Configuration overview · See the whole setup in six compact cards. Open a group to edit without losing your draft.',
+    matrix: 'Node workbench · Compare copies side by side, filter by settings group, and edit selected nodes together.'
   };
 
   // ---------- Sample fleet and models ----------
@@ -82,7 +82,7 @@
         { name: 'Daily 16K', scope: '', node: { ctx: 16384, min_context: 8192, parallel_enabled: true, parallel_count: 2, parallel_context: 8192, parallel_shared: true }, shared: { temp: '0.7', 'top-p': '0.8', reasoning: 'off' } },
         { name: 'Deep reasoning 40K', scope: 'Same file only', node: { ctx: 40960, min_context: 16384, parallel_enabled: false, parallel_count: 1, parallel_context: 40960 }, shared: { temp: '0.6', reasoning: 'on', 'reasoning-effort': 'high' } },
       ] : [],
-      history: [], scope: new Set(['atlas']), pick: new Set(), open: null, expanded: new Set(), collapsed: new Set(), measured: true,
+      history: [], scope: new Set(['atlas']), pick: new Set(), open: null, group: 'context', view: 'configuration', matrixGroup: 'all', collapsed: new Set(), measured: true,
     };
   }
 
@@ -263,7 +263,7 @@
     el.dataset.key = field.key;
     if (label) label.textContent = compact && group.scope === 'node' ? `${text} on ${names[0]}` : text;
     if (code) code.textContent = resolve(field.code) || '';
-    if (hint) hint.textContent = compact ? '' : resolve(field.hint) || '';
+    if (hint) hint.textContent = compact || options.hideHints ? '' : resolve(field.hint) || '';
     if (field.wide && !compact) el.classList.replace('col-md-6', 'col-12');
     if (compact) {
       el.classList.remove('col-md-6', 'col-12');
@@ -549,6 +549,53 @@
   }
 
   // ---------- Layouts ----------
+  function showView(view) {
+    S.view = view;
+    $$('[data-view-panel]').forEach(panel => { panel.hidden = panel.dataset.viewPanel !== view; });
+    $$('[data-view]').forEach(button => {
+      const active = button.dataset.view === view;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  function renderOverview() {
+    const names = S.design === 'matrix' ? installed() : scopeNames();
+    const each = names.map(name => {
+      const values = vals(name), fit = estimate(name);
+      return {
+        context: num(values.ctx),
+        requests: String(S.engine === 'strata' || !values.parallel_enabled ? 1 : values.parallel_count),
+        placement: S.engine === 'strata' ? 'Single GPU' : { auto: 'Automatic GPU', pin: 'Pinned GPUs', cpu: 'CPU only' }[values.placement],
+        memory: `${fit.need.toFixed(1)} GB`,
+        notes: {
+          context: `${blank(values.min_context) ? 'Fixed' : `Minimum ${num(values.min_context)}`} · ${name}`,
+          requests: `${num(perRequest(values))} tokens per request`,
+          placement: lines(groups().find(group => group.id === 'hardware'), name)[0][1],
+          memory: `${fit.capacity == null ? 'Host RAM' : `of ${fit.capacity} GB on ${name}`} · sample estimate`,
+        },
+      };
+    });
+    for (const key of ['context', 'requests', 'placement', 'memory']) {
+      const identical = each.every(item => item[key] === each[0][key]);
+      $(`[data-overview="${key}"]`).textContent = identical ? each[0][key] : 'Varies by node';
+      const notes = each.map((item, i) => identical ? item.notes[key] : `${names[i]}: ${item[key]}`);
+      $(`[data-overview-note="${key}"]`).textContent = [...new Set(notes)].join(' · ');
+    }
+    const box = $('#setup-summary-groups');
+    box.replaceChildren(...groups().filter(group => ['model', 'hardware', 'generation', 'adapters'].includes(group.id)).map(group => {
+      const el = clone('#tpl-glance-group');
+      $('[data-title]', el).textContent = group.title;
+      const summary = group.scope === 'node'
+        ? names.map(name => `${names.length > 1 ? `${name}: ` : ''}${lines(group, name).map(([, value]) => value).join(' · ')}`).join('; ')
+        : lines(group).map(([, value]) => value).join(' · ');
+      $('[data-value]', el).textContent = group.id === 'generation'
+        ? `temp ${S.shared.temp || 'default'} · top-p ${S.shared['top-p'] || 'default'} · reasoning ${S.shared.reasoning || 'auto'}`
+        : group.id === 'model' ? `${S.engine === 'strata' ? 'Strata' : 'llama.cpp'} · ${basename(S.shared.file)}` : summary;
+      return el;
+    }));
+  }
+
   function renderEditor() {
     const form = $('#editor'), index = $('#section-index'), names = scopeNames();
     form.replaceChildren(); index.replaceChildren();
@@ -560,7 +607,7 @@
       $('.section-title', box).textContent = group.title;
       scopeBadge($('.scope-badge', box), group, names);
       const fields = $('[data-fields]', box);
-      const fill = () => group.fields.forEach(field => fields.append(renderField(group, field, names)));
+      const fill = () => group.fields.filter(field => isSummary || field.type !== 'meter').forEach(field => fields.append(renderField(group, field, names, { hideHints: !isSummary })));
       if (isSummary) {
         const open = S.open === group.id, button = $('[data-edit]', box);
         fillSummary($('[data-summary]', box), group, names);
@@ -577,21 +624,29 @@
       } else {
         const hint = $('[data-group-hint]', box);
         if (group.hint) { hint.hidden = false; hint.textContent = group.hint; }
-        const collapsed = group.collapsible && !S.expanded.has(group.id);
-        if (group.collapsible) {
-          const toggle = $('[data-collapse]', box), count = new Set(names.flatMap(name => Object.keys(vals(name).flags))).size;
-          toggle.hidden = false;
-          toggle.textContent = collapsed ? `Show ${plural(count, 'flag')}` : 'Hide';
-          toggle.setAttribute('aria-expanded', String(!collapsed));
-          toggle.addEventListener('click', () => { collapsed ? S.expanded.add(group.id) : S.expanded.delete(group.id); rerender(toggle); });
-          toggle.dataset.focus = `collapse|${group.id}`;
-        }
-        if (!collapsed) fill();
-        if (group.id === 'context' || group.id === 'generation' || group.id === 'hardware' || group.id === 'model') box.dataset.half = '';
+        fill();
+        const help = $('[data-setting-help]', box), items = $('[data-help-items]', help);
+        group.fields.filter(field => field.hint).forEach(field => {
+          const li = document.createElement('li');
+          li.textContent = `${resolve(field.label)}: ${resolve(field.hint)}`;
+          items.append(li);
+        });
+        help.hidden = !items.children.length;
+        box.hidden = S.group !== group.id;
         const link = clone('#tpl-index-link');
-        link.href = `#section-${group.id}`;
+        link.dataset.section = group.id;
+        link.setAttribute('aria-controls', box.id);
+        link.setAttribute('aria-pressed', String(S.group === group.id));
         $('[data-label]', link).textContent = group.title;
-        link.addEventListener('click', event => { event.preventDefault(); $(`#section-${group.id}`).scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+        $('[data-detail]', link).textContent = {
+          context: 'Window & concurrency', generation: 'Sampling & reasoning', hardware: 'Placement & sharing',
+          model: 'Identity & files', adapters: 'LoRA & strengths', advanced: 'Cache & runtime flags',
+        }[group.id];
+        link.addEventListener('click', () => {
+          S.group = group.id;
+          $$('#editor > [data-group]').forEach(panel => { panel.hidden = panel.dataset.group !== S.group; });
+          $$('#section-index [data-section]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.section === S.group)));
+        });
         index.append(link);
         live.push({ refresh: () => { $('[data-dot]', link).hidden = !group.fields.some(field => fieldChanged(group, field, group.scope === 'all' ? names : installed())); } });
       }
@@ -601,6 +656,8 @@
 
   function renderMatrix() {
     const names = installed(), head = clone('#tpl-matrix-head'), body = $('#matrix-body');
+    $('#matrix-group').replaceChildren(new Option('All settings', 'all'), ...groups().map(group => new Option(group.title, group.id)));
+    $('#matrix-group').value = S.matrixGroup;
     names.forEach(name => {
       const th = clone('#tpl-matrix-node'), node = info(name), pick = $('[data-matrix-pick]', th);
       $('[data-node]', th).textContent = name;
@@ -617,7 +674,7 @@
     $('#matrix-head').replaceChildren(head);
     body.replaceChildren();
     const columns = names.length + 1;
-    for (const group of groups()) {
+    for (const group of groups().filter(group => S.matrixGroup === 'all' || S.matrixGroup === group.id)) {
       const row = clone('#tpl-matrix-group'), th = $('[data-colspan]', row), toggle = $('[data-toggle-group]', row), collapsed = S.collapsed.has(group.id);
       th.colSpan = columns;
       toggle.textContent = `${collapsed ? '▸' : '▾'} ${group.title}`;
@@ -758,6 +815,7 @@
     const used = document.createElement('span'), file = document.createElement('span'), link = document.createElement('a'), size = document.createElement('span');
     used.innerHTML = '<span class="text-secondary">Last used</span> 3 minutes ago';
     link.href = '#facts'; link.textContent = basename(S.shared.file);
+    link.addEventListener('click', event => { event.preventDefault(); showView('facts'); });
     size.className = 'text-secondary'; size.textContent = ` ${S.weights} GB`;
     file.className = 'wrap'; file.append(link, size);
     box.append(used, file);
@@ -779,7 +837,7 @@
       return item;
     }));
     const names = scopeNames(), offline = names.filter(name => info(name).state !== 'ready');
-    $('#scope-note').textContent = `Node settings change on ${words(names)}. Shared settings change on all ${plural(installed().length, 'node')}.${offline.length ? ` ${words(offline)} ${offline.length > 1 ? 'are' : 'is'} offline and gets them on reconnect.` : ''}`;
+    $('#scope-note').textContent = `Node settings: ${words(names)} · shared settings: all ${plural(installed().length, 'node')} · applies on next load.${offline.length ? ` ${words(offline)} ${offline.length > 1 ? 'are' : 'is'} offline and gets them on reconnect.` : ''}`;
     $('#scope-all').disabled = names.length === installed().length;
   }
 
@@ -815,7 +873,7 @@
       const edit = $('[data-edit-node]', row);
       edit.setAttribute('aria-label', `Edit settings on ${name}`);
       edit.disabled = S.scope.size === 1 && S.scope.has(name);
-      edit.addEventListener('click', () => { S.scope = new Set([name]); render(); say(`Editing ${name} only.`); $('#scope').scrollIntoView({ block: 'nearest' }); });
+      edit.addEventListener('click', () => { S.scope = new Set([name]); render(); showView('configuration'); say(`Editing ${name} only.`); });
       locationButtons(row, name);
       return row;
     }));
@@ -834,6 +892,7 @@
         names.forEach(name => Object.assign(vals(name), copy(preset.node)));
         Object.assign(S.shared, copy(preset.shared));
         render();
+        showView('configuration');
         say(`Loaded preset “${preset.name}” for ${words(names)} as unsaved changes. Preview and save to apply it.`);
       });
       remove.setAttribute('aria-label', `Delete preset ${preset.name}`);
@@ -869,12 +928,15 @@
   // ---------- Changes, review and saving ----------
   function touch() {
     live.forEach(item => item.refresh());
+    renderOverview();
     const list = changes(), nodes = [...new Set(list.map(item => item.where))];
     $('#change-count').textContent = list.length ? `${plural(list.length, 'unsaved change')} · ${words(nodes)}` : 'No unsaved changes.';
     $('#discard').disabled = !list.length;
     $('#preview').disabled = false;
     $('#save-bar').classList.toggle('has-changes', !!list.length);
     $('#matrix-panel').classList.toggle('only-differences', $('#matrix-differences').checked);
+    const visibleRows = $$('#matrix-body .matrix-row').filter(row => !$('#matrix-differences').checked || (!row.hasAttribute('data-shared') && row.dataset.differs !== 'false'));
+    $('#matrix-empty').hidden = visibleRows.length > 0;
   }
   function render() {
     live = [];
@@ -884,6 +946,7 @@
     if (matrix) { $('#editor').replaceChildren(); renderMatrix(); }
     else { $('#matrix-body').replaceChildren(); renderEditor(); renderScope(); }
     renderLocations();
+    showView(S.view);
     touch();
   }
   function rerender(from = null, focus = null) {
@@ -1096,6 +1159,7 @@
     $$('[data-design]').forEach(button => { if (button.matches('button')) { button.classList.toggle('active', button.dataset.design === design); button.setAttribute('aria-pressed', String(button.dataset.design === design)); } });
     $('#design-description').textContent = descriptions[design];
     history.replaceState(null, '', `#${design}`);
+    S.view = 'configuration';
     render();
   }
   function reset() {
@@ -1114,6 +1178,7 @@
     render(); say('Discarded unsaved changes.');
   });
   $('#preview').addEventListener('click', openReview);
+  $('#editor').addEventListener('submit', event => { event.preventDefault(); openReview(); });
   $('#apply').addEventListener('click', apply);
   $('#save-preset').addEventListener('click', savePreset);
   $('#undo').addEventListener('click', () => {
@@ -1123,7 +1188,8 @@
     renderAll();
     say('Loaded the configuration from before your last change as unsaved changes. Preview and save to restore it.');
   });
-  $('#open-presets').addEventListener('click', () => { $('#presets-card').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#presets-card').focus?.(); });
+  $('#open-presets').addEventListener('click', () => { showView('presets'); $('[data-view="presets"]').focus(); });
+  $$('[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
   $('#open-transfer').addEventListener('click', () => openTransfer(scopeNames()[0]));
   document.addEventListener('click', event => {
     const button = event.target.closest('[data-transfer-from]');
@@ -1137,6 +1203,7 @@
   $('#transfer-form').addEventListener('change', updateTransfer);
   $('#transfer-form').addEventListener('submit', runTransfer);
   $('#matrix-differences').addEventListener('change', touch);
+  $('#matrix-group').addEventListener('change', () => { S.matrixGroup = $('#matrix-group').value; render(); });
   $('#forget').addEventListener('click', () => { S.measured = false; renderFacts(); say('Forgot the measurements. The next load measures again.'); });
   $('#remove').addEventListener('click', () => {
     const sure = $('#remove-sure');

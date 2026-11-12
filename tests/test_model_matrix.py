@@ -105,7 +105,8 @@ def test_node_form_gives_each_node_its_own_fields_and_the_shared_ones():
 def test_the_page_has_a_column_for_each_copy_with_shared_settings_once(matrix):
     browser, _ = matrix
     page = browser.get('/models/qwen?node=compute').text
-    assert page.count('class="matrix-node') == 2 and 'aria-current="true">compute</a>' in page and '>rig</a>' in page
+    assert page.count('data-model-group="') == 6 and page.count('class="matrix-node') == 12
+    assert 'aria-current="true">compute</a>' in page and '>rig</a>' in page
     form = Form(page, 'data-model-settings')
     sent = dict((name, value) for name, value in form.fields)
     assert sent['ctx'] == '8192' and sent['n:rig:ctx'] == '4096' and sent['n:rig:cpu'] == 'yes' and 'cpu' not in sent

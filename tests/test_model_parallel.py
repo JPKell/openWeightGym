@@ -85,7 +85,7 @@ def test_parallel_model_fields_save_validate_and_remove_the_server_flags(desk, t
     browser.post("/models", data={"name": "one", "file": file, "ctx": "8000", "cards": "1"})
     shown = browser.get("/models/one").text
     assert 'aria-label="requests at once" data-parallel-field disabled' in shown
-    assert 'name="parallel_context" type="number" min="1" step="1" class="form-control form-control-sm" value="4000"' in shown
+    assert 'name="parallel_context" type="number" min="0" step="1" class="form-control form-control-sm" value="4000"' in shown
     form = {"do": "save", "file": file, "ctx": "8000", "cards": "1", "parallel_controls": "yes",
             "parallel_enabled": "yes", "parallel_count": "2", "parallel_shared": "yes", "parallel_context": "4000"}
     saved = browser.post("/models/one", data=form)

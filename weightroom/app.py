@@ -442,7 +442,8 @@ def node_form(form: dict[str, list[str]], machine: str) -> dict[str, list[str]]:
     own = {key.removeprefix(prefix): values for key, values in form.items() if key.startswith(prefix)}
     pairs = [(flag, value) for flag, value in zip(own.get("flag", []), own.get("value", []))]
     pairs += [(flag, value) for flag, value in zip(form.get("flag", []), form.get("value", [])) if flag.strip().lstrip("-") in GLOBAL_FLAGS]
-    return own | {key: form[key] for key in SHARED_FIELDS if key in form} | {"flag": [flag for flag, _ in pairs], "value": [value for _, value in pairs]}
+    suppressed = own.get("suppress_flag", []) + [flag for flag in form.get("suppress_flag", []) if flag in GLOBAL_FLAGS or flag == "mmproj"]
+    return own | {key: form[key] for key in SHARED_FIELDS if key in form} | {"flag": [flag for flag, _ in pairs], "value": [value for _, value in pairs], "suppress_flag": suppressed}
 
 
 def matrix_nodes(form: dict[str, list[str]]) -> list[str]:
@@ -1461,7 +1462,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             local = copy.get("name", name)
             columns.append({"machine": machine, "selected": here, "name": local, "logical": name,
                             "model_id": copy.get("model_id"), "enabled": copy.get("enabled", True),
-                            "state": states.get(machine, "unknown"), "showing": settings, "cards": cards,
+                            "state": states.get(machine, "unknown"), "showing": settings, "cards": cards, "defaults": defaults if llama else {},
                             "prefix": "" if here else f"n:{machine}:", "idp": "" if here else f"node{index}-",
                             "on": f" on {machine}" if len(copies) > 1 else "",
                             "link": model_address(local) + "?node=" + quote(machine, safe=""),
@@ -2132,7 +2133,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "model.html", person, columns=columns,
                     targets=[node for node in node_choices if node["name"] not in {column["machine"] for column in columns}], status=400 if failed else 200, model=model, build=known.get("build"), parts=parts, showing=showing, known=known, told=told, every=every,
                     selected_node=selected_node, node_choices=node_choices, global_flags=GLOBAL_FLAGS, engine_schema=engine_for(model).schema(),
-                    setup=setup, measure=measure,
+                    setup=setup, measure=measure, has_draft=typed_in is not None or bool(typed_nodes),
                     **scores,
                     suggestions=suggested(showing, known["defaults"], known["cards"]),
                     parallel=parallel_fields({**known["defaults"], **showing["flags"]}, (told or {}).get("facts", {}).get("trained_context")),
