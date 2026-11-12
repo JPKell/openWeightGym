@@ -8,7 +8,7 @@
 #   owg start|stop|restart [PROGRAM...]          all installed programs by default
 #   owg restart --host USER@HOST [PROGRAM...]    restart services on another machine over SSH
 #   owg logs [PROGRAM] [-f|--follow] [-n LINES]  the latest 80 lines unless -n says otherwise
-#   owg update [--yes] [--plain]                 fetch the latest openWeightGym code only
+#   owg update [--yes] [--plain]                 fetch code and select it for the next restart
 #   owg repair [--yes] [--plain]                 reinstall packages and services as they are
 #   owg install [--yes] [OPTIONS]                add omitted services and model engines
 #                                                options: install.sh --help
@@ -190,6 +190,12 @@ control() {
   fi
   for program in "${chosen[@]}"; do
     [[ $program =~ ^[a-z-]+$ ]] || ui_die "$program is not a program name." "The programs are: ${ALL_PROGRAMS[*]}"
+  done
+  if [[ $action == start || $action == restart ]]; then
+    # Also covers the first restart after an older updater fetched this repair.
+    refresh_runtime_sources "$ROOT" "${chosen[@]}" || return 1
+  fi
+  for program in "${chosen[@]}"; do
     ui_step "${action^} $program" -- owg_systemctl "$action" "$program.service" || failed=1
   done
   return "$failed"

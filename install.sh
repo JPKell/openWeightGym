@@ -64,7 +64,7 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --no-browser            do not open the console in a browser at the end
   --ref BRANCH            which branch of openWeightGym to fetch (default: main)
   --plain                 no colour or animation
-  --update                fetch openWeightGym code only (as owg update does)
+  --update                fetch code and select it for the next restart (as owg update does)
   --repair                reinstall packages and services as they are
   --uninstall             remove openWeightGym (see uninstall.sh --help)
   -h, --help              show this help
@@ -607,6 +607,8 @@ update() {
     ui_die "$DIR is not a Git checkout, so its code cannot be updated with git pull." \
       'Use an openWeightGym Git checkout for code updates'
   fi
+  refresh_runtime_sources "$DIR" || ui_die 'Code was fetched, but service source overrides could not be updated.' \
+    'Resolve the override error above, then run owg update again before restarting services'
   ui_info "${C_ERR}Code update complete. Restart running services when ready: owg restart${C_RESET}"
   if [[ $(receipt_get state) == pending ]]; then
     ui_note 'The unfinished installation is still saved. Run install.sh separately when you want to continue it.'

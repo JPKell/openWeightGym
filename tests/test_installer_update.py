@@ -1,9 +1,14 @@
-"""Code updates never resume setup, rebuild engines or mutate installation state."""
+"""Code updates select current source without resuming setup or rebuilding engines."""
+import importlib.util
+import json
+import os
+import shutil
 import subprocess
+import sys
 
 import pytest
 
-from test_setup_recovery import script_functions, shell
+from test_setup_recovery import ROOT, one_function, script_functions, shell
 
 
 def git(*args):
@@ -29,7 +34,7 @@ def checkout(tmp_path):
     return installed
 
 
-def run_update(tmp_path, installed, *, menu=False):
+def run_update(tmp_path, installed, *, menu=False, env=None):
     source = script_functions("install.sh") + '''
 source "$TEST_REPO/scripts/lib/ui.sh"
 source "$TEST_REPO/scripts/lib/detect.sh"
@@ -54,7 +59,7 @@ installed_menu
 '''
     else:
         source += 'main --update --dir "$INSTALL" --yes --strata install\n'
-    return shell(tmp_path, source, env={"INSTALL": str(installed)})
+    return shell(tmp_path, source, env={"INSTALL": str(installed), **(env or {})})
 
 
 @pytest.mark.parametrize("state,operation", [("complete", "install"), ("pending", "install"),
@@ -121,3 +126,137 @@ printf '%s\\n' "$OWG_RETRY_COMMAND" "$OWG_RETRY"
     assert answer.returncode == 0, answer.stderr
     assert "| bash -s -- --dir" in answer.stdout and "--update" in answer.stdout
     assert "Run the code update again:" in answer.stdout
+
+
+def source_helper():
+    spec = importlib.util.spec_from_file_location('runtime_source_update', ROOT / 'scripts/update-runtime-source.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def installed_unit(tmp_path, root, program='weightroom'):
+    units = tmp_path / 'config/systemd/user'
+    units.mkdir(parents=True, exist_ok=True)
+    (units / f'{program}.service').write_text(f'[Service]\nExecStart="{root}/.venv/bin/{program}" --config settings.toml\n')
+    dropins = units / f'{program}.service.d'
+    dropins.mkdir(exist_ok=True)
+    return units, dropins
+
+
+def test_source_update_preserves_custom_libraries_other_policies_and_rollback(tmp_path, monkeypatch):
+    root = tmp_path / 'installed suite'
+    units, dropins = installed_unit(tmp_path, root)
+    pin = dropins / 'zz-source.conf'
+    original = '[Service]\nEnvironment="CUDA_VISIBLE_DEVICES=0" "PYTHONPATH=/old/release:/custom/libs"\nMemoryMax=12G\n'
+    pin.write_text(original)
+    policy = dropins / 'resources.conf'
+    policy.write_text('[Service]\nCPUQuota=200%\nEnvironment="LD_LIBRARY_PATH=/cuda/lib"\n')
+    helper = source_helper()
+    calls = []
+    monkeypatch.setattr(helper.subprocess, 'run', lambda command, **kwargs: calls.append(command))
+    changes = helper.plan(root, units, ['weightroom'])
+    assert list(changes) == [pin]
+    helper.apply(changes, tmp_path / 'recovery')
+    assert f'"PYTHONPATH={root}:/old/release:/custom/libs"' in pin.read_text()
+    assert '"CUDA_VISIBLE_DEVICES=0"' in pin.read_text() and 'MemoryMax=12G' in pin.read_text()
+    assert policy.read_text() == '[Service]\nCPUQuota=200%\nEnvironment="LD_LIBRARY_PATH=/cuda/lib"\n'
+    assert calls == [['systemctl','--user','daemon-reload']]
+    manifest = next((tmp_path / 'recovery').glob('*/manifest.json'))
+    saved = manifest.parent / json.loads(manifest.read_text())[str(pin)]
+    assert saved.read_text() == original and saved.stat().st_mode & 0o777 == 0o600
+    assert helper.plan(root, units, ['weightroom']) == {}
+
+
+def test_environment_file_cannot_restore_an_old_pin(tmp_path):
+    root = tmp_path / 'installed'
+    units, dropins = installed_unit(tmp_path, root)
+    environment = tmp_path / 'runtime.env'
+    environment.write_text('PRIVATE_TOKEN=do-not-print\nPYTHONPATH="/old release:/vendor"\n')
+    (dropins / 'environment.conf').write_text(f'[Service]\nEnvironmentFile="{environment}"\n')
+    changes = source_helper().plan(root, units, ['weightroom'])
+    assert changes[environment][1] == f'PRIVATE_TOKEN=do-not-print\nPYTHONPATH="{root}:/old release:/vendor"\n'
+
+
+def test_foreign_units_are_untouched_and_unsupported_commands_fail_before_writing(tmp_path):
+    root = tmp_path / 'installed'
+    units, dropins = installed_unit(tmp_path, tmp_path / 'different-installation')
+    pin = dropins / 'source.conf'
+    pin.write_text('[Service]\nEnvironment="PYTHONPATH=/older"\n')
+    helper = source_helper()
+    assert helper.plan(root, units, ['weightroom']) == {}
+    (units / 'weightroom.service').write_text(f'[Service]\nExecStart={root}/.venv/bin/weightroom\n')
+    command = dropins / 'zz-command.conf'
+    command.write_text('[Service]\nExecStart=\nExecStart=/old/.venv/bin/weightroom\n')
+    with pytest.raises(ValueError, match='outside this checkout'):
+        helper.plan(root, units, ['weightroom'])
+    assert pin.read_text() == '[Service]\nEnvironment="PYTHONPATH=/older"\n'
+
+
+def test_failed_reload_restores_source_override(tmp_path, monkeypatch):
+    root = tmp_path / 'installed'
+    units, dropins = installed_unit(tmp_path, root)
+    pin = dropins / 'source.conf'
+    original = '[Service]\nEnvironment="PYTHONPATH=/old"\n'
+    pin.write_text(original)
+    helper = source_helper()
+    def failed(command, **kwargs):
+        if kwargs.get('check'):
+            raise subprocess.CalledProcessError(1,command)
+    monkeypatch.setattr(helper.subprocess,'run',failed)
+    with pytest.raises(subprocess.CalledProcessError):
+        helper.apply(helper.plan(root,units,['weightroom']),tmp_path/'recovery')
+    assert pin.read_text() == original
+
+
+def test_restart_selects_source_before_restarting_services(tmp_path):
+    source = 'source "$TEST_REPO/scripts/lib/ui.sh"\nui_init\n' + one_function('scripts/owg','control') + '''
+ROOT="$INSTALL"
+refresh_runtime_sources() { printf 'source:%s\\n' "$*" >> "$SOURCE_CALLS"; }
+owg_systemctl() { printf 'service:%s\\n' "$*" >> "$SOURCE_CALLS"; }
+control restart weightroom turnstile
+'''
+    calls = tmp_path / 'restart-calls'
+    answer = shell(tmp_path,source,env={'INSTALL':str(tmp_path/'installed'),'SOURCE_CALLS':str(calls)})
+    assert answer.returncode == 0, answer.stderr
+    lines = calls.read_text().splitlines()
+    assert lines == [f'source:{tmp_path}/installed weightroom turnstile',
+                     'service:restart weightroom.service','service:restart turnstile.service']
+
+
+def test_restart_stops_if_source_selection_fails(tmp_path):
+    source = 'source "$TEST_REPO/scripts/lib/ui.sh"\nui_init\n' + one_function('scripts/owg','control') + '''
+ROOT="$INSTALL"
+refresh_runtime_sources() { return 1; }
+owg_systemctl() { printf 'UNEXPECTED SERVICE RESTART\\n'; }
+control restart weightroom
+'''
+    answer = shell(tmp_path,source,env={'INSTALL':str(tmp_path/'installed')})
+    assert answer.returncode == 1
+    assert 'UNEXPECTED SERVICE RESTART' not in answer.stdout
+
+
+def test_update_selects_checkout_even_when_git_is_already_current(tmp_path, checkout):
+    interpreter = checkout / '.venv/bin/python'
+    interpreter.parent.mkdir(parents=True)
+    interpreter.symlink_to(sys.executable)
+    helper = checkout / 'scripts/update-runtime-source.py'
+    helper.parent.mkdir()
+    shutil.copyfile(ROOT / 'scripts/update-runtime-source.py',helper)
+    _, dropins = installed_unit(tmp_path,checkout)
+    pin = dropins / 'zz-source.conf'
+    tools = tmp_path / 'tools'
+    tools.mkdir()
+    systemctl = tools / 'systemctl'
+    systemctl.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$SOURCE_CALLS"\n')
+    systemctl.chmod(0o755)
+    calls = tmp_path / 'source-calls'
+    env = {'PATH':str(tools)+os.pathsep+os.environ['PATH'], 'SOURCE_CALLS':str(calls)}
+    for index in range(2):
+        pin.write_text('[Service]\nEnvironment="PYTHONPATH=/old/release"\n')
+        answer = run_update(tmp_path,checkout,env=env)
+        assert answer.returncode == 0, answer.stdout + answer.stderr
+        assert f'PYTHONPATH={checkout}:/old/release' in pin.read_text()
+        if index:
+            assert 'Already up to date' in answer.stdout
+    assert calls.read_text().splitlines() == ['--user daemon-reload','--user daemon-reload']

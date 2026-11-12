@@ -108,6 +108,18 @@ as_owner() {
 
 owg_systemctl() { as_owner systemctl --user "$@"; }
 
+# Existing runtime pins must never outrank a successful code update. Keep custom libraries
+# and other unit settings; the Python helper backs up only files whose source order changes.
+refresh_runtime_sources() {
+  local root=$1 program
+  shift
+  [[ -x $root/.venv/bin/python && -f $root/scripts/update-runtime-source.py ]] || return 0
+  local -a options=(--root "$root" --unit-dir "$(receipt_unit_dir)" --apply)
+  for program in "$@"; do options+=(--service "$program"); done
+  ui_step "Selecting current checkout for services" -- as_owner "$root/.venv/bin/python" \
+    "$root/scripts/update-runtime-source.py" "${options[@]}"
+}
+
 # The journal of the installation's programs: owg_journalctl --user-unit X.service [options]
 owg_journalctl() {
   local owner=${OWG_OWNER:-${RECEIPT[service_user]:-}}
