@@ -1,6 +1,5 @@
 """Live fleet matrix: complete topology, exact location evidence and bounded browsing."""
 
-import csv
 from pathlib import Path
 
 import pytest
@@ -87,7 +86,7 @@ def test_inventory_outage_keeps_last_known_topology_and_evidence(fleet, desk, mo
 
 
 @pytest.mark.parametrize('count', (15, 30))
-def test_browser_fleet_matrix_scale_filters_units_export_and_navigation(fleet, monkeypatch, tmp_path, count):
+def test_browser_fleet_matrix_scale_filters_units_and_navigation(fleet, monkeypatch, tmp_path, count):
     playwright = pytest.importorskip('playwright.sync_api')
     from test_console_browser import browser_context
     server, library, _, _ = fleet
@@ -111,6 +110,8 @@ def test_browser_fleet_matrix_scale_filters_units_export_and_navigation(fleet, m
         errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/benchmarks/node-measurements?benchmark=load')
         playwright.expect(page.locator('[data-measurement-row]')).to_have_count(count)
+        playwright.expect(page.locator('#benchmark-top .eyebrow')).to_have_count(0)
+        playwright.expect(page.get_by_role('button', name='Export view')).to_have_count(0)
         for theme in ('light', 'dark'):
             page.emulate_media(color_scheme=theme)
             for width in (1440, 1024, 390, 320):
@@ -128,13 +129,6 @@ def test_browser_fleet_matrix_scale_filters_units_export_and_navigation(fleet, m
         page.locator('[data-matrix-display]').select_option('scores')
         playwright.expect(cells.nth(1).locator('[data-matrix-scores]').first).to_have_text('0.5')
         playwright.expect(cells.nth(2).locator('[data-matrix-scores]').first).to_have_text('0.125')
-        with page.expect_download() as result:
-            page.locator('[data-matrix-export]').click()
-        output = tmp_path / 'matrix.csv'; result.value.save_as(output)
-        with output.open(newline='') as source:
-            exported = list(csv.DictReader(source))
-        assert len(exported) == 6 and all(row['Model'] == name for row in exported)
-        assert [row['Value'] for row in exported[1:3]] == ['0.5', '0.125']
         page.reload()
         playwright.expect(page.locator('[data-matrix-search]')).to_have_value('matrix-model-00')
         playwright.expect(page.locator('[data-matrix-display]')).to_have_value('scores')
