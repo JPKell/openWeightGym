@@ -34,9 +34,6 @@
 {% endcall %}
 </aside>
 </div>
-{% call card('Discovered & unbound files', false, hint='Excluded from active totals, Dump all and maintenance. Export explicitly after inspecting ownership.') %}
-<div class="table-responsive"><table class="table table-sm align-middle" aria-label="Discovered databases"><thead><tr><th>Node / database</th><th>Location</th><th>Size</th><th>Action</th></tr></thead><tbody id="discovered"></tbody></table></div>
-{% endcall %}
 {% call card('Diagnostics & migration', false, hint='Engine support, tool availability, store health and offline migration.') %}
 <p class="small">SQLite and PostgreSQL are supported per store. Engine labels do not represent compute nodes. Row counts are estimates where marked; expand a database for exact counts.</p>
 <div class="table-responsive mb-3"><table class="table table-sm" aria-label="Dump tools by node"><thead><tr><th>Node</th><th>sqlite3</th><th>pg_dump</th><th>pg_restore</th><th>psql</th><th>pgloader</th></tr></thead><tbody>{% for node in snapshot.nodes %}<tr><td>{{ node.name }}</td>{% for tool in ['sqlite3','pg_dump','pg_restore','psql','pgloader'] %}<td>{{ 'available' if node.tools.get(tool, {}).get('available') else 'unavailable' if node.answering else 'unknown' }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
@@ -45,6 +42,9 @@
 {% for profile in migration_profiles %}<form method="post" action="/databases/migrations/{{ profile }}/preview" class="d-flex gap-2 align-items-center mb-2"><strong>{{ profile }}</strong><button class="btn btn-outline-primary btn-sm">Check and preview</button></form>{% else %}<p class="small text-secondary">No migration profiles are configured. Configure an owner-only profile under <code>settings/migrations/</code> before changing a populated store's engine.</p>{% endfor %}
 {% for report in migration_reports %}<details class="mt-2"><summary>{{ report.id }} · {{ report.state }}</summary><p>{{ report.failure or report.operator_action or 'No failure recorded.' }}</p><p>Recovery hosts: {{ report.recovery.keys()|join(', ') }}</p>{% if report.acceptance %}<p>Acceptance: {{ report.acceptance }}</p>{% endif %}<ol>{% for step in report.steps %}<li>{{ step.state }} · {{ step.at|timestamp }}</li>{% endfor %}</ol></details>{% endfor %}
 {% endcall %}
+{% endcall %}
+{% call card('Discovered & unbound files', false, hint='Excluded from active totals, Dump all and maintenance. Export explicitly after inspecting ownership.') %}
+<div class="table-responsive"><table class="table table-sm align-middle" aria-label="Discovered databases"><thead><tr><th>Node / database</th><th>Location</th><th>Size</th><th>Action</th></tr></thead><tbody id="discovered"></tbody></table></div>
 {% endcall %}
 <p class="small text-secondary">SQL exports may contain secrets and retained content; keep them private. Each database has its own snapshot. A batch export is not a verified simultaneous recovery set. SQL downloads expire after 24 hours; job receipts expire after seven days. Encrypted maintenance backups stay on the owning server under the normal backup retention policy.</p>
 <noscript>{{ alert('info', 'Enable JavaScript for the database operations desk. Recovery sets remain available from Backups.') }}</noscript>
