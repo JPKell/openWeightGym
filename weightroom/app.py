@@ -108,6 +108,7 @@ from weightroom.system_docs import BY_SLUG as DOC_SECTIONS, MOVED as MOVED_DOCS,
 from weightroom import doc_markdown
 from weightroom.alerts import Alerts, machine_conditions
 from weightroom.schedules import Schedules, ScheduleWorker
+from weightroom import schedule_views
 from loadcoach.schedule_time import validate as validate_schedule
 from weightroom.pagination import controls, pagination
 from engines import engine_for
@@ -4887,10 +4888,19 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     schedule_worker = ScheduleWorker(schedules, loadcoach, benchmarks.state.store, scheduled_front_backup, gate, benchmarks.state.worker.wake)
 
-    async def schedules_page(request: Request, person: Person, said='', failed=False, editing_id=''):
+    async def schedules_page(request: Request, person: Person, said='', failed=False, editing_id='', selected_id='', new_form=False):
         """Render durable recurring schedules and their occurrence history."""
         if 'manage-settings' not in person.can:
             return Response('You may not manage schedules.', status_code=403)
+        now = time.time()
+        if request.query_params.get('part') == 'timing':
+            try:
+                weekdays = [int(day) for day in request.query_params.getlist('weekdays')]
+            except ValueError:
+                weekdays = []
+            return page(request, 'schedule_timing.html', person, **schedule_views.timing(
+                dict(time=request.query_params.get('time', ''), timezone=request.query_params.get('timezone', ''), weekdays=weekdays),
+                request.query_params.get('preview_enabled') != 'no', now))
         try:
             number = max(1, min(1_000_000, int(request.query_params.get('page', 1))))
         except ValueError:
@@ -4911,12 +4921,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             row['next_display'] = datetime.fromtimestamp(row['next_at'], ZoneInfo(row['spec']['timezone'])).strftime('%Y-%m-%d %H:%M %Z') if row['enabled'] else 'Paused'
             latest = schedules.db.execute('SELECT state,message FROM schedule_occurrences WHERE schedule_id=? ORDER BY due_at DESC LIMIT 1', (row['id'],)).fetchone()
             row['last'] = dict(zip(('state', 'message'), latest)) if latest else None
+            schedule_views.decorate(row, now)
         editing_id = editing_id or request.query_params.get('edit', '')
         editing = next((row for row in rows if row['id'] == editing_id), None)
         if editing_id and not editing:
             return Response('No such schedule.', status_code=404)
         if editing and not editing['can_edit']:
             return Response('Only the schedule owner may edit it with an online sign-in.', status_code=403)
+        selected_id = editing_id or selected_id or request.query_params.get('view', '')
+        selected = next((row for row in rows if row['id'] == selected_id), None)
+        if selected_id and not selected:
+            return Response('No such schedule.', status_code=404)
+        if not selected and not new_form and request.query_params.get('new') != '1':
+            selected = next(iter(rows), None)
+        editing = selected if selected and selected['can_edit'] else None
+        form_spec = selected['spec'] if selected else {'kind': 'backup', 'model_id': '', 'benchmark': '',
+            'time': '03:00', 'timezone': settings.timezone or 'America/Vancouver', 'retention': settings.backup_retention,
+            'weekdays': list(range(7)), 'missed': 'skip'}
+        upcoming = min((row for row in rows if row['enabled']), key=lambda row: row['next_at'], default=None)
         names = {row['id']: row['name'] for row in schedules.rows(include_deleted=True)}
         history = schedules.occurrences(limit=26, offset=(number-1)*25)
         for row in history:
@@ -4934,9 +4956,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             schedules=rows, history=history[:25], history_page=number, more_history=len(history)>25,
             catalogue=catalogue, schedule_nodes=sorted({'compute', *(one['machine'] for model in catalogue for one in model.get('locations', []))}), definitions=[row for row in benchmarks.state.store.definitions() if row['enabled']],
             timezone=settings.timezone or 'America/Vancouver', retention=settings.backup_retention,
-            editing=editing, form_spec=editing['spec'] if editing else {'kind': 'backup', 'model_id': '', 'benchmark': '',
-                'time': '03:00', 'timezone': settings.timezone or 'America/Vancouver', 'retention': settings.backup_retention,
-                'weekdays': list(range(7)), 'missed': 'skip'},
+            editing=editing, selected=selected, form_spec=form_spec, upcoming=upcoming,
+            active_count=sum(bool(row['enabled']) for row in rows), paused_count=sum(not row['enabled'] for row in rows),
+            attention_count=sum(row['attention'] for row in rows),
+            can_save=bool(person.key and (not selected or selected['can_edit'])),
+            timing=schedule_views.timing(form_spec, bool(selected['enabled']) if selected else True, now),
             said=said or request.query_params.get('said', ''), failed=failed)
 
     def schedule_form_values(form):
@@ -4972,8 +4996,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 raise ValueError(answer.json()['error']['message'])
             schedules.create(identifier, name, person.me['identity'], person.name, spec, token, model_name=answer.json().get('model_name', ''))
         except (ValueError, TypeError, KeyError, ComputeOff) as problem:
-            return await schedules_page(request, person, 'Compute is unavailable.' if isinstance(problem, ComputeOff) else str(problem), failed=True)
-        return go('/schedules')
+            return await schedules_page(request, person, 'Compute is unavailable.' if isinstance(problem, ComputeOff) else str(problem), failed=True, new_form=True)
+        return go('/schedules?edit='+identifier+'&said=Schedule+created.')
 
     async def schedule_edit(request: Request, person: Person):
         """Replace the selected schedule and rotate its execution grant."""
@@ -5001,7 +5025,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 schedules.update(identifier, name, spec, token, model_name=answer.json().get('model_name', ''))
         except (ValueError, TypeError, KeyError, ComputeOff) as problem:
             return await schedules_page(request, person, 'Compute is unavailable; the edit was not saved.' if isinstance(problem, ComputeOff) else str(problem), failed=True, editing_id=identifier)
-        return go('/schedules?said=Schedule+saved.')
+        return go('/schedules?edit='+identifier+'&said=Schedule+saved.')
 
     async def schedule_action(request: Request, person: Person):
         """Pause, resume or remove a schedule after ownership checks."""
@@ -5031,8 +5055,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         raise ValueError(answer.json()['error']['message'])
                 schedules.enable(identifier, action == 'resume')
         except (ValueError, ComputeOff) as problem:
-            return await schedules_page(request, person, 'Compute is unavailable.' if isinstance(problem, ComputeOff) else str(problem), failed=True)
-        return go('/schedules')
+            return await schedules_page(request, person, 'Compute is unavailable.' if isinstance(problem, ComputeOff) else str(problem), failed=True, selected_id=identifier)
+        return go('/schedules?view='+identifier)
 
     async def alert_page(request: Request, person: Person) -> Response:
         """Render durable alert episodes and monitoring source freshness."""

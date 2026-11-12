@@ -1,0 +1,45 @@
+{% from 'parts.html' import page_header, card, section_title, more, danger_confirmation %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'icons.html' import icon %}
+{% from 'schedule_design_parts.html' import editor, templates %}
+{% from 'schedule_parts.html' import overview %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Schedules · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to schedules</a>
+<header class="sc-review"><div class="d-flex align-items-center gap-3"><strong class="sc-brand">{{ icon('barbell') }} weightRoom</strong><span class="small text-secondary">Design review / Schedules</span></div><div class="d-flex flex-wrap gap-2 align-items-center"><span class="badge bg-secondary-lt">Interactive sample</span><button type="button" class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button type="button" class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div></header>
+<main class="sc-page">
+<section class="sc-design-review" aria-label="Layout proposals">
+{% call pills('Design options', buttons=true, class_='gap-2 mb-0') %}{{ pill_button('01 / Schedule studio', true, attrs={'data-design':'studio'}) }}{{ pill_button('02 / Week planner', attrs={'data-design':'planner'}) }}{{ pill_button('03 / Automation ledger', attrs={'data-design':'ledger'}) }}{% endcall %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-3"><p id="design-description" class="text-secondary small mb-0">A calm split view. Browse schedules on the left; fine-tune one on the right. Recommended.</p><label class="d-flex align-items-center gap-2 small text-secondary">Preview state<select class="form-select form-select-sm w-auto" id="scenario"><option value="normal">Sample schedules</option><option value="empty">First visit</option><option value="attention">Run needs attention</option></select></label></div>
+</section>
+<div id="workspace" data-layout="studio">
+{% call page_header('Schedules', pretitle='AUTOMATION / ON YOUR TIME') %}<button type="button" class="btn btn-primary" data-new><span aria-hidden="true">＋</span> New schedule</button>{% endcall %}
+{{ overview(5,1,2) }}
+<div id="feedback" class="small text-secondary mb-3" role="status" aria-live="polite">Sample data · changes and actions are simulated.</div>
+<div class="sc-toolbar mb-4"><input class="form-control" type="search" id="search" aria-label="Search schedules" placeholder="Find a schedule, function or node…"><select class="form-select" id="status-filter" aria-label="Schedule status"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option><option value="attention">Needs attention</option></select><select class="form-select" id="kind-filter" aria-label="Function filter"><option value="all">All functions</option><option value="backup">Paired backup</option><option value="benchmark">Benchmark rerun</option><option value="outstanding">Missing / outdated benchmark</option></select><span class="small text-secondary text-md-end" id="visible-count">6 schedules</span></div>
+<div class="sc-body">
+{% call card('Your schedules', id='inventory', body_class='p-0', actions='<span class="small text-secondary">Select to edit</span>'|safe) %}
+<div id="schedule-list"></div>
+<div id="schedule-ledger" class="table-responsive" hidden><table class="table table-hover align-middle mb-0 sc-ledger"><caption class="visually-hidden">Recurring functions, timing, next runs and latest outcomes</caption><thead><tr><th scope="col">Schedule / function</th><th scope="col">Timing</th><th scope="col">Next run</th><th scope="col">Last outcome</th><th scope="col">Actions</th></tr></thead><tbody id="ledger-rows"></tbody></table></div>
+<div class="sc-inventory-footer small text-secondary"><span>Compute stays asleep until you wake it.</span><span id="inventory-zone">Times in each schedule’s timezone</span></div>
+{% endcall %}
+{% call card('9–15 November 2026', id='planner', body_class='p-0', actions='<span class="badge bg-secondary-lt">Week 46</span>'|safe) %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 px-3 py-3 border-bottom"><span class="small text-secondary">Start times · America/Vancouver</span><span class="small text-secondary">Select any run to edit its schedule</span></div>
+<div id="week-calendar" class="sc-week-calendar" aria-label="Schedules for the week of 9 November"></div>
+<div class="sc-calendar-legend small text-secondary"><span><i class="sc-kind-dot" data-kind="backup"></i> Paired backup</span><span><i class="sc-kind-dot" data-kind="benchmark"></i> Benchmark rerun</span><span><i class="sc-kind-dot" data-kind="outstanding"></i> Missing / outdated</span><span>Paused schedules are omitted · start times only</span></div>
+{% endcall %}
+<aside id="inspector-slot" class="sc-inspector-slot" aria-label="Schedule editor">{{ editor() }}</aside>
+{% call card('Recent runs', id='history-panel', body_class='p-0', actions='<span class="small text-secondary" id="history-scope">All schedules</span>'|safe) %}<div id="history-list" role="region" aria-label="Scrollable recent runs" tabindex="0"></div>{% endcall %}
+</div>
+<div class="sc-page-note mt-3">{% call more('How scheduled work behaves') %}Daily or selected-weekday functions run while openWeightGym is running. Compute is never woken. Only one occurrence per schedule runs at a time. Delete stops future and unsubmitted work, preserving history and submitted work; cancel submitted benchmarks from Runs. Resuming starts at the next future time. These proposals show the current scheduler’s supported functions; the cron expression is a read-only equivalent of the time and weekdays.{% endcall %}</div>
+</div>
+</main>
+<dialog id="editor-dialog" class="sc-editor-dialog" aria-labelledby="editor-title"><div id="dialog-slot"></div></dialog>
+{{ danger_confirmation() }}
+{{ templates() }}
+<script type="application/json" id="schedule-data">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>

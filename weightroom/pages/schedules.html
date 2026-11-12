@@ -1,54 +1,45 @@
 {% extends "frame.html" %}
-{% from "navigation_parts.html" import pager %}
-{% from "parts.html" import card, said_box, page_header, section_title , confirm_loss, confirm_two, empty_row %}
+{% from 'parts.html' import card, said_box, page_header, section_title, more, swaps, confirm_loss, confirm_two, alert %}
+{% from 'navigation_parts.html' import pager %}
+{% from 'schedule_parts.html' import overview, choice, state, form_fields, history_row %}
 {% block title %}Schedules · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/schedules.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/schedules.js?v=2" defer></script>{% endblock %}
 {% block main %}
-{{ page_header("Recurring schedules") }}
+<link rel="stylesheet" href="/static/schedules.css?v=1">
+<div id="schedule-studio" data-schedule-studio data-selected="{{ selected.id if selected else 'new' }}" data-save-failed="{{ 'yes' if failed else 'no' }}">
+{% call page_header('Schedules', pretitle='AUTOMATION / ON YOUR TIME') %}<a class="btn btn-primary" href="/schedules?new=1" {{ swaps('page-content', true) }}>＋ New schedule</a>{% endcall %}
 {{ said_box(said, failed) }}
-<p class="small text-secondary">Daily or selected-weekday work, checked every 15 seconds while openWeightGym runs. Compute is never woken. Pausing stops future occurrences; claimed work continues. Delete stops future runs and unsubmitted occurrences, keeping history and submitted work. Cancel submitted benchmarks from Runs. Overlapping occurrences are skipped. Resume starts with the next future time.</p>
-{% call card("Schedules", true, "schedule-list", id="schedule-list") %}
-<div class="table-responsive"><table class="table align-middle mb-0 schedule-table table-stack">
-<thead><tr><th scope="col">Schedule</th><th scope="col">Work</th><th scope="col">When</th><th scope="col">Next run</th><th scope="col">Last outcome</th><th scope="col">Actions</th></tr></thead>
-<tbody>
-{% for schedule in schedules %}
-<tr>
-<td data-label="Schedule"><strong>{{ schedule.name }}</strong><div class="small text-secondary">Owner: {{ schedule.owner_name }}</div><span class="badge {{ 'text-bg-success' if schedule.enabled else 'text-bg-secondary' }}">{{ 'Enabled' if schedule.enabled else 'Paused' }}</span></td>
-<td data-label="Work">{% if schedule.spec.kind == 'outstanding' %}<div>One missing/outdated benchmark</div><div class="small text-secondary">Preferred: {{ schedule.spec.machine or 'default' }}</div>{% elif schedule.spec.kind == 'benchmark' %}<div>Benchmark · {{ schedule.spec.benchmark }}</div><div class="small text-secondary">{{ schedule.model_name or schedule.spec.model_id }}</div>{% else %}<div>Paired backup</div><div class="small text-secondary">{{ 'Keep every recovery set' if schedule.spec.retention == 0 else 'Retain ' ~ schedule.spec.retention ~ ' sets per machine' }}</div>{% endif %}</td>
-<td data-label="When"><strong>{{ schedule.spec.time }}</strong><div class="small">{% for day in schedule.spec.weekdays %}{{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][day] }}{{ ', ' if not loop.last }}{% endfor %}</div><div class="small text-secondary">{{ schedule.spec.timezone }}</div><div class="small text-secondary">Missed: {{ 'run latest once' if schedule.spec.missed == 'latest' else 'skip if over 15 min late' }}</div></td>
-<td data-label="Next run" class="small">{{ schedule.next_at|timestamp if schedule.enabled else 'Paused' }}</td>
-<td data-label="Last outcome" class="small">{% if schedule.last %}<strong>{{ schedule.last.state }}</strong><div class="text-secondary">{{ schedule.last.message }}</div>{% else %}<span class="text-secondary">No occurrences yet.</span>{% endif %}</td>
-<td data-label="Actions"><div class="d-flex flex-wrap gap-1 schedule-actions">
-{% if schedule.can_edit %}<a class="btn btn-outline-secondary btn-sm" href="/schedules?edit={{ schedule.id }}#schedule-form" aria-label="Edit {{ schedule.name }}">Edit</a>{% else %}<span class="small text-secondary">Owner edits</span>{% endif %}
-<form method="post" action="/schedules/{{ schedule.id }}"><button name="do" value="{{ 'pause' if schedule.enabled else 'resume' }}" class="btn btn-outline-primary btn-sm" aria-label="{{ 'Pause' if schedule.enabled else 'Resume' }} {{ schedule.name }}">{{ 'Pause' if schedule.enabled else 'Resume' }}</button></form>
-<form method="post" action="/schedules/{{ schedule.id }}" {{ confirm_two() }}><button  name="do" value="delete" class="btn btn-outline-danger btn-sm" aria-label="Delete {{ schedule.name }}" {{ confirm_loss() }}>Delete</button></form>
-</div></td>
-</tr>
-{% else %}{% call empty_row(6) %}No schedules yet.{% endcall %}{% endfor %}
-</tbody></table></div>
+{{ overview(active_count, paused_count, attention_count, upcoming) }}
+<div class="sc-toolbar mb-4"><input class="form-control" type="search" id="schedule-search" aria-label="Search schedules" placeholder="Find a schedule, function or node…"><select class="form-select" id="schedule-status-filter" aria-label="Schedule status"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option><option value="attention">Needs attention</option></select><select class="form-select" id="schedule-kind-filter" aria-label="Function filter"><option value="all">All functions</option><option value="backup">Paired backup</option><option value="benchmark">Benchmark rerun</option><option value="outstanding">Missing / outdated benchmark</option></select><span class="small text-secondary text-md-end" id="schedule-count" aria-live="polite">{{ schedules|length }} schedules</span></div>
+<div class="sc-body">
+{% call card('Your schedules', id='schedule-list', body_class='p-0', actions='<span class="small text-secondary">Select to inspect</span>'|safe) %}
+<div class="sc-schedule-list" role="region" aria-label="Schedules" tabindex="0">
+{% for schedule in schedules %}{{ choice(schedule, selected.id if selected else '') }}{% else %}<div class="sc-empty text-center p-4">{{ section_title('No schedules yet.', wrapper_class='justify-content-center mb-2') }}<p class="text-secondary small mb-0">Create a schedule to run backups and benchmarks automatically.</p></div>{% endfor %}
+<p class="text-secondary small p-4 mb-0" id="schedule-no-matches" hidden>No schedules match. Try another search or clear the filters.</p>
+</div>
+<div class="sc-inventory-footer small text-secondary"><span>Sleeping nodes are never woken.</span><span>Times in each schedule’s timezone</span></div>
 {% endcall %}
-{% call card("Edit schedule · " ~ editing.name if editing else "Add schedule", true, "schedule-form", id="schedule-form") %}
-{% if editing %}<p class="small text-secondary">Edits apply to future runs. Finish any claimed occurrence before saving. A paused schedule stays paused.</p>{% endif %}
-<form method="post" action="{{ '/schedules/' ~ editing.id ~ '/edit' if editing else '/schedules' }}" class="row g-3" data-schedule-form>
-<div class="col-md-6"><label for="schedule-name" class="form-label">Name</label><input id="schedule-name" name="name" value="{{ editing.name if editing else '' }}" maxlength="80" required class="form-control"></div>
-<div class="col-md-6"><label for="schedule-kind" class="form-label">Work</label><select id="schedule-kind" name="kind" class="form-select"><option value="backup" {{ 'selected' if form_spec.kind == 'backup' }}>Paired backup</option><option value="benchmark" {{ 'selected' if form_spec.kind == 'benchmark' }}>Benchmark rerun</option><option value="outstanding"{{ ' selected' if form_spec.kind=='outstanding' }}>Run one missing/outdated benchmark</option></select></div>
-<div class="col-md-6" data-schedule-kind="benchmark"><label for="schedule-model" class="form-label">Local model (benchmark only)</label><select id="schedule-model" name="model" class="form-select"><option value="">Choose a model</option>{% if form_spec.model_id and form_spec.model_id not in catalogue|map(attribute='model_id')|list %}<option value="{{ form_spec.model_id }}" selected>{{ editing.model_name or form_spec.model_id }} (unavailable)</option>{% endif %}{% for model in catalogue %}<option value="{{ model.model_id }}" {{ 'selected' if model.model_id == form_spec.model_id }}>{{ model.id }}</option>{% endfor %}</select></div>
-<div class="col-md-6" data-schedule-kind="benchmark"><label for="schedule-benchmark" class="form-label">Benchmark (benchmark only)</label><select id="schedule-benchmark" name="benchmark" class="form-select">{% if form_spec.benchmark and form_spec.benchmark not in definitions|map(attribute='id')|list %}<option value="{{ form_spec.benchmark }}" selected>{{ form_spec.benchmark }} (unavailable)</option>{% endif %}{% for definition in definitions %}<option value="{{ definition.id }}" {{ 'selected' if definition.id == form_spec.benchmark }}>{{ definition.name }}</option>{% endfor %}</select></div>
-<div class="col-md-6" data-schedule-kind="benchmark outstanding"><label for="schedule-node" class="form-label">Preferred node</label><select id="schedule-node" name="machine" class="form-select">{% if form_spec.machine|default('') and form_spec.machine not in schedule_nodes %}<option selected value="{{ form_spec.machine }}">{{ form_spec.machine }} (unavailable)</option>{% endif %}{% for node in schedule_nodes %}<option value="{{ node }}"{{ ' selected' if node==form_spec.machine|default('compute') }}>{{ node }}</option>{% endfor %}</select><div class="form-text" data-schedule-target>Uses this node when available; a verified missing model can fall back. Unknown nodes defer the occurrence.</div></div>
-<div class="col-md-6" data-schedule-kind="outstanding"><label for="schedule-models" class="form-label">Eligible models</label><select id="schedule-models" name="model_ids" multiple size="5" class="form-select">{% for id in form_spec.model_ids|default([]) if id not in catalogue|map(attribute='model_id')|list %}<option selected value="{{ id }}">{{ id }} (unavailable)</option>{% endfor %}{% for model in catalogue %}<option value="{{ model.model_id }}"{{ ' selected' if model.model_id in form_spec.model_ids|default([]) }}>{{ model.id }}</option>{% endfor %}</select><div class="form-text">Leave empty for all currently permitted models.</div></div>
-<div class="col-md-6" data-schedule-kind="outstanding"><label for="schedule-benchmarks" class="form-label">Eligible benchmarks</label><select id="schedule-benchmarks" name="benchmarks" multiple size="5" class="form-select">{% for id in form_spec.benchmarks|default([]) if id not in definitions|map(attribute='id')|list %}<option selected value="{{ id }}">{{ id }} (unavailable)</option>{% endfor %}{% for definition in definitions %}<option value="{{ definition.id }}"{{ ' selected' if definition.id in form_spec.benchmarks|default([]) }}>{{ definition.name }}</option>{% endfor %}</select><div class="form-text">Leave empty for all enabled, compatible definitions. One missing/stale pair runs per occurrence; failures cool down for one hour.</div></div>
-<div class="col-md-4"><label for="schedule-time" class="form-label">Local time</label><input id="schedule-time" type="time" name="time" value="{{ form_spec.time }}" required class="form-control"></div>
-<div class="col-md-4"><label for="schedule-zone" class="form-label">Timezone</label><input id="schedule-zone" name="timezone" value="{{ form_spec.timezone }}" required class="form-control"><div class="form-text">An IANA name such as America/Vancouver.</div></div>
-<div class="col-md-4" data-schedule-kind="backup"><label for="schedule-retention" class="form-label">Backup recovery sets to retain</label><input id="schedule-retention" name="retention" type="number" min="0" max="100" value="{{ form_spec.retention }}" required class="form-control"><div class="form-text">Per machine. Zero keeps every set.</div></div>
-<fieldset class="col-12"><legend class="section-title">Weekdays</legend><div class="d-flex flex-wrap gap-3">{% for day in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}<label class="form-check-label"><input type="checkbox" name="weekdays" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in form_spec.weekdays }} class="form-check-input me-1">{{ day }}</label>{% endfor %}</div></fieldset>
-<div class="col-md-8"><label for="schedule-missed" class="form-label">Missed-run policy</label><select id="schedule-missed" name="missed" class="form-select"><option value="skip" {{ 'selected' if form_spec.missed == 'skip' }}>Skip if more than 15 minutes late</option><option value="latest" {{ 'selected' if form_spec.missed == 'latest' }}>Run the latest missed occurrence once</option></select><div class="form-text">Older missed times are recorded as skipped. Claimed work retries after outages. Spring clock gaps are skipped; repeated autumn times run once, at the first occurrence.</div></div>
-<div class="col-12"><p class="small text-secondary">Saving authorizes this specific recurring job after your browser session expires. Your account must remain enabled and retain manage-settings, plus benchmark and model access for reruns. Backups use online snapshots. Benchmarks retain the existing low priority and foreground preemption.</p><div class="d-flex gap-2"><button class="btn btn-primary">{{ 'Save schedule' if editing else 'Create schedule' }}</button>{% if editing %}<a class="btn btn-outline-secondary" href="/schedules#schedule-list">Cancel</a>{% endif %}</div></div>
+<aside id="schedule-inspector" class="sc-inspector-slot" aria-labelledby="editor-title">
+<div class="mb-3"><div class="eyebrow mb-2">{{ 'SCHEDULE DETAILS' if selected else 'NEW SCHEDULE' }}</div>{{ section_title(selected.name if selected else 'New schedule', id='editor-title', wrapper_class='mb-1') }}<span class="text-secondary small">Owned by {{ selected.owner_name if selected else person.name }}</span></div>
+<div class="d-flex justify-content-between align-items-center mb-4">{{ state('active' if selected.enabled else 'paused') if selected else state('new', 'New schedule') }}<span id="schedule-draft-status" class="small text-secondary" role="status">{{ 'Saved' if selected else 'Draft' }}</span></div>
+{% if not can_save %}{{ alert('info', 'Only the schedule owner may edit it with an online sign-in.' if selected else 'Create schedules with an online sign-in.', class_='small py-2') }}{% endif %}
+{% if selected and selected.last %}<div class="sc-last-outcome small mb-3"><strong>Last outcome: </strong>{{ state(selected.last.state) }}<p class="text-secondary mt-1 mb-0">{{ selected.last.message }}</p></div>{% endif %}
+<form method="post" action="{{ '/schedules/' ~ selected.id ~ '/edit' if selected else '/schedules' }}" id="schedule-form" data-schedule-form data-hold-refresh data-can-edit="{{ 'yes' if can_save else 'no' }}" {{ swaps('page-content') }}>
+<fieldset{{ ' disabled' if not can_save }}>
+{{ form_fields(form_spec, selected.name if selected else '', catalogue, definitions, schedule_nodes, selected.model_name if selected else '', timing.next_runs, timing.enabled, timing.timing_error, live=true) }}
+<div class="sc-editor-actions border-top pt-3 mt-4"><button class="btn btn-primary" type="submit">{{ 'Save schedule' if selected else 'Create schedule' }}</button><button class="btn btn-outline-secondary" type="button" data-discard-schedule hidden>Discard</button></div>
+</fieldset>
+<p class="small text-secondary mt-3 mb-0">Saving authorizes this recurring job after sign-out. The owner must remain enabled and retain manage-settings, plus benchmark and model access for reruns.</p>
 </form>
+{% if editing %}<form method="post" action="/schedules/{{ editing.id }}" class="mt-3" data-schedule-delete="{{ editing.id }}" {{ swaps('page-content') }} {{ confirm_two() }}><button name="do" value="delete" class="btn btn-outline-danger btn-sm" aria-label="Delete {{ editing.name }}" {{ confirm_loss() }}>Delete schedule</button></form>{% endif %}
+</aside>
+{% call card('Recent runs', id='history-panel', body_class='p-0') %}
+<div class="sc-history-list" role="region" aria-label="Scrollable recent runs" tabindex="0">{% for occurrence in history %}{{ history_row(occurrence) }}{% else %}<p class="text-secondary small p-4 mb-0">No occurrences yet.</p>{% endfor %}</div>
+{% set selection_query = ('edit=' ~ selected.id ~ '&') if editing else ('view=' ~ selected.id ~ '&') if selected else 'new=1&' %}
+<div class="px-3 pb-3">{{ pager('/schedules?' ~ selection_query ~ 'page=' ~ (history_page - 1) if history_page > 1 else none, '/schedules?' ~ selection_query ~ 'page=' ~ (history_page + 1) if more_history else none, 'Page ' ~ history_page, label='Schedule history pages', target='page-content') }}</div>
 {% endcall %}
-{% call card("Occurrence history", true) %}
-{% for occurrence in history %}<article class="border-bottom py-2">{% set _section_title1 %}{{ occurrence.name }} <span class="badge text-bg-secondary">{{ occurrence.state }}</span>{% endset %}
-{{ section_title(_section_title1) }}<div class="small">Due: {{ occurrence.due_at|timestamp }}</div><div class="small text-break">{{ occurrence.message }}{% if occurrence.href %} <a href="{{ occurrence.href }}">Open work</a>{% endif %}</div></article>{% else %}<p class="text-secondary mb-0">No occurrences yet.</p>{% endfor %}
-{{ pager('/schedules?page=' ~ (history_page - 1) if history_page > 1 else none, '/schedules?page=' ~ (history_page + 1) if more_history else none, 'Page ' ~ history_page, label='Schedule history pages') }}
-{% endcall %}
+</div>
+<div class="mt-3">{% call more('How scheduled work behaves') %}Daily or selected-weekday work is checked every 15 seconds while openWeightGym runs. Compute is never woken. Pausing stops future occurrences; claimed work continues. Delete stops future runs and unsubmitted occurrences, keeping history and submitted work. Cancel submitted benchmarks from Runs. Resume starts with the next future time. Edits apply to future runs; finish claimed work before saving. A paused schedule stays paused. Backups use online snapshots; benchmarks keep their low priority and foreground preemption.{% endcall %}</div>
 <script id="schedule-catalogue" type="application/json">{{ catalogue|tojson }}</script>
+</div>
 {% endblock %}
