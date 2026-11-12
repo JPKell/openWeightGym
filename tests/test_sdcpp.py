@@ -214,6 +214,34 @@ def test_private_image_runtime_streams_previews_and_resolved_seeds(image_setting
         assert client.post('/v1/images/generations',headers=headers,json={'model':'flux2-dev','prompt':'Again','size':'256x256'}).status_code==200
 
 
+@pytest.mark.parametrize('family,cfg,scheduler,alignment',[
+    ('qwen-image',4,'discrete',16),('qwen-image-2.1',6,'flux',32)])
+def test_qwen_generation_keeps_native_sampling_negative_prompt_and_family_geometry(image_settings,family,cfg,scheduler,alignment):
+    from copy import deepcopy
+    settings=deepcopy(image_settings)
+    settings['sdcpp']['family']=family
+    model.check_model('qwen',settings,('CUDA0','CUDA1'))
+    native=FakeNative();job=private_job(settings)
+    command=native_command(job,12345)
+    assert command[command.index('--diffusion-model')+1]==settings['flags']['model']
+    assert command[command.index('--llm')+1]==settings['sdcpp']['components']['text_encoder']
+    with TestClient(create_app(job,native)) as client:
+        headers={'authorization':'Bearer '+job['token']}
+        response=client.post('/v1/images/generations',headers=headers,json={
+            'model':'qwen','prompt':'A sign reading OWG','negative_prompt':'blur','width':256,'height':256,'seed':42})
+        assert response.status_code==200,response.text
+        assert native.payloads[0]['negative_prompt']=='blur'
+        assert native.payloads[0]['sample_params']['scheduler']==scheduler
+        assert native.payloads[0]['sample_params']['guidance']['txt_cfg']==cfg
+        assert native.payloads[0]['sample_params']['sample_steps']==50
+        assert 'ref_images' not in native.payloads[0]
+    with pytest.raises(ValueError,match='reference'):
+        checked_request({'model':'qwen','prompt':'Edit','references':['eA==']},settings)
+    if alignment==32:
+        with pytest.raises(ValueError,match='multiples of 32'):
+            checked_request({'model':'qwen','prompt':'Image','width':272,'height':256},settings)
+
+
 def test_generation_failure_stops_native_before_releasing_private_slot(image_settings):
     native=FakeNative(fail=True);job=private_job(image_settings)
     with TestClient(create_app(job,native)) as client:

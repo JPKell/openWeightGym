@@ -100,8 +100,9 @@ def checked_request(asked,settings=None):
         value=result[key]
         if type(value) is not int or not lo<=value<=hi:
             raise ValueError(f"{key} must be an integer from {lo} to {hi}.")
-    if result["width"]%16 or result["height"]%16 or result["width"]*result["height"]>maximum["max_pixels"]:
-        raise ValueError("Dimensions must be multiples of 16 within the workflow's pixel limit.")
+    alignment=32 if settings and settings.get('sdcpp',{}).get('family')=='qwen-image-2.1' else 16
+    if result["width"]%alignment or result["height"]%alignment or result["width"]*result["height"]>maximum["max_pixels"]:
+        raise ValueError(f"Dimensions must be multiples of {alignment} within the workflow's pixel limit.")
     for key,lo,hi,default in (("guidance",0,20,1),("cfg_scale",0,30,1),("strength",0,1,.75)):
         value=result.get(key,default)
         if type(value) not in (int,float) or not math.isfinite(value) or not lo<=value<=hi:
@@ -127,7 +128,7 @@ def checked_request(asked,settings=None):
     negative=result.get("negative_prompt","")
     if not isinstance(negative,str) or len(negative)>24000:
         raise ValueError("Invalid negative prompt.")
-    if negative and settings and settings["sdcpp"]["family"]!="sdxl":
+    if negative and settings and settings["sdcpp"]["family"] not in ('sdxl','qwen-image','qwen-image-2.1'):
         raise ValueError("Negative prompts are not supported by this Flux workflow.")
     if 'strength' in asked and settings and settings['sdcpp']['family']!='sdxl':
         raise ValueError('Strength applies to SDXL image-to-image; Flux uses reference conditioning.')

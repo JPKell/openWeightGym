@@ -4,8 +4,10 @@
   const node = new URLSearchParams(location.search).get('node') || 'compute';
   const query = node ? '?node=' + encodeURIComponent(node) : '';
   const SLOTS = ['diffusion', 'text_encoder', 'vae', 'clip_l', 'clip_g', 'upscaler'];
-  const FAMILIES = {'flux2-klein': 'Flux 2 klein', 'flux2-dev': 'Flux 2 Dev', 'sdxl': 'SDXL'};
-  let nodeCards = [], models = [], selected = null, checking = 0, timer = null;
+  const FAMILIES = SuiteImageProfiles.labels;
+  const modelDrafts = new Map();
+  const dialog = document.getElementById('model-dialog');
+  let nodeCards = [], models = [], selected = null, checking = 0, timer = null, initialized = false;
   const message = error => { $('message').hidden = !error; $('message').textContent = error || ''; };
   const element = (tag, text, className) => { const one = document.createElement(tag); if (text !== undefined) one.textContent = text; if (className) one.className = className; return one; };
   async function api(body, path = '') {
@@ -30,14 +32,21 @@
     return {engine:'sdcpp', flags:{model:$('diffusion').value.trim(),'ctx-size':0}, sdcpp:profile, gpus, alone:$('alone').checked};
   }
   function familyDefaults() {
-    const family = $('family').value;
-    return {width:1024, height:1024, steps:family === 'flux2-klein' ? 6 : 28, guidance:family === 'flux2-dev' ? 4 : 1, ...(family === 'sdxl' ? {cfg_scale:7} : {})};
+    return SuiteImageProfiles.spec($('family').value).defaults;
   }
   function setFamily(family) {
     $('family').value = family;
     if (!selected) SuiteModelFields.load('mw-defaults', familyDefaults());
     if (!selected && family === 'sdxl') SuiteModelFields.load('mw-limits', {...SuiteModelFields.read('mw-limits'), max_references: 1});
+    if (!selected && family.startsWith('qwen-image')) SuiteModelFields.load('mw-limits', {...SuiteModelFields.read('mw-limits'), max_references:0});
+    familyHelp();
+    remember();
     recheck(0);
+  }
+  function familyHelp() {
+    SuiteImageProfiles.help($('family-help'),$('family').value,values=>{
+      SuiteModelFields.load('mw-defaults',values); remember(); recheck(0);
+    });
   }
   /** Show, for each part, whether it is right for these diffusion weights, and what to use or get instead. */
   function render(found) {
@@ -89,14 +98,19 @@
     for (const lora of found.loras) box.append(element('div', (lora.status === 'ok' ? '✓ ' : '✗ ') + 'LoRA ' + lora.name + ': ' + lora.message, 'small mw-says-' + (lora.status === 'ok' ? 'ok' : 'wrong')));
     if (!ready && $('diffusion').value.trim()) box.append(element('p', 'Downloaded files arrive in Files on front; copy them to ' + node + ' there, then use them here.', 'mw-model-note mb-0 mt-2'));
   }
-  async function check() {
-    const mine = ++checking;
+  async function check(mine) {
     try {
       const found = await api({settings: draft(false)}, '/check');
-      if (mine === checking) render(found);
+    if (mine === checking) render(found);
     } catch (error) { if (mine === checking) $('check').replaceChildren(element('p', 'The files could not be checked: ' + error.message, 'text-secondary small')); }
   }
-  function recheck(wait = 450) { clearTimeout(timer); timer = setTimeout(check, wait); }
+  function recheck(wait = 450) { clearTimeout(timer); const mine=++checking; timer = setTimeout(() => check(mine), wait); }
+  function remember() {
+    if (!dialog?.open) return;
+    const controls=[...$('model-form').querySelectorAll('input,select,textarea')].filter(input=>input.id || input.name).map(input=>({id:input.id,name:input.name,value:input.value,checked:input.checked}));
+    const loras=[...$('lora-rows').querySelectorAll('tr:not([data-empty-row])')].map(row=>Object.fromEntries([...row.querySelectorAll('[data-lora-field]')].map(input=>[input.dataset.loraField,input.value])));
+    modelDrafts.set(selected?.name || '',{controls,loras});
+  }
   function fill(model) {
     selected = model; const profile = model?.sdcpp || {};
     $('heading').textContent = model ? model.name : 'Add image model';
@@ -120,6 +134,13 @@
     $('measurement').textContent = model?.measured ? 'Reserved per GPU: ' + model.measured.mib.join(', ') + ' MiB · ' + model.measured.at : 'No qualified full-workflow memory envelope yet.';
     if (model?.image_profile) $('measurement').textContent += ' Observed GPU peaks: ' + model.image_profile.gpu_peak_mib.join(', ') + ' MiB; host RSS peak: ' + model.image_profile.rss_peak_mib + ' MiB.';
     $('list').querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.name === model?.name));
+    const saved=modelDrafts.get(model?.name || '');
+    if(saved) {
+      saved.controls.forEach(row=>{const input=row.id?document.getElementById(row.id):[...$('model-form').querySelectorAll('input')].find(input=>input.name===row.name && input.value===row.value); if(input) {input.value=row.value; if(row.checked!==undefined) input.checked=row.checked;}});
+      document.querySelector('[data-hardware-prefix="mw"] [data-hardware-mode]:checked')?.dispatchEvent(new Event('change',{bubbles:true}));
+      $('lora-rows').replaceChildren(); saved.loras.forEach(one=>addLora(one.name,one));
+    }
+    familyHelp();
     recheck(0);
   }
   async function refresh() {
@@ -135,6 +156,7 @@
     const runtime = engines.find(one => one.id === 'sdcpp');
     $('runtime').hidden = Boolean(runtime?.available);
     $('runtime').textContent = runtime?.why || 'Optional runtime: install with scripts/install-sdcpp.sh on this compute node. Manual directions are in Docs → Deployment and operations → Installation.';
+    if(initialized) document.dispatchEvent(new CustomEvent('weightroom:image-inventory',{detail:{models,node}}));
   }
   async function files() {
     const response = await fetch('/model-files', {cache:'no-store'});
@@ -153,14 +175,15 @@
     for (const [name, entry] of Object.entries(values)) addLora(name, entry);
   }
   function addLora(name = '', entry = {}) {
-    const row = element('tr');
+    const row = $('lora-row').content.firstElementChild.cloneNode(true);
     for (const [key, value] of [['name', name], ['file', entry.file || ''], ['scale', entry.scale ?? 1]]) {
-      const cell = element('td'), input = element('input'); input.className = 'form-control'; input.value = value; input.dataset.loraField = key; input.setAttribute('aria-label', 'LoRA ' + key);
-      if (key === 'scale') { input.type = 'number'; input.step = 'any'; }
-      cell.append(input); row.append(cell);
+      row.querySelector('[data-lora-field="'+key+'"]').value=value;
     }
-    const cell = element('td'), remove = element('button', 'Remove', 'btn btn-outline-danger btn-sm'); remove.type = 'button';
-    remove.onclick = () => { row.remove(); syncLoras(); }; cell.append(remove); row.append(cell); $('lora-rows').append(row);
+    row.querySelector('[data-remove-lora]').onclick = () => {
+      row.remove();
+      try { syncLoras(); recheck(0); message(''); } catch (error) { message(error.message); }
+      remember();
+    }; $('lora-rows').append(row);
   }
   function syncLoras() {
     const raw = JSON.parse($('loras').value || '{}');
@@ -186,7 +209,13 @@
     if (Array.isArray(gpus) && gpus.length > 1 && $('split').value === 'single') $('split').value = 'components';
   });
   $('split').addEventListener('change', () => { delete document.querySelector('[data-hardware-prefix="mw"]').dataset.automaticGpus; });
-  $('new').onclick = () => fill(null);
+  $('new').onclick = () => {remember(); fill(null); dialog.showModal(); $('name').focus();};
+  document.addEventListener('weightroom:image-select',event=>{remember(); fill(models.find(model=>model.name===event.detail.name) || null);});
+  document.addEventListener('weightroom:image-edit',event=>{fill(models.find(model=>model.name===event.detail.name) || null); dialog.showModal();});
+  dialog.addEventListener('close',remember);
+  dialog.addEventListener('cancel',remember);
+  $('model-form').addEventListener('input',remember);
+  $('model-form').addEventListener('change',remember);
   $('family').onchange = () => setFamily($('family').value);
   [...SLOTS, 'loras'].forEach(name => { $(name).addEventListener('input', () => recheck()); $(name).addEventListener('change', () => recheck(0)); });
   $('model-form').onsubmit = async event => {
@@ -196,12 +225,16 @@
       const answer = await api({name:$('name').value.trim(), settings:draft(), new:!selected,
         source_machine:$('diffusion').selectedOptions[0]?.dataset.machine || node});
       if (answer.kind === 'model-install') { location.href = '/models?kind=image&install=' + encodeURIComponent(answer.id); return; }
+      modelDrafts.delete(selected?.name || '');
       await refresh(); fill(models.find(one => one.name === answer.name)); $('saved').textContent = 'Saved.'; message('');
+      dialog.close(); document.dispatchEvent(new CustomEvent('weightroom:image-saved',{detail:{name:answer.name}}));
     } catch (error) { message(error.message); }
   };
   Promise.all([refresh(), files()]).then(() => {
+    initialized=true;
+    document.dispatchEvent(new CustomEvent('weightroom:image-inventory',{detail:{models,node}}));
     const params = new URLSearchParams(location.search);
-    fill(params.has('new') ? null : models.find(one => one.name === params.get('model')) || null);
-    if (params.has('file')) { fill(null); if (!Array.from($('diffusion').options).some(one => one.value === params.get('file'))) $('diffusion').add(new Option(params.get('file'), params.get('file'))); $('diffusion').value = params.get('file'); recheck(0); }
+    if (params.has('new')) {fill(null); dialog.showModal();}
+    if (params.has('file')) { fill(null); if (!Array.from($('diffusion').options).some(one => one.value === params.get('file'))) $('diffusion').add(new Option(params.get('file'), params.get('file'))); $('diffusion').value = params.get('file'); dialog.showModal(); recheck(0); }
   }).catch(error => message(error.message));
 })();

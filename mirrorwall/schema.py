@@ -23,4 +23,11 @@ MIRRORWALL = (Migration(1,"private image assets and versioned workflow presets",
 """),Migration(2,'stable ownership for new batch uploads',"""
     CREATE TABLE IF NOT EXISTS mirrorwall_uploads (
         file_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL);
+"""),Migration(3,'image workflow version history',"""
+    CREATE TABLE IF NOT EXISTS mirrorwall_preset_versions (
+        id TEXT NOT NULL, version INTEGER NOT NULL, name TEXT NOT NULL,
+        model_id TEXT NOT NULL, model_name TEXT NOT NULL, settings TEXT NOT NULL,
+        updated DOUBLE PRECISION NOT NULL, PRIMARY KEY(id,version));
+    INSERT INTO mirrorwall_preset_versions (id,version,name,model_id,model_name,settings,updated)
+        SELECT id,version,name,model_id,model_name,settings,updated FROM mirrorwall_presets;
 """))

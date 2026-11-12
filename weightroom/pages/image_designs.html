@@ -1,0 +1,107 @@
+{% from 'parts.html' import page_header, card, form_section, more, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'image_design_parts.html' import field, select, templates %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Images · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to Images</a>
+<div class="review-bar px-4 py-3 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-2"><div><strong>openWeightGym</strong><span class="text-secondary ms-3">Images / design review</span></div><div class="d-flex gap-2"><span class="badge bg-blue-lt">Interactive sample</span><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div></div>
+<main class="image-review">
+{% call pills('Design proposals', buttons=true, class_='design-options mb-3 gap-2') %}
+{{ pill_button('01 / Model studio', true, attrs={'data-design':'studio'}) }}
+{{ pill_button('02 / Workflow board', attrs={'data-design':'board'}) }}
+{{ pill_button('03 / Settings matrix', attrs={'data-design':'matrix'}) }}
+{% endcall %}
+<div class="design-caption mb-4"><span class="eyebrow" id="design-intent">FOCUSED / MODEL FIRST</span><p id="design-description" class="text-secondary mb-0 mt-1"></p></div>
+<div id="workspace" data-layout="studio">
+{% call page_header('Images', pretitle='MODEL & WORKFLOW LIBRARY') %}<button id="add-model" class="btn btn-outline-secondary">+ Add model</button><button id="new-workflow" class="btn btn-primary">+ New workflow</button>{% endcall %}
+<div class="image-intro mb-4"><p class="mb-1">Set up a model once. Give every idea its own workflow.</p><span class="text-secondary small">Files and hardware belong to the model. Image settings live in named, versioned workflows.</span></div>
+<div id="status" class="mb-3 small" role="status" aria-live="polite"></div>
+<div class="image-workspace">
+<aside id="models-panel" aria-label="Image model library">
+{% call card('Models', hint='One setup, many workflows', class_='model-library') %}
+<label class="visually-hidden" for="model-search">Search models</label><input id="model-search" type="search" class="form-control mb-3" placeholder="Find a model…">
+<div id="model-list" class="model-list"></div><p id="models-empty" class="text-secondary small" hidden>No models match your search.</p>
+{% endcall %}
+</aside>
+<div id="selected-panel">
+{% call card(class_='selected-model', body_class='d-flex flex-wrap align-items-center justify-content-between gap-3') %}
+<div class="min-w-0"><div class="eyebrow mb-2">MODEL SETUP</div><strong id="model-name" class="model-title"></strong><span id="model-family" class="badge bg-blue-lt ms-2"></span><div id="model-detail" class="small text-secondary mt-2"></div></div><button id="edit-model" class="btn btn-outline-secondary btn-sm">Edit model setup</button>
+{% endcall %}
+</div>
+<section id="workflows-panel" aria-label="Workflows for selected model">
+{% call card('Workflows', hint='Choose a starting point', class_='workflow-library') %}
+<div class="d-flex flex-wrap gap-2 mb-3"><input id="workflow-search" type="search" class="form-control" aria-label="Search workflows" placeholder="Find a workflow…"><select id="sharing-filter" class="form-select" aria-label="Filter workflow visibility"><option value="all">All workflows</option><option value="personal">Personal</option><option value="shared">Shared</option></select></div>
+<div class="small text-secondary mb-3" id="workflow-count"></div>
+<div id="workflow-list" class="workflow-list"></div>
+<div id="workflows-empty" class="text-secondary py-4" hidden><strong class="d-block mb-2">A model, ready for its first workflow.</strong><p class="small">Start with the model defaults and tune the image settings.</p><button class="btn btn-outline-primary" data-create>+ Create a workflow</button></div>
+<div id="search-empty" class="text-secondary py-4" hidden>No matching workflows. <button class="btn btn-link p-0" id="clear-search">Clear filters</button></div>
+<div id="matrix-wrap" class="table-responsive" hidden><table class="table table-hover align-middle mb-0"><caption class="visually-hidden">Compare workflows for the selected model</caption><thead><tr><th>Workflow</th><th>Output</th><th>Steps</th><th>Sampler / scheduler</th><th>Upscale</th><th>Version</th></tr></thead><tbody id="matrix-rows"></tbody></table></div>
+{% endcall %}
+</section>
+<section id="editor-panel" aria-label="Workflow editor">
+{% call card('Workflow settings', class_='workflow-editor', header_id='editor-heading') %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3"><span class="badge bg-blue-lt" id="version-badge"></span><span id="draft-state" class="small text-secondary" role="status"></span><button id="duplicate" class="btn btn-outline-secondary btn-sm ms-auto">Duplicate</button><button type="submit" form="workflow-form" class="btn btn-primary btn-sm" id="save-top">Save version</button></div>
+<form id="workflow-form" data-hold-refresh>
+<div class="row g-3">
+{{ field('workflow-name', 'Workflow name', wide=true) }}
+<div class="col-12 small text-secondary" id="workflow-owner"></div>
+{% call form_section('Output') %}
+{% for key,label,low,high,step in [('width','Width (px)',256,4096,16),('height','Height (px)',256,4096,16),('n','Image count',1,64,1),('upscale','Output enlargement (×)',1,4,0.5)] %}{{ field('wf-' ~ key,label,'number',min=low,max=high,step=step) }}{% endfor %}
+{% endcall %}
+{% call form_section('Sampling') %}
+{{ field('wf-steps','Steps','number',min=1,max=200) }}{{ field('wf-seed','Seed · −1 is random','number',min=-1,max=2147483647) }}
+{{ select('wf-sampler','Sampler',['euler','euler_a','heun','dpm2','dpmpp2s_a','dpmpp2m','dpmpp2mv2','lcm','ipndm','ipndm_v']) }}
+{{ select('wf-scheduler','Scheduler',['flux2','discrete','karras','exponential','ays','simple','smoothstep','sgm_uniform']) }}
+{{ field('wf-guidance','Guidance','number',min=0,max=20,step=0.1) }}{{ field('wf-cfg_scale','CFG scale','number',min=0,max=30,step=0.1) }}
+{% endcall %}
+{% call form_section('Reference images') %}
+<p class="small text-secondary col-12 mb-0" id="reference-note"></p>
+{{ field('wf-reference_megapixels','Reference size (MP)','number',min=0.1,max=4,step=0.01) }}{{ field('wf-strength','Image-to-image strength','number',min=0,max=1,step=0.05) }}
+{% endcall %}
+<div class="col-12" id="negative-field"><label class="form-label" for="wf-negative_prompt">Negative prompt</label><textarea id="wf-negative_prompt" name="negative_prompt" class="form-control" rows="2" maxlength="24000"></textarea></div>
+{% call form_section('LoRAs') %}<div id="lora-fields" class="row g-3 m-0 p-0"></div><p id="no-loras" class="text-secondary small col-12 mb-0">No adapters configured. Add LoRAs in model setup.</p>{% endcall %}
+<div class="col-12"><label class="form-check"><input type="checkbox" id="wf-shared" class="form-check-input"><span class="form-check-label">Share this workflow with other users</span></label></div>
+<div class="col-12">{% call more('Version history') %}<label for="history" class="form-label">Saved version</label><select id="history" class="form-select mb-2"></select><p id="history-detail" class="text-secondary small"></p><button type="button" id="restore" class="btn btn-outline-secondary btn-sm">Use settings as draft</button>{% endcall %}</div>
+</div>
+<div class="editor-actions d-flex flex-wrap gap-2 align-items-center mt-4 pt-3 border-top"><button type="submit" class="btn btn-primary" id="save-workflow">Save new version</button><button type="button" class="btn btn-outline-secondary" id="discard">Discard changes</button><small class="text-secondary" id="save-note">Previous versions stay available.</small></div>
+</form>
+{% endcall %}
+</section>
+</div>
+<p class="small text-secondary mt-3">Design preview · sample data saved in this browser · no model loading or image generation.</p>
+</div>
+</main>
+<dialog id="model-dialog" aria-labelledby="model-dialog-title">
+{% call card('Model setup', class_='mb-0', header_id='model-dialog-title') %}
+<p class="small text-secondary">Configure files and hardware once. Every workflow for this model uses this setup.</p>
+<form id="model-form"><div class="row g-3">
+{{ field('setup-name','Model name') }}{{ select('setup-family','Family',['flux2-klein','flux2-dev','sdxl']) }}
+{% call form_section('Model files') %}
+{% for key,label in [('diffusion','Diffusion weights'),('text_encoder','Text encoder'),('vae','VAE'),('clip_l','CLIP L'),('clip_g','CLIP G'),('upscaler','Image upscaler')] %}{{ select('setup-' ~ key,label,['None'],wide=true) }}{% endfor %}
+{% endcall %}
+{% call form_section('Compute location') %}
+{{ select('setup-node','Compute node',['atlas','nova','cedar']) }}{{ select('setup-gpu','GPU assignment',['GPU 0','GPU 1','GPU 0 + GPU 1','CPU']) }}
+{{ select('setup-split','Split strategy',['single','components','layer','row']) }}{{ field('setup-ram','Host RAM cap (MiB)','number',8192,2048,131072) }}
+{{ field('setup-threads','CPU threads','number',4,1,64) }}{{ field('setup-budgets','Native VRAM budgets (GiB per GPU)',required=false) }}
+{{ field('setup-weights','Layer weight ratio',required=false) }}
+<div class="col-12"><label class="form-check"><input id="setup-staged" type="checkbox" class="form-check-input" checked><span class="form-check-label">Stage components to reduce VRAM use</span></label></div>
+<div class="col-12"><label class="form-check"><input id="setup-alone" type="checkbox" class="form-check-input" checked><span class="form-check-label">Keep GPUs to itself</span></label></div>
+{% endcall %}
+{% call form_section('Limits & starting defaults') %}
+<p class="col-12 small text-secondary mb-0">New workflows start at 1024 × 1024, one image and 6 steps, within these limits. Existing workflows keep their saved settings.</p>
+{% for key,label,value,low,high in [('max_width','Maximum width (px)',2048,256,4096),('max_height','Maximum height (px)',2048,256,4096),('max_steps','Maximum steps',60,1,200),('max_images','Maximum images',4,1,64),('max_references','Maximum references',2,0,8),('max_pixels','Pixel budget',4194304,65536,16777216),('max_upscale','Maximum upscale (×)',2,1,4)] %}{{ field('setup-' ~ key,label,'number',value,low,high) }}{% endfor %}
+{{ field('setup-reference_megapixels','Reference size limit (MP)','number',1,0.1,4,0.01) }}
+{% endcall %}
+{% call form_section('LoRA adapters') %}
+{{ field('setup-lora-name','Adapter name',required=false) }}{{ select('setup-lora-file','Adapter file',['None','soft-light.safetensors','detail.safetensors']) }}
+<p class="text-secondary small col-12 mb-0">The sample supports one configured adapter; each workflow saves its own strength.</p>
+{% endcall %}
+</div><p id="model-error" role="alert" class="text-danger small mt-3"></p><div class="d-flex flex-wrap gap-2 mt-3"><button class="btn btn-primary">Save model setup</button><button type="button" class="btn btn-outline-secondary" id="cancel-model">Cancel</button></div></form>
+{% endcall %}
+</dialog>
+{{ templates() }}
+<script>{{ javascript|safe }}</script>
+</body></html>

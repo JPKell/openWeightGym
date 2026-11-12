@@ -73,8 +73,8 @@ class SDCpp:
         """Keep image generation distinct from language vision/chat capabilities."""
         return {"version":1,"chat":False,"streaming":False,"embeddings":False,"tokenize":False,
                 "raw_completion":False,"prompt_rendering":False,"images":False,"tools":False,
-                "image_generation":True,"image_editing":True,"image_streaming":True,
-                "adapters":True,"native_probes":False,"load_probes":True,"masks":True}
+                "image_generation":True,"image_editing":not settings.get('sdcpp',{}).get('family','').startswith('qwen-image'),"image_streaming":True,
+                "adapters":True,"native_probes":False,"load_probes":True,"masks":not settings.get('sdcpp',{}).get('family','').startswith('qwen-image')}
 
     def describe(self,config,settings=None):
         """Expose availability and the dedicated image configuration schema."""

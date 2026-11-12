@@ -14,7 +14,10 @@ def test_model_defaults_workflow_versions_and_civitai_destinations(desk,tmp_path
     library=Models(str(tmp_path/'loadcoach.db'))
     file=gguf(tmp_path/'trained.gguf',general__architecture='qwen',qwen__context_length=8192)
     library.put('available',{'flags':{'model':file,'ctx-size':8192},'gpus':0})
-    profiles=[{'id':name,'model_id':'model-'+name,'image_workflow':{
+    for name,family in [('SDXL','sdxl'),('Flux','flux2-klein')]:
+        library.put(name,{'engine':'sdcpp','flags':{'model':file,'ctx-size':0},'gpus':0,'alone':True,
+                         'sdcpp':{'family':family,'components':{},'defaults':{},'limits':{}}})
+    profiles=[{'id':name,'model_id':library.identity(name),'image_workflow':{
         'family':family,'exclusive':True,'defaults':{'width':512,'height':512,'steps':6,'n':1,'guidance':1,'cfg_scale':7 if family=='sdxl' else 1,'sampler':'euler','scheduler':'discrete' if family=='sdxl' else 'flux2','seed':-1,'upscale':1},
         'limits':{'max_width':1024,'max_height':1024,'max_steps':30,'max_images':4,'max_references':0 if family=='sdxl' else 1,'max_pixels':1048576},'reference_megapixels':.25 if family=='sdxl' else 1,'loras':{}}} for name,family in [('SDXL','sdxl'),('Flux','flux2-klein')]]
     async def catalogue(user):return profiles
@@ -40,27 +43,30 @@ def test_model_defaults_workflow_versions_and_civitai_destinations(desk,tmp_path
         assert page.locator('#cards, #allow-split').count()==0
         if width==1440:
             positions=[page.locator(selector).bounding_box() for selector in ['#model-nodes','#file','#model-engine','#name','#projector','#min-context','#ctx']]
-            assert positions[0]['x']<positions[1]['x']<positions[2]['x'] and positions[3]['x']<positions[4]['x']<positions[5]['x']<positions[6]['x']
+            # Compute-node choices live in the Add a model card header, above its file/engine fields.
+            assert page.locator('#model-nodes').evaluate('e=>Boolean(e.closest(".card-header"))')
+            assert positions[0]['x']>positions[1]['x'] and positions[1]['x']<positions[2]['x']
+            assert positions[3]['x']<positions[4]['x']<positions[5]['x']<positions[6]['x']
             assert positions[0]['y']<positions[3]['y'] and len({round(box['y']+box['height']) for box in positions[3:]})==1  # the second row's fields line up
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         folder=Path('data/qualification/model-image-settings-20261027');folder.mkdir(parents=True,exist_ok=True)
         page.screenshot(path=str(folder/f'models-{width}.png'),full_page=True)
         page.goto('http://console.test/models/images/workflows')
-        playwright.expect(page.locator('#workflow-model')).to_have_value('SDXL')
+        page.locator('#studio-model-list [data-model="SDXL"]').click()
         page.locator('#workflow-name').fill('SDXL product')
         page.locator('#workflow-negative_prompt').fill('blur, text')
         page.get_by_role('button',name='Save workflow',exact=True).click()
-        playwright.expect(page.locator('main').get_by_role('status')).to_contain_text('Workflow saved.')
+        playwright.expect(page.locator('#studio-status')).to_contain_text('Workflow saved.')
         page.locator('#workflow-steps').fill('9')
         page.get_by_role('button',name='Save new version',exact=True).click()
         playwright.expect(page.get_by_text('Version 2',exact=True)).to_be_visible()
-        page.reload();page.locator('#workflow-workflow').select_option(index=1)
+        page.reload();page.locator('#studio-model-list [data-model="SDXL"]').click()
         playwright.expect(page.locator('#workflow-negative_prompt')).to_have_value('blur, text')
         playwright.expect(page.locator('#workflow-steps')).to_have_value('9')
-        page.locator('#workflow-model').select_option('Flux')
+        page.locator('#studio-model-list [data-model="Flux"]').click()
         playwright.expect(page.locator('#workflow-negative_prompt')).to_be_hidden()
         playwright.expect(page.locator('#workflow-strength')).to_be_hidden()
-        page.locator('#workflow-model').select_option('SDXL')
+        page.locator('#studio-model-list [data-model="SDXL"]').click()
         page.screenshot(path=str(folder/f'workflows-{width}.png'),full_page=True)
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         page.goto('http://console.test/chat/images')

@@ -12,9 +12,13 @@ from mirrorwall.front import Front
 from mirrorwall.runtime import native_command
 
 
-def gguf(path, tensors):
+def gguf(path, tensors, metadata=None):
     """A GGUF header naming tensors with PyTorch-order shapes, and no weights."""
-    data = b"GGUF" + struct.pack("<IQQ", 3, len(tensors), 0)
+    metadata=metadata or {}
+    data = b"GGUF" + struct.pack("<IQQ", 3, len(tensors), len(metadata))
+    for key,value in metadata.items():
+        key,value=key.encode(),value.encode()
+        data+=struct.pack('<Q',len(key))+key+struct.pack('<IQ',8,len(value))+value
     for name, shape in tensors.items():
         encoded = name.encode()
         data += struct.pack("<Q", len(encoded)) + encoded + struct.pack("<I", len(shape))
@@ -56,6 +60,35 @@ def test_parts_are_told_apart_by_their_headers(library):
     assert identify(library["lora"])["kind"] == "lora" and identify(library["lora"])["variant"] == "klein-9b"
     assert identify(library["flux1"])["family"] == "flux1"
     assert identify(str(library["folder"] / "absent.gguf"))["kind"] == "missing"
+
+
+@pytest.mark.parametrize('family,encoder_shape,vae_channels',[
+    ('qwen-image',(152064,3584),16),('qwen-image-2.1',(151936,4096),64)])
+def test_qwen_parts_and_component_suggestions_are_distinct_from_flux(library,family,encoder_shape,vae_channels):
+    folder=library['folder']
+    tensors={'img_in.weight':(4096,64),'transformer_blocks.0.img_mod.1.weight':(12288,4096)}
+    if family=='qwen-image-2.1': tensors['txt_in.text_norm.weight']=(4096,)
+    weights=safetensors(folder/'qwen-image.safetensors',tensors)
+    encoder=safetensors(folder/'qwen-vl.safetensors',{'model.language_model.embed_tokens.weight':encoder_shape})
+    vae=safetensors(folder/'qwen-vae.safetensors',{'decoder.conv_in.weight':(512,vae_channels,3,3,3)})
+    assert identify(weights)['family']==family
+    found=check(draft(weights,family,text_encoder=encoder,vae=vae),folder)
+    assert found['ready']
+    wrong=check(draft(weights,family,text_encoder=library['qwen8'],vae=library['vae']),folder)
+    slots={one['slot']:one for one in wrong['slots']}
+    assert slots['text_encoder']['status']==slots['vae']['status']=='wrong'
+    assert slots['text_encoder']['candidates']==[encoder]
+    assert 'Qwen' in slots['text_encoder']['message'] and slots['vae']['get']['repository'].startswith('Comfy-Org/Qwen-Image')
+
+
+def test_qwen3_vl_gguf_metadata_disambiguates_identical_text_embedding_shapes(library):
+    path=gguf(library['folder']/'qwen-vl.gguf',{'token_embd.weight':(151936,4096)}, {'general.architecture':'qwen3vl'})
+    assert identify(path)['variant']=='qwen3-vl-8b'
+    assert identify(library['qwen8'])['variant']=='qwen3-8b'
+    vl=gguf(library['folder']/'qwen25-vl.gguf',{'token_embd.weight':(152064,3584)}, {'general.architecture':'qwen2vl'})
+    text=gguf(library['folder']/'qwen25-text.gguf',{'token_embd.weight':(152064,3584)}, {'general.architecture':'qwen2'})
+    assert identify(vl)['variant']=='qwen2.5-vl-7b'
+    assert identify(text)['variant']=='qwen2.5-7b'
 
 
 def test_the_check_names_the_wrong_part_and_offers_the_right_one_already_there(library):

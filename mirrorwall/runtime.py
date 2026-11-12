@@ -129,10 +129,10 @@ class Native:
             if self.job.get("qualification_log"):
                 with Path(self.job["qualification_log"]).open("a") as record:
                     record.write(text)
-            if re.search(r"(?:flux|diffusion|dit|unet).*graph-cut layer split:.*segments",text,re.I):
+            if re.search(r"(?:flux|qwen|diffusion|dit|unet).*graph-cut layer split:.*segments",text,re.I):
                 if match:=re.search(r"CUDA\s*([0-9]+)",text,re.I):
                     self.split_devices.add(int(match[1]))
-            if re.search(r"(?:flux|diffusion|dit|unet).*row split: [1-9][0-9]* tensors .*split across 2 devices",text,re.I):
+            if re.search(r"(?:flux|qwen|diffusion|dit|unet).*row split: [1-9][0-9]* tensors .*split across 2 devices",text,re.I):
                 self.row_split=True
             clean=re.sub(r'\x1b\[[0-9;]*m','',text).strip()
             clean=re.sub(r' --- [^\r\n]+:\d+$','',clean)

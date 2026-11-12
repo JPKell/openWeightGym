@@ -19,6 +19,9 @@ LABELS = {"klein-4b": "Flux 2 klein 4B", "klein-9b": "Flux 2 klein 9B", "dev": "
           "unet": "SDXL UNet only", "qwen3-4b": "Qwen3 4B text encoder", "qwen3-8b": "Qwen3 8B text encoder",
           "mistral-small-24b": "Mistral Small 3.x 24B text encoder", "flux2-vae": "Flux 2 VAE (32 latent channels)",
           "sdxl-vae": "SD/SDXL VAE (4 latent channels)", "clip_l": "CLIP L text encoder", "clip_g": "CLIP G text encoder"}
+LABELS.update({'qwen-image':'Qwen Image (original / 2512)', 'qwen-image-2.1':'Qwen Image 2.1',
+               'qwen2.5-vl-7b':'Qwen2.5-VL 7B text encoder','qwen3-vl-8b':'Qwen3-VL 8B text encoder',
+               'qwen-image-vae':'Qwen Image VAE (16 latent channels)', 'qwen-image-2.1-vae':'Qwen Image 2.1 VAE (64 latent channels)'})
 # Where to get each missing part: a repository and file the Hugging Face page can bring down.
 GET = {"klein-4b": ("leejet/FLUX.2-klein-4B-GGUF", "flux-2-klein-4b-Q8_0.gguf"),
        "klein-9b": ("leejet/FLUX.2-klein-9B-GGUF", "flux-2-klein-9b-Q4_0.gguf"),
@@ -30,6 +33,12 @@ GET = {"klein-4b": ("leejet/FLUX.2-klein-4B-GGUF", "flux-2-klein-4b-Q8_0.gguf"),
        "sdxl-vae": ("madebyollin/sdxl-vae-fp16-fix", "sdxl_vae.safetensors"),
        "checkpoint": ("stabilityai/stable-diffusion-xl-base-1.0", "sd_xl_base_1.0.safetensors"),
        "upscaler": ("Kim2091/UltraSharp", "4x-UltraSharp.pth")}
+GET.update({'qwen-image':('QuantStack/Qwen-Image-GGUF','Qwen_Image-Q4_K_M.gguf'),
+            'qwen-image-2.1':('leejet/Qwen-Image-2.1-GGUF','qwen_image_2.1-Q4_K.gguf'),
+            'qwen2.5-vl-7b':('mradermacher/Qwen2.5-VL-7B-Instruct-GGUF','Qwen2.5-VL-7B-Instruct.Q8_0.gguf'),
+            'qwen3-vl-8b':('Qwen/Qwen3-VL-8B-Instruct-GGUF','Qwen3VL-8B-Instruct-Q4_K_M.gguf'),
+            'qwen-image-vae':('Comfy-Org/Qwen-Image_ComfyUI','split_files/vae/qwen_image_vae.safetensors'),
+            'qwen-image-2.1-vae':('Comfy-Org/Qwen-Image-2.1','vae/qwen_image_2.1_vae_bf16.safetensors')})
 SLOTS = (("diffusion", "Diffusion weights"), ("text_encoder", "Text encoder"), ("vae", "VAE"),
          ("clip_l", "CLIP L"), ("clip_g", "CLIP G"), ("upscaler", "Image upscaler"))
 FORMATS = (".gguf", ".safetensors", ".pth")
@@ -62,6 +71,12 @@ def classify(shapes):
         width = next((shape[0] for name, shape in shapes.items() if "img_attn.proj" in name and ("lora_B" in name or "lora_up" in name)), None)
         return "lora", "flux2" if any("double_blocks" in name for name in names) else None, FLUX2.get(width)
     flat = {plain(name): shape for name, shape in shapes.items()}
+    if 'txt_in.text_norm.weight' in flat:
+        return 'diffusion','qwen-image-2.1','qwen-image-2.1'
+    if 'transformer_blocks.0.img_mod.1.weight' in flat and flat.get('img_in.weight',(0,0))[1] == 64:
+        if 'time_text_embed.addition_t_embedding.weight' in flat:
+            return 'diffusion','qwen-image-layered',None
+        return 'diffusion','qwen-image','qwen-image'
     if "img_in.weight" in flat and any(name.startswith("double_blocks") for name in flat):
         width, channels = flat["img_in.weight"][:2]
         if channels != 128:
@@ -74,14 +89,19 @@ def classify(shapes):
         whole = any(name.startswith("conditioner.embedders.1") for name in names) and any(name.startswith("first_stage_model.") for name in names)
         return "diffusion", "sdxl", "checkpoint" if whole else "unet"
     conv = next((shape for name, shape in shapes.items() if name.endswith("decoder.conv_in.weight")), None)
-    if conv and len(conv) == 4:
-        return "vae", None, {32: "flux2-vae", 4: "sdxl-vae"}.get(conv[1], f"vae-{conv[1]}")
+    if conv and len(conv) in (4,5):
+        return "vae", None, {32: "flux2-vae", 4: "sdxl-vae",16:'qwen-image-vae',64:'qwen-image-2.1-vae'}.get(conv[1], f"vae-{conv[1]}")
     token = shapes.get("text_model.embeddings.token_embedding.weight") or shapes.get("token_embedding.weight")
     if token and token[0] == 49408:
         return {768: ("clip_l", None, "clip_l"), 1280: ("clip_g", None, "clip_g")}.get(token[1], ("unknown", None, None))
-    embed = shapes.get("model.embed_tokens.weight") or shapes.get("token_embd.weight")
+    embed = shapes.get('model.language_model.embed_tokens.weight') or shapes.get('language_model.model.embed_tokens.weight') or shapes.get("model.embed_tokens.weight") or shapes.get("token_embd.weight")
     if embed and len(embed) == 2:
         vocabulary, width = embed
+        if vocabulary==152064 and width==3584:
+            vision=any(name.startswith(('model.visual.','visual.','model.language_model.','language_model.')) for name in names)
+            return 'text_encoder',None,'qwen2.5-vl-7b' if vision else 'qwen2.5-7b'
+        if width==4096 and any(name.startswith(('model.visual.','visual.','model.language_model.','language_model.')) for name in names):
+            return 'text_encoder',None,'qwen3-vl-8b'
         if vocabulary in (151936, 151669):
             return "text_encoder", None, {2560: "qwen3-4b", 4096: "qwen3-8b"}.get(width, f"qwen-{width}")
         if vocabulary == 131072 and width == 5120:
@@ -101,6 +121,12 @@ def _identified(path, modified, size):
         return {"kind": "upscaler", "family": None, "variant": None, "label": "Image upscaler (.pth, ESRGAN family)"}
     try:
         kind, family, variant = classify(shapes_of(file))
+        if file.suffix.lower()=='.gguf' and kind=='text_encoder' and variant in ('qwen2.5-7b','qwen3-8b'):
+            architecture=read_metadata(str(file)).get('general.architecture')
+            if variant=='qwen2.5-7b' and architecture=='qwen2vl':
+                variant='qwen2.5-vl-7b'
+            elif variant=='qwen3-8b' and architecture=='qwen3vl':
+                variant='qwen3-vl-8b'
     except (OSError, ValueError, KeyError, IndexError, TypeError, struct.error):
         return {"kind": "unreadable", "family": None, "variant": None, "label": "Not a readable GGUF or safetensors file"}
     label = LABELS.get(variant) or {"lora": "LoRA adapter", "upscaler": "Image upscaler", "flux1": "Flux 1 (not supported here)",
@@ -137,6 +163,12 @@ def scan(folder, roots=None):
 def needs(family, variant):
     """What each slot must hold: (required, expected kind, expected variant, why) by slot."""
     upscaler = (False, "upscaler", None, "Enlarges reference images smaller than the reference size, and outputs when asked to upscale.")
+    if family in ('qwen-image','qwen-image-2.1'):
+        encoder='qwen3-vl-8b' if family=='qwen-image-2.1' else 'qwen2.5-vl-7b'
+        vae='qwen-image-2.1-vae' if family=='qwen-image-2.1' else 'qwen-image-vae'
+        return {'text_encoder':(True,'text_encoder',encoder,f'{LABELS[family]} needs {LABELS[encoder]}, not a Qwen3 text-only encoder.'),
+                'vae':(True,'vae',vae,'Qwen Image VAE generations are not interchangeable; Flux 2 and SDXL VAEs do not fit.'),
+                'clip_l':None,'clip_g':None,'upscaler':upscaler}
     if family in ("flux2-klein", "flux2-dev") and variant in ENCODER:
         return {"text_encoder": (True, "text_encoder", ENCODER[variant], f"{LABELS[variant]} reads prompts with the {LABELS[ENCODER[variant]]}."),
                 "vae": (True, "vae", "flux2-vae", "Every Flux 2 model decodes images with the Flux 2 VAE."),
@@ -175,10 +207,10 @@ def check(settings, folder, roots=None):
                  "why": rule[3] if rule else ""}
         expected_kind, expected = (rule[1], rule[2]) if rule else (None, None)
         get = GET.get(expected or ("upscaler" if slot == "upscaler" else ""))
-        if slot == "diffusion" and family in ("flux1", "sd1"):
-            entry["status"], entry["message"] = "wrong", found["label"] + ": Mirror Wall runs Flux 2 klein, Flux 2 Dev and SDXL."
+        if slot == "diffusion" and family in ("flux1", "sd1",'qwen-image-layered'):
+            entry["status"], entry["message"] = "wrong", found["label"] + ": Mirror Wall runs Flux 2 klein, Flux 2 Dev and SDXL, plus Qwen Image text-to-image profiles."
         elif slot == "diffusion" and found and found["kind"] == "diffusion" and not variant:
-            entry["status"], entry["message"] = "wrong", "Diffusion weights of an unrecognized size; Mirror Wall knows Flux 2 klein 4B and 9B, Flux 2 Dev and SDXL."
+            entry["status"], entry["message"] = "wrong", "Diffusion weights of an unrecognized size; Mirror Wall knows Flux 2 klein 4B and 9B, Flux 2 Dev, SDXL, Qwen Image and Qwen Image 2.1."
         elif found and found["kind"] in ("missing", "unreadable"):
             entry["status"], entry["message"] = "wrong", found["label"] + (": copy the file to this node from Files, or correct the path." if found["kind"] == "missing" else ".")
         elif found and rule is None:
@@ -206,9 +238,9 @@ def check(settings, folder, roots=None):
         loras.append({"name": name, "found": found, "status": "ok" if fits else "wrong",
                       "message": found["label"] if fits else (found or {}).get("label", "Not a LoRA") + (f"; this model is {LABELS.get(variant, variant)}." if found and found["kind"] == "lora" else ".")})
         ready &= fits
-    detected = family if family in ("flux2-klein", "flux2-dev", "sdxl") else None
+    detected = family if family in ("flux2-klein", "flux2-dev", "sdxl",'qwen-image','qwen-image-2.1') else None
     if detected and options.get("family") and options["family"] != detected:
         ready = False
     return {"detected_family": detected, "variant": variant, "variant_label": LABELS.get(variant, ""), "family_matches": not detected or options.get("family") == detected,
             "slots": slots, "loras": loras, "ready": bool(ready and diffusion and detected), "folder": str(folder or ""),
-            "get_diffusion": [{"label": LABELS[key], "repository": GET[key][0], "file": GET[key][1]} for key in ("klein-4b", "klein-9b", "dev", "checkpoint")]}
+            "get_diffusion": [{"label": LABELS[key], "repository": GET[key][0], "file": GET[key][1]} for key in ("klein-4b", "klein-9b", "dev", "checkpoint",'qwen-image','qwen-image-2.1')]}

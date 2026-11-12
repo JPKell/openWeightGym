@@ -1,0 +1,33 @@
+/* Three arrangements of the same model, workflow and editor components. */
+.image-review { max-width: 1760px; margin: auto; padding: 28px 36px; }
+.review-bar { background: var(--theme-surface); }
+.design-options .nav-link { border: 1px solid var(--theme-border); }
+.design-caption { min-height: 54px; }
+.image-intro { border-left: 3px solid var(--theme-accent); padding-left: 16px; }
+.image-intro > p { font-size: 1.12rem; }
+[data-layout=board] .image-workspace { grid-template-columns: minmax(0,1.25fr) minmax(380px,1fr); }
+[data-layout=board] #models-panel { grid-column: 1 / -1; grid-row: 1; }
+[data-layout=board] .model-library .card-body { display: flex; align-items: start; gap: 16px; }
+[data-layout=board] #model-search { max-width: 180px; }
+[data-layout=board] .model-list { display: flex; flex: 1; overflow-x: auto; }
+[data-layout=board] .model-option { width: auto; min-width: 190px; }
+[data-layout=board] #selected-panel { grid-column: 1 / -1; grid-row: 2; }
+[data-layout=board] #workflows-panel { grid-column: 1; grid-row: 3; }
+[data-layout=board] #editor-panel { grid-column: 2; grid-row: 3; }
+[data-layout=board] .workflow-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
+[data-layout=board] .workflow-option { flex-direction: column; min-height: 196px; }
+[data-layout=board] .workflow-symbol { width: 72px; height: 56px; }
+[data-layout=board] .workflow-arrow { position: absolute; right: 16px; top: 16px; }
+[data-layout=matrix] .image-workspace { grid-template-columns: 246px minmax(0,1fr); }
+[data-layout=matrix] #models-panel { grid-row: 1 / span 3; }
+[data-layout=matrix] #selected-panel { grid-column: 2; grid-row: 1; }
+[data-layout=matrix] #workflows-panel { grid-column: 2; grid-row: 2; }
+[data-layout=matrix] #editor-panel { grid-column: 2; grid-row: 3; }
+[data-layout=matrix] #workflow-form > .row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+[data-layout=matrix] #workflow-form > .row > * { width: auto; }
+[data-layout=matrix] #workflow-form > .row > :not(.form-section) { grid-column: 1 / -1; }
+button:focus-visible { outline: 3px solid var(--theme-accent); outline-offset: 3px; }
+@media (min-width: 1150px) { [data-layout=studio] #model-list { max-height: 650px; overflow: auto; } }
+@media (max-width: 1150px) { .image-workspace { grid-template-columns: 220px minmax(0,1fr); } #selected-panel { grid-column: 2; } #workflows-panel { grid-column: 2; } #editor-panel { grid-column: 2; grid-row: 3; } #models-panel { grid-row: 1 / span 3; } [data-layout=board] .workflow-list { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .image-review { padding: 20px 14px; } .image-workspace, [data-layout=board] .image-workspace, [data-layout=matrix] .image-workspace { display: flex; flex-direction: column; gap: 0; } .image-workspace > * { width: 100%; } .model-list { grid-template-columns: repeat(2,minmax(0,1fr)); } .model-option { padding: 10px 6px; gap: 6px; } .model-monogram { display: none; } [data-layout=board] .model-library .card-body { display: block; } [data-layout=board] #model-search { max-width: none; } [data-layout=board] .workflow-list { grid-template-columns: repeat(2,minmax(0,1fr)); } [data-layout=board] .workflow-option { padding: 14px; } [data-layout=matrix] #workflow-form > .row { display: flex; } .design-caption { min-height: 0; } }
+@media (prefers-reduced-motion: no-preference) { .workflow-option, .model-option { transition: background-color .15s, border-color .15s; } }
