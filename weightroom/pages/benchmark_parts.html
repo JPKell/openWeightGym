@@ -75,10 +75,9 @@
 <td><div class="d-flex flex-wrap gap-1">{% for target in model.targets %}{{ target_choice(target.choice, target.node, selected_target) }}{% endfor %}</div></td>
 </tr>
 {% endmacro %}
-{% macro model_type_navigation(section, kind, type_benchmarks={}) %}
+{% macro model_type_navigation(kind, type_benchmarks) %}
 {% from 'navigation_parts.html' import pills, pill_link %}
-{% set choices = [('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')] if section == 'node-measurements' else [('llm','LLM'),('image','Image'),('audio','Audio')] %}
 {% call pills('Model type') %}
-{% for value, label in choices %}{{ pill_link(label, '/benchmarks/' ~ section ~ '?kind=' ~ value ~ ('&benchmark=' ~ type_benchmarks[value] if section == 'node-measurements' else ''), kind == value, attrs={'data-matrix-navigation':''} if section == 'node-measurements' else {}) }}{% endfor %}
+{% for value, label in [('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')] %}{{ pill_link(label, '/benchmarks/node-measurements?kind=' ~ value ~ '&benchmark=' ~ type_benchmarks[value], kind == value, attrs={'data-matrix-navigation':''}) }}{% endfor %}
 {% endcall %}
 {% endmacro %}

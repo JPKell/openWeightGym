@@ -567,11 +567,11 @@ The top **Set up runs** link jumps to the shared Runs workspace below the matrix
 the left, Running now and Benchmark queue on the right. Setup offers resource tests for the selected
 model type and compute-only targets, with batch review before submission. Live monitor polling
 preserves unsent selections; submissions and queue controls return to this workspace and model type.
-Results shows quality benchmarks only, using one row per authorized model and the preferred
+Results shows LLM quality benchmarks only, using one row per authorized model and the preferred
 completed result across nodes (current settings first, otherwise latest saved evidence). Context,
 Speed and Load time remain on Node measurements. The Measurements selector sits at the right of
-its shared card header and updates that card in place. Types without quality benchmarks link to
-Node measurements. Saved image/audio load-time evidence remains accessible through Node measurements
+its shared card header and updates that card in place. Results has no model-type pills or
+Benchmark pretitle. Saved image/audio load-time evidence remains accessible through Node measurements
 and run details; load-capable models remain available in the Load time run picker. Embedders retain their separate
 resource controls. Future image/audio evaluation is a [deferred candidate](../docs/agent-status.md#conditional-maintenance-candidates).
 The orange-to-green quality heatmap scales each benchmark independently. Click a column header to sort
