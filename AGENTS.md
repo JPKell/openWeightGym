@@ -1,5 +1,19 @@
 # Repository instructions
 
+## Deployment workflow
+
+- Preserve the user's normal deployment route: `owg update; owg restart`. A successful update
+  and restart must run the updated installed checkout on its configured Git branch.
+- Do not introduce release-source pins, alternate runtime trees, `PYTHONPATH` overrides,
+  systemd source overrides or wrapper launchers that bypass that checkout. Do not replace the
+  deployment method without explicit user instruction.
+- Fix deployment bugs in the existing OWG update/start/restart implementation and test that
+  route. Do not substitute an ad hoc deployment workaround, including a temporary snapshot pin.
+- Preserve settings, keys, databases, model files, custom library paths and unrelated service
+  policies. Use the established OWG commands for authorized updates and restarts.
+- Verify the effective service source and live behavior after deployment. A committed/pushed
+  change, updated checkout or successful restart alone does not prove the new code is running.
+
 ## Web UI
 
 Before creating or changing a web element, search the templates below and their callers.
