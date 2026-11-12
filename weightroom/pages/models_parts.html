@@ -1,6 +1,15 @@
 {# Live inventory and sample proposals share model identities, node chips and catalogue surfaces. #}
-{% from 'parts.html' import more %}
+{% from 'parts.html' import more, node_state %}
 {% from 'kpi_parts.html' import kpi_row, kpi %}
+{% macro node_target(node={}, selected=false) %}
+{% set accepting = node.accepting_work|default(true) %}
+<label class="form-selectgroup-item"><input type="checkbox" name="node" value="{{ node.name|default('') }}" class="form-selectgroup-input" data-model-node{{ ' checked' if selected and accepting }}{{ ' disabled' if not accepting }}><span class="form-selectgroup-label"><span data-node-name>{{ node.name|default('') }}</span><small class="text-secondary" data-node-state>{% if not accepting %} {{ node.lifecycle|default('disabled') }}{% elif node.state|default('ready') != 'ready' %} {{ node_state(node.state) }}{% endif %}</small></span></label>
+{% endmacro %}
+{% macro node_targets(nodes=(), selected=(), id='model-nodes', fallback=true) %}
+<fieldset id="{{ id }}" class="m-0 p-0 border-0" aria-label="Compute nodes"><div class="form-selectgroup justify-content-end" data-target-choices>
+{% for node in nodes %}{{ node_target(node,node.name in selected) }}{% else %}{% if fallback %}{{ node_target({'name':'compute','state':'ready'},true) }}{% endif %}{% endfor %}
+</div></fieldset>
+{% endmacro %}
 {% macro subject(name='', meta='', href='', initial='', attrs={}) %}
 <{{ 'a' if href else 'button' }}{% if href %} href="{{ href }}"{% else %} type="button"{% endif %} class="inventory-subject"{{ attrs|xmlattr }}>
   <span class="inventory-monogram" aria-hidden="true" data-initial>{{ initial or name[:1]|upper }}</span>

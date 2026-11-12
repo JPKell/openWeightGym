@@ -1,8 +1,12 @@
 {% from "parts.html" import form_section, more, hardware, card, empty_row %}
 {% from "model_form.html" import number, choice %}
+{% from 'models_parts.html' import node_targets, node_target %}
 <template id="mw-lora-row"><tr>{% for key,label,type in [('name','Name','text'),('file','File','text'),('scale','Strength','number')] %}<td><input type="{{ type }}" class="form-control" data-lora-field="{{ key }}" aria-label="LoRA {{ label }}"{% if type=='number' %} step="any" min="-4" max="4"{% endif %}></td>{% endfor %}<td><button type="button" data-remove-lora class="btn btn-outline-danger btn-sm">Remove</button></td></tr></template>
-{% call card("Add image model", tag="form", id="mw-model-form", attrs={'data-hold-refresh':''}, header_id="mw-heading") %}
+<template id="mw-node-target">{{ node_target() }}</template>
+{% set target_actions %}{{ node_targets(id='mw-install-targets',fallback=false) }}{% endset %}
+{% call card("Add image model", tag="form", id="mw-model-form", attrs={'data-hold-refresh':''}, header_id="mw-heading", actions=target_actions) %}
 <div class="row g-3">
+<p class="col-12 small text-secondary mb-0" id="mw-target-note">Select the nodes that should receive this model. Its complete bundle is copied and verified before the model is created on each node. Hardware settings must be valid on every selected node.</p>
 {% call form_section("Model and files", "All nodes") %}
 <div class="col-md-6"><label for="mw-name" class="form-label">Model name</label><input id="mw-name" name="name" class="form-control" required maxlength="128"></div>
 <div class="col-md-6"><label for="mw-family" class="form-label">Family</label><select id="mw-family" name="family" class="form-select"><option value="flux2-klein">Flux 2 klein</option><option value="flux2-dev">Flux 2 Dev</option><option value="sdxl">SDXL</option><option value="qwen-image">Qwen Image (original / 2512)</option><option value="qwen-image-2.1">Qwen Image 2.1</option></select></div>
@@ -36,6 +40,6 @@
 <div class="col-12"><label for="mw-loras" class="form-label">LoRAs (JSON)</label><textarea id="mw-loras" class="form-control font-monospace" rows="3">{}</textarea><div class="form-hint">Changing JSON refreshes the adapter rows.</div></div>
 </div>{% endcall %}</div>
 <div class="col-12 sticky-actions"><button class="btn btn-primary" type="submit">Save model</button><span id="mw-saved" class="text-success ms-3" role="status"></span></div>
-</div>{% call more() %}<p class="mw-model-note mb-3">Start with the diffusion weights. The checklist reads each file's header on the selected node and says which text encoder, VAE and other parts the model needs, offering matching files already there. New files come down on <a href="/hub">Hugging Face</a> or <a href="/civitai">Civitai</a> and appear in the file lists below. Saving a new model checks cache space, promotes storage files and copies its complete bundle to the node. <a href="/docs/mirrorwall#models">Which parts each model needs</a></p>
+</div>{% call more() %}<p class="mw-model-note mb-3">Start with the diffusion weights. The checklist reads each file's header on the selected node and says which text encoder, VAE and other parts the model needs, offering matching files already there. New files come down on <a href="/hub">Hugging Face</a> or <a href="/civitai">Civitai</a> and appear in the file lists below. Saving a new model checks every selected destination, promotes storage files and copies its complete bundle to those nodes. Each model is created after its files pass verification. <a href="/docs/mirrorwall#models">Which parts each model needs</a></p>
 <p class="mw-model-note mt-3 mb-0">Unqualified models reserve their assigned cards. Shared residency requires reproducible placement and full workflow memory measurements, plus 256 MiB sampling headroom and the node's configured card margin. Shared workflows pin sampler, scheduler and CFG; use an exclusive entry to change those per request. Existing work finishes before settings take effect.</p>{% endcall %}<p id="mw-measurement" class="mw-model-note mt-2 mb-0"></p>
 {% endcall %}

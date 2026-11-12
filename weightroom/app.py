@@ -1473,9 +1473,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def model_api(request: Request, person: Person, method: str, path: str, **more):
         """Send a management request to the explicitly selected compute node."""
         source_machine = more.pop("source_machine", "")
+        machines = more.pop("machines", None)
         if more.pop("prepare_files", False):
             return await ask("POST", "/turnstile/models/install", person.key, json={
-                "name": unquote(path.removeprefix("/loadcoach/models/")), "machine": request.query_params.get("node") or "compute",
+                "name": unquote(path.removeprefix("/loadcoach/models/")),
+                **({"machines":machines} if machines is not None else {"machine":request.query_params.get("node") or "compute"}),
                 "settings": more["json"], "source_machine": source_machine}, timeout=None)
         if method == "POST" and (path.startswith("/loadcoach/models/") or path == "/loadcoach/model-setup"):
             node = request.query_params.get("node") or "compute"

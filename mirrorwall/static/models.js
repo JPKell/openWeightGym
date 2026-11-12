@@ -113,6 +113,8 @@
   }
   function fill(model) {
     selected = model; const profile = model?.sdcpp || {};
+    $('install-targets').hidden=Boolean(model); $('target-note').hidden=Boolean(model);
+    $('model-form').querySelector('section[aria-label="Hardware"] .scope-badge').textContent=model?'This node':'Selected nodes';
     $('heading').textContent = model ? model.name : 'Add image model';
     const choose = (name, value) => { if (value && !Array.from($(name).options).some(option => option.value === value)) $(name).add(new Option(value + ' · current selection', value)); $(name).value = value || ''; };
     $('name').value = model?.name || ''; $('name').readOnly = Boolean(model); choose('diffusion', model?.flags?.model);
@@ -152,6 +154,17 @@
     $('cards').textContent = 'Enabled: ' + (value.cards.join(', ') || 'none');
     $('node').replaceChildren(new Option('Default', ''));
     value.nodes.forEach(one => $('node').add(new Option(one.name + ' · ' + ({unknown:'status not reported',offline:'not reachable',unavailable:'not reachable',ready:'available'}[one.state] || one.state || 'status not reported'), one.name))); $('node').value = node;
+    const choices=$('install-targets').querySelector('[data-target-choices]');
+    const before=[...choices.querySelectorAll('input:checked')].map(input=>input.value), first=!choices.children.length;
+    choices.replaceChildren();
+    value.nodes.forEach(one=>{
+      const label=$('node-target').content.firstElementChild.cloneNode(true), input=label.querySelector('input');
+      input.value=one.name; input.disabled=one.accepting_work===false;
+      input.checked=!input.disabled && (first?one.name===node:before.includes(one.name));
+      label.querySelector('[data-node-name]').textContent=one.name;
+      label.querySelector('[data-node-state]').textContent=input.disabled?' '+(one.lifecycle || 'disabled'):one.state==='ready'?'':' '+({unknown:'status not reported',offline:'not reachable',unavailable:'not reachable',sleeping:'asleep'}[one.state] || one.state || 'status not reported');
+      choices.append(label);
+    });
     const engines = value.engines.engines || [];
     const runtime = engines.find(one => one.id === 'sdcpp');
     $('runtime').hidden = Boolean(runtime?.available);
@@ -222,8 +235,14 @@
     event.preventDefault();
     try {
       syncLoras();
+      const machines=[...$('install-targets').querySelectorAll('input:checked:not(:disabled)')].map(input=>input.value);
+      if(!selected && !machines.length) {message('Choose at least one destination node.'); $('install-targets').scrollIntoView({block:'center'}); return;}
       const answer = await api({name:$('name').value.trim(), settings:draft(), new:!selected,
-        source_machine:$('diffusion').selectedOptions[0]?.dataset.machine || node});
+        source_machine:$('diffusion').selectedOptions[0]?.dataset.machine || node,...(!selected?{machines}:{})});
+      if(Array.isArray(answer.jobs)) {
+        const query=new URLSearchParams({kind:'image'}); answer.jobs.forEach(job=>query.append('install',job.id));
+        location.href='/models?'+query; return;
+      }
       if (answer.kind === 'model-install') { location.href = '/models?kind=image&install=' + encodeURIComponent(answer.id); return; }
       modelDrafts.delete(selected?.name || '');
       await refresh(); fill(models.find(one => one.name === answer.name)); $('saved').textContent = 'Saved.'; message('');
