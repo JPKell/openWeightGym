@@ -2,10 +2,11 @@
 {# Add a model: the nodes it goes to, then its file, engine and name, then the engine's own fields.
    static/model-files.js checks the choices as they change; turnstile checks them all again. #}
 <div id="model-editor">
-  <form method="post" action="/models" class="row g-2 align-items-end" data-create-model>
+  <form method="post" action="/models" class="row g-3 align-items-end" data-create-model data-hold-refresh>
     <input type="hidden" name="prepare_files" value="yes">
     <input type="hidden" name="shown_node" value="{{ shown_node }}">
-    <fieldset id="model-nodes" class="col-md-4"><legend class="form-label">Compute nodes</legend>
+    {% call form_section('Files and destination', hint='Select one or several compute nodes. Files in storage are prepared in cache before installation.') %}
+    <fieldset id="model-nodes" class="col-12"><legend class="form-label">Compute nodes</legend>
       <div class="form-selectgroup">
       {% for node in node_choices %}{% set accepting = node.accepting_work|default(true) %}
         <label class="form-selectgroup-item"><input type="checkbox" name="node" value="{{ node.name }}" class="form-selectgroup-input" data-model-node{{ ' checked' if node.name in add_nodes and accepting }}{{ ' disabled' if not accepting }}><span class="form-selectgroup-label">{{ node.name }}{% if not accepting %} <small class="text-secondary">{{ node.lifecycle|default('disabled') }}</small>{% elif node.state != 'ready' %} <small class="text-secondary">{{ node_state(node.state) }}</small>{% endif %}</span></label>
@@ -14,10 +15,13 @@
       {% endfor %}
       </div>
     </fieldset>
-    <div class="col-md-4"><label for="file" class="form-label">File</label>{% include 'model_file_picker.html' %}</div>
+    <div class="col-md-8"><label for="file" class="form-label">File</label>{% include 'model_file_picker.html' %}</div>
     <div class="col-md-4"><label for="model-engine" class="form-label">Engine</label><select id="model-engine" name="engine" class="form-select" data-engine-picker>{% for engine in engine_choices if engine.enabled %}<option value="{{ engine.id }}" data-nodes="{{ engine.nodes|join(' ') }}"{{ ' selected' if engine.id == selected_engine }}>{{ engine.label }}</option>{% endfor %}</select></div>
+    {% endcall %}
+    {% call form_section('Model configuration') %}
     <div class="col-md-6 col-lg-3"><label for="name" class="form-label">Name</label><input id="name" name="name" class="form-control" value="{{ form.name or '' }}" autocapitalize="none" spellcheck="false" required></div>
     {% if engine_schema %}{% include engine_schema.create_template %}{% else %}<p class="text-danger">No enabled engine is available on these nodes.</p>{% endif %}
+    {% endcall %}
     {# What the chosen file says of its context, and why Add cannot be used yet. Kept under the fields, so that it moves none of them. #}
     <div class="col-12">
       <div class="form-text" data-trained-note>{% if form.trained %}Trained context: {{ "{:,}".format(form.trained|int) }} tokens.{% endif %}</div>

@@ -47,6 +47,7 @@ from markdown_it import MarkdownIt
 from markupsafe import Markup
 import uvicorn
 from weightroom.forms import refill, error_message
+from weightroom.model_catalogue import catalogue as model_catalogue
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException
@@ -605,6 +606,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return moment.strftime('%d %b %Y, %H:%M UTC') if moment else 'never'
 
     pages = Jinja2Templates(directory=[HERE / "pages", HERE.parent / "mirrorwall" / "pages", HERE.parent / "soundroom" / "pages"])  # values put into a page are escaped, always
+    pages.env.globals['model_catalogue'] = model_catalogue
     pages.env.globals.update(setting_label=setting_labels.describe, settings_sections=setting_labels.sections,
                              server_timezone=settings.timezone or display.server_zone(),
                              log_timezone=settings.timezone or "UTC", input_utc=display.input_utc)

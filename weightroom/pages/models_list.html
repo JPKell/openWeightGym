@@ -1,9 +1,13 @@
 {% from "parts.html" import card, section_title , confirm_two, alert, empty_row %}
+{% from 'models_parts.html' import subject, placement, overview, model_facts %}
+{% set catalogue = model_catalogue(known, request.query_params.get('node', '')) %}
 {# The list of models. It asks for itself again every 5 seconds, so what is loaded and in use stays true. #}
 {% set node_query = '&node=' ~ (request.query_params.get('node')|urlencode) if request.query_params.get('node') else '' %}
 {% set jobs = request.query_params.getlist('install')|map('urlencode')|list %}
 {% set node_query = node_query ~ ('&kind=' ~ kind if kind|default('llm') != 'llm' else '') ~ ('&install=' ~ jobs|join('&install=') if jobs else '') %}
-<div id="models" class="table-responsive mb-3" hx-get="/models?part=list{{ node_query }}" hx-trigger="every 5s" hx-swap="outerHTML">
+<div id="models" class="mb-3" hx-get="/models?part=list{{ node_query }}" hx-trigger="every 5s" hx-swap="outerHTML">
+{% if measure_oob|default(false) %}{{ overview(catalogue, oob=true) }}{% endif %}
+{% if catalogue.offline %}{{ alert('warning', 'Unavailable nodes: ' ~ catalogue.offline|join(', ') ~ '. Live availability excludes these nodes; any retained installations remain listed.', class_='py-2') }}{% endif %}
 {# One line for each node a model is being added to. #}
 {% for installation in installations|default([]) %}{% call alert(('danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info'), role='status') %}<strong>{{ installation.name }}</strong> on {{ installation.machine }}: {{ installation.state }}{% if installation.why %} · {{ installation.why }}{% endif %}{% if installation.of %} · {{ installation.done|size }} / {{ installation.of|size }}{% endif %}{% if installation.moved_from %} · moved from {{ installation.moved_from }}{% endif %}{% if installation.state == 'complete' %} · <a href="/models/{{ installation.name|urlencode }}?node={{ installation.machine|urlencode }}">Open model</a>{% endif %}{% endcall %}{% endfor %}
 {# How far measuring has got on each node, or how its last run there ended. The button that starts it is at the top of the page (models_measure.html). #}
@@ -24,35 +28,29 @@
   {% for name, why in run.failed.items() %}<br><b>{{ name }}</b> would not load: {{ why }}{% endfor %}
 {% endcall %}
 {% endfor %}
-<table id="models-table" class="table table-hover align-middle sortable">
-  <thead><tr><th data-sort="value" title="The sort order set on the model's page. The lowest comes first in every list of models">Order</th><th data-sort="text">Model</th><th data-sort="value">Locations</th>{% if kind|default('llm') == 'llm' %}<th data-sort="value">Min context</th><th data-sort="value">Max context</th>{% else %}<th data-sort="text">Family</th>{% if kind == 'audio' %}<th data-sort="text">Kind</th>{% endif %}{% endif %}{% if kind|default('llm') == 'llm' %}<th data-sort="value">Memory at min</th><th data-sort="value">Memory at max</th>{% else %}<th data-sort="value">Measured memory</th>{% endif %}<th data-sort="text">Fingerprint</th><th data-sort="text">Now</th><th data-sort="value">Last used</th></tr></thead>
+{% call card('Installed models', body_class='p-0', actions='<span class="small text-secondary" data-catalogue-count role="status" aria-live="polite"></span>'|safe) %}
+<div class="inventory-table-scroll" role="region" tabindex="0" aria-label="Installed models and compute nodes; scroll to browse all models">
+<table id="models-table" class="table table-hover align-middle mb-0 inventory-table">
+  <thead><tr><th scope="col">Model</th><th scope="col">Installed on</th><th scope="col">{{ 'Max context' if kind == 'llm' else 'Family' }}</th><th scope="col">File size</th><th scope="col">In memory</th></tr></thead>
   <tbody>
-  {% for model in known.models %}
-  <tr>
-    <td data-value="{{ model.order }}">{{ model.order }}</td>
-    <td><a href="{{ address(model.name) }}">{{ model.name }}</a>{% if model.alone %} <small class="text-secondary">alone</small>{% endif %}{% if model.adapters %} <small class="text-secondary">with {{ model.adapters|join(", ") }}</small>{% endif %}{% if model.flags.mmproj %} <small class="text-secondary">vision</small>{% endif %}</td>
-    <td data-value="{{ model.locations|default([])|length or 1 }}">{% if model.locations|default([])|length > 1 %}<details><summary>{{ model.locations|length }} nodes</summary><ul class="list-unstyled small mb-0">{% for location in model.locations %}<li><strong>{{ location.machine }}</strong>{% if location.name != model.name %} · {{ location.name }}{% endif %}</li>{% endfor %}</ul></details>{% elif model.locations|default([]) %}{{ model.locations[0].machine }}{% else %}{{ request.query_params.get('node', 'compute') }}{% endif %}</td>
-    {% set minimum = model.min_context|default(model.flags["ctx-size"]) or 'N/A' %}
-    {% if kind|default('llm') == 'llm' %}
-    <td data-value="{{ minimum }}">{{ "{:,}".format(minimum) if minimum is number else minimum }}</td>
-    <td data-value="{{ model.flags['ctx-size'] }}">{{ "{:,}".format(model.flags['ctx-size']) if model.flags['ctx-size'] else 'N/A' }}</td>
-    {% else %}<td>{{ model.get(model.engine, {}).get('family', 'Unknown') }}</td>{% if kind == 'audio' %}<td>{{ model.get('audiocpp', {}).get('kind', '')|capitalize }}</td>{% endif %}{% endif %}
-    {% if kind|default('llm') == 'llm' %}
-    {% for context in [minimum, model.flags["ctx-size"]] %}
-    {% set point = model.measurements|default([])|selectattr("context", "equalto", context)|first %}
-    <td data-value="{{ point.mib|sum if point and point.mib else 0 }}">{% if point and point.mib %}{{ point.mib|map("mib")|join(" + ") }}{% elif point and point.error %}<span class="text-danger">load failed</span>{% else %}<span class="text-secondary">Not measured</span>{% endif %}</td>
-    {% endfor %}
-    {% else %}{% set point = model.measured or model.measurements|default([])|selectattr('context', 'equalto', 0)|first %}<td data-value="{{ point.mib|sum if point and point.mib else 0 }}">{% if point and point.mib %}{{ point.mib|map('mib')|join(' + ') }}{% else %}<span class="text-secondary">Not measured</span>{% endif %}</td>{% endif %}
-    {# The start of it, which is enough to tell two apart. It leads to all of it, and what was written down then. #}
-    <td>{% if model.fingerprint %}<a href="/fingerprints?start={{ model.fingerprint }}"><code>{{ model.fingerprint[:12] }}</code></a>{% else %}<span class="text-secondary">{{ "no file" if model.size is none else "Reading file metadata" }}</span>{% endif %}</td>
-    <td>{% include "model_now.html" %}</td>
-    <td data-value="{{ model.last_used or "" }}">{{ model.last_used|timestamp if model.last_used else "never" }}</td>
+  {% for row in catalogue.rows %}{% set model = row.model %}
+  <tr data-catalogue-row data-name="{{ model.name }}" data-search="{{ row.search }}" data-order="{{ model.order }}" data-coverage="{{ row.placements|length }}" data-size="{{ row.sizes|first|default('') }}" data-states="{{ row.placements|map(attribute='state')|join(' ') }}{{ ' disabled' if row.placements|selectattr('disabled')|list }}">
+    <th scope="row">{{ subject(model.name, model.engine|default('llama_cpp') ~ (' · vision' if model.flags.mmproj else ''), address(model.name)) }}{% if model.alone %} <small class="text-secondary">alone</small>{% endif %}{% if model.adapters %} <small class="text-secondary">with {{ model.adapters|join(', ') }}</small>{% endif %}{{ model_facts(row, kind) }}</th>
+    <td data-column="placements"><div class="inventory-placements">{% for place in row.placements %}{{ placement(place.node, place.state, place.label, place.href) }}{% endfor %}</div></td>
+    <td>{% if kind == 'llm' %}{% if row.contexts %}{{ '{:,}'.format(row.contexts[0]) }}{% if row.contexts|length > 1 %}–{{ '{:,}'.format(row.contexts[-1]) }}<small class="d-block text-secondary">Varies by node</small>{% endif %}{% else %}N/A{% endif %}{% else %}{{ model.get(model.engine, {}).get('family', 'Unknown') }}{% endif %}</td>
+    <td>{% if row.sizes %}{{ row.sizes[0]|size }}{% if row.sizes|length > 1 %}–{{ row.sizes[-1]|size }}{% endif %}{% else %}<span class="text-secondary">File missing</span>{% endif %}</td>
+    <td>{% if row.active %}<strong>{{ row.active }} node{{ 's' if row.active != 1 }}</strong><small class="d-block text-secondary">{{ row.in_use }} in use · {{ row.active - row.in_use }} loaded</small>{% else %}<span class="text-secondary">—</span>{% endif %}</td>
   </tr>
   {% else %}
-  {% call empty_row((10 if kind|default('llm') == 'llm' else 9 if kind == 'audio' else 8), class_='') %}<div class="empty py-4"><p class="empty-title mb-1">No models yet.</p><p class="empty-subtitle mb-0">Add a model to see its availability here.</p></div>{% endcall %}
+  {% call empty_row(5, class_='') %}<div class="empty py-4"><p class="empty-title mb-1">No models yet.</p><p class="empty-subtitle mb-0">Add a model to see its availability here.</p></div>{% endcall %}
   {% endfor %}
+  {% call empty_row(5, attrs={'data-catalogue-empty':'', 'hidden':''}) %}<div class="py-4 text-center"><strong class="d-block mb-2">No matching models</strong><p class="small text-secondary">Try another name, node or availability.</p><button type="button" class="btn btn-outline-secondary btn-sm" data-catalogue-clear>Clear filters</button></div>{% endcall %}
   </tbody>
 </table>
+</div>
+<div class="inventory-footer small text-secondary"><span>Open a model or node chip for settings. Details shows each node’s memory and configuration.</span><span>{{ catalogue.rows|length }} models · {{ catalogue.installations }} installations</span></div>
+{% endcall %}
+<div class="inventory-legend small text-secondary mb-3" aria-label="Availability legend">{% for state,label in [('in-use','In use'),('loaded','Loaded'),('installed','Installed'),('loading','Loading'),('offline','Node unavailable'),('missing','File missing'),('disabled','Disabled')] %}<span class="inventory-state" data-state="{{ state }}"><span class="inventory-dot" aria-hidden="true"></span>{{ label }}</span>{% endfor %}</div>
 {% if adaptor_models %}
 {% call card("", class_="mt-3") %}{{ section_title("Adaptor models") }}<div class="table-responsive"><table class="sortable table mb-0"><thead><tr><th>Model</th><th>Type</th><th>Plugin</th><th>Instance / profile</th><th>State</th></tr></thead><tbody>
 {% for model in adaptor_models %}<tr><td><code>{{ model.id }}</code></td><td><span class="badge text-bg-secondary">Adaptor</span></td><td>{{ model.adaptor.plugin }}</td><td>{% if "front-manage-plugins" in person.can %}<a href="/plugins/{{ model.adaptor.plugin }}/instances/{{ model.adaptor.instance }}">{{ model.adaptor.instance }}</a>{% else %}{{ model.adaptor.instance }}{% endif %} / {{ model.adaptor.profile }}</td><td>{{ "Available" if model.available else "Settings pending or service unavailable" }}</td></tr>{% endfor %}
