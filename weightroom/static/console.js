@@ -62,8 +62,9 @@
     const saved = {html: button.innerHTML, label: button.getAttribute('aria-label')};
     armed.set(button, saved);
     saved.timer = setTimeout(() => reset(form), 10000);
-    button.setAttribute('aria-label', 'Are you sure? ' + button.textContent.trim());
-    button.textContent = 'Are you sure?';
+    const text = button.dataset.confirmText || 'Are you sure?';
+    button.setAttribute('aria-label', text + ' ' + (saved.label || button.textContent.trim()));
+    button.textContent = text;
   }, true);
   document.addEventListener('input', event => reset(event.target.closest('form')));
   document.addEventListener('suite:actionsChanged', event => reset(event.detail.form));

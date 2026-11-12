@@ -5661,10 +5661,11 @@ tick box is only shown to someone with the ability.
 
 Milestone 90 (implemented 2026-10-14; owner confirmed complete 2026-10-15) moves the conversation
 list into the existing Chat section rail between Conversations and Voice. New conversation,
-Find a conversation and an independently scrolling list occupy 40% of the rail's available
-height. Each row has a right-aligned trash icon. Double-clicking a title opens inline rename;
-F2 offers the same action for keyboard users. Both use the existing owner-checked APIs, and a
-running reply still has to be stopped before deletion. The old Settings button, title/delete
+Find a conversation and the list fill the remaining desktop rail below its navigation links;
+the list scrolls only when its rows exceed that space. Each row has a right-aligned trash icon.
+Double-clicking a title opens inline rename; F2 offers the same action for keyboard users.
+Both use the existing owner-checked APIs, and a running reply still has to be stopped before
+deletion. The old Settings button, title/delete
 popover, separate inner sidebar and checkbox drawer were removed. On phones, the existing
 section drawer exposes the same controls. The list is also available on Chat → Voice.
 

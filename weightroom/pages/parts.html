@@ -96,8 +96,8 @@
 {% endmacro %}
 
 
-{# Reversible actions ask twice; data or credential loss uses the shared checkbox dialog. #}
-{% macro confirm_two() %}data-confirm-two{% endmacro %}
+{# Actions ask twice; data or credential loss normally uses the shared checkbox dialog. #}
+{% macro confirm_two(text='') %}data-confirm-two{% if text %} data-confirm-text="{{ text }}"{% endif %}{% endmacro %}
 {% macro confirm_loss() %}data-confirm-loss{% endmacro %}
 {% macro confirm_check(label, id, name='', value='yes', framed=true) %}
 {% set field %}

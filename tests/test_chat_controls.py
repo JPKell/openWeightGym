@@ -170,6 +170,73 @@ def test_chat_heading_rename_saves_cancels_and_syncs_with_sidebar(desk, tmp_path
         browser.close()
 
 
+@pytest.mark.parametrize('width', [1440, 390])
+def test_chat_delete_requires_two_clicks_and_recovers_after_failure(desk, tmp_path, width):
+    from playwright.sync_api import sync_playwright, expect
+
+    server, _, users = desk
+    store, numbers = history(desk, tmp_path)
+    ref = numbers[-1]
+    owner = users.by_name('jordan').identity
+    sign_in(server, 'jordan')
+    attempts = []
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(headless=True, args=['--disable-gpu'])
+        page = browser.new_page(viewport={'width': width, 'height': 1000})
+        page.add_init_script('window.EventSource = class { addEventListener() {} close() {} };')
+
+        def serve(route):
+            request = route.request
+            path = request.url.replace('http://chat.test', '')
+            if request.method == 'POST':
+                attempts.append(parse_qs(request.post_data or ''))
+                if len(attempts) == 1:
+                    return route.fulfill(status=503, content_type='application/json',
+                                         body='{"error":{"message":"Please try again."}}')
+            response = server.request(request.method, path, content=request.post_data_buffer,
+                                      headers={name: request.headers[name] for name in ('accept', 'content-type') if name in request.headers})
+            route.fulfill(status=response.status_code, content_type=response.headers.get('content-type', 'text/html'), body=response.content)
+
+        page.route('http://chat.test/**', serve)
+        page.goto(f'http://chat.test/chat/{ref}')
+        if width == 390:
+            page.get_by_role('button', name='Menu', exact=True).click()
+        button = page.locator(f'[data-conversation="{ref}"] [data-chat-delete] button')
+        original = button.get_attribute('aria-label')
+        page.clock.install()
+        button.click()
+        expect(button).to_have_text('Del?')
+        expect(button).to_have_attribute('aria-label', 'Del? ' + original)
+        expect(page.locator('#danger-confirmation')).not_to_be_visible()
+        assert not attempts and store.get(ref, owner) is not None
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.keyboard.press('Escape')
+        if width == 390:
+            page.get_by_role('button', name='Menu', exact=True).click()
+        expect(button.locator('svg')).to_have_count(1)
+        expect(button).to_have_attribute('aria-label', original)
+        button.press('Enter')
+        expect(button).to_have_text('Del?')
+        page.clock.run_for(10001)
+        expect(button.locator('svg')).to_have_count(1)
+        assert not attempts
+        button.click()
+        button.click()
+        expect(page.locator('[data-sidebar-error]')).to_have_text('Please try again.')
+        expect(button).to_be_enabled()
+        expect(button.locator('svg')).to_have_count(1)
+        assert len(attempts) == 1 and store.get(ref, owner) is not None
+        button.click()
+        expect(button).to_have_text('Del?')
+        assert len(attempts) == 1
+        button.press('Enter')
+        expect(page).to_have_url('http://chat.test/chat')
+        assert attempts == [{'do': ['delete']}, {'do': ['delete']}]
+        assert store.get(ref, owner) is None
+        assert store.get(numbers[0], owner) is not None
+        browser.close()
+
+
 def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
     from playwright.sync_api import sync_playwright, expect
     server, _, _ = desk
@@ -203,13 +270,25 @@ def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
         rail = page.locator('#site-sidebar')
         scroll = rail.locator('.chat-conversations-scroll')
         assert scroll.evaluate('el => el.scrollHeight > el.clientHeight')
-        fraction = rail.locator('.chat-sidebar').bounding_box()['height'] / rail.bounding_box()['height']
-        assert .35 < fraction < .42
+        for height in (1000, 720):
+            page.set_viewport_size({'width': 1440, 'height': height})
+            bounds = rail.evaluate('''rail => {
+              const history = rail.querySelector('.chat-sidebar');
+              const bottom = rail.getBoundingClientRect().bottom - parseFloat(getComputedStyle(rail).paddingBottom);
+              return {bottom, historyBottom: history.getBoundingClientRect().bottom + parseFloat(getComputedStyle(history).marginBottom),
+                      outerOverflow: rail.scrollHeight > rail.clientHeight};
+            }''')
+            assert abs(bounds['bottom'] - bounds['historyBottom']) < 1, bounds
+            assert not bounds['outerOverflow'], bounds
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        list_height = scroll.evaluate('el => el.clientHeight')
         search = page.get_by_role('searchbox', name='Find a conversation')
         search.fill('save')  # hidden rename buttons must not become search matches
         expect(page.locator('[data-conversation]:visible')).to_have_count(0)
         search.fill('Conversation 00')
         expect(page.locator('[data-conversation]:visible')).to_have_count(1)
+        assert scroll.evaluate('el => el.scrollHeight === el.clientHeight')
+        assert scroll.evaluate('el => el.clientHeight') == list_height
         link = page.locator(f'[data-conversation="{numbers[0]}"] [data-chat-title]')
         link.dblclick()
         rename = page.locator(f'[data-conversation="{numbers[0]}"] [data-chat-rename]')
@@ -218,9 +297,12 @@ def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
         rename.get_by_role('button', name='Save conversation name').click()
         expect(link).to_have_text('Renamed from the rail')
         search.fill('')
-        page.get_by_role('button', name='Delete Renamed from the rail', exact=True).click()
-        page.locator('#danger-confirmation-check').check()
-        page.get_by_role('button', name='Continue', exact=True).click()
+        delete = page.get_by_role('button', name='Delete Renamed from the rail', exact=True)
+        delete.click()
+        expect(page.get_by_role('button', name='Del? Delete Renamed from the rail', exact=True)).to_have_text('Del?')
+        expect(page.get_by_role('dialog')).not_to_be_visible()
+        assert store.get(numbers[0], owner) is not None
+        page.get_by_role('button', name='Del? Delete Renamed from the rail', exact=True).click()
         expect(page.locator(f'[data-conversation="{numbers[0]}"]')).to_have_count(0)
         assert page.url.endswith(f'/chat/{ref}')
         main = page.locator('.composer')
