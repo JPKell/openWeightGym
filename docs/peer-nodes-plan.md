@@ -80,12 +80,13 @@ busy node still beats an idle node that would have to load it.
 
 ## Phase 0: safety and inventory
 
-Before any behaviour changes:
+Before any behaviour changes. Code and findings done 2026-11-12; backups are blocked (below).
 
-- [ ] Take verified backups of the front's stores and each node's `loadcoach.db` and settings, using the existing backup routes.
-- [ ] Log, at debug level, every request that reaches the `pass_on` fallthrough without a `machine`. Add a test that lists every path turnstile handles itself and every path that falls through, so later phases can prove the fallthrough is empty.
-- [ ] Add a test that fails on any new `"compute"` literal outside an allow-list. The list shrinks as each phase lands.
-- [ ] Find which stored columns are covered by a hash chain (`loadcoach/log.py` `chain_hash`, `db/transfer.py`). Those columns are never rewritten; Phase 2 uses an alias instead.
+- [ ] **Blocked:** take verified backups of the front's stores and each node's `loadcoach.db` and settings, using the existing backup routes. No machine can make one yet: the routes encrypt with `age` and read `data/backups/recipients.txt`. `age` is missing on jpk-main and jpk1–3. No machine has that `recipients.txt` (the front has one public recipient in `settings/recipients.txt`). The front's Backups page also only pairs the front with the default node, so jpk1–3 need `POST /turnstile/machines/{name}/databases/backups`. These backups gate Phase 1's deployment, not its code.
+- [x] Every request that reaches the `pass_on` fallthrough is counted by route in [turnstile/fallthrough.py](../turnstile/fallthrough.py). The first of each route is printed to the journal once per process (`turnstile: default-node fallthrough METHOD route on port N`), with record IDs shown as `{id}` and at most 500 routes remembered. Printing instead of debug logging makes the journal show the live list once this is deployed.
+- [x] [tests/test_default_node_inventory.py](../tests/test_default_node_inventory.py) sends every console request with a literal path through turnstile, using the live front's switches. It compares the routes that fall through with [tests/fixtures/default_node_fallthrough.txt](../tests/fixtures/default_node_fallthrough.txt): **31 routes** today, including `POST /loadcoach/tasks` (the CPU-node failure), `POST /loadcoach/schedules`, backups, file listings, request details, `stop`/`peek`, model setup and rename, and status. A new entry fails the test; a removed one asks for the list to be lowered. The live journal adds any route the console builds without a literal path.
+- [x] The same test counts `"compute"` references per file against [tests/fixtures/compute_literals.json](../tests/fixtures/compute_literals.json): **240 in 49 files** (weightroom 94, turnstile 90, loadcoach 20, benchmarks 17, db 11, soundroom 3, mirrorwall 2, spotter 2, voice 1). More fails; fewer asks for the list to be lowered. `OWG_UPDATE_INVENTORY=1` rewrites both lists after a deliberate change.
+- [x] Hash chain coverage: the event chain (`loadcoach/log.py` `chain_hash`, checked again by `db/transfer.py` `check_chain`) covers the `events` columns `at` through `text`, including `detail`. Machine names inside `detail` (task and schedule events record `machine=…`) are therefore never rewritten; Phase 2 resolves them through `node_aliases`. The `events.machine` and `events.source` columns are outside the chain and can be renamed. Renaming whole tables doesn't touch row contents, so it leaves chains valid.
 
 ## Phase 1: the setting and task ownership
 
