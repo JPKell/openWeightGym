@@ -301,6 +301,16 @@ def test_multi_node_audio_install_preflights_all_destinations_and_copies_compani
                 assert saved['gpus']==0 and saved['audiocpp']['files']==['tokens.json']
                 assert target.read_bytes()==main.read_bytes()
                 assert (target.parent/companion.name).read_bytes()==companion.read_bytes()
+            page.locator(f'#am-profiles [data-model="{name}"] [data-identity]').click()
+            nodes=page.get_by_role('radiogroup',name='Compute node',exact=True)
+            nodes.locator('input[value="studio-cpu"]').locator('..').click()
+            playwright.expect(nodes.locator('input[value="studio-cpu"]')).to_be_checked()
+            page.locator('[data-section="hardware"]').click()
+            page.locator('#am-ram').fill('2048')
+            page.locator('#am-submit').click()
+            playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+            assert libraries[1].stored(name)['audiocpp']['host_ram_mib']==2048
+            assert libraries[0].stored(name)['audiocpp']['host_ram_mib']==8192
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         for library in libraries:
             library.db.close()
