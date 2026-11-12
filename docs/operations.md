@@ -23,12 +23,23 @@ Current installation addresses, documented **2026-10-20**:
 | Browser voice | [Private HTTPS voice app](https://k-srv.tailaf60c6.ts.net/) |
 | Desktop voice | Front server, port `8447`; [download](https://10.77.10.42/static/LoadCoach-Voice.zip) |
 
+### Normal update source selection restored (2026-11-12)
+
+Repair `7a55847` makes `owg update` and start/restart put the installed checkout before old
+release-source overrides. On k-srv, the normal update/restart route now runs WeightRoom and
+Turnstile from `~/openWeightGym`; the older release paths remain only as library fallbacks.
+Three changed override files have private rollback copies using the [runtime source policy](#runtime-source-overrides).
+Only those two front services were restarted, after every worker, chats, benchmarks and file
+transfers reported no active work. Two hundred update/recovery checks passed. Authenticated live
+Models checks verified search between the pill rows, All models and the compact expandable-row
+assets; Users detail returned 200. Temporary verification sessions were revoked.
+
 ### Model discovery runtime (2026-11-12)
 
 The old Turnstile runtime pin still executed the legacy 40-result search despite newer
 WeightRoom controls. Release `model-discovery-82e846b` preserves that runtime and its Users
 PostgreSQL fix, overlaying only `loadcoach/hub.py`, `turnstile/artifacts.py` and
-`mirrorwall/civitai.py`. WeightRoom runs immutable source `82e846b`, including the already
+`mirrorwall/civitai.py`. WeightRoom initially ran immutable source `82e846b`, including the already
 deployed Models catalogue. Both use the existing virtualenv, settings and databases.
 
 Front `zz-model-discovery.conf` user-service drop-ins select each service's source beneath
