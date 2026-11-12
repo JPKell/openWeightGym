@@ -177,11 +177,6 @@ html { scroll-padding-top: var(--top, 6rem); }
 .pulse { font-size: .8rem; flex: none; }
 .dot { width: .5rem; height: .5rem; border-radius: 50%; flex: none; }
 
-/* A chart on the Machine page: a frame, a label, and the place static/charts.js draws the line in. */
-.chart { padding: .5rem .7rem; }
-.chart figcaption { font-size: .85rem; }
-.plot { height: 9rem; margin: .3rem 0; }
-
 /* The list of every llama-server flag: small, and no taller than most of a screen, so that the Save button is never far. */
 .flags { font-size: .85rem; }
 .table-responsive:has(> .flags) { max-height: 70vh; overflow-y: auto; }

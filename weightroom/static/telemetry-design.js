@@ -24,6 +24,9 @@
       const gpuModel = index === 0 ? 'RTX A4000' : 'RTX 4090';
       const total = index === 0 ? 16 : 24;
       return { id: `host-${index}`, name, cores: front ? 8 : index % 2 ? 32 : 24,
+        uptime: `${index + 2}d 3h 12m`,
+        installedServices: (front ? ['weightroom', 'turnstile', 'toollocker', 'spotter'] : ['loadcoach', 'spotter', 'voice'])
+          .map((name, service) => ({name, running: scenario === 'healthy' || service !== 2})),
         services: front ? ['Front'] : index === 0 ? ['GPU compute', 'CPU compute'] : ['Compute'],
         state: scenario === 'stale' ? 'stale' : scenario === 'healthy' ? 'reporting' : index === 2 ? 'offline' : 'reporting',
         cpu: front ? 12 : index === 0 ? 1 : 31 + index * 13 % 49,
@@ -133,7 +136,6 @@
     $('#fleet-empty').hidden = !!hosts.length;
     $('#empty-title').textContent = state.hosts.length ? 'No matching hosts' : 'No hosts registered';
     $('#empty-note').textContent = state.hosts.length ? 'Try a different host name or GPU model.' : 'Hardware will appear here when a host reports telemetry.';
-    $('#inventory-note').textContent = 'One entry per physical host';
   }
   function selectHost(id, tab = 'processor') {
     state.selected = id;
@@ -178,7 +180,19 @@
   }
   function hostDetails(host) {
     $('#host-title').textContent = host.name;
-    $('#host-subtitle').textContent = `${host.cores} CPU cores · ${host.ramTotal} GiB RAM · ${host.gpus.length} GPUs · ${host.services.join(' + ')}`;
+    $('#host-subtitle').textContent = fresh(host) ? 'Reading 4s ago' : hostAge(host);
+    $('#host-uptime-value').textContent = fresh(host) ? host.uptime : 'Unknown';
+    $('#host-services').replaceChildren();
+    host.installedServices.forEach(service => {
+      const pill = clone('#telemetry-service-pill');
+      const label = fresh(host) ? service.running ? 'Running' : 'Stopped' : 'Unknown';
+      pill.dataset.service = service.name;
+      pill.textContent = `${service.name} · ${label}`;
+      pill.title = `${service.name}.service · ${label}`;
+      pill.classList.toggle('bg-secondary-lt', label !== 'Running');
+      pill.classList.toggle('bg-green-lt', label === 'Running');
+      $('#host-services').append(pill);
+    });
     badge($('#host-state'), host);
     $('#stale-notice').hidden = fresh(host);
     $('#stale-note').textContent = `${hostAge(host)}. Current readings are unknown; retained history and device inventory remain visible.`;

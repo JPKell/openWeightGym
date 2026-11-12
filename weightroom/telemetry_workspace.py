@@ -18,6 +18,28 @@ def percentage(value, total):
     return max(0, min(100, value / total * 100)) if value is not None and total and total > 0 else None
 
 
+def service_states(services, fresh):
+    """Show installed or unconfirmed services, without presenting stale state as live."""
+    if not isinstance(services, list):
+        return None
+    labels = {'active': ('Running', 'green'), 'running': ('Running', 'green'),
+              'inactive': ('Stopped', 'secondary'), 'failed': ('Failed', 'red'),
+              'activating': ('Starting', 'blue'), 'deactivating': ('Stopping', 'yellow'),
+              'reloading': ('Reloading', 'blue')}
+    rows = []
+    for service in services:
+        if not isinstance(service, dict) or not isinstance(service.get('name'), str) or service.get('installed') is False:
+            continue
+        state = service.get('state')
+        label, tone = labels.get(state, ('Unknown', 'secondary')) if fresh else ('Unknown', 'secondary')
+        if fresh and state == 'active' and service.get('detail') == 'exited':
+            label, tone = 'Not running', 'secondary'
+        if service.get('installed') is not True and state == 'inactive':
+            label, tone = 'Unknown', 'secondary'
+        rows.append({**service, 'label': label, 'tone': tone})
+    return rows
+
+
 def hosts_view(hosts, poll):
     """Add safe current readings to the already deduplicated physical-host inventory."""
     result = []
@@ -27,6 +49,7 @@ def hosts_view(hosts, poll):
         age = number(source.get('age'))
         fresh = bool(snapshot and age is not None and age <= max(5, poll) * 3 and source.get('state') == 'ready')
         current = lambda value: number(value) if fresh else None
+        uptime = current(snapshot.get('up_for'))
         memory, processor = snapshot.get('memory') or {}, snapshot.get('processor') or {}
         cards = [{**gpu, 'card': gpu['card'], 'model': gpu.get('model') or 'GPU',
                   **{key: current(gpu.get(key)) for key in ('load', 'memory_used', 'temperature', 'power', 'fan')},
@@ -42,6 +65,8 @@ def hosts_view(hosts, poll):
         capacity = sum(d['total'] for d in disks) if complete_disks else None
         identity = source.get('fingerprint') or 'unidentified:' + ','.join(source.get('machines', []))
         host.update(identity=identity, fresh=fresh, age=age, has_inventory=bool(snapshot),
+                    uptime=uptime if uptime is not None and uptime >= 0 else None,
+                    services=service_states(snapshot.get('services'), fresh),
                     gpu_inventory_known=isinstance(snapshot.get('cards'), list), gpus=cards, disks=disks,
                     excluded_gpu_ids=[*snapshot.get('excluded_gpu_ids', []),
                                       *(gpu['card'] for gpu in snapshot.get('cards', []) if is_integrated(gpu))],

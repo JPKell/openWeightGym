@@ -456,8 +456,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
     async def state_of(name: str) -> dict:
         """One service: whether it is running, since when, and how often it has had to be started again."""
         unit, own = units[name]
-        ended, shown = await systemctl("show", unit, "-p", "ActiveState,SubState,ActiveEnterTimestamp,NRestarts,MemoryCurrent,Result,InvocationID,StateChangeTimestamp", own=own)
+        ended, shown = await systemctl("show", unit, "-p", "LoadState,ActiveState,SubState,ActiveEnterTimestamp,NRestarts,MemoryCurrent,Result,InvocationID,StateChangeTimestamp", own=own)
         told = dict(line.split("=", 1) for line in shown.splitlines() if "=" in line)
+        absent = told.get('LoadState') == 'not-found'
         if ended:
             told = {}  # command errors cannot be treated as cleanly stopped services
         return {
@@ -465,6 +466,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
             "unit": unit,
             "root": not own,
             "state": told.get("ActiveState", "unknown"),
+            "installed": (False if absent else True if told.get('LoadState') else
+                          True if told.get('ActiveState') in ('active', 'reloading', 'activating', 'deactivating', 'failed') else None),
             "detail": told.get("SubState", ""),
             "since": told.get("ActiveEnterTimestamp", ""),
             "restarts": int(told["NRestarts"]) if told.get("NRestarts", "").isdigit() else None,

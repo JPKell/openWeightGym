@@ -160,8 +160,11 @@ class Machines:
                 telemetry = None  # never join a reading to a different host merely by its configured name
             if telemetry:
                 from loadcoach.gpu_type import is_integrated
-                telemetry = {key: telemetry[key] for key in ("at", "machine_fingerprint", "hostname", "cards", "processor", "memory", "disks", "excluded_gpu_ids")
+                telemetry = {key: telemetry[key] for key in ("at", "machine_fingerprint", "hostname", "cards", "processor", "memory", "disks", "excluded_gpu_ids", "up_for", "services")
                              if key in telemetry}
+                if isinstance(telemetry.get('services'), list):
+                    telemetry['services'] = [{key: service[key] for key in ('name', 'unit', 'state', 'detail', 'installed') if key in service}
+                                             for service in telemetry['services'] if isinstance(service, dict)]
                 rejected = [*telemetry.get('excluded_gpu_ids', []),
                             *(card['card'] for card in telemetry.get('cards', []) if is_integrated(card))]
                 telemetry['cards'] = [card for card in telemetry.get('cards', []) if not is_integrated(card)]

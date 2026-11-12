@@ -124,6 +124,18 @@ def test_anyone_signed_in_sees_the_machine_and_a_missing_reading_is_not_a_zero(m
     assert number("[N/A]") is None and number("12.5") == 12.5
 
 
+@pytest.mark.parametrize('load,state,ended,installed', [('loaded', 'inactive', 0, True),
+    ('not-found', 'inactive', 0, False), ('not-found', 'inactive', 1, False),
+    ('loaded', 'failed', 0, True), ('loaded', 'inactive', 1, None)])
+def test_service_installation_is_independent_of_running_state(machine, tmp_path, load, state, ended, installed):
+    caller, keys, _, _ = machine
+    (tmp_path / 'bin/systemctl').write_text(
+        f'#!/bin/sh\nprintf "LoadState={load}\\nActiveState={state}\\nSubState=dead\\n"\nexit {ended}\n')
+    service = caller.get('/spotter/now?system_services=', headers=keys['pat']).json()['services'][0]
+    assert service['installed'] is installed
+    assert service['state'] == (state if not ended else 'unknown')
+
+
 def test_only_a_named_service_and_a_listed_action_and_only_with_the_ability(machine, tmp_path):
     caller, keys, asked, _ = machine
     assert caller.post("/spotter/services/loadcoach/restart", headers=keys["pat"]).status_code == 403

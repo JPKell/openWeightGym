@@ -31,7 +31,10 @@ def test_two_instances_on_one_host_share_readings_and_front_history_survives_out
     async def telemetry(name, path):
         if not spotter_online[0]:
             return None
-        return {"machine_fingerprint": fingerprint, "at": clock[0], "cards": [],
+        return {"machine_fingerprint": fingerprint, "at": clock[0], "cards": [], 'up_for': 90061,
+                'services': [{'name': 'loadcoach', 'unit': 'loadcoach.service', 'state': 'active',
+                              'detail': 'running', 'installed': True, 'private_extra': 'omit'}],
+                'may_act': True, 'power': {'may': True},
                 "processor": {"load": 42, "temperature": None},
                 "memory": {"used": 2_000, "total": 10_000}, "disks": []}
 
@@ -41,6 +44,10 @@ def test_two_instances_on_one_host_share_readings_and_front_history_survives_out
     hosts = machines.hosts()
     assert len(hosts) == 1 and hosts[0]["machines"] == ["compute", "front_cpu"]
     assert hosts[0]["telemetry"]["memory"]["used"] == 2_000
+    assert hosts[0]['telemetry']['up_for'] == 90061
+    assert hosts[0]['telemetry']['services'] == [{'name': 'loadcoach', 'unit': 'loadcoach.service',
+                                               'state': 'active', 'detail': 'running', 'installed': True}]
+    assert 'may_act' not in hosts[0]['telemetry'] and 'power' not in hosts[0]['telemetry']
     assert hosts[0]["loaded"] == [{"model": "embed-small", "state": "ready", "cards": [], "machine": "front_cpu"}]
     assert hosts[0]["models_unknown"] is False
     assert machines.history(fingerprint, 1000, 60, 2)["series"]["memory used"][-1] == 2_000

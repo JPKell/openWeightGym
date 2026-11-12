@@ -22,7 +22,7 @@ from starlette.testclient import TestClient
 
 import spotter.app as spotter
 from fake_hub import FakeHub
-from weightroom.app import Settings, build_app, chart, load_settings, of_its_own, tail
+from weightroom.app import Settings, build_app, load_settings, of_its_own, tail
 from loadcoach.app import build_app as build_loadcoach
 from loadcoach.config import Config
 from loadcoach.log import Log
@@ -1286,7 +1286,7 @@ def test_a_form_that_changes_a_piece_of_its_page_names_a_piece_that_is_there(des
     browser, _, _, users, _ = desk_with_machine
     sign_in(browser, "jordan")
     # htmx takes the piece a form names out of the page that comes back. A name that is on no page would leave nothing in its place.
-    pieces = {"/log?complete=1": "log-view", "/machine": "stretch", "/account/logs": "usage", "/output?source=loadcoach": "page-content", "/fingerprints": "found", "/hub": "hub-found",
+    pieces = {"/log?complete=1": "log-view", "/account/logs": "usage", "/output?source=loadcoach": "page-content", "/fingerprints": "found", "/hub": "hub-found",
               "/benchmarks/runs": "benchmark-choice", "/benchmarks/compare": "compare-content", "/cloud-apis": "page-content", "/roles": "page-content", "/settings": "page-content",
               "/users/pat": "page-content", "/groups/plain": "page-content"}  # fmt: skip
     for address, piece in pieces.items():
@@ -1345,42 +1345,16 @@ def test_outstanding_partial_result_shows_queued_and_each_unavailable_plan(desk)
     assert 'class="alert alert-warning said said-box" role="alert"' in page.text
 
 
-def test_the_machine_page_shows_telemetry_over_time_and_its_services(desk_with_machine, tmp_path):
+def test_compute_service_actions_and_system_logs(desk_with_machine):
     browser, _, _, _, asked = desk_with_machine
-    readings = sqlite3.connect(tmp_path / "spotter.db")
-    now = time.time()
-    for ago, heat in ((3000, 40), (2940, 45), (2880, 50), (600, 65), (540, 70)):  # nothing was read for a long while in the middle
-        kept = {"free on /": 2**30, "memory used": 2**30, "processor load": 5, "GPU 1 load": 9, "GPU 0 temperature": heat, "GPU 0 memory used": 8 * 2**30}
-        readings.execute("INSERT INTO readings VALUES (?, ?)", (now - ago, json.dumps(kept)))
-    readings.commit()
-
-    page = sign_in(browser, "pat")
-    page = browser.get("/machine?hours=1").text
-    assert "GPU 0 temperature" in page and "<b>70°</b>" in page and "40° to 70°" in page and "8.0 GB" in page
-    # Each GPU under a heading of its own, then the processor and the memory, then the drives.
-    assert [page.index(f">{heading}</h2>") for heading in ("GPU 0", "GPU 1", "Processor and memory", "Storage")] == sorted(page.index(f">{heading}</h2>") for heading in ("GPU 0", "GPU 1", "Processor and memory", "Storage"))
-    assert page.index(">Memory used<") < page.index(">Temperature<") < page.index(">Processor load<") < page.rindex(">Memory used<") < page.index(">Free on /<")
-    heat = next(figure for figure in page.split("<figure") if "GPU 0 temperature" in figure)
-    told = json.loads(heat.split("data-chart='")[1].split("'")[0])  # what the browser draws the line from
-    assert (told["unit"], told["heat"], len(told["values"])) == ("°", [45, 85], 60) and len(json.loads(page.split("data-times='")[1].split("'")[0])) == 60  # an hour, a minute to a step
-    gaps = "".join("-" if value is None else "x" for value in told["values"]).strip("-")
-    assert "x-" in gaps and "-x" in gaps and 70 in told["values"]  # where nothing was read there is nothing, not a nought
-    chart_script = browser.get("/static/charts.js").text
-    assert 'src="/static/echarts.min.js"' in page and 'src="/static/charts.js?v=4"' in page and "echarts.min.js" not in browser.get("/status").text
-    assert "connectNulls: true" in chart_script and 'areaStyle: { opacity: 0.18, origin: "start" }' in chart_script and 'type: "slider"' in chart_script and 'type: "inside"' in chart_script
-    assert "dataZoom" in browser.get("/static/usage.js").text and "dataZoom" in browser.get("/static/reliability.js").text
-    assert "loadcoach.service" in page and "active" in page and "Restart loadcoach" not in page and "What it printed" not in page  # pat may look, not act
-    assert browser.post("/machine/services/loadcoach/restart").status_code == 400 and "may not" in browser.post("/machine/services/loadcoach/restart").text
-    assert "restart" not in (asked.read_text() if asked.exists() else "").replace("NRestarts", "")
-
+    sign_in(browser, "pat")
+    denied = browser.post("/machine/services/loadcoach/restart")
+    assert denied.status_code == 400 and "may not" in denied.text
     sign_in(browser, "jordan")
-    page = browser.get("/machine").text
-    assert "Restart loadcoach" in page and "What it printed" in page
-    assert "ollama.service" in page and "docker.service" in page and "apache2.service" not in page and "nginx.service" not in page
     done = browser.post("/machine/services/loadcoach/restart")
-    assert "Asked loadcoach to restart. It is now active." in done.text and "--user restart loadcoach.service" in asked.read_text().splitlines()
+    assert done.url.path == "/telemetry" and "Asked loadcoach to restart. It is now active." in done.text
+    assert "--user restart loadcoach.service" in asked.read_text().splitlines()
     # What a service printed has a page of its own, reached from here: the latest lines, or those around a moment.
-    assert 'href="/output?source=loadcoach"' in page and 'href="/output?source=kernel"' in page
     printed = browser.get("/output?source=loadcoach").text
     assert re.search(r'<td><time[^>]+data-local-time[^>]*>[^<]+</time> loadcoach &lt;b&gt;started&lt;/b&gt;</td>', printed)  # what a service printed is text, never HTML
     assert "<option selected>loadcoach</option>" in printed and "<option >kernel</option>" in printed and 'data-filter="printed"' in printed
@@ -1393,9 +1367,8 @@ def test_the_machine_page_shows_telemetry_over_time_and_its_services(desk_with_m
     changed = browser.post("/settings/weightroom", data={"third-party-services-present": "1", "third-party-apache": "on"})
     assert "Saved." in changed.text
     deadline = time.monotonic() + 5
-    while "apache2.service" not in (changed_machine := browser.get("/machine").text) and time.monotonic() < deadline:
+    while "<option >apache</option>" not in (changed_logs := browser.get("/output").text) and time.monotonic() < deadline:
         time.sleep(0.05)
-    assert "apache2.service" in changed_machine and "ollama.service" not in changed_machine and "docker.service" not in changed_machine and "nginx.service" not in changed_machine
     changed_logs = browser.get("/output").text
     assert "<option >apache</option>" in changed_logs and ">ollama</option>" not in changed_logs and ">docker</option>" not in changed_logs and ">nginx</option>" not in changed_logs
     blocked = browser.post("/machine/services/docker/restart")
@@ -1405,29 +1378,6 @@ def test_the_machine_page_shows_telemetry_over_time_and_its_services(desk_with_m
     assert browser.get("/output?at=noon").status_code == 400 and "spotter knows the services" in browser.get("/output?source=nothing").text
     sign_in(browser, "pat")
     assert "restart-services ability" in browser.get("/output").text and browser.get("/output").status_code == 403  # reading what was printed needs the same ability as acting
-    sign_in(browser, "jordan")
-
-    # Power: the logged-in count is informational, and those who may act need no separate acknowledgement for it.
-    assert "Compute never goes to sleep by itself." in page and ">Sleep</button>" in page
-    assert "2 users are logged in to compute." in page and 'name="desktop"' not in page
-    going = browser.post("/machine/power/sleep", data={"force": "on"})
-    assert "Compute will go to sleep now, whatever LoadCoach is doing." in going.text
-    deadline = time.monotonic() + 3
-    while "suspend" not in asked.read_text() and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert "--no-ask-password suspend --check-inhibitors=no" in asked.read_text().splitlines()
-    assert 'id="power-now"' in browser.get("/machine?part=power").text and "<html" not in browser.get("/machine?part=power").text
-    sign_in(browser, "pat")
-    assert ">Sleep</button>" not in browser.get("/machine").text and "2 users are logged in to compute." in browser.get("/machine").text
-    assert "may not" in browser.post("/machine/power/off").text
-    assert "poweroff" not in asked.read_text()
-
-    drawn = chart("GPU 0 temperature", [40, None, 50, 70])
-    assert drawn["told"] == {"values": [40, None, 50, 70], "unit": "°", "top": None, "heat": [45, 85]} and (drawn["low"], drawn["high"], drawn["last"]) == ("40°", "70°", "70°")
-    assert chart("GPU 0 load", [None, None])["told"] is None and chart("processor temperature", [50])["told"]["heat"] == [45, 90]
-    assert chart("memory used", [2**30], top=2**31)["told"] == {"values": [1.0], "unit": " GB", "top": 2.0, "heat": [0, 2.0]}  # a size is drawn in GB
-    assert chart("free on /", [2**30], top=2**32)["told"]["heat"] == [4.0, 0]  # room on a drive is the other way up: red when little is left
-    assert chart("GPU 1 power", [50])["told"]["heat"] is None and chart("GPU 1 power", [50], top=180)["told"]["heat"] == [0, 180]  # no known most, no colour scale
 
 
 def test_with_loadcoach_down_and_the_machine_up_someone_can_still_sign_in_and_start_it_again(desk_with_machine):
@@ -1438,15 +1388,17 @@ def test_with_loadcoach_down_and_the_machine_up_someone_can_still_sign_in_and_st
     # A sign-in from before still counts: the accounts are on this machine, and turnstile says whose key it is.
     off = browser.get("/")
     assert off.status_code == 200 and "Node unavailable: compute" in off.text
-    assert "Restart loadcoach" in browser.get("/machine").text
+    assert browser.get("/telemetry").status_code == 200
 
     # A fresh sign-in is checked by turnstile, here, whatever compute is doing.
     browser.post("/sign-out")
     assert "Wrong name or password." in sign_in(browser, "jordan", "wrong horse").text
     sign_in(browser, "jordan")
-    assert "Restart loadcoach" in browser.get("/machine").text
+    assert browser.get("/telemetry").status_code == 200
     assert users.by_key(browser.cookies["weightroom"]).name == "jordan"  # a real session key, good at LoadCoach too once it is back
-    assert "Asked loadcoach to start." in browser.post("/machine/services/loadcoach/start").text and "--user start loadcoach.service" in asked.read_text()
+    started = browser.post("/machine/services/loadcoach/start")
+    assert started.url.path == "/telemetry" and "Asked loadcoach to start." in started.text
+    assert "--user start loadcoach.service" in asked.read_text()
 
     compute.off = False
     assert '<h1 class="page-title wrap">Status</h1>' in browser.get("/").text  # LoadCoach is back, and the same sign-in carries on
@@ -1952,21 +1904,14 @@ def test_store_health_permissions_backup_age_and_compute_outage(desk, tmp_path, 
     assert "compute is not answering" in page.text and "default_weightroom_chat" in page.text
 
 
-def test_machine_storage_signals_are_on_database_page(desk_with_machine):
-    browser, compute, machine, _, _ = desk_with_machine
+def test_database_page_remains_available_when_spotter_is_unavailable(desk_with_machine):
+    browser, _, machine, _, _ = desk_with_machine
     sign_in(browser, "jordan")
-    page = browser.get("/machine")
-    assert page.status_code == 200 and "Store health and backup age" not in page.text
-    compute.off = True
-    page = browser.get("/machine")
-    assert page.status_code == 200 and "Store health and backup age" not in page.text
-    compute.off = False  # Keep an authentication authority available; both down requires a new offline sign-in.
-    machine.off = True
-    page = browser.get("/machine")
-    assert page.status_code == 503 and "Store health and backup age" not in page.text
-    page = browser.get("/databases")
-    assert page.status_code == 200 and "Store health and backup age" in page.text
-    assert "default_weightroom_chat" in page.text
+    for unavailable in (False, True):
+        machine.off = unavailable
+        page = browser.get("/databases")
+        assert page.status_code == 200 and "Store health and backup age" in page.text
+        assert "default_weightroom_chat" in page.text
 
 
 def test_multimedia_gpu_names_are_escaped_in_attribute(desk, tmp_path):

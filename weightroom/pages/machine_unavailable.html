@@ -1,7 +1,0 @@
-{% extends "frame.html" %}
-{% from "parts.html" import page_header, alert %}
-{% block title %}Machine · openWeightGym{% endblock %}
-{% block main %}
-{{ page_header("Machine", lead="This machine is currently unavailable.") }}
-{% call alert('warning') %}{{ why }}{% endcall %}
-{% endblock %}

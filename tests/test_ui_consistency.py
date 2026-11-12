@@ -1042,32 +1042,3 @@ def test_system_logs_refusal_is_permanent_and_unavailable_link_is_hidden(desk_wi
     response = server.get('/output')
     assert response.status_code == 403 and 'restart-services ability' in response.text
     assert 'said-box' not in response.text and 'href="/output"' not in server.get('/usage?complete=1').text
-
-
-def test_telemetry_chart_times_use_browser_zone_and_keep_utc_tooltips():
-    from test_console_browser import playwright
-    from datetime import datetime
-    start = datetime.fromisoformat('2026-10-30T12:00:00+00:00').timestamp()
-    markup = f'''<html><meta charset="utf-8"><body>
-      <div id="charts" data-times='["12:00","12:01"]' data-time-start="{start}" data-time-step="60">
-      <div class="plot" data-chart='{{"values":[5,6],"unit":" W"}}'></div></div>
-      <script>window.options=[];window.echarts={{getInstanceByDom:()=>null,init:place=>({{
-        getDom:()=>place,dispose(){{}},resize(){{}},setOption(option){{options.push(option)}}
-      }})}};</script>'''
-    markup += '<script>' + (ROOT / 'weightroom/static/charts.js').read_text() + '</script></body></html>'
-    with playwright.sync_playwright() as engine:
-        browser = engine.chromium.launch(headless=True, args=['--disable-gpu'])
-        for zone, hour in [('America/Vancouver', '05:00'), ('Asia/Tokyo', '21:00')]:
-            context = browser.new_context(timezone_id=zone, locale='en-GB')
-            page = context.new_page()
-            page.set_content(markup)
-            assert hour in page.evaluate('options[0].xAxis.data[0]')
-            label = page.locator('[data-chart-time-zone]')
-            assert label.inner_text() == 'Chart times: ' + zone
-            assert label.get_attribute('title').startswith('2026-10-30T12:00:00.000Z')
-            tooltip = page.evaluate('options[0].tooltip.formatter([{dataIndex:0,value:5}])')
-            assert hour in tooltip and '12:00' in tooltip and 'UTC' in tooltip and '5 W' in tooltip
-            page.evaluate("document.dispatchEvent(new Event('htmx:afterSwap'))")
-            assert label.count() == 1
-            context.close()
-        browser.close()
