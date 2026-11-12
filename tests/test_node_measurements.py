@@ -11,21 +11,23 @@ from test_weightroom import desk, sign_in  # noqa: F401
 from weightroom.benchmark_views import measurement_matrix
 
 
-def test_measurements_keep_all_nodes_across_types_without_private_model_metadata(fleet):
+def test_measurements_keep_compute_nodes_across_types_without_private_model_metadata(fleet):
     server, _, users, state = fleet
     users.change('pat', own={'models': ['local-model']})
     sign_in(server, 'pat')
-    expected = ['front', 'compute', 'rig', 'empty', 'offline', 'disabled']
+    expected = ['compute', 'rig', 'empty', 'offline', 'disabled']
     for kind in ('llm', 'embedding', 'image', 'audio'):
         response = server.get('/benchmarks/node-measurements', params={'kind': kind, 'benchmark': 'load'})
         assert response.status_code == 200
         nodes = Tags(response.text).with_attribute('data-matrix-node')
         assert [node['data-node'] for node in nodes] == expected
+        assert [column['data-label'] for column in Tags(response.text).with_attribute('data-label')] == expected
+        assert 'id="node-total">5</strong>' in response.text
         assert 'private-model' not in response.text and 'monitor-only' not in response.text
         assert 'Unreachable' in response.text and 'Disabled' in response.text
     state['empty'] = True
     response = server.get('/benchmarks/node-measurements')
-    assert len(Tags(response.text).with_attribute('data-matrix-node')) == 6
+    assert len(Tags(response.text).with_attribute('data-matrix-node')) == 5
     assert 'No local models are available to your account.' in response.text
 
 
@@ -72,6 +74,21 @@ def test_legacy_results_never_migrate_to_another_node():
     assert next(cell for cell in other['rows'][0]['cells'] if cell['node'] == 'compute')['value'] is None
 
 
+def test_front_host_is_not_a_compute_node_without_an_inference_service():
+    bench = {'id': 'load', 'score_unit': '1/s', 'enabled': True}
+    models = [{'id': 'local'}]
+    matrix = measurement_matrix({}, {}, models, [bench], bench, [], {})
+    assert [node['id'] for node in matrix['nodes']] == ['compute']
+    assert [cell['node'] for cell in matrix['rows'][0]['cells']] == ['compute']
+    # A compute service can be registered on the same physical host as front.
+    models[0]['locations'] = [{'machine': 'front'}, {'machine': 'compute'}]
+    registered = measurement_matrix({'available_machines': ['front', 'compute']},
+                                    {'machines': [{'name': 'front'}, {'name': 'compute'}]},
+                                    models, [bench], bench, [], {})
+    assert [node['id'] for node in registered['nodes']] == ['front', 'compute']
+    assert all(node['state_label'] == 'Ready' for node in registered['nodes'])
+
+
 def test_inventory_outage_keeps_last_known_topology_and_evidence(fleet, desk, monkeypatch):
     server, _, _, _ = fleet
     server.get('/benchmarks/node-measurements')
@@ -82,11 +99,11 @@ def test_inventory_outage_keeps_last_known_topology_and_evidence(fleet, desk, mo
     monkeypatch.setattr(route, 'app', request_response(unavailable))
     response = server.get('/benchmarks/node-measurements')
     assert response.status_code == 200 and 'Node inventory could not be refreshed' in response.text
-    assert len(Tags(response.text).with_attribute('data-matrix-node')) == 6
+    assert len(Tags(response.text).with_attribute('data-matrix-node')) == 5
 
 
 @pytest.mark.parametrize('count', (15, 30))
-def test_browser_fleet_matrix_scale_filters_units_and_navigation(fleet, monkeypatch, tmp_path, count):
+def test_browser_fleet_matrix_scale_units_and_navigation(fleet, monkeypatch, tmp_path, count):
     playwright = pytest.importorskip('playwright.sync_api')
     from test_console_browser import browser_context
     server, library, _, _ = fleet
@@ -108,7 +125,7 @@ def test_browser_fleet_matrix_scale_filters_units_and_navigation(fleet, monkeypa
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
-        page.goto('http://console.test/benchmarks/node-measurements?benchmark=load')
+        page.goto('http://console.test/benchmarks/node-measurements?benchmark=load&q=does-not-match&evidence=failed&order=node-2')
         playwright.expect(page.locator('[data-measurement-row]')).to_have_count(count)
         playwright.expect(page.locator('#benchmark-top .eyebrow')).to_have_count(0)
         playwright.expect(page.get_by_role('button', name='Export view')).to_have_count(0)
@@ -118,37 +135,32 @@ def test_browser_fleet_matrix_scale_filters_units_and_navigation(fleet, monkeypa
                 page.set_viewport_size({'width': width, 'height': 1000})
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (count, theme, width)
                 assert page.locator('.measurement-table-scroll').evaluate('(el) => el.clientHeight <= 602 && el.scrollHeight > el.clientHeight')
-                for node in ('front', 'compute', 'rig', 'empty', 'offline', 'disabled'):
+                for node in ('compute', 'rig', 'empty', 'offline', 'disabled'):
                     playwright.expect(page.locator(f'.measurement-node[data-node="{node}"]')).to_be_visible()
         page.set_viewport_size({'width': 1440, 'height': 1000})
-        page.locator('[data-matrix-search]').fill('matrix-model-00')
-        playwright.expect(page.locator('[data-measurement-row]:visible')).to_have_count(1)
-        cells = page.locator('[data-measurement-row]:visible td')
-        playwright.expect(cells.nth(1).locator('[data-matrix-values]').first).to_have_text('2')
-        playwright.expect(cells.nth(2).locator('[data-matrix-values]').first).to_have_text('8')
+        playwright.expect(page.locator('[data-measurement-row]:visible')).to_have_count(count)
+        playwright.expect(page.locator('#node-total')).to_have_text('5')
+        playwright.expect(page.locator('[data-matrix-search], [data-matrix-filter], [data-matrix-sort]')).to_have_count(0)
+        playwright.expect(page.locator('.measurement-node[data-node="front"]')).to_have_count(0)
+        assert page.locator('#measurement-nodes').bounding_box()['y'] + page.locator('#measurement-nodes').bounding_box()['height'] <= page.locator('nav[aria-label="Model type"]').bounding_box()['y']
+        assert all(text not in page.locator('#node-measurements').inner_text() for text in ('All nodes', 'Every configured node.', 'FLEET / ONE TEST, EVERY NODE', 'One row per model.'))
+        assert not page.evaluate('new URL(location.href).searchParams.has("q")')
+        cells = page.locator(f'[data-measurement-row][data-model="{name}"] td')
+        playwright.expect(cells.nth(0).locator('[data-matrix-values]').first).to_have_text('2')
+        playwright.expect(cells.nth(1).locator('[data-matrix-values]').first).to_have_text('8')
         page.locator('[data-matrix-display]').select_option('scores')
-        playwright.expect(cells.nth(1).locator('[data-matrix-scores]').first).to_have_text('0.5')
-        playwright.expect(cells.nth(2).locator('[data-matrix-scores]').first).to_have_text('0.125')
+        playwright.expect(cells.nth(0).locator('[data-matrix-scores]').first).to_have_text('0.5')
+        playwright.expect(cells.nth(1).locator('[data-matrix-scores]').first).to_have_text('0.125')
         page.reload()
-        playwright.expect(page.locator('[data-matrix-search]')).to_have_value('matrix-model-00')
         playwright.expect(page.locator('[data-matrix-display]')).to_have_value('scores')
         page.get_by_role('link', name='Context', exact=True).click()
-        playwright.expect(page.locator('[data-matrix-search]')).to_have_value('matrix-model-00')
         playwright.expect(page.locator('[data-matrix-display]')).to_have_value('scores')
         page.get_by_role('link', name='Load time', exact=True).click()
-        playwright.expect(page.locator('[data-measurement-row]:visible')).to_have_count(1)
-        page.locator('[data-matrix-search]').fill('no matching model')
-        playwright.expect(page.locator('[data-matrix-empty]')).to_be_visible()
-        page.locator('[data-matrix-search]').fill('')
-        page.locator('[data-matrix-filter]').select_option('failed')
-        playwright.expect(page.locator('[data-measurement-row]:visible')).to_have_count(1)
-        page.locator('[data-matrix-filter]').select_option('stale')
-        playwright.expect(page.locator('[data-measurement-row]:visible')).to_have_count(1)
-        page.locator('[data-matrix-filter]').select_option('all')
-        page.locator('[data-matrix-sort]').select_option('node-2')
-        playwright.expect(page.locator('#measurement-column-2')).to_have_attribute('aria-sort', 'descending')
+        playwright.expect(page.locator('[data-measurement-row]:visible')).to_have_count(count)
+        page.locator('[data-matrix-column="1"]').click()
+        playwright.expect(page.locator('#measurement-column-1')).to_have_attribute('aria-sort', 'descending')
         page.locator('.measurement-node[data-node="disabled"]').click()
-        playwright.expect(page.locator('#measurement-column-5 button')).to_be_focused()
+        playwright.expect(page.locator('#measurement-column-4 button')).to_be_focused()
         # Headers stay fixed while browsing the full model inventory.
         page.locator('.measurement-table-scroll').evaluate('(el) => { el.scrollTop = 200; el.scrollLeft = 250; }')
         assert page.locator('thead').evaluate('(el) => getComputedStyle(el).position') == 'sticky'

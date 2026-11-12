@@ -145,7 +145,7 @@ def run_model_rows(nodes):
 
 
 def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs, location_latest):
-    """Build a caller-scoped fleet matrix without borrowing evidence from another node."""
+    """Build a caller-scoped compute-node matrix with location-specific evidence."""
     import math
     from benchmarks.eligibility import compatible
 
@@ -161,7 +161,9 @@ def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs,
             return f'{value:.6g}'
         return f'{value:,.2f}'.rstrip('0').rstrip('.') if abs(value) >= .01 else f'{value:.4g}'
 
-    nodes = run_lanes(catalogue, inventory, models, selected, runs, location_latest, {}, False)
+    # Run studio includes front's host; measurements require an inference service.
+    nodes = [node for node in run_lanes(catalogue, inventory, models, selected, runs, location_latest, {}, False)
+             if node['service']]
     reports = {node['name']: node for node in inventory.get('machines', [])}
     labels = {'ready': 'Ready', 'unknown': 'Status unknown', 'unavailable': 'Unreachable',
               'disabled': 'Disabled', 'front': 'Front host'}

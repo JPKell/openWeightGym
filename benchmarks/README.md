@@ -542,21 +542,24 @@ not model quality. Production benchmark evidence and model rankings were not cha
 |---|---|
 | `/benchmarks` | Redirects to Runs; older saved links containing a model/run still redirect to Results |
 | `/benchmarks/results` | LLM, Image and Audio pills filter saved model results; language quality scores and selected benchmark measurements |
-| `/benchmarks/node-measurements` | Fleet matrix for LLM, Embedders, Image and Audio; every configured node, with measured values or benchmark scores |
+| `/benchmarks/node-measurements` | Fleet matrix for LLM, Embedders, Image and Audio; compute nodes only, with measured values or benchmark scores |
 | `/benchmarks/embedders` | Embedding Context, Speed and Load time pills with compute nodes as columns |
 | `/benchmarks/runs` | Active run at the top, model selection, queue controls, logs, measurements and history; polls every two seconds |
 | `/benchmarks/compare` | Compare multiple models and saved fingerprint/engine/machine identities across multiple benchmarks |
 | `/benchmarks/manage` | Enable benchmarks, edit score formulas and select higher/lower values for green |
 
 Overview and its template/polling branch have been removed. Runs is the first benchmark page.
-**Node measurements** uses Fleet matrix: every configured node stays visible, including empty,
-disabled and unreachable nodes and front's host. Rows use only the caller's authorized catalogue;
+**Node measurements** uses Fleet matrix: compute nodes stay visible, including empty, disabled
+and unreachable services. Front's host is excluded unless it also runs a compute service.
+Rows use only the caller's authorized catalogue;
 saved evidence never moves between nodes. The LLM and Embedders pills offer their own Context,
 Speed and Load time tests; Image/Audio offer load-time evidence. Measured values are the default;
 Benchmark scores uses the saved formula and its configured higher/lower direction. Best-current
-cells are highlighted per model, excluding changed settings and rerun recommendations. Search,
-evidence filters, display and ordering survive reloads and test/type switches in the URL. Headers
-and model names stay pinned inside a bounded scrolling table for 15–30-model inventories.
+cells are highlighted per model, excluding changed settings and rerun recommendations. Model-type
+pills sit below the node cards; all authorized models remain visible without search or evidence/order
+filters. Value/score display survives reloads and test/type switches in the URL. Column headers sort
+current measurements best first. Headers and model names stay pinned inside a bounded scrolling
+table for 15–30-model inventories.
 Node summaries show current-test coverage; selecting one focuses its column. Missing tests,
 failed attempts, unavailable inventory and absence are distinct; none is treated as zero.
 Saved values link to the existing run details. Without JavaScript the complete table remains visible.
