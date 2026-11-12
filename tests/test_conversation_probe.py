@@ -28,8 +28,13 @@ def models(**flags):
 @pytest.mark.parametrize('field',['evaluation','dialogue'])
 @pytest.mark.parametrize('tools',[False,True])
 @pytest.mark.parametrize('format',[None,{'type':'json_object'},SCHEMA])
-def test_native_conversation_preserves_history_calls_reasoning_and_receipts(fake_llama_server,fake_cards,field,tools,format):
-    with gateway(fake_llama_server,models=models(),nvidia_smi=fake_cards[0]) as client:
+@pytest.mark.parametrize('cpu',[False,True])
+def test_native_conversation_preserves_history_calls_reasoning_and_receipts(fake_llama_server,fake_cards,field,tools,format,cpu):
+    settings=models(**({'gpu-layers':0} if cpu else {}))
+    if cpu:
+        settings['small']['gpus']=0
+        settings['small']['flags'].pop('mib')  # the fake engine's GPU-allocation flag
+    with gateway(fake_llama_server,models=settings,nvidia_smi=fake_cards[0]) as client:
         owner=add_user(client,'owner','admin');task=create(client,owner)
         spec={'messages':copy.deepcopy(MESSAGES)}
         if tools:
@@ -45,6 +50,9 @@ def test_native_conversation_preserves_history_calls_reasoning_and_receipts(fake
         assert json.loads(evidence['prompt'])=={'messages':MESSAGES,'tools':[TOOL] if tools else []}
         assert evidence['native_dialogue'] and evidence['native_tools']==tools
         assert evidence['response_format']==format and evidence['native_timings']['cache_n']==0
+        if cpu:
+            assert values['device']=='cpu' and values['cards']==[] and values['peak_gpu_mib'] is None
+            assert values['peak_ram_mib']>=values['rss_mib']>0
         message=evidence['native_message']
         assert message['reasoning_content']=='private reasoning'
         if tools:

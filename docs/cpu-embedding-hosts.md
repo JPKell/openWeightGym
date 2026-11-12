@@ -151,8 +151,9 @@ the installed workers, unit ceilings, SQLite bindings and sleep policy were pres
 
 An eligible `gpus = 0`, `embedding = true` model can run generic Load and
 embedding Context, Load and Speed through the existing signed task token, probe
-lock and native child lifecycle. CPU text generation and quality probes remain
-unsupported. Embedding requests retain complete native input counts, a finite
+lock and native child lifecycle. CPU text models also support Load, Context, Speed
+and native generation/quality probes through that path, with the same RAM admission,
+measurement and interruption checks. Embedding requests retain complete native input counts, a finite
 pooled vector and its receipt; load-only probes do not claim a vector. Each CPU
 sample reports `device = cpu`, final process-and-children `rss_mib`, sampled
 `peak_ram_mib`, empty `cards` and null `peak_gpu_mib`. The RAM values also appear
@@ -203,7 +204,6 @@ model/protocol/server/engine/machine and per-location evidence; these fixture
 checks are separate from the live fresh-result check.
 [Deployment and queue receipts](../data/qualification/gates-2026-10-16/g18-runtime-deployment.json).
 G18 and milestones 130/135 are complete for the eligible three-node workload.
-CPU text generation and quality probes remain unsupported.
 
 During qualification, front-owned queued benchmarks did not appear in the compute
 Spotter's direct queue counts. Preserve its configured sleep policy: interleave

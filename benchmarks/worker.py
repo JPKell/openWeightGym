@@ -199,7 +199,8 @@ class BenchmarkWorker:
         values = dict(result['values'], repetition=repeat + 1)
         if not values['success'] and not capacity_is_result:
             raise ValueError(values.get('error', 'The measurement could not finish.'))
-        self.store.keep(number, sample, values, result['output'], result['log'], result.get('evidence') if embedding else None)
+        self.store.keep(number, sample, values, result['output'], result['log'],
+                        result.get('evidence') if embedding or values.get('device') == 'cpu' else None)
         self.store.message(number, f'{sample}: ' + ('completed.' if values['success'] else 'does not fit.'))
 
     async def evaluate(self, number, case, grade):

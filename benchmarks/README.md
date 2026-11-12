@@ -190,8 +190,10 @@ after model loading and includes prompt processing; request time also includes g
 
 Context tests resource fit and successful generation; it does not test long-document
 comprehension. Load time uses fresh processes but does not flush the operating system's file
-cache. Current probes support local GPU models through native `llama-server`, require full
-GPU layer offload and do not update ordinary model memory calibration.
+cache. Native `llama-server` probes support configured CPU text models for Load, Context,
+Speed and quality tests, using the same RAM admission, measured resource receipts and
+foreground interruption as CPU embedders. GPU probes still require full GPU layer offload
+and do not update ordinary GPU model memory calibration.
 
 ### Embedder resource suites (milestone 87)
 

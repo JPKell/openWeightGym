@@ -11234,9 +11234,7 @@ See [the installation guide](operations.md#db1-ownership-and-retirement-mileston
 
 ## CPU embedding probes and measured RAM (G18)
 
-The existing isolated-probe path supports CPU embedders for generic Load and
-embedding Context, Load and Speed. CPU text generation and quality probes remain
-unsupported. Eligible three-node resource and fresh-result queue qualification is complete. See
+The existing isolated-probe path supports CPU text models and embedders. See
 [CPU embedding hosts](cpu-embedding-hosts.md#native-cpu-resource-benchmarks-g18)
 for the deployed RAM admission and timeout behavior, receipts and operating limits.
 

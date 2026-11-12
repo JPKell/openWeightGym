@@ -61,19 +61,10 @@ def test_cpu_embedding_probes_keep_native_and_ram_evidence_without_gpu_telemetry
         assert status['lock'] is None and status['loaded']==[]
 
 
-def test_cpu_generation_subject_remains_unsupported(fake_llama_server):
-    settings={'text':model('text.gguf',0,**{'ctx-size':512,'gpu-layers':0})}
-    gguf('text.gguf',general__architecture='tiny',tiny__context_length=512)
-    with gateway(fake_llama_server,models=settings) as caller:
-        owner=add_user(caller,'owner','admin')
-        response=caller.post('/benchmarks',headers=owner,json={'benchmark':'load','models':['text']})
-        assert response.status_code == 400
-        assert 'CPU probes require an embedding model' in response.text
-
-
-def test_cpu_probe_refuses_insufficient_host_ram_before_start(fake_llama_server):
+@pytest.mark.parametrize('embedding', [False, True])
+def test_cpu_probe_refuses_insufficient_host_ram_before_start(fake_llama_server,embedding):
     gguf('vectors.gguf',general__architecture='tiny',tiny__context_length=512)
-    settings=model('vectors.gguf',0,**{'ctx-size':512,'gpu-layers':0,'embedding':True})
+    settings=model('vectors.gguf',0,**{'ctx-size':512,'gpu-layers':0,'embedding':embedding})
     library=Models(':memory:',first={'vectors':settings})
     file=Path('vectors.gguf')
     library.keep_hash(str(file),hashlib.sha256(file.read_bytes()).hexdigest(),file.stat().st_size,file.stat().st_mtime)
@@ -85,7 +76,7 @@ def test_cpu_probe_refuses_insufficient_host_ram_before_start(fake_llama_server)
             runner.host_memory=lambda:{'free':0}
             task={'id':'trial','model':'vectors','model_id':subject['model_id'],'subject':subject,'fingerprint':mark}
             with pytest.raises(Refusal) as refusal:
-                await probes.sample(task,{'context':512,'inputs':0,'outputs':0,'warmup_outputs':0,'embedding':True})
+                await probes.sample(task,{'context':512,'inputs':0,'outputs':0,'warmup_outputs':0,'embedding':embedding})
             assert refusal.value.status==503 and not runner.servers
     asyncio.run(check())
 
