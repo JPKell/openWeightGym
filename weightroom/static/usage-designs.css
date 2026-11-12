@@ -23,9 +23,6 @@
 
 /* 02 · Analyst figures as tiles. */
 .usage-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
-.usage-tile { position: relative; margin: 0 !important; overflow: hidden; }
-.usage-tile::before { content: ""; position: absolute; inset: 0 auto 0 0; inline-size: 3px; background: var(--usage-color, var(--usage-input)); }
-.usage-tile > .card-body { padding: 1rem 1.1rem; }
 
 /* 03 · Spend console. */
 .usage-drawer:not([open]) > summary { border-bottom: 0; }
@@ -43,7 +40,7 @@
 .usage-tile-chart { grid-column: span 8; }
 .usage-tile-leaders { grid-column: span 4; }
 .usage-tile-table, .usage-tile-daily { grid-column: 1 / -1; }
-.usage-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+
 .usage-assumptions-inline { padding-top: 1rem; border-top: 1px solid var(--tblr-border-color); }
 .usage-outcome { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; gap: .5rem; align-items: center; padding: .2rem 0; font-size: .8125rem; }
 .usage-outcome-name { text-transform: capitalize; }
@@ -66,15 +63,11 @@
 
 /* Narrower screens: fewer tiles, the bento in one or two columns. */
 @media (max-width: 1199.98px) {
-  .usage-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
   .usage-tile-spend, .usage-tile-chart, .usage-tile-leaders { grid-column: 1 / -1; }
   .usage-tile-tokens, .usage-tile-requests { grid-column: span 6; }
 }
 @media (max-width: 767.98px) {
   :is(.usage-toolbar-grid, .usage-drawer-grid) > :is([data-usage-field="dates"], [data-usage-field="people"]) { grid-column: auto; }
   .usage-tile-tokens, .usage-tile-requests { grid-column: 1 / -1; }
-}
-@media (max-width: 479.98px) {
-  .usage-tiles { grid-template-columns: minmax(0, 1fr); }
-  .usage-pair { grid-template-columns: minmax(0, 1fr); }
 }

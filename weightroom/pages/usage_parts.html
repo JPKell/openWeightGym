@@ -4,6 +4,7 @@
 {% from "parts.html" import card, empty_row, section_title %}
 {% from "filter_parts.html" import users_groups %}
 {% from "navigation_parts.html" import pills, pill_button %}
+{% from 'kpi_parts.html' import kpi_row, kpi, kpi_value %}
 
 {% macro money(value) %}<span title="{{ '$%.6f'|format(value) }} USD">${{ '{:,.4f}'.format(value) }}</span>{% endmacro %}
 
@@ -13,7 +14,7 @@
                         ('effective_cost', 'Total cost USD'), ('missing_usage', 'Missing counts')] %}
 
 {# One total of the report, kept current by usage.js through `data-usage-total` when the mock rates change. #}
-{% macro usage_total(report, key, class_='fs-3') %}{% if key.endswith('_cost') %}<strong class="{{ class_ }}" data-usage-total="{{ key }}">{{ money(report.totals[key]) }}</strong>{% else %}<strong class="{{ class_ }}" title="{{ '{:,}'.format(report.totals[key]) }}" data-usage-total="{{ key }}">{{ report.totals[key]|count }}</strong>{% endif %}{% endmacro %}
+{% macro usage_total(report, key, class_='') %}{% if key.endswith('_cost') %}{{ kpi_value(money(report.totals[key]), class_, attrs={'data-usage-total':key}) }}{% else %}{{ kpi_value(report.totals[key]|count, class_, attrs={'title':'{:,}'.format(report.totals[key]), 'data-usage-total':key}) }}{% endif %}{% endmacro %}
 
 {% macro usage_range(report) %}{{ report.start }} – {{ report.end }} · {{ report.timezone }}{% endmacro %}
 
@@ -106,39 +107,33 @@
 {% set usage_cost_sources = [('recorded_cost', 'Recorded cost', 'recorded'), ('model_cost', 'Model-rate estimate', 'model'), ('fallback_cost', 'Mock fallback', 'fallback')] %}
 
 {% macro usage_token_band(report) %}
-{% call card('', class_='usage-band', attrs={'aria-label': 'Token totals'}, body=false) %}
-  <div class="usage-band-grid">
+{% call kpi_row('Token totals', class_='usage-band usage-band-grid mb-3') %}
   {% for key, label in usage_token_figures %}
-    <div class="usage-band-cell" data-figure="{{ key }}">
-      <div class="usage-label">{{ label }}</div>{{ usage_total(report, key, 'usage-value') }}
+    {% call kpi(label, class_='usage-band-cell', attrs={'data-figure':key}, value_html=usage_total(report, key, 'usage-value')) %}
       <div class="usage-sub" data-derived="{{ key }}"></div>
       <svg class="usage-spark" data-spark="{{ key }}" viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true"></svg>
-    </div>
+    {% endcall %}
   {% endfor %}
-  </div>
 {% endcall %}
 {% endmacro %}
 
 {# The total cost, the share each source gives it, and (with `rates`) the mock rates that price the rest. #}
 {% macro usage_cost_band(report, rates=true) %}
-{% call card('', class_='usage-cost-band', attrs={'aria-label': 'Cost totals'}, body_class='usage-cost-grid') %}
-    <div class="usage-cost-hero">
-      <div class="usage-label">Total cost / estimate · USD</div>{{ usage_total(report, 'effective_cost', 'usage-value usage-value-lg') }}
+{% call kpi_row('Cost totals', class_='usage-cost-band mb-3') %}
+    {% call kpi('Total cost / estimate · USD', class_='usage-cost-hero', attrs={'data-source':'effective'}, value_html=usage_total(report, 'effective_cost', 'usage-value')) %}
       <div class="usage-composition mt-3" data-composition role="img" aria-label="Share of the total from each cost source"></div>
-    </div>
-    <dl class="usage-sources mb-0">
+    {% endcall %}
     {% for key, label, source in usage_cost_sources %}
-      <div class="usage-source" data-source="{{ source }}"><dt><i class="usage-swatch" aria-hidden="true"></i>{{ label }} · USD</dt><dd>{{ usage_total(report, key, 'usage-source-value') }}<small class="text-secondary" data-share="{{ key }}"></small></dd></div>
+      {{ kpi(label ~ ' · USD', attrs={'data-source':source}, value_html=usage_total(report, key, 'usage-value'), note_attrs={'data-share':key}) }}
     {% endfor %}
-    </dl>
+{% endcall %}
     {% if rates %}
-    <fieldset class="usage-assumptions">
+    <fieldset class="usage-assumptions border rounded p-3 mb-3">
       <legend class="usage-label">Pricing assumptions</legend>
       <div class="row g-2 align-items-end">{{ usage_rates(report, 'col-6') }}</div>
       <p class="small text-secondary mb-0 mt-2">Prices requests with no recorded cost or model rate.</p>
     </fieldset>
     {% endif %}
-{% endcall %}
 {% endmacro %}
 
 {# The filter form as a rail beside the report: the range it shows, how many filters are on, every field, then Apply.

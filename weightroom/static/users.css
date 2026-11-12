@@ -30,8 +30,7 @@
 .users-workspace [hidden] { display: none !important; }
 .users-workspace .page-header { margin-bottom: .75rem !important; }
 .users-workspace .page-actions { align-items: center; }
-.users-summary { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.5rem; }
-.users-summary > span { display: inline-flex; align-items: baseline; gap: .3rem; }
+
 .users-summary-attention strong { color: var(--bs-warning-text-emphasis); }
 .users-summary .btn-link { font-size: inherit; }
 .users-add { border-color: var(--suite-accent); }
@@ -74,9 +73,7 @@
 .users-workspace .form-hint, .users-workspace .more { font-size: .75rem; }
 .users-workspace .table { font-size: .75rem; }
 .users-workspace .section-heading { margin-bottom: .5rem !important; }
-.account-figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
-.account-figures > div { min-width: 0; }
-.account-figures .usage-sub { font-size: .72rem; }
+
 .account-days { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .75rem; }
 .account-days .form-control { inline-size: 5.5rem; }
 .account-trend { display: grid; gap: .75rem; margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--bs-border-color); }
@@ -113,7 +110,7 @@
 @media (max-width: 1250px) {
   .account-panels { grid-template-columns: minmax(0, 1fr); grid-template-areas: "activity" "access" "keys" "permissions" "limits" "save"; }
   .group-panels { grid-template-areas: "activity" "members" "permissions" "limits" "models" "save"; }
-  .account-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 }
 @media (max-width: 767px) {
   .users-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; }

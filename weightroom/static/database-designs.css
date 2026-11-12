@@ -1,6 +1,6 @@
 /* Standalone DB review; console palette and component tokens remain authoritative. */
 .db-design-page { max-width: 1600px; margin: auto; padding: 1.5rem var(--suite-page-gutter); }
-.review-bar, .snapshot-bar { background: var(--bs-body-bg); }
+.review-bar { background: var(--bs-body-bg); }
 .db-design-page .page-header { margin-bottom: 1rem !important; }
 .db-filters #search { min-width: 12rem; width: auto; }
 .db-inventory { min-width: 1120px; font-variant-numeric: tabular-nums; }

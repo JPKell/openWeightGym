@@ -1,4 +1,5 @@
 {% from 'parts.html' import card, swaps, section_title %}
+{% from 'kpi_parts.html' import kpi %}
 
 {% macro host_header(hostname, reading, up_for=none) %}
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 border-bottom">
@@ -28,7 +29,7 @@
 
 {% macro meter(label, value, maximum=100, unit='load', note='') %}
 {% set percent = ([0, [100, 100 * value / maximum]|min]|max) if value is not none and maximum else none %}
-<div class="tw-total"><span class="small text-secondary text-nowrap">{{ label }}{% if note %} {{ note }}{% endif %}</span><strong class="text-nowrap">{{ amount(value, unit) }}</strong><div class="progress progress-sm" role="progressbar" aria-label="{{ label }}" aria-valuemin="0" aria-valuemax="100"{% if percent is not none %} aria-valuenow="{{ percent|round|int }}"{% endif %} aria-valuetext="{{ amount(value, unit) }}"><div class="progress-bar" style="width: {{ percent or 0 }}%;{% if percent is not none %} background-color: hsl({{ (120 - 1.2 * percent)|round|int }} 60% 42%);{% endif %}"></div></div></div>
+{% call kpi(label ~ (' ' ~ note if note else ''), amount(value, unit), class_='tw-total') %}<div class="progress progress-sm" role="progressbar" aria-label="{{ label }}" aria-valuemin="0" aria-valuemax="100"{% if percent is not none %} aria-valuenow="{{ percent|round|int }}"{% endif %} aria-valuetext="{{ amount(value, unit) }}"><div class="progress-bar" style="width: {{ percent or 0 }}%;{% if percent is not none %} background-color: hsl({{ (120 - 1.2 * percent)|round|int }} 60% 42%);{% endif %}"></div></div>{% endcall %}
 {% endmacro %}
 
 {% macro gpu_table(host, selected=false) %}

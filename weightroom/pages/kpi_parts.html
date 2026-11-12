@@ -1,0 +1,17 @@
+{# Shared KPI presentation. Callers retain their own formatting, IDs and update hooks. #}
+{% macro kpi_value(value='', class_='', attrs={}) -%}
+<strong class="kpi-value{{ ' ' ~ class_ if class_ }}"{{ attrs|xmlattr }}>{{ value if value is not none else '—' }}</strong>
+{%- endmacro %}
+
+{% macro kpi(label='', value='', note='', class_='', attrs={}, value_attrs={}, label_attrs={}, note_attrs={}, value_html=none) %}
+<div class="kpi{{ ' ' ~ class_ if class_ }}"{{ attrs|xmlattr }}>
+  <span class="kpi-label small text-secondary"{{ label_attrs|xmlattr }}>{{ label }}</span>
+  {% if value_html is not none %}{{ value_html }}{% else %}{{ kpi_value(value, attrs=value_attrs) }}{% endif %}
+  {% if note or note_attrs %}<small class="kpi-note text-secondary"{{ note_attrs|xmlattr }}>{{ note }}</small>{% endif %}
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}
+
+{% macro kpi_row(label='', class_='mb-3', attrs={}) %}
+<div class="kpi-row{{ ' ' ~ class_ if class_ }}"{% if label %} aria-label="{{ label }}"{% endif %}{{ attrs|xmlattr }}>{{ caller() }}</div>
+{% endmacro %}

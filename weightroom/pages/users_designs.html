@@ -3,6 +3,7 @@
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'user_design_parts.html' import user_choice, user_row, group_lane, user_card, ability_category, ability_row, key_row, model_choice, secret_row %}
 {% from 'user_parts.html' import account_avatar, account_status %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
 <!doctype html>
 <html lang="en" data-bs-theme="light" data-site-theme="slate">
 <head>
@@ -33,13 +34,13 @@
     <button type="button" class="btn btn-primary" id="add-account" aria-expanded="false" aria-controls="add-panel">+ Add account</button>
   {% endcall %}
 
-  <div class="user-kpis" aria-label="Accounts summary">
-    <div><span class="usage-label">Accounts</span><strong id="kpi-accounts"></strong><small class="text-secondary" id="kpi-accounts-sub"></small></div>
-    <div><span class="usage-label">Signed in now</span><strong id="kpi-sessions"></strong><small class="text-secondary">browser sessions</small></div>
-    <div><span class="usage-label">API keys</span><strong id="kpi-keys"></strong><small class="text-secondary" id="kpi-keys-sub"></small></div>
-    <div><span class="usage-label">Requests · 7 days</span><strong id="kpi-requests"></strong><small class="text-secondary">all accounts</small></div>
-    <div class="kpi-attention"><span class="usage-label">Needs attention</span><strong id="kpi-attention"></strong><button type="button" class="btn btn-link btn-sm p-0" id="show-attention">Show them</button></div>
-  </div>
+  {% call kpi_row('Accounts summary', class_='user-kpis mb-3') %}
+    {{ kpi('Accounts', value_attrs={'id':'kpi-accounts'}, note_attrs={'id':'kpi-accounts-sub'}) }}
+    {{ kpi('Signed in now', note='browser sessions', value_attrs={'id':'kpi-sessions'}) }}
+    {{ kpi('API keys', value_attrs={'id':'kpi-keys'}, note_attrs={'id':'kpi-keys-sub'}) }}
+    {{ kpi('Requests · 7 days', note='all accounts', value_attrs={'id':'kpi-requests'}) }}
+    {% call kpi('Needs attention', class_='kpi-attention', value_attrs={'id':'kpi-attention'}) %}<button type="button" class="btn btn-link btn-sm p-0" id="show-attention">Show them</button>{% endcall %}
+  {% endcall %}
 
   {% set add_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" id="close-add">Close</button>{% endset %}
   {% call card('Add an account', id='add-panel', actions=add_actions, attrs={'hidden': ''}, class_='add-panel', hint='For a person, or for a program that needs a key of its own. What it may do comes from its group.') %}
@@ -94,12 +95,12 @@
       <form id="user-editor" aria-label="Account settings" data-hold-refresh novalidate>
         <div class="user-panels">
           {% call card('Activity', id='activity-panel', class_='user-panel', hint='Requests by this account. The full report is on Usage.', attrs={'data-panel': 'activity'}) %}
-            <div class="activity-figures">
-              <div data-figure="requests"><span class="usage-label">Last 24 hours</span><strong class="usage-value usage-value-sm" id="usage-day"></strong><span class="usage-sub">requests</span></div>
-              <div data-figure="requests"><span class="usage-label">Last 7 days</span><strong class="usage-value usage-value-sm" id="usage-week"></strong><span class="usage-sub" id="usage-week-trend"></span></div>
-              <div data-figure="input_tokens"><span class="usage-label">Tokens · 28 days</span><strong class="usage-value usage-value-sm" id="usage-tokens"></strong><span class="usage-sub" id="usage-tokens-split"></span></div>
-              <div data-figure="output_tokens"><span class="usage-label">Spend · 24 hours</span><strong class="usage-value usage-value-sm" id="usage-spend"></strong><span class="usage-sub" id="usage-allowance"></span><div class="usage-composition usage-composition-thin mt-2" id="allowance-bar" aria-hidden="true"><span class="usage-segment" data-source="recorded"></span></div></div>
-            </div>
+            {% call kpi_row('Account activity', class_='activity-figures') %}
+              {{ kpi('Last 24 hours', note='requests', attrs={'data-figure':'requests'}, value_attrs={'id':'usage-day'}) }}
+              {{ kpi('Last 7 days', attrs={'data-figure':'requests'}, value_attrs={'id':'usage-week'}, note_attrs={'id':'usage-week-trend'}) }}
+              {{ kpi('Tokens · 28 days', attrs={'data-figure':'input_tokens'}, value_attrs={'id':'usage-tokens'}, note_attrs={'id':'usage-tokens-split'}) }}
+              {% call kpi('Spend · 24 hours', attrs={'data-figure':'output_tokens'}, value_attrs={'id':'usage-spend'}, note_attrs={'id':'usage-allowance'}) %}<div class="usage-composition usage-composition-thin mt-2" id="allowance-bar" aria-hidden="true"><span class="usage-segment" data-source="recorded"></span></div>{% endcall %}
+            {% endcall %}
             <div data-figure="requests"><svg class="usage-spark usage-spark-wide" id="usage-spark" viewBox="0 0 120 32" preserveAspectRatio="none" role="img" aria-label="Requests per day over 28 days"></svg></div>
             <div class="d-flex flex-wrap justify-content-between gap-2 small mt-2"><span class="text-secondary" id="usage-range">28 days · retained log</span><span class="d-flex gap-3"><a href="#usage" data-inert>Open in Usage</a><a href="#log" data-inert>Event log</a></span></div>
           {% endcall %}

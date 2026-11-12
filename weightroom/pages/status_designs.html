@@ -23,9 +23,10 @@
 </div>
 <div id="sd-workspace" data-design="focus">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">{{ page_header('Status', pretitle='SYSTEM / OPERATIONS') }}<span class="small text-secondary">Sample snapshot · no live connection</span></div>
-  <div class="sd-kpis mb-3" aria-label="Fleet request totals">
-    {% for key, title, hint in [('running','Processing','Active requests'),('queued','In queue','Waiting to start'),('five','Last 5 min','Requests received'),('fifteen','Last 15 min','Requests received'),('sixty','Last 60 min','Requests received')] %}<div><span class="small text-secondary">{{ title }}</span><strong data-kpi="{{ key }}">—</strong><small class="text-secondary">{{ hint }}</small></div>{% endfor %}
-  </div>
+  {% from 'kpi_parts.html' import kpi_row, kpi %}
+  {% call kpi_row('Fleet request totals', class_='sd-kpis mb-3') %}
+    {% for key, title, hint in [('running','Processing','Active requests'),('queued','In queue','Waiting to start'),('five','Last 5 min','Requests received'),('fifteen','Last 15 min','Requests received'),('sixty','Last 60 min','Requests received')] %}{{ kpi(title, '—', hint, value_attrs={'data-kpi':key}) }}{% endfor %}
+  {% endcall %}
   <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
     <input id="search" type="search" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Find a request, model, user or node…" aria-label="Find requests and nodes">
     <label for="control-scope" class="small text-secondary">Control</label><select id="control-scope" class="form-select form-select-sm w-auto" aria-label="Control scope"></select>

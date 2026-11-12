@@ -3,6 +3,7 @@
    links, and the live static/usage.js draws its chart. Rendered with scripts/preview-usage-designs.py. #}
 {% from 'parts.html' import page_header, card, section_title, empty_row %}
 {% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
 {% from 'usage_parts.html' import usage_total, usage_range, usage_filter_fields, usage_filter_actions, usage_filter_hidden, usage_rates,
    usage_token_figures as token_figures, usage_cost_sources as cost_sources, usage_token_band, usage_cost_band, usage_filter_rail, usage_no_requests as no_requests,
    usage_chart_card as chart_card, usage_breakdown_card as breakdown_card, usage_daily_card as daily_card, usage_notes_card as notes_card, usage_data %}
@@ -38,24 +39,21 @@
   {{ usage_filter_rail(report, rates=true) }}
   <div class="usage-main">
     {{ no_requests(report) }}
-    <div class="usage-tiles mb-3" aria-label="Usage totals">
+    {% call kpi_row('Usage totals', class_='usage-tiles mb-3') %}
     {% for key, label in token_figures %}
-      {% call card('', class_='usage-tile', attrs={'data-figure': key}) %}
-        <div class="usage-label">{{ label }}</div>{{ usage_total(report, key, 'usage-value') }}
+      {% call kpi(label, class_='usage-tile', attrs={'data-figure':key}, value_html=usage_total(report, key, 'usage-value')) %}
         <div class="usage-sub" data-derived="{{ key }}"></div>
       {% endcall %}
     {% endfor %}
-    {% call card('', class_='usage-tile', attrs={'data-source': 'effective'}) %}
-      <div class="usage-label">Total cost / estimate · USD</div>{{ usage_total(report, 'effective_cost', 'usage-value') }}
+    {% call kpi('Total cost / estimate · USD', class_='usage-tile', attrs={'data-source':'effective'}, value_html=usage_total(report, 'effective_cost', 'usage-value')) %}
       <div class="usage-composition usage-composition-thin mt-2" data-composition role="img" aria-label="Share of the total from each cost source"></div>
     {% endcall %}
     {% for key, label, source in cost_sources %}
-      {% call card('', class_='usage-tile', attrs={'data-source': source}) %}
-        <div class="usage-label"><i class="usage-swatch" aria-hidden="true"></i>{{ label }} · USD</div>{{ usage_total(report, key, 'usage-value usage-value-sm') }}
+      {% call kpi(label ~ ' · USD', class_='usage-tile', attrs={'data-source':source}, value_html=usage_total(report, key, 'usage-value')) %}
         <div class="usage-sub" data-share="{{ key }}"></div>
       {% endcall %}
     {% endfor %}
-    </div>
+    {% endcall %}
     {{ chart_card('mb-3') }}
     {{ breakdown_card(report, 'mb-3') }}
     {{ daily_card(report) }}
@@ -78,7 +76,7 @@
 {{ no_requests(report) }}
 <div class="usage-bento">
   {% call card('', class_='usage-tile-spend', attrs={'aria-label': 'Cost'}) %}
-    <div class="usage-label">Total cost / estimate · USD</div>{{ usage_total(report, 'effective_cost', 'usage-value usage-value-xl') }}
+    {{ kpi('Total cost / estimate · USD', value_html=usage_total(report, 'effective_cost', 'usage-value')) }}
     <div class="usage-composition usage-composition-tall my-3" data-composition role="img" aria-label="Share of the total from each cost source"></div>
     <dl class="usage-sources usage-sources-rows mb-3">
     {% for key, label, source in cost_sources %}
@@ -88,16 +86,15 @@
     <div class="usage-assumptions-inline"><span class="usage-label">Pricing assumptions</span><div class="row g-2 align-items-end">{{ usage_rates(report, 'col-6') }}</div></div>
   {% endcall %}
   {% call card('', class_='usage-tile-tokens', attrs={'aria-label': 'Tokens'}) %}
-    <div class="usage-label">Total tokens</div>{{ usage_total(report, 'total_tokens', 'usage-value usage-value-lg') }}
+    {{ kpi('Total tokens', value_html=usage_total(report, 'total_tokens', 'usage-value')) }}
     <div class="usage-split my-3" data-split role="img" aria-label="Input and output share of all tokens"></div>
-    <div class="usage-pair">
-      <div data-figure="input_tokens"><div class="usage-label"><i class="usage-swatch" data-side="input" aria-hidden="true"></i>Input tokens</div>{{ usage_total(report, 'input_tokens', 'usage-value usage-value-sm') }}<div class="usage-sub" data-derived="input_tokens"></div></div>
-      <div data-figure="output_tokens"><div class="usage-label"><i class="usage-swatch" data-side="output" aria-hidden="true"></i>Output tokens</div>{{ usage_total(report, 'output_tokens', 'usage-value usage-value-sm') }}<div class="usage-sub" data-derived="output_tokens"></div></div>
-    </div>
+    {% call kpi_row('Token split', class_='usage-pair') %}
+      {% for key,label in [('input_tokens','Input tokens'),('output_tokens','Output tokens')] %}{% call kpi(label, attrs={'data-figure':key}, value_html=usage_total(report, key, 'usage-value')) %}<div class="usage-sub" data-derived="{{ key }}"></div>{% endcall %}{% endfor %}
+    {% endcall %}
     <svg class="usage-spark usage-spark-wide mt-3" data-spark="total_tokens" viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true"></svg>
   {% endcall %}
   {% call card('', class_='usage-tile-requests', attrs={'aria-label': 'Requests'}) %}
-    <div class="usage-label">Requests</div>{{ usage_total(report, 'requests', 'usage-value usage-value-lg') }}
+    {{ kpi('Requests', value_html=usage_total(report, 'requests', 'usage-value')) }}
     <div class="usage-sub" data-derived="requests"></div>
     <div class="usage-label mt-3">Outcomes</div>
     <ul class="usage-outcomes list-unstyled" data-outcome-mix></ul>

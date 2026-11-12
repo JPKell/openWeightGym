@@ -3,8 +3,9 @@
 {% from "navigation_parts.html" import pills %}
 {% from "deferred.html" import loading %}
 {% from "user_parts.html" import account_choice, account_avatar, account_status, ability_categories %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
 {% block title %}{{ user.name }} · Users · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=1"><link rel="stylesheet" href="/static/users.css?v=3"><script src="/static/users.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=2"><link rel="stylesheet" href="/static/users.css?v=4"><script src="/static/users.js?v=2" defer></script>{% endblock %}
 {% block main %}
 {# The directory of accounts beside the chosen one, as Compute nodes lays out its machines. /users chooses the first.
    Every form names its account's address itself: the page is also shown at /users, straight after an account is added. #}
@@ -17,13 +18,12 @@
   <form method="get" action="{{ here }}" class="m-0"><input type="hidden" name="open" value="add"><button class="btn btn-primary btn-sm" data-toggle-add aria-expanded="{{ 'true' if adding else 'false' }}" aria-controls="add-account">+ Add account</button></form>
 {% endcall %}
 {% set needing = accounts|selectattr('attention')|list|length %}
-<div class="users-summary small text-secondary mb-3" aria-label="Accounts summary">
-  <span><strong class="text-body">{{ accounts|length }}</strong> {{ 'account' if accounts|length == 1 else 'accounts' }}</span>
-  <span><strong class="text-body">{{ accounts|selectattr('kind', 'equalto', 'person')|list|length }}</strong> people · <strong class="text-body">{{ accounts|selectattr('kind', 'equalto', 'program')|list|length }}</strong> programs</span>
-  <span><strong class="text-body">{{ accounts|sum(attribute='sessions') }}</strong> signed in now</span>
-  <span><strong class="text-body">{{ accounts|map(attribute='keys')|map('length')|sum }}</strong> API keys</span>
-  {% if needing %}<span class="users-summary-attention"><strong>{{ needing }}</strong> {{ 'needs' if needing == 1 else 'need' }} attention <button type="button" class="btn btn-link btn-sm p-0" data-show-attention>Show</button></span>{% endif %}
-</div>
+{% call kpi_row('Accounts summary', class_='users-summary mb-3') %}
+  {{ kpi('Accounts', accounts|length, (accounts|selectattr('kind', 'equalto', 'person')|list|length) ~ ' people · ' ~ (accounts|selectattr('kind', 'equalto', 'program')|list|length) ~ ' programs') }}
+  {{ kpi('Signed in now', accounts|sum(attribute='sessions')) }}
+  {{ kpi('API keys', accounts|map(attribute='keys')|map('length')|sum) }}
+  {% if needing %}{% call kpi('Needs attention', needing, class_='users-summary-attention') %}<button type="button" class="btn btn-link btn-sm p-0" data-show-attention>Show</button>{% endcall %}{% endif %}
+{% endcall %}
 {{ said_box(said, failed) }}
 
 {% set add_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" data-close-add>Close</button>{% endset %}
@@ -101,13 +101,13 @@
   <div class="account-panels">
     {% call card('Activity', id='account-activity', class_='account-panel', attrs={'data-panel': 'activity'}, hint='Requests by this account. The full report is on Usage.') %}
       <div id="usage">
-        <div class="account-figures">
+        {% call kpi_row('Account activity', class_='account-figures') %}
           {% for row in user.usage %}
-          <div data-figure="requests"><span class="usage-label">{{ "Last 24 hours" if row.days == 1 else "Last %d days"|format(row.days) }}</span><strong class="usage-value usage-value-sm">{{ "{:,}".format(row.requests) }}</strong><span class="usage-sub">request{{ "" if row.requests == 1 else "s" }}</span></div>
+          {{ kpi('Last 24 hours' if row.days == 1 else 'Last %d days'|format(row.days), '{:,}'.format(row.requests), 'request' if row.requests == 1 else 'requests', attrs={'data-figure':'requests'}) }}
           {% endfor %}
           {% set last = user.usage|last %}
-          {% if last %}<div data-figure="input_tokens"><span class="usage-label">Tokens · {{ "24 hours" if last.days == 1 else "%d days"|format(last.days) }}</span><strong class="usage-value usage-value-sm" title="{{ '{:,}'.format(last.prompt_tokens + last.answer_tokens) }}">{{ (last.prompt_tokens + last.answer_tokens)|count }}</strong><span class="usage-sub">{{ last.prompt_tokens|count }} in · {{ last.answer_tokens|count }} out</span></div>{% endif %}
-        </div>
+          {% if last %}{{ kpi('Tokens · ' ~ ('24 hours' if last.days == 1 else '%d days'|format(last.days)), (last.prompt_tokens + last.answer_tokens)|count, (last.prompt_tokens|count) ~ ' in · ' ~ (last.answer_tokens|count) ~ ' out', attrs={'data-figure':'input_tokens'}, value_attrs={'title':'{:,}'.format(last.prompt_tokens + last.answer_tokens)}) }}{% endif %}
+        {% endcall %}
         <form method="get" action="{{ here }}" class="account-days" {{ swaps("usage", true) }}>
           <label for="days" class="small text-secondary">Days in the last figure</label>
           <input id="days" name="days" type="number" min="1" {% if user.keep_days %}max="{{ user.keep_days|int }}"{% endif %} class="form-control form-control-sm" value="{{ last.days if last else 28 }}" required>

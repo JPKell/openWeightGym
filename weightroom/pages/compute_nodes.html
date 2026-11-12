@@ -3,7 +3,7 @@
 {% from "navigation_parts.html" import pills %}
 {% from "compute_node_parts.html" import node_choice %}
 {% block title %}Compute nodes · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/compute-nodes.css?v=1"><script src="/static/compute-nodes.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/compute-nodes.css?v=2"><script src="/static/compute-nodes.js?v=1" defer></script>{% endblock %}
 {% block main %}
 {% set show_setting_help = false %}
 <div class="settings-page compute-nodes" data-compute-nodes data-machine="{{ selected_machine }}">
@@ -11,7 +11,11 @@
 {% call page_header('Compute nodes') %}
 {% if may_pair %}<form method="get" action="/compute-nodes"><input type="hidden" name="machine" value="{{ selected_machine }}"><input type="hidden" name="open" value="add-node"><button class="btn btn-primary btn-sm" data-toggle-pairing aria-expanded="{{ 'true' if pairing_open else 'false' }}" aria-controls="add-node">+ Add GPU node</button></form>{% endif %}
 {% endcall %}
-<div class="compute-fleet-summary small text-secondary mb-3" aria-label="Fleet summary"><span><strong class="text-body">{{ machine_choices|length }}</strong> {{ 'node' if machine_choices|length == 1 else 'nodes' }}</span><span><strong class="text-body">{{ machine_choices|selectattr('state', 'equalto', 'ready')|selectattr('lifecycle', 'equalto', 'active')|list|length }}</strong> available for new work</span><span class="ms-auto d-none d-lg-inline">Hardware, runtimes &amp; access</span></div>
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% call kpi_row('Fleet summary', class_='compute-fleet-summary mb-3') %}
+{{ kpi('Nodes', machine_choices|length, 'Hardware, runtimes & access') }}
+{{ kpi('Available for new work', machine_choices|selectattr('state', 'equalto', 'ready')|selectattr('lifecycle', 'equalto', 'active')|list|length) }}
+{% endcall %}
 {{ said_box(said, failed) }}
 {% if may_pair %}
 {% set pairing_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" data-close-pairing>Close</button>{% endset %}
