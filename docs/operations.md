@@ -588,15 +588,19 @@ over newer work. Superseded files are removed only after every affected consumer
 
 ## Runtime source overrides
 
-Existing services can select a reviewed release through a scoped `PYTHONPATH` unit drop-in.
-Inspect and back up the effective unit/drop-ins before deployment: copying checkout files alone
-does not replace the selected release. Deliberately update that source override, drain active
-work and restart only the affected services through the existing deployment workflow.
+`owg update` selects the installed checkout ahead of older `PYTHONPATH` source overrides;
+`owg start` and `owg restart` enforce the same rule. Custom library paths remain after the checkout,
+and other unit settings remain unchanged. See [update and rollback copies](installation.md#looking-after-it-owg)
+for the normal workflow. Source selection reloads systemd's configuration without restarting services.
+An override that launches an executable outside this installation stops the command for correction.
 
-For rollback, restore the saved override to a compatible prior release without overwriting newer
-databases or history. Preserve unrelated drop-ins, settings, native engine files and resource
-limits; do not remove delegated memory groups until all owned children have exited. Protected
-recovery sets remain under `~/.local/share/ai-suite/recovery/` on the affected hosts.
+For a normal rollback, revert the application code to a compatible version and restart after work
+drains; do not overwrite newer databases or history. For emergency snapshot recovery, restore the
+saved override files using their path manifest, reload systemd and restart the affected services
+directly with systemctl; the next OWG update/start/restart will select the checkout again.
+Preserve unrelated drop-ins, settings, native engine files and resource limits; do not remove
+delegated memory groups until all owned children have exited. Historical protected recovery sets
+remain under `~/.local/share/ai-suite/recovery/` on the affected hosts.
 
 ### Usability release 2026-10-30
 

@@ -175,7 +175,7 @@ the `pg_hba.conf` lines to add.
 | `owg start`, `stop`, `restart [PROGRAM…]` | controls the services, all of them by default |
 | `owg restart --host USER@HOST [PROGRAM…]` | restarts services over SSH using that host's OWG installation; all installed services by default |
 | `owg logs [PROGRAM] [-f] [-n LINES]` | the latest from the programs' journals (80 lines unless `-n` says otherwise); `-f` follows them |
-| `owg update [--yes] [--plain]` | fetches the latest openWeightGym code only, including when an installation is unfinished |
+| `owg update [--yes] [--plain]` | fetches the latest code and selects this checkout ahead of older runtime source overrides, including when an installation is unfinished |
 | `owg repair [--yes] [--plain]` | reinstalls packages and services as they are |
 | `owg install [OPTIONS]` | adds omitted services and model engines; equivalent to `install.sh --components` |
 | `owg doctor` | checks the environment, services, settings, llama.cpp, key permissions, linger, the console and disk space, and says what to fix |
@@ -186,9 +186,15 @@ the `pg_hba.conf` lines to add.
 Before any command, `--plain` turns off colour and animation and `--yes` takes every default
 without asking.
 
-Update only pulls code: it does not install packages, build engines, restart services or resume
-an unfinished installation. Run `owg restart` when ready to use the updated code in running
-services. A saved installation plan remains available by running `install.sh` separately.
+Update pulls code and puts this checkout first in existing service `PYTHONPATH` overrides,
+preserving custom library paths and other service settings. It does not install packages, build
+engines, restart services or resume an unfinished installation. Run `owg restart` when ready;
+start/restart also selects the checkout, including the first restart after an older updater fetched
+this repair. Changed override files have private rollback copies and a path manifest under the
+service owner's `$XDG_STATE_HOME/openweightgym/runtime-source-updates/` (normally
+`~/.local/state/openweightgym/runtime-source-updates/`). An unsupported override of the service
+executable stops the command with an error instead of claiming the new code will run.
+A saved installation plan remains available by running `install.sh` separately.
 Updates refuse to run over changes of your own to the code; commit or stash them first. Settings
 files are kept; enabling voice adds its missing gateway port and pairing updates node addresses,
 with private backups before those changes. Replaced service units are backed up beside their

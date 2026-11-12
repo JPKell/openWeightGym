@@ -387,6 +387,8 @@ def test_failed_service_control_returns_failure_after_trying_other_services(tmp_
     answer = shell(tmp_path, '''set -euo pipefail
 source "$TEST_REPO/scripts/lib/ui.sh"
 ui_init
+ROOT=/fixture
+refresh_runtime_sources() { return 0; }
 owg_systemctl() { printf '%s\\n' "$*" >>"$ATTEMPTS"; [[ $2 != loadcoach.service ]]; }
 ''' + one_function("scripts/owg", "control") + '\ncontrol restart loadcoach weightroom\n',
                    env={"ATTEMPTS": str(tmp_path / "attempts")})
