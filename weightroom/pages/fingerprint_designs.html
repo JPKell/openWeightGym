@@ -1,0 +1,79 @@
+{% from 'parts.html' import page_header, card, section_title, more, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'fingerprint_parts.html' import fingerprint_row, fact_row, file_record, setting_row %}
+{% from 'fingerprint_design_parts.html' import no_records %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fingerprints · Design review · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a class="visually-hidden-focusable" href="#workspace">Skip to fingerprints</a>
+<header class="fp-topbar"><a href="#" id="brand" class="fp-brand">openWeightGym<span class="text-primary"> /</span></a><span class="small text-secondary">Models <span class="mx-2">/</span> Fingerprints</span><button class="btn btn-outline-secondary btn-sm ms-auto" id="theme">Dark mode</button></header>
+<div class="fp-review">
+  <div class="fp-review-heading"><span class="eyebrow">Design study / 06 screens</span><span class="small text-secondary">Interactive sample data</span></div>
+  {% call pills('Design options', buttons=true, class_='fp-design-options mb-0') %}
+  {{ pill_button('01 / Registry', true, attrs={'data-design':'registry'}) }}
+  {{ pill_button('02 / Analyst ledger', attrs={'data-design':'ledger'}) }}
+  {{ pill_button('03 / Record explorer', attrs={'data-design':'explorer'}) }}
+  {% endcall %}
+  <div class="fp-review-bottom"><p class="small text-secondary mb-0" id="design-description"></p>
+  {% call pills('Preview page', buttons=true, class_='gap-1 mb-0') %}{{ pill_button('Directory', true, attrs={'data-view':'directory'}) }}{{ pill_button('Individual record', attrs={'data-view':'detail'}) }}{% endcall %}</div>
+</div>
+<main id="workspace" class="fp-workspace" data-layout="registry" data-view="directory">
+<div id="directory-view">
+  {% call page_header('Fingerprints', pretitle='Model provenance') %}<button type="button" class="btn btn-outline-secondary" id="export-directory">Export results ↓</button>{% endcall %}
+  <p class="fp-intro text-secondary">Every configuration leaves a record.<br><span class="text-body">Find the exact file and settings behind an answer.</span></p>
+  {% call kpi_row('Fingerprint archive', class_='fp-summary mb-4') %}
+    {{ kpi('Fingerprints', '24', note='immutable records', value_attrs={'id':'total-count'}) }}
+    {{ kpi('Model names', '8', note='as first recorded', value_attrs={'id':'model-count'}) }}
+    {{ kpi('Distinct files', '10', note='including projectors', value_attrs={'id':'file-count'}) }}
+    {{ kpi('Latest first seen', '12 Nov', note='2026', value_attrs={'id':'latest-seen'}) }}
+  {% endcall %}
+  <div class="fp-directory-grid">
+    <aside class="fp-filter-rail">
+      {{ section_title('Find a record', class_='h4') }}
+      <form id="lookup-form" class="fp-search-form" role="search">
+        <div class="fp-query"><label class="form-label" for="start">Fingerprint or model</label><input type="search" name="start" id="start" class="form-control" placeholder="Paste a fingerprint or search…" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+        <div><label class="form-label" for="model-filter">Model</label><select class="form-select" id="model-filter"><option value="">All model names</option></select></div>
+        <div><label class="form-label" for="context-filter">Context</label><select class="form-select" id="context-filter"><option value="">Any context</option><option value="8192">8,192 tokens</option><option value="16384">16,384 tokens</option><option value="32768">32,768 tokens</option></select></div>
+        <button class="btn btn-primary" type="submit">Find</button><button class="btn btn-link text-secondary" type="button" data-clear>Reset filters</button>
+      </form>
+      <div class="fp-retention">{% call more('What does a fingerprint identify?') %}The model file’s contents and every setting used. A change to either creates a different fingerprint. Records remain available after the model or file is removed.{% endcall %}</div>
+    </aside>
+    {% call card('Fingerprint archive', id='archive', class_='fp-archive', body=false, actions='<span class="small text-secondary fw-normal" id="match-count" role="status" aria-live="polite"></span>'|safe) %}
+      <div class="table-responsive fp-table-scroll" tabindex="0" role="region" aria-label="Fingerprint results"><table class="table table-hover align-middle mb-0" id="fingerprints-table"><caption class="visually-hidden">Recorded fingerprints, model names, first seen dates, model files and context sizes. Select a fingerprint to inspect its complete record.</caption><thead><tr>
+      {% for key, label in [('fingerprint','Fingerprint'), ('model','Model, then'), ('first','First seen'), ('file','File'), ('context','Context')] %}<th scope="col"{% if key == 'context' %} class="text-end"{% endif %}><button type="button" class="fp-sort" data-sort="{{ key }}">{{ label }} <span aria-hidden="true">↕</span></button></th>{% endfor %}
+      </tr></thead><tbody id="fingerprint-rows">{{ no_records() }}</tbody></table></div>
+      <div class="card-footer fp-table-footer"><span class="small text-secondary" id="page-summary"></span><label class="small ms-auto d-flex gap-2 align-items-center">Rows<select id="page-size" class="form-select form-select-sm"><option>12</option><option>24</option></select></label><nav aria-label="Results pages" class="d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" id="previous">← Previous</button><button class="btn btn-outline-secondary btn-sm" id="next">Next →</button></nav></div>
+    {% endcall %}
+    <aside class="fp-peek" id="record-peek" aria-label="Record preview">
+      {% call card('At a glance') %}<div class="fp-mosaic" data-mosaic aria-hidden="true"></div><span class="eyebrow d-block mt-3 mb-2">Selected fingerprint</span><code id="peek-hash"></code>{{ section_title('', id='peek-model', class_='h3', wrapper_class='mt-3') }}<dl class="fp-facts" id="peek-facts"></dl><button class="btn btn-primary w-100 mb-3" id="open-peek">Open complete record →</button><div class="fp-peek-weights" id="peek-weights"></div>{% endcall %}
+      <p class="small text-secondary">A permanent snapshot, retained independently of the model’s current configuration.</p>
+    </aside>
+  </div>
+</div>
+<div id="detail-view" hidden>
+  <div class="fp-backline"><button type="button" class="btn btn-link px-0" id="back">← All fingerprints</button><span class="small text-secondary ms-auto" id="record-position"></span><button class="btn btn-outline-secondary btn-sm" id="previous-record" aria-label="Previous fingerprint">←</button><button class="btn btn-outline-secondary btn-sm" id="next-record" aria-label="Next fingerprint">→</button></div>
+  {% call page_header('Fingerprint record', pretitle='Permanent configuration snapshot', id='record-heading') %}<button class="btn btn-outline-secondary" id="export-record">Download JSON ↓</button><button class="btn btn-primary" id="copy-link">Copy record link</button>{% endcall %}
+  <div class="fp-detail-grid">
+    <nav class="fp-outline" aria-label="Record sections"><span class="eyebrow d-block mb-3">On this record</span><a href="#identity" data-anchor="identity">01 <span>Identity</span></a><a href="#record-files" data-anchor="record-files">02 <span>File evidence</span></a><a href="#record-settings" data-anchor="record-settings">03 <span>Settings</span></a><a href="#record-notes" data-anchor="record-notes">04 <span>Reading this record</span></a></nav>
+    {% call card('', id='identity', class_='fp-identity') %}
+      <div class="fp-identity-content"><div class="fp-mosaic" data-mosaic aria-hidden="true"></div><div class="min-w-0 flex-grow-1"><span class="eyebrow">Model, when first recorded</span>{{ section_title('', id='record-model', class_='fp-model-title', attrs={'tabindex':'-1'}, wrapper_class='mt-1 mb-2') }}<div class="fp-full-hash"><code id="record-hash"></code><button class="btn btn-outline-secondary btn-sm" id="copy-hash">Copy<span class="visually-hidden"> fingerprint</span></button></div></div><span class="badge bg-secondary-lt align-self-start">Immutable record</span></div>
+      <dl class="fp-identity-facts" id="identity-facts"></dl>
+    {% endcall %}
+    <section id="record-files" class="fp-files" aria-label="Recorded files">{{ section_title('File evidence', scope='As recorded') }}<div id="file-records"></div></section>
+    {% call card('Settings', id='record-settings', class_='fp-settings', hint='The exact configuration used to create this fingerprint.', body=false) %}
+      <div class="fp-settings-tools"><label class="visually-hidden" for="setting-search">Search settings</label><input type="search" id="setting-search" class="form-control form-control-sm" placeholder="Find a setting…"></div>
+      <div class="table-responsive"><table class="table table-sm mb-0"><caption class="visually-hidden">All recorded settings, excluding file paths which are shown in File evidence.</caption><thead><tr><th scope="col">Setting</th><th scope="col">Recorded value</th></tr></thead><tbody id="setting-rows"></tbody></table></div><p id="no-settings" class="text-secondary p-3 mb-0" hidden>No settings match. Try a different name or value.</p>
+    {% endcall %}
+    <aside id="record-notes" class="fp-notes">{% call card('Reading this record') %}<p>This snapshot identifies the model’s file contents and settings when first seen.</p><p class="text-secondary mb-0">The file path and model name are historical. They do not confirm where the file is now. Changing a file or setting creates a new fingerprint; this record stays intact.</p>{% endcall %}</aside>
+  </div>
+</div>
+{{ alert('warning', 'That fingerprint is not in this sample archive. Choose a record from the directory.', attrs={'id':'missing-record','hidden':''}, class_='mt-3') }}
+<p id="feedback" class="fp-feedback" role="status" aria-live="polite"></p>
+<footer class="fp-bottom-note"><span>openWeightGym / Model provenance</span><span>Sample archive · 24 records · preview only</span></footer>
+</main>
+<template id="fingerprint-row">{{ fingerprint_row() }}</template><template id="fact-row">{{ fact_row() }}</template><template id="file-record">{{ file_record() }}</template><template id="compact-file-record">{{ file_record(compact=true) }}</template><template id="setting-row">{{ setting_row() }}</template>
+<script id="sample-data" type="application/json">{{ sample|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>

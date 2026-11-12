@@ -1,0 +1,37 @@
+{# The archive, selected record, and design previews share the same evidence components. #}
+{% from 'parts.html' import card, section_title %}
+{% macro fact_row(name='', value='') %}<div class="fp-fact"><dt>{{ name }}</dt><dd>{{ value }}</dd></div>{% endmacro %}
+
+{% macro mosaic(mark='') %}
+<div class="fp-mosaic" aria-hidden="true" data-mosaic>{% for digit in mark %}<span data-lit="{{ 'true' if digit in '89abcdef' else 'false' }}"></span>{% endfor %}</div>
+{% endmacro %}
+
+{% macro fingerprint_row(one=none, href='', selected=false) %}
+{% set file = one.files.get('model', {}) if one else {} %}
+{% set flags = one.settings.get('flags', {}) if one else {} %}
+<tr data-record{% if one %} data-fingerprint="{{ one.fingerprint }}" data-selected="{{ 'true' if selected else 'false' }}"{% endif %}>
+  <td><a data-open class="fp-record-link"{% if one %} href="{{ href }}" hx-get="{{ href }}&amp;peek={{ one.fingerprint }}" hx-target="#record-peek" hx-select="#record-peek" hx-swap="outerHTML show:none" hx-sync="#archive:replace" aria-label="Inspect fingerprint {{ one.fingerprint[:12] }} for {{ one.model or 'unnamed model' }}"{% endif %}><span data-field="fingerprint" class="font-monospace"><code>{{ one.fingerprint[:12] if one }}</code></span><span class="fp-record-hint small text-secondary d-block">Inspect record →</span></a></td>
+  <td><strong data-field="model">{{ one.model or 'Not named' if one }}</strong><small class="text-secondary d-block" data-field="quantization">{{ (file.says or {}).get('size_label', '') if one }}</small></td>
+  <td class="when"{% if one %} data-value="{{ one.first }}"{% endif %}><span data-field="first">{{ one.first|timestamp if one }}</span><small class="text-secondary d-block" data-field="time"></small></td>
+  <td class="fp-file-cell"><span data-field="filename">{{ file.get('path', '').rsplit('/', 1)[-1] if one }}</span><small class="text-secondary d-block" data-field="size">{{ file.get('size')|size if one }}</small></td>
+  <td class="text-end"{% if one %} data-value="{{ flags.get('ctx-size', '') }}"{% endif %}><span data-field="context">{{ flags.get('ctx-size')|count if one }}</span><small class="text-secondary d-block">tokens</small></td>
+</tr>
+{% endmacro %}
+
+{% macro file_record(file=none, role='model', prefix='file', compact=false) %}
+{% set contents %}
+  <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">{{ section_title(('Model weights' if role == 'model' else 'Projector' if role in ('mmproj', 'projector') else role|replace('_', ' ')|title) if file else '', level=3, attrs={'data-file-role':''}, wrapper_class='mb-0') }}<span class="badge bg-secondary-lt" data-file-size>{{ file.size|size if file }}</span></div>
+  <p class="fw-semibold wrap mb-3" data-file-name>{{ file.path.rsplit('/', 1)[-1] if file }}</p>
+  <dl class="fp-facts" data-file-facts>
+    {% if file %}
+    {{ fact_row('Recorded path', file.path) }}
+    {{ fact_row('Exact size', '{:,} bytes'.format(file.size) if file.size is not none else 'Not recorded') }}
+    {% for name, value in (file.says or {}).items() if value is not none %}{{ fact_row(name|replace('_', ' '), value|shown) }}{% endfor %}
+    {% endif %}
+  </dl>
+  <div class="fp-digest"><span class="eyebrow">SHA-256 · file contents</span><div class="d-flex align-items-start gap-2 mt-2"><span class="flex-grow-1 font-monospace" data-file-hash{% if file %} id="{{ prefix }}-sha256"{% endif %}><code>{{ file.sha256 if file }}</code></span><button class="btn btn-outline-secondary btn-sm" type="button" data-copy-file{% if file %} data-copy-target="{{ prefix }}-sha256"{% endif %}>Copy<span class="visually-hidden"> file hash</span></button></div></div>
+{% endset %}
+{% if compact %}{{ contents }}{% else %}{% call card('', class_='fp-file-record') %}{{ contents }}{% endcall %}{% endif %}
+{% endmacro %}
+
+{% macro setting_row(name='', value='') %}<tr><th scope="row">{{ name }}</th><td><code>{{ value }}</code></td></tr>{% endmacro %}

@@ -1,0 +1,30 @@
+{% from 'parts.html' import page_header, card, section_title %}
+{% from 'fingerprint_parts.html' import mosaic, fact_row, file_record, setting_row %}
+<nav class="fp-backline" aria-label="Fingerprint archive"><a class="btn btn-link px-0" href="{{ back }}">← All fingerprints</a></nav>
+{% call page_header('Fingerprint record', pretitle='Permanent configuration snapshot') %}
+<button type="button" class="btn btn-outline-secondary" data-fingerprint-export="record-json">Download JSON ↓</button>
+<button type="button" class="btn btn-primary" data-copy-target="record-link">Copy record link</button>
+{% endcall %}
+<span id="record-link" hidden data-record-link="/fingerprints?start={{ one.fingerprint }}">/fingerprints?start={{ one.fingerprint }}</span>
+<div class="fp-detail-grid">
+  <nav class="fp-outline" aria-label="Record sections"><span class="eyebrow d-block mb-3">On this record</span><a href="#identity">01 <span>Identity</span></a><a href="#record-files">02 <span>File evidence</span></a><a href="#record-settings">03 <span>Settings</span></a><a href="#record-notes">04 <span>Reading this record</span></a></nav>
+  {% call card('', id='identity', class_='fp-identity') %}
+    <div class="fp-identity-content">{{ mosaic(one.fingerprint) }}<div class="min-w-0 flex-grow-1"><span class="eyebrow">Model, when first recorded</span>{{ section_title(one.model or 'Not named', id='record-model', class_='fp-model-title', wrapper_class='mt-1 mb-2') }}<div class="fp-full-hash"><span id="record-hash"><code>{{ one.fingerprint }}</code></span><button type="button" class="btn btn-outline-secondary btn-sm" data-copy-target="record-hash">Copy<span class="visually-hidden"> fingerprint</span></button></div></div><span class="badge bg-secondary-lt align-self-start">Immutable record</span></div>
+    <dl class="fp-identity-facts">
+      {{ fact_row('First seen', one.first|timestamp) }}
+      {{ fact_row('Context', one.settings.get('flags', {}).get('ctx-size')|count ~ ' tokens') }}
+      {{ fact_row('Recorded files', one.files|length) }}
+    </dl>
+    {% if 'see-log' in person.can %}<p class="small mt-3 mb-0"><a href="/log?model={{ one.model|urlencode }}">Answers recorded for {{ one.model or 'this model' }}</a>. Each entry identifies the fingerprint that answered.</p>{% endif %}
+  {% endcall %}
+  <section id="record-files" class="fp-files" aria-label="Recorded files">{{ section_title('File evidence', scope='As recorded') }}<div id="file-records">{% for role, file in one.files.items() %}{{ file_record(file, role, 'record-file-' ~ loop.index) }}{% endfor %}</div></section>
+  {% call card('Settings', id='record-settings', class_='fp-settings', hint='Its settings, as they were used.', body=false) %}
+    <div class="fp-settings-tools"><label class="visually-hidden" for="setting-search">Search settings</label><input type="search" id="setting-search" class="form-control form-control-sm" placeholder="Find a setting…"></div>
+    <div class="table-responsive"><table class="table table-sm mb-0"><caption class="visually-hidden">All recorded settings. File paths appear in File evidence.</caption><thead><tr><th scope="col">Setting</th><th scope="col">Recorded value</th></tr></thead><tbody id="setting-rows">
+    {% for name, value in one.settings.items() if name != 'flags' %}{{ setting_row(name, value|shown) }}{% endfor %}
+    {% for name, value in one.settings.get('flags', {}).items() if name not in one.files %}{{ setting_row(name, value|shown) }}{% endfor %}
+    </tbody></table></div><p id="no-settings" class="text-secondary p-3 mb-0" hidden>No settings match. Try a different name or value.</p>
+  {% endcall %}
+  <aside id="record-notes" class="fp-notes">{% call card('Reading this record') %}<p>This snapshot identifies the model’s file contents and settings when first seen.</p><p class="text-secondary mb-0">The file path and model name are historical. They do not confirm where the file is now. Changing a file or setting creates a new fingerprint; this record stays intact.</p>{% endcall %}</aside>
+</div>
+<script type="application/json" id="record-json">{{ one|tojson }}</script>

@@ -1,0 +1,5 @@
+{# Preview-only empty state; all evidence markup is shared with the live archive. #}
+{% from 'parts.html' import empty_row %}
+{% macro no_records() %}
+{% call empty_row(5, attrs={'id':'no-records', 'hidden':''}) %}<div class="py-5 text-center"><strong class="d-block mb-2">No matching fingerprints</strong><span>Try a shorter fingerprint prefix, a model name, or </span><button type="button" class="btn btn-link p-0" data-clear>clear the filters</button>.</div>{% endcall %}
+{% endmacro %}

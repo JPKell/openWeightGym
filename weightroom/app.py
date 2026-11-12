@@ -2874,12 +2874,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response('The owning node cannot export this database.', status_code=503)
 
     async def fingerprints_page(request: Request, person: Person) -> Response:
-        """Every fingerprint there has been, or those that begin a given way. One alone is shown with all that was written down of it."""
-        start = request.query_params.get("start", "").strip()
-        found = await fetch(request, person, "/loadcoach/fingerprints", params={"start": start})
+        """Browse archived configurations, preview their files, or inspect a permanent snapshot."""
+        from .fingerprint_views import fingerprint_context
+
+        found = await fetch(request, person, "/loadcoach/fingerprints")
         if isinstance(found, Response):
             return found
-        return page(request, "fingerprints.html", person, found=found["fingerprints"], start=start)
+        context = fingerprint_context(found["fingerprints"], request.query_params)
+        return page(request, "fingerprint_peek.html" if context['peek_requested'] else "fingerprints.html", person, **context)
 
     # ---- settings ---------------------------------------------------------------------------
     #
