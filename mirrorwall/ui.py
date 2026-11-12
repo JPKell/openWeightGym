@@ -6,6 +6,7 @@ from starlette.routing import Route
 
 from loadcoach import observability as observation
 from mirrorwall.front import Front
+from mirrorwall.model import check_name
 
 
 def routes(for_people, page, ask, model_api):
@@ -86,6 +87,7 @@ def routes(for_people, page, ask, model_api):
             name, settings = body["name"], body["settings"]
             if not isinstance(name, str) or not isinstance(settings,dict) or settings.get("engine") != "sdcpp":
                 raise ValueError("Choose an image model name and settings.")
+            check_name(name)
             destinations=body.get('machines')
             if destinations is not None and (not body.get('new') or not isinstance(destinations,list) or not destinations
                 or len(destinations)>100 or any(not isinstance(node,str) or not node.strip() for node in destinations)):

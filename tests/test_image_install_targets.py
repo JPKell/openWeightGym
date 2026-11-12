@@ -12,6 +12,25 @@ from turnstile.model_install import plan
 from loadcoach.files import SPARE
 
 
+@pytest.mark.parametrize('name', ['Qwen Image 2.1', '_image', 'x' * 129, 'café'])
+def test_invalid_image_names_explain_requirements_before_consulting_nodes(name):
+    called=[]
+    def people(handler):
+        async def endpoint(request):
+            return await handler(request,SimpleNamespace(can=['manage-models']))
+        return endpoint
+    async def model_api(*args,**kwargs):
+        called.append(kwargs)
+        return httpx.Response(202,json={'jobs':[]})
+    with TestClient(Starlette(routes=routes(people,None,None,model_api))) as client:
+        response=client.post('/mirrorwall-models',json={'new':True,'name':name,'settings':{'engine':'sdcpp'},
+            'machines':['compute','rig']})
+        assert response.status_code==400,response.text
+        message=response.json()['error']['message']
+        assert '1–128' in message and 'spaces are not allowed' in message and 'qwen-image-2.1' in message
+        assert not called
+
+
 @pytest.mark.parametrize('targets',[[],[''],['compute',None],'compute'])
 def test_image_creation_refuses_invalid_targets_before_installing(targets):
     called=[]
