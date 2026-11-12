@@ -1515,23 +1515,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         models = [model for model in catalogue["data"] if model.get("owned_by") == "loadcoach"]  # in LoadCoach's order: by sort order, then by name
         definitions, runs = found['definitions'], found['runs']
         wanted = next((bench for bench in definitions if bench['id'] == request.query_params.get('benchmark')), {})
-        kind = request.query_params.get('kind', 'llm')
-        kinds = ('llm', 'embedding', 'image', 'audio') if section == 'node-measurements' else ('llm', 'image', 'audio')
-        if kind not in kinds:
+        kind = request.query_params.get('kind', 'llm') if section == 'node-measurements' else 'llm'
+        if kind not in ('llm', 'embedding', 'image', 'audio'):
             kind = 'llm'
         resource_ids = {'context', 'speed', 'load', 'embedding_context', 'embedding_speed', 'embedding_load'}
         embedding_ids = {bench['id'] for bench in definitions if bench.get('embedding')}
         embedding_family = bool(section == 'embedders' or request.query_params.get('family') == 'embedding'
-                                or section in ('results', 'node-measurements') and wanted.get('embedding'))
+                                or section == 'node-measurements' and wanted.get('embedding'))
         if section == 'node-measurements':
             if 'kind' not in request.query_params and embedding_family:
                 kind = 'embedding'
             embedding_family = kind == 'embedding'
-        if section in ('results', 'node-measurements'):
             models = [model for model in models if benchmark_model_kind(model) == ('llm' if kind == 'embedding' else kind)]
             if kind in ('image', 'audio'):
                 embedding_family = False
                 definitions = [bench for bench in definitions if bench['id'] == 'load']
+        elif section == 'results':
+            embedding_family = False
+            models = [model for model in models if benchmark_model_kind(model) == 'llm']
         if section in ('node-measurements', 'embedders', 'results', 'compare'):
             definitions = [bench for bench in definitions if bool(bench.get('embedding')) == bool(embedding_family)]
             models = [model for model in models if bool(model.get('embedding')) == bool(embedding_family)]
@@ -1540,11 +1541,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if section == 'results':
             definitions = [bench for bench in definitions if bench['id'] not in resource_ids]
             models = list({model['id']: model for model in models}.values())
-            if not definitions:
-                return page(request, 'benchmarks.html', person, section=section, kind=kind,
-                            embedding_family=embedding_family, benchmarks=[], benchmark={}, score_benchmarks=[],
-                            catalogue_warning=catalogue_warning, said=request.query_params.get('said', ''),
-                            failed='failed' in request.query_params, partial='partial' in request.query_params)
         requested = request.query_params.get('benchmark', '')
         if section == 'node-measurements' and requested:
             requested = ('embedding_' if embedding_family else '') + requested.removeprefix('embedding_')

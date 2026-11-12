@@ -7,7 +7,7 @@
 <section id="measurement-nodes" aria-label="Compute nodes" class="mb-3">
   <div class="measurement-node-list">{% for node in matrix.nodes %}{{ node_choice(node, loop.index0) }}{% endfor %}</div>
 </section>
-{{ model_type_navigation('node-measurements', kind, type_benchmarks) }}
+{{ model_type_navigation(kind, type_benchmarks) }}
 <div class="measurement-metric-toolbar mb-3">
 {% call pills('Resource benchmark', class_='gap-1 mb-0') %}{% for bench in resource_benchmarks %}{{ pill_link(bench.name, '/benchmarks/node-measurements?benchmark=' ~ bench.id ~ '&kind=' ~ kind ~ '#node-measurements', bench.id == resource_selected.id, attrs={'data-matrix-navigation':''}) }}{% endfor %}{% endcall %}
   <label class="d-flex align-items-center gap-2 small">Display<select class="form-select form-select-sm w-auto" data-matrix-display><option value="values">Measured values</option><option value="scores">Benchmark scores</option></select></label>

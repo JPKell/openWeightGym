@@ -10,14 +10,16 @@ from test_benchmark_pages import typed_models  # noqa: F401
 playwright = pytest.importorskip('playwright.sync_api')
 
 
-def test_results_type_pills_and_node_page_preserve_selected_models(desk, typed_models):
+def test_results_are_llm_only_and_node_page_preserves_model_types(desk, typed_models):
     from test_console_browser import browser_context
     server, _, _ = desk
     sign_in(server, 'jordan')
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
-        page.goto('http://console.test/benchmarks/results?benchmark=load')
+        page.goto('http://console.test/benchmarks/results?kind=audio&family=embedding&benchmark=load')
+        playwright.expect(page.locator('nav[aria-label="Model type"]')).to_have_count(0)
+        playwright.expect(page.locator('#benchmark-top .eyebrow')).to_have_count(0)
         playwright.expect(page.locator('#benchmark-score-table tbody')).to_contain_text('llm-model')
         assert 'image-model' not in page.locator('#benchmark-score-table tbody').inner_text()
         assert 'audio-model' not in page.locator('#benchmark-score-table tbody').inner_text()
@@ -33,6 +35,7 @@ def test_results_type_pills_and_node_page_preserve_selected_models(desk, typed_m
         playwright.expect(page.locator('#benchmark-results thead')).to_contain_text('CSV checks correct')
         assert page.evaluate("document.querySelector('#benchmark-measurements') !== window.previousMeasurements")
         playwright.expect(page.locator('#measurements')).to_have_attribute('open', '')
+        assert not {'kind', 'family'} & set(page.evaluate('Object.keys(Object.fromEntries(new URLSearchParams(location.search)))'))
         for theme in ('light', 'dark'):
             page.emulate_media(color_scheme=theme)
             for width in (1440, 390, 320):
@@ -41,21 +44,9 @@ def test_results_type_pills_and_node_page_preserve_selected_models(desk, typed_m
         page.set_viewport_size({'width': 1440, 'height': 1000})
         images = Path('data/benchmark-previews'); images.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(images / 'results-model-measurements.png'), full_page=True)
-        for kind, label in (('llm', 'LLM'), ('image', 'Image'), ('audio', 'Audio')):
-            page.locator('nav[aria-label="Model type"]').get_by_role('link', name=label, exact=True).click()
-            page.wait_for_url('http://console.test/benchmarks/results?kind=' + kind)
-            if kind == 'llm':
-                page.select_option('#benchmark', 'extraction')
-                playwright.expect(page.locator('#benchmark-results tbody')).to_contain_text('llm-model')
-                assert not {'context', 'speed', 'load'} & set(page.locator('#benchmark option').evaluate_all('(els) => els.map(el => el.value)'))
-            else:
-                playwright.expect(page.locator('#measurements')).to_contain_text('No model benchmarks are available for this model type.')
-                playwright.expect(page.locator('#benchmark')).to_have_count(0)
-                playwright.expect(page.get_by_role('link', name='View node measurements')).to_have_attribute('href', '/benchmarks/node-measurements?kind=' + kind)
-            assert page.locator('#benchmark-resource-table').count() == 0
-            page.set_viewport_size({'width': 390, 'height': 844})
-            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-        page.set_viewport_size({'width': 1440, 'height': 1000})
+        page.select_option('#benchmark', 'extraction')
+        playwright.expect(page.locator('#benchmark-results tbody')).to_contain_text('llm-model')
+        assert not {'context', 'speed', 'load'} & set(page.locator('#benchmark option').evaluate_all('(els) => els.map(el => el.value)'))
         page.get_by_role('link', name='Node measurements', exact=True).click()
         playwright.expect(page.locator('#benchmark-resource-table')).to_be_visible()
         page.locator('nav[aria-label="Model type"]').get_by_role('link', name='Audio', exact=True).click()

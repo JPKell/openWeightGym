@@ -40,7 +40,7 @@ def typed_models(desk, tmp_path, monkeypatch):
     return entries
 
 
-def test_result_model_types_and_node_comparisons_keep_evidence_separate(desk, typed_models):
+def test_results_are_llm_only_and_node_comparisons_keep_types_separate(desk, typed_models):
     browser, _, users = desk
     sign_in(browser, 'jordan')
     for kind, (name, number) in typed_models.items():
@@ -48,16 +48,12 @@ def test_result_model_types_and_node_comparisons_keep_evidence_separate(desk, ty
         assert result.status_code == 200
         assert 'id="benchmark-resource-table"' not in result.text
         assert number not in result.text
-        if kind == 'llm':
-            table = result.text.split('id="benchmark-results"', 1)[1].split('</table>', 1)[0]
-            assert name in table
-            assert all(other not in table for other, _ in typed_models.values() if other != name)
-            options = result.text.split('<select id="benchmark"', 1)[1].split('</select>', 1)[0]
-            assert all(f'value="{resource}"' not in options for resource in ('context', 'speed', 'load'))
-        else:
-            assert 'No model benchmarks are available for this model type.' in result.text
-            assert f'href="/benchmarks/node-measurements?kind={kind}"' in result.text
-            assert 'id="benchmark-results"' not in result.text and 'id="benchmark-score-table"' not in result.text
+        table = result.text.split('id="benchmark-results"', 1)[1].split('</table>', 1)[0]
+        assert 'llm-model' in table and 'image-model' not in table and 'audio-model' not in table
+        assert 'aria-label="Model type"' not in result.text
+        assert 'name="kind"' not in result.text and 'name="family"' not in result.text
+        options = result.text.split('<select id="benchmark"', 1)[1].split('</select>', 1)[0]
+        assert all(f'value="{resource}"' not in options for resource in ('context', 'speed', 'load'))
         nodes = browser.get('/benchmarks/node-measurements', params={'kind': kind, 'benchmark': 'load'})
         grid = nodes.text.split('id="benchmark-resource-table"', 1)[1].split('</table>', 1)[0]
         assert name in grid and number in grid and 'data-label="compute"' in grid
@@ -503,9 +499,6 @@ def test_results_show_one_quality_result_per_model_across_nodes(fleet):
         saved.append(ref)
     for requested in ('extraction', 'context', 'speed', 'load', 'embedding_load'):
         html = browser.get('/benchmarks/results', params={'benchmark': requested, 'kind': 'llm'}).text
-        if requested == 'embedding_load':
-            assert 'No model benchmarks are available for this model type.' in html
-            continue
         table = html.split('id="benchmark-results"', 1)[1].split('</table>', 1)[0]
         assert table.count('local-model') == 1 and table.count('private-model') == 1
         if requested == 'extraction':
@@ -513,6 +506,6 @@ def test_results_show_one_quality_result_per_model_across_nodes(fleet):
         options = html.split('<select id="benchmark"', 1)[1].split('</select>', 1)[0]
         assert all(f'value="{key}"' not in options for key in ('context', 'speed', 'load'))
         assert 'value="extraction"' in options
-    empty = browser.get('/benchmarks/results?family=embedding').text
-    assert 'No model benchmarks are available for this model type.' in empty
-    assert 'href="/benchmarks/node-measurements?kind=embedding"' in empty
+    legacy = browser.get('/benchmarks/results?kind=image&family=embedding&benchmark=embedding_load').text
+    assert 'id="benchmark-results"' in legacy and 'local-model' in legacy
+    assert 'name="kind"' not in legacy and 'name="family"' not in legacy
