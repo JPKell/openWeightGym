@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% from 'parts.html' import card, said_box, page_header, section_title, more, swaps, confirm_loss, confirm_two, alert %}
 {% from 'navigation_parts.html' import pager %}
-{% from 'schedule_parts.html' import overview, choice, state, form_fields, history_row %}
+{% from 'schedule_parts.html' import overview, choice, state, form_fields, history_row, inventory_footer, behavior_notes %}
 {% block title %}Schedules · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/schedules.js?v=2" defer></script>{% endblock %}
 {% block main %}
@@ -17,7 +17,7 @@
 {% for schedule in schedules %}{{ choice(schedule, selected.id if selected else '') }}{% else %}<div class="sc-empty text-center p-4">{{ section_title('No schedules yet.', wrapper_class='justify-content-center mb-2') }}<p class="text-secondary small mb-0">Create a schedule to run backups and benchmarks automatically.</p></div>{% endfor %}
 <p class="text-secondary small p-4 mb-0" id="schedule-no-matches" hidden>No schedules match. Try another search or clear the filters.</p>
 </div>
-<div class="sc-inventory-footer small text-secondary"><span>Sleeping nodes are never woken.</span><span>Times in each schedule’s timezone</span></div>
+{{ inventory_footer() }}
 {% endcall %}
 <aside id="schedule-inspector" class="sc-inspector-slot" aria-labelledby="editor-title">
 <div class="mb-3"><div class="eyebrow mb-2">{{ 'SCHEDULE DETAILS' if selected else 'NEW SCHEDULE' }}</div>{{ section_title(selected.name if selected else 'New schedule', id='editor-title', wrapper_class='mb-1') }}<span class="text-secondary small">Owned by {{ selected.owner_name if selected else person.name }}</span></div>
@@ -39,7 +39,7 @@
 <div class="px-3 pb-3">{{ pager('/schedules?' ~ selection_query ~ 'page=' ~ (history_page - 1) if history_page > 1 else none, '/schedules?' ~ selection_query ~ 'page=' ~ (history_page + 1) if more_history else none, 'Page ' ~ history_page, label='Schedule history pages', target='page-content') }}</div>
 {% endcall %}
 </div>
-<div class="mt-3">{% call more('How scheduled work behaves') %}Daily or selected-weekday work is checked every 15 seconds while openWeightGym runs. Compute is never woken. Pausing stops future occurrences; claimed work continues. Delete stops future runs and unsubmitted occurrences, keeping history and submitted work. Cancel submitted benchmarks from Runs. Resume starts with the next future time. Edits apply to future runs; finish claimed work before saving. A paused schedule stays paused. Backups use online snapshots; benchmarks keep their low priority and foreground preemption.{% endcall %}</div>
+<div class="mt-3">{% call more('How scheduled work behaves') %}{{ behavior_notes() }}{% endcall %}</div>
 <script id="schedule-catalogue" type="application/json">{{ catalogue|tojson }}</script>
 </div>
 {% endblock %}

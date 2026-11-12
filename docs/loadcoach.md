@@ -9679,7 +9679,8 @@ Current schedule kinds are `backup`, `benchmark` and `outstanding`. Optional `ma
 the preferred node. Outstanding schedules use `model_ids` and `benchmarks` scopes (empty means
 all permitted/enabled); fixed schedules keep their original `model_id` and `benchmark` fields.
 `POST /loadcoach/schedules/{id}/inspect` uses the scoped grant to report current permitted node
-catalogues/environments without waking hosts. Dispatch validates the persisted target against
+catalogues/environments. An ordinary inspection is passive; a validated `due_at` uses the same
+node-readiness path as dispatch. Dispatch validates the persisted target against
 that grant and freezes model identity, fingerprint, node and environment. Stable occurrence IDs
 and atomic benchmark/front-task reservations prevent retries from choosing another pair.
 The operating rules and cooldown are in the [benchmark guide](../benchmarks/README.md).
@@ -9691,16 +9692,16 @@ backups and one selected benchmark/local GPU model per schedule, daily or on sel
 without loading it. The form exposes local HH:MM, IANA timezone, weekdays, missed-run policy,
 backup retention, next run, pause/resume and last outcome. Occurrence history uses 25-row pages.
 
-The schedule list is a full-width table with Schedule, Work, When, Next run, Last outcome and
-Actions columns; narrow screens stack labeled cells. Row **Edit** opens a prefilled form for
-the owner with an online sign-in. Saving validates the current permissions and local model,
+Schedule Studio shows a searchable schedule directory beside the chosen schedule's editor;
+narrow screens stack the two. Drafts and filters survive selection changes in page memory.
+The owner edits with an online sign-in. Saving validates the current permissions and local model,
 replaces the compute grant through `POST /loadcoach/schedules/{id}/edit`, preserves the schedule
 ID and paused state, and calculates the next future time without backfilling. Editing waits for
-claimed work to finish. Row **Delete** uses the site's two-click confirmation, revokes compute
+claimed work to finish. **Delete schedule** uses the site's confirmation dialog, revokes compute
 authorization before removal, cancels unsubmitted occurrences and retains submitted benchmarks
 and history. The schedules schema retains deleted definitions for history labels but clears
 their scoped credential. Mutations serialize with the existing schedule worker. Both sides need
-the matching code for edits; no schedule control wakes compute.
+the matching code for edits. Browsing, creating and editing schedules remain passive.
 
 This table/edit/delete refinement was verified locally on 2026-10-13: 82 schedule, database
 and WeightRoom checks passed. Desktop and mobile Chromium checks covered the prefilled editor,
@@ -9744,10 +9745,21 @@ retain their existing compatibility behavior. Renames preserve identity and reso
 model/account names. Existing benchmark batches, plans, sample persistence, protocol checks,
 low priority and foreground preemption still govern execution.
 
+For front-owned grants, a due backup can wake `compute`; a due benchmark or outstanding run
+can wake its saved preferred node (default `compute`). The node must remain active with
+Wake-on-LAN configured, and front rechecks the owner's `front-wake` permission before sending
+a packet. Disabled/retired nodes are never woken. Per-node packets are limited to one every
+30 seconds. While the node starts, the occurrence stays `dispatching`, records the wake or
+configuration message, and retries on the normal 15-second worker loop with the same IDs and
+tokens. A missing wake configuration or send failure remains retryable; configure the node
+or wake it manually. Accepted benchmark tasks are returned without waking their nodes again.
+Compute-owned compatibility grants remain passive until migrated to front ownership; an
+unverified token cannot wake hardware. No suspend or shutdown behavior is added.
+
 Backups reuse `create_backup` and the existing two-machine verification/retention path.
 Recorded verified halves are reused on lost-reply recovery instead of taking another archive
 for the same occurrence. The worker is part of WeightRoom's lifespan, with a 15-second loop;
-it never invokes a wake, suspend or service-control API. Maintenance pauses claims, counts active
+front requests wake only after validating the due grant. Maintenance pauses claims, counts active
 work, defers dispatch commits across the barrier and waits for front backup writers before
 shutdown releases its active count. Online snapshots do not drain interactive inference.
 

@@ -802,8 +802,42 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return None
         return answer if proven(answer, nonce, key_file) else None
 
+    scheduled_wakes = {}
+
+    async def scheduled_node_ready(owner, name, identifier, due, token):
+        """Wake a due schedule's node after current owner and node-policy checks; retry later."""
+        if name not in machines.names:
+            return error(409, 'The scheduled compute node is no longer configured.')
+        if not machines.enabled(name):
+            return error(409, f'Compute node {name} is {machines.state(name)}; wake is disabled.')
+        answer = await ask_compute(owner, 'GET', '/loadcoach/status', machine=name, timeout=5)
+        if answer is not None:
+            return None
+        # Permissions, grant rotation and node lifecycle may change during the readiness probe.
+        if not machines.enabled(name):
+            return error(409, f'Compute node {name} is {machines.state(name)}; wake is disabled.')
+        try:
+            current, _ = front_tasks.grants.authorized(identifier, token, due)
+        except PermissionError as problem:
+            return error(403, str(problem))
+        if not current.can('front-wake'):
+            return error(403, 'Waking a scheduled node requires the owner to retain manage-settings and front-wake.')
+        policy = settings.machines.get(name, {}) if name != 'compute' else {
+            'wake_mac': settings.wake_mac, 'wake_address': settings.wake_address}
+        if not policy.get('wake_mac'):
+            return error(503, f'Node {name} is not answering; configure its Wake-on-LAN settings or wake it manually.', {'retry-after': '15'})
+        now = time.monotonic()
+        if now - scheduled_wakes.get(name, float('-inf')) >= 30:
+            try:
+                waker(policy['wake_mac'], policy.get('wake_address', '255.255.255.255'))
+            except (OSError, ValueError):
+                return error(503, f'Could not send the wake packet for {name}. Check its Wake-on-LAN settings.', {'retry-after': '15'})
+            scheduled_wakes[name] = now
+            log.add('schedule', 'wake-requested', current.name, 'scheduler', schedule=identifier, due_at=due, machine=name)
+        return error(503, f'Asked {name} to wake; waiting for the node to answer before submitting scheduled work.', {'retry-after': '15'})
+
     front_tasks = FrontTasks(batch_work.store, users, log, routing.evidence, ask_compute,
-                             dispatch_probe, ["compute", *settings.machines], settings.front_tasks)
+                             dispatch_probe, ["compute", *settings.machines], settings.front_tasks, scheduled_node_ready)
     front_tasks.locations = model_locations
     from mirrorwall.store import Store as ImageStore
     from mirrorwall.front import Front as ImageFront
