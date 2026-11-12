@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 import sys
 import time
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 import pytest
 from starlette.testclient import TestClient
@@ -134,7 +134,8 @@ def test_add_reopen_edit_and_reject_duplicate_audio_model(audio_install_console,
         page.locator('#am-seconds').fill('20')
         page.locator('#am-option-speed').fill('1.25')
         page.locator('#am-submit').click()
-        page.wait_for_url('**/models?kind=audio&install=*')
+        playwright.expect(page.locator('#am-install-text')).to_contain_text('Installed',timeout=15000)
+        assert urlsplit(page.url).path=='/models/audio'
         deadline=time.monotonic()+10
         library=Models(database)
         while time.monotonic()<deadline and library.stored(name) is None:
@@ -189,7 +190,8 @@ def test_cpu_only_node_adds_a_model_without_a_hardware_override(audio_install_co
         page.locator('#am-file').select_option(value=option.get_attribute('value'))
         page.locator('#am-name').fill('cpu-default')
         page.locator('#am-submit').click()
-        page.wait_for_url('**/models?kind=audio&install=*')
+        playwright.expect(page.locator('#am-install-text')).to_contain_text('Installed',timeout=15000)
+        assert urlsplit(page.url).path=='/models/audio'
         library=Models(database)
         deadline=time.monotonic()+10
         while time.monotonic()<deadline and library.stored('cpu-default') is None:
@@ -219,7 +221,8 @@ def test_visible_destination_installs_on_the_selected_compute_node(audio_install
         playwright.expect(page.locator('#panel-files')).to_be_visible()
         playwright.expect(page.locator('#am-name')).to_have_value('chosen-destination')
         page.locator('#am-submit').click()
-        page.wait_for_url('**/models?kind=audio&install=*')
+        playwright.expect(page.locator('#am-install-text')).to_contain_text('Installed',timeout=15000)
+        assert urlsplit(page.url).path=='/models/audio'
         library=Models(destination['database'])
         deadline=time.monotonic()+10
         while time.monotonic()<deadline and library.stored('chosen-destination') is None:
@@ -268,7 +271,8 @@ def test_multi_node_audio_install_preflights_all_destinations_and_copies_compani
             setup()
             page.locator('#am-install-targets input[value="compute"]').locator('..').click()
             page.locator('#am-submit').click()
-            page.wait_for_url('**/models?kind=audio&install=*')
+            playwright.expect(page.locator('#am-install-text')).to_contain_text('Installed',timeout=15000)
+            assert urlsplit(page.url).path=='/models/audio'
             await_saved(libraries[1])
 
         setup()
@@ -286,9 +290,10 @@ def test_multi_node_audio_install_preflights_all_destinations_and_copies_compani
         else:
             assert response.status==202,response.text()
             assert response.request.post_data_json['machines']==['compute','studio-cpu']
-            page.wait_for_url('**/models?kind=audio&install=*')
-            jobs=parse_qs(urlsplit(page.url).query)['install']
-            assert len(jobs)==len(set(jobs))==2
+            playwright.expect(page.locator('#am-install-text')).to_contain_text('Installed',timeout=15000)
+            assert urlsplit(page.url).path=='/models/audio'
+            playwright.expect(page.locator('#am-install-text')).to_contain_text('on compute: Installed',timeout=15000)
+            playwright.expect(page.locator('#am-install-text')).to_contain_text('on studio-cpu: Installed',timeout=15000)
             for library,folder in zip(libraries,[cache,destination['cache']]):
                 saved=await_saved(library)
                 target=folder/main.parent.name/main.name
@@ -300,3 +305,31 @@ def test_multi_node_audio_install_preflights_all_destinations_and_copies_compani
         for library in libraries:
             library.db.close()
         browser.close()
+
+
+@pytest.mark.parametrize('width',[1440,390])
+def test_create_several_audio_models_without_navigation_or_leave_site_prompts(audio_install_console,width):
+    client,packages,_,database=audio_install_console
+    library=Models(database)
+    with playwright.sync_playwright() as engine:
+        browser,page=browser_context(engine,client)
+        page.set_viewport_size({'width':width,'height':1100})
+        dialogs=[]
+        page.on('dialog',lambda dialog:(dialogs.append(dialog.type),dialog.dismiss()))
+        page.goto('http://console.test/models/audio?new=1')
+        page.evaluate('window.audioStudioDocument=true')
+        for tier,name in [('cache','first-studio-voice'),('front-storage','second-studio-voice')]:
+            main,_=packages[tier]
+            option=page.locator(f'#am-file option[data-path="{main}"]')
+            page.locator('#am-file').select_option(value=option.get_attribute('value'))
+            page.locator('#am-name').fill(name)
+            page.locator('#am-submit').click()
+            playwright.expect(page.locator('#am-install-text')).to_contain_text(name+' on compute: Installed',timeout=15000)
+            playwright.expect(page.locator(f'#am-profiles [data-model="{name}"]')).to_be_visible()
+            playwright.expect(page.locator('#am-name')).to_have_value('')
+            playwright.expect(page.locator('#am-name')).to_be_editable()
+            assert library.stored(name) is not None
+            assert urlsplit(page.url).path=='/models/audio' and page.evaluate('window.audioStudioDocument')
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        assert not dialogs
+        library.db.close(); browser.close()

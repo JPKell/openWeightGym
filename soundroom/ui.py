@@ -149,6 +149,24 @@ def routes(for_people, page, ask, model_api, settings=None):
         value["catalogue"] = packages.json() if packages.is_success else {"families": [], "error": packages.text[:300]}
         return JSONResponse(value, headers={"cache-control": "no-store"})
 
+    async def installations(request, person):
+        """Report the requested installation jobs without leaving the Audio studio."""
+        if "manage-models" not in person.can:
+            return JSONResponse({"error": {"message": "Model management is required."}}, 403)
+        wanted = set(request.query_params.getlist('install'))
+        if len(wanted) > 1000:
+            return JSONResponse({"error": {"message": "Too many installation jobs."}}, 400)
+        if not wanted:
+            return JSONResponse({"installations": []})
+        answer = await ask('GET', '/turnstile/artifacts/distributions', person.key)
+        if answer.is_error:
+            return Response(answer.content, answer.status_code, media_type="application/json")
+        fields = {'id', 'name', 'machine', 'state', 'file', 'done', 'of', 'why'}
+        jobs = [{key: value for key, value in job.items() if key in fields}
+                for job in answer.json().get('distributions', [])
+                if job.get('id') in wanted and job.get('kind') == 'model-install']
+        return JSONResponse({"installations": jobs}, headers={"cache-control": "no-store"})
+
     async def model_save(request, person):
         """Validate the audio envelope before updating the selected compute node."""
         if "manage-models" not in person.can:
@@ -207,5 +225,6 @@ def routes(for_people, page, ask, model_api, settings=None):
             Route("/models/audio", for_people(models)),
             Route("/soundroom-models", for_people(inventory)),
             Route("/soundroom-models", for_people(model_save), methods=["POST"]),
+            Route("/soundroom-installations", for_people(installations)),
             Route("/soundroom-packages", for_people(packages), methods=["POST"]),
             Route("/soundroom-api/{action:path}", for_people(proxy), methods=["GET", "POST", "DELETE"])]
