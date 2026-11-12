@@ -40,7 +40,7 @@ def studio(desk):
         for node,rows in inventories.items()]
     files.append(dict(name='vault',answering=True,files=[dict(path='/storage/voice.gguf',tier='storage',facts={'what':'audio','family':'kokoro'})]))
     state = dict(inventories=inventories, files=files, failed=set(), posts=[], requests=[], install=False, file_error=False,
-                 cards={node:['A','B'] for node in inventories}, nodes=nodes)
+                 cards={node:['A','B'] for node in inventories}, nodes=nodes, families=families)
 
     def capture(route, path):
         parsed = urlsplit(path)
@@ -188,6 +188,102 @@ def test_existing_companion_paths_survive_an_unavailable_file_scan(studio):
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
     assert state['posts'][0][1]['settings']['audiocpp']['files'] == ['tokens.bin']
+
+
+@pytest.mark.parametrize('width',[1440,390])
+def test_audio_task_filters_files_and_retains_the_selected_task_and_draft(studio,width):
+    page,state=studio
+    page.set_viewport_size({'width':width,'height':1100})
+    page.goto('http://console.test/models/audio?new=1')
+    task=page.locator('#am-kind')
+    files=page.locator('#am-file')
+    playwright.expect(task).to_have_value('')
+    task_box,file_box=task.bounding_box(),files.bounding_box()
+    if width==1440:
+        assert task_box['x']<file_box['x'] and abs(task_box['y']-file_box['y'])<1
+    else:
+        assert task_box['y']<file_box['y']
+    task.select_option('speech')
+    playwright.expect(files.locator('option[data-path]')).to_have_count(3)
+    playwright.expect(files.locator('option[data-path*="song"]')).to_have_count(0)
+    files.select_option(label='vault · storage')
+    page.locator('#am-name').fill('task-first-model')
+    task.select_option('music')
+    playwright.expect(files).to_have_value('')
+    playwright.expect(page.locator('#am-root')).to_have_value('')
+    playwright.expect(page.locator('#am-companions option')).to_have_count(0)
+    playwright.expect(files.locator('option[data-path]')).to_have_count(1)
+    files.select_option(label='atlas · song')
+    playwright.expect(page.locator('#am-family')).to_have_value('ace_step')
+    page.locator('[data-section="output"]').click()
+    page.locator('#am-option-bpm').fill('130')
+    page.locator('#am-profiles [data-model="speaker"] [data-identity]').click()
+    page.locator('#am-add').click()
+    playwright.expect(task).to_have_value('music')
+    playwright.expect(files.locator('option:checked')).to_have_text('atlas · song')
+    page.locator('#am-retry').evaluate('button=>button.click()')
+    playwright.expect(files.locator('option[data-path]')).to_have_count(1)
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+    body=state['posts'][0][1]
+    assert body['settings']['audiocpp']['kind']=='music'
+    assert body['settings']['audiocpp']['defaults']=={'bpm':130}
+    assert body['settings']['alone'] is True
+    assert body['settings']['flags']['model']=='/audio/atlas/song/song.gguf'
+    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+
+
+def test_task_filter_uses_embedded_capabilities_and_keeps_unknown_files_under_all_tasks(studio):
+    page,state=studio
+    state['files'][-1]['files'].extend([
+        dict(path='/storage/effects/model.gguf',tier='storage',facts={'what':'audio','family':'embedded-synth','kinds':['sound','music']}),
+        dict(path='/storage/unknown/model.gguf',tier='storage',facts={'what':'audio'}),
+    ])
+    page.goto('http://console.test/models/audio?new=1')
+    task,files=page.locator('#am-kind'),page.locator('#am-file')
+    task.select_option('sound')
+    playwright.expect(files.locator('option[data-path]')).to_have_count(1)
+    files.select_option(label='vault · effects')
+    playwright.expect(page.locator('#am-family')).to_have_value('embedded-synth')
+    task.select_option('transcription')
+    playwright.expect(files).to_have_value('')
+    playwright.expect(files.locator('option')).to_have_text('No model files for this task')
+    playwright.expect(page.locator('#am-file-note')).to_contain_text('All tasks')
+    task.select_option('')
+    playwright.expect(files.locator('option[data-path="/storage/unknown/model.gguf"]')).to_have_count(1)
+    task.select_option('music')
+    playwright.expect(files.locator('option[data-path]')).to_have_count(2)
+    files.select_option(label='vault · effects')
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+    assert state['posts'][0][1]['settings']['audiocpp']['kind']=='music'
+
+
+def test_all_tasks_preserves_an_existing_models_task(studio):
+    page,state=studio
+    state['families'][0]['kinds'].append('clone')
+    state['inventories']['atlas'][0]['audiocpp']['kind']='clone'
+    page.goto('http://console.test/models/audio?model=speaker')
+    playwright.expect(page.locator('#am-kind')).to_have_value('clone')
+    page.locator('#am-kind').select_option('')
+    playwright.expect(page.locator('#am-file option:checked')).to_have_text('atlas · speaker')
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+    assert state['posts'][0][1]['settings']['audiocpp']['kind']=='clone'
+
+
+def test_file_capabilities_limit_the_tasks_of_a_broader_runtime_family(studio):
+    page,state=studio
+    state['families'][0]['kinds'].append('clone')
+    state['files'][-1]['files'][0]['facts']['kinds']=['clone']
+    page.goto('http://console.test/models/audio?new=1')
+    page.locator('#am-kind').select_option('speech')
+    playwright.expect(page.locator('#am-file option[data-machine="vault"]')).to_have_count(0)
+    page.locator('#am-kind').select_option('')
+    page.locator('#am-file').select_option(label='vault · storage')
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+    assert state['posts'][0][1]['settings']['audiocpp']['kind']=='clone'
 
 
 def test_new_model_destination_uses_cpu_when_target_has_no_audio_gpus(studio):

@@ -24,11 +24,11 @@
 {% endcall %}
 <section id="panel-files" data-panel="files">
 <div class="row g-3">
-{{ select('file','Model file in cache or storage',wide=true,required=true) }}
+{{ select('kind','Audio task') }}{{ select('file','Model file in cache or storage',required=true) }}
 <div class="col-12 small text-secondary" id="{{ 'am-file-note' if live else 'file-note' }}">Choose a managed file. Family and task follow its runtime contract.</div>
 {{ field('name','Model name',pattern='[A-Za-z0-9][A-Za-z0-9._:\\/\\-]{0,127}' if live else '') }}{{ select('family','Model family',required=true) }}
 {% if live %}<div class="col-12 form-text" id="am-family-note"></div>{% endif %}
-{{ select('kind','Audio task') }}{{ field('root','Package folder',wide=true,maxlength=none) }}
+{{ field('root','Package folder',wide=true,maxlength=none) }}
 <div class="col-12"><label for="am-companions" class="form-label">Companion files <span class="text-secondary">(optional)</span></label>{% if live %}<select id="am-companions" name="companions" class="form-select font-monospace" multiple size="4"></select>{% else %}<textarea id="am-companions" name="companions" class="form-control font-monospace" rows="2" placeholder="One relative path per line"></textarea>{% endif %}<p class="form-text">Paths are relative to the package folder; standalone GGUF files usually need none.</p></div>
 </div>
 </section>
