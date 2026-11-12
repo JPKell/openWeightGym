@@ -1,0 +1,11 @@
+{# Preview-only rows and cards reuse the live studio editor and identities. #}
+{% from 'parts.html' import card, empty_row %}
+{% from 'models_parts.html' import subject, placement %}
+{% from 'audio_model_parts.html' import wave, studio_choice %}
+{% macro templates() %}
+<template id="audio-row"><tr><th scope="row">{{ subject(attrs={'data-open':''}) }}</th><td><span class="badge" data-kind></span></td><td><div class="inventory-placements" data-placements></div></td><td><span class="inventory-state" data-availability><span class="inventory-dot" aria-hidden="true"></span><span data-state-label></span></span></td><td class="text-secondary" data-size></td><td><button type="button" class="btn btn-outline-secondary btn-sm" data-configure>Configure</button></td></tr></template>
+<template id="audio-placement">{{ placement(attrs={'data-installation':''}) }}</template>
+{{ studio_choice() }}
+<template id="audio-card">{% call card('', class_='audio-model-card mb-0') %}<div class="d-flex justify-content-between gap-2 mb-3"><span class="badge" data-kind></span><span class="inventory-state" data-availability><span class="inventory-dot" aria-hidden="true"></span><span data-state-label></span></span></div>{{ wave() }}<div class="mt-4 mb-3">{{ subject(attrs={'data-open':''}) }}</div><p class="small text-secondary" data-description></p><div class="inventory-placements mb-4" data-placements></div><div class="d-flex justify-content-between align-items-center gap-2"><span class="text-secondary small" data-size></span><button type="button" class="btn btn-outline-secondary btn-sm" data-configure>Configure ↗</button></div>{% endcall %}</template>
+<template id="audio-empty-row">{{ empty_row(6, 'No models match these filters. Clear your filters or add a model.') }}</template>
+{% endmacro %}

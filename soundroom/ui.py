@@ -90,7 +90,11 @@ def routes(for_people, page, ask, model_api, settings=None):
         """Render audio-only model management for authorized administrators."""
         if "manage-models" not in person.can:
             return page(request, "refused.html", person, status=403, why="Your account may not manage audio models.")
-        return page(request, "soundroom_models.html", person)
+        answer = await ask("GET", "/turnstile/machines", person.key)
+        nodes = answer.json().get("machines", []) if answer.is_success else []
+        return page(request, "soundroom_models.html", person,
+                    audio_nodes=[{key: node[key] for key in ("name", "state", "accepting_work") if key in node}
+                                 for node in nodes])
 
     async def proxy(request, person):
         """Forward only allowlisted audio operations using the current server-side session."""

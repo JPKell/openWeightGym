@@ -1,22 +1,35 @@
-/* Audio models are selected from managed files; runtime contracts describe compatibility. */
+/* Live Audio model studio; managed files and runtime contracts retain the existing API envelope. */
 (() => {
   'use strict';
-  if (!document.getElementById('soundroom-models')) return;
+  const root = document.getElementById('soundroom-models');
+  if (!root) return;
   const $ = name => document.getElementById('am-' + name);
-  const params = new URLSearchParams(location.search), node = params.get('node') || 'compute';
+  const params = new URLSearchParams(location.search);
+  const computeNodes = JSON.parse($('nodes').textContent);
+  const inventories = new Map(), failures = new Set(), drafts = new Map();
+  const kinds = {music:'Music',sound:'Sound effects',speech:'Speech',clone:'Voice cloning',design:'Voice design',transcription:'Transcription',alignment:'Alignment',diarization:'Speaker detection'};
+  let activeNode = params.get('node') || computeNodes[0]?.name || '';
+  let inventory = {}, nodes = [], choices = [], selected = null, task = 'all', section = 'files';
+  let editing = false, dirty = false, busy = false, loading = true, initialized = false;
   const element = (tag, text, className) => { const one = document.createElement(tag); if (text !== undefined) one.textContent = text; if (className) one.className = className; return one; };
   const message = error => { $('message').hidden = !error; $('message').textContent = error || ''; };
-  let inventory = {}, nodes = [], choices = [], selected = null;
-  async function call(path, body) {
-    if (path === '/soundroom-models') path += '?node=' + encodeURIComponent(node);
-    const response = await fetch(path, {method: body === undefined ? 'GET' : 'POST', cache:'no-store',
-      headers: body === undefined ? {} : {'content-type':'application/json'}, body:body === undefined ? undefined : JSON.stringify(body)});
-    if (response.redirected) { location.href = '/sign-in'; throw new Error('Please sign in again.'); }
-    const value = await response.json();
+  const key = (name=selected?.name || '', node=activeNode) => JSON.stringify([node,name]);
+  const available = name => inventories.has(name) && !failures.has(name);
+  const accepting = name => available(name) && computeNodes.find(one => one.name === name)?.accepting_work !== false;
+  const safe = action => async event => { try { await action(event); } catch (error) { message(error.message); } };
+  async function call(path, body, node=activeNode) {
+    if (path === '/soundroom-models') {
+      if (!node) throw new Error('Choose a compute node.');
+      path += '?node=' + encodeURIComponent(node);
+    }
+    const response = await fetch(path,{method:body === undefined ? 'GET' : 'POST',cache:'no-store',
+      headers:body === undefined ? {} : {'content-type':'application/json'},body:body === undefined ? undefined : JSON.stringify(body)});
+    if (response.redirected || response.status === 401) { location.href='/sign-in'; throw new Error('Please sign in again.'); }
+    let value;
+    try { value = await response.json(); } catch { throw new Error('The server did not return model data. Try again.'); }
     if (!response.ok) throw new Error(value.error?.message || 'The operation failed.');
     return value;
   }
-  const safe = action => async event => { try { await action(event); message(''); } catch (error) { message(error.message); } };
   const chosen = () => $('file').value === '' ? null : choices[Number($('file').value)];
   function families() {
     const list = [...(inventory.catalogue?.families || [])];
@@ -53,7 +66,7 @@
         if (option.max !== undefined) input.max = option.max;
       }
       column.append(label, input);
-      if (option.description) { const more = element('details', undefined, 'more'); more.append(element('summary','Why?'), element('p',option.description,'form-hint')); column.append(more); }
+      if (option.description) { const more = document.getElementById('am-default-help').content.firstElementChild.cloneNode(true); more.querySelector('[data-help-text]').textContent = option.description; column.append(more); }
       $('default-fields').append(column);
     }
     $('defaults-empty').hidden = spec.length > 0;
@@ -68,101 +81,334 @@
   function familyChanged() {
     const family = families().find(one => one.family === $('family').value);
     const previous = $('kind').value;
-    $('kind').replaceChildren(...(family?.kinds || []).map(kind => new Option(kind,kind)));
+    $('kind').replaceChildren(...(family?.kinds || []).map(kind => new Option(kinds[kind] || kind,kind)));
     if (family?.kinds.includes(previous)) $('kind').value = previous;
     $('family-note').textContent = [family?.description, family?.note].filter(Boolean).join(' ');
     $('session').title = family?.note || ''; defaultFields(family); exclusive();
   }
-  function companions() {
+  function companions(extra=[]) {
     const file = chosen(), root = $('root').value.replace(/\/$/, '');
     const previous = new Set(Array.from($('companions').selectedOptions).map(option => option.value));
     const source = nodes.find(one => one.name === file?.machine);
-    const available = (source?.files || []).filter(one => !one.moving && one.path !== file.path && one.path.startsWith(root + '/'));
-    $('companions').replaceChildren(...available.map(one => { const option = new Option(one.path.slice(root.length + 1),one.path); option.selected = previous.has(one.path); return option; }));
+    const available = (source?.files || []).filter(one => !one.moving && one.path !== file?.path && one.path.startsWith(root + '/'));
+    const profile=selected?.audiocpp;
+    const savedRoot=profile?.path?.endsWith('.gguf') ? profile.path.slice(0,profile.path.lastIndexOf('/')) : profile?.path;
+    const paths=new Set([...available.map(one=>one.path),...(profile?.files || []).map(path=>savedRoot + '/' + path),...(Array.isArray(extra) ? extra : []),...previous]);
+    $('companions').replaceChildren(...[...paths].filter(path=>path.startsWith(root + '/') && path !== file?.path).map(path => { const option = new Option(path.slice(root.length + 1),path); option.selected = previous.has(path); return option; }));
   }
   function fileChanged() {
     const file = chosen();
-    if (!file) return;
+    if (!file) { filterFamilies(); familyChanged(); return; }
     $('root').value = file.path.slice(0,file.path.lastIndexOf('/'));
     filterFamilies();
     familyChanged(); companions();
     if (!selected && !$('name').value) $('name').value = file.path.split('/').pop().replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9._-]/g,'-');
   }
-  function renderProfiles() {
-    $('profiles').replaceChildren(...inventory.models.map(row => {
-      const tr = element('tr'), cell = element('td'), link = element('a',row.name);
-      link.href = '/models/' + encodeURIComponent(row.name) + '?node=' + encodeURIComponent(node); cell.append(link);
-      const device = row.gpus === 0 ? 'CPU' : Array.isArray(row.gpus) ? row.gpus.join(', ') : 'one GPU';
-      tr.append(cell,element('td',row.audiocpp.family),element('td',row.audiocpp.kind),element('td',device),
-        element('td',row.loaded || 'idle'),element('td',row.measured?.mib?.map(value => value + ' MiB').join(', ') || '—'));
-      const action = element('td');
-      if (['music','sound'].includes(row.audiocpp.kind)) {
-        const button = element('button','Test','btn btn-outline-secondary btn-sm');
-        button.addEventListener('click',safe(() => runTest(row,button))); action.append(button);
-      }
-      tr.append(action); return tr;
-    }));
+
+  function showSection(value) {
+    section = value;
+    root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== section; });
+    root.querySelectorAll('[data-section]').forEach(button => {
+      const active = button.dataset.section === section;
+      button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active));
+    });
   }
-  async function refresh() {
-    const [models,files] = await Promise.all([call('/soundroom-models'),call('/model-files')]);
-    inventory = models; nodes = files.nodes || [];
-    selected = inventory.models.find(row => row.name === params.get('model')) || null;
-    choices = nodes.flatMap(source => source.files.filter(file => file.facts?.what === 'audio' && !file.moving && /\.(gguf|safetensors|pth|bin|onnx)$/i.test(file.path)).map(file => ({...file,machine:source.name})));
-    if (selected && !choices.some(file => file.machine === node && file.path === selected.flags.model))
-      choices.push({path:selected.flags.model,machine:node,tier:'current',facts:{family:selected.audiocpp.family,kinds:[selected.audiocpp.kind]}});
-    $('file').replaceChildren(new Option('Choose an audio model file',''),...choices.map((file,index) => {
-      const option = new Option(file.path + ' · ' + file.machine + ' · ' + file.tier,String(index));
-      option.disabled = Boolean(selected && (file.machine !== node || file.tier === 'storage') && file.path !== selected.flags.model); return option;
-    }));
-    filterFamilies();
-    $('node').replaceChildren(...nodes.map(one => new Option(one.name + (one.answering ? '' : ' · not reachable'),one.name))); $('node').value = node;
-    SuiteHardware.set('am', selected?.gpus ?? 1, inventory.cards || []);
+  function updateSummary() {
+    $('save-summary').textContent = ($('name').value || 'New audio model') + ' → ' + (activeNode || 'Choose a node');
+    const mode = root.querySelector('[data-hardware-mode]:checked')?.value;
+    const device = mode === 'cpu' ? 'CPU' : mode === 'pin' ? [...root.querySelectorAll('[data-gpu-card]:checked')].map(one=>one.value).join(', ') || 'Choose GPUs' : 'Automatic GPU';
+    $('save-detail').textContent = [device,Number($('ram').value || 0).toLocaleString() + ' MiB host RAM',kinds[$('kind').value] || 'Choose a task'].join(' · ');
+    $('draft-status').textContent = dirty ? 'Unsaved draft' : selected ? 'Saved configuration' : 'Review setup, then add model';
+    const reachable = available(activeNode);
+    $('editor-state').textContent = !reachable ? 'Node unavailable' : selected ? 'Installed' : 'New model';
+    $('editor-context').textContent = selected ? 'Editing ' + selected.name + ' on ' + activeNode + '. Changes apply to this installation.' : 'Choose a managed file, assign hardware and review the output defaults.';
+    $('submit').textContent = busy ? 'Saving…' : selected ? 'Save model' : 'Add model';
+    $('submit').disabled = busy || !reachable || (!selected && !accepting(activeNode));
+    $('target-node').disabled = Boolean(selected) || busy;
     const runtime = (inventory.engines?.engines || []).find(one => one.id === 'audiocpp');
-    $('runtime').textContent = runtime?.available ? 'audio.cpp is installed on this node. Choose any compatible model file from cache/storage.' : runtime?.why || '';
-    renderProfiles();
+    $('runtime').textContent = !reachable ? 'This node is unavailable. Saved settings and drafts remain visible; retry to reconnect.' : runtime?.available ? 'audio.cpp is installed on ' + activeNode + '.' : runtime?.why || inventory.catalogue?.error || '';
+    const file = chosen();
+    $('file-note').textContent = file ? file.machine + ' · ' + file.tier + '. ' + (file.tier === 'storage' ? 'Stored files are promoted and copied after space checks when adding a model.' : 'Managed model file.') : 'Choose a compatible audio model from managed cache or storage.';
+    $('session-note').textContent = families().find(one=>one.family === $('family').value)?.note || 'Optional runtime-specific session settings. Saved keys are preserved.';
+    $('model-actions').hidden = !selected;
+    $('test-button').hidden = !selected || !['music','sound'].includes(selected.audiocpp.kind);
+    $('test-button').disabled = busy || !reachable || dirty;
+    $('test-button').title = dirty ? 'Save or discard changes before testing.' : '';
     if (selected) {
-      const profile = selected.audiocpp;
-      $('file').value = String(choices.findIndex(file => file.path === selected.flags.model && file.machine === node)); fileChanged();
-      $('family').value = profile.family; familyChanged(); $('kind').value = profile.kind; exclusive();
-      $('name').value = selected.name; $('name').readOnly = true;
-      $('alone').checked = selected.alone ?? true; exclusive();
-      $('seconds').value = profile.limits?.max_seconds || 600; $('takes').value = profile.limits?.max_takes || 8;
-      $('text').value = profile.limits?.max_text_chars ?? 20000; $('audio').value = profile.limits?.max_audio_mib ?? 32;
-      $('heading').textContent = selected.name;
-      $('ram').value = profile.host_ram_mib || 8192; $('session').value = JSON.stringify(profile.session_options || {},null,2);
-      SuiteModelFields.load('am-defaults', profile.defaults || {});
-      $('root').value = profile.path.endsWith('.gguf') ? profile.path.slice(0,profile.path.lastIndexOf('/')) : profile.path;
-      companions();
-      for (const option of $('companions').options) option.selected = (profile.files || []).includes(option.value.slice($('root').value.length + 1));
-      $('form').querySelector('button[type="submit"]').textContent = 'Save model';
+      $('details').href = '/models/' + encodeURIComponent(selected.name) + '?node=' + encodeURIComponent(activeNode);
+      $('measured').textContent = selected.measured?.mib?.length ? 'Peak seen: ' + selected.measured.mib.map(value=>value + ' MiB').join(' + ') : 'Memory not measured';
     }
   }
-  async function runTest(row,button) {
-    button.disabled = true; $('test').hidden = false; $('test-title').textContent = 'Testing ' + row.name + '…'; $('test-result').textContent = ''; $('test-audio').removeAttribute('src');
+  function captureDraft() {
+    if (!editing || loading || !dirty) return;
+    const file = chosen();
+    drafts.set(key(),{
+      fields:[...$('form').querySelectorAll('input[id],select[id],textarea[id]')].map(input=>({id:input.id,value:input.value,checked:input.checked,jsonField:input.dataset.jsonField})),
+      file:file ? {path:file.path,machine:file.machine} : null,
+      companions:[...$('companions').selectedOptions].map(option=>option.value),
+      mode:root.querySelector('[data-hardware-mode]:checked')?.value || 'auto',
+      pins:[...root.querySelectorAll('[data-gpu-card]:checked')].map(input=>input.value),
+      automatic:root.querySelector('[data-hardware]').dataset.automaticGpus
+    });
+  }
+  function restoreDraft(draft) {
+    if (!draft) return;
+    if (draft.file) $('file').value = String(choices.findIndex(file=>file.path === draft.file.path && file.machine === draft.file.machine));
+    else $('file').value = '';
+    const fieldValue = id => draft.fields.find(one=>one.id === 'am-' + id)?.value;
+    $('defaults').value = '{}';
+    filterFamilies(); $('family').value = fieldValue('family'); familyChanged();
+    for (const saved of draft.fields) {
+      if (['am-file','am-target-node'].includes(saved.id)) continue;
+      const input = document.getElementById(saved.id);
+      if (!input) continue;
+      input.value = saved.value;
+      if (saved.jsonField) input.dataset.jsonField = saved.jsonField;
+      if (['checkbox','radio'].includes(input.type)) input.checked = saved.checked;
+    }
+    companions(draft.companions);
+    for (const option of $('companions').options) option.selected = draft.companions.includes(option.value);
+    SuiteHardware.set('am',draft.mode === 'cpu' ? 0 : draft.mode === 'pin' ? draft.pins : Number(draft.automatic) || 1,inventory.cards || []);
+    if (draft.mode === 'pin' && !draft.pins.length) {
+      root.querySelector('[data-hardware-mode][value="pin"]').checked = true;
+      root.querySelector('[data-hardware-mode][value="pin"]').dispatchEvent(new Event('change',{bubbles:true}));
+    }
+    exclusive(); dirty = true;
+  }
+  function populate(name='') {
+    loading = true; message(''); $('saved').textContent = '';
+    inventory = inventories.get(activeNode) || {};
+    selected = (inventory.models || []).find(row=>row.name === name) || null;
+    $('form').reset(); $('defaults').value = '{}'; $('session').value = '{}';
+    $('default-fields').replaceChildren();
+    // Always retain installed paths, even if a cache scan cannot currently see the file.
+    choices = nodes.flatMap(source=>(source.files || []).filter(file=>file.facts?.what === 'audio' && !file.moving && /\.(gguf|safetensors|pth|bin|onnx)$/i.test(file.path)).map(file=>({...file,machine:source.name})));
+    if (selected && !choices.some(file=>file.machine === activeNode && file.path === selected.flags.model)) {
+      choices.push({path:selected.flags.model,machine:activeNode,tier:'current',facts:{family:selected.audiocpp.family,kinds:[selected.audiocpp.kind]}});
+    }
+    $('file').replaceChildren(new Option('Choose an audio model file',''),...choices.map((file,index)=>{
+      const option = new Option(file.path + ' · ' + file.machine + ' · ' + file.tier,String(index));
+      option.disabled = Boolean(selected && (file.machine !== activeNode || file.tier === 'storage') && file.path !== selected.flags.model);
+      return option;
+    }));
+    $('target-node').replaceChildren(...computeNodes.map(one=>{
+      const option=new Option(one.name + (accepting(one.name) ? '' : ' · unavailable for new models'),one.name);
+      option.disabled = !selected && !accepting(one.name); return option;
+    }));
+    $('target-node').value=activeNode;
+    SuiteHardware.set('am',selected?.gpus ?? 1,inventory.cards || []);
+    filterFamilies(); familyChanged();
+    $('name').readOnly=Boolean(selected);
+    $('heading').textContent=selected?.name || 'Add an audio model';
+    if (selected) {
+      const profile=selected.audiocpp;
+      $('file').value=String(choices.findIndex(file=>file.path === selected.flags.model && file.machine === activeNode));
+      fileChanged(); $('family').value=profile.family; familyChanged(); $('kind').value=profile.kind;
+      $('name').value=selected.name; $('alone').checked=selected.alone ?? true; exclusive();
+      $('seconds').value=profile.limits?.max_seconds ?? 600; $('takes').value=profile.limits?.max_takes ?? 8;
+      $('text').value=profile.limits?.max_text_chars ?? 20000; $('audio').value=profile.limits?.max_audio_mib ?? 32;
+      $('ram').value=profile.host_ram_mib ?? 8192; $('session').value=JSON.stringify(profile.session_options || {},null,2);
+      $('defaults').value=JSON.stringify(profile.defaults || {}); defaultFields(families().find(one=>one.family === profile.family));
+      SuiteModelFields.load('am-defaults',profile.defaults || {});
+      $('root').value=profile.path.endsWith('.gguf') ? profile.path.slice(0,profile.path.lastIndexOf('/')) : profile.path;
+      companions();
+      for (const option of $('companions').options) option.selected=(profile.files || []).includes(option.value.slice($('root').value.length+1));
+    }
+    dirty=false; restoreDraft(drafts.get(key())); editing=true;
+    $('controls').disabled=!available(activeNode);
+    loading=false; showSection(section); updateSummary();
+  }
+  const kindGroup = kind => ['speech','clone','design'].includes(kind) ? 'voice' : ['transcription','alignment','diarization'].includes(kind) ? 'understand' : kind;
+  const state = (row,node) => !available(node) ? 'offline' : row.running ? 'in-use' : row.loaded === 'ready' ? 'loaded' : row.loaded ? 'loading' : row.enabled === false ? 'disabled' : 'installed';
+  const stateLabel = value => ({offline:'Node unavailable',loaded:'Loaded','in-use':'In use',loading:'Loading',disabled:'Disabled',installed:'Installed'})[value];
+  function renderProfiles() {
+    const grouped=new Map();
+    for (const [node,known] of inventories) for (const row of known.models || []) {
+      if (!grouped.has(row.name)) grouped.set(row.name,[]);
+      grouped.get(row.name).push({node,row});
+    }
+    const all=[...grouped], search=$('search').value.trim().toLowerCase(), scope=$('node').value, status=$('availability').value;
+    const shown=all.map(([name,places])=>[name,places.filter(place=>(!scope || place.node === scope) &&
+      (task === 'all' || kindGroup(place.row.audiocpp.kind) === task) &&
+      (status === 'all' || status === 'loaded' && ['loaded','in-use'].includes(state(place.row,place.node)) || status === 'offline' && !available(place.node)))])
+      .filter(([name,places])=>places.length && (!search || [name,...places.flatMap(place=>[place.node,place.row.audiocpp.family])].join(' ').toLowerCase().includes(search)))
+      .sort(([a],[b])=>a.localeCompare(b));
+    const scroll=$('profiles').scrollTop;
+    $('profiles').replaceChildren(...shown.map(([name,places])=>{
+      const choice=$('profile-template').content.firstElementChild.cloneNode(true);
+      const place=places.find(one=>one.node === activeNode) || places[0], row=place.row;
+      choice.dataset.model=name;
+      choice.querySelector('[data-name]').textContent=name;
+      choice.querySelector('[data-meta]').textContent=row.audiocpp.family + ' · audio.cpp';
+      choice.querySelector('[data-initial]').textContent=name[0].toUpperCase();
+      choice.querySelector('[data-kind]').textContent=kinds[row.audiocpp.kind] || row.audiocpp.kind;
+      const active=selected?.name === name && places.some(one=>one.node === activeNode);
+      choice.classList.toggle('is-selected',active);
+      const button=choice.querySelector('[data-identity]'); button.setAttribute('aria-pressed',String(active));
+      button.addEventListener('click',()=>selectModel(name,place.node));
+      choice.querySelector('[data-draft]').textContent=places.some(one=>drafts.has(key(name,one.node))) ? 'Unsaved draft' : '';
+      for (const installation of places) {
+        const chip=$('placement-template').content.firstElementChild.cloneNode(true), status=state(installation.row,installation.node);
+        chip.querySelector('[data-node-name]').textContent=installation.node;
+        chip.querySelector('[data-status]').textContent=' · ' + stateLabel(status);
+        chip.dataset.state=status;
+        chip.title=installation.node + ' · ' + stateLabel(status);
+        chip.setAttribute('aria-label','Configure ' + name + ' on ' + installation.node + ': ' + stateLabel(status));
+        chip.addEventListener('click',()=>selectModel(name,installation.node));
+        choice.querySelector('[data-placements]').append(chip);
+      }
+      return choice;
+    }));
+    if (!shown.length) $('profiles').append(element('p',all.length ? 'No models match. Clear your filters or add a model.' : failures.size ? 'Inventory is unavailable. Retry to reconnect to your compute nodes.' : 'No audio models yet. Choose a file to add your first model.','small text-secondary p-3 mb-0'));
+    $('profiles').scrollTop=scroll;
+    $('total-models').textContent=all.length || (failures.size ? '—' : '0');
+    $('total-installations').textContent=all.reduce((count,[,places])=>count+places.length,0) || (failures.size ? '—' : '0');
+    const reachable=[...inventories].filter(([node])=>available(node));
+    $('total-loaded').textContent=reachable.length ? reachable.reduce((count,[node,known])=>count+(known.models || []).filter(row=>['loaded','in-use'].includes(state(row,node))).length,0) : '—';
+    $('total-kinds').textContent=new Set(all.flatMap(([,places])=>places.map(place=>place.row.audiocpp.kind))).size || (failures.size ? '—' : '0');
+    $('result-count').textContent=shown.length + ' of ' + all.length + ' models' + (failures.size ? ' · inventory incomplete' : '');
+    root.querySelectorAll('[data-audio-task]').forEach(button=>{
+      const active=button.dataset.audioTask === task;
+      button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active));
+    });
+  }
+  function updateLocation() {
+    const url=new URL(location.href);
+    if (activeNode) url.searchParams.set('node',activeNode);
+    if (selected) { url.searchParams.set('model',selected.name); url.searchParams.delete('new'); }
+    else { url.searchParams.delete('model'); url.searchParams.set('new','1'); }
+    history.replaceState(null,'',url);
+  }
+  function selectModel(name,node) {
+    if (busy) return;
+    captureDraft(); activeNode=node; populate(name); updateLocation(); renderProfiles();
+  }
+  function startNew() {
+    if (busy) return;
+    captureDraft();
+    const scope=$('node').value;
+    activeNode=(scope && accepting(scope) ? scope : accepting(activeNode) ? activeNode : computeNodes.find(one=>accepting(one.name))?.name) || activeNode;
+    section='files'; populate(); updateLocation(); renderProfiles(); $('name').focus();
+  }
+  async function refresh() {
+    if (busy) return;
+    captureDraft(); $('retry').disabled=true;
     try {
-      const answer = await call('/soundroom-test',{model:row.name,prompt:row.audiocpp.kind === 'music' ? 'short bright piano melody, gentle drums' : 'a single door knock',duration:10});
-      $('test-title').textContent = row.name + ' · ' + answer.seconds + ' s'; $('test-result').textContent = JSON.stringify(answer.take?.metrics || answer,null,2);
-      if (answer.take?.asset_id) $('test-audio').src = '/soundroom-api/assets/' + encodeURIComponent(answer.take.asset_id) + '/content';
-    } finally { button.disabled = false; }
+      const outcomes=await Promise.allSettled([call('/model-files'),...computeNodes.map(one=>call('/soundroom-models',undefined,one.name))]);
+      const files=outcomes[0];
+      let fileError='';
+      if (files.status === 'fulfilled') nodes=files.value.nodes || [];
+      else fileError='Managed files could not be refreshed. ' + files.reason.message;
+      for (const [index,one] of computeNodes.entries()) {
+        const result=outcomes[index+1];
+        if (result.status === 'fulfilled') { inventories.set(one.name,result.value); failures.delete(one.name); }
+        else failures.add(one.name);
+      }
+      const warning=[fileError,failures.size ? 'Unavailable nodes: ' + [...failures].join(', ') + '. Last known configurations remain visible.' : '',!computeNodes.length ? 'No compute nodes are configured. Add one under Compute nodes first.' : ''].filter(Boolean).join(' ');
+      $('load-error').hidden=!warning; $('load-error-text').textContent=warning;
+      if (!initialized) {
+        const requested=params.get('model');
+        if (!params.get('node') && requested) activeNode=computeNodes.find(one=>(inventories.get(one.name)?.models || []).some(row=>row.name === requested))?.name || activeNode;
+        if (!params.get('node') && !available(activeNode)) activeNode=computeNodes.find(one=>available(one.name))?.name || activeNode;
+        const first=(inventories.get(activeNode)?.models || [])[0]?.name;
+        populate(params.has('new') ? '' : requested || first || '');
+        initialized=true;
+      } else populate(selected?.name || '');
+      renderProfiles();
+      $('add').disabled=!computeNodes.some(one=>accepting(one.name));
+    } finally { $('retry').disabled=false; }
+  }
+  async function runTest() {
+    if (!selected || dirty) return;
+    message('');
+    const row=selected, node=activeNode;
+    $('test-button').disabled=true; $('test').hidden=false; $('test-title').textContent='Testing ' + row.name + '…';
+    $('test-result').textContent=''; $('test-audio').removeAttribute('src');
+    try {
+      const answer=await call('/soundroom-test',{model:row.name,prompt:row.audiocpp.kind === 'music' ? 'short bright piano melody, gentle drums' : 'a single door knock',duration:10},node);
+      $('test-title').textContent=row.name + ' · ' + answer.seconds + ' s';
+      $('test-result').textContent=JSON.stringify(answer.take?.metrics || answer,null,2);
+      if (answer.take?.asset_id) $('test-audio').src='/soundroom-api/assets/' + encodeURIComponent(answer.take.asset_id) + '/content';
+    } finally { updateSummary(); }
   }
   $('file').addEventListener('change',fileChanged); $('family').addEventListener('change',familyChanged); $('root').addEventListener('change',companions); $('kind').addEventListener('change',exclusive);
-  $('form').addEventListener('submit',safe(async event => {
-    event.preventDefault(); const file = chosen(), family = $('family').value, root = $('root').value.trim().replace(/\/$/,'');
+  root.querySelectorAll('[data-section]').forEach(button=>button.addEventListener('click',()=>showSection(button.dataset.section)));
+  root.querySelectorAll('[data-audio-task]').forEach(button=>button.addEventListener('click',()=>{ task=button.dataset.audioTask; renderProfiles(); }));
+  for (const [name,event] of [['search','input'],['availability','change']]) $(name).addEventListener(event,renderProfiles);
+  $('node').addEventListener('change',()=>{
+    const node=$('node').value;
+    if (node && !busy) {
+      captureDraft();
+      const rows=inventories.get(node)?.models || [];
+      const name=rows.find(row=>row.name === selected?.name)?.name || rows[0]?.name || '';
+      activeNode=node; populate(name); updateLocation();
+    }
+    renderProfiles();
+  });
+  $('clear').addEventListener('click',()=>{ task='all'; $('search').value=''; $('availability').value='all'; $('node').value=''; renderProfiles(); });
+  $('node').value=params.get('node') || '';
+  $('add').addEventListener('click',startNew);
+  $('target-node').addEventListener('change',()=>{
+    if (selected || busy) return;
+    const target=$('target-node').value;
+    // A new-model draft follows its chosen target without leaking hardware from another node.
+    captureDraft(); const draft=drafts.get(key()); activeNode=target;
+    if (draft && !drafts.has(key('',target))) drafts.set(key('',target),{...draft,mode:'auto',pins:[],automatic:undefined});
+    populate(); updateLocation(); renderProfiles();
+  });
+  $('reset').addEventListener('click',()=>{ drafts.delete(key()); populate(selected?.name || ''); renderProfiles(); });
+  const changed=()=>{
+    if (loading) return; dirty=true; $('saved').textContent='';
+    queueMicrotask(()=>{ updateSummary(); captureDraft(); });
+  };
+  $('form').addEventListener('input',changed); $('form').addEventListener('change',changed);
+  $('form').addEventListener('submit',safe(async event=>{
+    event.preventDefault(); message('');
+    for (const input of $('form').querySelectorAll('input,select,textarea')) if (!input.checkValidity()) {
+      const panel=input.closest('[data-panel]'); if (panel) showSection(panel.dataset.panel);
+      input.reportValidity(); return;
+    }
+    const file=chosen(),family=$('family').value,root=$('root').value.trim().replace(/\/$/,'');
     if (!file || !family) throw new Error('Choose an audio model file and its compatible runtime family.');
     if (!file.path.startsWith(root + '/')) throw new Error('The model file must be inside its package folder.');
-    const parse = field => { try { return JSON.parse($(field).value || '{}'); } catch { throw new Error(field + ' must be valid JSON.'); } };
-    const device = SuiteHardware.read('am');
-    const settings = {engine:'audiocpp',flags:{model:file.path,'ctx-size':0},gpus:device,
+    const parse=name=>{
+      const value=JSON.parse($(name).value || '{}');
+      if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error(name + ' must be a JSON object.');
+      return value;
+    };
+    let session,defaults;
+    try { session=parse('session'); defaults=SuiteModelFields.read('am-defaults'); }
+    catch (error) { showSection('advanced'); throw new Error('Advanced JSON: ' + error.message); }
+    const device=SuiteHardware.read('am');
+    const preserved=Object.fromEntries(['allow_split','adapters','min_context','order'].filter(name=>Object.hasOwn(selected || {},name)).map(name=>[name,selected[name]]));
+    const settings={...preserved,engine:'audiocpp',flags:{...selected?.flags,model:file.path,'ctx-size':0},gpus:device,
       alone:['music','sound'].includes($('kind').value) || $('alone').checked,
       audiocpp:{...selected?.audiocpp,family,kind:$('kind').value,package:selected?.audiocpp.package || '',
-        path:file.path.endsWith('.gguf') ? file.path : root, files:Array.from($('companions').selectedOptions).map(option => option.value.slice(root.length + 1)),
-        session_options:parse('session'), defaults:SuiteModelFields.read('am-defaults'),
+        path:file.path.endsWith('.gguf') ? file.path : root,files:[...$('companions').selectedOptions].map(option=>option.value.slice(root.length+1)),
+        session_options:session,defaults,
         limits:{...selected?.audiocpp.limits,max_seconds:Number($('seconds').value),max_takes:Number($('takes').value),max_text_chars:Number($('text').value),max_audio_mib:Number($('audio').value)},host_ram_mib:Number($('ram').value)}};
-    const answer = await call('/soundroom-models',{name:$('name').value.trim(),settings,new:!selected,source_machine:file.machine});
-    if (answer.kind === 'model-install') { location.href = '/models?kind=audio&install=' + encodeURIComponent(answer.id); return; }
-    message('');
-    params.set('model', answer.name || $('name').value.trim());
-    await refresh(); $('saved').textContent = 'Saved.';
+    const name=$('name').value.trim(), draftKey=key();
+    busy=true; $('controls').disabled=true; updateSummary();
+    try {
+      const answer=await call('/soundroom-models',{name,settings,new:!selected,source_machine:file.machine});
+      if (answer.kind === 'model-install') {
+        drafts.delete(draftKey); dirty=false;
+        location.href='/models?kind=audio&install=' + encodeURIComponent(answer.id); return;
+      }
+      drafts.delete(draftKey); dirty=false;
+      const savedName=answer.name || name;
+      const known=inventories.get(activeNode);
+      const row=(known.models || []).find(one=>one.name === savedName);
+      if (row) Object.assign(row,settings);
+      else (known.models ||= []).push({...settings,name:savedName});
+      populate(savedName); updateLocation(); renderProfiles(); $('saved').textContent='Saved.';
+    } finally { busy=false; $('controls').disabled=!available(activeNode); updateSummary(); }
   }));
-  refresh().catch(error => message(error.message));
+  $('retry').addEventListener('click',safe(refresh));
+  $('test-button').addEventListener('click',safe(runTest));
+  window.addEventListener('beforeunload',event=>{
+    if (!dirty && !drafts.size) return;
+    event.preventDefault(); event.returnValue='';
+  });
+  refresh().catch(error=>{ $('load-error').hidden=false; $('load-error-text').textContent=error.message; });
 })();

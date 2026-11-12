@@ -1,0 +1,62 @@
+{# Shared live Audio studio and preview editor, model choices and controls. #}
+{% from 'parts.html' import card, alert, hardware %}
+{% from 'model_form.html' import number %}
+{% from 'models_parts.html' import subject %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% macro field(id, label, value='', type='text', min=none, max=none, required=true, wide=false, pattern='', maxlength=128) %}
+<div class="{{ 'col-12' if wide else 'col-sm-6' }}"><label for="am-{{ id }}" class="form-label">{{ label }}</label><input{% if pattern %} pattern="{{ pattern }}"{% endif %} id="am-{{ id }}" name="{{ id }}" type="{{ type }}" value="{{ value }}" class="form-control"{% if required %} required{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if type == 'text' and maxlength is not none %} maxlength="{{ maxlength }}"{% endif %}></div>
+{% endmacro %}
+{% macro select(id, label, options=[], wide=false, required=false) %}
+<div class="{{ 'col-12' if wide else 'col-sm-6' }}"><label for="am-{{ id }}" class="form-label">{{ label }}</label><select{% if required %} required{% endif %} id="am-{{ id }}" name="{{ id }}" class="form-select">{% for value,label in options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+{% endmacro %}
+{% macro wave() %}
+<span class="audio-wave" aria-hidden="true">{% for height in [12,23,16,32,46,28,56,40,66,48,32,58,42,72,54,38,64,46,28,50,34,58,40,26,44,30,18,36,22,12] %}<i style="--wave-height:{{ height }}%"></i>{% endfor %}</span>
+{% endmacro %}
+{% macro editor(data=none, live=false) %}
+{% set heading = 'am-heading' if live else 'editor-title' %}
+<div id="audio-editor" class="audio-editor">
+{% call card('Model configuration', class_='mb-0', header_id=heading, actions=('<span class="badge" id="' ~ ('am-editor-state' if live else 'editor-state') ~ '">' ~ ('Loading' if live else 'Installed') ~ '</span>')|safe) %}
+<p id="{{ 'am-editor-context' if live else 'editor-context' }}" class="text-secondary small"></p>
+<form id="am-form" novalidate data-hold-refresh>
+{% call pills('Configuration sections', buttons=true, class_='gap-1 mb-4 audio-editor-tabs') %}
+{% for key,label in [('files','01 · Model & files'),('hardware','02 · Hardware'),('output','03 · Output'),('advanced','Advanced')] %}{{ pill_button(label, key == 'files', attrs={'data-section':key, 'aria-controls':'panel-' ~ key}) }}{% endfor %}
+{% endcall %}
+<section id="panel-files" data-panel="files">
+<div class="row g-3">
+{{ select('file','Model file in cache or storage',wide=true,required=true) }}
+<div class="col-12 small text-secondary" id="{{ 'am-file-note' if live else 'file-note' }}">Choose a managed file. Family and task follow its runtime contract.</div>
+{{ field('name','Model name',pattern='[A-Za-z0-9][A-Za-z0-9._:\\/\\-]{0,127}' if live else '') }}{{ select('family','Model family',required=true) }}
+{% if live %}<div class="col-12 form-text" id="am-family-note"></div>{% endif %}
+{{ select('kind','Audio task') }}{{ field('root','Package folder',wide=true,maxlength=none) }}
+<div class="col-12"><label for="am-companions" class="form-label">Companion files <span class="text-secondary">(optional)</span></label>{% if live %}<select id="am-companions" name="companions" class="form-select font-monospace" multiple size="4"></select>{% else %}<textarea id="am-companions" name="companions" class="form-control font-monospace" rows="2" placeholder="One relative path per line"></textarea>{% endif %}<p class="form-text">Paths are relative to the package folder; standalone GGUF files usually need none.</p></div>
+</div>
+</section>
+<section id="panel-hardware" data-panel="hardware" hidden><div class="row g-3">
+{% if live %}
+{{ select('target-node','Compute node') }}
+{{ hardware('am', alone=true, legacy='audio') }}
+{% else %}
+{{ select('node','Compute node') }}
+{{ select('gpu','GPU assignment',[('GPU 0','GPU 0'),('GPU 1','GPU 1'),('GPU 0 + GPU 1','GPU 0 + GPU 1'),('CPU','CPU only')]) }}
+{% endif %}
+{{ number('am-ram','Host RAM budget','MiB',1024,131072,8192,required=true) }}
+{% if not live %}<div class="col-12"><label class="form-check"><input id="am-alone" name="alone" type="checkbox" class="form-check-input"><span class="form-check-label">Keep GPUs exclusive to this model</span></label><p class="form-text" id="exclusive-note">Music and sound models require exclusive GPUs.</p></div>{% else %}<div class="col-12 form-hint" id="am-exclusive-hint">Music and sound models require exclusive GPUs.</div>{% endif %}
+</div></section>
+<section id="panel-output" data-panel="output" hidden><div class="row g-3">
+{{ number('am-seconds','Longest output','s',1,3600,600,required=true) }}{{ number('am-takes','Takes per request','',1,16,8,required=true) }}
+{{ number('am-text','Input text limit','characters',1,200000,20000,required=true) }}{{ number('am-audio','Input audio limit','MiB',1,64,32,required=true) }}
+{% if live %}<div class="col-12"><div id="am-default-fields" class="row g-3"></div><p class="form-hint" id="am-defaults-empty">Choose a model family to see its options.</p></div>{% else %}<div class="col-12"><label for="am-defaults" class="form-label">Generation defaults (JSON)</label><textarea id="am-defaults" name="defaults" class="form-control font-monospace" rows="4">{}</textarea><p class="form-text">Runtime defaults apply to omitted options. Only use options supported by this family.</p></div>{% endif %}
+</div></section>
+<section id="panel-advanced" data-panel="advanced" hidden>{% if live %}<div class="mb-3"><label for="am-defaults" class="form-label">Additional generation defaults (JSON)</label><textarea id="am-defaults" class="form-control font-monospace" rows="4">{}</textarea><p class="form-text">Use the labelled output fields for declared options. Other saved keys are preserved here.</p></div>{% endif %}<label for="am-session" class="form-label">Session options (JSON)</label><textarea id="am-session" name="session" class="form-control font-monospace" rows="6">{}</textarea><p class="form-text" id="{{ 'am-session-note' if live else 'family-note' }}"></p></section>
+<div class="audio-save-summary mt-4"><span class="audio-save-icon" aria-hidden="true">↳</span><div><strong id="{{ 'am-save-summary' if live else 'save-summary' }}"></strong><small id="{{ 'am-save-detail' if live else 'save-detail' }}" class="d-block text-secondary"></small></div></div>
+{% if live %}{{ alert('danger',attrs={'id':'am-message','hidden':''},class_='mt-3 mb-0') }}{% else %}<div id="form-error" hidden>{{ alert('danger', attrs={'id':'form-error-text'}, class_='mt-3 mb-0') }}</div>{% endif %}
+<div class="audio-editor-actions d-flex flex-wrap gap-2 mt-3"><button type="submit" class="btn btn-primary" id="{{ 'am-submit' if live else 'save-model' }}">{{ 'Add model' if live else 'Save configuration' }}</button><button type="button" class="btn btn-outline-secondary" id="{{ 'am-reset' if live else 'reset-model' }}">Discard changes</button><span id="{{ 'am-draft-status' if live else 'draft-status' }}" class="small text-secondary ms-auto align-self-center" role="status"></span></div>
+{% if live %}<span id="am-saved" class="small text-success d-block mt-2" role="status"></span>{% endif %}
+</form>
+{% endcall %}
+</div>
+{% endmacro %}
+
+{% macro studio_choice(id='audio-choice', live=false) %}
+<template id="{{ id }}"><div class="audio-choice">{{ subject(attrs={'data-identity':''}) }}<span class="badge" data-kind></span>{% if live %}<div class="inventory-placements" data-placements></div><small class="text-secondary" data-draft></small>{% endif %}</div></template>
+{% endmacro %}

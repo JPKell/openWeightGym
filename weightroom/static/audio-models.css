@@ -1,0 +1,25 @@
+/* Shared live Audio studio and design preview surfaces. */
+.audio-toolbar { display:grid; grid-template-columns:minmax(0,1fr) 180px 170px; gap:1rem; }
+.audio-studio { display:grid; grid-template-columns:300px minmax(0,1fr); gap:1.5rem; align-items:start; }
+.audio-model-choices { max-height:690px; overflow:auto; }
+.audio-choice { position:relative; display:flex; flex-direction:column; align-items:start; gap:.7rem; padding:1rem; border:1px solid transparent; border-radius:8px; margin:.2rem 0; }
+.audio-choice .inventory-subject { width:100%; }
+.audio-choice.is-selected { background:var(--theme-accent-bg); border-color:var(--theme-border); }
+.audio-choice .badge { margin-left:47px; }
+.audio-editor-tabs { font-size:.76rem; }
+.audio-editor-tabs .nav-link { padding:.6rem .75rem; }
+.audio-editor [data-panel] { min-height:285px; }
+.audio-editor .card-header { background:var(--theme-surface); }
+.audio-editor .card-body { padding:1.5rem; }
+.audio-editor .form-label { font-size:.8rem; }
+.audio-save-summary { display:flex; align-items:center; gap:1rem; padding:1rem; border-radius:8px; background:var(--theme-subtle); font-size:.8rem; }
+.audio-save-icon { color:var(--theme-accent); font-size:1.5rem; }
+.audio-editor-actions { border-top:1px solid var(--theme-border); padding-top:1.25rem; }
+.audio-choice:focus-within { outline:2px solid var(--theme-accent); outline-offset:2px; }
+.audio-studio > *, .audio-editor { min-width:0; }
+.audio-choice .inventory-placements, .audio-choice [data-draft] { margin-left:47px; }
+.audio-choice .badge { width:fit-content; background:var(--theme-subtle); color:var(--theme-muted); font-size:.66rem; font-weight:500; }
+[data-audio-studio] [hidden] { display:none !important; }
+@media(max-width:1200px) { .audio-studio { grid-template-columns:260px minmax(0,1fr); } }
+@media(max-width:900px) { .audio-studio { grid-template-columns:minmax(0,1fr); } .audio-model-choices { display:flex; max-height:220px; gap:.5rem; overflow:auto; } .audio-choice { flex:0 0 220px; } }
+@media(max-width:600px) { .audio-toolbar { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; } .audio-toolbar > :first-child { grid-column:1/-1; } .audio-editor .card-body { padding:1rem; } .audio-editor-tabs { gap:.2rem !important; } .audio-editor-tabs .nav-link { padding:.5rem; font-size:.7rem; } .audio-editor-actions [role=status] { width:100%; margin-left:0 !important; } }
