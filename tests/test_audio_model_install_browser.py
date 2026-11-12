@@ -6,7 +6,7 @@ runtime and catalogue, and OWG_AUDIOCPP_TEST_MODEL to use real Kokoro weights.
 These checks register models; they do not launch native inference.
 """
 
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 import json
 import os
 from pathlib import Path
@@ -28,7 +28,7 @@ from weightroom.app import Settings, build_app
 
 
 @pytest.fixture
-def audio_install_console(tmp_path, monkeypatch):
+def audio_install_console(tmp_path, monkeypatch, request):
     monkeypatch.setattr('weightroom.app.LOOK_EVERY', .05)
     data=tmp_path/'data'; data.mkdir()
     users=Users(str(data/'accounts.db'),GROUPS)
@@ -56,19 +56,37 @@ def audio_install_console(tmp_path, monkeypatch):
     manifest=specs.parent/'installation.json'; manifest.write_text('{}')
     if native_manifest:
         manifest=Path(native_manifest)
-    database=str(tmp_path/'loadcoach.db')
-    config_file=tmp_path/'loadcoach.toml'; config_file.write_text('')
-    index=str(tmp_path/'files-index.json')
     later=Later()
-    coach=build_loadcoach(Config(database=database,gpus=(),nvidia_smi='no-such-program',path=str(config_file),data='.',
-        front='http://front:8442',machine_key_file=machine_key(tmp_path),
-        places={'audio':str(cache),'storage_audio':str(storage)},
-        engines={'audiocpp':{'enabled':True,'executable':os.environ.get('OWG_AUDIOCPP_TEST_EXECUTABLE',sys.executable),
-                            'manifest':str(manifest)}}),front=door(later,8442))
-    watcher=spotter.build_app(spotter.Settings(services={},machine_key_file=machine_key(tmp_path),
-        database=database,places={'audio':str(cache),'storage_audio':str(storage)},file_index=index,
-        history=str(data/'spotter.db'),disks=(str(tmp_path),)))
-    front=turnstile_to(tmp_path,users,{8442:Switch(coach),8444:Switch(watcher)},
+
+    def worker(folder,cache,storage):
+        folder.mkdir(exist_ok=True)
+        config_file=folder/'loadcoach.toml'; config_file.write_text('')
+        database=str(folder/'loadcoach.db')
+        places={'audio':str(cache),'storage_audio':str(storage)}
+        key=machine_key(folder)
+        if folder!=tmp_path:
+            Path(key).write_text('secondary-node-key-for-audio-install-test')
+        coach=build_loadcoach(Config(database=database,gpus=(),nvidia_smi='no-such-program',path=str(config_file),data='.',
+            front='http://front:8442',machine_key_file=key,places=places,
+            engines={'audiocpp':{'enabled':True,'executable':os.environ.get('OWG_AUDIOCPP_TEST_EXECUTABLE',sys.executable),
+                                'manifest':str(manifest)}}),front=door(later,8442))
+        watcher=spotter.build_app(spotter.Settings(services={},machine_key_file=key,database=database,
+            places=places,file_index=str(folder/'files-index.json'),history=str(folder/'spotter.db'),disks=(str(folder),)))
+        return coach,watcher,database,key
+
+    coach,watcher,database,_=worker(tmp_path,cache,storage)
+    wires={8442:Switch(coach),8444:Switch(watcher)}
+    machines={}; peers=[]; destination=None
+    if getattr(request,'param',False):
+        folder=tmp_path/'secondary'
+        target_cache,target_storage=folder/'cache'/'audio',folder/'storage'/'audio'
+        target_cache.mkdir(parents=True); target_storage.mkdir(parents=True)
+        peer,peer_watcher,target_database,key=worker(folder,target_cache,target_storage)
+        wires.update({9442:Switch(peer),9444:Switch(peer_watcher)})
+        machines['studio-cpu']={'compute':'http://secondary:9442','spotter':'http://secondary:9444','machine_key_file':key}
+        peers=[peer,peer_watcher]
+        destination={'node':'studio-cpu','cache':target_cache,'database':target_database}
+    front=turnstile_to(tmp_path,users,wires,machines=machines,
                        models_folder=str(front_cache),models_storage_folder=str(front_storage))
     later.app=front
     app=build_app(Settings(compute='http://compute',key=users.new_key('panel'),data=str(data)),door(front,8442))
@@ -76,12 +94,16 @@ def audio_install_console(tmp_path, monkeypatch):
 
     @asynccontextmanager
     async def services(application):
-        async with coach.router.lifespan_context(coach),watcher.router.lifespan_context(watcher),front.router.lifespan_context(front),lifespan(application):
+        async with AsyncExitStack() as stack:
+            for service in [coach,watcher,*peers,front]:
+                await stack.enter_async_context(service.router.lifespan_context(service))
+            await stack.enter_async_context(lifespan(application))
             yield
 
     app.router.lifespan_context=services
     with TestClient(app) as client:
         sign_in(client,'jordan')
+        client.audio_target=destination
         yield client,packages,cache,database
 
 
@@ -173,3 +195,39 @@ def test_cpu_only_node_adds_a_model_without_a_hardware_override(audio_install_co
         assert library.stored('cpu-default')['gpus']==0
         library.db.close()
         browser.close()
+
+
+@pytest.mark.parametrize('audio_install_console',[True],indirect=True)
+def test_visible_destination_installs_on_the_selected_compute_node(audio_install_console):
+    client,packages,_,source_database=audio_install_console
+    main,companion=packages['front-storage']
+    destination=client.audio_target
+    with playwright.sync_playwright() as engine:
+        browser,page=browser_context(engine,client)
+        page.set_viewport_size({'width':390,'height':1100})
+        page.goto('http://console.test/models/audio?new=1')
+        target=page.get_by_label('Install on compute node',exact=True)
+        playwright.expect(target).to_be_visible()
+        option=page.locator(f'#am-file option[data-path="{main}"]')
+        page.locator('#am-file').select_option(value=option.get_attribute('value'))
+        page.locator('#am-name').fill('chosen-destination')
+        page.locator('#am-companions').select_option(str(companion))
+        target.select_option(destination['node'])
+        playwright.expect(page.locator('#panel-files')).to_be_visible()
+        playwright.expect(page.locator('#am-name')).to_have_value('chosen-destination')
+        page.locator('#am-submit').click()
+        page.wait_for_url('**/models?kind=audio&install=*')
+        library=Models(destination['database'])
+        deadline=time.monotonic()+10
+        while time.monotonic()<deadline and library.stored('chosen-destination') is None:
+            time.sleep(.05)
+        saved=library.stored('chosen-destination')
+        assert saved is not None
+        expected=destination['cache']/'front-storage-voice'/'model.gguf'
+        assert saved['flags']['model']==str(expected)
+        assert saved['gpus']==0
+        assert saved['audiocpp']['files']==['tokens.json']
+        assert expected.read_bytes()==main.read_bytes()
+        source=Models(source_database)
+        assert source.stored('chosen-destination') is None
+        source.db.close(); library.db.close(); browser.close()

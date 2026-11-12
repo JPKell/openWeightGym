@@ -295,7 +295,7 @@
     captureDraft();
     const scope=$('node').value;
     activeNode=(scope && accepting(scope) ? scope : accepting(activeNode) ? activeNode : computeNodes.find(one=>accepting(one.name))?.name) || activeNode;
-    section='files'; populate(); updateLocation(); renderProfiles(); $('name').focus();
+    section='files'; populate(); updateLocation(); renderProfiles(); $('target-node').focus();
   }
   async function refresh() {
     if (busy) return;

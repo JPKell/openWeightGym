@@ -18,6 +18,7 @@
 {% call card('Model configuration', class_='mb-0', header_id=heading, actions=('<span class="badge" id="' ~ ('am-editor-state' if live else 'editor-state') ~ '">' ~ ('Loading' if live else 'Installed') ~ '</span>')|safe) %}
 <p id="{{ 'am-editor-context' if live else 'editor-context' }}" class="text-secondary small"></p>
 <form id="am-form" novalidate data-hold-refresh>
+<div class="row g-3 mb-4">{{ select('target-node' if live else 'node','Install on compute node',wide=true,required=true) }}</div>
 {% call pills('Configuration sections', buttons=true, class_='gap-1 mb-4 audio-editor-tabs') %}
 {% for key,label in [('files','01 · Model & files'),('hardware','02 · Hardware'),('output','03 · Output'),('advanced','Advanced')] %}{{ pill_button(label, key == 'files', attrs={'data-section':key, 'aria-controls':'panel-' ~ key}) }}{% endfor %}
 {% endcall %}
@@ -33,10 +34,8 @@
 </section>
 <section id="panel-hardware" data-panel="hardware" hidden><div class="row g-3">
 {% if live %}
-{{ select('target-node','Compute node') }}
 {{ hardware('am', alone=true, legacy='audio') }}
 {% else %}
-{{ select('node','Compute node') }}
 {{ select('gpu','GPU assignment',[('GPU 0','GPU 0'),('GPU 1','GPU 1'),('GPU 0 + GPU 1','GPU 0 + GPU 1'),('CPU','CPU only')]) }}
 {% endif %}
 {{ number('am-ram','Host RAM budget','MiB',1024,131072,8192,required=true) }}
