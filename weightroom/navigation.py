@@ -13,7 +13,7 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
         {"name": "Chat", "links": [("Conversations", "/chat"), ("Image generation", "/chat/images"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Speech", "/chat/speech")]},
         {"name": "Models", "links": []},
         # Collections and workflows keep their own addresses; they are here because they are used to compare models.
-        {"name": "Benchmark", "links": [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements"), ("Embedders", "/benchmarks/embedders"), ("Compare", "/benchmarks/compare"), ("Collections", "/collections"), ("Workflows", "/workflows")]},
+        {"name": "Benchmark", "links": [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements"), ("Compare", "/benchmarks/compare"), ("Collections", "/collections"), ("Workflows", "/workflows")]},
         {"name": "Logs", "links": [("Usage", "/usage"), ("Requests", "/requests"), ("Batches", "/batches"), ("AI Logs", "/log"), ("Reliability", "/reliability")]},
         {"name": "System", "links": [("Status", "/status")]},
         {"name": "Settings", "links": []},

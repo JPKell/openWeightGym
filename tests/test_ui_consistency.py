@@ -26,7 +26,7 @@ PAGES = (
     '/chat/sounds', '/chat/speech', '/voice', '/voice/desktop', '/models',
     '/models/images/workflows', '/models/audio', '/dry-fit', '/roles', '/files',
     '/hub', '/civitai', '/fingerprints', '/cloud-apis', '/benchmarks', '/benchmarks/runs',
-    '/benchmarks/results', '/benchmarks/embedders', '/benchmarks/compare',
+    '/benchmarks/results', '/benchmarks/compare',
     '/benchmarks/manage', '/usage', '/allowances', '/requests', '/batches', '/log', '/reliability',
     '/plugins/activity', '/output', '/status', '/system/voice', '/system/audio',
     '/telemetry', '/alerts', '/schedules', '/compute-nodes', '/users', '/groups',
@@ -40,7 +40,8 @@ PAGES = (
     '/models/picture', '/benchmarks/node-measurements', '/system/voice/status',
     '/settings/image', '/models/images?model=picture',
     '/files?tier=storage', '/files?machine=compute', '/models?kind=image', '/models?kind=audio',
-    '/benchmarks/node-measurements?kind=image', '/benchmarks/node-measurements?kind=audio',
+    '/benchmarks/node-measurements?kind=embedding', '/benchmarks/node-measurements?kind=image',
+    '/benchmarks/node-measurements?kind=audio',
 )
 
 MEASURE = r"""() => {

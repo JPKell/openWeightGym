@@ -221,11 +221,10 @@ def test_embedder_cards_picker_and_mobile_results_are_separate(desk,tmp_path):
         def serve(route):
             serve_browser_request(server, 'http://embedding.test', route)
         context.route('http://embedding.test/**',serve)
-        page.goto('http://embedding.test/benchmarks/embedders')
-        assert page.locator('[aria-label="Embedder benchmarks"]').count()==0
-        assert page.locator('[data-card-key="benchmark-resources"] .nav-pills .nav-link').count()==3
-        assert page.locator('[name=run-target]').count()==1
-        assert json.loads(page.locator('[name=run-target]').input_value()) == {'model':'vector-model','machine':'compute'}
+        page.goto('http://embedding.test/benchmarks/node-measurements?kind=embedding')  # where the retired Embedders page's runs are set up
+        workspace = page.locator('#measurement-runs')
+        assert workspace.locator('[name=run-target]').count()==1
+        assert json.loads(workspace.locator('[name=run-target]').input_value()) == {'model':'vector-model','machine':'compute'}
         enabled_only = page.evaluate('''() => {
           const wrapper = document.createElement('div');
           wrapper.innerHTML = '<input type="checkbox" data-select-node="compute">' +
@@ -238,19 +237,13 @@ def test_embedder_cards_picker_and_mobile_results_are_separate(desk,tmp_path):
           return result;
         }''')
         assert enabled_only == [False, True]
-        assert page.locator('#node-measurements').count()==1
-        assert page.locator('#benchmark-resource-heatmap svg').count()==1
-        assert page.locator('#benchmark-resource-table tbody tr').count()==1
-        assert page.locator('#benchmark-resource-table .score-cell').count()==1
-        page.select_option('#benchmark','embedding_load')
-        playwright.expect(page.locator('#start-benchmark input')).to_have_value('embedding_load')
-        page.wait_for_timeout(2400)  # real OOB polling must leave the card and selected benchmark alone
-        playwright.expect(page.locator('#start-benchmark input')).to_have_value('embedding_load')
+        playwright.expect(page.get_by_role('link', name='Compare embedders')).to_have_attribute('href', '/benchmarks/compare?family=embedding')
         images=Path('data/benchmark-previews');images.mkdir(parents=True,exist_ok=True)
         page.screenshot(path=str(images/'embedders-desktop.png'))
         page.set_viewport_size({'width':390,'height':844})
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         page.screenshot(path=str(images/'embedders-mobile.png'))
+        page.set_viewport_size({'width':1440,'height':1000})
         page.goto('http://embedding.test/benchmarks/node-measurements?benchmark=speed')
         types = page.locator('nav[aria-label="Model type"]')
         playwright.expect(types.get_by_role('link')).to_have_text(['LLM', 'Embedders', 'Image', 'Audio'])

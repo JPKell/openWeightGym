@@ -31,7 +31,6 @@
 - [ ] Run specific page
 - [ ] Results
 - [ ] Node measurements
-- [ ] Embedders
 - [ ] Compare
 - [ ] Collections
 - [ ] Collection specific page

@@ -24,8 +24,8 @@ from loadcoach.statement import PROOF
 def test_navigation_orders_and_detail_parents():
     can = ['manage-models', 'manage-settings', 'manage-users', 'manage-groups', 'front-manage-plugins', 'see-log', 'restart-services']
     nav = navigation('/benchmarks/runs', can, True)
-    assert [name for name, _ in nav['links']] == ['Runs', 'Results', 'Node measurements', 'Embedders', 'Compare', 'Collections', 'Workflows', 'Manage']
-    assert navigation('/benchmarks/embedders', can, True)['active'] == '/benchmarks/embedders'
+    assert [name for name, _ in nav['links']] == ['Runs', 'Results', 'Node measurements', 'Compare', 'Collections', 'Workflows', 'Manage']
+    assert navigation('/benchmarks/node-measurements', can, True)['active'] == '/benchmarks/node-measurements'
     nav = navigation('/plugins/activity', can, True)
     assert nav['section'] == 'Logs' and nav['active'] == '/plugins/activity'
     assert [name for name, _ in nav['links']] == ['Usage', 'Requests', 'Batches', 'AI Logs', 'Reliability', 'Plugin logs', 'System logs']

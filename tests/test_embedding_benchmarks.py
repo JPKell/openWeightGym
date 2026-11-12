@@ -619,15 +619,18 @@ def test_embedder_page_cards_results_and_model_page_keep_families_separate(desk,
     library.put('private-vector',{'flags':{'model':str(tmp_path/'embed.gguf'),'ctx-size':512,'embedding':True}})
     users.change('pat',own={'models':['vector-only','text-only']})
     sign_in(browser,'pat')
+    # The retired Embedders page sends its address to Node measurements' Embedders type, which sets up its runs.
+    retired=browser.get('/benchmarks/embedders',follow_redirects=False)
+    assert retired.status_code==303 and retired.headers['location']=='/benchmarks/node-measurements?kind=embedding'
     page=browser.get('/benchmarks/embedders').text
-    assert '<h1 class="page-title wrap">Embedders</h1>' in page
-    assert 'aria-label="Select vector-only at compute"' in page and 'text-only' not in page and 'private-vector' not in page
-    assert 'data-card-key="benchmark-resources"' in page
-    assert 'id="benchmark-resource-heatmap"' in page and 'id="benchmark-resource-table"' in page
-    assert '<th scope="row" class="fw-normal ps-3">' not in page
-    assert all(f'?benchmark={kind}#node-measurements' in page for kind in KINDS)
-    assert 'aria-label="Embedder benchmarks"' not in page
-    assert 'name="benchmark" value="embedding_context"' in page
+    assert '<h1 class="page-title wrap">Node measurements</h1>' in page
+    assert 'kind=embedding&amp;benchmark=embedding_context" aria-current="page"' in page
+    assert 'href="/benchmarks/compare?family=embedding"' in page and 'href="/benchmarks/embedders"' not in page
+    workspace=page.split('id="measurement-runs"',1)[1]
+    assert 'name="run-target"' in workspace and 'vector-only' in workspace
+    assert 'text-only' not in workspace and 'private-vector' not in workspace
+    assert 'id="benchmark-resource-heatmap"' not in page
+    assert 'Compare embedders' not in browser.get('/benchmarks/node-measurements?kind=llm').text
     assert '<h1 class="page-title wrap">Runs</h1>' in browser.get('/benchmarks').text
     assert 'vector-only' not in browser.get('/benchmarks/results').text
     for kind, unit in zip(KINDS, ('tokens', 'tokens/s', '1/s')):
@@ -649,8 +652,6 @@ def test_embedder_page_cards_results_and_model_page_keep_families_separate(desk,
     assert 'name="family" value="embedding"' in compare and 'text-only' not in compare
     assert '<th scope="row">Input throughput</th>' in compare
     assert 'First token' not in compare
-    live=browser.get('/benchmarks/embedders?part=live').text
-    assert 'id="benchmark-embedder-active" hx-swap-oob="innerHTML"' in live and 'start-benchmark' not in live
     sign_in(browser,'jordan')
     store=browser.app.state.benchmarks.state.store
     number=store.create('jordan','vector-only','embedding_speed')

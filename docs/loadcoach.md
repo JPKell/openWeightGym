@@ -7723,7 +7723,6 @@ it was.
 | `/benchmarks` | Home: active run, or Start a run when idle, then per-node resource results and quality scores |
 | `/benchmarks/results` | Language quality-score heatmap and selected benchmark KPI details, filtered by model type |
 | `/benchmarks/node-measurements` | Fleet matrix with all configured nodes; see the [page contract](../benchmarks/README.md#pages-scores-and-result-identity) |
-| `/benchmarks/embedders` | Embedding Context, Speed and Load time pills with node columns and embedding-only run selection |
 | `/benchmarks/runs` | Eleven available benchmark definitions in the local implementation (nine deployed before progression P4), model checkboxes, durable queue, pause/stop controls, live log and samples, and run history |
 | `/benchmarks/compare` | Multiple current models or recorded fingerprint/engine/machine identities, with models in columns and selected benchmark KPIs in rows |
 | `/benchmarks/manage` | Saved enabled flags and score formulas, available operands, and installed IFEval details; requires `manage-settings` |
