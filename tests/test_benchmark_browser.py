@@ -21,21 +21,38 @@ def test_results_type_pills_and_node_page_preserve_selected_models(desk, typed_m
         playwright.expect(page.locator('#benchmark-score-table tbody')).to_contain_text('llm-model')
         assert 'image-model' not in page.locator('#benchmark-score-table tbody').inner_text()
         assert 'audio-model' not in page.locator('#benchmark-score-table tbody').inner_text()
+        playwright.expect(page.locator('#measurements > summary .card-actions #benchmark')).to_be_visible()
+        assert page.locator('#measurements > summary').evaluate('''el => {
+            const title = el.querySelector('.card-heading').getBoundingClientRect();
+            const select = el.querySelector('select').getBoundingClientRect();
+            return select.left > title.right && Math.abs((title.top + title.bottom - select.top - select.bottom) / 2) < 3
+                && el.getBoundingClientRect().right - select.right < 30;
+        }''')
+        page.evaluate("window.previousMeasurements = document.querySelector('#benchmark-measurements')")
+        page.select_option('#benchmark', 'tables')
+        playwright.expect(page.locator('#benchmark-results thead')).to_contain_text('CSV checks correct')
+        assert page.evaluate("document.querySelector('#benchmark-measurements') !== window.previousMeasurements")
+        playwright.expect(page.locator('#measurements')).to_have_attribute('open', '')
+        for theme in ('light', 'dark'):
+            page.emulate_media(color_scheme=theme)
+            for width in (1440, 390, 320):
+                page.set_viewport_size({'width': width, 'height': 1000})
+                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        images = Path('data/benchmark-previews'); images.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(images / 'results-model-measurements.png'), full_page=True)
         for kind, label in (('llm', 'LLM'), ('image', 'Image'), ('audio', 'Audio')):
             page.locator('nav[aria-label="Model type"]').get_by_role('link', name=label, exact=True).click()
             page.wait_for_url('http://console.test/benchmarks/results?kind=' + kind)
             if kind == 'llm':
-                page.select_option('#benchmark', 'load')
-            name, number = typed_models[kind]
-            playwright.expect(page.locator('#benchmark-results tbody')).to_contain_text(name)
+                page.select_option('#benchmark', 'extraction')
+                playwright.expect(page.locator('#benchmark-results tbody')).to_contain_text('llm-model')
+                assert not {'context', 'speed', 'load'} & set(page.locator('#benchmark option').evaluate_all('(els) => els.map(el => el.value)'))
+            else:
+                playwright.expect(page.locator('#measurements')).to_contain_text('No model benchmarks are available for this model type.')
+                playwright.expect(page.locator('#benchmark')).to_have_count(0)
+                playwright.expect(page.get_by_role('link', name='View node measurements')).to_have_attribute('href', '/benchmarks/node-measurements?kind=' + kind)
             assert page.locator('#benchmark-resource-table').count() == 0
-            playwright.expect(page.locator(f'#benchmark-results a[href="/benchmarks/run/{number}"]')).to_have_count(1)
-            if kind != 'llm':
-                assert page.locator('#benchmark option').count() == 1
-                # A real GET submission must retain the selected model type.
-                page.select_option('#benchmark', 'load')
-                playwright.expect(page).to_have_url('http://console.test/benchmarks/results?kind=' + kind + '&benchmark=load')
-                playwright.expect(page.locator('#benchmark-results tbody')).to_contain_text(name)
             page.set_viewport_size({'width': 390, 'height': 844})
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.set_viewport_size({'width': 1440, 'height': 1000})
@@ -146,6 +163,24 @@ def test_cards_survive_navigation_oob_refresh_accounts_and_sample_anchors(desk, 
         page.goto('http://benchmark.test/benchmarks/results')
         assert page.locator('#benchmark-score-table > summary').count() == 0
         assert page.locator('#benchmark-heatmap svg').count() == 1
+        from test_themes import change_theme
+        chart_data = page.locator('#benchmark-heatmap').evaluate('''node => {
+            const options = echarts.getInstanceByDom(node).getOption();
+            return {rows: options.yAxis[0].data, values: options.series[0].data.map(point => point.value)};
+        }''')
+        for palette, mode in [('forest', 'dark'), ('clay', 'light')]:
+            change_theme(page, palette, mode)
+            themed = page.locator('#benchmark-heatmap').evaluate('''node => {
+                const options = echarts.getInstanceByDom(node).getOption();
+                const css = getComputedStyle(document.documentElement);
+                return {rows: options.yAxis[0].data, values: options.series[0].data.map(point => point.value),
+                    followsTheme: options.yAxis[0].axisLabel.color === css.getPropertyValue('--bs-body-color').trim() &&
+                        options.tooltip[0].backgroundColor === css.getPropertyValue('--bs-body-bg').trim() &&
+                        options.series[0].data.filter(point => point.score === 'Not measured').every(point =>
+                            point.itemStyle.color === css.getPropertyValue('--bs-tertiary-bg').trim())};
+            }''')
+            assert themed.pop('followsTheme'), (palette, mode)
+            assert themed == chart_data
         assert page.locator('#benchmark-resource-table').count() == 0
         page.screenshot(path=str(images / 'results.png'))
         page.get_by_role('link', name='Node measurements', exact=True).click()

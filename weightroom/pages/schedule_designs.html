@@ -1,4 +1,4 @@
-{% from 'parts.html' import page_header, card, section_title, more, danger_confirmation %}
+{% from 'parts.html' import page_header, card, section_title, more %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'icons.html' import icon %}
 {% from 'schedule_design_parts.html' import editor, templates %}
@@ -39,7 +39,6 @@
 </div>
 </main>
 <dialog id="editor-dialog" class="sc-editor-dialog" aria-labelledby="editor-title"><div id="dialog-slot"></div></dialog>
-{{ danger_confirmation() }}
 {{ templates() }}
 <script type="application/json" id="schedule-data">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
 </body></html>

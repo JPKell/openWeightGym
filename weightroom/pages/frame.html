@@ -18,8 +18,8 @@ try { document.documentElement.dataset.sidebar = matchMedia("(max-width: 767.98p
 catch { document.documentElement.dataset.sidebar = "closed"; }
 </script>
 <link rel="stylesheet" href="/static/tabler.min.css">
-<link rel="stylesheet" href="/static/style.css?v=47">
-<link rel="stylesheet" href="/static/themes.css?v=6">
+<link rel="stylesheet" href="/static/style.css?v=48">
+<link rel="stylesheet" href="/static/themes.css?v=7">
 {# htmx keeps no copy of a page for the Back button: going back loads the page again, so nothing that was shown is kept in the browser. #}
 <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
 <script src="/static/htmx.min.js" defer></script>
@@ -30,7 +30,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 <script src="/static/navigation.js?v=4" defer></script>
 <script src="/static/console.js?v=11" defer></script>
 <script src="/static/user-picker.js?v=1" defer></script>
-{% if person and nav.active == '/chat' %}<script src="/static/chat_sidebar.js?v=2" defer></script>{% endif %}
+{% if person and nav.active == '/chat' %}<script src="/static/chat_sidebar.js?v=3" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
 
 {# The navigation and the telemetry row beneath it stay in view while the page scrolls. #}

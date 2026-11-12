@@ -4,6 +4,8 @@ import shutil
 from pathlib import Path
 from urllib.parse import parse_qs
 
+import pytest
+
 from loadcoach.models import Models
 from plugin_helpers import SOURCE
 from weightroom.chat_store import Conversations
@@ -83,6 +85,89 @@ def test_chat_option_save_and_sidebar_actions_preserve_owner_checks(desk, tmp_pa
     deleted = server.post(f'/chat/{ref}', data={'do': 'delete'}, headers={'accept': 'application/json'})
     assert deleted.status_code == 200 and store.get(ref, owner) is None
     assert store.get(numbers[0], owner) is not None
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_chat_heading_rename_saves_cancels_and_syncs_with_sidebar(desk, tmp_path, width):
+    from playwright.sync_api import sync_playwright, expect
+
+    server, _, users = desk
+    store, numbers = history(desk, tmp_path)
+    ref = numbers[-1]
+    owner = users.by_name('jordan').identity
+    sign_in(server, 'jordan')
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(headless=True, args=['--disable-gpu'])
+        page = browser.new_page(viewport={'width': width, 'height': 1000})
+        page.add_init_script('window.EventSource = class { addEventListener() {} close() {} };')
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+
+        def serve(route):
+            request = route.request
+            path = request.url.replace('http://chat.test', '')
+            if request.method == 'POST' and parse_qs(request.post_data or '').get('title') == ['Retry this name']:
+                return route.fulfill(status=503, content_type='application/json',
+                                     body='{"error":{"message":"Please try again."}}')
+            response = server.request(request.method, path, content=request.post_data_buffer,
+                                      headers={name: request.headers[name] for name in ('accept', 'content-type') if name in request.headers})
+            route.fulfill(status=response.status_code, content_type=response.headers.get('content-type', 'text/html'), body=response.content)
+
+        page.route('http://chat.test/**', serve)
+        page.goto(f'http://chat.test/chat/{ref}')
+        before = store.get(ref, owner)
+        heading = page.locator('[data-conversation-heading]')
+        form = page.locator('#chat-main > [data-chat-rename]')
+        field = form.get_by_role('textbox', name='Conversation name')
+        heading.dblclick()
+        expect(field).to_be_focused()
+        expect(field).to_have_value(before['title'])
+        assert field.evaluate('el => el.selectionEnd - el.selectionStart') == len(before['title'])
+        field.fill('Discard this name')
+        field.press('Escape')
+        expect(form).not_to_be_visible()
+        expect(heading).to_be_focused()
+        assert store.get(ref, owner)['title'] == before['title']
+        heading.press('F2')
+        expect(field).to_have_value(before['title'])
+        field.fill('Retry this name')
+        field.press('Enter')
+        expect(page.locator('[data-chat-rename-error]')).to_have_text('Please try again.')
+        expect(form.get_by_role('button', name='Save conversation name')).to_be_enabled()
+        expect(field).to_have_value('Retry this name')
+        title = '<b>My renamed chat</b> & notes'
+        field.fill(title)
+        field.press('Enter')
+        expect(heading).to_have_text(title)
+        expect(heading.locator('b')).to_have_count(0)
+        expect(page).to_have_title(title + ' · openWeightGym')
+        expect(form).not_to_be_visible()
+        row = page.locator(f'[data-conversation="{ref}"]')
+        expect(row.locator('[data-chat-title]')).to_have_text(title)
+        assert store.get(ref, owner)['title'] == title
+        assert store.get(ref, owner)['messages'] == before['messages']
+        heading.press('Enter')
+        field.fill('A' * 120)
+        form.get_by_role('button', name='Save conversation name').click()
+        expect(heading).to_have_text('A' * 120)
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        if width == 390:
+            page.get_by_role('button', name='Menu', exact=True).click()
+        row.locator('[data-chat-title]').dblclick()
+        rail_form = row.locator('[data-chat-rename]')
+        expect(rail_form.locator('[name=title]')).to_have_value('A' * 120)
+        rail_form.locator('[name=title]').fill('Renamed from the sidebar')
+        rail_form.get_by_role('button', name='Save conversation name').click()
+        expect(heading).to_have_text('Renamed from the sidebar')
+        expect(page).to_have_title('Renamed from the sidebar · openWeightGym')
+        page.reload()
+        expect(heading).to_have_text('Renamed from the sidebar')
+        heading.dblclick()
+        expect(field).to_have_value('Renamed from the sidebar')
+        field.press('Escape')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not errors, errors
+        browser.close()
 
 
 def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):

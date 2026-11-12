@@ -1537,12 +1537,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             models = [model for model in models if bool(model.get('embedding')) == bool(embedding_family)]
         if section == 'node-measurements':
             definitions = [bench for bench in definitions if bench['id'] in resource_ids]
+        if section == 'results':
+            definitions = [bench for bench in definitions if bench['id'] not in resource_ids]
+            models = list({model['id']: model for model in models}.values())
+            if not definitions:
+                return page(request, 'benchmarks.html', person, section=section, kind=kind,
+                            embedding_family=embedding_family, benchmarks=[], benchmark={}, score_benchmarks=[],
+                            catalogue_warning=catalogue_warning, said=request.query_params.get('said', ''),
+                            failed='failed' in request.query_params, partial='partial' in request.query_params)
         requested = request.query_params.get('benchmark', '')
         if section == 'node-measurements' and requested:
             requested = ('embedding_' if embedding_family else '') + requested.removeprefix('embedding_')
         selected = next((bench for bench in definitions if bench["id"] == requested), definitions[0])
-        if section == 'results' and kind != 'llm':
-            selected = {**selected, 'kpis': [kpi for kpi in selected['kpis'] if kpi[0] != 'context_tokens']}
         resource_benchmarks = [bench for bench in definitions if bench['id'] in resource_ids]
         score_benchmarks = [bench for bench in definitions if bench['id'] not in resource_ids]
         resource_selected = next((bench for bench in resource_benchmarks if bench['id'] == selected['id']),
@@ -1697,7 +1703,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                              or selected['id'] == 'load' and location.get('capabilities', model.get('capabilities', {})).get('load_probes'))]
         start_models += [{**model, 'target': {'model': model['id'], 'machine': 'compute'}, 'result_key': None, 'location': 'compute'}
                          for model in eligible_models if not model.get('locations')]
-        measurement_models = start_models
+        measurement_models = eligible_models if section == 'results' else start_models
         preferred_node = request.query_params.get('machine', 'compute')
         unavailable_nodes = catalogue.get('unavailable_machines', [])
         start_nodes, start_rows = [], []

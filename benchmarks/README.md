@@ -541,7 +541,7 @@ not model quality. Production benchmark evidence and model rankings were not cha
 | WeightRoom page | Purpose |
 |---|---|
 | `/benchmarks` | Redirects to Runs; older saved links containing a model/run still redirect to Results |
-| `/benchmarks/results` | LLM, Image and Audio pills filter saved model results; language quality scores and selected benchmark measurements |
+| `/benchmarks/results` | Model quality scores and measurements, one row per model across compute nodes; resource tests live on Node measurements |
 | `/benchmarks/node-measurements` | Fleet matrix for LLM, Embedders, Image and Audio; compute nodes only, with measured values or benchmark scores |
 | `/benchmarks/embedders` | Embedding Context, Speed and Load time pills with compute nodes as columns |
 | `/benchmarks/runs` | Active run at the top, model selection, queue controls, logs, measurements and history; polls every two seconds |
@@ -567,10 +567,12 @@ The top **Set up runs** link jumps to the shared Runs workspace below the matrix
 the left, Running now and Benchmark queue on the right. Setup offers resource tests for the selected
 model type and compute-only targets, with batch review before submission. Live monitor polling
 preserves unsent selections; submissions and queue controls return to this workspace and model type.
-Results shows individual run measurements and preserves the model-type selection
-when changing benchmarks. Scores and both Runs model selectors contain language models only.
-Saved image/audio load-time evidence remains accessible through Results, Node measurements and
-run details; those models are excluded from the run picker. Embedders retain their separate
+Results shows quality benchmarks only, using one row per authorized model and the preferred
+completed result across nodes (current settings first, otherwise latest saved evidence). Context,
+Speed and Load time remain on Node measurements. The Measurements selector sits at the right of
+its shared card header and updates that card in place. Types without quality benchmarks link to
+Node measurements. Saved image/audio load-time evidence remains accessible through Node measurements
+and run details; load-capable models remain available in the Load time run picker. Embedders retain their separate
 resource controls. Future image/audio evaluation is a [deferred candidate](../docs/agent-status.md#conditional-maintenance-candidates).
 The orange-to-green quality heatmap scales each benchmark independently. Click a column header to sort
 models from best (green) to worst, with unmeasured models last. The chart and score table

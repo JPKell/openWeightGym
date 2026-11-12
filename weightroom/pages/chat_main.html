@@ -1,5 +1,6 @@
 {# Shared prompt controls are used by the composer and Ask again. #}
 {% from "parts.html" import said_box, page_header , confirm_two, alert %}
+{% from "chat_parts.html" import rename_form %}
 {% set last_model = ((talk.messages|selectattr('model', 'defined')|list|last or {}).model if talk else '') %}
 {% macro model_choice(chosen, compact=false) %}
 <select name="model" class="form-select{{ ' form-select-sm' if compact }}" aria-label="Model" data-chat-setting data-chat-model-picker{{ ' disabled' if not models }}>
@@ -69,7 +70,7 @@
 
 {% if not talk %}
 <div class="chat-new">
-  {{ page_header("New conversation", lead="Talk with your permitted models and keep your conversations.", help="/docs/web-app/chat") }}
+  {{ page_header("New conversation", lead="Talk with your permitted models and keep your conversations.") }}
   {{ said_box(said, true) }}
   <form method="post" action="/chat" data-chat-form class="composer-box frame">
     <textarea aria-label="Message" name="content" rows="3" class="form-control border-0 shadow-none" placeholder="Ask something" data-enter required autofocus>{{ typed_in.content or "" }}</textarea>
@@ -82,8 +83,10 @@
 </div>
 
 {% else %}
-{% set _page_title2 %}<span data-conversation-heading>{{ talk.title }}</span>{% if talk.temporary %} <span class="badge text-bg-secondary">temporary</span>{% endif %}{% endset %}
+{% set _page_title2 %}<span data-conversation-heading tabindex="0" aria-keyshortcuts="F2" title="Double-click or press F2 to rename">{{ talk.title }}</span>{% if talk.temporary %} <span class="badge text-bg-secondary">temporary</span>{% endif %}{% endset %}
 {{ page_header(_page_title2, lead="Talk with your permitted models and keep your conversations.") }}
+{{ rename_form(talk, 'mb-4') }}
+<p class="text-danger small mb-0" role="status" data-chat-rename-error></p>
 {{ said_box(said, true) }}
 
 {% if talk.memory and not talk.compare %}

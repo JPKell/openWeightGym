@@ -69,6 +69,9 @@ pre.secret { padding: .7rem; border: 1px dashed var(--bs-border-color); border-r
 dl.facts dt { font-weight: 400; color: var(--bs-secondary-color); }
 dl.facts dd { min-width: 0; overflow-wrap: anywhere; }
 .wrap, code { overflow-wrap: anywhere; }
+/* Code, reasoning, logs and keyboard hints use the active palette in every context. */
+pre { --tblr-scrollbar-color: var(--bs-body-color); background: var(--bs-tertiary-bg); color: var(--bs-body-color); }
+kbd, .kbd { background: var(--tblr-code-bg); color: var(--bs-body-color); }
 /* Diagnostic tables scroll on narrow screens without crushing long details into tall rows. */
 .diagnostic-activity { min-width: 48rem; }
 .diagnostic-distribution { min-width: 42rem; }

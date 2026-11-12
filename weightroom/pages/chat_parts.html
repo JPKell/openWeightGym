@@ -1,0 +1,7 @@
+{# The sidebar and conversation heading share the same rename form contract. #}
+{% macro rename_form(conversation, class_='') %}
+<form method="post" action="/chat/{{ conversation.id }}" data-chat-rename class="d-flex gap-1{{ ' ' ~ class_ if class_ }}" hidden>
+  <input type="hidden" name="do" value="rename"><input name="title" class="form-control" aria-label="Conversation name" value="{{ conversation.title }}" maxlength="120" required>
+  <button class="btn btn-primary" aria-label="Save conversation name">Save</button>
+</form>
+{% endmacro %}

@@ -9697,7 +9697,7 @@ narrow screens stack the two. Drafts and filters survive selection changes in pa
 The owner edits with an online sign-in. Saving validates the current permissions and local model,
 replaces the compute grant through `POST /loadcoach/schedules/{id}/edit`, preserves the schedule
 ID and paused state, and calculates the next future time without backfilling. Editing waits for
-claimed work to finish. **Delete schedule** uses the site's confirmation dialog, revokes compute
+claimed work to finish. **Delete schedule** uses the site's two-click confirmation button, revokes compute
 authorization before removal, cancels unsubmitted occurrences and retains submitted benchmarks
 and history. The schedules schema retains deleted definitions for history labels but clears
 their scoped credential. Mutations serialize with the existing schedule worker. Both sides need
