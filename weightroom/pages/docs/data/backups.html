@@ -1,24 +1,59 @@
-{% from "docs_parts.html" import doc_contents, doc_section, doc_table, doc_note, doc_code %}
-{{ doc_contents([('setup', 'Recovery encryption'), ('recovery-sets', 'Create and retain backups'), ('protected-data', 'Protected data'), ('restore', 'Verify and restore'), ('identities', 'Planned reinstall'), ('legacy', 'Older archives and rotation')]) }}
+{% from "docs_parts.html" import doc_contents, doc_section, doc_heading, doc_table, doc_note, doc_code %}
+{{ doc_contents([('setup', 'Recovery encryption'), ('recipient-location', 'Where recipients.txt goes'), ('recovery-sets', 'Create and retain backups'), ('protected-data', 'Protected data'), ('restore', 'Verify and restore'), ('identities', 'Planned reinstall'), ('legacy', 'Older archives and rotation')]) }}
 
 {% call doc_section('Set up recovery encryption', 'setup') %}
 <p>Every new recovery archive requires <a href="https://age-encryption.org/">age</a> authenticated encryption. Servers hold public recipients; private recovery keys belong in separate recovery storage. Missing tools or recipients stop a backup before snapshots are taken. There is no unencrypted fallback.</p>
 <ol>
-  <li>Install the distribution's <code>age</code> package on both servers and a trusted recovery computer. It supplies <code>age</code> and <code>age-keygen</code>. The main installer includes this dependency; existing installations need it added.</li>
+  <li>Install the distribution's <code>age</code> package on the front, on every compute node and on a trusted recovery computer. It supplies <code>age</code> and <code>age-keygen</code>. The main installer includes this dependency; existing installations need it added.</li>
   <li>Generate the key pair on the recovery computer using the first block below. Keep <code>recovery.key</code> on encrypted removable storage or in a private credential vault, with a second independent recovery copy. Keep it off application servers, source control, email and logs.</li>
-  <li>Copy only <code>recipients.txt</code> to each server. As the service account, run the second block with your actual data and source paths. The file accepts 1–20 native <code>age1…</code> public recipients, one per line; any corresponding private key can decrypt the archive.</li>
-  <li>Open <a href="/backups">System → Backups</a>, confirm both hosts are ready, create a set, and test it with the saved recovery key.</li>
+  <li>Copy only <code>recipients.txt</code> to every machine: the front and each compute node. Each machine reads it from its own data folder, at <code>DATA/backups/recipients.txt</code>; <a href="#recipient-location">Where recipients.txt goes</a> gives the full path for each kind of installation and the commands. The file accepts 1–20 native <code>age1…</code> public recipients, one per line; any corresponding private key can decrypt the archive.</li>
+  <li>Check each machine with the readiness command below, then open <a href="/backups">System → Backups</a>, confirm the hosts are ready, create a set, and test it with the saved recovery key.</li>
 </ol>
 {% call doc_code('backup-key-generation') %}
 umask 077
 age-keygen -o recovery.key
 age-keygen -y recovery.key &gt; recipients.txt
 {% endcall %}
-{% call doc_code('backup-recipient-install') %}
-install -d -m 700 /path/to/data/backups
-install -m 600 /path/to/recipients.txt /path/to/data/backups/recipients.txt
-{% endcall %}
 {% call doc_note('warning', 'Keep the recovery key separate') %}<p>A lost private key cannot be reset or recovered by the server. Anyone obtaining it can decrypt retained archives addressed to it. A compromised service can still read live data, substitute future recipients or delete local backups.</p>{% endcall %}
+{% endcall %}
+
+{% call doc_section('Where recipients.txt goes', 'recipient-location') %}
+<p>Every machine backs up its own stores and encrypts them with the recipients in its own data folder. The front and each compute node therefore each need their own copy, at <code>DATA/backups/recipients.txt</code>, where <code>DATA</code> is that machine's data folder.</p>
+<p>The data folder is the <code>data</code> setting in the machine's settings file, counted from the folder that holds the settings file. The front reads <code>settings/weightroom.toml</code>; a compute node reads <code>settings/loadcoach.toml</code>. Both are installed with <code>data = "../data"</code>, so the data folder is the <code>data</code> folder beside <code>settings</code> in the installation folder. A copy anywhere else, such as <code>settings/recipients.txt</code>, is not read.</p>
+{% call doc_table('Full path of recipients.txt by installation') %}
+<thead><tr><th scope="col">Installation</th><th scope="col">Installation folder</th><th scope="col">recipients.txt</th><th scope="col">Owned by</th></tr></thead>
+<tbody>
+  <tr><td>For one account (the default)</td><td><code>/home/ACCOUNT/openWeightGym</code></td><td><code>/home/ACCOUNT/openWeightGym/data/backups/recipients.txt</code></td><td>The account that runs the services (the one that ran the installer)</td></tr>
+  <tr><td>For one account, another folder (<code>--dir PATH</code> or <code>OWG_HOME</code>)</td><td><code>PATH</code></td><td><code>PATH/data/backups/recipients.txt</code></td><td>The account that runs the services</td></tr>
+  <tr><td>Whole machine (<code>--system</code>)</td><td><code>/opt/openweightgym</code></td><td><code>/var/lib/openweightgym/data/backups/recipients.txt</code> (<code>/opt/openweightgym/data</code> links there)</td><td>The <code>openweightgym</code> account</td></tr>
+  <tr><td>A changed <code>data</code> setting</td><td>Any</td><td><code>SETTINGS/DATA/backups/recipients.txt</code>, where <code>SETTINGS</code> is the folder of the settings file and <code>DATA</code> the setting's value (an absolute <code>DATA</code> is used as it is)</td><td>The account that runs the services</td></tr>
+</tbody>
+{% endcall %}
+<p>To confirm a machine's data folder, read the setting: <code>grep '^data' /home/ACCOUNT/openWeightGym/settings/weightroom.toml</code> on the front, or <code>…/settings/loadcoach.toml</code> on a compute node.</p>
+<p>The file and its folder are checked before every backup. The <code>backups</code> folder must belong to the account that runs the services and is kept at mode 700. <code>recipients.txt</code> must be a regular file (not a link) owned by that account or root, and not writable by its group or others; use mode 600. Otherwise the backup stops with "Backup key/configuration permissions are unsafe".</p>
+{{ doc_heading("For one account, on the machine itself") }}
+<p>Run as the account that runs the services, with <code>recipients.txt</code> copied to the current folder:</p>
+{% call doc_code('backup-recipient-install') %}
+install -d -m 700 /home/ACCOUNT/openWeightGym/data/backups
+install -m 600 recipients.txt /home/ACCOUNT/openWeightGym/data/backups/recipients.txt
+{% endcall %}
+{{ doc_heading("For one account, from the recovery computer over SSH") }}
+<p>Repeat for the front and each compute node, replacing <code>ACCOUNT@MACHINE</code>. Only the public file leaves the recovery computer.</p>
+{% call doc_code('backup-recipient-install-ssh') %}
+ssh ACCOUNT@MACHINE 'umask 077 &amp;&amp; install -d -m 700 /home/ACCOUNT/openWeightGym/data/backups &amp;&amp; cat &gt; /home/ACCOUNT/openWeightGym/data/backups/recipients.txt' &lt; recipients.txt
+{% endcall %}
+{{ doc_heading("Whole-machine installation") }}
+<p>The <code>openweightgym</code> account cannot sign in, so an administrator installs the file for it:</p>
+{% call doc_code('backup-recipient-install-system') %}
+sudo install -d -m 700 -o openweightgym /var/lib/openweightgym/data/backups
+sudo install -m 600 -o openweightgym recipients.txt /var/lib/openweightgym/data/backups/recipients.txt
+{% endcall %}
+{{ doc_heading("Check that a machine is ready") }}
+<p>This runs the same check a backup runs first, without making a backup or reading the stores. Run it as the account that runs the services (for a whole-machine installation, prefix it with <code>sudo -u openweightgym</code> and use <code>/opt/openweightgym</code> and <code>/var/lib/openweightgym/data</code>). It prints <code>'ready': True</code> when <code>age</code>, <code>age-keygen</code> and the recipients are all usable; otherwise the reason.</p>
+{% call doc_code('backup-recipient-check') %}
+cd /home/ACCOUNT/openWeightGym &amp;&amp; .venv/bin/python -c 'from pathlib import Path; from loadcoach.backup_crypto import encryption_status; print(encryption_status(Path("/home/ACCOUNT/openWeightGym/data/backups")))'
+{% endcall %}
+{% call doc_note('note', 'Changing recipients') %}<p>Replace the file on every machine together, then make and test a new set. Backups already made stay addressed to the recipients in force when they were made.</p>{% endcall %}
 {% endcall %}
 
 {% call doc_section('Create and retain backups', 'recovery-sets') %}
