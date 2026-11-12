@@ -190,6 +190,47 @@ def test_existing_companion_paths_survive_an_unavailable_file_scan(studio):
     assert state['posts'][0][1]['settings']['audiocpp']['files'] == ['tokens.bin']
 
 
+@pytest.mark.parametrize('suffix,facts',[
+    ('gguf',{}),
+    ('gguf',{'what':'model','architecture':'audiocpp'}),
+    ('safetensors',{'what':'image','family':'sdxl'}),
+    ('pt',{'what':'audio','family':'kokoro'}),
+])
+def test_managed_cache_and_storage_weights_do_not_require_audio_classification(studio,suffix,facts):
+    page,state = studio
+    for node,tier in [('atlas','cache'),('vault','storage')]:
+        source=next(one for one in state['files'] if one['name'] == node)
+        source['files'].extend([
+            dict(path=f'/custom/{tier}/voice.{suffix}',tier=tier,facts=facts),
+            dict(path=f'/custom/{tier}/moving.{suffix}',tier=tier,facts=facts,moving=True),
+            dict(path=f'/custom/{tier}/config.json',tier=tier,facts={'what':'audio'}),
+        ])
+    page.goto('http://console.test/models/audio?new=1')
+    for index,(tier,node) in enumerate([('cache','atlas'),('storage','vault')]):
+        path=f'/custom/{tier}/voice.{suffix}'
+        option=page.locator('#am-file option').filter(has_text=f'{path} · {node} · {tier}')
+        playwright.expect(option).to_have_count(1)
+        page.locator('#am-file').select_option(label=f'{path} · {node} · {tier}')
+        if facts.get('what') == 'audio':
+            playwright.expect(page.locator('#am-family')).to_have_value('kokoro')
+        else:
+            if index == 0:
+                playwright.expect(page.locator('#am-family')).to_have_value('')
+            playwright.expect(page.locator('#am-family option[value="sdxl"]')).to_have_count(0)
+            page.locator('#am-family').select_option('kokoro')
+        playwright.expect(page.locator('#am-root')).to_have_value(f'/custom/{tier}')
+    playwright.expect(page.locator('#am-file option').filter(has_text='/moving.')).to_have_count(0)
+    playwright.expect(page.locator('#am-file option').filter(has_text='/config.json')).to_have_count(0)
+    page.locator('#am-name').fill('stored-voice')
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+    node,body=state['posts'][0]
+    assert node == 'atlas'
+    assert body['source_machine'] == 'vault'
+    assert body['settings']['flags']['model'] == f'/custom/storage/voice.{suffix}'
+    assert body['settings']['audiocpp']['family'] == 'kokoro'
+
+
 @pytest.mark.parametrize('width',[1440,768,390,320])
 def test_studio_sections_fit_both_appearances_and_have_accessible_controls(studio,width):
     page,state = studio

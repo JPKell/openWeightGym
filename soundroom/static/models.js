@@ -31,16 +31,17 @@
     return value;
   }
   const chosen = () => $('file').value === '' ? null : choices[Number($('file').value)];
+  const audioFamily = file => file?.facts?.what === 'audio' ? file.facts.family : '';
   function families() {
     const list = [...(inventory.catalogue?.families || [])];
-    for (const file of choices) if (file.facts?.family && !list.some(one => one.family === file.facts.family))
+    for (const file of choices) if (audioFamily(file) && !list.some(one => one.family === file.facts.family))
       list.push({family:file.facts.family, name:file.facts.family, kinds:file.facts.kinds || [], description:'Contract embedded in this model file; the runtime must implement its architecture.'});
     if (selected && !list.some(one => one.family === selected.audiocpp.family)) list.push({family:selected.audiocpp.family, name:selected.audiocpp.family, kinds:[selected.audiocpp.kind], description:'Current model family; runtime catalogue unavailable.'});
     return list;
   }
   function filterFamilies() {
     const file = chosen(), previous = $('family').value;
-    const known = file?.facts?.family;
+    const known = audioFamily(file);
     const choices = families().filter(one => one.kinds.length && (!known || one.family === known));
     $('family').replaceChildren(new Option('Choose a compatible model family',''), ...choices.map(one => new Option(one.name || one.family, one.family)));
     $('family').value = known || (choices.some(one => one.family === previous) ? previous : '');
@@ -182,9 +183,10 @@
     $('form').reset(); $('defaults').value = '{}'; $('session').value = '{}';
     $('default-fields').replaceChildren();
     // Always retain installed paths, even if a cache scan cannot currently see the file.
-    choices = nodes.flatMap(source=>(source.files || []).filter(file=>file.facts?.what === 'audio' && !file.moving && /\.(gguf|safetensors|pth|bin|onnx)$/i.test(file.path)).map(file=>({...file,machine:source.name})));
+    // Inventory classification is a hint: custom folders and older indexes may not label audio weights.
+    choices = nodes.flatMap(source=>(source.files || []).filter(file=>!file.moving && /\.(gguf|safetensors|pth|pt|bin|onnx)$/i.test(file.path)).map(file=>({...file,machine:source.name})));
     if (selected && !choices.some(file=>file.machine === activeNode && file.path === selected.flags.model)) {
-      choices.push({path:selected.flags.model,machine:activeNode,tier:'current',facts:{family:selected.audiocpp.family,kinds:[selected.audiocpp.kind]}});
+      choices.push({path:selected.flags.model,machine:activeNode,tier:'current',facts:{what:'audio',family:selected.audiocpp.family,kinds:[selected.audiocpp.kind]}});
     }
     $('file').replaceChildren(new Option('Choose an audio model file',''),...choices.map((file,index)=>{
       const option = new Option(file.path + ' · ' + file.machine + ' · ' + file.tier,String(index));
