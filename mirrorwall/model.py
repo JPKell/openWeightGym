@@ -41,14 +41,19 @@ def limits(settings):
             **settings.get("sdcpp",{}).get("limits",{})}
 
 
-def check_model(name,settings,cards):
-    """Validate image assets, supported fields and explicit one/two-card layout."""
+def check_name(name):
+    """Explain the shared naming rule before consulting nodes or copying files."""
     if not isinstance(name,str) or not NAME.fullmatch(name):
         raise ValueError(
             "Invalid image model name. Use 1–128 characters, starting with A–Z, a–z or 0–9. "
             "Only letters, numbers, periods (.), underscores (_), colons (:), slashes (/) and "
             "hyphens (-) are allowed; spaces are not allowed. Example: qwen-image-2.1."
         )
+
+
+def check_model(name,settings,cards):
+    """Validate image assets, supported fields and explicit one/two-card layout."""
+    check_name(name)
     if not isinstance(settings,dict) or settings.keys()-{"engine","flags","sdcpp","gpus","alone"}:
         raise ValueError("Image models accept engine, flags, sdcpp, gpus and alone.")
     if settings.get("engine")!="sdcpp" or not isinstance(settings.get("flags"),dict) or settings["flags"].keys()!={"model","ctx-size"} or settings["flags"]["ctx-size"]!=0:
