@@ -8,9 +8,8 @@
 {% block title %}{{ name }} · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/static/file.css?v=1"><script src="/static/file.js?v=1" defer></script>{% endblock %}
 {% block main %}
-<nav class="mb-2"><a href="/files">Files</a></nav>
 <div id="file-workspace" data-file-page data-layout="inspector">
-{% call page_header(name, pretitle=artifact_machine ~ ' / ' ~ (file.tier|default('cache'))) %}
+{% call page_header(name) %}
   <button type="button" class="btn btn-outline-secondary btn-sm" data-copy-target="file-path">Copy path</button>
   <a class="btn btn-primary btn-sm" href="#distribution-card">Distribute to nodes</a>
 {% endcall %}
