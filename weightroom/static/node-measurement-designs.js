@@ -303,20 +303,5 @@
     $('#theme').textContent = dark ? 'Light mode' : 'Dark mode';
   });
   window.addEventListener('hashchange', () => { const next = location.hash.slice(1); if (Object.hasOwn(names, next)) {layout = next; render();} });
-  $('#export').addEventListener('click', () => {
-    const rows = [['Model', 'Node', 'Metric', 'Value', 'Unit', 'State', 'Run', 'Recorded']];
-    const models = visibleModels().filter(model => layout !== 'lens' || model.id === modelId);
-    models.forEach(model => (layout === 'ledger' ? [nodeById(nodeId)] : data.nodes).forEach(node => {
-      (layout === 'matrix' ? [metric] : tableMetrics()).forEach(key => {
-        const item = result(model, node, key);
-        rows.push([model.name, node.id, metricName(key), hasValue(item) ? formatted(item, key) : '', unit(key), item.state, item.run || '', item.at || '']);
-      });
-    }));
-    const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
-    const link = document.createElement('a'), url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
-    link.href = url; link.download = `sample-node-measurements-${layout}.csv`; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    $('#feedback').textContent = `Exported the sample ${layout} view with evidence states and run references.`;
-  });
   render();
 })();

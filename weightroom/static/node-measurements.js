@@ -84,28 +84,6 @@
       column.querySelector('button').focus({preventScroll: true});
       viewport.scrollIntoView({block: 'nearest'});
     }));
-    const exporter = document.querySelector('[data-matrix-export]');
-    exporter.hidden = false;
-    exporter.addEventListener('click', () => {
-      const output = [['Model', 'Node', 'Benchmark', 'Display', 'Value', 'State', 'Run']];
-      for (const row of table.tBodies[0].rows) {
-        if (!row.hasAttribute('data-measurement-row') || row.hidden) continue;
-        for (const cell of [...row.cells].slice(1)) {
-          output.push([row.dataset.model, cell.dataset.node, matrix.dataset.benchmarkName, mode(),
-            cell.dataset[mode() === 'scores' ? 'score' : 'value'], cell.dataset.state,
-            cell.querySelector('a')?.getAttribute('href').split('/').pop() || '']);
-        }
-      }
-      // Quote every field and neutralize spreadsheet formula prefixes in caller-controlled names.
-      const csv = output.map(row => row.map((value, index) => {
-        const text = String(value ?? '');
-        return `"${(index !== 4 && /^[=+\-@\t\r]/.test(text) ? "'" + text : text).replaceAll('"', '""')}"`;
-      }).join(',')).join('\r\n');
-      const url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
-      const link = document.createElement('a'); link.href = url; link.download = 'node-measurements.csv'; link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      matrix.querySelector('[data-matrix-status]').textContent = 'Exported the current view, including evidence states and run references.';
-    });
     update();
   }
   initialize();

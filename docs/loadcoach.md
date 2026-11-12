@@ -7786,8 +7786,8 @@ to assistive technology and support Enter/Space. Cell links still open the match
 The Measurements partial update leaves the chart in place and preserves scroll position.
 
 Compact benchmark displays use K, M, B and T suffixes with one decimal place. The Fleet matrix
-uses readable measured values and up to six significant digits for fractional scores; exports
-and recorded sample details retain full precision.
+uses readable measured values and up to six significant digits for fractional scores;
+recorded sample details retain full precision.
 Changing the Measurements selector updates its table and details in place, retaining scroll
 position; the heatmap stays in place and the URL follows the selected benchmark.
 On Runs, an active benchmark and its live log and measurements appear above Start a run.

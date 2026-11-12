@@ -557,8 +557,7 @@ Benchmark scores uses the saved formula and its configured higher/lower directio
 cells are highlighted per model, excluding changed settings and rerun recommendations. Search,
 evidence filters, display and ordering survive reloads and test/type switches in the URL. Headers
 and model names stay pinned inside a bounded scrolling table for 15–30-model inventories.
-Node summaries show current-test coverage; selecting one focuses its column. CSV exports only
-visible models with separate node values, evidence states and run references. Missing tests,
+Node summaries show current-test coverage; selecting one focuses its column. Missing tests,
 failed attempts, unavailable inventory and absence are distinct; none is treated as zero.
 Saved values link to the existing run details. Without JavaScript the complete table remains visible.
 Results shows individual run measurements and preserves the model-type selection

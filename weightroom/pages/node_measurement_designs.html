@@ -24,14 +24,13 @@
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3"><p class="small mb-0 text-secondary" id="design-description"></p><label class="d-flex align-items-center gap-2 small">Preview state<select class="form-select form-select-sm w-auto" id="scenario"><option value="normal">Mixed measurements</option><option value="unmeasured">No measurements yet</option><option value="empty">No models</option><option value="offline">Connection lost</option></select></label></div>
 </section>
 <div id="workspace" data-layout="ledger">
-{% call page_header('Node measurements', pretitle='BENCHMARK / MACHINE PERFORMANCE') %}<button type="button" class="btn btn-outline-secondary" id="export">Export view</button>{% endcall %}
+{{ page_header('Node measurements') }}
 {{ overview(8, 30, '', 0, 0, sample=true) }}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
 {% call pills('Model type', buttons=true, class_='gap-1 mb-0') %}{% for kind,label in [('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')] %}{{ pill_button(label, kind == 'llm', attrs={'data-kind':kind}) }}{% endfor %}{% endcall %}
 <span class="text-secondary small" id="type-note">Context, load and speed tests · every configured node stays visible.</span>
 </div>
 <div id="connection-note" hidden>{{ alert('warning', 'Connection lost. Showing the last saved snapshot; measurements may be out of date.', class_='py-2') }}</div>
-<div id="feedback" class="small mb-2" role="status" aria-live="polite"></div>
 <div class="measurement-workspace">
 <aside class="measurement-node-panel" aria-label="Configured nodes">
   <div class="d-flex justify-content-between align-items-center mb-2"><strong>All nodes</strong><span class="badge bg-secondary-lt" id="node-count">8</span></div>

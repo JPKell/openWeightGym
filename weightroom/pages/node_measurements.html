@@ -1,7 +1,7 @@
 {% from 'parts.html' import card, empty_row, section_title, alert %}
 {% from 'navigation_parts.html' import pills, pill_link %}
 {% from 'node_measurement_parts.html' import node_choice, measurement_cell %}
-<div id="node-measurements" class="measurement-fleet" data-measurement-matrix data-value-higher="{{ 'true' if matrix.higher else 'false' }}" data-score-higher="{{ 'true' if matrix.score_higher else 'false' }}" data-benchmark-name="{{ resource_selected.name }}" data-formula="{{ resource_selected.formula }}">
+<div id="node-measurements" class="measurement-fleet" data-measurement-matrix data-value-higher="{{ 'true' if matrix.higher else 'false' }}" data-score-higher="{{ 'true' if matrix.score_higher else 'false' }}" data-formula="{{ resource_selected.formula }}">
 {% if inventory_warning %}{{ alert('warning', inventory_warning, class_='py-2') }}{% endif %}
 <section aria-label="All configured nodes" class="mb-4">
   <div class="d-flex justify-content-between align-items-center mb-2"><strong>All nodes</strong><span class="badge bg-secondary-lt">{{ matrix.nodes|length }}</span></div>
@@ -29,5 +29,4 @@
 <div class="measurement-table-footer small text-secondary"><span>Open a saved value to inspect its score, settings and evidence.</span><span>All matching rows · scroll to browse</span></div>
 {% endcall %}
 <div class="measurement-legend small text-secondary mt-3"><span>† Settings changed</span><span>* Rerun recommended</span><span>Not run</span><span>Failed</span><span>Not on node</span><span>Inventory unavailable</span></div>
-<div class="small text-secondary mt-3" data-matrix-status role="status" aria-live="polite"></div>
 </div>

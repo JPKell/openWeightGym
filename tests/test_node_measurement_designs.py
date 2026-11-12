@@ -1,6 +1,5 @@
 """Sample measurement proposals preserve node coverage and per-location evidence."""
 
-import csv
 import json
 import runpy
 from pathlib import Path
@@ -124,7 +123,7 @@ def test_measurements_scores_failed_and_changed_evidence_stay_distinct(preview):
     expect(page.locator('#measurement-rows')).to_contain_text('Not on node')
 
 
-def test_type_specific_protocols_and_csv_snapshot(preview, tmp_path):
+def test_type_specific_protocols_and_offline_evidence(preview):
     page = preview
     page.locator('[data-kind="embedding"]').click()
     page.locator('[data-metric="speed"]').first.click()
@@ -140,17 +139,6 @@ def test_type_specific_protocols_and_csv_snapshot(preview, tmp_path):
         expect(page.locator('button[data-metric="speed"]')).not_to_be_visible()
     page.locator('[data-design="matrix"]').click()
     page.locator('#model-search').fill('Kokoro')
-    with page.expect_download() as download:
-        page.locator('#export').click()
-    path = tmp_path / download.value.suggested_filename
-    download.value.save_as(path)
-    with path.open(newline='') as source:
-        rows = list(csv.DictReader(source))
-    assert len(rows) == 8
-    assert [row['Node'] for row in rows] == NODES
-    assert all(row['Model'] == 'Kokoro' and row['Metric'] == 'Load time' for row in rows)
-    assert all(not row['Value'] for row in rows if row['State'] in ('missing', 'failed', 'absent'))
-    assert rows[-1]['State'] == 'absent'
     page.locator('#scenario').select_option('offline')
     expect(page.locator('#connection-note')).to_be_visible()
     assert page.locator('#measurement-rows [data-evidence]').count() > 0
