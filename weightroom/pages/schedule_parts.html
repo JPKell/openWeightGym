@@ -25,6 +25,10 @@
 {% endcall %}
 {% endmacro %}
 
+{% macro inventory_footer() %}<div class="sc-inventory-footer small text-secondary"><span>Scheduled runs can wake their node.</span><span id="inventory-zone">Times in each schedule’s timezone</span></div>{% endmacro %}
+
+{% macro behavior_notes() %}Daily or selected-weekday work is checked every 15 seconds while openWeightGym runs. Due runs request Wake-on-LAN for their execution node and wait for it to answer. Configure Wake-on-LAN in Compute nodes; the owner must retain Wake permission. Pausing stops future occurrences; claimed work continues. Delete stops future runs and unsubmitted occurrences, keeping history and submitted work. Cancel submitted benchmarks from Runs. Resume starts with the next future time. Edits apply to future runs; finish claimed work before saving. A paused schedule stays paused. Backups use online snapshots; benchmarks keep their low priority and foreground preemption.{% endmacro %}
+
 {% macro choice(schedule=none, selected='') %}
 <article class="sc-schedule-row"{% if schedule %} data-schedule-row="{{ schedule.id }}" data-kind="{{ schedule.spec.kind }}" data-enabled="{{ 'yes' if schedule.enabled else 'no' }}" data-attention="{{ 'yes' if schedule.attention else 'no' }}" data-search="{{ [schedule.name,schedule.work,schedule.owner_name,schedule.spec.kind,schedule.spec.timezone,{'backup':'Paired backup','benchmark':'Benchmark rerun','outstanding':'Missing outdated benchmark'}.get(schedule.spec.kind)]|join(' ') }}"{% endif %}>
 {% if schedule %}<a class="sc-row-open" href="/schedules?{{ 'edit' if schedule.can_edit else 'view' }}={{ schedule.id }}" {{ swaps('page-content', true) }} aria-label="{{ 'Edit' if schedule.can_edit else 'View' }} {{ schedule.name }}"{% if selected == schedule.id %} aria-current="true"{% endif %}>

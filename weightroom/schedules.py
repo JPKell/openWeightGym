@@ -110,6 +110,11 @@ class Schedules:
             self.db.execute('UPDATE schedule_occurrences SET state=?,message=?,ended_at=? WHERE id=?',
                 (state, message, time.time() if now is None else now, identifier))
 
+    def waiting(self, identifier, message):
+        """Keep retryable dispatch open with its current readiness or wake explanation."""
+        with self.db:
+            self.db.execute("UPDATE schedule_occurrences SET message=? WHERE id=? AND state='dispatching'", (message[:1000], identifier))
+
     def claim(self, now=None):
         """Record all due slots in bounded chunks, applying lateness and overlap policies."""
         now = time.time() if now is None else now
@@ -133,7 +138,7 @@ class Schedules:
                     reason = reason or ('Skipped because the previous occurrence is still open.' if overlap else '')
                     self.db.execute('INSERT INTO schedule_occurrences VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)',
                         (number, row['id'], due, json.dumps(spec), row['grant_token'], secrets.token_urlsafe(32),
-                         'skipped' if reason else 'dispatching', reason or 'Waiting to submit; compute is never woken.', now if reason else None))
+                         'skipped' if reason else 'dispatching', reason or 'Waiting for the execution node before submitting scheduled work.', now if reason else None))
                 due = following
                 remaining -= 1
 
@@ -151,7 +156,7 @@ class ScheduleWorker:
         from benchmarks.eligibility import compatible, evidence_matches, resolve_location
         spec = occurrence['spec']
         answer = await self.compute.post('/loadcoach/schedules/'+occurrence['schedule_id']+'/inspect',
-                                        headers={'x-suite-schedule':occurrence['grant_token']}, json={})
+                                        headers={'x-suite-schedule':occurrence['grant_token']}, json={'due_at':occurrence['due_at']})
         answer.raise_for_status()
         inventory, candidates, unknown = answer.json(), [], []
         blocked = False
@@ -196,7 +201,7 @@ class ScheduleWorker:
         return None, 'No eligible work: active pairs or failure cooldown.' if blocked else 'Nothing outstanding.'
 
     async def tick(self, now=None):
-        """No power actions; submitted benchmarks use the existing foreground-preemptible worker."""
+        """Dispatch due grants; front handles node wake, and benchmarks remain foreground-preemptible."""
         async with self.lock:
             if self.gate.token():
                 return
@@ -244,11 +249,13 @@ class ScheduleWorker:
                         if self.gate.token():
                             return  # the persisted ID makes a lost reply recoverable
                         if answer.status_code in (429, 503):
+                            self.store.waiting(number, self.response_message(answer))
                             continue
                         if not answer.is_success:
                             if target and self.benchmarks.get(number):
                                 self.benchmarks.finish(number, 'failed', 'Schedule authorization or frozen target refused.')
-                            self.store.finish(number, 'failed', f'Compute refused scheduled work (HTTP {answer.status_code}). Check owner permissions, model and backup configuration.', now)
+                            detail = self.response_message(answer, 'Check owner permissions, model and backup configuration.')
+                            self.store.finish(number, 'failed', f'Compute refused scheduled work (HTTP {answer.status_code}). '+detail, now)
                             if answer.status_code in (401, 403):
                                 self.store.enable(occurrence['schedule_id'], False, now)
                             continue
@@ -270,12 +277,31 @@ class ScheduleWorker:
                             with self.store.db:
                                 self.store.db.execute("UPDATE schedule_occurrences SET state='running',message=? WHERE id=?", ('Submitted at '+remote.get('machine','compute')+'. Preferred: '+spec.get('machine','default')+'. '+(target.get('fallback_reason','') if target else remote.get('schedule_resolution',{}).get('fallback_reason','')), number))
                             self.wake.set()
+                    except httpx.HTTPStatusError as problem:
+                        status = problem.response.status_code
+                        if status in (429, 503):
+                            self.store.waiting(number, self.response_message(problem.response))
+                        else:
+                            detail = self.response_message(problem.response, 'Check owner permissions and node configuration.')
+                            self.store.finish(number, 'failed', f'Compute refused scheduled inspection (HTTP {status}). '+detail, now)
+                            if status in (401, 403):
+                                self.store.enable(occurrence['schedule_id'], False, now)
                     except httpx.HTTPError:
+                        self.store.waiting(number, 'The execution node is not answering. Scheduled submission will retry.')
                         continue  # a network failure may have happened after compute committed
                     except (ValueError, OSError, RuntimeError):
                         self.store.finish(number, 'failed', 'Scheduled work failed. Check Backups or the benchmark run and service output.', now)
             finally:
                 self.gate.active -= 1
+
+    @staticmethod
+    def response_message(answer, fallback='Waiting for the execution node; scheduled submission will retry.'):
+        """Retain a bounded operator-facing readiness or rejection explanation."""
+        try:
+            message = answer.json()['error']['message']
+            return message[:1000] if isinstance(message, str) and message.strip() else fallback
+        except (ValueError, KeyError, TypeError):
+            return fallback
 
     async def run(self):
         """Poll due schedules while respecting the shared maintenance barrier."""

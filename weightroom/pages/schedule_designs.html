@@ -2,7 +2,7 @@
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'icons.html' import icon %}
 {% from 'schedule_design_parts.html' import editor, templates %}
-{% from 'schedule_parts.html' import overview %}
+{% from 'schedule_parts.html' import overview, inventory_footer, behavior_notes %}
 <!doctype html>
 <html lang="en" data-bs-theme="light" data-site-theme="slate">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Schedules · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
@@ -25,7 +25,7 @@
 {% call card('Your schedules', id='inventory', body_class='p-0', actions='<span class="small text-secondary">Select to edit</span>'|safe) %}
 <div id="schedule-list"></div>
 <div id="schedule-ledger" class="table-responsive" hidden><table class="table table-hover align-middle mb-0 sc-ledger"><caption class="visually-hidden">Recurring functions, timing, next runs and latest outcomes</caption><thead><tr><th scope="col">Schedule / function</th><th scope="col">Timing</th><th scope="col">Next run</th><th scope="col">Last outcome</th><th scope="col">Actions</th></tr></thead><tbody id="ledger-rows"></tbody></table></div>
-<div class="sc-inventory-footer small text-secondary"><span>Compute stays asleep until you wake it.</span><span id="inventory-zone">Times in each schedule’s timezone</span></div>
+{{ inventory_footer() }}
 {% endcall %}
 {% call card('9–15 November 2026', id='planner', body_class='p-0', actions='<span class="badge bg-secondary-lt">Week 46</span>'|safe) %}
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 px-3 py-3 border-bottom"><span class="small text-secondary">Start times · America/Vancouver</span><span class="small text-secondary">Select any run to edit its schedule</span></div>
@@ -35,7 +35,7 @@
 <aside id="inspector-slot" class="sc-inspector-slot" aria-label="Schedule editor">{{ editor() }}</aside>
 {% call card('Recent runs', id='history-panel', body_class='p-0', actions='<span class="small text-secondary" id="history-scope">All schedules</span>'|safe) %}<div id="history-list" role="region" aria-label="Scrollable recent runs" tabindex="0"></div>{% endcall %}
 </div>
-<div class="sc-page-note mt-3">{% call more('How scheduled work behaves') %}Daily or selected-weekday functions run while openWeightGym is running. Compute is never woken. Only one occurrence per schedule runs at a time. Delete stops future and unsubmitted work, preserving history and submitted work; cancel submitted benchmarks from Runs. Resuming starts at the next future time. These proposals show the current scheduler’s supported functions; the cron expression is a read-only equivalent of the time and weekdays.{% endcall %}</div>
+<div class="sc-page-note mt-3">{% call more('How scheduled work behaves') %}{{ behavior_notes() }} These proposals show the current scheduler’s supported functions; the cron expression is a read-only equivalent of the time and weekdays.{% endcall %}</div>
 </div>
 </main>
 <dialog id="editor-dialog" class="sc-editor-dialog" aria-labelledby="editor-title"><div id="dialog-slot"></div></dialog>

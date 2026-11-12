@@ -81,8 +81,8 @@ Owner decisions D1–D7, recorded 2026-10-15/16, apply to the approved disposabl
   separate resource measurements from quality. Graders are deterministic/data-only: no real tools,
   generated code, answer keys sent to models or model judges. Label subsets and unsupported cases.
   Only supported arithmetic evaluates scoring formulas; never execute formula code.
-- **Durable work:** use stable IDs, current owner/model permissions and scoped revocable grants.
-  Schedules do not wake hosts; missing readings do not resolve alerts. Preserve confirmed playback
+- **Durable work:** use stable IDs, current owner/model permissions and scoped revocable grants
+  for execution and scheduled wake requests; missing readings do not resolve alerts. Preserve confirmed playback
   history and separate Direct/Hermes sessions. Broader tools/voice approval flows need explicit scope.
 - **UI:** server-rendered Jinja/HTMX with small JS modules, vendored Tabler 1.4 CSS/ECharts; no Node
   build requirement. Responsive controls, escaped content and one detail view per object. Refreshes
@@ -129,8 +129,10 @@ Markdown limited to `README.md` (the project's front page: what it is and the in
 Installation/deployment interfaces must change with their contracts:
 
 - [Guided installer](../install.sh), [uninstaller](../uninstall.sh), [`owg`](../scripts/owg) and their shared [terminal look](../scripts/lib/ui.sh), [machine checks](../scripts/lib/detect.sh) and [install receipt](../scripts/lib/receipt.sh); user-facing contract in [Installation](installation.md).
-- [openWeightGym installer](../scripts/install-suite.sh), [support](../scripts/install-suite-support.py), [settings editing](../weightroom/settings_file.py), [installer tests](../tests/test_installer.py), [distribution tests](../tests/test_installer_distros.py).
+- [openWeightGym installer](../scripts/install-suite.sh), [support](../scripts/install-suite-support.py), [source-build toolchain helper](../scripts/install-build-tools.sh), [settings editing](../weightroom/settings_file.py), [installer tests](../tests/test_installer.py), [distribution tests](../tests/test_installer_distros.py), [component tests](../tests/test_install_components.py) and [update tests](../tests/test_installer_update.py).
+- [Installer plan cleanup](../scripts/discard-install.py) and its [tests](../tests/test_discard_install.py).
 - [llama.cpp installer](../scripts/install-llamacpp.sh): pinned ggml-org builds by graphics card.
+- [Strata installer](../scripts/install-strata.sh) and its [native implementation](../engines/strata/install.py).
 - [Pairing](../weightroom/pairing.py) of GPU nodes with one-time codes, [tests](../tests/test_pairing.py).
 - Optional image runtime: [installer](../scripts/install-sdcpp.sh), [implementation](../scripts/install-sdcpp.py); operating instructions in the [operations log](operations.md#optional-image-generation-runtime).
 - Mirror Wall: [native installer implementation](../mirrorwall/install.py); image engine, workflows, storage and UI live in the root `mirrorwall/` package.

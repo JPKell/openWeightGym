@@ -28,10 +28,11 @@ class FrontTasks:
     body = Tasks.body
     public = staticmethod(Tasks.public)
 
-    def __init__(self, batches, users, log, evidence, ask, dispatch, names, enabled=False):
+    def __init__(self, batches, users, log, evidence, ask, dispatch, names, enabled=False, wake_node=None):
         """Bind durable front tasks to current account checks and signed compute dispatch."""
         self.batches, self.users, self.log, self.evidence = batches, users, log, evidence
         self.ask, self.dispatch, self.names, self.enabled = ask, dispatch, names, enabled
+        self.wake_node = wake_node
         self.working = {}  # outgoing requests; loss/restart never rebinds their machine
         self.publication_cursor = ''
         migrate(batches.db.database, batches.db, "turnstile.tasks", FRONT_TASKS)
@@ -209,6 +210,13 @@ class FrontTasks:
                 owner, spec = self.grants.authorized(identifier, request.headers.get('x-suite-schedule', ''))
                 if spec['kind'] == 'backup':
                     raise ValueError('Backups have no benchmark catalogue.')
+                if 'due_at' in body:
+                    due = body['due_at']
+                    if not is_due(spec, due) or due > time.time():
+                        raise ValueError('This timestamp is not a due occurrence.')
+                    owner, spec = self.grants.authorized(identifier, request.headers.get('x-suite-schedule', ''), due)
+                    if waiting := await self.prepare_schedule(request, owner, spec, identifier, due):
+                        return waiting
                 return JSONResponse(await self.schedule_inventory(owner), headers={'cache-control':'no-store'})
             if len(parts) == 5 and parts[4] == 'dispatch':
                 owner, spec = self.grants.authorized(identifier, request.headers.get('x-suite-schedule', ''))
@@ -217,29 +225,30 @@ class FrontTasks:
                     raise ValueError('This timestamp is not a due occurrence.')
                 owner, spec = self.grants.authorized(identifier, request.headers.get('x-suite-schedule', ''), due)
                 number, backup_id = occurrence_ids(identifier, due)
+                old = self.get(number) if spec['kind'] != 'backup' else None
+                if old:
+                    # Lost replies do not wake an already accepted task's node.
+                    if old['owner_id'] != owner.identity:
+                        raise PermissionError('This occurrence belongs to another account.')
+                    return JSONResponse(self.public(old))
+                if spec['kind'] != 'backup' and not self.enabled:
+                    return error(503, 'New front task creation is paused for cutover or rollback.', retry=True)
+                chosen = body.get('target') if spec['kind'] == 'outstanding' else None
+                if spec['kind'] == 'outstanding':
+                    if not isinstance(chosen, dict) or not chosen.get('model_id') or not chosen.get('benchmark'):
+                        raise ValueError('An outstanding occurrence needs one frozen target.')
+                    if spec.get('benchmarks') and chosen['benchmark'] not in spec['benchmarks']:
+                        raise PermissionError('The selected benchmark is outside the schedule scope.')
+                if waiting := await self.prepare_schedule(request, owner, spec, identifier, due):
+                    return waiting
                 if spec['kind'] == 'backup':
                     existing = await self.ask(owner, 'GET', '/loadcoach/backups/' + backup_id, machine='compute')
                     if existing is not None and existing.status_code == 200 and existing.json().get('verification', {}).get('state') == 'verified':
                         return JSONResponse(existing.json())
                     answer = await self.ask(owner, 'POST', '/loadcoach/backups', json.dumps({'id': backup_id, 'retention': spec['retention']}).encode(), machine='compute')
                     return error(503, 'Compute is unavailable.', retry=True) if answer is None else JSONResponse(answer.json(), status_code=answer.status_code)
-                if not self.enabled and self.get(number) is None:
-                    return error(503, 'New front task creation is paused for cutover or rollback.', retry=True)
                 from benchmarks.eligibility import resolve_location
-                chosen = body.get('target') if spec['kind'] == 'outstanding' else None
-                if spec['kind'] == 'outstanding' and chosen is None:
-                    raise ValueError('An outstanding occurrence needs one frozen target.')
-                old = self.get(number)
-                if old:
-                    # A lost reply must return the already frozen task, even if its node is offline.
-                    if old['owner_id'] != owner.identity:
-                        raise PermissionError('This occurrence belongs to another account.')
-                    return JSONResponse(self.public(old))
                 if chosen is not None:
-                    if not isinstance(chosen, dict) or not chosen.get('model_id') or not chosen.get('benchmark'):
-                        raise ValueError('Choose one frozen outstanding target.')
-                    if spec.get('benchmarks') and chosen['benchmark'] not in spec['benchmarks']:
-                        raise PermissionError('The selected benchmark is outside the schedule scope.')
                     inventory = await self.schedule_inventory(owner)
                     logical = next((row for row in inventory['models'] if any(one.get('model_id')==chosen['model_id'] and one['machine']==chosen['machine'] and one.get('enabled',True) for one in row['locations'])), None)
                     if logical is None:
@@ -303,6 +312,13 @@ class FrontTasks:
             return error(403, str(problem))
         except (ValueError, TypeError, KeyError, OverflowError) as problem:
             return error(400, str(problem))
+
+    async def prepare_schedule(self, request, owner, spec, identifier, due):
+        """Only a validated due grant may request its configured execution node's wake."""
+        if self.wake_node is None or 'x-turnstile-no-wake' in request.headers:
+            return None
+        machine = 'compute' if spec['kind'] == 'backup' else spec.get('machine') or 'compute'
+        return await self.wake_node(owner, machine, identifier, due, request.headers.get('x-suite-schedule', ''))
 
     async def refresh(self, task):
         """Refresh the task's pinned model availability from its owning compute node."""

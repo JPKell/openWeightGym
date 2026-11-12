@@ -15,7 +15,7 @@ enabled and compatible work). Each due occurrence persists one target before sub
 active duplicates and prioritizes least recently attempted gaps; failed/cancelled pairs cool down
 for one hour. Current evidence requires the same local stable identity, node, fingerprint,
 protocol/server mode and engine/machine hashes. Formula-only edits reuse retained metrics.
-Unavailable inventory defers work; nothing wakes a host. All-current occurrences record “Nothing
+Node readiness follows the schedule contract below. All-current occurrences record “Nothing
 outstanding.” Existing tokens, owner checks, overlap policies and foreground preemption remain.
 **Benchmark → Runs** uses Run studio: every configured node stays visible, including empty,
 disabled and unreachable nodes, alongside front's host. Choices come only from the caller's
