@@ -1,0 +1,36 @@
+{# Shared sample components for all three layouts and JavaScript replacements. #}
+{% from 'parts.html' import section_title, more, empty_row %}
+{% from 'icons.html' import icon %}
+{% from 'schedule_parts.html' import task_mark, state, choice, form_fields, history_row %}
+
+{% macro identity() %}<strong data-name></strong><span class="small text-secondary" data-work></span>{% endmacro %}
+
+{% macro editor() %}
+<section id="schedule-inspector" aria-labelledby="editor-title">
+<div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+  <div><div class="eyebrow mb-2" id="editor-eyebrow">SCHEDULE DETAILS</div>{{ section_title('Nightly recovery', id='editor-title', wrapper_class='mb-1') }}<span class="text-secondary small" id="editor-owner">Owned by jordan</span></div>
+  <button type="button" id="close-editor" class="btn btn-outline-secondary btn-sm" hidden>Close</button>
+</div>
+<form id="schedule-form" data-hold-refresh>
+<div class="d-flex justify-content-between align-items-center mb-4"><span id="editor-state" class="sc-state"></span><span id="draft-state" class="small text-secondary" role="status">Saved</span></div>
+{{ form_fields(
+  spec={'kind':'backup','time':'02:00','timezone':'America/Vancouver','weekdays':[0,1,2,3,4,5,6]},
+  catalogue=[{'model_id':'qwen3-32b','id':'Qwen3 32B'},{'model_id':'llama-3.3-70b','id':'Llama 3.3 70B'},{'model_id':'gemma3-27b','id':'Gemma 3 27B'}],
+  definitions=[{'id':'ifeval','name':'IFEval'},{'id':'mmlu','name':'MMLU'},{'id':'speed','name':'Generation speed'}], nodes=['atlas','orion']) }}
+<p id="form-error" class="text-danger small mt-3" role="alert" hidden></p>
+<div class="sc-editor-actions border-top pt-3 mt-4"><button class="btn btn-primary" type="submit" id="save-schedule">Save changes</button><button class="btn btn-outline-secondary" type="button" id="discard">Discard</button><button type="button" class="btn btn-outline-danger btn-sm ms-auto" id="delete-schedule">Delete</button></div>
+<p class="small text-secondary mt-3 mb-0">Demo changes stay in this page. A live save authorizes recurring work after sign-out, subject to the owner’s current permissions.</p>
+</form>
+</section>
+{% endmacro %}
+
+{% macro templates() %}
+<template id="schedule-choice-template">{{ choice() }}</template>
+<template id="schedule-ledger-template"><tr><td><button class="sc-ledger-open" type="button" data-open><span class="d-flex align-items-center gap-3">{{ task_mark() }}<span class="sc-row-identity">{{ identity() }}</span></span></button></td><td><strong data-clock></strong><span class="d-block small text-secondary" data-days></span><code class="sc-table-cron small" data-cron></code></td><td><span data-next-day></span><strong class="d-block" data-next-time></strong></td><td>{{ state() }}<span class="d-block small text-secondary mt-1" data-last-time></span></td><td><button type="button" class="btn btn-outline-secondary btn-sm" data-toggle></button></td></tr></template>
+<template id="schedule-event-template"><button type="button" class="sc-calendar-event" data-open><strong data-name></strong><span class="small" data-event-detail></span></button></template>
+<template id="schedule-day-template"><section class="sc-calendar-day" data-calendar-day><div class="sc-day-heading"><span data-day-name></span><strong data-day-number></strong><span class="sc-today-label" hidden>Today</span></div><div class="sc-day-events"></div><p class="sc-free-day small text-secondary" hidden>No runs</p></section></template>
+<template id="schedule-history-template">{{ history_row() }}</template>
+<template id="schedule-empty-template"><div class="sc-empty text-center p-5"><span class="sc-empty-clock" aria-hidden="true">◷</span>{{ section_title('A little planning. A lot less repetition.', wrapper_class='justify-content-center mb-2') }}<p class="text-secondary small" data-empty-text>Create a schedule to run backups and benchmarks automatically.</p><button type="button" class="btn btn-primary" data-new>Create a schedule</button></div></template>
+<template id="schedule-empty-row">{{ empty_row(5, 'No schedules match these filters.') }}</template>
+<template id="schedule-next-template"><li></li></template>
+{% endmacro %}

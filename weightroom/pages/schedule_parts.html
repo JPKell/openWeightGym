@@ -1,0 +1,79 @@
+{# Canonical Schedules components, used by the live studio and all sample layouts. #}
+{% from 'parts.html' import section_title, more, swaps, confirm_loss, confirm_two %}
+{% from 'kpi_parts.html' import kpi, kpi_row %}
+{% from 'icons.html' import icon %}
+
+{% macro days_text(days) -%}
+{% if days|length == 7 %}Every day{% elif days == [0,1,2,3,4] %}Weekdays{% elif days == [5,6] %}Weekends{% else %}{% for day in days %}{{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][day] }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}
+{%- endmacro %}
+
+{% macro cron(spec) -%}
+{{ spec.time.split(':')[1]|int }} {{ spec.time.split(':')[0]|int }} * * {% if spec.weekdays|length == 7 %}*{% elif spec.weekdays == [0,1,2,3,4] %}1-5{% else %}{% for day in spec.weekdays %}{{ (day + 1) % 7 }}{{ ',' if not loop.last }}{% endfor %}{% endif %}
+{%- endmacro %}
+
+{% macro task_mark(kind='') %}<span class="sc-task-mark" aria-hidden="true"><span data-kind-mark>{{ {'backup':'▤','benchmark':'↗','outstanding':'✧'}.get(kind, '') }}</span></span>{% endmacro %}
+{% macro state(value='', label=none, attrs={}) -%}
+<span class="sc-state" data-state{% if value %} data-tone="{{ value }}"{% endif %}{{ attrs|xmlattr }}>{{ label if label is not none else {'completed':'Completed','failed':'Failed','deferred':'Waiting for node','paused':'Paused','active':'Active','new':'New schedule','dispatching':'Dispatching','running':'Running','queued':'Queued','skipped':'Skipped','rejected':'Rejected','cancelled':'Cancelled'}.get(value, value|replace('_',' ')|capitalize) }}</span>
+{%- endmacro %}
+
+{% macro overview(active=0, paused=0, attention=0, upcoming=none) %}
+{% call kpi_row('Schedule overview') %}
+{{ kpi('Active', active, 'Enabled schedules', value_attrs={'id':'enabled-count'}) }}
+{{ kpi('Paused', paused, 'Future runs stopped', value_attrs={'id':'paused-count'}) }}
+{{ kpi('Needs attention', attention, 'Latest failed, rejected or deferred outcomes', value_attrs={'id':'attention-count'}, note_attrs={'id':'overview-deferred'}) }}
+{{ kpi('Next run', upcoming.next_time if upcoming else '—', upcoming.name ~ ' · ' ~ upcoming.next_day ~ ' · ' ~ upcoming.spec.timezone if upcoming else 'Nothing scheduled', value_attrs={'id':'overview-next-time'}, note_attrs={'id':'overview-next'}) }}
+{% endcall %}
+{% endmacro %}
+
+{% macro choice(schedule=none, selected='') %}
+<article class="sc-schedule-row"{% if schedule %} data-schedule-row="{{ schedule.id }}" data-kind="{{ schedule.spec.kind }}" data-enabled="{{ 'yes' if schedule.enabled else 'no' }}" data-attention="{{ 'yes' if schedule.attention else 'no' }}" data-search="{{ [schedule.name,schedule.work,schedule.owner_name,schedule.spec.kind,schedule.spec.timezone,{'backup':'Paired backup','benchmark':'Benchmark rerun','outstanding':'Missing outdated benchmark'}.get(schedule.spec.kind)]|join(' ') }}"{% endif %}>
+{% if schedule %}<a class="sc-row-open" href="/schedules?{{ 'edit' if schedule.can_edit else 'view' }}={{ schedule.id }}" {{ swaps('page-content', true) }} aria-label="{{ 'Edit' if schedule.can_edit else 'View' }} {{ schedule.name }}"{% if selected == schedule.id %} aria-current="true"{% endif %}>
+{% else %}<button type="button" class="sc-row-open" data-open aria-pressed="false">{% endif %}
+{{ task_mark(schedule.spec.kind if schedule else '') }}
+<span class="sc-row-identity"><strong data-name>{{ schedule.name if schedule }}</strong><span class="small text-secondary" data-work>{{ schedule.work if schedule }}</span><span class="small text-secondary" data-recurrence>{% if schedule %}{{ days_text(schedule.spec.weekdays) }} · {{ schedule.spec.time }} · {{ schedule.spec.timezone }}{% endif %}</span>{% if schedule %}<span class="small text-secondary">Owner: {{ schedule.owner_name }}{% if not schedule.can_edit %} · Owner edits{% endif %}</span>{% endif %}</span>
+<span class="sc-row-next"><strong data-next-time>{{ schedule.next_time if schedule }}</strong><span class="small text-secondary" data-next-day>{{ schedule.next_day if schedule }}</span></span>
+{% if schedule %}</a>{% else %}</button>{% endif %}
+<div class="sc-row-actions">{{ state(('paused' if not schedule.enabled else schedule.last.state if schedule.last else 'active') if schedule else '') }}
+{% if schedule %}<span class="sc-draft-mark" data-draft-mark hidden>Unsaved</span><form method="post" action="/schedules/{{ schedule.id }}" {{ swaps('page-content') }} data-schedule-action="{{ schedule.id }}"><button name="do" value="{{ 'pause' if schedule.enabled else 'resume' }}" class="btn btn-outline-secondary btn-sm" aria-label="{{ 'Pause' if schedule.enabled else 'Resume' }} {{ schedule.name }}">{{ 'Pause' if schedule.enabled else 'Resume' }}</button></form>
+{% else %}<button class="btn btn-outline-secondary btn-sm" type="button" data-toggle></button>{% endif %}
+</div></article>
+{% endmacro %}
+
+{% macro timing_readout(spec={}, next_runs=(), enabled=true, timing_error='') %}
+<div id="schedule-timing" aria-live="polite">
+<div class="sc-cron"><div class="d-flex justify-content-between align-items-center gap-2 mb-2"><span class="small text-secondary">Cron equivalent</span><span class="small text-secondary">Read only</span></div><output id="cron-value" class="font-monospace">{{ cron(spec) if spec.time|default('') and spec.weekdays|default([]) and not timing_error else '—' }}</output><p id="timing-summary" class="small mt-2 mb-0">{% if not timing_error %}{{ days_text(spec.weekdays|default([])) }} at {{ spec.time|default('') }}, {{ spec.timezone|default('') }}.{% endif %}</p></div>
+{% if timing_error %}<p class="text-danger small mt-2 mb-0" role="alert">{{ timing_error }}</p>{% endif %}
+<div class="mt-3"><span class="form-label small">Next three runs <span class="text-secondary fw-normal" id="next-zone">· {{ spec.timezone|default('') }}</span></span><ol class="sc-next-runs small" id="next-times">{% if not enabled %}<li>Paused. Resume to start at the next future time.</li>{% else %}{% for run in next_runs %}<li>{{ run }}</li>{% endfor %}{% endif %}</ol></div>
+</div>
+{% endmacro %}
+
+{% macro form_fields(spec={}, name='', catalogue=(), definitions=(), nodes=(), model_name='', next_runs=(), enabled=true, timing_error='', live=false) %}
+<label class="form-label" for="schedule-name">Name</label><input class="form-control mb-3" id="schedule-name" name="name" value="{{ name }}" maxlength="80" required>
+<label class="form-label" for="schedule-kind">Function</label><select class="form-select mb-3" id="schedule-kind" name="kind">{% for value,label in [('backup','Paired backup'),('benchmark','Benchmark rerun'),('outstanding','One missing / outdated benchmark')] %}<option value="{{ value }}"{{ ' selected' if spec.kind|default('backup') == value }}>{{ label }}</option>{% endfor %}</select>
+<div data-for-kind="benchmark" data-schedule-kind="benchmark" class="row g-3 mb-3">
+<div class="col-12"><label for="schedule-model" class="form-label">Local model</label><select class="form-select" id="schedule-model" name="model"><option value="">Choose a model</option>{% if spec.model_id|default('') and spec.model_id not in catalogue|map(attribute='model_id')|list %}<option value="{{ spec.model_id }}" selected>{{ model_name or spec.model_id }} (unavailable)</option>{% endif %}{% for model in catalogue %}<option value="{{ model.model_id }}"{{ ' selected' if model.model_id == spec.model_id|default('') }}>{{ model.id }}</option>{% endfor %}</select></div>
+<div class="col-12"><label for="schedule-benchmark" class="form-label">Benchmark</label><select class="form-select" id="schedule-benchmark" name="benchmark">{% if spec.benchmark|default('') and spec.benchmark not in definitions|map(attribute='id')|list %}<option value="{{ spec.benchmark }}" selected>{{ spec.benchmark }} (unavailable)</option>{% endif %}{% for definition in definitions %}<option value="{{ definition.id }}"{{ ' selected' if definition.id == spec.benchmark|default('') }}>{{ definition.name }}</option>{% endfor %}</select></div>
+</div>
+<div data-for-kind="benchmark outstanding" data-schedule-kind="benchmark outstanding" class="mb-3"><label for="schedule-node" class="form-label">Preferred node</label><select class="form-select" id="schedule-node" name="machine">{% if spec.machine|default('') and spec.machine not in nodes %}<option value="{{ spec.machine }}" selected>{{ spec.machine }} (unavailable)</option>{% endif %}{% for node in nodes %}<option value="{{ node }}"{{ ' selected' if node == spec.machine|default('compute') }}>{{ node }}</option>{% endfor %}</select><p class="form-hint mt-1 mb-0" data-schedule-target>Uses this node when available; a verified missing model can fall back. Unknown nodes defer the occurrence.</p></div>
+{% call more('Eligible models & benchmarks', attrs={'data-for-kind':'outstanding','data-schedule-kind':'outstanding'}) %}
+<label class="form-label" for="schedule-models">Eligible models</label><select class="form-select mb-2" multiple size="4" id="schedule-models" name="model_ids">{% for id in spec.model_ids|default([]) if id not in catalogue|map(attribute='model_id')|list %}<option value="{{ id }}" selected>{{ id }} (unavailable)</option>{% endfor %}{% for model in catalogue %}<option value="{{ model.model_id }}"{{ ' selected' if model.model_id in spec.model_ids|default([]) }}>{{ model.id }}</option>{% endfor %}</select>
+<label class="form-label" for="schedule-benchmarks">Eligible benchmarks</label><select class="form-select" multiple size="4" id="schedule-benchmarks" name="benchmarks">{% for id in spec.benchmarks|default([]) if id not in definitions|map(attribute='id')|list %}<option value="{{ id }}" selected>{{ id }} (unavailable)</option>{% endfor %}{% for definition in definitions %}<option value="{{ definition.id }}"{{ ' selected' if definition.id in spec.benchmarks|default([]) }}>{{ definition.name }}</option>{% endfor %}</select><p class="form-hint mt-2 mb-0">Leave empty for all permitted, compatible work. One missing/stale pair runs per occurrence; failures cool down for one hour.</p>
+{% endcall %}
+<div class="sc-editor-section mt-4 pt-3 border-top">{{ section_title('When to run', level=3, wrapper_class='mb-3') }}
+<div class="row g-3 mb-3"><div class="col-sm-5"><label class="form-label" for="schedule-time">Local time</label><input type="time" class="form-control" id="schedule-time" name="time" value="{{ spec.time|default('03:00') }}" required></div><div class="col-sm-7"><label class="form-label" for="schedule-zone">Timezone</label><input class="form-control" id="schedule-zone" name="timezone" value="{{ spec.timezone|default('America/Vancouver') }}" list="schedule-zones" required><datalist id="schedule-zones"><option value="America/Vancouver"><option value="UTC"><option value="Europe/London"></datalist></div></div>
+<label class="form-label" for="repeat">Repeat</label><select id="repeat" class="form-select mb-3"><option value="daily"{{ ' selected' if spec.weekdays|default([])|length == 7 }}>Every day</option><option value="weekdays"{{ ' selected' if spec.weekdays|default([]) == [0,1,2,3,4] }}>Weekdays</option><option value="custom"{{ ' selected' if spec.weekdays|default([])|length != 7 and spec.weekdays|default([]) != [0,1,2,3,4] }}>Selected days</option></select>
+<fieldset class="mb-3"><legend class="form-label small">Run on</legend><div class="sc-weekday-picker">{% for day in ['M','T','W','T','F','S','S'] %}<label class="sc-weekday"><input type="checkbox" class="form-check-input" name="weekdays" value="{{ loop.index0 }}"{{ ' checked' if loop.index0 in spec.weekdays|default([]) }} aria-label="{{ ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'][loop.index0] }}"><span aria-hidden="true">{{ day }}</span></label>{% endfor %}</div></fieldset>
+{% if live %}<input id="schedule-enabled" type="hidden" name="preview_enabled" value="{{ 'yes' if enabled else 'no' }}"><div data-schedule-preview hx-get="/schedules?part=timing" hx-trigger="schedule:timing delay:200ms" hx-include="#schedule-time,#schedule-zone,[name=weekdays],#schedule-enabled" hx-target="#schedule-timing" hx-select="#schedule-timing" hx-swap="outerHTML" hx-sync="this:replace">{% endif %}
+{{ timing_readout(spec,next_runs,enabled,timing_error) }}
+{% if live %}</div>{% endif %}
+</div>
+{% call more('Run policies') %}
+<label class="form-label" for="schedule-missed">If a run is missed</label><select class="form-select mb-3" id="schedule-missed" name="missed"><option value="skip"{{ ' selected' if spec.missed|default('skip') == 'skip' }}>Skip if more than 15 minutes late</option><option value="latest"{{ ' selected' if spec.missed|default('skip') == 'latest' }}>Run the latest missed occurrence once</option></select>
+<div data-for-kind="backup" data-schedule-kind="backup"><label for="schedule-retention" class="form-label">Recovery sets to retain per machine</label><input id="schedule-retention" type="number" min="0" max="100" name="retention" value="{{ spec.retention|default(10) }}" class="form-control" required><p class="form-hint mt-1">Zero keeps every set.</p></div>
+<p class="small text-secondary mb-0">Overlapping occurrences are skipped. Older missed times are recorded as skipped; claimed work retries after outages. Spring clock gaps are skipped; repeated autumn times run once, at the first occurrence.</p>
+{% endcall %}
+{% endmacro %}
+
+{% macro history_row(occurrence=none) %}
+<article class="sc-history-row"{% if occurrence %} data-tone="{{ occurrence.state }}"{% endif %}><span class="sc-history-dot" aria-hidden="true"></span><div class="flex-fill min-w-0"><div class="d-flex justify-content-between gap-2"><strong data-name>{{ occurrence.name if occurrence }}</strong><span class="small text-secondary" data-history-time>{{ occurrence.due_display if occurrence }}</span></div><div class="d-flex align-items-center flex-wrap gap-2 mt-1">{{ state(occurrence.state if occurrence else '') }}{% if occurrence %}{% if occurrence.href %}<a class="sc-history-link small" href="{{ occurrence.href }}">Open work {{ icon('arrow-right') }}</a>{% endif %}{% else %}<button type="button" class="sc-history-link small" data-open>View schedule {{ icon('arrow-right') }}</button>{% endif %}</div><p class="small text-secondary mt-2 mb-0" data-message>{{ occurrence.message if occurrence }}</p></div></article>
+{% endmacro %}
