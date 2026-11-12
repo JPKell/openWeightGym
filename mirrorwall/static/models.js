@@ -10,6 +10,12 @@
   let nodeCards = [], models = [], selected = null, checking = 0, timer = null, initialized = false;
   const message = error => { $('message').hidden = !error; $('message').textContent = error || ''; };
   const element = (tag, text, className) => { const one = document.createElement(tag); if (text !== undefined) one.textContent = text; if (className) one.className = className; return one; };
+  function fileOption(path, machine = node, tier = 'current') {
+    const folder=path.split('/').filter(Boolean).at(-2) || '/';
+    const option=new Option(machine+' · '+folder,path);
+    option.title=path; option.dataset.machine=machine; option.dataset.tier=tier;
+    return option;
+  }
   async function api(body, path = '') {
     const response = await fetch('/mirrorwall-models' + path + query, {method: body ? 'POST' : 'GET', cache: 'no-store', headers: body ? {'content-type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined});
     if (response.redirected) { location.href = '/sign-in'; throw new Error('Please sign in again.'); }
@@ -116,7 +122,7 @@
     $('install-targets').hidden=Boolean(model); $('target-note').hidden=Boolean(model);
     $('model-form').querySelector('section[aria-label="Hardware"] .scope-badge').textContent=model?'This node':'Selected nodes';
     $('heading').textContent = model ? model.name : 'Add image model';
-    const choose = (name, value) => { if (value && !Array.from($(name).options).some(option => option.value === value)) $(name).add(new Option(value + ' · current selection', value)); $(name).value = value || ''; };
+    const choose = (name, value) => { if (value && !Array.from($(name).options).some(option => option.value === value)) $(name).add(fileOption(value)); $(name).value = value || ''; };
     $('name').value = model?.name || ''; $('name').readOnly = Boolean(model); choose('diffusion', model?.flags?.model);
     for (const name of ['text_encoder','vae','clip_l','clip_g']) choose(name, profile.components?.[name]);
     $('family').value = profile.family || 'flux2-klein'; $('split').value = profile.split_mode || 'single';
@@ -178,7 +184,7 @@
     const choices = found.nodes.flatMap(source => source.files.filter(file => (file.facts?.what === 'image' || file.facts?.image_component) && !file.moving).map(file => ({...file, machine:source.name})));
     SLOTS.forEach(name => {
       $(name).replaceChildren(new Option(name === 'diffusion' ? 'Choose diffusion weights' : 'No file', ''));
-      choices.forEach(file => { const option = new Option(file.path + ' · ' + file.machine + ' · ' + file.tier, file.path); option.dataset.machine = file.machine; option.dataset.tier = file.tier; $(name).add(option); });
+      choices.forEach(file => $(name).add(fileOption(file.path,file.machine,file.tier)));
     });
   }
   function renderLoras() {
@@ -254,6 +260,6 @@
     document.dispatchEvent(new CustomEvent('weightroom:image-inventory',{detail:{models,node}}));
     const params = new URLSearchParams(location.search);
     if (params.has('new')) {fill(null); dialog.showModal();}
-    if (params.has('file')) { fill(null); if (!Array.from($('diffusion').options).some(one => one.value === params.get('file'))) $('diffusion').add(new Option(params.get('file'), params.get('file'))); $('diffusion').value = params.get('file'); dialog.showModal(); recheck(0); }
+    if (params.has('file')) { fill(null); if (!Array.from($('diffusion').options).some(one => one.value === params.get('file'))) $('diffusion').add(fileOption(params.get('file'))); $('diffusion').value = params.get('file'); dialog.showModal(); recheck(0); }
   }).catch(error => message(error.message));
 })();
