@@ -1,11 +1,11 @@
 {% extends "frame.html" %}
-{% from 'parts.html' import page_header, card, section_title, alert %}
+{% from 'parts.html' import page_header, card, alert %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% from 'audio_model_parts.html' import editor, studio_choice %}
 {% from 'models_parts.html' import placement, node_target %}
 {% block title %}Audio models · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><link rel="stylesheet" href="/static/audio-models.css?v=2"><script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/soundroom-static/models.js?v=16" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><link rel="stylesheet" href="/static/audio-models.css?v=2"><script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/soundroom-static/models.js?v=17" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom-models" data-audio-studio>
 {% call page_header('Audio models') %}<a href="/models?kind=audio" class="btn btn-outline-secondary">Catalogue</a><button type="button" class="btn btn-primary" id="am-add" disabled>Add audio model</button>{% endcall %}
@@ -27,13 +27,8 @@
 {% call card('Your models',body_class='p-2') %}<div id="am-profiles" class="audio-model-choices"><p class="text-secondary small p-3 mb-0">Loading installed audio models…</p></div>{% endcall %}
 <p class="small text-secondary">Unsaved drafts stay on this page as you switch models and compute nodes.</p>
 </aside>
-<div class="min-w-0">
 <fieldset class="m-0 p-0 border-0" id="am-controls" disabled>{{ editor(live=true) }}</fieldset>
-{% call card('',id='am-test',class_='mt-3',attrs={'hidden':''}) %}{{ section_title('',id='am-test-title',level=3) }}<audio id="am-test-audio" controls class="w-100 mb-2"></audio><pre id="am-test-result" class="small mb-0"></pre>{% endcall %}
-<div class="d-flex flex-wrap align-items-center gap-2 mt-3" id="am-model-actions" hidden><a class="btn btn-outline-secondary btn-sm" id="am-details" href="/models?kind=audio">Model details &amp; maintenance</a><button type="button" class="btn btn-outline-secondary btn-sm" id="am-test-button" hidden>Test 10-second output</button><span class="text-secondary small" id="am-measured"></span></div>
 </div>
-</div>
-<p class="small text-secondary mt-4">Need model files? <a href="/hub">Find files on Hugging Face</a> or browse <a href="/files">Files</a>. Choose a managed cache or storage file compatible with your node's audio.cpp runtime.</p>
 {{ studio_choice('am-profile-template',live=true) }}
 <template id="am-placement-template">{{ placement() }}</template>
 <template id="am-node-target">{{ node_target() }}</template>

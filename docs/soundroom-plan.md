@@ -10,7 +10,7 @@ First release: music, sound effects, speech generation with voice cloning and de
 - Use [audio.cpp](https://github.com/0xShug0/audio.cpp) as the single native runtime. Keep the music contract engine-neutral so [acestep.cpp](https://github.com/ServeurpersoCom/acestep.cpp) can be added later without changing pages or the API.
 - All new code lives in the `soundroom/` package, laid out like `mirrorwall/`.
 - Chat gains a **Speech** page (Studio, Spoken chat and Transcribe tabs), a **Music** page and a **Sounds** page.
-- Models gains an **Audio models** page: cache/storage file selection, per-node loading profiles, a test action and measured footprints; no pre-populated download menu (owner update 2026-10-26).
+- Models gains an **Audio models** page: cache/storage file selection and per-node loading profiles; no pre-populated download menu (owner update 2026-11-12).
 - Settings: administrator defaults under **System → Audio**; per-user preferences under **My account**.
 - Optional audio.cpp installation during initial install, a standalone script to add it later, and manual directions. Model downloads use Suite's Files/Hugging Face machinery.
 - LoadCoach admits and accounts for all audio work on GPUs and on explicit CPU profiles.
@@ -80,7 +80,7 @@ Same contract as the Mirror Wall runtime installer:
 
 Add an `audio` folder to the cache and storage roots beside `llm`, `adapters` and `projectors`. Extend Files/Hugging Face downloads beyond `.gguf` so a package directory (GGUF, safetensors, JSON and tokenizer files) installs as one verified bundle, atomically, with hashes and source revisions recorded. Shared files are tracked once and protected while any profile uses them. `audiocpp_model_manager` is not used at runtime. Coordinate with Mirror Wall's equivalent non-GGUF extension at merge.
 
-The Audio models form starts with actual cache/storage files and optional companion files. Obtain other weights through Files/Hugging Face; there is no pre-populated download menu. Runtime families and declared load/session/request options come from the pinned release's `model_specs/`, with a selected audio.cpp GGUF's embedded contract as a fallback. The installed runtime must implement the family's architecture: an arbitrary GGUF is not automatically compatible. `soundroom/catalog.toml` supplies legacy task hints, licence metadata and family-specific caption/lyrics mappings; it is not a family allowlist. Tasks without Suite routes remain unavailable. Native option names must be declared by the contract. The existing package installer remains available explicitly through the CLI/API. Models shows configured profiles and measured footprints; music/sound profiles retain their bounded Test action.
+The Audio models form starts with actual cache/storage files and optional companion files. Obtain other weights through Files/Hugging Face; there is no pre-populated download menu. Runtime families and declared load/session/request options come from the pinned release's `model_specs/`, with a selected audio.cpp GGUF's embedded contract as a fallback. The installed runtime must implement the family's architecture: an arbitrary GGUF is not automatically compatible. `soundroom/catalog.toml` supplies legacy task hints, licence metadata and family-specific caption/lyrics mappings; it is not a family allowlist. Tasks without Suite routes remain unavailable. Native option names must be declared by the contract. The existing package installer remains available explicitly through the CLI/API. The Audio models page shows installed profiles and per-node configuration.
 
 Default precision per family: the highest precision whose measured peak fits its card and passes the metric checks; q8 only where bf16/f16 does not fit.
 
@@ -179,7 +179,7 @@ Owner answers from 2026-10-23. Open rows are recommendations; ask before relying
 | A20 | Spoken chat | Hands-free with barge-in, through the existing Voice gateway in direct mode. | Confirmed |
 | A21 | Spoken chat history | Text saved in Conversations; audio recording opt-in, off by default. | Confirmed |
 | A22 | Model downloads | Suite Files/Hugging Face machinery. | Confirmed |
-| A23 | Audio models page | Choose existing cache/storage files and companion files, profiles, test action, measured footprint; no pre-populated downloads. | Updated by owner 2026-10-26 |
+| A23 | Audio models page | Choose existing cache/storage files and companion files, profiles and per-node configuration; no pre-populated downloads. | Updated by owner 2026-11-12 |
 | A24 | Runtime build | Source, pinned, CUDA, full model set. | Confirmed |
 | A25 | Settings | Administrator defaults in System → Audio; personal preferences in My account. | Confirmed |
 | A26 | Processes | Shared speech server per card; one generation server per music/sound/long-speech profile. | Confirmed; **built as one server per profile** (see Engine and admission) |
@@ -202,7 +202,7 @@ Owner answers from 2026-10-23. Open rows are recommendations; ask before relying
 ## Delivery order and acceptance
 
 1. **Runtime**: `soundroom/install.py`, `scripts/install-audiocpp.sh`, installer flag and prompt, manual directions. Verify accept, decline, unattended choices, front-only, dry-run, check, existing builds, failed builds, retry and rollback.
-2. **Engine and models**: `audiocpp` adapter, speech and generation servers, profiles, admission, cleanup; the `audio` root, bundle downloads, `catalog.toml`; the Audio models page with install, profiles, Test and footprints. Download and test ACE-Step first, then the other music families.
+2. **Engine and models**: `audiocpp` adapter, speech and generation servers, profiles, admission, cleanup; the `audio` root, bundle downloads, `catalog.toml`; the Audio models page with file-based setup and profiles. Download and test ACE-Step first, then the other music families.
 3. **Music**: job API, front assets, Music page, lyrics helper, takes, player, repaint/continue/cover, downloads and the NC note. Qualify each music family by metrics.
 4. **Sounds**: families, variations, loops, tagged library.
 5. **Speech**: speech and transcription routes, Studio, voice library with consent and sharing, script mode, Transcribe tab, speech and transcription families.

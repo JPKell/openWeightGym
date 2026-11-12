@@ -1,5 +1,4 @@
 """SoundRoom browser pages and narrow authenticated proxies into openWeightGym's existing APIs."""
-import time
 from contextlib import suppress
 from urllib.parse import parse_qs, quote, urlsplit
 
@@ -189,35 +188,7 @@ def routes(for_people, page, ask, model_api, settings=None):
                                  prepare_files=bool(body.get("new")), source_machine=body.get("source_machine", ""), machines=destinations)
         return Response(answer.content, answer.status_code, media_type="application/json", headers={"cache-control": "no-store"})
 
-    async def packages(request, person):
-        """Install or remove one pinned audio package on the selected compute node."""
-        if "manage-models" not in person.can:
-            return JSONResponse({"error": {"message": "Model management is required."}}, 403)
-        try:
-            body = await Front.read_json(request)
-        except (ValueError, TypeError) as problem:
-            return JSONResponse({"error": {"message": str(problem)}}, 400)
-        answer = await model_api(request, person, "POST", "/loadcoach/audio/packages", json=body)
-        return Response(answer.content, answer.status_code, media_type="application/json", headers={"cache-control": "no-store"})
-
-    async def test(request, person):
-        """Generate one short take with a profile, kept in the tester's own library like any other."""
-        if "manage-models" not in person.can:
-            return JSONResponse({"error": {"message": "Model management is required."}}, 403)
-        try:
-            body = await Front.read_json(request)
-            asked = {"model": body["model"], "prompt": body["prompt"], "duration": body.get("duration", 10), "n": 1}
-        except (ValueError, KeyError, TypeError) as problem:
-            return JSONResponse({"error": {"message": str(problem)}}, 400)
-        began = time.monotonic()
-        answer = await ask("POST", "/v1/audio/generations", person.key, json=asked)
-        if answer.is_error:
-            return Response(answer.content, answer.status_code, media_type="application/json")
-        take = {key: value for key, value in (answer.json().get("data") or [{}])[0].items() if key != "b64_wav"}
-        return JSONResponse({"take": take, "seconds": round(time.monotonic() - began, 1)}, headers={"cache-control": "no-store"})
-
     return [Route("/chat/music", for_people(music)),
-            Route("/soundroom-test", for_people(test), methods=["POST"]),
             Route("/chat/sounds", for_people(sounds)),
             Route("/chat/speech", for_people(speech)),
             Route("/account/audio", for_people(preferences)),
@@ -226,5 +197,4 @@ def routes(for_people, page, ask, model_api, settings=None):
             Route("/soundroom-models", for_people(inventory)),
             Route("/soundroom-models", for_people(model_save), methods=["POST"]),
             Route("/soundroom-installations", for_people(installations)),
-            Route("/soundroom-packages", for_people(packages), methods=["POST"]),
             Route("/soundroom-api/{action:path}", for_people(proxy), methods=["GET", "POST", "DELETE"])]
