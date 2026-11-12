@@ -1,6 +1,14 @@
 """Presentation of verified Models inventory; every node retains its own configuration."""
 
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
+
+
+def editor_address(name, engine, node):
+    """Open the correct editor with this copy's local model name and compute node."""
+    workspace = {'audiocpp': 'audio', 'sdcpp': 'images'}.get(engine)
+    if workspace:
+        return '/models/' + workspace + '?' + urlencode({'model': name, 'node': node}, quote_via=quote)
+    return '/models/' + quote(name, safe='/:') + '?node=' + quote(node, safe='')
 
 
 def catalogue(known, node=''):
@@ -31,12 +39,13 @@ def catalogue(known, node=''):
                 label={'offline':'Node unavailable', 'missing':'File missing', 'disabled':'Placement disabled',
                        'in-use':'In use', 'loaded':'Loaded', 'loading':'Loading', 'installed':'Installed'}[state] +
                       (' · placement disabled' if copy.get('enabled') is False and state != 'disabled' else ''),
-                href='/models/' + quote(copy['name'], safe='/:') + '?node=' + quote(machine, safe='')))
+                href=editor_address(copy['name'], copy.get('engine', model.get('engine')), machine)))
             machines.add(machine)
         contexts = sorted({copy.get('flags', {}).get('ctx-size') for copy in copies
                            if isinstance(copy.get('flags', {}).get('ctx-size'), int) and copy['flags']['ctx-size'] > 0})
         sizes = sorted({copy['size'] for copy in copies if isinstance(copy.get('size'), (int, float))})
-        rows.append(dict(model=model, placements=placements, contexts=contexts, sizes=sizes,
+        preferred = next((place for place in placements if place['node'] == node), placements[0])
+        rows.append(dict(model=model, href=preferred['href'], placements=placements, contexts=contexts, sizes=sizes,
             active=sum(p['state'] in ('loaded', 'in-use') for p in placements),
             in_use=sum(p['state'] == 'in-use' for p in placements),
             search=' '.join(str(value) for value in [model['name'], model.get('engine', 'llama_cpp'),
@@ -45,4 +54,5 @@ def catalogue(known, node=''):
     placements = [p for row in rows for p in row['placements']]
     return dict(rows=rows, installations=len(placements), nodes=len(machines),
                 active=sum(row['active'] for row in rows), in_use=sum(row['in_use'] for row in rows),
-                offline=sorted(offline | {p['node'] for p in placements if p['state'] == 'offline'}))
+                offline=sorted(offline | {p['node'] for p in placements if p['state'] == 'offline'}),
+                links={(p['node'], p['copy']['name']): p['href'] for p in placements})

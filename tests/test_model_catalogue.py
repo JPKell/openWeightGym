@@ -1,6 +1,7 @@
 """The live catalogue summarizes node copies accurately and survives polling while browsing."""
 
 import pytest
+from urllib.parse import parse_qs, urlsplit
 
 from loadcoach.models import Models
 from weightroom.model_catalogue import catalogue
@@ -41,6 +42,65 @@ def test_disabled_placement_can_still_hold_a_model_in_memory():
     assert result['rows'][0]['placements'][0]['state'] == 'loaded'
     assert result['rows'][0]['placements'][0]['disabled']
     assert 'placement disabled' in result['rows'][0]['placements'][0]['label']
+
+
+@pytest.mark.parametrize('engine,workspace',[('audiocpp','audio'),('sdcpp','images')])
+def test_media_links_use_the_local_copy_name_and_selected_compute_node(engine,workspace):
+    name='renamed/model:one &+?'
+    node='rig & two'
+    known={'models':[{'name':'logical-name','engine':engine,'locations':[copy('atlas'),copy(node,name=name)]}]}
+    catalogue_row=catalogue(known,node)['rows'][0]
+    selected=catalogue_row['placements'][1]
+    assert catalogue_row['href']==selected['href']
+    parsed=urlsplit(selected['href'])
+    assert parsed.path=='/models/'+workspace and not parsed.fragment
+    assert parse_qs(parsed.query)=={'model':[name],'node':[node]}
+    assert catalogue(known)['rows'][0]['href']==catalogue_row['placements'][0]['href']
+    assert catalogue(known)['links'][(node,name)]==selected['href']
+
+
+@pytest.mark.parametrize('engine,workspace',[('audiocpp','audio'),('sdcpp','images')])
+@pytest.mark.parametrize('link',['subject','placement'])
+@pytest.mark.parametrize('width',[1440,390])
+def test_catalogue_links_open_the_matching_media_editor_with_the_model_selected(desk,tmp_path,engine,workspace,link,width):
+    server,_,_=desk
+    library=Models(str(tmp_path/'loadcoach.db'))
+    chosen='selected/'+workspace+':model'
+    for index,name in enumerate(['aaa-first-model',chosen]):
+        path=gguf(tmp_path/f'media-{index}.gguf',general__architecture='fixture',general__name=name)
+        settings={'engine':engine,'gpus':0,'flags':{'model':path,'ctx-size':0}}
+        if engine=='audiocpp':
+            settings['audiocpp']={'family':'kokoro_tts','kind':'speech','path':path}
+        else:
+            settings['sdcpp']={'family':'sdxl','split_mode':'single','defaults':{'width':512,'height':512}}
+        library.put(name,settings)
+    sign_in(server,'jordan')
+    with playwright.sync_playwright() as driver:
+        browser,page=browser_context(driver,server)
+        page.set_viewport_size({'width':width,'height':1100})
+        errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+        kind='all' if link=='subject' else 'audio' if engine=='audiocpp' else 'image'
+        page.goto('http://console.test/models?kind='+kind)
+        row=page.locator(f'#models-table [data-catalogue-row][data-name="{chosen}"]')
+        target=row.locator('.inventory-'+link)
+        playwright.expect(target).to_have_attribute('href',f'/models/{workspace}?model=selected%2F{workspace}%3Amodel&node=compute')
+        if link=='placement':
+            page.evaluate('(kind)=>htmx.ajax("GET","/models?part=list&kind="+kind,{target:"#models",swap:"outerHTML"})',kind)
+            playwright.expect(target).to_be_visible()
+        target.click()
+        if engine=='audiocpp':
+            playwright.expect(page.locator('#am-name')).to_have_value(chosen)
+            playwright.expect(page.locator('#am-install-targets input[value="compute"]')).to_be_checked()
+        else:
+            playwright.expect(page.locator('#studio-model-name')).to_have_text(chosen)
+            playwright.expect(page.locator('#mw-node')).to_have_value('compute')
+        parsed=urlsplit(page.url)
+        assert parsed.path=='/models/'+workspace
+        assert parse_qs(parsed.query)['model']==[chosen] and parse_qs(parsed.query)['node']==['compute']
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        assert not errors,errors
+        browser.close()
+    library.db.close()
 
 
 @pytest.mark.parametrize('width', [1440,768,390])
