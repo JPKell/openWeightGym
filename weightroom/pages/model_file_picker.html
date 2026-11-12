@@ -5,4 +5,4 @@
   {% for file in file_choices %}{% set chosen = file.path == form.file and not selection.chosen %}<option value="{{ {'path':file.path,'machine':file.machine}|tojson|forceescape }}"{{ ' selected' if chosen }} title="{{ file.path }}" data-trained="{{ file.facts.trained_context|default(file.facts.context|default('')) }}">{{ file_choice_label(file) }}</option>{% if chosen %}{% set selection.chosen = true %}{% endif %}{% endfor %}
   {% if form.file and not selection.chosen %}<option value="{{ {'path':form.file,'machine':form.source_machine|default(add_nodes|first|default('compute'))}|tojson|forceescape }}" selected disabled title="{{ form.file }}">{{ form.file.rsplit('/', 1)[-1] }} · unavailable</option>{% endif %}
 </select>
-{% if not file_choices %}<div class="form-text">No available model files were found. Download a model under <a href="/hub">Hugging Face</a> or check <a href="/files">Files</a>.</div>{% endif %}
+{% if not file_choices %}<div class="form-text">No available model files were found. {% if platform().downloads %}Download a model under <a href="/hub">Hugging Face</a> or check{% else %}Check{% endif %} <a href="/files">Files</a>.</div>{% endif %}

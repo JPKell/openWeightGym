@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% from "parts.html" import page_header, alert %}
 {% block title %}Audio · My account · openWeightGym{% endblock %}
-{% block scripts %}<script src="/soundroom-static/preferences.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<script src="/soundroom-static/preferences.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom-preferences" style="max-width:36rem">
   {{ page_header("Audio", lead="Your own choices for the Music, Sounds and Speech pages.") }}
@@ -9,9 +9,9 @@
   <form id="ap-form">
     <label class="form-label" for="ap-format">Download format</label>
     <select id="ap-format" class="form-select mb-3"><option value="wav">WAV</option><option value="flac">FLAC</option><option value="mp3">MP3</option><option value="opus">Opus</option></select>
-    <label class="form-label" for="ap-speech">Speech model</label><select id="ap-speech" class="form-select mb-3"></select>
+    {% if platform().speech %}<label class="form-label" for="ap-speech">Speech model</label><select id="ap-speech" class="form-select mb-3"></select>
     <label class="form-label" for="ap-transcription">Transcription model</label><select id="ap-transcription" class="form-select mb-3"></select>
-    <label class="form-label" for="ap-voice">Voice</label><select id="ap-voice" class="form-select mb-3"></select>
+    <label class="form-label" for="ap-voice">Voice</label><select id="ap-voice" class="form-select mb-3"></select>{% endif %}
     <button class="btn btn-primary" type="submit">Save</button>
   </form>
 </div>

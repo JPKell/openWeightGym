@@ -76,8 +76,8 @@
 </tr>
 {% endmacro %}
 {% macro model_type_navigation(kind, type_benchmarks) %}
-{% from 'navigation_parts.html' import pills, pill_link %}
+{% from 'navigation_parts.html' import pills, pill_link, model_type_choices %}
 {% call pills('Model type') %}
-{% for value, label in [('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')] %}{{ pill_link(label, '/benchmarks/node-measurements?kind=' ~ value ~ '&benchmark=' ~ type_benchmarks[value], kind == value, attrs={'data-matrix-navigation':''}) }}{% endfor %}
+{% call(value, label) model_type_choices([('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')]) %}{{ pill_link(label, '/benchmarks/node-measurements?kind=' ~ value ~ '&benchmark=' ~ type_benchmarks[value], kind == value, attrs={'data-matrix-navigation':''}) }}{% endcall %}
 {% endcall %}
 {% endmacro %}

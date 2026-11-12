@@ -5,8 +5,8 @@
 
 {% macro source_navigation(active) %}
 {% call pills('Model sources', class_='gap-1 mb-0') %}
-{{ pill_link('Hugging Face', '/hub', active == 'hub') }}
-{{ pill_link('Civitai', '/civitai', active == 'civitai') }}
+{% if platform is not defined or platform().downloads %}{{ pill_link('Hugging Face', '/hub', active == 'hub') }}
+{% if platform is not defined or platform().images %}{{ pill_link('Civitai', '/civitai', active == 'civitai') }}{% endif %}{% endif %}
 {% endcall %}
 {% endmacro %}
 

@@ -11,6 +11,14 @@ From a checkout, `./install.sh` does the same and the checkout becomes the insta
 the installer again offers **Update**, **Repair**, **Install components**, **Add a GPU node**
 (on a console) and **Uninstall**.
 
+A new console installation asks whether to enable image generation, speech (TTS, STT and Voice),
+music/audio generation, and model downloads. Change these later under **General → Platform services**;
+changes apply immediately. Disabled services disappear from navigation, model-type pills and filters,
+and their requests are refused. Hugging Face requires model downloads; Civitai requires both model
+downloads and Images. Existing installations and unattended installs keep all four enabled by default.
+For an unattended choice, use `--platform-services images,speech,audio,downloads`, a subset, or `none`.
+Repair and updates preserve existing choices, settings and models.
+
 Release-by-release delivery notes, runtime pins and recovery procedures for this project's own
 deployment are in the [operations log](operations.md).
 

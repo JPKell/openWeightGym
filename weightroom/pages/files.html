@@ -7,7 +7,7 @@
   <form method="post" action="/files"><input type="hidden" name="back" value="{{ here }}"><button class="btn btn-outline-secondary btn-sm" name="do" value="refresh-files" title="Look through every model folder again now, instead of waiting for the next check">Refresh files</button></form>
 {% endcall %}
 {{ said_box(said, failed|default(false)) }}
-{% include "downloads.html" %}
+{% if platform().downloads %}{% include "downloads.html" %}{% endif %}
 {% if deferred %}{% from "deferred.html" import loading %}{{ loading('files-content', fragment_url, 'Loading model files…') }}
 {% else %}{% include "files_content.html" %}{% endif %}
 {% endblock %}

@@ -1,5 +1,10 @@
 {% from "parts.html" import swaps %}
 
+{# One policy for model-type pills and select options, including previews with all types enabled. #}
+{% macro model_type_choices(choices) -%}
+{% for value, label in choices if platform is not defined or platform().kind_enabled(value) %}{{ caller(value, label) }}{% endfor %}
+{%- endmacro %}
+
 {# Links navigate; buttons switch a view in place and expose their pressed state. #}
 {% macro pills(label, class_='gap-1 mb-3', buttons=false, attrs={}) -%}
 <{{ 'div' if buttons else 'nav' }} class="nav nav-pills{{ ' ' ~ class_ if class_ }}" aria-label="{{ label }}"{% if buttons %} role="group"{% endif %}{{ attrs|xmlattr }}>{{ caller() }}</{{ 'div' if buttons else 'nav' }}>

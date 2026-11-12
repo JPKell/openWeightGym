@@ -746,6 +746,7 @@ def main() -> int:
     rendering.add_argument("--machine-name", default="")
     rendering.add_argument("--voice", action="store_true")
     rendering.add_argument("--voice-model", default="")
+    rendering.add_argument("--platform-services", default="images,speech,audio,downloads")
     voice = subparsers.add_parser("voice")
     voice.add_argument("--root", type=Path, required=True)
     voice.add_argument("--services", required=True)
@@ -773,10 +774,16 @@ def main() -> int:
     if args.command == "voice":
         return prepare_voice(args.root.resolve(), args.services.split(","))
     if args.command == "render":
+        from loadcoach.platform_services import SERVICE_SETTINGS
         root = args.root.resolve()
+        selected = set() if args.platform_services == 'none' else set(args.platform_services.split(','))
+        if selected - set(SERVICE_SETTINGS.values()):
+            raise SystemExit('Platform services must be images,speech,audio,downloads or none.')
         values = {} if args.topology == "keep" else topology_values(
             args.example.stem, args.topology, root, args.address, args.front, args.compute, args.llama_server,
             args.machine_name, args.voice, args.voice_model)
+        if args.example.stem == 'weightroom':
+            values.update({key: service in selected for key, service in SERVICE_SETTINGS.items()})
         return render(args.example, args.target, root, args.home, values)
     if args.command in {"audit", "state", "firewall-ports"}:
         services = [item for item in args.services.split(",") if item]

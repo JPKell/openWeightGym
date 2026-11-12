@@ -7,6 +7,10 @@ TIMEZONES = [(json.dumps(name), name) for name in sorted(available_timezones())]
 
 # Unknown keys retain their current editor under Additional settings.
 LABELS = {
+    'allow_image_generation': ('Image generation', 'Platform services', '', 'switch'),
+    'allow_speech': ('Speech · TTS, STT and Voice', 'Platform services', '', 'switch'),
+    'allow_audio_generation': ('Music and audio generation', 'Platform services', '', 'switch'),
+    'allow_model_downloads': ('Model downloads', 'Platform services', '', 'switch'),
     'wait': ('Wait for a node', 'Requests and queue', 's', 'number'),
     'allow_caller_to_specify_destination': ('Allow callers to choose the node', 'Requests and queue', '', 'switch'),
     'max_wait': ('Queue wait limit', 'Requests and queue', 's', 'number'),
@@ -102,7 +106,7 @@ def sections(programs, *, compute_node=False):
             group = result.setdefault(title, {})
             fragment = group.setdefault(program['program'], {**program, 'settings': []})
             fragment['settings'].append(setting)
-    order = ['Requests and queue', 'Logs and retention', 'Power and idle', 'Telemetry, power and idle', 'Alerts and monitoring',
+    order = ['Platform services', 'Requests and queue', 'Logs and retention', 'Power and idle', 'Telemetry, power and idle', 'Alerts and monitoring',
              'Tools', 'Display and costs', 'Model files', 'Direct conversations', 'Hermes agent',
              'Sessions and limits', 'Speech', 'RAM policy', 'Additional settings', 'Advanced']
     return [{'title': title, 'programs': list(result[title].values())}
