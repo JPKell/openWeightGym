@@ -207,16 +207,38 @@ class Store:
         rows=self.db.execute("SELECT id,owner_id,name,version,model_id,model_name,settings,updated FROM mirrorwall_presets WHERE owner_id IN (?, '*') ORDER BY name",(owner,)).fetchall()
         return [{"id":r[0],"published":r[1]=="*","name":r[2],"version":r[3],"model_id":r[4],"model":r[5],"settings":json.loads(r[6]),"updated":r[7]} for r in rows]
 
-    def save_preset(self,owner,name,model_name,model_id,settings,identifier=None):
+    def preset_history(self,owner,identifier):
+        """Read revisions only through a currently visible private/shared workflow."""
+        if not self.db.execute("SELECT 1 FROM mirrorwall_presets WHERE id=? AND owner_id IN (?, '*')",(identifier,owner)).fetchone():
+            return None
+        return [{"version":r[0],"name":r[1],"model_id":r[2],"model":r[3],"settings":json.loads(r[4]),"updated":r[5]}
+                for r in self.db.execute("SELECT version,name,model_id,model_name,settings,updated FROM mirrorwall_preset_versions WHERE id=? ORDER BY version DESC",(identifier,))]
+
+    def save_preset(self,owner,name,model_name,model_id,settings,identifier=None,expected_version=None):
         """Create/update a preset while incrementing its version and preserving ownership."""
         if not isinstance(name,str) or not 1<=len(name.strip())<=100:
             raise ValueError("Preset name must contain 1–100 characters.")
+        if identifier is not None and (not isinstance(identifier,str) or not re.fullmatch(r'workflow_[a-f0-9]{24}',identifier)):
+            raise ValueError('Invalid workflow ID.')
         identifier=identifier or "workflow_"+secrets.token_hex(12)
-        existing=self.db.execute("SELECT owner_id,version FROM mirrorwall_presets WHERE id=?",(identifier,)).fetchone()
+        existing=self.db.execute("SELECT owner_id,version,model_id FROM mirrorwall_presets WHERE id=?",(identifier,)).fetchone()
         if existing and existing[0]!=owner:
             raise ValueError("There is no such workflow of yours.")
+        if expected_version is not None and (type(expected_version) is not int or not existing or expected_version!=existing[1]):
+            raise ValueError("This workflow changed elsewhere. Reload its latest version or save a copy.")
+        if existing and existing[2] and existing[2]!=model_id:
+            raise ValueError("This workflow belongs to another model identity. Save a copy for this model.")
         version=existing[1]+1 if existing else 1
+        updated=time.time()
         with self.db:
-            self.db.execute("INSERT INTO mirrorwall_presets VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,version=excluded.version,model_id=excluded.model_id,model_name=excluded.model_name,settings=excluded.settings,updated=excluded.updated",
-                            (identifier,owner,name.strip(),version,model_id or "",model_name,json.dumps(settings),time.time()))
+            if existing:
+                changed=self.db.execute("UPDATE mirrorwall_presets SET name=?,version=?,model_id=?,model_name=?,settings=?,updated=? WHERE id=? AND owner_id=? AND version=?",
+                    (name.strip(),version,model_id or "",model_name,json.dumps(settings),updated,identifier,owner,existing[1]))
+                if changed.rowcount!=1:
+                    raise ValueError("This workflow changed elsewhere. Reload its latest version or save a copy.")
+            else:
+                self.db.execute("INSERT INTO mirrorwall_presets VALUES (?,?,?,?,?,?,?,?)",
+                                (identifier,owner,name.strip(),version,model_id or "",model_name,json.dumps(settings),updated))
+            self.db.execute("INSERT INTO mirrorwall_preset_versions VALUES (?,?,?,?,?,?,?)",
+                            (identifier,version,name.strip(),model_id or "",model_name,json.dumps(settings),updated))
         return next(row for row in self.presets(owner) if row["id"]==identifier)

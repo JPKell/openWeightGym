@@ -1,0 +1,41 @@
+{% from "parts.html" import form_section, more, hardware, card, empty_row %}
+{% from "model_form.html" import number, choice %}
+<template id="mw-lora-row"><tr>{% for key,label,type in [('name','Name','text'),('file','File','text'),('scale','Strength','number')] %}<td><input type="{{ type }}" class="form-control" data-lora-field="{{ key }}" aria-label="LoRA {{ label }}"{% if type=='number' %} step="any" min="-4" max="4"{% endif %}></td>{% endfor %}<td><button type="button" data-remove-lora class="btn btn-outline-danger btn-sm">Remove</button></td></tr></template>
+{% call card("Add image model", tag="form", id="mw-model-form", attrs={'data-hold-refresh':''}, header_id="mw-heading") %}
+<div class="row g-3">
+{% call form_section("Model and files", "All nodes") %}
+<div class="col-md-6"><label for="mw-name" class="form-label">Model name</label><input id="mw-name" name="name" class="form-control" required maxlength="128"></div>
+<div class="col-md-6"><label for="mw-family" class="form-label">Family</label><select id="mw-family" name="family" class="form-select"><option value="flux2-klein">Flux 2 klein</option><option value="flux2-dev">Flux 2 Dev</option><option value="sdxl">SDXL</option><option value="qwen-image">Qwen Image (original / 2512)</option><option value="qwen-image-2.1">Qwen Image 2.1</option></select></div>
+<div id="mw-family-help" class="col-12" hidden></div>
+{% for name,label in [('diffusion','Diffusion weights'),('text_encoder','Text encoder'),('vae','VAE'),('clip_l','CLIP L'),('clip_g','CLIP G'),('upscaler','Image upscaler')] %}<div id="mw-row-{{name}}" class="col-12"><label for="mw-{{name}}" class="form-label">{{label}} <span id="mw-need-{{name}}" class="badge rounded-pill text-bg-light border fw-normal"></span></label><select id="mw-{{name}}" name="{{name}}" class="form-select" aria-describedby="mw-says-{{name}}" {{'required' if name=='diffusion'}}><option value="">Choose a file from cache/storage</option></select><div id="mw-says-{{name}}" class="mw-says form-text"></div></div>{% endfor %}
+<div class="col-12"><div id="mw-check" class="mw-check frame" aria-live="polite"></div></div>
+{% endcall %}
+{% call form_section('Hardware', 'This node') %}
+{{ hardware('mw', legacy='image') }}
+<div class="col-12" data-image-split><label for="mw-split" class="form-label">Split strategy</label><select id="mw-split" name="split_mode" class="form-select"><option value="single">One GPU</option><option value="components">Separate components</option><option value="layer">Diffusion layers</option><option value="row">Diffusion rows</option></select><div class="form-hint">Multiple GPUs require a matching split strategy.</div></div>
+{{ number('mw-ram', 'Host RAM cap', 'MiB', 2048, 131072, 8192, required=true) }}
+{{ number('mw-threads', 'CPU threads', '', 1, 32, 4, required=true) }}
+<div class="col-12 form-check form-switch ms-2"><input id="mw-staged" type="checkbox" class="form-check-input" checked><label for="mw-staged" class="form-check-label">Stage components to reduce VRAM use</label></div>
+<div class="col-12"><span id="mw-cards" class="form-hint"></span></div>
+{% endcall %}
+{% call form_section('Image defaults', 'All nodes') %}
+{% for key,label,unit,low,high in [('width','Width','px',256,4096),('height','Height','px',256,4096),('steps','Steps','',1,200),('cfg_scale','CFG scale','',0,30),('guidance','Guidance','',0,20),('seed','Seed','',-1,2147483647),('n','Images per request','',1,64),('upscale','Upscale','×',1,4)] %}{{ number('mw-default-' ~ key,label,unit,low,high,source='mw-defaults',key=key,step='any' if key in ['cfg_scale','guidance'] else '1') }}{% endfor %}
+{{ choice('mw-default-sampler','Sampler',['euler','euler_a','heun','dpm2','dpmpp2s_a','dpmpp2m','dpmpp2mv2','ipndm','ipndm_v','lcm'], 'mw-defaults','sampler') }}
+{{ choice('mw-default-scheduler','Scheduler',['discrete','karras','exponential','ays','sgm_uniform','simple','smoothstep','flux2','flux'], 'mw-defaults','scheduler') }}
+{{ number('mw-ref-mp','Reference size','MP',0.1,4,1,step='.1',required=true) }}
+{% endcall %}
+{% call form_section('Workflow limits', 'All nodes') %}
+{% for key,label,unit,low,high in [('max_width','Maximum width','px',256,4096),('max_height','Maximum height','px',256,4096),('max_steps','Maximum steps','',1,200),('max_images','Maximum images','',1,64),('max_references','Reference images','',0,8),('max_pixels','Pixel budget','px',65536,16777216),('max_upscale','Maximum upscale','×',1,4)] %}{{ number('mw-limit-' ~ key,label,unit,low,high,source='mw-limits',key=key) }}{% endfor %}
+{% endcall %}
+{% call form_section('LoRAs', 'All nodes') %}<div class="col-12"><div class="table-responsive"><table class="table table-sm sortable" aria-label="Image adapters" data-empty-message="No image adapters. Select Add LoRA to configure one."><thead><tr><th>Name</th><th>File</th><th>Strength</th><th></th></tr></thead><tbody id="mw-lora-rows">{{ empty_row(4, "No image adapters. Select Add LoRA to configure one.") }}</tbody></table></div><button class="btn btn-outline-secondary btn-sm" id="mw-add-lora" type="button">Add LoRA</button></div>{% endcall %}
+<div class="col-12">{% call card('Advanced (JSON)', false) %}<div class="row g-3">
+<div class="col-md-6"><label for="mw-vram" class="form-label">Native VRAM budgets <small>GiB per GPU</small></label><input id="mw-vram" class="form-control" placeholder="14.5,14.5"></div>
+<div class="col-md-6"><label for="mw-layer-weights" class="form-label">Layer weight ratio</label><input id="mw-layer-weights" class="form-control" placeholder="3,1"></div>
+<div class="col-md-6"><label for="mw-defaults" class="form-label">Additional image defaults</label><textarea id="mw-defaults" class="form-control font-monospace" rows="3">{}</textarea></div>
+<div class="col-md-6"><label for="mw-limits" class="form-label">Additional workflow limits</label><textarea id="mw-limits" class="form-control font-monospace" rows="3">{}</textarea></div>
+<div class="col-12"><label for="mw-loras" class="form-label">LoRAs (JSON)</label><textarea id="mw-loras" class="form-control font-monospace" rows="3">{}</textarea><div class="form-hint">Changing JSON refreshes the adapter rows.</div></div>
+</div>{% endcall %}</div>
+<div class="col-12 sticky-actions"><button class="btn btn-primary" type="submit">Save model</button><span id="mw-saved" class="text-success ms-3" role="status"></span></div>
+</div>{% call more() %}<p class="mw-model-note mb-3">Start with the diffusion weights. The checklist reads each file's header on the selected node and says which text encoder, VAE and other parts the model needs, offering matching files already there. New files come down on <a href="/hub">Hugging Face</a> or <a href="/civitai">Civitai</a> and appear in the file lists below. Saving a new model checks cache space, promotes storage files and copies its complete bundle to the node. <a href="/docs/mirrorwall#models">Which parts each model needs</a></p>
+<p class="mw-model-note mt-3 mb-0">Unqualified models reserve their assigned cards. Shared residency requires reproducible placement and full workflow memory measurements, plus 256 MiB sampling headroom and the node's configured card margin. Shared workflows pin sampler, scheduler and CFG; use an exclusive entry to change those per request. Existing work finishes before settings take effect.</p>{% endcall %}<p id="mw-measurement" class="mw-model-note mt-2 mb-0"></p>
+{% endcall %}

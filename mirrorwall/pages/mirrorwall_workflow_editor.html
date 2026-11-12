@@ -1,0 +1,30 @@
+{% from 'parts.html' import card, form_section, more, alert %}
+{% from 'image_design_parts.html' import field, select %}
+{% call card('Workflow settings', class_='workflow-editor', header_id='studio-editor-title') %}
+<div class="d-flex flex-wrap gap-2 align-items-center mb-3"><span id="studio-version" class="badge bg-blue-lt">New workflow</span><span id="studio-draft" class="small text-secondary" role="status"></span><button id="studio-duplicate" class="btn btn-outline-secondary btn-sm ms-auto" disabled>Duplicate</button></div>
+<form id="studio-workflow-form" data-hold-refresh><fieldset id="studio-workflow-fields" disabled><div class="row g-3">
+{{ field('workflow-name','Workflow name',wide=true,max=100) }}
+<div class="col-12 small text-secondary" id="studio-owner"></div>
+<div class="col-12" id="studio-workflow-helper"></div>
+{% call form_section('Output') %}
+{% for key,label,low,high,step in [('width','Width (px)',256,4096,16),('height','Height (px)',256,4096,16),('n','Image count',1,64,1),('upscale','Output enlargement (×)',1,4,0.5)] %}{{ field('workflow-' ~ key,label,'number',min=low,max=high,step=step) }}{% endfor %}
+{% endcall %}
+{% call form_section('Sampling') %}
+{{ field('workflow-steps','Steps','number',min=1,max=200) }}{{ field('workflow-seed','Seed · −1 is random','number',min=-1,max=2147483647) }}
+{{ select('workflow-sampler','Sampler',['euler','euler_a','heun','dpm2','dpmpp2s_a','dpmpp2m','dpmpp2mv2','lcm','ipndm','ipndm_v']) }}
+{{ select('workflow-scheduler','Scheduler',['flux2','discrete','karras','exponential','ays','simple','smoothstep','sgm_uniform','flux']) }}
+{{ field('workflow-guidance','Guidance','number',min=0,max=20,step=0.1) }}{{ field('workflow-cfg_scale','CFG scale','number',min=0,max=30,step=0.1) }}
+{% endcall %}
+{% call form_section('Reference images') %}
+<p class="small text-secondary col-12 mb-0" id="studio-reference-note"></p>
+{{ field('workflow-reference_megapixels','Reference size (MP)','number',min=0.1,max=4,step=0.01) }}{{ field('workflow-strength','Image-to-image strength','number',min=0,max=1,step=0.05) }}
+{% endcall %}
+<div class="col-12" id="studio-negative"><label for="workflow-negative_prompt" class="form-label">Negative prompt</label><textarea id="workflow-negative_prompt" class="form-control" rows="2" maxlength="24000"></textarea></div>
+{% call form_section('LoRAs') %}<div id="studio-loras" class="row g-3 m-0 p-0"></div><p id="studio-no-loras" class="col-12 small text-secondary mb-0">No adapters configured. Add LoRAs in model setup.</p>{% endcall %}
+<div class="col-12"><label class="form-check"><input id="workflow-shared" type="checkbox" class="form-check-input"><span class="form-check-label">Share this workflow with other users</span></label><p class="small text-secondary mt-2" id="studio-sharing-note"></p></div>
+<div class="col-12">{% call more('Version history') %}<label class="form-label" for="studio-history">Saved version</label><select id="studio-history" class="form-select mb-2"></select><p id="studio-history-detail" class="small text-secondary"></p><button id="studio-restore" class="btn btn-outline-secondary btn-sm" type="button" disabled>Use settings as draft</button>{% endcall %}</div>
+</div></fieldset>
+{% call alert('danger', role='alert', attrs={'id':'studio-save-error','hidden':''}, class_='mt-3') %}{% endcall %}
+<div class="editor-actions d-flex flex-wrap align-items-center gap-2 border-top pt-3 mt-3"><button id="studio-save" type="submit" class="btn btn-primary" disabled>Save workflow</button><button id="studio-discard" type="button" class="btn btn-outline-secondary" disabled>Discard changes</button><small class="text-secondary">Previous versions stay available.</small></div>
+</form>
+{% endcall %}

@@ -22,7 +22,7 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
         groups[0]["links"].append(("Voice", '/voice'))
         groups[0]["links"].append(("Voice desktop app", '/voice/desktop'))
     if "manage-models" in can:
-        groups[1]["links"] = [("Models", "/models"), ("Images", "/models/images"), ("Image workflows", "/models/images/workflows"), ("Audio models", "/models/audio"), ("Dry fit", "/dry-fit"), ("Roles", "/roles"), ("Files", "/files"),
+        groups[1]["links"] = [("Models", "/models"), ("Images", "/models/images"), ("Audio models", "/models/audio"), ("Dry fit", "/dry-fit"), ("Roles", "/roles"), ("Files", "/files"),
                               ("HuggingFace", "/hub"), ("Civitai", "/civitai"), ("Fingerprints", "/fingerprints")]
     if "manage-hosted" in can:  # the services elsewhere whose models are offered here
         groups[1]["links"].append(("Cloud APIs", "/cloud-apis"))
@@ -62,7 +62,7 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
         if active.startswith('/benchmarks/run/'):
             active = '/benchmarks/runs'
     if path.startswith("/models/images"):
-        active = "/models/images/workflows" if path.startswith("/models/images/workflows") else "/models/images"
+        active = "/models/images"
     elif path.startswith(("/chat/images", "/chat/music", "/chat/sounds", "/chat/speech", "/models/audio")):
         active = "/" + "/".join(path.strip("/").split("/")[:2])
     selected = next((group for group in groups if any(url == active for _, url in group["links"])), None)

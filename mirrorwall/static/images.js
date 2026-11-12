@@ -55,7 +55,10 @@
     if (!one) return;
     modelName = one.id;
     const profile = one.image_workflow || {};
-    $('negative-wrap').hidden = profile.family !== 'sdxl';
+    $('negative-wrap').hidden = !SuiteImageProfiles.spec(profile.family).negative;
+    $('guidance').closest('.col-6').hidden = !SuiteImageProfiles.spec(profile.family).guidance;
+    $('cfg').closest('.col-6').hidden = !SuiteImageProfiles.spec(profile.family).negative;
+    $('width').step = $('height').step = SuiteImageProfiles.spec(profile.family).alignment;
     $('upscale').querySelectorAll('option').forEach(node => { node.disabled = Number(node.value) > (profile.limits?.max_upscale || (profile.upscaling ? 4 : 1)); });
     $('reference-mp').max = profile.reference_megapixels || 1;
     if (reset) $('reference-mp').value = profile.reference_megapixels || 1;
@@ -79,7 +82,8 @@
     if (!$('preset')) return;
     const old = $('preset').value;
     $('preset').replaceChildren(new Option('Model defaults', ''));
-    state.presets.filter(row => row.model === modelName).forEach(row => $('preset').add(new Option(row.name + ' · v' + row.version + (row.published ? ' · shared' : ''), row.id)));
+    const model=state.models.find(row=>row.id===modelName);
+    state.presets.filter(row => row.model_id && model?.model_id ? row.model_id===model.model_id : row.model === modelName).forEach(row => $('preset').add(new Option(row.name + ' · v' + row.version + (row.published ? ' · shared' : ''), row.id)));
     if ([...$('preset').options].some(row => row.value === old)) $('preset').value = old;
   }
   /** What the chosen model does with reference images: how many, how, and whether small ones can be enlarged. */
@@ -221,7 +225,6 @@
     try {
       state = await api('state');
       if (refreshProblem) { message(''); refreshProblem = false; }
-      if (root.dataset.mode === 'workflows') { renderWorkflowPage(); return; }
       if (!older.length) moreImages = state.assets.length === 100;
       const latest = new Set(state.assets.map(row => row.id));
       state.assets.push(...older.filter(row => !latest.has(row.id)));
@@ -240,90 +243,6 @@
     } catch (error) { refreshProblem = true; message(error.message); } finally { polling = false; }
   }
   function dialog(title, content) { $('dialog-title').textContent = title; $('dialog-content').replaceChildren(content); $('dialog').showModal(); }
-  function renderWorkflowPage() {
-    const list = $('workflow-list');
-    // Refresh data without erasing a form the user is editing.
-    if (list.childElementCount) return;
-    const form = $('workflow-form').content.firstElementChild.cloneNode(true);
-    const body = form.querySelector('.card-body');
-    const grid = element('div', undefined, 'row g-3'); body.append(grid);
-    function field(name, label, input, width = 'col-md-6') {
-      const cell = element('div', undefined, width), caption = element('label', label, 'form-label');
-      input.id = 'workflow-' + name; input.name = name; input.className = input.tagName === 'SELECT' ? 'form-select' : 'form-control';
-      caption.htmlFor = input.id; cell.append(caption, input); grid.append(cell); return input;
-    }
-    const selection = field('workflow', 'Workflow', element('select'));
-    selection.add(new Option('New workflow', ''));
-    state.presets.forEach(row => selection.add(new Option(row.name + ' · v' + row.version + (row.published ? ' · shared' : ''), row.id)));
-    const name = field('name', 'Name', element('input')); name.required = true; name.maxLength = 120;
-    const model = field('model', 'Image model', element('select'));
-    state.models.forEach(row => model.add(new Option(row.id + ' · ' + (row.image_workflow?.family || ''), row.id)));
-    const version = element('p', 'New workflow', 'small text-secondary mb-0');
-    const versionCell = element('div', undefined, 'col-md-6 align-self-end'); versionCell.append(version); grid.append(versionCell);
-    const controls = {};
-    const definitions = [
-      ['width','Width',256,4096,16], ['height','Height',256,4096,16], ['n','Image count',1,64,1],
-      ['steps','Steps',1,200,1], ['seed','Seed (-1 = random)',-1,2147483647,1],
-      ['guidance','Guidance',0,20,.1], ['cfg_scale','CFG scale',0,30,.1],
-      ['strength','Image-to-image strength',0,1,.05], ['reference_megapixels','Reference size (MP)',.1,4,.01],
-      ['upscale','Output enlargement',1,4,.5]];
-    for (const [key,label,min,max,step] of definitions) {
-      const input = field(key,label,element('input'),'col-md-6');
-      Object.assign(input,{type:'number',min:String(min),max:String(max),step:String(step),required:true}); controls[key] = input;
-    }
-    for (const [key,label,values] of [
-      ['sampler','Sampler',['euler','euler_a','heun','dpm2','dpmpp2s_a','dpmpp2m','dpmpp2mv2','lcm','ipndm','ipndm_v']],
-      ['scheduler','Scheduler',['flux2','discrete','karras','exponential','ays','simple','smoothstep','sgm_uniform']]]) {
-      const input = field(key,label,element('select'),'col-sm-6'); values.forEach(v => input.add(new Option(v,v))); controls[key]=input;
-    }
-    const negative = field('negative_prompt','Negative prompt',element('textarea'),'col-12'); negative.rows=3; negative.maxLength=24000;
-    const loras = element('div',undefined,'col-12 row g-2'); grid.append(loras);
-    const shared = element('input'); shared.type='checkbox'; shared.className='form-check-input me-2';
-    const sharing = element('label',undefined,'form-check-label mt-3'); sharing.append(shared,document.createTextNode('Share with other users')); sharing.hidden=!state.can_manage;
-    const save=element('button','Save workflow','btn btn-primary mt-3 align-self-start'); save.disabled=!state.models.length;
-    const feedback=element('p','','small text-success mt-2 mb-0');feedback.setAttribute('role','status');body.append(sharing,save,feedback);list.append(form);
-    let extra = {};
-    function populate(values = {}) {
-      const profile = state.models.find(row=>row.id===model.value)?.image_workflow || {}, limits=profile.limits || {};
-      const defaults={width:1024,height:1024,n:1,steps:6,seed:-1,guidance:1,cfg_scale:1,strength:.75,
-        reference_megapixels:profile.reference_megapixels || 1,upscale:1,sampler:'euler',scheduler:'flux2',...profile.defaults,...values};
-      extra = {...values};
-      for (const [key,input] of Object.entries(controls)) {
-        input.value=defaults[key]; input.disabled=((['strength','cfg_scale'].includes(key) && profile.family!=='sdxl') || (key==='strength' && limits.max_references===0)) || (key==='guidance' && profile.family!=='flux2-dev') || (key==='upscale' && !profile.upscaling) || (key==='reference_megapixels' && limits.max_references===0);
-        input.parentElement.hidden=input.disabled;
-      }
-      for (const [key,limit] of [['width','max_width'],['height','max_height'],['steps','max_steps'],['n','max_images'],['upscale','max_upscale']]) if(limits[limit]) controls[key].max=limits[limit];
-      controls.reference_megapixels.max=profile.reference_megapixels || 1;
-      negative.value=values.negative_prompt || ''; negative.disabled=profile.family!=='sdxl'; negative.parentElement.hidden=negative.disabled;
-      loras.replaceChildren();
-      for (const [key,definition] of Object.entries(profile.loras || {})) {
-        const label=element('label',key+' · LoRA scale','col-sm-6 form-label'), input=element('input');
-        Object.assign(input,{type:'number',min:'-4',max:'4',step:'.05',value:String(values.loras?.[key] ?? definition.scale ?? 0),className:'form-control'});
-        input.dataset.workflowLora=key; label.append(input); loras.append(label);
-      }
-    }
-    selection.onchange=()=>{
-      const row=state.presets.find(row=>row.id===selection.value);
-      name.value=row?.name || ''; if(row)model.value=row.model;
-      shared.checked=state.can_manage && Boolean(row?.published); version.textContent=row?'Version '+row.version:'New workflow';
-      save.textContent=row?.published && !state.can_manage?'Save personal copy':row?'Save new version':'Save workflow'; feedback.textContent='';populate(row?.settings);
-    };
-    model.onchange=()=>{ populate(); feedback.textContent=''; };
-    form.onsubmit=safe(async event=>{
-      event.preventDefault();const values={...extra};
-      for(const [key,input] of Object.entries(controls)){delete values[key];if(!input.disabled)values[key]=input.tagName==='SELECT'?input.value:Number(input.value);}
-      delete values.negative_prompt;if(!negative.disabled)values.negative_prompt=negative.value;
-      const scales={};loras.querySelectorAll('[data-workflow-lora]').forEach(input=>{scales[input.dataset.workflowLora]=Number(input.value);});
-      if(Object.keys(scales).length)values.loras=scales;else delete values.loras;
-      const source=state.presets.find(row=>row.id===selection.value);
-      const saved=await api('presets',{id:source?.published && !state.can_manage?undefined:selection.value || undefined,name:name.value,model:model.value,settings:values,published:shared.checked});
-      const old=state.presets.findIndex(row=>row.id===saved.id);if(old>=0)state.presets[old]=saved;else{state.presets.push(saved);selection.add(new Option(saved.name,saved.id));}
-      selection.value=saved.id;selection.selectedOptions[0].textContent=saved.name+' · v'+saved.version;
-      version.textContent='Version '+saved.version;save.textContent='Save new version';feedback.textContent='Workflow saved.';
-    });
-    populate();
-  }
-  if (root.dataset.mode === 'workflows') { refresh(); return; }
   $('model').onchange = () => chooseModel();
   $('older').onclick = safe(async () => {
     const last = state.assets[state.assets.length - 1]; if (!last) return;

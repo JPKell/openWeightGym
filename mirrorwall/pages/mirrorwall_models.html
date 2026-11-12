@@ -1,51 +1,58 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, form_section, more, hardware, card , empty_row, alert %}
-{% from "model_form.html" import number, choice %}
-{% block title %}Image models · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/mirrorwall-static/images.css?v=3"><script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/mirrorwall-static/models.js?v=7" defer></script>{% endblock %}
+{% from 'parts.html' import page_header, card, alert, more %}
+{% from 'image_design_parts.html' import templates %}
+{% block title %}Images · Image models · openWeightGym{% endblock %}
+{% block scripts %}
+<link rel="stylesheet" href="/mirrorwall-static/images.css?v=4"><link rel="stylesheet" href="/static/image-studio.css?v=1">
+<script src="/mirrorwall-static/image-profiles.js?v=1" defer></script>
+{% if studio_manage %}<script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/mirrorwall-static/models.js?v=8" defer></script>{% endif %}
+<script src="/mirrorwall-static/workflows.js?v=1" defer></script>
+{% endblock %}
 {% block main %}
+<div id="image-studio" data-manage="{{ 'true' if studio_manage else 'false' }}">
+{% call page_header('Images', pretitle='MODEL & WORKFLOW LIBRARY') %}
+<a href="/chat/images" class="btn btn-outline-secondary">Generate images</a>
+{% if studio_manage %}<button id="mw-new" class="btn btn-outline-secondary">Add image model</button>{% endif %}
+<button id="studio-new-workflow" class="btn btn-primary" disabled>New workflow</button>
+{% endcall %}
+<p class="mb-1">Set up a model once. Give every idea its own workflow.</p><p class="small text-secondary mb-4">Files and hardware belong to the model. Image settings live in named, versioned workflows.</p>
+{% call alert('danger', role='alert', attrs={'id':'studio-error','hidden':''}) %}{% endcall %}
+<p id="studio-status" class="small" role="status" aria-live="polite"></p>
+<div class="image-workspace">
+<aside id="models-panel" aria-label="Image model library">
+{% call card('Models', hint='One setup, many workflows') %}
+{% if studio_manage %}<form method="get" class="mb-3"><label for="mw-node" class="form-label">Compute node</label><select id="mw-node" name="node" class="form-select mb-2"><option value="compute">Default</option></select><button class="btn btn-outline-secondary btn-sm">Browse node</button></form>{% endif %}
+<label class="visually-hidden" for="studio-model-search">Search models</label><input id="studio-model-search" type="search" class="form-control mb-3" placeholder="Find a model…"><div id="studio-model-list" class="model-list"></div><p id="studio-models-empty" class="small text-secondary" hidden>No image models on this node. Add an image model to begin.</p>
+{% endcall %}
+</aside>
+<div id="selected-panel">
+{% call card(class_='selected-model', body_class='d-flex flex-wrap justify-content-between align-items-center gap-3') %}
+<div class="min-w-0"><div class="eyebrow mb-2">MODEL SETUP</div><strong id="studio-model-name" class="model-title">Choose an image model</strong><span id="studio-family" class="badge bg-blue-lt ms-2"></span><p id="studio-model-detail" class="small text-secondary mt-2 mb-0"></p></div>
+{% if studio_manage %}<button id="studio-edit-model" class="btn btn-outline-secondary btn-sm" disabled>Edit model setup</button>{% endif %}
+{% endcall %}
+<p id="studio-unavailable" class="small text-secondary" hidden></p>
+</div>
+<section id="workflows-panel" aria-label="Workflows for selected model">
+{% call card('Workflows', hint='Choose a starting point') %}
+<input id="studio-workflow-search" type="search" class="form-control mb-2" aria-label="Search workflows" placeholder="Find a workflow…"><select id="studio-visibility" class="form-select mb-3" aria-label="Filter workflow visibility"><option value="all">All workflows</option><option value="personal">Personal</option><option value="shared">Shared</option></select>
+<p id="studio-count" class="small text-secondary"></p><div id="studio-workflow-list" class="workflow-list"></div>
+<p id="studio-workflow-empty" class="small text-secondary" hidden>No workflows yet. Create one from this model’s defaults.</p><p id="studio-no-match" class="small text-secondary" hidden>No workflows match your search.</p>
+{% endcall %}
+</section>
+<section id="editor-panel" aria-label="Workflow editor">
+{% include 'mirrorwall_workflow_editor.html' %}
+</section>
+</div>
+{% if studio_manage %}
 <div id="mirrorwall-models">
 <template id="mw-family-warning">{% call alert('warning', class_='py-2 my-2') %}<span data-message></span> <button type="button" class="btn btn-sm btn-warning"></button>{% endcall %}</template>
-<p><a href="/models?kind=image">Image models</a></p>
-{% call page_header('Image model settings', 'Choose model files, hardware and image defaults for the selected node.') %}<a href="/chat/images" class="btn btn-outline-secondary btn-sm">Generate images</a>{% endcall %}
-{% call alert('danger', role='alert', attrs={'id': 'mw-message', 'hidden': ''}) %}{% endcall %}{% call alert('secondary', attrs={'id': 'mw-runtime', 'hidden': ''}) %}{% endcall %}
-<form method="get" class="d-flex flex-wrap gap-2 align-items-center mb-3"><label for="mw-node">Compute node</label><select id="mw-node" name="node" class="form-select form-select-sm w-auto"><option value="">Default</option></select><button class="btn btn-outline-secondary btn-sm">Browse node files</button></form>
-<div class="mw-models"><aside><button id="mw-new" class="btn btn-outline-primary w-100 mb-3">Add image model</button><div id="mw-list" class="mw-model-list"></div></aside>
-{% call card("Add image model", tag="form", id="mw-model-form", header_id="mw-heading") %}
-<div class="row g-3">
-{% call form_section("Model and files", "All nodes") %}
-<div class="col-md-6"><label for="mw-name" class="form-label">Model name</label><input id="mw-name" name="name" class="form-control" required maxlength="128"></div>
-<div class="col-md-6"><label for="mw-family" class="form-label">Family</label><select id="mw-family" name="family" class="form-select"><option value="flux2-klein">Flux 2 klein</option><option value="flux2-dev">Flux 2 Dev</option><option value="sdxl">SDXL</option></select></div>
-{% for name,label in [('diffusion','Diffusion weights'),('text_encoder','Text encoder'),('vae','VAE'),('clip_l','CLIP L'),('clip_g','CLIP G'),('upscaler','Image upscaler')] %}<div id="mw-row-{{name}}" class="col-12"><label for="mw-{{name}}" class="form-label">{{label}} <span id="mw-need-{{name}}" class="badge rounded-pill text-bg-light border fw-normal"></span></label><select id="mw-{{name}}" name="{{name}}" class="form-select" aria-describedby="mw-says-{{name}}" {{'required' if name=='diffusion'}}><option value="">Choose a file from cache/storage</option></select><div id="mw-says-{{name}}" class="mw-says form-text"></div></div>{% endfor %}
-<div class="col-12"><div id="mw-check" class="mw-check frame" aria-live="polite"></div></div>
-{% endcall %}
-{% call form_section('Hardware', 'This node') %}
-{{ hardware('mw', legacy='image') }}
-<div class="col-12" data-image-split><label for="mw-split" class="form-label">Split strategy</label><select id="mw-split" name="split_mode" class="form-select"><option value="single">One GPU</option><option value="components">Separate components</option><option value="layer">Diffusion layers</option><option value="row">Diffusion rows</option></select><div class="form-hint">Multiple GPUs require a matching split strategy.</div></div>
-{{ number('mw-ram', 'Host RAM cap', 'MiB', 2048, 131072, 8192, required=true) }}
-{{ number('mw-threads', 'CPU threads', '', 1, 32, 4, required=true) }}
-<div class="col-12 form-check form-switch ms-2"><input id="mw-staged" type="checkbox" class="form-check-input" checked><label for="mw-staged" class="form-check-label">Stage components to reduce VRAM use</label></div>
-<div class="col-12"><span id="mw-cards" class="form-hint"></span></div>
-{% endcall %}
-{% call form_section('Image defaults', 'All nodes') %}
-{% for key,label,unit,low,high in [('width','Width','px',256,4096),('height','Height','px',256,4096),('steps','Steps','',1,200),('cfg_scale','CFG scale','',0,30),('guidance','Guidance','',0,30),('seed','Seed','',-1,4294967295),('n','Images per request','',1,64),('upscale','Upscale','×',1,4)] %}{{ number('mw-default-' ~ key,label,unit,low,high,source='mw-defaults',key=key,step='any' if key in ['cfg_scale','guidance'] else '1') }}{% endfor %}
-{{ choice('mw-default-sampler','Sampler',['euler','euler_a','heun','dpm2','dpm++2s_a','dpm++2m','dpm++2mv2','ipndm','ipndm_v','lcm','ddim_trailing','tcd'], 'mw-defaults','sampler') }}
-{{ choice('mw-default-scheduler','Scheduler',['discrete','karras','exponential','ays','gits','sgm_uniform','simple','smoothstep','kl_optimal','flux2'], 'mw-defaults','scheduler') }}
-{{ number('mw-ref-mp','Reference size','MP',0.1,4,1,step='.1',required=true) }}
-{% endcall %}
-{% call form_section('Workflow limits', 'All nodes') %}
-{% for key,label,unit,low,high in [('max_width','Maximum width','px',256,4096),('max_height','Maximum height','px',256,4096),('max_steps','Maximum steps','',1,200),('max_images','Maximum images','',1,64),('max_references','Reference images','',0,8),('max_pixels','Pixel budget','px',65536,16777216),('max_upscale','Maximum upscale','×',1,4)] %}{{ number('mw-limit-' ~ key,label,unit,low,high,source='mw-limits',key=key) }}{% endfor %}
-{% endcall %}
-{% call form_section('LoRAs', 'All nodes') %}<div class="col-12"><div class="table-responsive"><table class="table table-sm sortable" aria-label="Image adapters" data-empty-message="No image adapters. Select Add LoRA to configure one."><thead><tr><th>Name</th><th>File</th><th>Strength</th><th></th></tr></thead><tbody id="mw-lora-rows">{{ empty_row(4, "No image adapters. Select Add LoRA to configure one.") }}</tbody></table></div><button class="btn btn-outline-secondary btn-sm" id="mw-add-lora" type="button">Add LoRA</button></div>{% endcall %}
-<div class="col-12">{% call card('Advanced (JSON)', false) %}<div class="row g-3">
-<div class="col-md-6"><label for="mw-vram" class="form-label">Native VRAM budgets <small>GiB per GPU</small></label><input id="mw-vram" class="form-control" placeholder="14.5,14.5"></div>
-<div class="col-md-6"><label for="mw-layer-weights" class="form-label">Layer weight ratio</label><input id="mw-layer-weights" class="form-control" placeholder="3,1"></div>
-<div class="col-md-6"><label for="mw-defaults" class="form-label">Additional image defaults</label><textarea id="mw-defaults" class="form-control font-monospace" rows="3">{}</textarea></div>
-<div class="col-md-6"><label for="mw-limits" class="form-label">Additional workflow limits</label><textarea id="mw-limits" class="form-control font-monospace" rows="3">{}</textarea></div>
-<div class="col-12"><label for="mw-loras" class="form-label">LoRAs (JSON)</label><textarea id="mw-loras" class="form-control font-monospace" rows="3">{}</textarea><div class="form-hint">Changing JSON refreshes the adapter rows.</div></div>
-</div>{% endcall %}</div>
-<div class="col-12 sticky-actions"><button class="btn btn-primary" type="submit">Save model</button><span id="mw-saved" class="text-success ms-3" role="status"></span></div>
-</div>{% call more() %}<p class="mw-model-note mb-3">Start with the diffusion weights. The checklist reads each file's header on the selected node and says which text encoder, VAE and other parts the model needs, offering matching files already there. New files come down on <a href="/hub">Hugging Face</a> or <a href="/civitai">Civitai</a> and appear in the file lists below. Saving a new model checks cache space, promotes storage files and copies its complete bundle to the node. <a href="/docs/mirrorwall#models">Which parts each model needs</a></p>
-<p class="mw-model-note mt-3 mb-0">Unqualified models reserve their assigned cards. Shared residency requires reproducible placement and full workflow memory measurements, plus 256 MiB sampling headroom and the node's configured card margin. Shared workflows pin sampler, scheduler and CFG; use an exclusive entry to change those per request. Existing work finishes before settings take effect.</p>{% endcall %}<p id="mw-measurement" class="mw-model-note mt-2 mb-0"></p>
-{% endcall %}</div></div>
+<dialog id="model-dialog" aria-labelledby="mw-heading"><div class="d-flex justify-content-end p-3"><button id="studio-close-model" class="btn btn-outline-secondary btn-sm" type="button">Close model setup</button></div>
+{% call alert('danger', role='alert', attrs={'id':'mw-message','hidden':''}) %}{% endcall %}{% call alert('secondary', attrs={'id':'mw-runtime','hidden':''}) %}{% endcall %}
+{% include 'mirrorwall_model_setup.html' %}
+</dialog>
+<div id="mw-list" hidden></div>
+</div>
+{% endif %}
+{{ templates() }}
+</div>
 {% endblock %}

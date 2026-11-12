@@ -16,13 +16,13 @@ def routes(for_people, page, ask, model_api):
 
     async def workflows(request, person):
         """Render versioned image workflow settings."""
-        return page(request, "mirrorwall_workflows.html", person)
+        return page(request, "mirrorwall_workflows.html", person, studio_manage="manage-models" in person.can)
 
     async def models(request, person):
         """Render image-only model management for authorized administrators."""
         if "manage-models" not in person.can:
             return page(request, "refused.html", person, status=403, why="Your account may not manage image models.")
-        return page(request, "mirrorwall_models.html", person)
+        return page(request, "mirrorwall_models.html", person, studio_manage=True)
 
     async def proxy(request, person):
         """Forward only allowlisted image operations using the current server-side session."""
@@ -33,7 +33,8 @@ def routes(for_people, page, ask, model_api):
                 return JSONResponse({"error": {"message": "Use this site's own image page."}}, 403)
         # Explicit shapes prevent this proxy from becoming a general management API.
         parts = action.split("/")
-        permitted = ((action in ("state", "preferences", "assets") and request.method == "GET") or
+        permitted = ((action in ("state", "preferences", "assets", "workflows") and request.method == "GET") or
+                     (len(parts) == 2 and parts[0] == "presets" and request.method == "GET") or
                      (action in ("assets", "jobs", "presets", "preferences") and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "jobs" and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "assets" and request.method == "DELETE") or

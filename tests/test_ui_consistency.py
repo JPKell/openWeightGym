@@ -463,8 +463,8 @@ def test_dynamic_image_cards_use_shared_templates(ui_console):
 
     def capture(route, path):
         value = None
-        if path == '/mirrorwall-api/state':
-            value = {'models': [{'id': 'picture', 'image_workflow': {'family': 'sdxl'}}],
+        if path == '/mirrorwall-api/workflows':
+            value = {'models': [{'id': 'picture', 'image_workflow': {'family': 'sdxl','defaults':{'width':512,'height':512}}}],
                      'assets': [], 'references': [], 'presets': [], 'jobs': [], 'can_manage': True}
         elif path.startswith('/mirrorwall-discovery?'):
             value = {'found': [{'name': unsafe_name, 'kind': 'checkpoint', 'base_model': 'SDXL',
@@ -472,7 +472,9 @@ def test_dynamic_image_cards_use_shared_templates(ui_console):
         elif path == '/mirrorwall-api/presets':
             body = json.loads(route.request.post_data)
             submitted.append(body)
-            value = {'id': 'saved', 'name': body['name'], 'version': 1}
+            value = {'id': 'saved', 'name': body['name'], 'version': 1,'model':body['model'],'settings':body['settings'],'published':False}
+        elif path == '/mirrorwall-api/presets/saved':
+            value = {'versions': []}
         if value is None:
             return False
         route.fulfill(status=200, content_type='application/json', body=json.dumps(value))
@@ -495,13 +497,13 @@ def test_dynamic_image_cards_use_shared_templates(ui_console):
             assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
             page.goto('http://console.test/models/images/workflows')
             playwright.expect(page.locator('#workflow-name')).to_be_visible()
-            assert page.locator('#mw-workflow-list form > .card-header').count() == 1
-            assert page.locator('#mw-workflow-list form > .card-body').count() == 1
+            assert page.locator('#editor-panel > section > .card-header').count() == 1
+            assert page.locator('#editor-panel > section > .card-body').count() == 1
             page.locator('#workflow-name').fill('Shared component workflow')
             page.get_by_role('button', name='Save workflow', exact=True).click()
             playwright.expect(page.get_by_role('status').filter(has_text='Workflow saved.')).to_be_visible()
             assert submitted[-1]['model'] == 'picture'
-            assert submitted[-1]['settings']['width'] == 1024
+            assert submitted[-1]['settings']['width'] == 512
             assert submitted[-1]['name'] == 'Shared component workflow'
             assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
         assert not errors, errors
@@ -530,6 +532,7 @@ def test_dynamic_warning_and_empty_rows_keep_their_actions(ui_console):
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/models/images?model=picture')
         playwright.expect(page.locator('#mw-name')).to_have_value('picture')
+        page.locator('#studio-edit-model').click()
         page.locator('#mw-family').select_option('flux2-klein')
         playwright.expect(page.locator('#mw-check').get_by_role('alert')).to_contain_text('These weights are SDXL')
         page.get_by_role('button', name='Use SDXL', exact=True).click()

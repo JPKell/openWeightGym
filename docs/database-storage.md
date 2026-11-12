@@ -11,6 +11,14 @@ and thumbnails live under front `data/mirrorwall-assets/` and join the existing 
 temporary/no-log assets never enter SQL, files or recovery sets. Workers retain model bundles
 and measured workflow resource envelopes in their existing model registry. Source igen data stays intact.
 
+`mirrorwall.front` migration 3 retains workflow revisions in `mirrorwall_preset_versions`, seeded
+with each existing workflow's latest saved version; older overwritten settings cannot be recovered.
+The current workflow and its revision commit together, stale saves refuse to overwrite newer
+versions, and history access follows the parent workflow's private/shared permissions. Existing
+full-store backup/export/transfer includes the new table. A code rollback leaves it intact, but
+older code will not append history, so restore a verified pre-upgrade recovery set if reverting
+the store as well. No model files or live settings are moved by this migration.
+
 SoundRoom uses the same front `accounts.db`: `soundroom.front` owns private audio asset metadata
 (takes, sounds, speech, references, recordings and their transcripts), saved voices with their
 consent time, group shares, job bindings and personal preferences. Audio files live under front

@@ -61,6 +61,11 @@ class Front:
             raise ValueError("Image model inventory is unavailable.")
         return [one for one in answer.json().get('data',[]) if one.get('capabilities',{}).get('image_generation')]
 
+    def visible_presets(self,user,models):
+        """Shared recipes follow immutable model identities when names are reused."""
+        return [row for row in self.store.presets(user.identity) if not row['published'] or any(
+            row['model_id']==m.get('model_id') if row['model_id'] else row['model']==m['id'] for m in models)]
+
     def job_owner(self,identifier):
         """Look up either durable or temporary ownership without trusting a request header."""
         return self.transient.get(identifier,{}).get('owner') or self.store.owner(identifier)
@@ -207,7 +212,7 @@ class Front:
             if row['owner']==user.identity:
                 jobs.insert(0,{'id':identifier,**{k:v for k,v in row.items() if k not in ('owner','task')},'progress':self.progress.get(identifier)})
         return JSONResponse({'models':models,'assets':self.store.listing(user.identity,kind='output'),
-             'references':self.store.listing(user.identity,kind='reference'),'presets':[row for row in self.store.presets(user.identity) if not row['published'] or row['model'] in {one['id'] for one in models}],
+             'references':self.store.listing(user.identity,kind='reference'),'presets':self.visible_presets(user,models),
              'jobs':jobs,'preferences':self.store.preferences(user.identity),'can_manage':user.can('manage-models'),'can_unlogged':user.can('unlogged')},headers={'cache-control':'no-store'})
 
     async def assets(self,request,user):
@@ -459,9 +464,32 @@ class Front:
             owner='*' if asked.get('published') and user.can('manage-models') else user.identity
             if asked.get('published') and owner!='*':
                 return error(403,'Publishing presets requires model-management permission.')
-            return JSONResponse(self.store.save_preset(owner,asked.get('name',''),selected['id'],selected.get('model_id',''),settings,asked.get('id')))
+            return JSONResponse(self.store.save_preset(owner,asked.get('name',''),selected['id'],selected.get('model_id',''),settings,asked.get('id'),asked.get('version')))
         except (ValueError,TypeError) as problem:
             return error(400,str(problem))
+
+    async def workflows(self,request,user):
+        """Read the permitted workflow library without fetching images or job history."""
+        try:
+            models=await self.catalogue(user)
+        except ValueError as problem:
+            return error(503,str(problem))
+        return JSONResponse({'models':models,'presets':self.visible_presets(user,models),'can_manage':user.can('manage-models')},headers={'cache-control':'no-store'})
+
+    async def preset_history(self,request,user):
+        """Keep workflow revisions behind current ownership and shared-model access."""
+        identifier=request.path_params['identifier']
+        row=next((row for row in self.store.presets(user.identity) if row['id']==identifier),None)
+        if not row:
+            return error(404,'There is no such workflow.')
+        if row['published']:
+            try:
+                allowed=await self.catalogue(user)
+            except ValueError as problem:
+                return error(503,str(problem))
+            if not any(m.get('model_id')==row['model_id'] if row['model_id'] else m['id']==row['model'] for m in allowed):
+                return error(404,'There is no such workflow.')
+        return JSONResponse({'versions':self.store.preset_history(user.identity,identifier)},headers={'cache-control':'no-store'})
 
     def routes(self,caller,log):
         """Expose front-owned image operations through the existing API-key authority."""
@@ -473,4 +501,5 @@ class Front:
                 route('/mirrorwall/assets/{identifier}',self.asset,'DELETE'),
                 route('/mirrorwall/assets/{identifier}/content',self.asset),route('/mirrorwall/assets/{identifier}/thumbnail',self.asset),
                 route('/mirrorwall/jobs',self.start,'POST'),route('/mirrorwall/jobs/{identifier}',self.control,'POST'),
-                route('/mirrorwall/preferences',self.preferences),route('/mirrorwall/preferences',self.preferences,'POST'),route('/mirrorwall/presets',self.preset,'POST')]
+                route('/mirrorwall/preferences',self.preferences),route('/mirrorwall/preferences',self.preferences,'POST'),route('/mirrorwall/presets',self.preset,'POST'),
+                route('/mirrorwall/workflows',self.workflows),route('/mirrorwall/presets/{identifier}',self.preset_history)]
