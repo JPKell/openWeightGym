@@ -105,7 +105,7 @@
   ('audio', 'Audio', 'files-audio', ''),
   ('adapter', 'Adapters', 'files-adapters', 'Small files that change how one model behaves.'),
   ('projector', 'Projectors', 'files-projectors', 'Files that let one model see pictures.')
-] if not file_type or file_type == what %}
+] if (not file_type or file_type == what) and (platform is not defined or platform().kind_enabled(what)) %}
 {% set content %}
   {% if what == 'image' %}{% from "mirrorwall_files.html" import image_files with context %}{{ image_files(found) }}
   {% elif what in ('model', 'audio') %}{{ models_table(found, what) }}

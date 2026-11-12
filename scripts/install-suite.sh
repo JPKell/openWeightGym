@@ -42,6 +42,7 @@ COMPUTE_URL=
 LLAMA_SERVER=
 MACHINE_NAME=
 VOICE_MODEL=
+PLATFORM_SERVICES=images,speech,audio,downloads
 START_NEW=0
 KEEP_EXISTING_UNITS=0
 UV=
@@ -88,6 +89,7 @@ change both the service set and database engine before anything is installed.
   --llama-server PATH        the llama-server LoadCoach runs (see install-llamacpp.sh)
   --machine-name NAME        the name the console knows this GPU node by (default: compute)
   --voice-model NAME         conversation model for newly written voice settings (default: the voice defaults')
+  --platform-services LIST   initial console services: images,speech,audio,downloads or none
   --start-new                also start services whose settings were just written
   --keep-existing-units      preserve existing unit customizations when adding components
   --uv PATH                  make the environment and install packages with uv
@@ -215,6 +217,7 @@ while (($#)); do
     --llama-server) (($# >= 2)) || usage_error '--llama-server needs a path'; LLAMA_SERVER=$2; shift 2 ;;
     --machine-name) (($# >= 2)) || usage_error '--machine-name needs a name'; MACHINE_NAME=$2; shift 2 ;;
     --voice-model) (($# >= 2)) || usage_error '--voice-model needs a model'; VOICE_MODEL=$2; shift 2 ;;
+    --platform-services) (($# >= 2)) || usage_error '--platform-services needs a list or none'; PLATFORM_SERVICES=$2; shift 2 ;;
     --start-new) START_NEW=1; shift ;;
     --keep-existing-units) KEEP_EXISTING_UNITS=1; shift ;;
     --uv) (($# >= 2)) || usage_error '--uv needs a path'; UV=$2; shift 2 ;;
@@ -905,7 +908,8 @@ install_example_config() {
       (has_service voice || has_service voice-gateway) && voice_options=(--voice ${VOICE_MODEL:+--voice-model "$VOICE_MODEL"})
       "$PY" "$ROOT/scripts/install-suite-support.py" render --example "$source_config" --target "$target_config" \
         --root "$ROOT" --home "$HOME" --topology "$TOPOLOGY" --address "${ADDRESS:-127.0.0.1}" \
-        --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" --machine-name "$MACHINE_NAME" "${voice_options[@]}" ||
+        --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" --machine-name "$MACHINE_NAME" \
+        --platform-services "$PLATFORM_SERVICES" "${voice_options[@]}" ||
         die "The settings file $(shell_path "$target_config") could not be written." \
           "The lines above say why" "Check the folder is yours and has room: ls -ld $(shell_path "$ROOT/settings") && df -h $(shell_path "$ROOT")"
       ui_ok "Wrote settings/$config_name.toml"

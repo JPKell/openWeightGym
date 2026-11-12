@@ -3,6 +3,7 @@
 from starlette.responses import JSONResponse
 
 from loadcoach.settings import CHANGEABLE, Changes, FRONT_PROGRAMS as PROGRAMS, program_name, wrong_kind
+from loadcoach.platform_services import SERVICE_SETTINGS
 from loadcoach.tasks import error
 
 class ConsoleSettings:
@@ -84,6 +85,8 @@ class ConsoleSettings:
             for name, value in body.items():
                 if name not in CHANGEABLE[program]:
                     return error(403, 'This setting belongs in the program file.')
+                if program == 'weightroom' and name in SERVICE_SETTINGS and value is not None and type(value) is not bool:
+                    raise ValueError(f'{name} must be true or false.')
                 if value is not None and name in current and (why := wrong_kind(value, current[name])):
                     raise ValueError(f'{name}: {why}')
                 if name == 'component_versions_every' and value is not None:

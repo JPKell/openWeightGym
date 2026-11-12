@@ -58,6 +58,7 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
                           path of a llama-server you already have (default: auto)
   --database NAME         sqlite (default) or postgresql (installed and set up locally)
   --voice                 also install speech recognition and voices
+  --platform-services LIST  initial console services: images,speech,audio,downloads or none
   --voice-key-file FILE   manual GPU-node setup: the console's voice-service.key (pairing supplies it)
   --power-control         let the console put this machine to sleep, restart or switch it off
   --no-linger             let the services stop when you log out
@@ -195,6 +196,7 @@ parse_arguments() {
   COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
   ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
   VOICE_KEY_FILE='' VOICE_KEY=''
+  PLATFORM_SERVICES=images,speech,audio,downloads
   ADD_SERVICES='' STRATA_ACTION=keep STRATA_HOST_RAM_MIB=22528
   SDCPP_ACTION=keep SDCPP_BACKEND=cuda AUDIOCPP_ACTION=keep AUDIOCPP_BACKEND=cuda
   OPERATION=install
@@ -207,7 +209,8 @@ parse_arguments() {
     [--llama]='a choice' [--database]='sqlite or postgresql' [--voice-key-file]='a file' [--ref]='a branch'
     [--services]='service names' [--strata]='install, skip or keep' [--strata-host-ram-mib]='a positive MiB budget'
     [--sdcpp]='install, skip or keep' [--sdcpp-backend]='cuda, vulkan or cpu'
-    [--audiocpp]='install, skip or keep' [--audiocpp-backend]='cuda, vulkan or cpu')
+    [--audiocpp]='install, skip or keep' [--audiocpp-backend]='cuda, vulkan or cpu'
+    [--platform-services]='images,speech,audio,downloads or none')
   [[ -n $DIR ]] && DIR_GIVEN=1
   while (($#)); do
     if [[ -v takes[$1] ]] && { (($# < 2)) || [[ -z $2 ]]; }; then
@@ -228,6 +231,12 @@ parse_arguments() {
       --llama) LLAMA=$2; PLAN_GIVEN[LLAMA]=1; shift 2 ;;
       --database) DATABASE=$2; PLAN_GIVEN[DATABASE]=1; shift 2 ;;
       --voice) VOICE=1; PLAN_GIVEN[VOICE]=1; shift ;;
+      --platform-services)
+        PLATFORM_SERVICES=$2; PLAN_GIVEN[PLATFORM_SERVICES]=1
+        if [[ ! $PLATFORM_SERVICES =~ ^(none|(images|speech|audio|downloads)(,(images|speech|audio|downloads))*)$ ]]; then
+          ARGUMENT_ERROR='Platform services must be images,speech,audio,downloads, a subset, or none.'; return 0
+        fi
+        shift 2 ;;
       --voice-key-file) VOICE_KEY_FILE=$2; shift 2 ;;
       --power-control) POWER_RULE=1; PLAN_GIVEN[POWER_RULE]=1; shift ;;
       --no-model) shift ;;  # no model is downloaded any more; still accepted so older commands work
@@ -385,7 +394,8 @@ resume_settings() {
   for pair in TOPOLOGY:topology ADMIN:admin DATABASE:database LLAMA:llama VOICE:voice \
     LINGER_WANTED:linger_wanted POWER_RULE:power_rule FRONT_URL:front_url COMPUTE_URL:compute_url \
     MACHINE_NAME:machine_name JOIN_URL:join_url STRATA_ACTION:strata STRATA_HOST_RAM_MIB:strata_host_ram_mib \
-    SDCPP_ACTION:sdcpp SDCPP_BACKEND:sdcpp_backend AUDIOCPP_ACTION:audiocpp AUDIOCPP_BACKEND:audiocpp_backend; do
+    SDCPP_ACTION:sdcpp SDCPP_BACKEND:sdcpp_backend AUDIOCPP_ACTION:audiocpp AUDIOCPP_BACKEND:audiocpp_backend \
+    PLATFORM_SERVICES:platform_services; do
     variable=${pair%%:*} key=${pair#*:}
     value=$(receipt_get "$key")
     [[ -z $value || -n ${PLAN_GIVEN[$variable]:-} ]] || printf -v "$variable" '%s' "$value"
@@ -916,6 +926,7 @@ game_plan() {
     [[ $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install ]] ||
       ui_die 'Model engines need a model runner on this machine.' 'Choose everything on this machine or install the engine on your GPU node'
   else choose_runtimes; fi
+  choose_platform_services
 
   while true; do
     show_plan
@@ -930,6 +941,27 @@ game_plan() {
   done
   # The code is used once the plan is settled, and before anything is downloaded.
   if [[ -n $JOIN_URL ]]; then redeem; fi
+}
+
+choose_platform_services() {
+  [[ $TOPOLOGY != compute && ! -f $DIR/settings/weightroom.toml ]] || return 0
+  [[ -z ${PLAN_GIVEN[PLATFORM_SERVICES]:-} ]] || return 0
+  ((ASSUME_YES)) && return 0
+  ui_section 'Platform services' 'Change these later in General settings'
+  local selected=() service label default
+  for service in images speech audio downloads; do
+    case "$service" in
+      images) label='Allow image generation?' ;;
+      speech) label='Allow speech (TTS, STT and Voice)?' ;;
+      audio) label='Allow music and audio generation?' ;;
+      downloads) label='Allow model downloads?' ;;
+    esac
+    default=n
+    [[ ,$PLATFORM_SERVICES, != *,$service,* ]] || default=y
+    if ui_confirm "$label" "$default"; then selected+=("$service"); fi
+  done
+  PLATFORM_SERVICES=$(IFS=,; printf '%s' "${selected[*]}")
+  PLATFORM_SERVICES=${PLATFORM_SERVICES:-none}
 }
 
 valid_host() {
@@ -1074,6 +1106,7 @@ show_plan() {
     lines+=("${C_MUTED}Runs as      ${C_RESET}you, $( ((LINGER_WANTED)) && printf 'from every boot, signed in or not' || printf 'while you are signed in')")
   fi
   lines+=("${C_MUTED}Programs     ${C_RESET}$(plain_programs)")
+  [[ $TOPOLOGY == compute ]] || lines+=("${C_MUTED}Platform     ${C_RESET}$PLATFORM_SERVICES")
   lines+=("${C_MUTED}Data         ${C_RESET}$([[ $DATABASE == keep ]] && printf 'keep existing stores' || { [[ $DATABASE == sqlite ]] && printf 'SQLite, on this machine' || printf 'PostgreSQL, on this machine'; })")
   if [[ $TOPOLOGY != front ]]; then
     lines+=("${C_MUTED}Engine       ${C_RESET}llama.cpp · $(backend_label "$engine")")
@@ -1405,7 +1438,7 @@ setting_up() {
   services_for
   save_machine_key
   local options=(--root "$DIR" --embedded --non-interactive --yes --services "$SERVICES" --topology "$TOPOLOGY"
-                 --address "$HOST_ADDRESS" --start-new --uv "$UV" --database "$DATABASE")
+                 --address "$HOST_ADDRESS" --start-new --uv "$UV" --database "$DATABASE" --platform-services "$PLATFORM_SERVICES")
   runtime_options
   options+=("${RUNTIME_OPTIONS[@]}")
   prepare_optional_build_tools
@@ -1553,6 +1586,7 @@ write_receipt() {
     echo "database=$DATABASE"
     echo "llama=$LLAMA"
     echo "voice=$VOICE"
+    echo "platform_services=${PLATFORM_SERVICES:-images,speech,audio,downloads}"
     echo "strata=${STRATA_ACTION:-keep}"
     echo "strata_host_ram_mib=${STRATA_HOST_RAM_MIB:-22528}"
     echo "sdcpp=${SDCPP_ACTION:-keep}"

@@ -7,7 +7,8 @@
   const params = new URLSearchParams(location.search);
   const computeNodes = JSON.parse($('nodes').textContent);
   const inventories = new Map(), failures = new Set(), drafts = new Map(), installations = new Map();
-  const kinds = {music:'Music',sound:'Sound effects',speech:'Speech',clone:'Voice cloning',design:'Voice design',transcription:'Transcription',alignment:'Alignment',diarization:'Speaker detection'};
+  const kinds = Object.fromEntries(Object.entries({music:'Music',sound:'Sound effects',speech:'Speech',clone:'Voice cloning',design:'Voice design',transcription:'Transcription',alignment:'Alignment',diarization:'Speaker detection'})
+    .filter(([kind]) => ['music','sound'].includes(kind) ? root.dataset.audioEnabled !== 'false' : root.dataset.speechEnabled !== 'false'));
   let activeNode = params.get('node') || computeNodes[0]?.name || '';
   let inventory = {}, nodes = [], choices = [], selected = null, task = 'all', section = 'files';
   let editing = false, dirty = false, busy = false, loading = true, initialized = false;
@@ -59,6 +60,7 @@
     let value;
     try { value = await response.json(); } catch { throw new Error('The server did not return model data. Try again.'); }
     if (!response.ok) throw new Error(value.error?.message || 'The operation failed.');
+    if (path.startsWith('/soundroom-models') && Array.isArray(value.models)) value.models=value.models.filter(row=>row.audiocpp?.kind in kinds);
     return value;
   }
   const chosen = () => $('file').value === '' ? null : choices[Number($('file').value)];
@@ -82,7 +84,7 @@
   }
   function modelKinds() {
     const declared=chosen() ? fileKinds(chosen()) : [];
-    return (families().find(one=>one.family === $('family').value)?.kinds || []).filter(kind=>!declared.length || declared.includes(kind));
+    return (families().find(one=>one.family === $('family').value)?.kinds || []).filter(kind=>kind in kinds && (!declared.length || declared.includes(kind)));
   }
   function modelKind() {
     const supported=modelKinds();
@@ -253,6 +255,7 @@
     // Always retain installed paths, even if a cache scan cannot currently see the file.
     // Audio locations and configured profiles also identify weights when an older index lacks audio metadata.
     choices = nodes.flatMap(source=>(source.files || []).filter(file=>audioFile(file,source) && !file.moving && /\.(gguf|safetensors|pth|pt|bin|onnx)$/i.test(file.path)).map(file=>({...file,machine:source.name})));
+    choices = choices.filter(file=>{const tasks=fileKinds(file); return !tasks.length || tasks.some(kind=>kind in kinds);});
     if (selected && !choices.some(file=>file.machine === activeNode && file.path === selected.flags.model)) {
       choices.push({path:selected.flags.model,machine:activeNode,tier:'current',facts:{what:'audio',family:selected.audiocpp.family,kinds:[selected.audiocpp.kind]}});
     }

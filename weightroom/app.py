@@ -116,6 +116,7 @@ from weightroom.pagination import controls, pagination
 from engines import engine_for
 from engines.llama_cpp.model import FIRST_PLACE
 from weightroom import setting_labels
+from loadcoach.platform_services import PlatformServices, SERVICE_SETTINGS
 from weightroom.model_settings import PARALLEL_FLAGS, UNUSABLE_MODEL_FLAGS, parallel_fields, usable_model_flags
 from loadcoach.cli import groups_cli, log_cli, users_cli
 from loadcoach.groups import read_group
@@ -159,6 +160,10 @@ class Settings:
     mock_input_rate: float = 2.0  # USD per million input tokens when no recorded or model rate is known
     mock_output_rate: float = 10.0  # USD per million output tokens when no recorded or model rate is known
     third_party_services: tuple[str, ...] = ("ollama", "docker")  # optional system services shown on Machine and in System Logs
+    allow_image_generation: bool = True
+    allow_speech: bool = True
+    allow_audio_generation: bool = True
+    allow_model_downloads: bool = True
     backup_retention: int = 10  # verified recovery sets kept on each machine; zero keeps all
     databases: dict = field(default_factory=dict)  # named local/server stores and service bindings
     alert_gpu_temperature: float = 85  # degrees Celsius; live threshold for operational alerts
@@ -214,6 +219,8 @@ def load_settings(path: Path) -> Settings:
                    for rate in (loaded.mock_input_rate, loaded.mock_output_rate)):
                 raise ValueError("mock token rates must be numbers from 0 to 1,000,000 USD per million tokens")
             selected = loaded.third_party_services
+            if any(type(getattr(loaded, name)) is not bool for name in SERVICE_SETTINGS):
+                raise ValueError('Platform services must be true or false')
             if (not isinstance(selected, (list, tuple)) or any(not isinstance(name, str) for name in selected)
                     or len(selected) != len(set(selected)) or set(selected) - THIRD_PARTY_NAMES):
                 raise ValueError("third_party_services may contain ollama, docker, apache and nginx once each")
@@ -608,6 +615,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     pages = Jinja2Templates(directory=[HERE / "pages", HERE.parent / "mirrorwall" / "pages", HERE.parent / "soundroom" / "pages"])  # values put into a page are escaped, always
     pages.env.globals['model_catalogue'] = model_catalogue
+    service_defaults = {name: settings.file.get(name, getattr(settings, name)) for name in SERVICE_SETTINGS}
+    def platform():
+        return PlatformServices.from_settings(settings)
+    pages.env.globals['platform'] = platform
     pages.env.globals.update(setting_label=setting_labels.describe, settings_sections=setting_labels.sections,
                              server_timezone=settings.timezone or display.server_zone(),
                              log_timezone=settings.timezone or "UTC", input_utc=display.input_utc)
@@ -756,6 +767,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if copied != kept("settings.json", {}):
             keep("settings.json", copied)
         effective = laid_over(settings.file, copied.get("weightroom", {}), "weightroom")
+        service_values = {name: effective.get(name, service_defaults[name]) for name in SERVICE_SETTINGS}
+        if all(type(value) is bool for value in service_values.values()):
+            settings = replace(settings, **service_values)
         selected = effective.get("third_party_services", ("ollama", "docker"))
         if (isinstance(selected, list) and len(selected) == len(set(selected)) and not set(selected) - THIRD_PARTY_NAMES
                 and tuple(selected) != settings.third_party_services):
@@ -774,7 +788,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 pass  # Invalid persisted settings never become effective runtime thresholds.
         named = ("host", "port", "compute", "spotter", "timezone", "mock_input_rate", "mock_output_rate",
                  "third_party_services", "backup_retention", "alert_gpu_temperature", "wake_mac", "wake_address", "secure", "chat_model_url", "plugins_dir")
-        running = {**settings.file, **{name: getattr(settings, name) for name in (*named, *observation.ALERT_LIMITS)}}
+        running = {**settings.file, **{name: getattr(settings, name) for name in (*named, *observation.ALERT_LIMITS, *SERVICE_SETTINGS)}}
         # turnstile writes what it runs with into the folder the two share, each time it starts.
         for program, told in (("weightroom", said(running, settings.file, settings.says)), ("turnstile", kept("settings-seen-turnstile.json", None))):
             if told and said_last.get(program) != told:
@@ -794,7 +808,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     compute.status, compute.seen = status.json(), time.time()
                     keep("last.json", {"status": compute.status, "seen": compute.seen})
                 await plugins.auth.refresh(loadcoach, "/loadcoach/plugins/mirror", key=settings.key)
-                await in_step()
+            except ComputeOff:
+                pass
+            try:
+                await in_step()  # Front settings remain available while compute is offline.
             except ComputeOff:
                 pass
             await asyncio.sleep(LOOK_EVERY)
@@ -884,7 +901,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """One of the pages in pages/, filled in. Every page is told who is signed in and how compute is."""
         # The strip of meters is shown to someone signed in at compute, unless they chose not to see it.
         strip = bool(person and person.key and person.me.get("choices", {}).get("show_telemetry", True))
-        nav = navigation(request.url.path, person.can, bool(spotter)) if person else None
+        nav = navigation(request.url.path, person.can, bool(spotter), platform()) if person else None
         error_request_id = ''
         if template == 'refused.html' and status >= 500:
             context = getattr(request.state, 'observation', None)
@@ -998,7 +1015,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if person is None:
                 return browser_redirect(request, sign_in_url(request))
             try:
-                answer = await handler(request, person)
+                if not platform().path_enabled(request.url.path, request.method, request.query_params):
+                    why = 'This service is disabled in General settings → Platform services.'
+                    answer = (JSONResponse({'error': {'message': why}}, status_code=403)
+                              if request.url.path.startswith(('/soundroom-', '/mirrorwall-', '/voice/browser/'))
+                              else Response(why, status_code=403))
+                else:
+                    answer = await handler(request, person)
             except ComputeOff:
                 answer = page(request, "off.html", person, status=503)
             if (request.method == 'GET' and answer.status_code in (403, 404)
@@ -1375,7 +1398,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Render the caller's personal display preferences."""
         return page(request, 'account_appearance.html', person, status=400 if failed else 200, me=person.me,
                     said=said or request.query_params.get('said', ''), failed=failed,
-                    nav=navigation('/account/appearance', person.can, bool(spotter)))
+                    nav=navigation('/account/appearance', person.can, bool(spotter), platform()))
 
     async def account_logs(request: Request, person: Person) -> Response:
         """Render account-specific retained activity and usage."""
@@ -1486,14 +1509,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def all_models(request: Request, person: Person) -> dict | Response:
         """One logical model with all verified compute locations, with an old-server fallback."""
+        def enabled(known):
+            if isinstance(known, dict):
+                known['models'] = [model for model in known.get('models', []) if platform().model_enabled(model)]
+            return known
         if request.query_params.get("node"):
-            return await fetch(request, person, node_model_path(request, "/loadcoach/models"))
+            return enabled(await fetch(request, person, node_model_path(request, "/loadcoach/models")))
         answer = await ask("GET", "/turnstile/models", person.key)
         if answer.status_code == 404:
-            return await fetch(request, person, "/loadcoach/models")
+            return enabled(await fetch(request, person, "/loadcoach/models"))
         if answer.status_code != 200:
             return page(request, "refused.html", person, status=answer.status_code, why=answer.json()["error"]["message"])
-        return answer.json()
+        return enabled(answer.json())
 
     async def retry_model_install(request: Request, person: Person) -> Response:
         """Replay a saved installation through its normal authenticated preflight."""
@@ -1531,7 +1558,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         catalogue = found['catalogue']
         catalogue_warning = ("Compute is not answering. Saved benchmark results remain available, but no new run can be started."
                              if found['compute_unavailable'] else "")
-        models = [model for model in catalogue["data"] if model.get("owned_by") == "loadcoach"]  # in LoadCoach's order: by sort order, then by name
+        models = [model for model in catalogue["data"] if model.get("owned_by") == "loadcoach" and platform().model_enabled(model)]  # in LoadCoach's order: by sort order, then by name
         definitions, runs = found['definitions'], found['runs']
         wanted = next((bench for bench in definitions if bench['id'] == request.query_params.get('benchmark')), {})
         kind = request.query_params.get('kind', 'llm') if section == 'node-measurements' else 'llm'
@@ -1869,6 +1896,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         engine_choices = {}
         for name, rows in zip(engine_nodes, await asyncio.gather(*(engines_of(name) for name in engine_nodes))):
             for row in rows:
+                if not platform().model_enabled({'engine': row['id']}):
+                    continue
                 if not row.get('schema', {}).get('selectable', True):
                     continue
                 merged = engine_choices.setdefault(row["id"], {**row, "enabled": False, "nodes": [], "cards": []})
@@ -2967,7 +2996,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         except ComputeOff:
             person = None
         call = voice_calls.pop(sid, None)
-        if person is None or not may_talk(person) or not ours(socket) or call is None or call[1] != person.name:
+        if not platform().speech or person is None or not may_talk(person) or not ours(socket) or call is None or call[1] != person.name:
             await socket.close(code=1008)
             return
         address = urlsplit(settings.voice_gateway)
@@ -3553,6 +3582,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         answer = await ask("POST", target, person.key, json=asked)
         if answer.status_code not in (200, 202):
             return await render_settings(request, person, answer.json()["error"]["message"], failed=True, typed_in=form, opened=program)
+        if program == 'weightroom' and set(asked) & SERVICE_SETTINGS.keys():
+            await in_step()
         message = 'Saved on front. The node will receive these locations when it reconnects.' if answer.status_code == 202 else 'Saved.'
         return go(f"{destination}?{destination_query}open={quote(program)}&said=" + quote(message))
 
@@ -4389,6 +4420,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if isinstance(found, Response):
             return fragment_error(request, person, "files-content", "page", found) if part == "page" else found
         found = files_view(found)
+        found = {**found, 'files': [file for file in found.get('files', []) if platform().file_enabled(file)],
+                 'library': [row for row in found.get('library', []) if platform().file_enabled(row)],
+                 'nodes': [{**node, 'files': [file for file in node.get('files', []) if platform().file_enabled(file)]}
+                           for node in found.get('nodes', [])]}
         if file_type:
             def matching(files):
                 """Filter rows after resolving model usage, cache copies and location totals."""
@@ -4402,7 +4437,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if machine and selected_node is None:
             return page(request, "refused.html", person, status=404, why=f"There is no compute node named {machine}.")
         template = {"list": "files_poll.html", "page": "files_content.html"}.get(part, "files.html")  # list: the pieces, asked for again
-        downloads = await coming(person) if template == "files.html" else []
+        downloads = await coming(person) if template == "files.html" and platform().downloads else []
         return page(request, template, person, found=found, said=said, failed=failed, downloads=downloads, here=here,
                     tier=tier, machine=machine, selected_node=selected_node, file_type=file_type, file_types=file_types,
                     address=model_address, file_address=file_address)  # fmt: skip
@@ -5139,7 +5174,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         exception_handlers={HTTPException: http_error, 500: server_error},
         routes=[
             *image_routes(for_people, page, ask, model_api),
-            *audio_routes(for_people, page, ask, model_api, settings),
+            *audio_routes(for_people, page, ask, model_api, settings, platform),
             *plugin_routes(plugins, plugin_controller, for_people, page, go, typed),
             *conversations.routes,
             Route("/sign-in", sign_in_page),

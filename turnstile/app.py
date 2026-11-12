@@ -81,6 +81,7 @@ from turnstile.model_install import plan as installation_plan, execute as instal
 from turnstile import library
 from turnstile.accounts import LOOPBACK, key_of, signed_in
 from turnstile.reporting import ReportTimeout, run as run_report
+from loadcoach.platform_services import PlatformServices, PlatformServiceGate, SERVICE_SETTINGS
 
 # Headers that belong to one connection, not to the request. They are made afresh on each side.
 HOP_HEADERS = {"connection", "content-length", "host", "keep-alive", "te", "trailer", "transfer-encoding", "upgrade"}
@@ -121,6 +122,10 @@ class Settings:
     models_folder: str = ""  # optional model cache on front; no inference service is required
     models_storage_folder: str = ""  # optional model library on front; empty disables this tier
     image_adult_previews: bool = False  # permit individual users to opt in to adult Civitai previews
+    allow_image_generation: bool = True
+    allow_speech: bool = True
+    allow_audio_generation: bool = True
+    allow_model_downloads: bool = True
     files_every: float = 10  # minutes between looks through front's own model folders for the Files page. 0: only when asked
     component_versions_every: float = 60  # minutes between installed component version checks
     compute_offset: int = 0  # how far compute's ports sit from `ports`, from the port in compute's URL. 0 unless both run on one machine
@@ -159,6 +164,7 @@ def load_settings(path: Path) -> Settings:
                 data=str(data),
                 wake_mac=told.get("wake_mac", ""),
                 wake_address=told.get("wake_address", "255.255.255.255"),
+                **{name: told.get(name, True) for name in SERVICE_SETTINGS},
                 **{**mine, "ports": ports,
                    # This live policy reads front's current saved override, including resets.
                    "image_adult_previews": file.get("image_adult_previews", False),
@@ -175,6 +181,8 @@ def load_settings(path: Path) -> Settings:
                 raise TypeError("allow_caller_to_specify_destination must be a boolean")
             if type(settings.image_adult_previews) is not bool:
                 raise TypeError("image_adult_previews must be a boolean")
+            if any(type(getattr(settings, name)) is not bool for name in SERVICE_SETTINGS):
+                raise TypeError('Platform services must be true or false')
             interval_seconds(settings.component_versions_every)
             if type(settings.files_every) not in (int, float) or settings.files_every < 0:
                 raise TypeError("files_every is a number of minutes, 0 or more")
@@ -858,6 +866,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     console_settings = ConsoleSettings(stores.database('weightroom.accounts'), log, ask_compute, settings.keep_console_settings_on_front,
                                    programs=FRONT_PROGRAMS | {'toollocker'} if settings.toollocker_url else FRONT_PROGRAMS)
 
+    def platform():
+        return PlatformServices.from_settings(settings, console_settings.changes.of('weightroom'))
+
     configured_versions_every = settings.component_versions_every
     configured_file_roots = {name: getattr(settings, name) for name in ('models_folder', 'models_storage_folder')}
     if settings.path and Path(settings.path).is_file():
@@ -1185,6 +1196,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         # Sent on, and signed, as the caller sent it: decoding "a%2Fb" to "a/b" would make it another address.
         where = statement.address((request.scope.get("raw_path") or request.url.path.encode()).decode(), query)
         path = request.url.path
+        if path == '/loadcoach/downloads' and request.method == 'POST':
+            try:
+                if not platform().download_enabled(json.loads(body).get('repository')):
+                    return error(403, 'This model source is disabled in Platform services.')
+            except (ValueError, AttributeError):
+                return error(400, 'Choose a model repository.')
         if port == settings.ports[0]:
             handled = await console_settings.handle(request, user)
             if handled is not None:
@@ -1223,6 +1240,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             model = next((one for one in json.loads(catalogue.body)["data"] if one["id"] == path.removeprefix("/v1/models/")), None)
             return JSONResponse(model) if model else error(404, "There is no permitted model with that name.")
         if port == settings.ports[0] and user is not None and request.method == "POST" and path.startswith("/v1/") and not path.startswith(("/v1/files", "/v1/batches")):
+            if path == '/v1/audio/generations' and not (platform().speech and platform().audio):
+                try:
+                    selected = await audio_work.model_of(user, json.loads(body).get('model'))
+                except (ValueError, AttributeError):
+                    return error(400, 'Choose an available audio model.')
+                if not selected or not platform().model_enabled(selected):
+                    return error(403, 'This audio task is disabled in General settings → Platform services.')
             response=await routing.answer(request, user, where, body)
             if path == '/v1/audio/generations':
                 return await audio_work.capture(request, user, response, json.loads(body))
@@ -1267,6 +1291,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                       (any(one.get("enabled", True) for one in model["locations"]) if model.get("locations") else
                        model_locations.enabled("compute", model.get("model_id")))]
             listed.extend({"id": name, "object": "model", "created": 0, "owned_by": "hosted"} for name in hosted.offered(user))
+            listed = [model for model in listed if platform().model_enabled(model)]
             missing = sorted(name for name, answer in zip(names, answers)
                              if answer is None or answer.status_code != 200 or answer.headers.get("x-suite-retained"))
             return JSONResponse(routing.with_roles({"object": "list", "data": listed,
@@ -1567,6 +1592,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         try:
             asked = saved_request if saved_request is not None else json.loads(await request.body())
             name, wanted = asked["name"], asked["settings"]
+            if isinstance(wanted, dict) and not platform().model_enabled(wanted):
+                return error(403, 'This model type is disabled in Platform services.')
             several = "machines" in asked
             destinations = list(dict.fromkeys(asked["machines"] if several else [asked["machine"]]))
             if not isinstance(name, str) or not name or not destinations or not all(isinstance(one, str) for one in destinations):
@@ -1748,6 +1775,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         query = request.url.query
         path = "/loadcoach/" + suffix + (("?" + query) if query else "")
         body = await request.body()
+        if suffix == 'downloads' and request.method == 'POST':
+            try:
+                if not platform().download_enabled(json.loads(body).get('repository')):
+                    return error(403, 'This model source is disabled in Platform services.')
+            except (ValueError, AttributeError):
+                return error(400, 'Choose a model repository.')
         if file_store() == 'front' and suffix in ('files/delete', 'files/move'):
             if not user.can('manage-models'):
                 return error(403, 'Your account may not manage model files.')
@@ -2482,6 +2515,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 raise ValueError()
         except ValueError:
             return error(400, "Send a model configuration object.")
+        if request.method == 'POST' and suffix.startswith('models/') and not platform().model_enabled(body):
+            return error(403, 'This model type is disabled in Platform services.')
         if request.method == "POST" and (suffix.startswith("models/") or suffix == "model-setup" and body.get("action") == "apply"):
             async with configuration_lock:
                 try:
@@ -2954,6 +2989,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     app.state.rotate_due_keys_once = rotate_due_keys_once
     app.add_middleware(ClientAccesses, users=users, log=log, internal_prefix=internal_token + ':')
     app.add_middleware(ClientOrigin, key_file=settings.auth_key_file)
+    app.add_middleware(PlatformServiceGate, policy=platform)
     app.add_middleware(Barrier, gate=gate)
     observation.instrument(app, "turnstile", log)
     return app

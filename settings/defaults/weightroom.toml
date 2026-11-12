@@ -11,6 +11,18 @@
 # The zone that times are shown in. Left out, it is this machine's own, which may not be yours.
 timezone = "America/Vancouver"
 
+# Allow image generation and its model setup throughout the platform. Changes apply immediately.
+allow_image_generation = true
+
+# Allow text-to-speech, speech-to-text and Voice. Changes apply immediately.
+allow_speech = true
+
+# Allow music and sound generation. Speech has its own switch. Changes apply immediately.
+allow_audio_generation = true
+
+# Allow model discovery and downloads. Civitai also requires image generation. Changes apply immediately.
+allow_model_downloads = true
+
 # USD per million input tokens used to estimate cost when a request has no recorded cost and
 # its model has no known rate. This is the starting value in the Usage and Home pages.
 mock_input_rate = 2.0

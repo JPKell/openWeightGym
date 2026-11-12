@@ -356,7 +356,7 @@ detect_systemd() {
 detect_gpu() {
   GPU_KIND=none GPU_NAME='' GPU_COUNT=0 GPU_VRAM_MB=0 GPU_CUDA='' LLAMA_BACKEND=cpu
   local line name memory kind_helper
-  kind_helper=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/loadcoach/gpu_type.py
+  kind_helper=$(realpath -m -- "$(dirname -- "${BASH_SOURCE[0]}")/../../loadcoach/gpu_type.py")
   if command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null 2>&1; then
     GPU_KIND=nvidia
     while IFS=, read -r name memory; do

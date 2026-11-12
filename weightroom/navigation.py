@@ -1,14 +1,16 @@
 """Site categories and their pages, limited to the signed-in person's abilities."""
 
 from weightroom.system_docs import BY_SLUG as DOC_SECTIONS, visible as visible_docs
+from loadcoach.platform_services import PlatformServices
 
 
-def navigation(path: str, can: list[str], machine: bool) -> dict:
+def navigation(path: str, can: list[str], machine: bool, services: PlatformServices | None = None) -> dict:
     """Choose the category and page for the current route.
 
     Detail pages keep their parent highlighted. Voice chat, its desktop app download and administration are local pages.
     In Docs the links are its sections, and `children` holds the topics of the section being read, shown beneath it.
     """
+    services = services or PlatformServices()
     groups = [
         {"name": "Chat", "links": [("Conversations", "/chat"), ("Image generation", "/chat/images"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Speech", "/chat/speech")]},
         {"name": "Models", "links": []},
@@ -53,6 +55,7 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
     groups[5]['links'].sort(key=lambda link: settings_order.index(link[0]))
     groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Components', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups'].index(link[0]))
     for group in groups:
+        group['links'] = [link for link in group['links'] if services.path_enabled(link[1])]
         first_download = next((url for _, url in group['links'] if url in ('/hub', '/civitai')), None)
         group['headings'] = {first_download: 'Downloads'} if first_download else {}
     root = "/" + path.strip("/").split("/")[0]
@@ -88,7 +91,8 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
         if section in docs:
             children = {section['url']: [(topic['title'], topic['url']) for topic in section['topics']]}
     if root == "/account":
-        links = [("Account", "/account"), ("Appearance", "/account/appearance"), ("Audio", "/account/audio"), ("Logs", "/account/logs")]
+        links = [(label, url) for label, url in [("Account", "/account"), ("Appearance", "/account/appearance"), ("Audio", "/account/audio"), ("Logs", "/account/logs")]
+                 if services.path_enabled(url)]
         active = next((url for _, url in links[1:] if path.rstrip('/') == url), '/account')
         return {"groups": [group for group in groups if group['links']], "section": "My account", "links": links, "active": active, "children": {}, "headings": {}}
     return {"groups": [group for group in groups if group["links"]], "section": selected["name"] if selected else "", "links": selected["links"] if selected else [],

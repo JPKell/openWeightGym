@@ -7,10 +7,12 @@ from starlette.routing import Route
 
 from loadcoach import observability as observation
 from soundroom.front import Front
+from loadcoach.platform_services import PlatformServices
 
 
-def routes(for_people, page, ask, model_api, settings=None):
+def routes(for_people, page, ask, model_api, settings=None, platform=None):
     """Keep browser credentials server-side and reuse the ordinary session authority."""
+    services = platform or (lambda: PlatformServices.from_settings(settings))
     def defaults():
         """The administrator's first choices for the audio pages."""
         return {kind: getattr(settings, "audio_" + kind + "_model", "") for kind in ("lyrics", "music", "sound", "speech", "transcription")}
@@ -47,6 +49,8 @@ def routes(for_people, page, ask, model_api, settings=None):
             found = await ask("GET", "/loadcoach/settings", person.key)
         settings_now = next((one["settings"] for one in found.json().get("programs", []) if one["program"] == "weightroom"), []) if found is not None and found.is_success else []
         current = {one["name"]: one for one in settings_now}
+        available_defaults = [field for field in DEFAULTS if
+                              (services().speech if field[0] in ('audio_speech_model', 'audio_transcription_model') else services().audio)]
         said, failed = request.query_params.get("said", ""), False
         if request.method == "POST":
             body = await request.body()
@@ -54,7 +58,7 @@ def routes(for_people, page, ask, model_api, settings=None):
                 return page(request, "refused.html", person, status=413, why="The form is too large.")
             form = {name: values[-1] for name, values in parse_qs(body.decode(errors="replace")).items()}
             asked = {}
-            for name, _, _ in DEFAULTS:
+            for name, _, _ in available_defaults:
                 one = current.get(name)
                 holds = one["changed"]["value"] if one and one.get("changed") else one["value"] if one else ""
                 typed = str(form.get("value-" + name, holds)).strip()
@@ -71,7 +75,7 @@ def routes(for_people, page, ask, model_api, settings=None):
         nodes = [{"name": "compute", "available": bool(audio and audio.get("available")), "why": (audio or {}).get("why", "not answering")}]
         fields = [{"name": name, "label": label, "help": help, "when": current.get(name, {}).get("when", ""),
                    "value": (current[name]["changed"]["value"] if current.get(name, {}).get("changed") else current.get(name, {}).get("value", ""))}
-                  for name, label, help in DEFAULTS]
+                  for name, label, help in available_defaults]
         catalogue = None
         with suppress(ComputeOff):
             catalogue = await ask('GET', '/v1/models', person.key)
@@ -142,10 +146,13 @@ def routes(for_people, page, ask, model_api, settings=None):
         value = answer.json()
         value['cards'] = value.get('engine_cards', {}).get('audiocpp', value.get('cards', []))
         value["models"] = [one for one in value["models"] if one.get("engine") == "audiocpp"]
+        value['models'] = [one for one in value['models'] if services().model_enabled(one)]
         engines = await model_api(request, person, "GET", "/loadcoach/engines")
         value["engines"] = engines.json() if engines.is_success else {}
         packages = await model_api(request, person, "GET", "/loadcoach/audio/families")
         value["catalogue"] = packages.json() if packages.is_success else {"families": [], "error": packages.text[:300]}
+        value['catalogue']['families'] = [{**family, 'kinds': [kind for kind in family.get('kinds', []) if services().audio_task_enabled(kind)]}
+                                          for family in value['catalogue'].get('families', [])]
         return JSONResponse(value, headers={"cache-control": "no-store"})
 
     async def installations(request, person):
@@ -175,6 +182,8 @@ def routes(for_people, page, ask, model_api, settings=None):
             name, settings = body["name"], body["settings"]
             if not isinstance(name, str) or not isinstance(settings, dict) or settings.get("engine") != "audiocpp":
                 raise ValueError("Choose an audio model name and settings.")
+            if not services().model_enabled(settings):
+                return JSONResponse({'error': {'message': 'This audio task is disabled in Platform services.'}}, 403)
             destinations = body.get('machines')
             if destinations is not None and (not body.get('new') or not isinstance(destinations, list) or not destinations
                 or len(destinations) > 100 or any(not isinstance(node, str) or not node.strip() for node in destinations)):
