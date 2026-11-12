@@ -31,7 +31,7 @@ def test_suite_identity_is_nearest_tag_and_actual_commit(tmp_path):
     assert git_version(tmp_path) == f'v1.2.3 ({git("rev-parse", "--short=12", "HEAD")})'
 
 
-def test_versions_survive_reopen_and_refresh_only_after_sixty_minutes(tmp_path, monkeypatch):
+def test_native_versions_survive_reopen_and_refresh_only_after_sixty_minutes(tmp_path, monkeypatch):
     executable = program(tmp_path, "llama-server", "backend: CUDA runtime version 12\nversion: 1234 (abcd)")
     config = SimpleNamespace(engines={}, llama_server=executable)
     now = [10000]
@@ -53,6 +53,60 @@ def test_versions_survive_reopen_and_refresh_only_after_sixty_minutes(tmp_path, 
     assert report["services"][0]["version"] == report["services"][1]["version"] == versions.read()["suite"]["version"]
     assert report["engines"][0]["version"] == "1234 (abcd)"
     assert len((tmp_path / "calls").read_text().splitlines()) == 2  # rendering never runs an engine
+    versions.db.close()
+
+
+@pytest.fixture
+def version_checkout(tmp_path):
+    root=tmp_path/'checkout'; root.mkdir()
+    subprocess.run(['git','init','-q',str(root)],check=True)
+    def advance():
+        subprocess.run(['git','-C',str(root),'-c','user.name=Test','-c','user.email=test@example.test',
+                        'commit','--allow-empty','-qm','revision'],check=True)
+        return git_version(root)
+    advance()
+    return root,advance
+
+
+@pytest.mark.parametrize('operation',['attach','refresh'])
+def test_restart_discards_stale_suite_identity_without_reprobing_engines(tmp_path,monkeypatch,version_checkout,operation):
+    root,advance=version_checkout
+    monkeypatch.setattr('loadcoach.component_versions.time.time',lambda:10000)
+    executable=program(tmp_path,'llama-server','version: b123 (abcd)')
+    config=SimpleNamespace(engines={},llama_server=executable)
+    versions=Versions(tmp_path/'versions.db',root)
+    asyncio.run(versions.refresh(config))
+    previous=versions.read()['suite']['version']
+    versions.db.close()
+    current=advance()
+    assert current!=previous
+    versions=Versions(tmp_path/'versions.db',root)
+    report={'services':[{'id':'loadcoach','installed':True}],'engines':[{'id':'llama_cpp','installed':True}]}
+    if operation=='refresh':
+        asyncio.run(versions.refresh(config))
+    asyncio.run(versions.attach(report))
+    assert report['services'][0]['version']==current
+    assert report['engines'][0]['version']=='b123 (abcd)'
+    assert (tmp_path/'calls').read_text().splitlines()==['called']
+    versions.db.close()
+
+
+def test_front_inventory_refreshes_expired_suite_identity_without_a_spotter(tmp_path,monkeypatch,version_checkout):
+    root,advance=version_checkout
+    now=[10000]
+    monkeypatch.setattr('loadcoach.component_versions.time.time',lambda:now[0])
+    versions=Versions(tmp_path/'versions.db',root)
+    report={'services':[{'id':'turnstile','installed':True}],'engines':[]}
+    asyncio.run(versions.attach(report))
+    previous=report['services'][0]['version']
+    current=advance()
+    now[0]+=EVERY-1
+    asyncio.run(versions.attach(report))
+    assert report['services'][0]['version']==previous
+    now[0]+=1
+    asyncio.run(versions.attach(report))
+    assert report['services'][0]['version']==current
+    assert not (tmp_path/'calls').exists()
     versions.db.close()
 
 
