@@ -184,24 +184,32 @@ def needs(family, variant):
     return {"text_encoder": None, "vae": None, "clip_l": None, "clip_g": None, "upscaler": upscaler}
 
 
-def check(settings, folder, roots=None):
+def check(settings, folder, roots=None, *, inventory=None):
     """Each slot of a draft image profile: what it holds, whether it fits the diffusion weights, and what to get or use instead.
 
     `folder` is searched for files that would fit a slot; `roots` are the only folders whose files are read.
+    An authenticated `inventory` supplies header identities from several nodes without reading their paths here.
     """
     roots = [folder] if roots is None else roots
     options = settings.get("sdcpp", {}) if isinstance(settings, dict) else {}
     chosen = {"diffusion": (settings.get("flags") or {}).get("model", "") if isinstance(settings, dict) else "",
               **{key: value for key, value in (options.get("components") or {}).items() if isinstance(value, str)},
               "upscaler": options.get("upscaler") or ""}
-    library = scan(folder, roots)
-    diffusion = identify(chosen["diffusion"], roots) if chosen["diffusion"] else None
+    library = scan(folder, roots) if inventory is None else inventory
+    known = {one['path']: one for one in library}
+    def identity(path):
+        """Remote inventories are authoritative; never interpret their paths on this host."""
+        if inventory is None:
+            return identify(path, roots)
+        return known.get(path, {'kind':'missing', 'family':None, 'variant':None,
+                                'label':'File is not available in the current model library'})
+    diffusion = identity(chosen["diffusion"]) if chosen["diffusion"] else None
     family, variant = (diffusion or {}).get("family"), (diffusion or {}).get("variant")
     wanted = needs(family, variant)
     slots, ready = [], True
     for slot, label in SLOTS:
         path = chosen.get(slot, "")
-        found = identify(path, roots) if path else None
+        found = identity(path) if path else None
         rule = (True, "diffusion", None, "The model itself.") if slot == "diffusion" else wanted.get(slot)
         entry = {"slot": slot, "label": label, "path": path, "found": found, "need": "unused" if rule is None else "required" if rule[0] else "optional",
                  "why": rule[3] if rule else ""}
@@ -233,7 +241,7 @@ def check(settings, folder, roots=None):
         slots.append(entry)
     loras = []
     for name, entry in (options.get("loras") or {}).items():
-        found = identify(entry.get("file", ""), roots) if isinstance(entry, dict) else None
+        found = identity(entry.get("file", "")) if isinstance(entry, dict) else None
         fits = bool(found and found["kind"] == "lora" and (found["variant"] in (None, variant) or not variant))
         loras.append({"name": name, "found": found, "status": "ok" if fits else "wrong",
                       "message": found["label"] if fits else (found or {}).get("label", "Not a LoRA") + (f"; this model is {LABELS.get(variant, variant)}." if found and found["kind"] == "lora" else ".")})

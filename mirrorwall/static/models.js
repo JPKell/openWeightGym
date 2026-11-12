@@ -1,7 +1,8 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById('mw-' + id);
-  const node = new URLSearchParams(location.search).get('node') || 'compute';
+  const params = new URLSearchParams(location.search);
+  const node = params.get('node') || 'compute';
   const query = node ? '?node=' + encodeURIComponent(node) : '';
   const SLOTS = ['diffusion', 'text_encoder', 'vae', 'clip_l', 'clip_g', 'upscaler'];
   const FAMILIES = SuiteImageProfiles.labels;
@@ -102,11 +103,12 @@
       box.append(list);
     }
     for (const lora of found.loras) box.append(element('div', (lora.status === 'ok' ? '✓ ' : '✗ ') + 'LoRA ' + lora.name + ': ' + lora.message, 'small mw-says-' + (lora.status === 'ok' ? 'ok' : 'wrong')));
-    if (!ready && $('diffusion').value.trim()) box.append(element('p', 'Downloaded files arrive in Files on front; copy them to ' + node + ' there, then use them here.', 'mw-model-note mb-0 mt-2'));
+    if (!ready && $('diffusion').value.trim()) box.append(element('p', selected ? 'Choose compatible files on this node, or copy them here from Files.' : 'Choose compatible files from the library. Saving copies and verifies the bundle on every selected node.', 'mw-model-note mb-0 mt-2'));
   }
   async function check(mine) {
     try {
-      const found = await api({settings: draft(false)}, '/check');
+      const found = await api({settings: draft(false), new:!selected,
+        source_machine:$('diffusion').selectedOptions[0]?.dataset.machine || node}, '/check');
     if (mine === checking) render(found);
     } catch (error) { if (mine === checking) $('check').replaceChildren(element('p', 'The files could not be checked: ' + error.message, 'text-secondary small')); }
   }
@@ -229,7 +231,7 @@
   });
   $('split').addEventListener('change', () => { delete document.querySelector('[data-hardware-prefix="mw"]').dataset.automaticGpus; });
   $('new').onclick = () => {remember(); fill(null); dialog.showModal(); $('name').focus();};
-  document.addEventListener('weightroom:image-select',event=>{remember(); fill(models.find(model=>model.name===event.detail.name) || null);});
+  document.addEventListener('weightroom:image-select',event=>{if(!dialog.open) fill(models.find(model=>model.name===event.detail.name) || null);});
   document.addEventListener('weightroom:image-edit',event=>{fill(models.find(model=>model.name===event.detail.name) || null); dialog.showModal();});
   dialog.addEventListener('close',remember);
   dialog.addEventListener('cancel',remember);
@@ -258,7 +260,6 @@
   Promise.all([refresh(), files()]).then(() => {
     initialized=true;
     document.dispatchEvent(new CustomEvent('weightroom:image-inventory',{detail:{models,node}}));
-    const params = new URLSearchParams(location.search);
     if (params.has('new')) {fill(null); dialog.showModal();}
     if (params.has('file')) { fill(null); if (!Array.from($('diffusion').options).some(one => one.value === params.get('file'))) $('diffusion').add(fileOption(params.get('file'))); $('diffusion').value = params.get('file'); dialog.showModal(); recheck(0); }
   }).catch(error => message(error.message));

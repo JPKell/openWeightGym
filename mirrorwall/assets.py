@@ -43,5 +43,5 @@ def facts(path):
         from engines.llama_cpp.gguf import read_metadata, facts as gguf_facts
         metadata=read_metadata(str(file))
         if metadata.get('general.architecture') and metadata.get('tokenizer.ggml.model'):
-            return {**gguf_facts(metadata),'image_component':role,'format':'gguf'}
-    return {'what':'image', 'name':file.name, 'kind':role, 'format':file.suffix.lstrip('.')}
+            return {**gguf_facts(metadata),'image_component':role,'format':'gguf','image_identity':identity}
+    return {'what':'image', 'name':file.name, 'kind':role, 'format':file.suffix.lstrip('.'), 'image_identity':identity}

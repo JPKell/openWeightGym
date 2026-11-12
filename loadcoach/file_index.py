@@ -109,8 +109,11 @@ class FileIndex:
 
     def entry(self, file: Path, place: str, seen: os.stat_result, before: dict | None) -> dict:
         """One file's line: the one kept before if the file has not changed since, otherwise read again."""
+        facts = (before or {}).get('facts', {})
+        needs_image_identity = (facts.get('what') == 'image' or facts.get('image_component')) and 'image_identity' not in facts
         if (before and before.get("place") == place and before.get("size") == seen.st_size
-                and before.get("mtime") == seen.st_mtime and ("facts" in before or "unreadable" in before)):
+                and before.get("mtime") == seen.st_mtime and ("facts" in before or "unreadable" in before)
+                and not needs_image_identity):
             return before
         entry = {"path": str(file), "place": place, "tier": tier_of(place), "size": seen.st_size, "mtime": seen.st_mtime,
                  "modified": datetime.fromtimestamp(seen.st_mtime).isoformat(timespec="seconds")}

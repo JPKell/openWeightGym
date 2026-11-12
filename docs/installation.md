@@ -89,6 +89,37 @@ Checks report allowed ports, missing rules, inactive firewalls or rules they can
 print UFW or firewalld inspection and repair commands. These inspect local rules; remote network
 firewalls still need their own checks.
 
+## Docker qualification for image-model installation
+
+An isolated console, Turnstile, two LoadCoaches and two Spotter file receivers are defined in
+`tests/docker/images/compose.yaml`. Each node has its own volume; generated accounts and small
+image-header fixtures are separate from the installed suite. Only the console is published,
+on loopback port 18440 (`OWG_IMAGE_TEST_PORT` changes it). The native executable is a fixture:
+this deployment tests model installation, not image generation or GPU qualification.
+
+```bash
+docker compose -f tests/docker/images/compose.yaml build seed
+docker compose -f tests/docker/images/compose.yaml up -d --no-build
+```
+
+The browser/API qualification creates its own disposable Compose project and removes its
+containers and volumes afterwards. With the development dependencies and Playwright Chromium
+installed, run:
+
+```bash
+OWG_IMAGE_DOCKER=1 .venv/bin/pytest tests/test_image_install_docker.py -n 0 -q
+```
+
+It tests single-node and simultaneous multi-node creation, storage promotion, every selected
+component's SHA-256 and relocated settings, concurrent installs sharing files, and failed
+preflight with no partial model creation. To remove a manually started qualification deployment:
+
+```bash
+docker compose -f tests/docker/images/compose.yaml down -v
+```
+
+Installed services continue to use `owg update; owg restart`.
+
 ## ToolLocker on the console machine
 
 New **Console only** and **Everything on this machine** installations include ToolLocker with
