@@ -54,6 +54,12 @@
     $('#no-settings').hidden = rows.some(row => !row.hidden);
   });
   document.addEventListener('click', event => {
+    const row = event.target.closest('[data-fingerprint-page] #fingerprint-rows [data-record]');
+    if (row && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey &&
+        !event.target.closest('a, button, input, select, textarea, label, summary, [role="button"]') &&
+        !window.getSelection()?.toString()) {
+      row.querySelector('[data-open]')?.click();
+    }
     const step = event.target.closest('[data-fingerprint-page-step]');
     if (step) { currentPage += Number(step.dataset.fingerprintPageStep); paginate(); }
     if (event.target.closest('#fingerprints-table th[data-sort]')) {

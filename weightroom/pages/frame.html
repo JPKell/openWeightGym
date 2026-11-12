@@ -60,6 +60,13 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 
 {# The pages within the section being read, under its link: the Docs topics of the open section. #}
 {% macro section_children(children) %}{% if children %}<div class="section-children">{% for label, url in children %}<a class="section-link section-child{{ ' active' if url == nav.active }}" href="{{ url }}"{% if url == nav.active %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</div>{% endif %}{% endmacro %}
+{% macro section_links(links, headings={}) %}
+{% for label, url in links %}
+{% if headings.get(url) %}<div class="section-label mt-3">{{ headings[url] }}</div>{% endif %}
+<a class="section-link{{ ' active' if url == nav.active }}{{ ' open' if url in nav.children }}" href="{{ url }}"{% if url == nav.active %} aria-current="page"{% endif %}>{{ label }}</a>
+{{ section_children(nav.children.get(url)) }}
+{% endfor %}
+{% endmacro %}
 {% if person %}
 <a class="visually-hidden-focusable skip-content" href="#page-content">Skip to content</a>
 <div class="site-layout{{ ' d-block' if not nav.links }}">
@@ -69,10 +76,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 <aside id="site-sidebar" class="site-sidebar" aria-label="Section pages">
   <div class="section-label">{{ nav.section }}</div>
   <nav aria-label="{{ nav.section }} pages">
-    {% for label, url in nav.links %}
-    <a class="section-link{{ ' active' if url == nav.active }}{{ ' open' if url in nav.children }}" href="{{ url }}"{% if url == nav.active %} aria-current="page"{% endif %}>{{ label }}</a>
-    {{ section_children(nav.children.get(url)) }}
-    {% endfor %}
+    {{ section_links(nav.links, nav.headings|default({})) }}
     {% if nav.section == 'My account' %}
     <form method="post" action="/sign-out" class="m-0"><button type="submit" class="section-link btn w-100 text-start">Logout</button></form>
     {% endif %}
@@ -98,7 +102,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
   <nav aria-label="All pages">
   {% for category in nav.groups %}
     <details class="mobile-category mb-2"{{ ' open' if nav.section == category.name }}><summary class="fw-semibold py-2">{{ category.name }}</summary>
-    {% for label, url in category.links %}<a class="section-link{{ ' active' if url == nav.active }}{{ ' open' if url in nav.children }}" href="{{ url }}"{% if url == nav.active %} aria-current="page"{% endif %}>{{ label }}</a>{{ section_children(nav.children.get(url)) }}{% endfor %}
+    {{ section_links(category.links, category.headings|default({})) }}
     </details>
   {% endfor %}
   <a class="section-link" href="/account">My account</a>

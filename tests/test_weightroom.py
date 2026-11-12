@@ -1556,7 +1556,7 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
     browser.post("/sign-out")
     sign_in(browser, "jordan")
     assert 'Find a model file at Hugging Face</a>' not in browser.get("/files?complete=1").text and 'id="downloads"' in browser.get("/files").text
-    assert 'href="/hub">HuggingFace</a>' in browser.get("/files").text
+    assert 'href="/hub">Hugging Face</a>' in browser.get("/files").text
 
     found = browser.get("/hub?q=tiny").text
     assert '<h1 class="page-title wrap">Hugging Face</h1>' in found

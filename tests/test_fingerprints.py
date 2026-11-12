@@ -39,6 +39,7 @@ def test_archive_filters_detail_fragments_and_permissions(archive):
     assert directory.status_code == 200
     assert directory.text.count(' data-record ') == 24
     assert 'data-fingerprint-page' in directory.text and 'At a glance' in directory.text
+    assert 'Model provenance' not in directory.text
     assert 'Model weights' in directory.text
     for file in records[0]['files'].values():
         assert file['path'] in directory.text and file['sha256'] in directory.text
@@ -84,7 +85,7 @@ def test_live_preview_keeps_the_directory_and_its_filters(archive):
         for fact in ('chat template', 'false', 'embedding length', '0'):
             playwright.expect(page.locator('#record-peek')).to_contain_text(fact)
         mark = records[8]['fingerprint']
-        page.locator(f'[data-fingerprint="{mark}"] [data-open]').click()
+        page.locator(f'[data-fingerprint="{mark}"] [data-field="model"]').click()
         playwright.expect(page.locator('#record-peek')).to_have_attribute('data-selected-fingerprint', mark)
         playwright.expect(page.locator('#fingerprint-rows [data-record]')).to_have_count(3)
         playwright.expect(page.locator('#model-filter')).to_have_value('qwen3-32b')
@@ -94,6 +95,35 @@ def test_live_preview_keeps_the_directory_and_its_filters(archive):
         playwright.expect(page.locator('#start')).to_have_value('')
         playwright.expect(page.locator('#model-filter')).to_have_value('qwen3-32b')
         playwright.expect(page.locator('#fingerprint-rows [data-record]')).to_have_count(3)
+        browser.close()
+
+
+def test_every_cell_selects_the_preview_and_text_can_still_be_selected(archive):
+    from test_console_browser import browser_context, playwright
+    server, _, records = archive
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/fingerprints')
+        initial_url = page.url
+        for index, field in enumerate(('model', 'first', 'filename', 'context'), start=1):
+            mark = records[index]['fingerprint']
+            row = page.locator(f'[data-fingerprint="{mark}"]')
+            row.locator(f'[data-field="{field}"]').click()
+            playwright.expect(page.locator('#record-peek')).to_have_attribute('data-selected-fingerprint', mark)
+            playwright.expect(row).to_have_attribute('data-selected', 'true')
+            assert page.url == initial_url
+        # Keep drag-to-select usable even though the whole row is clickable.
+        row = page.locator(f'[data-fingerprint="{records[5]["fingerprint"]}"]')
+        row.locator('[data-field="model"]').evaluate('''el => {
+            const selection = window.getSelection(), range = document.createRange();
+            range.selectNodeContents(el); selection.removeAllRanges(); selection.addRange(range);
+            el.dispatchEvent(new MouseEvent('click', {bubbles:true}));
+        }''')
+        playwright.expect(page.locator('#record-peek')).to_have_attribute('data-selected-fingerprint', records[4]['fingerprint'])
+        page.evaluate('window.getSelection().removeAllRanges()')
+        row.locator('[data-open]').focus()
+        page.keyboard.press('Enter')
+        playwright.expect(page.locator('#record-peek')).to_have_attribute('data-selected-fingerprint', records[5]['fingerprint'])
         browser.close()
 
 
@@ -130,7 +160,7 @@ def test_live_explorer_selection_filters_pagination_and_downloads(archive, width
         page.locator('#start').fill(records[2]['fingerprint'][:16])
         page.locator('#context-filter').select_option('')
         playwright.expect(page.locator('#match-count')).to_have_text('1 of 24 records')
-        page.locator('#fingerprint-rows [data-open]').click()
+        page.locator('#fingerprint-rows [data-field="model"]').click()
         if width > 900:
             playwright.expect(page.locator('#record-peek')).to_have_attribute('data-selected-fingerprint', records[2]['fingerprint'])
             for key, value in records[2]['files']['model']['says'].items():

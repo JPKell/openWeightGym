@@ -22,10 +22,12 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
         groups[0]["links"].append(("Voice", '/voice'))
         groups[0]["links"].append(("Voice desktop app", '/voice/desktop'))
     if "manage-models" in can:
-        groups[1]["links"] = [("Models", "/models"), ("Images", "/models/images"), ("Audio models", "/models/audio"), ("Dry fit", "/dry-fit"), ("Roles", "/roles"), ("Files", "/files"),
-                              ("HuggingFace", "/hub"), ("Civitai", "/civitai"), ("Fingerprints", "/fingerprints")]
+        groups[1]["links"] = [("Models", "/models"), ("Images", "/models/images"), ("Audio", "/models/audio"), ("Roles", "/roles")]
     if "manage-hosted" in can:  # the services elsewhere whose models are offered here
         groups[1]["links"].append(("Cloud APIs", "/cloud-apis"))
+    if "manage-models" in can:
+        groups[1]["links"].extend([("Files", "/files"), ("Dry fit", "/dry-fit"), ("Fingerprints", "/fingerprints"),
+                                   ("Hugging Face", "/hub"), ("Civitai", "/civitai")])
     if set(can) & {"front-plugins", "front-manage-plugins", "see-log"}:
         groups[3]["links"].append(("Plugin logs", "/plugins/activity"))
     if "manage-settings" in can:
@@ -50,6 +52,9 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
     settings_order = ['Compute nodes', 'Users', 'Groups', 'Spending allowances', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
     groups[5]['links'].sort(key=lambda link: settings_order.index(link[0]))
     groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Components', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups'].index(link[0]))
+    for group in groups:
+        first_download = next((url for _, url in group['links'] if url in ('/hub', '/civitai')), None)
+        group['headings'] = {first_download: 'Downloads'} if first_download else {}
     root = "/" + path.strip("/").split("/")[0]
     active = {"/": "/status", "/file": "/files", "/downloads": "/hub", "/measure-models": "/models", "/outside": "/cloud-apis",
               "/control": "/status", "/ask": "/log", "/machines": "/telemetry"}.get(root, root)
@@ -85,6 +90,6 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
     if root == "/account":
         links = [("Account", "/account"), ("Appearance", "/account/appearance"), ("Audio", "/account/audio"), ("Logs", "/account/logs")]
         active = next((url for _, url in links[1:] if path.rstrip('/') == url), '/account')
-        return {"groups": [group for group in groups if group['links']], "section": "My account", "links": links, "active": active, "children": {}}
+        return {"groups": [group for group in groups if group['links']], "section": "My account", "links": links, "active": active, "children": {}, "headings": {}}
     return {"groups": [group for group in groups if group["links"]], "section": selected["name"] if selected else "", "links": selected["links"] if selected else [],
-            "active": active if selected else "", "children": children if selected else {}}
+            "active": active if selected else "", "children": children if selected else {}, "headings": selected['headings'] if selected else {}}

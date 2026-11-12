@@ -30,7 +30,7 @@ within their own layouts.
 
 | Element | Canonical source |
 |---|---|
-| Page shell, navigation, common assets and DOM templates | [frame.html](weightroom/pages/frame.html) |
+| Page shell, navigation, common assets and DOM templates | [frame.html](weightroom/pages/frame.html); `section_links` shares desktop/mobile links and subsection headings from [navigation.py](weightroom/navigation.py); Models retains Fingerprints before the Downloads subsection containing Hugging Face and Civitai |
 | Page/section headings, cards, form sections, notices, disclosures, empty rows, hardware controls and confirmation | [parts.html](weightroom/pages/parts.html) |
 | KPI bands, labels, values and notes across pages, fragments and previews | [kpi_parts.html](weightroom/pages/kpi_parts.html): `kpi_row`, `kpi`, `kpi_value`; Telemetry-style surface, spacing and responsive type in [style.css](weightroom/static/style.css). Preserve domain formatters and update hooks; keep progress bars and charts in the KPI caller block instead of duplicating KPI markup or styling. |
 | Documentation sections, contents, tables, notes and code blocks | [docs_parts.html](weightroom/pages/docs_parts.html) |
