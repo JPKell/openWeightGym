@@ -6,7 +6,7 @@
     {{ page_header("Compute is not answering", lead="Saved front-owned information remains available.") }}
     <p>Since {{ compute.since|timestamp }}. This page cannot show anything that compute owns until it is back.</p>
     <p>Your sign-in is kept. <a href="/status">Open Status</a> to check the nodes.</p>
-    {% if machine_page and person and person.key %}<p>The machine itself may still be up. The <a href="/machine">Machine</a> page shows it, and is where the compute service is started again.</p>{% endif %}
+    {% if spotter_available and person and person.key %}<p>The machine itself may still be up. Open <a href="/telemetry">Telemetry</a>, select its physical host and use the service controls to start compute again.</p>{% endif %}
     <p class="text-secondary mb-0">If you are one of the people who can do something while compute is off, <a href="/sign-in">sign in again</a> with your password.</p>
   {% endcall %}
 {% endblock %}

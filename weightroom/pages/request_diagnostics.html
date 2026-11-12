@@ -42,7 +42,7 @@
 {% if ended.why %}<p class="wrap"><strong>Failure detail:</strong> {{ ended.why }}</p>{% endif %}
 <p class="d-flex gap-2 flex-wrap mb-0">
   {% if asked.trace %}<a class="btn btn-sm btn-outline-secondary" href="/log?trace={{ asked.trace|urlencode }}">Trace {{ asked.trace }}</a>{% endif %}
-  {% if "restart-services" in person.can and machine_page %}
+  {% if "restart-services" in person.can and spotter_available %}
   <a class="btn btn-sm btn-outline-secondary" href="/output?source=loadcoach&amp;at={{ (ended.at or asked.at)|urlencode }}">LoadCoach output around this request</a>
   <a class="btn btn-sm btn-outline-secondary" href="/output?source=kernel&amp;at={{ (ended.at or asked.at)|urlencode }}&amp;before=300&amp;after=60">GPU / memory journal</a>
   {% endif %}

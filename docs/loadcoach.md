@@ -3820,92 +3820,40 @@ Added in milestone 18. The Controls card on the first page gained "Take no new r
 those with `drain`: a box for the reason and a tick box. Section 19 explains what it does.
 While LoadCoach is draining, everyone sees a line across the top of the first page: since
 when, who asked, why, and how many requests are still here. Those with `drain` have "Take
-requests again" in that line. It is on the first page and not the Machine page because it is
-LoadCoach's, and one thing has one place.
+requests again" in that line. These controls belong on Status because they govern LoadCoach admission.
 
-### The strip, and the Machine page
+### The strip and Telemetry
 
-Added in milestone 17, over `spotter`, which section 18 describes.
+The strip below navigation shows compact meters for each physical host. It streams changed
+readings and links to `/telemetry`. Each account can show or hide it under My account → Appearance.
 
-**The strip** is a line of meters under the top bar of every page: for each GPU a bar of its
-memory with the amount in words, its temperature and its load; then the processor with its
-load and temperature; then the machine's memory. A bar is green when empty and turns through
-amber to red as it fills. A temperature turns amber and then red as it climbs. A reading that was not given is a dash. On a phone the meters stack. The strip fetches
-itself when a page opens and every three seconds after, and the whole of it leads to the
-Machine page.
+`/telemetry` lists physical hosts; `/telemetry/{fingerprint}` selects one host, its devices and
+retained history. The standalone Machine page has been removed. Uptime and installed-service
+status pills distinguish running, stopped, failed and unknown readings. Stale readings stay unknown.
+The selected host's right column holds model pills, device capacity, Wake, and verified compute
+service/power controls. Its graph range, hardware tabs and zoom survive polling.
 
-Whether to see it is each person's own choice, a tick box under "What I am shown" on My
-account. The choice is kept with the user on compute, in a column of the users table, so it is
-the same on every device. `POST /loadcoach/me` keeps it. Choices of this kind are only ever
-about how things are shown, never about what someone may do.
+`history_groups()` in `weightroom/telemetry_workspace.py` arranges device series; `chart()` in
+`weightroom/app.py` prepares samples, units and heat limits. `telemetry-workspace.js` draws them
+with ECharts. Chart labels use the browser's timezone and tooltips include UTC. Missing samples
+remain absent while lines connect surrounding readings; low usage is green and high usage red.
 
-**`/machine`.** At the top: how long the machine has been up, the room on each watched drive,
-and each GPU's model, power and fan. Then how far back to look, and until when, with one press
-for an hour, six, a day, a week or four. Then the charts, one for each thing that is read,
-under headings: each GPU has its own, so two cards never share a row and each card's readings
-are in the same order; then "Processor and memory"; then "Storage". A row that is not full is
-left with a gap.
+Service actions require `restart-services`; power actions require `power`. Confirmation boxes
+and interruption notices remain in `telemetry_control_parts.html`. Unless forced, LoadCoach first
+stops taking new requests and finishes its current work before a power change. Models unload before
+sleep and load again when requested. Wake from a switched-off machine requires hardware support.
+Pending actions show who requested them, remaining work, failures and cancellation. The workspace
+polls their state, deferring replacements while a marked form has unsent changes.
 
-A chart shows its name, its newest value, the line, and the least and most in the stretch
-shown. The server writes those words, so they are there with JavaScript off. The line is drawn
-in the browser by ECharts, a chart library, which also gives the marks up the side, the times
-along the bottom, and a box with the exact value under the pointer. Where the most a reading
-can be is known, such as a card's memory or the power it may draw, the chart runs from nought
-to that, so the line shows how near full it is. Missed samples remain absent from the data, while
-the browser connects the surrounding readings and shades the area beneath the line.
+Spotter supplies the service inventory. The third-party services selected under Settings → WeightRoom
+are queried for compute controls; the choices include Ollama, Docker, Apache and Nginx. The signed
+`POST /machine/services/{name}/{action}` and `/machine/power/{action}` handlers remain active for
+Telemetry's forms and return there. The GET `/machine` page and its separate power polling endpoint
+are gone. System logs remain on `/output` and still require `restart-services`.
 
-**The line's colour says how high the reading is:** green when low, through amber, to red when
-high. The scale is the reading's own. A load, a fan or a memory runs from nought to its most.
-A GPU's temperature is green at 45° and red at 85°, the processor's at 90°. Room on a drive is
-the other way up, red when little is left. A reading with no known most, such as power on a
-card that does not say what it may draw, has a line of one colour, because a colour that
-means nothing is worse than none.
-
-**How a chart is made.** `chart()` in `app.py` turns one series into what the browser needs:
-the values, with nothing where nothing was read; the unit; the top; and the two values at
-which the line is fully green and fully red. The page puts that in the chart's `data-chart`
-attribute. [`static/charts.js`](../weightroom/static/charts.js), about sixty lines and ours,
-reads it and tells ECharts what to draw. The times along the bottom are written by the server
-in the zone `weightroom` is set to, and sent once for all the charts. Only the Machine page
-loads ECharts; no other page pays for it.
-
-Time-series charts have a slider below the plot and pointer/touch zoom inside it. This applies
-to Home usage, Usage trends, Reliability and machine/host telemetry; their exact tables and
-summary text remain available independently of the chart.
-
-A card, **Power**, added in milestone 18. Everyone sees whether compute puts itself to sleep,
-after how long, when and by what it was last used, and how many operating-system users are
-logged in. Those with `power` also get Sleep, Restart and Switch off, behind tick boxes:
-
-- "Yes, do this to compute", always.
-- "Do not wait. Cut off whatever LoadCoach is answering", in red and not ticked. Left alone,
-  LoadCoach first takes no new requests and finishes those it has.
-
-While a sleep, restart or switching off is on its way, the card says so, with who asked, how
-many requests are still being waited for, and "Call it off". That part asks for itself again
-every three seconds, and only while something is on its way, so that it never unticks a box
-someone has just ticked. If systemd refused, the card says so in systemd's words.
-
-A card, **Services**, lists the openWeightGym services and the third-party services selected under
-Settings → WeightRoom, root's ones marked as such: whether each is running, since when,
-how often it has had to be started again, and its memory. The choices are Ollama, Docker,
-Apache and Nginx; Ollama and Docker begin selected. Unchecked services are not queried by the
-Machine page. For those with `restart-services`
-there are Restart, Stop and Start behind a tick box, and "What it printed", which leads to
-the Output page for that service. Under the table is a way to what the kernel said about the
-cards and about memory. Section 23 describes that page.
-
-**When LoadCoach is down and the machine is up**, a sign-in from before still counts, because
-`spotter` reads the same users and says whose key it is. A fresh sign-in is checked by
-`spotter` and lands on the Machine page. That is the page LoadCoach is started again from.
-Only when `spotter` is silent too does `weightroom` fall back to its own small copy.
-
-Times are shown in the zone named by `timezone` in `settings/weightroom.toml`. Without it they are in the
-front machine's own zone, which on `k-srv` is not the owner's.
-
-In `app.py`: `ask_spotter`, `strip_piece`, `machine`, `act_on_service`, `power_action`,
-`wake_compute`, `choose_display`, and
-`chart` and `worded`, which turn a list of numbers into a line and a number into words.
+When LoadCoach is down but Spotter is answering, signed-in operators can still use Telemetry to
+start compute again. `ask_spotter`, `physical_host_controls`, `act_on_service` and `power_action`
+retain the existing authenticated path; physical-host identity is verified before Telemetry actions.
 
 ### The Files pages
 
@@ -4189,8 +4137,8 @@ HTTP 200; the active user-service process predates the deployment backup, confir
 restart during delivery. These live checks verify delivery, while
 the interaction checks used isolated apps in Chromium.
 
-Two things follow from pieces being put in after the page was loaded. `charts.js` draws the
-charts again when fresh ones arrive, and lets go of the old. `benchmarks.js` finds the tick
+Two things follow from pieces being put in after the page was loaded. `telemetry-workspace.js` redraws
+charts when fresh readings arrive and disposes of the old charts. `benchmarks.js` finds the tick
 boxes each time they are used, not once when the page opens. And htmx keeps no copy of a page
 for the Back button, which one line in `frame.html` tells it: going back loads the page again,
 so nothing that was on a page is left in the browser's store.
@@ -4204,7 +4152,7 @@ A table wider than a phone scrolls inside its own box. The page itself never scr
 | `echarts.min.js` | Apache ECharts 6.1.0, as fetched: 1,121,883 bytes. Not ours. Loaded only by a page that has charts |
 | `style.css` | Console layout and shared form styling |
 | `sort.js` | Sorting tables, and finding rows in one as you type, about seventy lines |
-| `charts.js` | Telling ECharts what to draw, about sixty lines |
+| `telemetry-workspace.js` | Physical-host graphs, selection, zoom and refreshed readings |
 | `pieces.js` | What to do with the page that comes back when a form changes one piece, about twenty lines |
 
 ### In `app.py`
@@ -4227,7 +4175,7 @@ A table wider than a phone scrolls inside its own box. The page itself never scr
 
 [`settings/examples/weightroom.toml`](../settings/examples/weightroom.toml) explains each key: `host`, `port`
 (`8440`), `compute` (LoadCoach's address), `key_file`, `data`, `spotter` (its address; left
-out, there is no strip and no Machine page), `timezone`, `wake_mac` and `wake_address` (for
+out, primary service/power controls and system logs are unavailable), `timezone`, `wake_mac` and `wake_address` (for
 waking compute; `turnstile` reads them too), and `secure`, which is set once HTTPS is in use so
 that the cookie travels only that way. The `[turnstile]` part of the file is `turnstile`'s own.
 
@@ -4301,9 +4249,8 @@ copy. Nothing a person types is run as HTML. A form from another site is refused
 | How a table is sorted is forgotten when the page is left or reloaded |
 | Which cards are open is not remembered either |
 | `sort.js` has no automated test. It was checked by hand in a browser |
-| `charts.js` has no automated test either. The tests check what the page hands it, not what it draws |
 | Only line charts so far. Bars, pies, box plots and heat maps are in ECharts, but nothing here asks for them yet |
-| Without JavaScript a chart is its words alone: newest, least and most |
+| Without JavaScript, Telemetry shows current readings; interactive graphs require JavaScript |
 | The log is narrowed by exact words. There is no search inside "More", and no span of time to choose |
 | The log page shows facts only. The text kept in the log itself, of sensitive work, is still read with `loadcoach log --text` |
 | What a request sent is shown as plain text. Markdown is not formatted |
@@ -5239,7 +5186,7 @@ Nothing is hidden beyond what is listed above. These remain:
 - **`turnstile` on the front machine,** if the request came through it, notes that the key was
   used that day. It notes the key's hash, never the key or the request.
 - **The ToolLocker is separate.** A tool called there by the same harness is logged there.
-- **The telemetry.** A busy card shows on the Machine page's charts.
+- **The telemetry.** A busy card shows on Telemetry's charts.
 
 ### In the code
 
@@ -5322,14 +5269,14 @@ Under the facts are ways on from that moment:
 - **What LoadCoach printed around then**, and **what the kernel said about the cards and
   memory**. Both go to the Output page with the moment filled in. Only for someone who may
   act on services, and only where `spotter` is set up.
-- **The machine in the half hour before**: the Machine page's charts ending at that moment,
+- **The machine in the half hour before**: the recorded physical host's Telemetry charts ending at that moment,
   where a card filling up shows.
 
 ### The Output page
 
 `/output` shows lines that a program on compute printed, as the journal holds them. It is one
-page for every source, reached from the Machine page ("What it printed" beside each service)
-and from a log entry. Its service choices follow the same WeightRoom checkboxes as Machine;
+page for every source, reached from Logs → System logs and the request/log diagnostic links
+and from a log entry. Its service choices follow the same WeightRoom checkboxes as Telemetry's compute controls;
 an unchecked third-party service is neither listed nor readable through a direct URL.
 
 | Box | Means |
@@ -5357,9 +5304,8 @@ since the machine last started. `journalctl` gives lines picked out with `-g` ne
 `spotter` turns those round: everything on the page is oldest first. No service can be named
 `kernel` in `settings/spotter.toml`.
 
-In `weightroom`: `output_page` is the handler and `output.html` the page. The Machine page
-used to show the last 200 lines of a service inside its Services card. That is gone: there is
-one view of what was printed, and it is this page. During compute outages it shows the last
+In `weightroom`: `output_page` is the handler and `output.html` the page. Service output has
+one view, on this page. During compute outages it shows the last
 successful snapshot for the same account and exact filters, with its fetch time. Snapshots
 are bounded to 32 selections in the front process and are cleared on restart; an uncached
 selection shows an offline empty state. Journal access is checked again on every visit.
@@ -5423,7 +5369,7 @@ model's output is shown as a table with a row for each line, as the Output page'
 | The answer is plain text, not formatted, and is not written as it comes |
 | How much is sent is a number of characters typed by hand. It is not filled in from the chosen model's context |
 | The marking was tried by hand in Chrome without a window, on three lines. Like the rest of `sort.js` it has no automated test |
-| Nothing reads `nvidia-smi` at the moment of a failure. The Machine page's charts show the cards over time |
+| Nothing reads `nvidia-smi` at the moment of a failure. Telemetry's charts show the cards over time |
 | The box that finds lines looks through the lines shown. It does not search the journal |
 
 ### Tests and what was checked
@@ -9610,7 +9556,7 @@ serialize chain appends with a table lock. The current hosts do not have
 
 Database P5 was implemented locally on 2026-10-13 after P0-P4. Accounts with `manage-settings`
 see the named-store health and backup-age panel on System → DB, directly below the Databases,
-Tables and On disk now summary cards. The Machine page shows service states from Spotter;
+Tables and On disk now summary cards. Telemetry shows service states from Spotter;
 storage checks use the configured store bindings independently on DB. Front store status remains
 visible there when compute is unreachable, and a Spotter failure does not prevent storage
 reporting when authentication is available.

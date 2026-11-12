@@ -146,7 +146,7 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8440
     secure: bool = False  # set true once it is served over HTTPS: the cookie then travels only that way
-    spotter: str = ""  # spotter's address on compute, such as http://10.77.10.84:8444. Empty: no telemetry, no Machine page. Asked through turnstile
+    spotter: str = ""  # spotter's address on compute, such as http://10.77.10.84:8444. Empty: primary service/power controls and logs unavailable. Asked through turnstile
     chat_model_url: str = ""  # model door for web chat; turnstile on this machine unless said
     toollocker: str = ""  # MCP service base URL; empty uses turnstile on this machine, port 8443
     front_toollocker: bool = False  # derived from Turnstile routing for recovery ownership
@@ -287,13 +287,12 @@ def current_batch_jobs(now: dict, person: Person, worker, store) -> list[dict]:
 
 
 def chart(name: str, values: list, top: float | None = None) -> dict:
-    """What a line chart of one series needs: its lowest, highest and newest in words, and `told`, which the browser draws from.
+    """Prepare the scaled samples, units and heat range used by Telemetry charts.
 
     A step with no reading stays None; the browser bridges missing samples without inventing a value.
     `heat` is the pair of values at which the line is fully green and fully red. Without one, the line is one colour.
     """
-    known = [value for value in values if value is not None]
-    if not known:
+    if not any(value is not None for value in values):
         return {"name": name, "told": None}
     sizes = "memory" in name or name.startswith("free on")
     per = 2**30 if sizes else 1  # a size is drawn in GB, so that the marks up the side fall on whole ones
@@ -306,7 +305,7 @@ def chart(name: str, values: list, top: float | None = None) -> dict:
         heat = [0, top] if top else None
     unit = " GB" if sizes else "\u00b0" if "temperature" in name else " W" if "power" in name else "%"
     told = {"values": [None if value is None else round(value / per, 2) for value in values], "unit": unit, "top": top, "heat": heat}
-    return {"name": name, "told": told, "low": worded(name, min(known)), "high": worded(name, max(known)), "last": worded(name, known[-1])}
+    return {"name": name, "told": told}
 
 
 def size(count: int | None) -> str:
@@ -885,7 +884,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if template == 'refused.html' and status >= 500:
             context = getattr(request.state, 'observation', None)
             error_request_id = context.root.request_id if context else uuid.uuid4().hex
-        response = pages.TemplateResponse(request, template, {"person": person, "compute": compute, "strip": strip, "machine_page": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, **more}, status_code=status)
+        response = pages.TemplateResponse(request, template, {"person": person, "compute": compute, "strip": strip, "spotter_available": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, **more}, status_code=status)
         if error_request_id:
             response.headers['x-request-id'] = error_request_id
         response.headers['cache-control'] = 'no-store'
@@ -4659,9 +4658,34 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         said = (f"Asked {name} to wake." if answer.is_success else answer.json()["error"]["message"])
         return go(destination + "?" + ("" if answer.is_success else "failed=1&") + "said=" + quote(said))
 
+    async def physical_host_controls(person: Person, fingerprint: str) -> tuple[dict | None, str]:
+        """Read compute's service/power controls only for its verified physical host."""
+        try:
+            answer = await ask_spotter('GET', '/spotter/now', person.key,
+                                       params={'system_services': ','.join(settings.third_party_services)}, timeout=5)
+        except MachineOff:
+            return None, 'Service and power controls are unavailable while Spotter is not answering.'
+        if answer.status_code != 200:
+            return None, 'Service and power controls are unavailable for this account.'
+        now = answer.json()
+        if now.get('machine_fingerprint') != fingerprint:
+            return None, 'Service and power controls could not verify this physical host. Refresh its inventory.'
+        return now, ''
+
+    def machine_action_destination(form):
+        """Keep control outcomes on a local Telemetry page."""
+        destination = form.get('return_to', '')
+        match = re.fullmatch(r'/telemetry/([0-9a-f]{64})(?:\?[^\r\n#]*)?', destination)
+        return (destination, match[1]) if match else ('/telemetry', '')
+
+    def machine_action_result(destination, message, *, failed=False):
+        """Append an action result without discarding the selected host or graph range."""
+        return go(destination + ('&' if '?' in destination else '?') +
+                  ('failed=1&' if failed else '') + 'said=' + quote(message))
+
     async def telemetry_workspace_page(request: Request, person: Person) -> Response:
         """One physical-host workspace, with bounded history only for the selected host."""
-        from weightroom.telemetry_workspace import hosts_view, fleet_summary, history_groups
+        from weightroom.telemetry_workspace import hosts_view, fleet_summary, history_groups, number, service_states
         found = await fetch(request, person, "/turnstile/machines")
         if isinstance(found, Response):
             return found
@@ -4698,9 +4722,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                       "identity": identity or "", "hours": hours, "until": asked.get("until", ""),
                       "initial_group": 'gpu-' + asked['gpu'] if asked.get('gpu', '').isdigit() else 'processor'}
         template = "telemetry_workspace.html" if asked.get("part") == "workspace" else "telemetry_host.html" if host else "machines.html"
+        machine_controls, controls_error = None, ''
+        if host and 'compute' in host['machines'] and host.get('fingerprint'):
+            machine_controls, controls_error = await physical_host_controls(person, host['fingerprint'])
+            if machine_controls:
+                uptime = number(machine_controls.get('up_for'))
+                host['uptime'] = uptime if uptime is not None and uptime >= 0 else None
+                host['services'] = service_states(machine_controls.get('services'), True)
+        control_return_to = host['href'] + ('?' + urlencode(query) if query else '') if host else ''
         return page(request, template, person, hosts=hosts, host=host, summary=summary, graph_data=graph_data,
                     poll=poll, hours=hours, until=asked.get("until", ""), refresh_url=refresh_url,
-                    history_error=history_error, snapshot_at=time.time())
+                    history_error=history_error, snapshot_at=time.time(), machine_controls=machine_controls,
+                    controls_error=controls_error, control_return_to=control_return_to)
 
     async def machines_page(request: Request, person: Person) -> Response:
         """Open the fleet grid without automatically selecting a host."""
@@ -4770,83 +4803,43 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         row.update(installed=True, state="running", detail="running without a systemd unit")
         return page(request, "components_content.html" if part else "components.html", person, found=found, deferred=False)
 
-    async def machine(request: Request, person: Person) -> Response:
-        """The machine: its telemetry over a stretch of time as small charts, and its services."""
-        asked = request.query_params
-        try:
-            seconds = max(float(asked.get("hours") or 1) * 3600, 60)
-            until = datetime.fromisoformat(asked["until"]).replace(tzinfo=zone).timestamp() if asked.get("until") else time.time()
-        except ValueError:
-            seconds, until = 3600, time.time()
-        try:
-            answer = await ask_spotter("GET", "/spotter/now", person.key, params={"system_services": ",".join(settings.third_party_services)})
-            if answer.status_code != 200:
-                return page(request, "refused.html", person, status=answer.status_code, why=answer.json()["error"]["message"])
-            now = answer.json()
-            if asked.get("part") == "power":  # what is on its way, asking for itself again while something is
-                return page(request, "power_now.html", person, now=now)
-            past = (await ask_spotter("GET", "/spotter/history", person.key, params={"end": until, "seconds": seconds, "points": 240})).json()
-        except MachineOff:
-            why = "spotter, the helper on compute, is not answering. Either the machine is off, or spotter is not running on it."
-            if "manage-settings" in person.can:
-                return page(request, "machine_unavailable.html", person, status=503, why=why)
-            return page(request, "refused.html", person, status=503, why=why)
-        # The most each reading can be, where that is known, so a chart shows how near the top it is.
-        tops = {"memory used": now["memory"]["total"], "processor load": 100}
-        for card in now["cards"]:
-            tops |= {f"GPU {card['card']} memory used": card["memory_total"], f"GPU {card['card']} load": 100, f"GPU {card['card']} fan": 100,
-                     f"GPU {card['card']} power": card.get("power_limit")}  # fmt: skip
-        tops |= {f"free on {disk['path']}": disk["total"] for disk in now["disks"]}
-
-        def group(name: str) -> str:
-            """The heading a chart goes under. Each GPU has its own, so two cards never share a row."""
-            return " ".join(name.split()[:2]) if name.startswith("GPU") else "Storage" if name.startswith("free on") else "Processor and memory"
-
-        def place(name: str) -> tuple:
-            """Where a chart goes: the cards first, each in the same order of readings, then the processor and the memory, then the drives."""
-            readings = ("memory used", "load", "temperature", "power", "fan")
-            what = next((at for at, reading in enumerate(readings) if name.endswith(reading)), 9)
-            return (0, name.split()[1], what) if name.startswith("GPU") else (2, name, 0) if name.startswith("free on") else (1, name.startswith("memory"), what)
-
-        groups = []
-        for name in sorted(past["series"], key=place):
-            if not groups or groups[-1]["title"] != group(name):
-                groups.append({"title": group(name), "charts": []})
-            short = name.removeprefix(group(name) + " ")  # under the heading "GPU 0", "GPU 0 load" is just "Load"
-            groups[-1]["charts"].append(chart(name, past["series"][name], tops.get(name)) | {"title": short[0].upper() + short[1:]})
-        # When each step begins, in words. The charts share them, so they are sent once.
-        said = "%H:%M" if seconds <= 86400 else "%d %b %H:%M"
-        times = [datetime.fromtimestamp(past["begin"] + past["step"] * step, zone).strftime(said) for step in range(len(next(iter(past["series"].values()), [])))]
-        return page(request, "machine.html", person, now=now, groups=groups, times=times, step=past["step"], begin=past["begin"], end=past["end"], hours=seconds / 3600,
-                    until=asked.get("until", ""), said=asked.get("said", ""), failed="failed" in asked, opened=asked.get("open", ""))  # fmt: skip
-
     async def act_on_service(request: Request, person: Person) -> Response:
         """Start, stop or restart a service on compute. spotter decides whether this person may, and does it."""
         name, action = request.path_params["name"], request.path_params["action"]
+        destination, fingerprint = machine_action_destination(await typed(request))
+        if fingerprint:
+            _, why = await physical_host_controls(person, fingerprint)
+            if why:
+                return machine_action_result(destination, why, failed=True)
         if name in THIRD_PARTY_NAMES and name not in settings.third_party_services:
-            return go("/machine?failed=1&said=" + quote(f"{name} is not selected under WeightRoom settings."))
+            return machine_action_result(destination, f"{name} is not selected under WeightRoom settings.", failed=True)
         try:
             answer = await ask_spotter("POST", f"/spotter/services/{quote(name, safe='')}/{quote(action, safe='')}", person.key)
         except MachineOff:
-            return go("/machine?failed=1&said=" + quote("spotter is not answering."))
+            return machine_action_result(destination, 'spotter is not answering.', failed=True)
         if answer.status_code != 200:
-            return go("/machine?failed=1&said=" + quote(answer.json()["error"]["message"]))
-        return go("/machine?said=" + quote(f"Asked {name} to {action}. It is now {answer.json()['state']}."))
+            return machine_action_result(destination, answer.json()['error']['message'], failed=True)
+        return machine_action_result(destination, f"Asked {name} to {action}. It is now {answer.json()['state']}.")
 
     async def power_action(request: Request, person: Person) -> Response:
         """Put compute to sleep, restart it, switch it off, or call that off. spotter decides whether this person may, and does it."""
         action, form = request.path_params["action"], await typed(request)
+        destination, fingerprint = machine_action_destination(form)
+        if fingerprint:
+            _, why = await physical_host_controls(person, fingerprint)
+            if why:
+                return machine_action_result(destination, why, failed=True)
         try:
             answer = await ask_spotter("POST", f"/spotter/power/{quote(action, safe='')}", person.key, json={"force": "force" in form})
         except MachineOff:
-            return go("/machine?open=power&failed=1&said=" + quote("spotter is not answering."))
+            return machine_action_result(destination, 'spotter is not answering.', failed=True)
         if answer.status_code not in (200, 202):
-            return go("/machine?open=power&failed=1&said=" + quote(answer.json()["error"]["message"]))
+            return machine_action_result(destination, answer.json()['error']['message'], failed=True)
         doing = {"sleep": "go to sleep", "reboot": "restart", "off": "switch off"}.get(action)
         if not doing:
-            return go("/machine?open=power&said=" + quote("Called off. LoadCoach takes requests again."))
+            return machine_action_result(destination, 'Called off. LoadCoach takes requests again.')
         how = "now, whatever LoadCoach is doing" if "force" in form else "once LoadCoach has finished what it has. Until then it takes no new requests"
-        return go("/machine?open=power&said=" + quote(f"Compute will {doing} {how}."))
+        return machine_action_result(destination, f"Compute will {doing} {how}.")
 
     async def choose_display(request: Request, person: Person) -> Response:
         """Keep what someone chose about how things are shown to them. A tick box that is not ticked is simply not sent."""
@@ -5206,7 +5199,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route("/models/{name:path}", change_model, "POST"),
             Route("/strip", for_people(strip_piece)),
             Route("/strip/stream", for_people(strip_stream)),
-            route("/machine", machine),
             route("/machines", machines_page),
             route("/telemetry", machines_page),
             route("/telemetry/{fingerprint}", telemetry_host),

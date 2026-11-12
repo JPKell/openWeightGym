@@ -47,6 +47,18 @@ def test_initial_grid_represents_every_gpu_once(preview):
     assert page.locator('#graph-grid .tw-plot').count() == 0
 
 
+def test_uptime_and_installed_service_pills_follow_the_selected_host(preview):
+    page = preview
+    page.get_by_role('button', name='Inspect atlas GPU 0', exact=True).click()
+    playwright.expect(page.locator('#host-uptime-value')).to_have_text('2d 3h 12m')
+    playwright.expect(page.locator('#host-services [data-service="loadcoach"]')).to_have_text('loadcoach · Running')
+    playwright.expect(page.locator('#host-services [data-service="voice"]')).to_have_text('voice · Stopped')
+    page.locator('#all-hosts').click()
+    page.get_by_role('button', name='Inspect nova GPU 0', exact=True).click()
+    playwright.expect(page.locator('#host-uptime-value')).to_have_text('Unknown')
+    playwright.expect(page.locator('#host-services [data-service="loadcoach"]')).to_have_text('loadcoach · Unknown')
+
+
 def test_gpu_drilldown_tabs_and_comparison_keep_devices_distinct(preview):
     page = preview
     page.get_by_role('button', name='Inspect orion GPU 1', exact=True).click()

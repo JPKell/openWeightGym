@@ -57,7 +57,6 @@
 - [ ] Status
 - [ ] Telemetry
 - [ ] Physical host telemetry
-- [ ] Machine
 - [ ] Components
 - [ ] Voice
 - [ ] Alerts

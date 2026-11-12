@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from test_weightroom import desk, sign_in  # noqa: F401
+from test_weightroom import desk, desk_with_machine, sign_in  # noqa: F401
 from weightroom.app import chart
 from weightroom.telemetry_workspace import fleet_summary, history_groups, hosts_view
 
@@ -22,7 +22,10 @@ def fleet(monkeypatch):
     gpu = lambda slot: dict(card=slot, model=f'GPU card {slot}', memory_used=(slot + 1) * 2**30,
                             memory_total=8 * 2**30, load=0 if slot == 0 else 90, temperature=40 + slot * 20,
                             power=20 + slot * 40, power_limit=200, fan=None if slot == 2 else 0)
-    snapshot = dict(cards=[gpu(0), gpu(2)], processor={'load': 35, 'temperature': 65},
+    snapshot = dict(cards=[gpu(0), gpu(2)], processor={'load': 35, 'temperature': 65}, up_for=90061,
+                    services=[{'name': name, 'unit': name + '.service', 'state': state, 'installed': installed}
+                              for name, state, installed in [('loadcoach', 'active', True), ('voice', 'inactive', True),
+                                                             ('spotter', 'failed', True), ('missing', 'inactive', False)]],
                     memory={'used': 12 * 2**30, 'total': 32 * 2**30},
                     disks=[{'path': '/models', 'free': 60 * 2**30, 'total': 100 * 2**30}])
     base = dict(fingerprint=HOST, hostname='atlas', machines=['compute', 'front_cpu'], state='ready',
@@ -61,6 +64,132 @@ def payload(response):
     return json.loads(re.search(r'<script id="telemetry-history" type="application/json">(.*?)</script>', response.text, re.S)[1])
 
 
+def test_retired_machine_page_and_chart_asset_are_gone(telemetry_server):
+    server, _, _ = telemetry_server
+    for path in ('/machine', '/machine?part=power', '/static/charts.js'):
+        assert server.get(path).status_code == 404, path
+    assert server.get('/telemetry').status_code == 200
+
+
+def test_chart_samples_keep_gaps_units_and_temperature_thresholds():
+    temperature = chart('GPU 0 temperature', [40, None, 50, 70])['told']
+    assert temperature == {'values': [40, None, 50, 70], 'unit': '°', 'top': None, 'heat': [45, 85]}
+    assert chart('GPU 0 load', [None, None])['told'] is None
+    assert chart('processor temperature', [50])['told']['heat'] == [45, 90]
+    assert chart('memory used', [2**30], top=2**31)['told'] == {
+        'values': [1.0], 'unit': ' GB', 'top': 2.0, 'heat': [0, 2.0]}
+    assert chart('free on /', [2**30], top=2**32)['told']['heat'] == [4.0, 0]
+    assert chart('GPU 1 power', [50])['told']['heat'] is None
+    assert chart('GPU 1 power', [50], top=180)['told']['heat'] == [0, 180]
+
+
+@pytest.mark.parametrize('zone,hour', [('America/Vancouver', '05:00'), ('Asia/Tokyo', '21:00')])
+def test_live_telemetry_chart_uses_browser_zone_and_utc_tooltips(telemetry_server, zone, hour):
+    from datetime import datetime
+    from front_helpers import serve_browser_request
+    from test_console_browser import playwright
+    server, _, _ = telemetry_server
+    instant = datetime.fromisoformat('2026-10-30T12:00:00+00:00').timestamp() * 1000
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(headless=True, args=['--disable-gpu'])
+        context = browser.new_context(timezone_id=zone, locale='en-GB')
+        context.route('http://console.test/**', lambda route: serve_browser_request(server, 'http://console.test', route))
+        page = context.new_page()
+        page.goto('http://console.test/telemetry/' + HOST)
+        tooltip = page.evaluate('''at => {
+            const chart = echarts.getInstanceByDom(document.querySelector('#graph-grid .tw-plot'));
+            return chart.getOption().tooltip[0].formatter([{value:[at,5], seriesName:'Processor load'}]);
+        }''', instant)
+        assert hour in tooltip and '12:00' in tooltip and 'UTC' in tooltip and '5%' in tooltip
+        assert zone in page.locator('#chart-context').inner_text()
+        browser.close()
+
+
+@pytest.fixture
+def control_server(fleet, desk_with_machine, monkeypatch):
+    monkeypatch.setattr('loadcoach.machine_identity.fingerprint', lambda: HOST)
+    rows, _ = fleet
+    rows[0]['loaded'] = [{'model': 'test-model', 'machine': 'compute', 'state': 'ready'}]
+    server, compute, machine, users, asked = desk_with_machine
+    users.change('jordan', own={'add': ['front-wake']})
+    sign_in(server, 'jordan')
+    return server, compute, machine, asked
+
+
+def test_host_controls_and_models_are_in_the_inventory_column(control_server):
+    server, _, _, _ = control_server
+    response = server.get('/telemetry/' + HOST + '?hours=6&gpu=2')
+    assert response.status_code == 200
+    column = response.text.split('<aside class="tw-inventory"', 1)[1].split('</aside>', 1)[0]
+    assert column.index('test-model') < column.index('>Device capacity</h2>')
+    assert 'Wake compute' in column and 'Restart loadcoach' in column and '>Sleep</button>' in column
+    assert 'Services and power' not in response.text and 'Compute service and power controls' not in response.text
+    assert f'name="return_to" value="/telemetry/{HOST}?hours=6&amp;gpu=2"' in column
+    assert 'data-hold-refresh' in column
+    sign_in(server, 'pat')
+    restricted = server.get('/telemetry/' + HOST).text
+    assert 'test-model' in restricted and 'Restart loadcoach' not in restricted and '>Sleep</button>' not in restricted
+    assert 'loadcoach · Running' in restricted and 'id="host-uptime"' in restricted
+
+
+def test_host_actions_return_to_telemetry_and_refuse_another_physical_host(control_server):
+    server, _, _, asked = control_server
+    destination = '/telemetry/' + HOST + '?hours=6&gpu=2'
+    done = server.post('/machine/services/loadcoach/restart', data={'return_to': destination}, follow_redirects=False)
+    assert done.status_code == 303 and done.headers['location'].startswith(destination + '&said=')
+    assert '--user restart loadcoach.service' in asked.read_text()
+    before = asked.read_text().count('--user restart loadcoach.service')
+    refused = server.post('/machine/services/loadcoach/restart',
+                          data={'return_to': '/telemetry/' + 'b' * 64}, follow_redirects=False)
+    assert refused.status_code == 400 and 'could not verify this physical host' in refused.text
+    assert asked.read_text().count('--user restart loadcoach.service') == before
+    sign_in(server, 'pat')
+    denied = server.post('/machine/services/loadcoach/restart', data={'return_to': destination})
+    assert denied.status_code == 400 and 'may not' in denied.text and 'id="telemetry-workspace"' in denied.text
+    assert asked.read_text().count('--user restart loadcoach.service') == before
+
+
+def test_host_power_and_spotter_failure_stay_on_the_selected_host(control_server):
+    server, compute, machine, asked = control_server
+    destination = '/telemetry/' + HOST
+    wrong_host = server.post('/machine/power/off', data={'return_to': '/telemetry/' + 'b' * 64}, follow_redirects=False)
+    assert wrong_host.status_code == 400 and 'could not verify this physical host' in wrong_host.text
+    assert 'poweroff' not in asked.read_text()
+    compute.off = True
+    assert 'Restart loadcoach' in server.get(destination).text
+    result = server.post('/machine/power/sleep', data={'return_to': destination, 'force': 'on'}, follow_redirects=False)
+    assert result.status_code == 303 and result.headers['location'].startswith(destination + '?said=')
+    machine.off = True
+    unavailable = server.get(destination)
+    assert unavailable.status_code == 200 and 'Spotter is not answering' in unavailable.text
+    assert 'Restart loadcoach' not in unavailable.text and 'test-model' in unavailable.text
+
+
+def test_host_controls_fit_and_preserve_confirmation_during_refresh(control_server):
+    from test_console_browser import browser_context, playwright
+    server, _, _, _ = control_server
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/telemetry/' + HOST)
+        column = page.locator('.tw-inventory')
+        playwright.expect(column.get_by_role('button', name='Restart loadcoach', exact=True)).to_be_visible()
+        assert column.locator('.host-models').bounding_box()['y'] < column.get_by_role('heading', name='Device capacity').bounding_box()['y']
+        force = column.get_by_label('Do not wait. Cut off whatever the compute service is answering', exact=True)
+        force.check()
+        assert page.evaluate("""() => {
+            const root = document.querySelector('#telemetry-workspace');
+            const event = new CustomEvent('htmx:beforeRequest', {cancelable:true, bubbles:true,
+                detail:{target:root, requestConfig:{elt:root, verb:'get'}}});
+            root.dispatchEvent(event);
+            return event.defaultPrevented;
+        }""")
+        playwright.expect(force).to_be_checked()
+        for width in (1440, 1024, 390, 320):
+            page.set_viewport_size({'width': width, 'height': 1000})
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), width
+        browser.close()
+
+
 def test_inventory_freshness_zero_and_unknown_are_distinct(fleet):
     rows, _ = fleet
     views = hosts_view(rows, 10)
@@ -68,6 +197,10 @@ def test_inventory_freshness_zero_and_unknown_are_distinct(fleet):
     offline = next(host for host in views if host['hostname'] == 'offline')
     assert [gpu['card'] for gpu in online['gpus']] == [0, 2]
     assert online['gpus'][0]['load'] == 0
+    assert online['uptime'] == 90061
+    assert [(service['name'], service['label']) for service in online['services']] == [
+        ('loadcoach', 'Running'), ('voice', 'Stopped'), ('spotter', 'Failed')]
+    assert offline['uptime'] is None and all(service['label'] == 'Unknown' for service in offline['services'])
     assert offline['cpu'] is None and offline['gpus'][0]['memory_used'] is None
     assert offline['gpus'][0]['memory_total'] == 8 * 2**30
     summary = fleet_summary(views)
@@ -75,6 +208,28 @@ def test_inventory_freshness_zero_and_unknown_are_distinct(fleet):
     assert rows[1]['telemetry']['cards'][0]['memory_used'] == 2**30  # presentation never mutates cached telemetry
     stale = hosts_view([{**rows[0], 'age': 31}], 10)[0]
     assert not stale['fresh'] and stale['label'] == 'Stale' and stale['cpu'] is None
+
+
+@pytest.mark.parametrize('uptime', [None, -1, float('nan'), float('inf'), '90061'])
+def test_unknown_uptime_and_legacy_service_evidence_stay_unknown(fleet, uptime):
+    rows, _ = fleet
+    rows[0]['telemetry']['up_for'] = uptime
+    rows[0]['telemetry']['services'] = [{'name': 'old-worker', 'state': 'inactive'},
+                                      {'name': 'old-running-worker', 'state': 'active'},
+                                      {'name': 'one-shot', 'state': 'active', 'detail': 'exited', 'installed': True}]
+    host = hosts_view(rows, 10)[0]
+    assert host['uptime'] is None
+    assert [service['label'] for service in host['services']] == ['Unknown', 'Running', 'Not running']
+
+
+def test_telemetry_renders_read_only_uptime_and_service_states(telemetry_server):
+    server, _, _ = telemetry_server
+    detail = server.get('/telemetry/' + HOST).text
+    assert 'Uptime <strong>1d 1h 1m</strong>' in detail
+    assert 'loadcoach · Running' in detail and 'voice · Stopped' in detail and 'spotter · Failed' in detail
+    assert 'data-service="missing"' not in detail and 'Restart loadcoach' not in detail
+    offline = server.get('/telemetry/' + 'b' * 64).text
+    assert 'Uptime <strong>Unknown</strong>' in offline and 'loadcoach · Unknown' in offline
 
 
 def test_history_only_devices_and_heat_thresholds(fleet):

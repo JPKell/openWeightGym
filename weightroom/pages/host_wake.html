@@ -7,4 +7,4 @@
 {% endfor %}
 {% endif %}
 {% if host.disabled_nodes %}<p class="small text-warning" role="status">Disabled for new work: {{ host.disabled_nodes|join(', ') }}. Telemetry remains visible.</p>{% endif %}
-{% if host.state != 'ready' or host.models_unknown %}<p class="small text-warning" role="status">{{ host.hostname }}: {% if host.state != 'ready' %}node is not answering{% else %}the compute service is not answering{% endif %}. Live controls are unavailable; retained readings remain visible.</p>{% endif %}
+{% if host.state != 'ready' or host.models_unknown %}<p class="small text-warning" role="status">{{ host.hostname }}: {% if host.state != 'ready' %}node is not answering{% else %}the compute service is not answering{% endif %}. Current model status is unavailable; retained readings remain visible.</p>{% endif %}

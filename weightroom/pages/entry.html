@@ -19,10 +19,10 @@
 
 {# Where to look next: what was printed around that moment, and how the machine was doing. #}
 <p class="mb-4">
-  {% if "restart-services" in person.can and machine_page and entry.machine in (none, "compute") %}<a class="btn btn-outline-secondary btn-sm" href="/output?at={{ entry.at|urlencode }}">What LoadCoach printed around then</a>
+  {% if "restart-services" in person.can and spotter_available and entry.machine in (none, "compute") %}<a class="btn btn-outline-secondary btn-sm" href="/output?at={{ entry.at|urlencode }}">What LoadCoach printed around then</a>
   <a class="btn btn-outline-secondary btn-sm" href="/output?source=kernel&amp;at={{ entry.at|urlencode }}&amp;before=300&amp;after=60">What the kernel said about the cards and memory</a>{% endif %}
   {% if entry.machine_fingerprint %}<a class="btn btn-outline-secondary btn-sm" href="/telemetry/{{ entry.machine_fingerprint }}?until={{ entry.at|urlencode }}&amp;hours=0.5">The machine in the half hour before</a>
-  {% elif machine_page %}<a class="btn btn-outline-secondary btn-sm" href="/machine?until={{ entry.at|urlencode }}&amp;hours=0.5">The machine in the half hour before</a>{% endif %}
+  {% elif spotter_available %}<a class="btn btn-outline-secondary btn-sm" href="/telemetry">Host telemetry</a>{% endif %}
 </p>
 
 {% if entry.text and entry.text.output %}

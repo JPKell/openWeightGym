@@ -52,7 +52,7 @@ def navigation(path: str, can: list[str], machine: bool) -> dict:
     groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Components', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups'].index(link[0]))
     root = "/" + path.strip("/").split("/")[0]
     active = {"/": "/status", "/file": "/files", "/downloads": "/hub", "/measure-models": "/models", "/outside": "/cloud-apis",
-              "/control": "/status", "/ask": "/log", "/machine": "/telemetry", "/machines": "/telemetry"}.get(root, root)
+              "/control": "/status", "/ask": "/log", "/machines": "/telemetry"}.get(root, root)
     if path.rstrip("/") in ("/plugins/activity", "/voice/desktop", "/system/components"):
         active = path.rstrip("/")
     if root == "/benchmarks":
