@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
 {% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}{% if section in ('results','embedders') %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=4" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=4" defer></script>{% endif %}{% if section in ('runs', 'node-measurements') %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=8" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if section == 'results' %}<script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=5" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=4" defer></script>{% endif %}{% if section in ('runs', 'node-measurements') %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=8" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
 {% block page_class %}benchmark-page{% endblock %}
 {% from "parts.html" import card, said_box, page_header, alert %}
 {% block main %}
@@ -23,13 +23,6 @@
 {% elif section == 'detail' %}
 {% include "benchmark_regressions.html" %}
 {% include "benchmark_detail.html" %}
-{% elif section == 'embedders' %}
-<p class="text-secondary">Single-input embedding capacity, fresh-process loading and input throughput. Uses the shared benchmark queue and idle GPUs.</p>
-<div hx-get="/benchmarks/embedders?part=live" hx-trigger="every 2s" hx-swap="none" data-refresh-companions="#benchmark-embedder-active"></div>
-<div id="benchmark-embedder-active">{% if live %}{% include "benchmark_running_card.html" %}{% endif %}</div>
-{% include "benchmark_start.html" %}
-{% include "benchmark_resources.html" %}
-<a href="/benchmarks/compare?family=embedding">Compare embedders</a>
 {% elif section == 'runs' %}
 <div hx-get="/benchmarks/runs?{{ live_query }}" hx-trigger="every 2s" hx-swap="none" data-benchmark-poller data-refresh-companions="#benchmark-nodes, #benchmark-active, #benchmark-queue, #benchmark-history"></div>
 {% include 'benchmark_nodes.html' %}

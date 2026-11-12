@@ -11,6 +11,7 @@
 <div class="measurement-metric-toolbar mb-3">
 {% call pills('Resource benchmark', class_='gap-1 mb-0') %}{% for bench in resource_benchmarks %}{{ pill_link(bench.name, '/benchmarks/node-measurements?benchmark=' ~ bench.id ~ '&kind=' ~ kind ~ '#node-measurements', bench.id == resource_selected.id, attrs={'data-matrix-navigation':''}) }}{% endfor %}{% endcall %}
   <label class="d-flex align-items-center gap-2 small">Display<select class="form-select form-select-sm w-auto" data-matrix-display><option value="values">Measured values</option><option value="scores">Benchmark scores</option></select></label>
+{% if kind == 'embedding' %}<a href="/benchmarks/compare?family=embedding" class="small">Compare embedders</a>{% endif %}
 </div>
 {% call card('Recorded measurements', key='benchmark-resources', body_class='p-0', actions='<span class="small text-secondary" data-matrix-count></span>'|safe) %}
 <div id="benchmark-resource-table" class="measurement-table-scroll" role="region" aria-label="Scrollable fleet measurements" tabindex="0"><table class="table table-hover align-middle mb-0 measurement-table">

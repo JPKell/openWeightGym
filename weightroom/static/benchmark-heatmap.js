@@ -4,8 +4,6 @@
   const maps = [
     { table: "#benchmark-score-table table", chart: "benchmark-heatmap",
       scroll: "benchmark-heatmap-scroll", fallback: "benchmark-score-table" },
-    { table: "#benchmark-resource-table table", chart: "benchmark-resource-heatmap",
-      scroll: "benchmark-resource-heatmap-scroll", fallback: "benchmark-resource-table" },
   ];
 
   /** Render an interactive heatmap from the retained score table. */

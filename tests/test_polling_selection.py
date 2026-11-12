@@ -101,7 +101,6 @@ def test_selection_started_during_a_poll_response_is_not_replaced(desk_with_mach
     ('/files', '#files-adapters td', '#files-adapters'),
     ('/files', '#files-projectors td', '#files-projectors'),
     ('/files', '#downloads td', '#downloads'),
-    ('/benchmarks/embedders', '#benchmark-embedder-active td', '#benchmark-embedder-active > details'),
     ('/benchmarks/runs', '#benchmark-active td', '#benchmark-active'),
     ('/benchmarks/runs', '#benchmark-queue td', '#benchmark-queue'),
     ('/benchmarks/runs', '#benchmark-history td', '#benchmark-history'),

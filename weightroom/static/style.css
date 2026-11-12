@@ -297,7 +297,6 @@ html { scroll-padding-top: var(--top, 6rem); }
 .benchmark-facts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin: 0; }
 .benchmark-facts dt { color: var(--bs-secondary-color); font-size: .75rem; font-weight: 400; }
 .benchmark-facts dd { margin-top: .3rem; margin-bottom: 0; font-size: .85rem; overflow-wrap: anywhere; }
-.benchmark-picker { display: flex; gap: .6rem; align-items: center; justify-content: start; margin-bottom: .65rem; flex-wrap: wrap; }
 .check-column { width: 2rem; }
 .benchmark-live { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
 .benchmark-log { height: 16rem; overflow: auto; overscroll-behavior: contain; margin: 0; background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); padding: .8rem; font-size: .8rem; white-space: pre-wrap; }
@@ -345,7 +344,6 @@ html { scroll-padding-top: var(--top, 6rem); }
 
 /* Benchmark evidence stays dense while controls retain keyboard focus and touch targets. */
 
-.benchmark-picker select { width: min(100%, 20rem); }
 .benchmark-icon { padding: .12rem .35rem; min-width: 1.8rem; }
 .benchmark-unit, .comparison-table td.benchmark-unit { width: 1%; min-width: 0; white-space: nowrap; font-size: .7rem; color: var(--bs-secondary-color); }
 

@@ -198,8 +198,9 @@ GPU layer offload and do not update ordinary model memory calibration.
 Open **Benchmark → Node measurements → Embedders** for Context, Speed and Load time by
 compute node. Embedding models are identified by their configured `embedding` flag; the
 model-type pill selects the embedding suites and their units. Switching between LLM and
-Embedders retains the measurement type. **Benchmark → Embedders** still provides run setup.
-**Compare embedders** preserves that family across selection changes, and a model's
+Embedders retains the measurement type, and the run workspace below the matrix starts embedding runs.
+The retired `/benchmarks/embedders` address redirects there. That view's **Compare embedders** link opens
+Compare for embedding models and preserves that family across selection changes, and a model's
 benchmark pills follow its type. Runs/queue/history and Manage remain shared. Existing saved
 results are retained, including older generic load-only runs on embedding models; that API
 remains accepted. Start handlers and the worker independently reject other mismatched types.
@@ -543,7 +544,6 @@ not model quality. Production benchmark evidence and model rankings were not cha
 | `/benchmarks` | Redirects to Runs; older saved links containing a model/run still redirect to Results |
 | `/benchmarks/results` | Model quality scores and measurements, one row per model across compute nodes; resource tests live on Node measurements |
 | `/benchmarks/node-measurements` | Fleet matrix for LLM, Embedders, Image and Audio; compute nodes only, with measured values or benchmark scores |
-| `/benchmarks/embedders` | Embedding Context, Speed and Load time pills with compute nodes as columns |
 | `/benchmarks/runs` | Active run at the top, model selection, queue controls, logs, measurements and history; polls every two seconds |
 | `/benchmarks/compare` | Compare multiple models and saved fingerprint/engine/machine identities across multiple benchmarks |
 | `/benchmarks/manage` | Enable benchmarks, edit score formulas and select higher/lower values for green |

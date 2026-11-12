@@ -289,7 +289,7 @@ def test_front_owned_pages_remain_available_when_every_loadcoach_is_down(desk):
     switch.off = True
     paths = (
         "/", "/account", "/account/appearance", "/account/logs", "/chat", "/collections", "/workflows",
-        "/benchmarks", "/benchmarks/runs", "/benchmarks/embedders", "/benchmarks/results",
+        "/benchmarks", "/benchmarks/runs", "/benchmarks/node-measurements?kind=embedding", "/benchmarks/results",
         "/benchmarks/compare", "/benchmarks/manage", f"/benchmarks/run/{number}", "/usage", "/requests?completed=1", "/batches", "/log", "/reliability",
         "/status", "/telemetry", "/models", "/compute-nodes", "/chat/images", "/chat/music", "/chat/sounds", "/chat/speech", "/alerts", "/schedules", "/users", "/groups", "/tools",
         "/plugins", "/plugins/activity", "/backups", "/databases", "/settings", "/docs",

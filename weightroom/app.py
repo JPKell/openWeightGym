@@ -1502,7 +1502,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if section is None:
             target = 'results' if any(key in request.query_params for key in ("run", "model")) else 'runs'
             return go('/benchmarks/' + target + ('?' + str(request.query_params) if request.query_params else ''))
-        if section not in {"node-measurements", "embedders", "results", "runs", "compare", "manage", "detail"}:
+        if section == 'embedders':  # the retired Embedders page: its measurements and runs are Node measurements' Embedders type
+            return go('/benchmarks/node-measurements?kind=embedding')
+        if section not in {"node-measurements", "results", "runs", "compare", "manage", "detail"}:
             return Response("No such benchmark page.", status_code=404)
         if section == "manage" and "manage-settings" not in person.can:
             return page(request, "refused.html", person, status=403, why="Your account may not manage benchmark settings.")
@@ -1520,7 +1522,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             kind = 'llm'
         resource_ids = {'context', 'speed', 'load', 'embedding_context', 'embedding_speed', 'embedding_load'}
         embedding_ids = {bench['id'] for bench in definitions if bench.get('embedding')}
-        embedding_family = bool(section == 'embedders' or request.query_params.get('family') == 'embedding'
+        embedding_family = bool(request.query_params.get('family') == 'embedding'
                                 or section == 'node-measurements' and wanted.get('embedding'))
         if section == 'node-measurements':
             if 'kind' not in request.query_params and embedding_family:
@@ -1533,7 +1535,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         elif section == 'results':
             embedding_family = False
             models = [model for model in models if benchmark_model_kind(model) == 'llm']
-        if section in ('node-measurements', 'embedders', 'results', 'compare'):
+        if section in ('node-measurements', 'results', 'compare'):
             definitions = [bench for bench in definitions if bool(bench.get('embedding')) == bool(embedding_family)]
             models = [model for model in models if bool(model.get('embedding')) == bool(embedding_family)]
         if section == 'node-measurements':
@@ -1566,7 +1568,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 location_latest[key] = run
         inventory = {'machines': list(benchmark_inventory.values())}
         inventory_warning = ''
-        if section in ('runs', 'node-measurements', 'embedders'):
+        if section in ('runs', 'node-measurements'):
             try:
                 answer = await ask('GET', '/turnstile/machines', person.key)
                 if answer.is_success:
@@ -1582,41 +1584,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     inventory_warning = 'Node inventory could not be refreshed. Showing last known nodes and saved evidence.'
             except (ComputeOff, httpx.HTTPError):
                 inventory_warning = 'Node inventory could not be refreshed. Showing last known nodes and saved evidence.'
-        resource_nodes = []
-        for model in models:
-            places = model.get('locations', [])
-            locations = [place['machine'] for place in places if place.get('enabled', True)]
-            for location in locations if places else ['compute']:
-                if location not in resource_nodes:
-                    resource_nodes.append(location)
         visible_models = {model['id'] for model in models}
-        for run in runs:
-            if run.get('location') and run['model'] in visible_models and run['location'] not in resource_nodes:
-                resource_nodes.append(run['location'])
-        resource_results = {}
-        for model in models:
-            places = model.get('locations', [])
-            for bench in resource_benchmarks:
-                for location in resource_nodes:
-                    result = location_latest.get((model['id'], location, bench['id']))
-                    if not places and location == 'compute':
-                        result = result or latest.get(model['id'], {}).get(bench['id'])
-                    resource_results[(model['id'], location, bench['id'])] = result
-        resource_colours = {}
-        for bench in resource_benchmarks:
-            for location in resource_nodes:
-                values = [result['score'] for model in models
-                          if (result := resource_results.get((model['id'], location, bench['id'])))
-                          and result['score'] is not None]
-                for model in models:
-                    result = resource_results.get((model['id'], location, bench['id']))
-                    if not result or result['score'] is None or not values:
-                        continue
-                    fraction = (result['score'] - min(values)) / (max(values) - min(values)) if max(values) != min(values) else .5
-                    if bench.get('green') == 'low':
-                        fraction = 1 - fraction
-                    resource_colours[(model['id'], location, bench['id'])] = 'rgb(%d,%d,%d)' % tuple(
-                        round(a + fraction * (b-a)) for a,b in zip((223,134,57),(41,152,121)))
         colours = {}
         for bench in definitions:
             values = [item[bench['id']]['score'] for model, item in latest.items()
@@ -1687,33 +1655,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                        (run['quant'] != model['quant'] if history_filter == 'quants' else
                         run['quant'] == model['quant'] and run['fingerprint'] != model.get('fingerprint')) for model in variants)
         filtered_history = [run for run in history if matches(run)]
-        eligible_models = [model for model in models if bool(model.get('embedding')) == bool(selected.get('embedding'))
-                           and (model.get('capabilities', {}).get('native_probes') is not False
-                                or selected['id'] == 'load' and model.get('capabilities', {}).get('load_probes'))
-                           and (not model.get('capabilities', {}).get('load_probes') or selected['id'] == 'load')]
-        start_models = [{**model, 'capabilities': location.get('capabilities', model.get('capabilities', {})),
-                         'target': {'model': model['id'], 'machine': location['machine']},
-                         'result_key': (model['id'], location['machine'], selected['id']), 'location': location['machine']}
-                        for model in eligible_models for location in model.get('locations', []) if location.get('enabled', True)
-                        and (location.get('capabilities', model.get('capabilities', {})).get('native_probes') is not False
-                             or selected['id'] == 'load' and location.get('capabilities', model.get('capabilities', {})).get('load_probes'))]
-        start_models += [{**model, 'target': {'model': model['id'], 'machine': 'compute'}, 'result_key': None, 'location': 'compute'}
-                         for model in eligible_models if not model.get('locations')]
-        measurement_models = eligible_models if section == 'results' else start_models
-        preferred_node = request.query_params.get('machine', 'compute')
-        unavailable_nodes = catalogue.get('unavailable_machines', [])
-        start_nodes, start_rows = [], []
-        if selected['id'] in resource_ids:
-            for candidate in start_models:
-                node = candidate['location'] or 'compute'
-                if node not in start_nodes:
-                    start_nodes.append(node)
-            for model in eligible_models:
-                targets = {}
-                for candidate in start_models:
-                    if candidate['id'] == model['id']:
-                        targets[candidate['location'] or 'compute'] = candidate
-                start_rows.append({'model': model, 'targets': targets})
+        measurement_models = [model for model in models if bool(model.get('embedding')) == bool(selected.get('embedding'))
+                              and (model.get('capabilities', {}).get('native_probes') is not False
+                                   or selected['id'] == 'load' and model.get('capabilities', {}).get('load_probes'))
+                              and (not model.get('capabilities', {}).get('load_probes') or selected['id'] == 'load')]
         may_run = ('benchmark' in person.can or 'superuser' in person.can) and not found['compute_unavailable']
         lanes = run_lanes(catalogue, inventory, models, selected, runs, location_latest, latest, may_run)
         if section == 'node-measurements':
@@ -1732,19 +1677,17 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                                   'history_node': pagination['node'], 'outcome': pagination['outcome'], 'q': pagination['search']})
         live_query = (urlencode({'benchmark': selected['id'], 'kind': kind, 'part': 'live'}) if section == 'node-measurements'
                       else history_query + '&page=' + str(pagination['page']) + '&part=live')
-        return page(request, 'benchmark_live.html' if section in ('embedders', 'runs', 'node-measurements') and request.query_params.get('part') == 'live' else 'benchmarks.html', person,
+        return page(request, 'benchmark_live.html' if section in ('runs', 'node-measurements') and request.query_params.get('part') == 'live' else 'benchmarks.html', person,
                     section=section, benchmarks=definitions, benchmark=selected, models=models, selected_models=chosen,
                     comparisons=comparisons, columns=columns, history=filtered_history, history_filter=history_filter,
-                    selected_runs=selected_runs, detail=detail, start_models=start_models, queue=queue, pagination=pagination,
+                    selected_runs=selected_runs, detail=detail, queue=queue, pagination=pagination,
                     history_query=history_query, live_query=live_query,
                     lanes=lanes, run_models=run_model_rows(lanes), live_runs=live_runs, selected_target=(request.query_params.get('pick_model'), request.query_params.get('pick_node')),
                     regression=regression, regression_error=regression_error,
-                    latest=latest, location_latest=location_latest, measurement_models=measurement_models,
+                    latest=latest, measurement_models=measurement_models,
                     resource_benchmarks=resource_benchmarks, score_benchmarks=score_benchmarks,
                     score_models=[model for model in models if benchmark_model_kind(model) == 'llm' and not model.get('embedding')],
-                    resource_selected=resource_selected, resource_nodes=resource_nodes, resource_results=resource_results,
-                    resource_colours=resource_colours, matrix=matrix, inventory_warning=inventory_warning,
-                    start_nodes=start_nodes, start_rows=start_rows, preferred_node=preferred_node, preferred_nodes=sorted(set(resource_nodes) | set(unavailable_nodes) | {preferred_node}), resource_ids=resource_ids,
+                    resource_selected=resource_selected, matrix=matrix, inventory_warning=inventory_warning,
                     colours=colours, runs=runs, paused=found['paused'], live=live,
                     embedding_family=embedding_family, kind=kind, type_benchmarks=type_benchmarks,
                     may_run=may_run, catalogue_warning=catalogue_warning,
