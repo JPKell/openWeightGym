@@ -68,7 +68,7 @@ def fleet(tmp_path, request, backup_keys):
     transport = Fleet()
     machines = {name: {'compute': f'http://{name}:8442', 'machine_key_file': keys[name]} for name in names[1:]}
     front = deferred.app = build_turnstile(TurnstileSettings(compute='compute', data=str(data),
-        machine_key_file=keys['compute'], machines=machines, front_settings=True),
+        machine_key_file=keys['compute'], machines=machines, keep_console_settings_on_front=True),
         client=httpx.AsyncClient(transport=transport), users=users)
     application = build_app(Settings(compute='http://front:8442', data=str(data), key=users.new_key('panel')), door(front, 8442))
     with TestClient(application) as browser:

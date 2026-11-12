@@ -1019,7 +1019,7 @@ def test_voice_compute_requires_a_front_key_before_downloading_weights(tmp_path)
     support = support_module()
     (tmp_path / "settings").mkdir()
     (tmp_path / "settings/voice.toml").write_text('key_file = "../keys/voice-service.key"\n')
-    with pytest.raises(ValueError, match="front-owned service key"):
+    with pytest.raises(ValueError, match="service key the front issues"):
         support.prepare_voice(tmp_path, ["voice"], install_models=lambda *args, **kwargs: pytest.fail("unexpected download"))
 
 

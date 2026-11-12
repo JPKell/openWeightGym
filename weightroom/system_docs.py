@@ -266,7 +266,7 @@ def api_headers(relative: str, path: str, method: str) -> tuple[str, ...]:
     if path.startswith('/loadcoach/tasks/'):
         headers.append('X-LoadCoach-Task')
         if path.endswith('/probe') and method == 'POST':
-            headers.append('X-LoadCoach-Probe-ID (front-owned tasks)')
+            headers.append('X-LoadCoach-Probe-ID (benchmark tasks)')
     if path.endswith('/dispatch') and path.startswith('/loadcoach/schedules/'):
         headers.append('X-Suite-Schedule (internal scoped grant)')
     if path.startswith('/mcp'):

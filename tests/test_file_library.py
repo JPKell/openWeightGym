@@ -152,7 +152,7 @@ def library_desk(tmp_path, monkeypatch):
                                             machine_key_file=key, front="http://front:8442"), FakeHub({}).client(), door(later, 8442)))
     receiver = Switch(spotter.build_app(spotter.Settings(services={}, machine_key_file=key, database=database, places=places,
                                                          history=str(tmp_path / "spotter.db"), disks=(str(tmp_path),))))
-    front = later.app = turnstile_to(tmp_path, users, {8442: compute, 8444: receiver}, front_settings=True)
+    front = later.app = turnstile_to(tmp_path, users, {8442: compute, 8444: receiver}, keep_console_settings_on_front=True)
     compute.front = front
     settings = Settings(compute="http://compute", key=users.new_key("panel"), data=str(tmp_path / "data"))
     with TestClient(build_app(settings, door(front, 8442))) as browser:

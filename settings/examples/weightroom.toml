@@ -163,12 +163,10 @@ toollocker = ""
 [turnstile]
 host = "0.0.0.0"
 ports = [8442, 8443, 8444]
-# Front owns settings and the authenticated MCP gateway, even while compute is unavailable.
-front_settings = true
+# The front stores and serves the settings of its own programs (weightroom, turnstile, voice-gateway)
+# and the authenticated MCP gateway, even while compute is unavailable. (Formerly front_settings.)
+keep_console_settings_on_front = true
 toollocker_url = "http://127.0.0.1:9443"
-# DB1 switches, disabled until the coordinated migration gates pass. Existing front
-# task IDs retain front ownership even when front_tasks is disabled for rollback.
-# front_tasks = false
 # machine_key_file = "../keys/machine.key"
 # keep_days = 90
 # max_in_flight = 200

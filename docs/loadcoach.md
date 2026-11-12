@@ -4788,7 +4788,7 @@ alone. Projectors and settings remain location-specific and their fingerprints s
 `GET /turnstile/models` supplies the manage-page row with its complete location settings.
 The individual model page lists every location's node, local alias and model-file path immediately
 above Benchmark results. Its per-location
-switch is front-owned: disabling a copy excludes it from Turnstile placement without deleting the
+switch is kept on the front: disabling a copy excludes it from Turnstile placement without deleting the
 node's model configuration or file; enabling it makes the copy eligible again.
 
 **Front-side placement (milestone 116, deployed and live-qualified 2026-10-16).** When `[machines.NAME]`
@@ -6393,7 +6393,7 @@ and its nine files and included README verified; no production service was chang
 ## 26. Settings changed from the site
 
 Every program reads its settings from a TOML file of its own, once, when it starts. System →
-Settings shows front-owned programs. Settings → Compute nodes selects a named host and shows its
+Settings shows the programs whose settings the front keeps. Settings → Compute nodes selects a named host and shows its
 LoadCoach and Spotter settings in fixed, non-collapsible sections. Spotter settings are there
 because each instance reports and stores its own values. The owner asked for the original page
 on 2026-10-08 and split node ownership from it on 2026-10-17.
@@ -6855,7 +6855,7 @@ loadcoach downloads discard PATH                # remove one stopped/failed part
 ```
 
 These ask the local LoadCoach selected by `--config`, as `loadcoach status` does. To manage
-the Files page’s front-owned downloads, run them on the configured artifact worker with its
+the Files page’s downloads, which the front keeps,, run them on the configured artifact worker with its
 LoadCoach configuration. `PATH` is copied exactly from the first column of
 `loadcoach downloads`; a compute worker’s list contains only that worker’s downloads.
 
@@ -9745,7 +9745,7 @@ retain their existing compatibility behavior. Renames preserve identity and reso
 model/account names. Existing benchmark batches, plans, sample persistence, protocol checks,
 low priority and foreground preemption still govern execution.
 
-For front-owned grants, a due backup can wake `compute`; a due benchmark or outstanding run
+For grants the front keeps, a due backup can wake `compute`; a due benchmark or outstanding run
 can wake its saved preferred node (default `compute`). The node must remain active with
 Wake-on-LAN configured, and front rechecks the owner's `front-wake` permission before sending
 a packet. Disabled/retired nodes are never woken. Per-node packets are limited to one every
@@ -10153,7 +10153,7 @@ then sends what it has from its beginning once; front already has those and skip
 Requests has inclusive minimum/maximum filters for the displayed public request number,
 request date/time and completed duration in seconds. Model, user, IP and status are exact
 dropdown selections. Native/provider/adapter catalogs and account membership supply options;
-request rows never seed them. IP options come from the front-owned client-access registry.
+request rows never seed them. IP options come from the client-access registry on the front.
 The current URL retains filters through pagination and completed-list polling. Date inputs
 use WeightRoom's selected timezone, falling back to its server's local timezone. Unfinished
 requests have no duration and are excluded by duration bounds. Old or deleted selections in
@@ -11034,7 +11034,7 @@ and invented source IDs. Source/model/context changes refuse visibly. Cancellati
 leave resumable state; account deletion cancels/cleans private records. Existing maintenance drain
 counts accepted background steps. `weightroom.chat` migration 4 adds prompt/run/attempt tables
 without a new database binding or dependency. The Hermes bridge remains the wrapper for native
-agent sessions; these front-owned records do not inherit its shared profile files/credentials.
+agent sessions; these records, kept on the front, do not inherit its shared profile files/credentials.
 
 Request receipts are retained when headers arrive. Usage/cost reconcile against existing normal
 request records with trace matching; unknown/unpriced/incomplete values stay unavailable, and an
@@ -11044,7 +11044,7 @@ The private internal `/loadcoach/workflows` routes and console controls are docu
 
 ## Advisory spending allowances (C07, milestone 107)
 
-The owner selected soft enforcement. Settings → Spending allowances and front-owned
+The owner selected soft enforcement. Settings → Spending allowances and front
 `GET/POST /loadcoach/allowances` reuse the accounts store and ordinary event log. Optional
 rolling 24-hour USD policies cover immutable users, persistent keys and pooled named groups;
 zero disables them. Existing hosted spending ceilings remain unchanged. No reservation or
@@ -11193,20 +11193,24 @@ same front creation/current-permission checks and matching grant ownership, scop
 due-time and occurrence-ID rules. Scheduled backups still use compute's guarded backup route
 and pair with front's existing worker; no parallel scheduler is introduced.
 
-Compatibility defaults select legacy creation with `[turnstile] front_tasks = false`.
-Existing front IDs remain front-owned even when that switch is disabled; unknown IDs retain
-the legacy compute route. Never dual-write or reassign an accepted task. Compute's
-`front_tasks = true` dispatch writes no durable task/batch records and requires terminal legacy
-tasks plus verified front history; the setting itself does not delete tables. Queue-draining
+The front always creates and keeps benchmark task records and sends each task to the node it
+is placed on; `[turnstile] allow_caller_to_specify_destination` (Settings → General, default
+on) only decides whether a caller may name that node. Unknown IDs (tasks and schedules a node
+created before this) keep their route to that node. Never dual-write or reassign an accepted
+task. A node whose store has the `loadcoach.retirement` migration writes no durable task/batch
+records of its own; the migration itself does not delete tables. Queue-draining
 and deployment permissions are maintained in the
 [operating contract](agents.md#standing-permissions-and-execution-constraints).
 
 ### Imports and retirement
 
-`turnstile.tasks` migrations 1–2 support both fresh storage and the early deployed schema.
-The ownership switches are described in [installation](operations.md#db1-ownership-and-retirement-milestone-124).
-After retirement, compute must use `front_tasks = true`; legacy startup is refused.
-Compute's API/CLI refuse front-owned settings while preserving its own settings and grants.
+`turnstile.benchmark_tasks` (formerly `turnstile.tasks`; its history moves across at start)
+migrations 1–2 support both fresh storage and the early deployed schema; migration 4 renames
+the tables to `benchmark_tasks`, `benchmark_task_evidence`, `benchmark_task_finishes` and
+`benchmark_task_reservations`. The settings are described in
+[installation](operations.md#db1-ownership-and-retirement-milestone-124). After retirement,
+a node refuses local task, batch and schedule creation. Compute's API/CLI refuse the
+settings the front keeps while preserving its own settings and grants.
 
 `db.consolidation` compares offline snapshots; `db.consolidation_import` previews and verifies
 history imports. `tasks|grants --apply` inserts only missing records and compares every source

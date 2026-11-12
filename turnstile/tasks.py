@@ -1,7 +1,7 @@
-"""Front-owned external tasks; compute receives only signed individual probes.
+"""Benchmark task records, kept on the front for every node; a node receives only signed individual probes.
 
-Unknown IDs retain their legacy compute route. A persisted front row owns its ID
-even when new front creation is disabled during rollback.
+The front creates every new task and schedule, on whichever node it names. Task and schedule
+IDs the front does not know are older records still held by a node, and keep their route there.
 """
 
 import asyncio
@@ -16,31 +16,50 @@ from starlette.responses import JSONResponse
 from starlette.requests import Request
 
 from db import migrate
-from db.schemas import FRONT_TASKS
+from db.schemas import TASK_RECORDS
 from loadcoach.tasks import ENDPOINT, Tasks, error
 from loadcoach.role_evidence import RoleEvidence
 from loadcoach.schedule_grants import ScheduleGrants
 from loadcoach.schedule_time import validate, is_due, occurrence_ids
 
 
-class FrontTasks:
-    """Front-owned scoped benchmark tasks, dispatch and durable evidence publication."""
+DESTINATION_OFF = ("Choosing a node is turned off. Turn on 'Allow callers to choose the node' in Settings → General, "
+                   "or leave the node out and the front will pick one.")
+
+
+def refusal(answer) -> str:
+    """The reason a node gave for refusing, from its JSON error, or "" (no answer, or not a 4xx)."""
+    if answer is None or not 400 <= answer.status_code < 500:
+        return ""
+    try:
+        said = answer.json().get("error", {})
+    except ValueError:
+        return ""
+    return said.get("message", "") if isinstance(said, dict) and isinstance(said.get("message", ""), str) else ""
+
+
+class TaskRecords:
+    """Scoped benchmark tasks the front keeps for every node, their dispatch and durable evidence publication."""
     body = Tasks.body
     public = staticmethod(Tasks.public)
 
-    def __init__(self, batches, users, log, evidence, ask, dispatch, names, enabled=False, wake_node=None):
-        """Bind durable front tasks to current account checks and signed compute dispatch."""
+    def __init__(self, batches, users, log, evidence, ask, dispatch, names, wake_node=None, destination_allowed=lambda: True):
+        """Bind durable task records to current account checks and signed node dispatch.
+
+        `destination_allowed()` says whether a caller may name the node (Settings → General).
+        """
         self.batches, self.users, self.log, self.evidence = batches, users, log, evidence
-        self.ask, self.dispatch, self.names, self.enabled = ask, dispatch, names, enabled
+        self.ask, self.dispatch, self.names = ask, dispatch, names
+        self.destination_allowed = destination_allowed
         self.wake_node = wake_node
         self.working = {}  # outgoing requests; loss/restart never rebinds their machine
         self.publication_cursor = ''
-        migrate(batches.db.database, batches.db, "turnstile.tasks", FRONT_TASKS)
+        migrate(batches.db.database, batches.db, "turnstile.benchmark_tasks", TASK_RECORDS)
         self.grants = ScheduleGrants(batches.db, users)
 
     def get(self, number):
-        """Read one front-owned task and its retained execution metadata."""
-        row = self.batches.db.execute("SELECT model,fingerprint,subject,environment,model_id,machine,owner_id FROM external_tasks WHERE id=?", (number,)).fetchone()
+        """Read one task record and its retained execution metadata."""
+        row = self.batches.db.execute("SELECT model,fingerprint,subject,environment,model_id,machine,owner_id FROM benchmark_tasks WHERE id=?", (number,)).fetchone()
         batch = self.batches.get(number)
         return None if not row or not batch else {
             "id": number, "model": row[0], "model_at_submit": row[0], "fingerprint": row[1],
@@ -61,15 +80,15 @@ class FrontTasks:
     def authenticate(self, request, task, user):
         """Validate the scoped task token without granting general API access."""
         token = request.headers.get("x-loadcoach-task", "")
-        saved = self.batches.db.execute("SELECT token_hash FROM external_tasks WHERE id=?", (task["id"],)).fetchone()[0]
+        saved = self.batches.db.execute("SELECT token_hash FROM benchmark_tasks WHERE id=?", (task["id"],)).fetchone()[0]
         if token and secrets.compare_digest(hashlib.sha256(token.encode()).hexdigest(), saved):
             return True
         return bool(user and user.identity == self.identity(task))
 
     def visible(self, user, row):
         """Check whether the caller may inspect or control the selected task."""
-        owners = self.batches.db.execute('SELECT owner_id FROM external_tasks WHERE id=? UNION '
-            'SELECT e.owner_id FROM external_tasks e JOIN batches b ON b.id=e.id WHERE ? IN (b.input_file,b.output_file,b.error_file)',
+        owners = self.batches.db.execute('SELECT owner_id FROM benchmark_tasks WHERE id=? UNION '
+            'SELECT e.owner_id FROM benchmark_tasks e JOIN batches b ON b.id=e.id WHERE ? IN (b.input_file,b.output_file,b.error_file)',
             (row['id'], row['id'])).fetchall()
         return not owners or any(owner and owner == user.identity for owner, in owners)
 
@@ -105,7 +124,8 @@ class FrontTasks:
         engine = model.get('engine_id', 'llama_cpp')
         environment = await self.ask(user, "GET", "/loadcoach/probe-environment" + ('?engine=' + quote(engine) if engine != 'llama_cpp' else ''), machine=name)
         if subject is None or environment is None or subject.status_code != 200 or environment.status_code != 200:
-            raise ValueError("The chosen machine could not freeze the probe subject/environment.")
+            raise ValueError("The chosen machine could not freeze the probe subject/environment."
+                             + "".join(f" {name} says: {reason}" for reason in [refusal(subject), refusal(environment)] if reason))
         frozen = subject.json()
         if frozen.get('front_probe_dispatch') != 1:
             raise ValueError('This machine needs the matching front-probe dispatch deployment first.')
@@ -113,8 +133,12 @@ class FrontTasks:
             raise ValueError("The model inventory changed during task creation; retry.")
         return name, model, frozen, environment.json()
 
-    async def create(self, request, user):
-        """Validate and create an idempotent front-owned benchmark task."""
+    async def create(self, request, user, chosen_by_caller=True):
+        """Validate and create an idempotent benchmark task on the node it names.
+
+        A `machine` in the body is the caller's choice of node, refused while choosing a node is
+        turned off. A schedule resolving its own node passes `chosen_by_caller=False`.
+        """
         if not user or not user.can("benchmark"):
             return error(403, "Your account may not run measurements.")
         try:
@@ -125,7 +149,7 @@ class FrontTasks:
             old = self.get(number)
             digest = hashlib.sha256(token.encode()).hexdigest()
             if old:
-                saved = self.batches.db.execute("SELECT token_hash FROM external_tasks WHERE id=?", (number,)).fetchone()[0]
+                saved = self.batches.db.execute("SELECT token_hash FROM benchmark_tasks WHERE id=?", (number,)).fetchone()[0]
                 if (self.identity(old) != user.identity or saved != digest or body.get("model_id", old["model_id"]) != old["model_id"]
                         or not body.get("model_id") and model != old["model_at_submit"]
                         or body.get("machine", old["machine"]) != old["machine"]):
@@ -133,6 +157,8 @@ class FrontTasks:
                 return JSONResponse(self.public(old))
             if self.batches.get(number):
                 return error(409, "That ID already belongs to a batch.")
+            if body.get("machine") and chosen_by_caller and not self.destination_allowed():
+                return error(400, DESTINATION_OFF)
             name, selected, frozen, environment = await self.select(user, model, body.get("model_id"), body.get("machine"))
             if body.get('expected_fingerprint') and (frozen['fingerprint'] != body['expected_fingerprint'] or any(environment.get(key)!=body.get('expected_environment',{}).get(key) for key in ('engine_hash','machine_hash'))):
                 raise ValueError('The frozen model or environment changed during task submission.')
@@ -159,14 +185,14 @@ class FrontTasks:
                 if metadata.get('benchmark'):
                     from benchmarks.eligibility import reservation_key
                     key = reservation_key(subject['model_id'], name, metadata['benchmark'])
-                    self.batches.db.execute("DELETE FROM external_task_reservations WHERE key=? AND task IN (SELECT id FROM batches WHERE status IN ('completed','failed','cancelled','expired'))", (key,))
-                    if not self.batches.db.execute('INSERT INTO external_task_reservations(key,task) VALUES(?,?) ON CONFLICT(key) DO NOTHING', (key,number)).rowcount:
+                    self.batches.db.execute("DELETE FROM benchmark_task_reservations WHERE key=? AND task IN (SELECT id FROM batches WHERE status IN ('completed','failed','cancelled','expired'))", (key,))
+                    if not self.batches.db.execute('INSERT INTO benchmark_task_reservations(key,task) VALUES(?,?) ON CONFLICT(key) DO NOTHING', (key,number)).rowcount:
                         return error(409, 'Matching benchmark work is already creating, queued or running.')
                 self.batches.db.execute("INSERT INTO files(id,user,filename,purpose,created,content) VALUES(?,?,?,?,?,?)",
                     (file, user.name, "task.jsonl", "batch", now, json.dumps({"custom_id": "task", "body": line, "method": "POST", "url": ENDPOINT}).encode()))
                 self.batches.db.execute("INSERT INTO batches(id,user,endpoint,input_file,status,created,metadata) VALUES(?,?,?,?,'in_progress',?,?)", (number, user.name, ENDPOINT, file, now, json.dumps(metadata)))
                 self.batches.db.execute("INSERT INTO batch_lines(batch,line,custom_id,body,model_id) VALUES(?,0,'task',?,?)", (number, json.dumps(line), subject["model_id"]))
-                self.batches.db.execute("INSERT INTO external_tasks(id,token_hash,model,fingerprint,subject,environment,model_id,machine,owner_id) VALUES(?,?,?,?,?,?,?,?,?)",
+                self.batches.db.execute("INSERT INTO benchmark_tasks(id,token_hash,model,fingerprint,subject,environment,model_id,machine,owner_id) VALUES(?,?,?,?,?,?,?,?,?)",
                     (number, digest, selected["id"], frozen["fingerprint"], json.dumps(subject), json.dumps(environment), subject["model_id"], name, user.identity))
             self.log.add("task", "created", user.name, task=number, machine=name, owner="front")
             return JSONResponse(self.public(self.get(number)), status_code=201)
@@ -200,8 +226,8 @@ class FrontTasks:
         parts = request.url.path.split('/')
         identifier = parts[3] if len(parts) > 3 else None
         known = identifier and self.batches.db.execute('SELECT 1 FROM schedule_grants WHERE id=?', (identifier,)).fetchone()
-        if not self.enabled and not known:
-            return None
+        if identifier and not known:
+            return None  # an older schedule a node still holds keeps its route there
         if request.method != 'POST':
             return error(405, 'Schedules use POST.')
         try:
@@ -231,8 +257,6 @@ class FrontTasks:
                     if old['owner_id'] != owner.identity:
                         raise PermissionError('This occurrence belongs to another account.')
                     return JSONResponse(self.public(old))
-                if spec['kind'] != 'backup' and not self.enabled:
-                    return error(503, 'New front task creation is paused for cutover or rollback.', retry=True)
                 chosen = body.get('target') if spec['kind'] == 'outstanding' else None
                 if spec['kind'] == 'outstanding':
                     if not isinstance(chosen, dict) or not chosen.get('model_id') or not chosen.get('benchmark'):
@@ -282,7 +306,7 @@ class FrontTasks:
                     """Replay the encoded schedule request to the existing task handler."""
                     return {'type': 'http.request', 'body': encoded, 'more_body': False}
                 delegated = Request({**request.scope, 'path': '/loadcoach/tasks'}, receive)
-                response = await self.create(delegated, owner)
+                response = await self.create(delegated, owner, chosen_by_caller=False)
                 if response.status_code < 300:
                     return JSONResponse({**json.loads(response.body), 'schedule_resolution':{
                         'preferred_node':spec.get('machine',''), 'resolved_node':machine, 'fallback_reason':reason}},status_code=response.status_code)
@@ -348,12 +372,12 @@ class FrontTasks:
     async def publish_pending(self, task_id=None):
         """Publish a bounded page of durable evidence after current owner checks."""
         if task_id:
-            rows = self.batches.db.execute('SELECT task,snapshot FROM front_task_evidence WHERE published=0 AND task=?', (task_id,)).fetchall()
+            rows = self.batches.db.execute('SELECT task,snapshot FROM benchmark_task_evidence WHERE published=0 AND task=?', (task_id,)).fetchall()
         else:
-            rows = self.batches.db.execute('SELECT task,snapshot FROM front_task_evidence WHERE published=0 AND task>? ORDER BY task LIMIT 20', (self.publication_cursor,)).fetchall()
+            rows = self.batches.db.execute('SELECT task,snapshot FROM benchmark_task_evidence WHERE published=0 AND task>? ORDER BY task LIMIT 20', (self.publication_cursor,)).fetchall()
             if not rows and self.publication_cursor:
                 self.publication_cursor = ''
-                rows = self.batches.db.execute('SELECT task,snapshot FROM front_task_evidence WHERE published=0 ORDER BY task LIMIT 20').fetchall()
+                rows = self.batches.db.execute('SELECT task,snapshot FROM benchmark_task_evidence WHERE published=0 ORDER BY task LIMIT 20').fetchall()
         for number, snapshot in rows:
             if not task_id:
                 self.publication_cursor = number
@@ -367,7 +391,7 @@ class FrontTasks:
                     if self.owner(task):  # recheck revocation after the inventory await
                         self.evidence.accept(json.loads(snapshot), definitions=False)
             with self.batches.db:
-                self.batches.db.execute("UPDATE front_task_evidence SET published=1 WHERE task=?", (number,))
+                self.batches.db.execute("UPDATE benchmark_task_evidence SET published=1 WHERE task=?", (number,))
 
     async def retry_publication(self):
         """Retry the bounded durable evidence queue after startup or a transient failure."""
@@ -395,16 +419,16 @@ class FrontTasks:
                     any(one.get(key) != task["environment"].get(key) for key in ("engine_hash", "machine_hash")) for one in snapshot["results"]):
                     raise ValueError("Evidence must match the frozen task/model/definition/environment.")
             with self.batches.db:
-                previous = self.batches.db.execute('SELECT payload FROM front_task_finishes WHERE task=?', (task['id'],)).fetchone()
+                previous = self.batches.db.execute('SELECT payload FROM benchmark_task_finishes WHERE task=?', (task['id'],)).fetchone()
                 if previous and previous[0] != serialized_finish:
                     return error(409, 'A task finish cannot replace its retained result.')
-                self.batches.db.execute('INSERT INTO front_task_finishes(task,payload) VALUES(?,?) ON CONFLICT DO NOTHING', (task['id'], serialized_finish))
+                self.batches.db.execute('INSERT INTO benchmark_task_finishes(task,payload) VALUES(?,?) ON CONFLICT DO NOTHING', (task['id'], serialized_finish))
                 if snapshot and task["status"] in ("in_progress", "completed"):
-                    saved = self.batches.db.execute("SELECT snapshot FROM front_task_evidence WHERE task=?", (task["id"],)).fetchone()
+                    saved = self.batches.db.execute("SELECT snapshot FROM benchmark_task_evidence WHERE task=?", (task["id"],)).fetchone()
                     serialized = json.dumps(snapshot, sort_keys=True)
                     if saved and saved[0] != serialized:
                         raise ValueError("A completed task cannot replace its retained evidence.")
-                    self.batches.db.execute("INSERT INTO front_task_evidence(task,snapshot) VALUES(?,?) ON CONFLICT DO NOTHING", (task["id"], serialized))
+                    self.batches.db.execute("INSERT INTO benchmark_task_evidence(task,snapshot) VALUES(?,?) ON CONFLICT DO NOTHING", (task["id"], serialized))
                 claimed = self.batches.db.execute("UPDATE batches SET status='finishing' WHERE id=? AND status IN ('in_progress','cancelling')", (task['id'],)).rowcount
                 if claimed:
                     result = None if state == "cancelled" else {"status_code": 200 if state == "completed" else 500, "request_id": "", "body": body.get("result", {})}
@@ -429,14 +453,6 @@ class FrontTasks:
         if path == '/loadcoach/schedules' or path.startswith('/loadcoach/schedules/'):
             return await self.schedule(request, user)
         if path == "/loadcoach/tasks" and request.method == "POST":
-            if not self.enabled:
-                # Persisted front ownership survives disabling new creation.
-                try:
-                    body = await self.body(request)
-                except ValueError as problem:
-                    return error(400, str(problem))
-                if not self.get(body.get("id")):
-                    return None
             return await self.create(request, user)
         parts = path.split("/")
         if len(parts) not in (4, 5) or parts[1:3] != ["loadcoach", "tasks"]:

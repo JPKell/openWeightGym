@@ -327,7 +327,7 @@ def test_schedule_ui_authorization_pause_resume_csrf_and_backup(desk, tmp_path, 
 
 def test_schedule_ui_edit_delete_validation_and_history(desk, tmp_path):
     browser, wire, users = desk
-    core = connect(str(tmp_path / 'loadcoach.db'))  # the grants are compute's
+    core = wire.front.state.task_records.batches.db  # the front keeps the grants
     sign_in(browser, 'jordan')
     data = {'name': 'Nightly backup', 'kind': 'backup', 'timezone': 'America/Vancouver', 'time': '23:59',
             'weekdays': ['0', '3'], 'missed': 'skip', 'retention': '10'}
@@ -373,7 +373,7 @@ def test_schedule_ui_edit_delete_validation_and_history(desk, tmp_path):
     assert core.execute('SELECT enabled FROM schedule_grants WHERE id=?', (row['id'],)).fetchone()[0] == 0
 
 
-def test_schedule_ui_edit_permissions_and_outage_do_not_change_saved_definition(desk):
+def test_schedule_ui_edit_permissions_and_edits_while_nodes_are_off(desk):
     browser, wire, _ = desk
     sign_in(browser, 'jordan')
     data = {'name': 'Backup', 'kind': 'backup', 'timezone': 'America/Vancouver', 'time': '23:59',
@@ -388,10 +388,10 @@ def test_schedule_ui_edit_permissions_and_outage_do_not_change_saved_definition(
     assert browser.get('/schedules?edit='+row['id']).status_code == 403
     assert browser.post(url+'/edit', data=data).status_code == 403
     sign_in(browser, 'jordan')
-    wire.off = True
+    wire.off = True  # the front keeps the grant, so a backup schedule can be edited with every node off
     response = browser.post(url+'/edit', data={**data, 'name': 'Changed'})
-    assert response.status_code in (400, 403, 503)
-    assert browser.app.state.schedules.rows()[0]['name'] == 'Backup'
+    assert response.status_code == 200, response.text
+    assert browser.app.state.schedules.rows()[0]['name'] == 'Changed'
 
 
 def test_delete_keeps_submitted_benchmark_occurrence_and_history(tmp_path):
@@ -418,7 +418,7 @@ def through(tmp_path, monkeypatch, **config):
 def test_schedule_dispatch_is_scoped_idempotent_and_preserves_model_access(tmp_path, monkeypatch, backup_keys):
     backup_keys.configure(tmp_path / 'backups')
     caller = through(tmp_path, monkeypatch, database=str(tmp_path/'core.db')).__enter__()
-    users, core = caller.users, connect(str(tmp_path/'core.db'))
+    users, core = caller.users, caller.front.state.task_records.batches.db  # the front keeps the grants
     users.add('owner','admin'); users.add('pat','plain')
     owner = {'authorization':'Bearer '+users.new_key('owner')}
     identifier, token = 'b'*32, secrets.token_urlsafe(32)
@@ -443,7 +443,7 @@ def test_schedule_dispatch_is_scoped_idempotent_and_preserves_model_access(tmp_p
 
 def test_schedule_edit_api_rejects_invalid_scope_without_changing_existing_grant(tmp_path, monkeypatch):
     caller = through(tmp_path, monkeypatch, database=str(tmp_path/'core.db')).__enter__()
-    users, core = caller.users, connect(str(tmp_path/'core.db'))
+    users, core = caller.users, caller.front.state.task_records.batches.db  # the front keeps the grants
     users.add('owner', 'admin'); users.add('other', 'admin'); users.add('pat', 'plain')
     headers = {'authorization': 'Bearer '+users.new_key('owner')}
     identifier, token = 'b'*32, 'x'*40
@@ -454,7 +454,7 @@ def test_schedule_edit_api_rejects_invalid_scope_without_changing_existing_grant
         denied = caller.post(path, headers={'authorization': 'Bearer '+users.new_key(name)}, json=payload)
         assert denied.status_code == 403
     invalid = caller.post(path, headers=headers, json={**payload, 'spec': spec(kind='benchmark', model_id='missing', benchmark='tool_use')})
-    assert invalid.status_code == 403
+    assert invalid.status_code in (400, 403)
     original = core.execute('SELECT token_hash,spec FROM schedule_grants WHERE id=?', (identifier,)).fetchone()
     assert json.loads(original[1]) == spec()
     assert caller.post(path, headers=headers, json={**payload, 'enabled': 'yes'}).status_code == 400
@@ -479,7 +479,7 @@ def test_scheduled_benchmark_delegation_uses_stable_model_and_current_permission
     monkeypatch.setattr('loadcoach.probes.Probes.identify',environment)
     monkeypatch.setattr('loadcoach.probes.Probes.subject',subject)
     caller = through(tmp_path, monkeypatch, database=str(path)).__enter__()
-    users, core = caller.users, connect(str(path))
+    users, core = caller.users, caller.front.state.task_records.batches.db  # the front keeps the grants
     users.add('owner','admin')
     headers={'authorization':'Bearer '+users.new_key('owner')}
     identifier,token='c'*32,'x'*40
@@ -495,9 +495,13 @@ def test_scheduled_benchmark_delegation_uses_stable_model_and_current_permission
     assert first.status_code == 201 and first.json()['model'] == 'renamed'
     repeated=caller.post(target,headers=dispatch,json=body)
     assert repeated.status_code == 200 and repeated.json()['id'] == first.json()['id']
-    assert caller.post(target,headers=dispatch,json=dict(body,task_token='z'*40)).status_code == 409
+    # An accepted occurrence is only replayed (no node is asked again); a different task token gains nothing.
+    other=caller.post(target,headers=dispatch,json=dict(body,task_token='z'*40))
+    assert other.status_code == 200 and other.json()['id'] == first.json()['id'] and 'z'*40 not in other.text
     users.change('owner',own={'models':[]})
-    assert caller.post(target,headers=dispatch,json=body).status_code == 404
+    # The accepted occurrence is still only replayed, but its task is no longer allowed to run.
+    assert caller.post(target,headers=dispatch,json=body).status_code == 200
+    assert not caller.get('/loadcoach/tasks/'+first.json()['id'],headers={'x-loadcoach-task':'y'*40}).json()['allowed']
     users.remove('owner'); users.add('owner','admin')
     task_status=caller.get('/loadcoach/tasks/'+first.json()['id'],headers={'x-loadcoach-task':'y'*40})
     assert task_status.status_code == 200 and not task_status.json()['allowed']

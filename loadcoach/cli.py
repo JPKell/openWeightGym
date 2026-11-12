@@ -45,7 +45,7 @@ import uvicorn
 from loadcoach.app import LOOPBACK, build_app
 from loadcoach.capture import resolve
 from loadcoach.config import CLI, Config, load_config
-from loadcoach.settings import Changes, front_programs, program_name, written
+from loadcoach.settings import Changes, front_programs, program_name, store_retired, written
 from loadcoach.log import Log
 from loadcoach.models import Models, check_model, check_order
 from loadcoach.statement import OVERLAP, replace_key
@@ -906,7 +906,7 @@ def log_verify(ctx: typer.Context) -> None:
 def settings_command(changes: Changes, action: str = "", program: str = "", name: str = "", excluded=()) -> None:
     """List what was changed in any program's settings from the site, or with `reset` take one change away."""
     if action == "reset" and program_name(program) in excluded:
-        raise ValueError("This program is front-owned; use front's Settings page.")
+        raise ValueError("The front keeps this program's settings; use the Settings page on the front.")
     if action == "reset":
         if not changes.take_away(program, name):
             raise ValueError(f"Nothing was changed for {name!r} of {program!r}. See what was with: loadcoach settings")
@@ -934,7 +934,7 @@ def settings(
     """What was changed in any program's settings from the site. `settings reset PROGRAM NAME` takes one change away, so that the file's value holds again."""
     config = opened(ctx)[0]
     settings_command(Changes(config.database), action, program, name,
-                     excluded=front_programs(config))
+                     excluded=front_programs(config, store_retired(config.database)))
 
 
 def for_server(ctx: typer.Context, action: str, *arguments: str) -> None:

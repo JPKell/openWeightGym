@@ -13,7 +13,7 @@ from loadcoach.users import Users
 from test_console_browser import browser_context, playwright
 from test_host_settings import Hosts, host
 from test_weightroom import GROUPS, desk, sign_in  # noqa: F401
-from turnstile.app import Settings as FrontSettings, build_app as build_front
+from turnstile.app import Settings as FrontConfig, build_app as build_front
 from weightroom.app import Settings, build_app
 
 expect = playwright.expect
@@ -37,7 +37,7 @@ def nodes(tmp_path):
     for worker in workers:
         worker.app.router.routes.insert(0, Route('/loadcoach/me', identity))
     wire = Hosts(*workers)
-    front = build_front(FrontSettings(compute='compute', data=str(tmp_path), machine_key_file=primary_key,
+    front = build_front(FrontConfig(compute='compute', data=str(tmp_path), machine_key_file=primary_key,
         auth_key_file=str(tmp_path / 'panel.key'), machines_poll_seconds=3600,
         machines={'remote': {'compute': 'http://compute:9442', 'machine_key_file': remote_key}}),
         httpx.AsyncClient(transport=wire), users=users)

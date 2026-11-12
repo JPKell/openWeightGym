@@ -209,7 +209,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             if capabilities.get('native_probes') is False and not (definition['id'] == 'load' and capabilities.get('load_probes')):
                 return error(400, f"{logical['id']}: this engine does not support native benchmark probes; no run was queued.")
             local_name = (place or {}).get('id', logical['id'])
-            local_id = (place or {}).get('model_id', logical.get('model_id'))
+            # A node's copy has its own model ID; another node's ID would name nothing there.
+            local_id = place.get('model_id') if place is not None else logical.get('model_id')
             key = (logical['id'], machine or '')
             if key in seen:
                 continue
@@ -219,7 +220,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             if definition['id'] != 'load' and bool(definition.get('embedding')) != bool(embedding):
                 skipped.append(logical['id'] + (f' at {machine}' if target.get('machine') else ''))
                 continue
-            selected.append({'model': logical['id'], 'local_name': local_name, 'model_id': local_id, 'machine': machine or ''})
+            selected.append({'model': logical['id'], 'local_name': local_name, 'model_id': local_id, 'machine': machine or '',
+                             'pinned': bool(target.get('machine'))})
         if not selected:
             return error(400, 'Quality benchmarks do not apply to embedding models.' if definition.get('quality') else
                          'Choose embedding models for embedder benchmarks, and other models for generation benchmarks.')
@@ -246,7 +248,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             try:
                 task = await ask(request, 'POST', '/loadcoach/tasks', json={'id':number,'token':store.token(number),
                     'model':target['local_name'], **({'model_id':target['model_id']} if target['model_id'] else {}),
-                    **({'machine': target['machine']} if target['machine'] else {}),
+                    # Only a node the caller chose is sent as `machine`; the front may refuse that choice
+                    # (Settings → General). Otherwise the node's own model ID places the task.
+                    **({'machine': target['machine']} if target['machine'] and (target.get('pinned') or not target['model_id']) else {}),
                     'metadata':{'benchmark':definition['id'],'benchmark_version':definition['version'],'model':target['model'],
                                 **({'machine': target['machine']} if target['machine'] else {})}})
                 store.activate(number, task)
@@ -324,7 +328,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
                 if place is None and logical.get('embedding'):
                     continue
                 plans.append((definition, {'model': logical['id'], 'local_name': (place or {}).get('id', logical['id']),
-                                           'model_id': (place or {}).get('model_id', logical.get('model_id')),
+                                           'model_id': place.get('model_id') if place is not None else logical.get('model_id'),
                                            'machine': (place or {}).get('machine', '')}, place))
             else:
                 places = locations if logical.get('locations') else [None]
@@ -333,7 +337,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
                             bool((place or logical).get('embedding', logical.get('embedding', False)))):
                         continue
                     plans.append((definition, {'model': logical['id'], 'local_name': (place or {}).get('id', logical['id']),
-                                               'model_id': (place or {}).get('model_id', logical.get('model_id')),
+                                               'model_id': place.get('model_id') if place is not None else logical.get('model_id'),
                                                'machine': (place or {}).get('machine', '')}, place))
 
         queued, fresh, active, unavailable, errors, pending = [], [], [], [], [], []

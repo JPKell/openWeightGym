@@ -311,7 +311,7 @@ exec {real_uv} "$@"
         gateway = tomllib.loads((install / 'settings/toollocker.toml').read_text())
         front = tomllib.loads((install / 'settings/weightroom.toml').read_text())
         assert (gateway['front'], gateway['host'], gateway['port']) == ('weightroom.toml', '127.0.0.1', 9443)
-        assert front['turnstile']['front_settings'] is True
+        assert front['turnstile']['keep_console_settings_on_front'] is True
         assert front['turnstile']['toollocker_url'] == 'http://127.0.0.1:9443'
         assert support.configured_targets(install / 'settings/toollocker.toml', 'toollocker') == [
             ('identity', engine, install / ('keys/postgresql/accounts.dsn' if server else 'data/accounts.db'))]

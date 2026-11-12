@@ -204,7 +204,8 @@ def queue_fixture(tmp_path, *, disabled=(), offline=(), rejected=(), rejected_st
             payload = json.loads(request.content)
             submitted.append(payload)
             kind = payload['metadata']['benchmark']
-            machine = payload.get('machine', 'compute')
+            # As the front does: a named node, or else the node whose copy the model ID names.
+            machine = payload.get('machine') or payload.get('model_id', 'compute-id').removesuffix('-id')
             if kind in rejected or machine in rejected_nodes:
                 return httpx.Response(rejected_status, json={'error': {'message': 'location unavailable'}})
             task = {'fingerprint': 'same-weights', 'model_id': machine + '-id',
@@ -242,7 +243,7 @@ def test_outstanding_uses_per_location_ids_and_skips_disabled_copies(tmp_path):
             {'model': 'small', 'machine': 'rig'}]}).status_code == 400
         response = caller.post('/benchmarks/outstanding', headers=headers, json={'model': 'small'})
         assert response.status_code == 202 and response.json()['queued'] == 2
-        assert {task['machine'] for task in submitted} == {'compute'}
+        assert {task['metadata']['machine'] for task in submitted} == {'compute'}
         again = caller.post('/benchmarks/outstanding', headers=headers, json={'model': 'small'})
         assert again.json()['queued'] == 0 and len(again.json()['active']) == 2
 
@@ -260,7 +261,7 @@ def test_outstanding_respects_each_location_evidence_and_environment(tmp_path):
         assert response.status_code == 202 and result['queued'] == 3
         assert result['fresh'] == ['load at compute']
         assert len([task for task in submitted if task['metadata']['benchmark'] == 'load']) == 1
-        assert next(task for task in submitted if task['metadata']['benchmark'] == 'load')['machine'] == 'rig'
+        assert next(task for task in submitted if task['metadata']['benchmark'] == 'load')['metadata']['machine'] == 'rig'
 
 
 def test_outstanding_reports_offline_and_partial_queue_failures(tmp_path):
@@ -272,7 +273,7 @@ def test_outstanding_reports_offline_and_partial_queue_failures(tmp_path):
         assert set(result['unavailable']) == {'load at rig', 'context at rig'}
         assert [{key: item[key] for key in ('benchmark', 'status', 'message')} for item in result['errors']] == [{'benchmark': 'context at compute', 'status': 503,
                                      'message': 'location unavailable'}]
-        assert {task['machine'] for task in submitted} == {'compute'}
+        assert {task['metadata']['machine'] for task in submitted} == {'compute'}
         assert all(run['location'] != 'rig' for run in app.state.store.listing())
 
 
@@ -379,8 +380,8 @@ def test_outstanding_requeues_stale_engine_evidence_for_only_its_location(tmp_pa
         response = caller.post('/benchmarks/outstanding', headers={'authorization': 'Bearer test'}, json={'model': 'small'})
         assert response.status_code == 202
         assert 'load at compute' in response.json()['fresh']
-        assert any(task['metadata']['benchmark'] == 'load' and task['machine'] == 'rig' for task in submitted)
-        assert not any(task['metadata']['benchmark'] == 'load' and task['machine'] == 'compute' for task in submitted)
+        assert any(task['metadata']['benchmark'] == 'load' and task['metadata']['machine'] == 'rig' for task in submitted)
+        assert not any(task['metadata']['benchmark'] == 'load' and task['metadata']['machine'] == 'compute' for task in submitted)
 
 
 def test_queue_outstanding_adds_each_applicable_benchmark_once(fake_llama_server, fake_cards):

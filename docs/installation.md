@@ -347,7 +347,7 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 | `--llama auto\|cuda-13.4\|cuda-12.8\|rocm\|vulkan\|cpu\|source\|skip\|PATH` | the engine |
 | `--database sqlite\|postgresql` | PostgreSQL is installed and set up locally (installs for you only) |
 | `--voice` | also speech recognition and voices |
-| `--voice-key-file FILE` | front-owned voice service key for a GPU node joined by hand |
+| `--voice-key-file FILE` | voice service key the front keeps for a GPU node joined by hand |
 | `--power-control` | let the console sleep, restart or switch off this machine (a polkit rule) |
 | `--no-linger`, `--no-browser` | skip linger, or opening the console |
 | `--ref BRANCH` | which branch to install |

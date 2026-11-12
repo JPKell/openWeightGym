@@ -10,7 +10,7 @@ that owns the tool, and writes what happened to the event log.
 
 Who is asking is turnstile's to say, on the front machine: it checks the caller's key and sends
 a signed statement in its place (see loadcoach/statement.py). The gateway runs on front with
-front-owned tool records; tool files execute on their configured owning hosts. Its configured
+tool records the front keeps; tool files execute on their configured owning hosts. Its configured
 event store uses the shared audit-log implementation rather than a separate identity authority.
 """
 
@@ -91,7 +91,7 @@ def shared_store(path: Path, told: dict) -> tuple[str, DatabaseSource]:
         return str(key.resolve()), store
     shared = path.parent / told.get("loadcoach", "loadcoach.toml")
     main, store, _ = kept_by_loadcoach(shared)
-    if main.get('front_toollocker'):
+    if main.get('toollocker_runs_on_front', main.get('front_toollocker')):
         raise SystemExit(f"{path}: ToolLocker moved to front; use front's toollocker.toml")
     key = str(shared.parent / main["machine_key_file"]) if main.get("machine_key_file") else ""
     return key, store

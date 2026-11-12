@@ -1,19 +1,22 @@
-"""Front-program settings authority, retaining the existing settings HTTP contract."""
+"""Settings of the front's own programs (the console), kept on the front, behind the existing settings HTTP contract."""
 
 from starlette.responses import JSONResponse
 
 from loadcoach.settings import CHANGEABLE, Changes, FRONT_PROGRAMS as PROGRAMS, program_name, wrong_kind
 from loadcoach.tasks import error
 
-class FrontSettings:
-    """Front-owned live program settings and compatibility endpoints."""
+class ConsoleSettings:
+    """Live settings of the front's own programs and their compatibility endpoints.
+
+    `enabled` is keep_console_settings_on_front: when false these requests go on to compute as before.
+    """
     def __init__(self, source, log, ask, enabled=False, *, programs=PROGRAMS):
-        """Bind front-owned program settings and their authenticated management API."""
+        """Bind the console's program settings and their authenticated management API."""
         self.changes, self.log, self.ask, self.enabled = Changes(source), log, ask, enabled
         self.programs = programs
 
     async def handle(self, request, user):
-        """Read or change front-owned program settings through the shared settings contract."""
+        """Read or change the console's program settings through the shared settings contract."""
         if not self.enabled:
             return None
         path = request.url.path

@@ -43,7 +43,7 @@ class FrontFiles:
     """Use the shared file formats and copy/download helpers without starting an engine."""
 
     def __init__(self, roots, log, index=None, every=lambda: 0):
-        """Read current front-owned roots on each operation and retain active downloads.
+        """Read the front's current file roots on each operation and retain active downloads.
 
         `index` is where the list of front's files is kept between looks (none: in memory), and
         `every` how many seconds a look is good for, 0 meaning until a Refresh asks again.

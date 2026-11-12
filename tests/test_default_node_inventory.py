@@ -118,9 +118,9 @@ def test_console_requests_that_fall_through_to_the_default_node(tmp_path):
     users = Users(str(tmp_path / "data" / "accounts.db"),
                   {"admin": Group(can=frozenset(ABILITIES) - OWN_KEY - {"superuser"}, max_sensitivity="restricted")})
     users.add("jordan", "admin")
-    # The switches as the live front has them (2026-11-12): console settings on the front, ToolLocker
-    # on the front, and task creation still left to compute (front_tasks unset).
-    front = turnstile_to(tmp_path, users, {8442: compute}, wait=0, front_settings=True, toollocker_url="http://127.0.0.1:9443")
+    # The switches as the live front has them: console settings and ToolLocker on the front. The front
+    # keeps every task record (peer-nodes Phase 1), so task creation no longer reaches a node.
+    front = turnstile_to(tmp_path, users, {8442: compute}, wait=0, keep_console_settings_on_front=True, toollocker_url="http://127.0.0.1:9443")
     headers = {"authorization": "Bearer " + users.new_key("jordan"), "x-turnstile-no-wake": "1"}
     with TestClient(front, base_url="http://front:8442", raise_server_exceptions=False) as api:
         for method, path in sorted(console_requests()):

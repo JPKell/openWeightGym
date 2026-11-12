@@ -83,7 +83,7 @@ def desk(tmp_path, monkeypatch):
                                            machine_key_file=machine_key(tmp_path), front="http://front:8442"), hub.client(), door(turnstile, 8442)))
     switch.hub = hub
     front = switch.front = turnstile.app = turnstile_to(
-        tmp_path, users, {8442: switch}, front_settings=True, toollocker_url="http://front-tools:9443")
+        tmp_path, users, {8442: switch}, keep_console_settings_on_front=True, toollocker_url="http://front-tools:9443")
     settings = Settings(compute="http://compute", key=users.new_key("panel"), data=str(tmp_path / "data"), wake_mac="bc:fc:e7:3d:90:6c", wake_address="10.0.0.255")
     with TestClient(build_app(settings, door(front, 8442))) as browser:
         yield browser, switch, users
@@ -745,7 +745,7 @@ def test_files_separates_cache_and_storage_and_promotes_or_two_click_deletes(tmp
     switch = Switch(build_loadcoach(Config(database=str(tmp_path / "loadcoach.db"), gpus=(), places=places,
         nvidia_smi="no-such-program", machine_key_file=machine_key(tmp_path), front="http://front:8442"),
         FakeHub({}).client(), door(later, 8442)))
-    front = later.app = turnstile_to(tmp_path, users, {8442: switch}, front_settings=True)
+    front = later.app = turnstile_to(tmp_path, users, {8442: switch}, keep_console_settings_on_front=True)
     settings = Settings(compute="http://compute", key=users.new_key("panel"), data=str(data))
     with TestClient(build_app(settings, door(front, 8442))) as browser:
         sign_in(browser, "jordan")
@@ -1501,7 +1501,7 @@ def test_hermes_settings_are_separate_editable_and_keep_machine_credentials_read
     for name in ("small", "alternate", "not-allowed"):
         models.put(name, {"gpus": 0, "flags": {"model": name + ".gguf"}})
     users.change("jordan", own={"models": ["small", "alternate"]})
-    store = switch.front.state.front_settings.changes
+    store = switch.front.state.console_settings.changes
     compute_store = Changes(str(tmp_path / "loadcoach.db"))
     original = tomllib.loads(Path("settings/defaults/voice-gateway.toml").read_text())
     original["hermes"] = dict(model="small", provider_key_file="/keys/hermes.key", python="/venv/python")

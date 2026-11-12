@@ -196,7 +196,7 @@ The console machine (front) runs WeightRoom, Turnstile, ToolLocker and optionall
 each GPU or CPU worker runs LoadCoach and Spotter. On one machine they run side by side.
 Workers appear in **Compute nodes**.
 Front owns accounts and retained application history. Workers own model files and local runtime
-state. Front-owned pages and saved records remain usable when inference workers are unavailable.
+state. Pages and saved records on the front remain usable when inference workers are unavailable.
 **Telemetry** offers **Wake** on the overview and host detail for nodes with Wake-on-LAN configured
 (`wake_mac` and optional `wake_address`, at top level for compute or under `[machines.NAME]`).
 Manual wake requires `front-wake`. Previously discovered, permitted deployed models remain selectable
@@ -204,7 +204,7 @@ in Chat, Mirror Wall and SoundRoom while a node is unavailable, including after 
 Using a model requests wake on its owning node; `[turnstile].wait` bounds the wake wait (180 seconds
 by default), followed by a timeout error if it still does not answer. Wake-on-LAN must also be enabled
 on the host and reachable from front. Offline alerts identify unavailable nodes; live management
-submissions for those nodes are disabled while front-owned records and retained configuration stay readable.
+submissions for those nodes are disabled while records kept on the front and retained configuration stay readable.
 
 Model servers use private loopback ports; clients connect through the front addresses above.
 

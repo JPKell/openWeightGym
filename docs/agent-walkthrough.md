@@ -221,7 +221,7 @@ Tests: [account/console routes](../tests/test_weightroom.py), [forms](../tests/t
 |---|---|---|
 | [Sign in](../app-walkthrough.md#sign-in-and-recovery-sign-in) | Safe deep-link/query retention through credential/authenticator steps, rejected external destinations, focus, validation and unavailable-auth guidance. | L/R; use isolated credentials for repeated failures/lockout tests. |
 | [Error and refusal pages](../app-walkthrough.md#sign-in-and-recovery-error-and-refusal-pages) | Framed 403/404/500, persistent reason, request ID, recovery links and no private exception detail. | L/R; 500 injection only L. |
-| [Compute or machine unavailable](../app-walkthrough.md#sign-in-and-recovery-compute-or-machine-unavailable) | Retained front-owned pages, correct stale/missing labels, node-scoped disabled controls and Wake visibility. | L/R using an already unavailable node; deliberate outage/power under M. |
+| [Compute or machine unavailable](../app-walkthrough.md#sign-in-and-recovery-compute-or-machine-unavailable) | Pages the front still serves, correct stale/missing labels, node-scoped disabled controls and Wake visibility. | L/R using an already unavailable node; deliberate outage/power under M. |
 
 Tests: [shared UI/recovery](../tests/test_ui_consistency.py), [console](../tests/test_console_browser.py), [node availability](../tests/test_node_availability_browser.py), [offline status](../tests/test_status_nodes.py).
 

@@ -153,7 +153,7 @@ def test_audit_reports_broken_file_links_and_unmatched_tasks(tmp_path):
         CREATE TABLE batches(id TEXT PRIMARY KEY,input_file TEXT,output_file TEXT,error_file TEXT,status TEXT);
         INSERT INTO batches VALUES('task','gone','kept',NULL,'completed');
         CREATE TABLE files(id TEXT PRIMARY KEY); INSERT INTO files VALUES('kept');
-        CREATE TABLE external_tasks(id TEXT PRIMARY KEY); INSERT INTO external_tasks VALUES('task');
+        CREATE TABLE benchmark_tasks(id TEXT PRIMARY KEY); INSERT INTO benchmark_tasks VALUES('task');
     """)
     front = store(tmp_path, "front.db", "CREATE TABLE benchmark_runs(id TEXT PRIMARY KEY,state TEXT);")
     result = audit(source, front, front, front)
@@ -239,16 +239,16 @@ def test_reliability_import_requires_event_and_immutable_identity_and_keeps_stat
 
 def test_terminal_task_import_preserves_bytes_ids_and_retention_holes_and_refuses_collisions(tmp_path):
     from db import migrate
-    from db.schemas import TASKS, FRONT_TASKS
+    from db.schemas import TASKS, TASK_RECORDS
     from loadcoach.batches import Batches
     source = Batches(str(tmp_path / 'source.db'))
     migrate(source.db.database, source.db, 'loadcoach.tasks', TASKS)
     file = source.put_file('owner', 'task.jsonl', 'batch', b'original bytes')
     source.start('owner', '/loadcoach/task', file['id'], [{'custom_id': 'task', 'body': {'model': 'small'}}], number='batch_old')
     with source.db:
-        source.db.execute('INSERT INTO external_tasks VALUES(?,?,?,?,?,?,?)', ('batch_old', 'hash', 'small', 'fp', '{}', '{}', 'mid'))
+        source.db.execute('INSERT INTO benchmark_tasks VALUES(?,?,?,?,?,?,?)', ('batch_old', 'hash', 'small', 'fp', '{}', '{}', 'mid'))
     target = Batches(str(tmp_path / 'target.db'))
-    migrate(target.db.database, target.db, 'turnstile.tasks', FRONT_TASKS)
+    migrate(target.db.database, target.db, 'turnstile.benchmark_tasks', TASK_RECORDS)
     source.db.close()
     with readonly(tmp_path / 'source.db') as old, pytest.raises(ValueError, match='terminal'):
         import_tasks(old, target.db, apply=True)
@@ -258,7 +258,7 @@ def test_terminal_task_import_preserves_bytes_ids_and_retention_holes_and_refuse
     source.db.close()
     with readonly(tmp_path / 'source.db') as old:
         preview = import_tasks(old, target.db)
-        assert preview['tables']['external_tasks']['missing'] == 1
+        assert preview['tables']['benchmark_tasks']['missing'] == 1
         assert target.listing('owner') == []
         assert import_tasks(old, target.db, apply=True)['tables']['batches']['after'] == 1
         assert target.content(file['id']) == b'original bytes'
@@ -271,7 +271,7 @@ def test_terminal_task_import_preserves_bytes_ids_and_retention_holes_and_refuse
     target.db.close()
 
 
-def test_front_settings_import_copies_only_front_programs_and_never_overwrites(tmp_path):
+def test_console_settings_import_copies_only_front_programs_and_never_overwrites(tmp_path):
     from loadcoach.settings import Changes
     source = Changes(str(tmp_path / 'old.db'))
     target = Changes(str(tmp_path / 'new.db'))
@@ -289,26 +289,26 @@ def test_front_settings_import_copies_only_front_programs_and_never_overwrites(t
         with pytest.raises(ValueError, match='conflict'):
             import_settings(old, target.db, apply=True)
     target.db.close()
-def test_deployed_front_task_schema_upgrades_without_inheriting_recreated_names(tmp_path):
+def test_deployed_task_record_schema_upgrades_without_inheriting_recreated_names(tmp_path):
     from db import Database, migrate
-    from db.schemas import FRONT_TASKS
+    from db.schemas import TASK_RECORDS
     import json
 
     database = Database.sqlite(tmp_path / 'front.db')
     connection = database.connect()
     # The first deployed schema predates the explicit ownership column.
-    initial = FRONT_TASKS[0]
+    initial = TASK_RECORDS[0]
     from db.migrations import Migration
-    migrate(database, connection, 'turnstile.tasks', (
+    migrate(database, connection, 'turnstile.benchmark_tasks', (
         Migration(initial.version, initial.name, initial.sqlite.replace(', owner_id TEXT', '')),
     ))
     with connection:
         for number, subject in [('frozen', {'owner_id': 'original-identity'}), ('unknown', {})]:
-            connection.execute('INSERT INTO external_tasks(id,token_hash,model,fingerprint,subject,environment,machine) VALUES(?,?,?,?,?,?,?)',
+            connection.execute('INSERT INTO external_tasks(id,token_hash,model,fingerprint,subject,environment,machine) VALUES(?,?,?,?,?,?,?)',  # its name then
                 (number, 'hash', 'model', 'fingerprint', json.dumps(subject), '{}', 'compute'))
-    migrate(database, connection, 'turnstile.tasks', FRONT_TASKS)
-    migrate(database, connection, 'turnstile.tasks', FRONT_TASKS)
-    assert dict(connection.execute('SELECT id,owner_id FROM external_tasks')) == {
+    migrate(database, connection, 'turnstile.benchmark_tasks', TASK_RECORDS)
+    migrate(database, connection, 'turnstile.benchmark_tasks', TASK_RECORDS)
+    assert dict(connection.execute('SELECT id,owner_id FROM benchmark_tasks')) == {
         'frozen': 'original-identity', 'unknown': None,
     }
     connection.close()
@@ -375,8 +375,9 @@ def test_retirement_preserves_live_tables_vacuums_and_transfers_without_resurrec
     with readonly(database.path) as source:
         assert not set(RETIRED_COMPUTE_TABLES) & set(row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'"))
         assert source.execute('SELECT name,settings FROM models').fetchall() == [('kept', '{"flags":{}}')]
-    with pytest.raises(ValueError, match='retired front-owned'):
-        build_app(Config(database=str(database.path)))
+    build_app(Config(database=str(database.path)))  # a retired store starts, and keeps no records the front keeps
+    with sqlite3.connect(database.path) as source:
+        assert not set(RETIRED_COMPUTE_TABLES) & set(row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'"))
     copy = Database.sqlite(tmp_path / 'transferred.db')
     assert copy_store(database, copy)['state'] == 'verified'
     with copy.connection() as source:

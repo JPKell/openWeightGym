@@ -68,7 +68,7 @@ def sleeping_nodes(tmp_path):
     users = Users(tmp_path/'front.db', GROUPS)
     users.add('owner','admin')
     users.change('owner', own={'add':['front-wake']})
-    settings = Settings(compute='compute', data=str(tmp_path), machine_key_file=key, front_tasks=True,
+    settings = Settings(compute='compute', data=str(tmp_path), machine_key_file=key,
                         wake_mac='00:11:22:33:44:55', machines={'rig': dict(compute='http://rig:8442',
                         machine_key_file=str(rig_key), wake_mac='00:11:22:33:44:66', wake_address='10.0.0.255')})
     def wake_node(*args):
@@ -96,8 +96,8 @@ def authorize(nodes, kind='backup', machine='rig'):
     response = nodes.client.post('/loadcoach/schedules', headers=nodes.headers,
                                  json=dict(id=identifier, token=token, spec=value))
     assert response.status_code == 201, response.text
-    with nodes.app.state.front_tasks.batches.db:
-        nodes.app.state.front_tasks.batches.db.execute('UPDATE schedule_grants SET valid_from=? WHERE id=?', (due-1,identifier))
+    with nodes.app.state.task_records.batches.db:
+        nodes.app.state.task_records.batches.db.execute('UPDATE schedule_grants SET valid_from=? WHERE id=?', (due-1,identifier))
     return identifier, token, value, due
 
 
@@ -173,7 +173,7 @@ def test_wake_respects_due_grant_owner_node_and_request_policy(sleeping_nodes, c
     elif case == 'future': payload['due_at'] += 86400; expected = 400
     elif case == 'not-due': payload['due_at'] -= 1; expected = 400
     elif case == 'paused':
-        nodes.app.state.front_tasks.grants.enable(identifier, False); expected = 403
+        nodes.app.state.task_records.grants.enable(identifier, False); expected = 403
     elif case == 'disabled-owner': nodes.users.change('owner', enabled=False); expected = 403
     elif case == 'no-wake-permission': nodes.users.change('owner', own={'remove':['front-wake']}); expected = 403
     elif case == 'disabled-node': nodes.app.state.machines.change_state('compute','disabled','owner'); expected = 409
@@ -224,7 +224,7 @@ def test_changes_during_readiness_probe_cancel_wake(sleeping_nodes, change):
     nodes = sleeping_nodes
     identifier, token, value, due = authorize(nodes)
     nodes.online['compute'] = False
-    grants = nodes.app.state.front_tasks.grants
+    grants = nodes.app.state.task_records.grants
     if change == 'node-disabled':
         nodes.before_unavailable.append(lambda: nodes.app.state.machines.change_state('compute','disabled','owner'))
     elif change == 'grant-paused':

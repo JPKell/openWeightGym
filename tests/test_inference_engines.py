@@ -25,7 +25,7 @@ from loadcoach.cli import as_toml
 from loadcoach import statement
 from loadcoach.groups import Group
 from loadcoach.users import Users
-from turnstile.app import Settings as FrontSettings, build_app as build_front
+from turnstile.app import Settings as FrontConfig, build_app as build_front
 from front_helpers import machine_key
 from test_app import add_user, fake_llama_server, gateway, in_an_empty_folder, model  # noqa: F401
 from test_two_machines import Two
@@ -266,7 +266,7 @@ def test_named_engine_management_is_signed_scoped_and_never_falls_back(tmp_path)
             return await super().handle_async_request(request)
 
     wire = Wire(worker("compute", primary_key), worker("rig", rig_key))
-    settings = FrontSettings(compute="compute", data=str(tmp_path), machine_key_file=primary_key,
+    settings = FrontConfig(compute="compute", data=str(tmp_path), machine_key_file=primary_key,
                              machines={"rig": {"compute": "http://compute:9442", "machine_key_file": rig_key}},
                              machines_poll_seconds=3600)
     with TestClient(build_front(settings, httpx.AsyncClient(transport=wire), users=users)) as front:

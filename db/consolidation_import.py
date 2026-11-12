@@ -12,11 +12,12 @@ import re
 
 from db import DatabaseRegistry
 from db.consolidation import normalized, readonly, quoted
+from db.schemas import stored_table
 from loadcoach.config import data_folder, read_settings
 
 
 def telemetry(source, target, fingerprint, *, apply=False):
-    """Import retained machine telemetry into front-owned history."""
+    """Import retained machine telemetry into the history the front keeps."""
     if not re.fullmatch(r"[a-f0-9]{64}", fingerprint):
         raise ValueError("A verified physical host fingerprint is required")
     if not target.execute("SELECT 1 FROM machine_hosts WHERE fingerprint=?", (fingerprint,)).fetchone():
@@ -84,14 +85,20 @@ def reliability(source, accounts, target, *, machine="compute", apply=False):
 
 
 def copy_missing(source, target, selections, *, apply=False):
-    """One transaction for a consistency-bound collection, with content collision checks."""
+    """One transaction for a consistency-bound collection, with content collision checks.
+
+    Each table is named by its current name. A source snapshot made before the benchmark task
+    tables were renamed is read under the old name; the target always has the current one.
+    """
     plans, reports = [], {}
+    source_tables = {name for name, in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     for table, where, parameters, additions in selections:
-        info = source.execute(f'PRAGMA table_info({quoted(table)})').fetchall()
+        stored = stored_table(source_tables, table)
+        info = source.execute(f'PRAGMA table_info({quoted(stored)})').fetchall()
         keys = [one[1] for one in sorted(info, key=lambda one: one[5]) if one[5]]
         if not keys:
             raise ValueError('Imports require a primary key for every table')
-        cursor = source.execute(f'SELECT * FROM {quoted(table)} {where}', parameters)
+        cursor = source.execute(f'SELECT * FROM {quoted(stored)} {where}', parameters)
         original_names = [one[0] for one in cursor.description]
         if set(additions) & set(original_names):
             raise ValueError('This import expects an unmodified legacy source schema')
@@ -132,9 +139,10 @@ def tasks(source, target, *, machine='compute', apply=False):
     """Preserve terminal legacy task/batch/file history, including existing retention holes."""
     if source.execute("SELECT 1 FROM batches WHERE endpoint='/loadcoach/task' AND status NOT IN ('completed','cancelled') LIMIT 1").fetchone():
         raise ValueError('Legacy tasks must all be terminal before the offline history move')
-    if source.execute("SELECT 1 FROM external_tasks e LEFT JOIN batches b ON b.id=e.id WHERE b.id IS NULL OR b.endpoint<>'/loadcoach/task' LIMIT 1").fetchone():
-        raise ValueError('Every external task needs its owning task batch')
     known_tables = {name for name, in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    task_table = quoted(stored_table(known_tables, 'benchmark_tasks'))
+    if source.execute(f"SELECT 1 FROM {task_table} e LEFT JOIN batches b ON b.id=e.id WHERE b.id IS NULL OR b.endpoint<>'/loadcoach/task' LIMIT 1").fetchone():
+        raise ValueError('Every benchmark task needs its owning task batch')
     owners = dict(source.execute('SELECT name,identity FROM users')) if 'users' in known_tables else {}
     batch_users = dict(source.execute('SELECT id,user FROM batches'))
     def owner_id(row):
@@ -146,7 +154,7 @@ def tasks(source, target, *, machine='compute', apply=False):
         ('files', "WHERE id IN (SELECT input_file FROM batches WHERE endpoint='/loadcoach/task' UNION SELECT output_file FROM batches WHERE endpoint='/loadcoach/task' UNION SELECT error_file FROM batches WHERE endpoint='/loadcoach/task')", (), {}),
         ('batches', "WHERE endpoint='/loadcoach/task'", (), {}),
         ('batch_lines', "WHERE batch IN (SELECT id FROM batches WHERE endpoint='/loadcoach/task')", (), {}),
-        ('external_tasks', '', (), {'machine': machine, 'owner_id': owner_id}),
+        ('benchmark_tasks', '', (), {'machine': machine, 'owner_id': owner_id}),
     ], apply=apply)
 
 
@@ -159,7 +167,7 @@ def settings(source, target, *, apply=False, programs=None):
 
 
 def grants(source, target, *, apply=False):
-    """Import existing schedule authorization grants into front ownership."""
+    """Import existing schedule authorization grants into the front's records."""
     return copy_missing(source, target, [('schedule_grants', '', (), {})], apply=apply)
 
 

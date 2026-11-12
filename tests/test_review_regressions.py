@@ -19,7 +19,7 @@ from toollocker.servers import LONGEST_LINE, Remote, Server, ToolProblem, catalo
 from toollocker import tools as tool_host
 from toollocker.tools import files as file_tools
 from turnstile.accounts import read_json
-from turnstile.tasks import FrontTasks
+from turnstile.tasks import TaskRecords
 from test_weightroom import desk, sign_in  # noqa: F401
 
 
@@ -121,7 +121,7 @@ def test_evidence_retry_visits_the_durable_queue():
         """Record the durable queue retry without a live model or database."""
         calls.append(True)
 
-    asyncio.run(FrontTasks.retry_publication(SimpleNamespace(publish_pending=publish)))
+    asyncio.run(TaskRecords.retry_publication(SimpleNamespace(publish_pending=publish)))
     assert calls == [True]
 
 

@@ -24,7 +24,7 @@ class Pins:
     """What `Batches.start` pins a queued request by: the model ID compute gave its name when the batch began."""
 
     def __init__(self, ids: dict[str, str]) -> None:
-        """Bind stable model identity lookups used by front-owned batches."""
+        """Bind stable model identity lookups used by the batches the front keeps."""
         self.ids = ids
 
     def identity(self, name: str) -> str | None:
@@ -37,7 +37,7 @@ class Pins:
 
 
 class FrontBatches:
-    """Front-owned durable batches executed through authenticated model APIs."""
+    """Durable batches the front keeps, executed through authenticated model APIs."""
     def __init__(self, store: Batches, log, ask_compute, door: httpx.AsyncClient, internal_key) -> None:
         """`ask_compute(user, method, path)` asks compute as someone. `door` is turnstile's own front door, and `internal_key(name)` the key that opens it for one account."""
         self.store, self.log, self.ask_compute, self.door, self.internal_key = store, log, ask_compute, door, internal_key
@@ -69,7 +69,7 @@ class FrontBatches:
     # ---- the work --------------------------------------------------------------------------------
 
     def work(self, number: str, user_for) -> None:
-        """Execute queued front-owned batch lines and persist their durable outcomes."""
+        """Execute queued batch lines and persist their durable outcomes."""
         task = self.working[number] = asyncio.create_task(self.work_through(number, user_for))
         self.carrying.add(task)
         task.add_done_callback(self.carrying.discard)
@@ -170,7 +170,7 @@ class FrontBatches:
         return one if allowed else error(404, "There is no such file or batch of yours.")
 
     async def file_upload(self, request: Request, user: User) -> Response:
-        """Validate and retain one front-owned batch input file."""
+        """Validate and retain one batch input file."""
         body = await request.body()
         if len(body) > MOST_BYTES:
             return error(413, f"A file may be up to {MOST_BYTES // 2**20} MB.")
@@ -203,7 +203,7 @@ class FrontBatches:
         return JSONResponse(self.as_openai(found))
 
     async def batch_start(self, request: Request, user: User, user_for) -> Response:
-        """Validate the uploaded lines and create a durable front-owned batch."""
+        """Validate the uploaded lines and create a durable batch."""
         asked = await read_json(request, {"input_file_id", "endpoint", "completion_window", "metadata"})
         if isinstance(asked, Response):
             return asked
@@ -258,7 +258,7 @@ class FrontBatches:
         return any(self.store.get(number)["user"] == name for number in self.store.unfinished())
 
     def renamed(self, name: str, new: str) -> None:
-        """Update front-owned batch attribution after an account rename."""
+        """Update batch attribution after an account rename."""
         with self.store.db:
             for table in ("files", "batches"):
                 self.store.db.execute(f"UPDATE {table} SET user = ? WHERE user = ?", (new, name))

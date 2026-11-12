@@ -185,6 +185,10 @@ can = ["follow-settings"]
 # turnstile's own part. Seconds it waits for compute to wake before it gives up on a request.
 [turnstile]
 wait = 180
+# Let callers choose the node their work runs on, such as benchmark runs on Node measurements that
+# name a node. When off, the front picks the node and a request that names one is refused with a
+# message saying so. The front keeps task records for every node either way. Changes apply immediately.
+allow_caller_to_specify_destination = true
 # LoadCoach on the front host that owns the model-file storage library and active cache. Empty prefers
 # front_cpu when configured, otherwise compute. Changing it requires restarting turnstile.
 artifact_machine = ""

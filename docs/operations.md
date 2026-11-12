@@ -121,7 +121,7 @@ with working deferred charts and model-file controls. Opening the model editor s
 5.37 s for file inventory, without delaying initial navigation. Targeted server and browser
 regressions passed; no live JavaScript errors or mobile overflow were found.
 
-Civitai front-owned discovery now dispatches to Civitai instead of Hugging Face and applies
+Civitai discovery on the front now dispatches to Civitai instead of Hugging Face and applies
 the caller's preview policy. Cards reject wrong-provider results rather than showing undefined
 metadata. Live search returned 36 named versions with type/base-model fields. These changes
 require matching WeightRoom templates/static files and Turnstile artifact routing; both front
@@ -198,7 +198,7 @@ optional control. Disable/reset the setting to restore timeout-only admission; t
 require reverting model settings or stored evidence. The live limit remains off; selected-model
 calibration is required before enabling it.
 
-C04 reusable case sets (milestone 94, deployed **2026-10-16**) is front-owned. On another
+C04 reusable case sets (milestone 94, deployed **2026-10-16**) runs on the front. On another
 installation, deliver WeightRoom, the benchmark package, templates and static example/import
 script together. Restart WeightRoom through the existing deployment workflow.
 `weightroom.benchmarks` migration 4 automatically
@@ -1158,17 +1158,32 @@ table/log metadata; earlier code has no allowance UI. See [the contract](allowan
 
 ## DB1 ownership and retirement (milestone 124)
 
-The installed split deployment enables `[turnstile] front_tasks = true` and
-`front_settings = true` in front's `settings/weightroom.toml`, and root-level
-`front_tasks = true` in compute's `settings/loadcoach.toml`. Compatibility defaults remain
-false for unconverted installations. Matching code is required on front and compute.
-Front IDs remain front-owned if new creation is disabled; after retirement, compute
-refuses legacy mode until its pre-retirement database is restored.
+The front always keeps benchmark task records (tables `benchmark_tasks`,
+`benchmark_task_evidence`, `benchmark_task_finishes` and `benchmark_task_reservations`,
+migration stream `turnstile.benchmark_tasks`, formerly `turnstile.tasks`) and sends each task to the node it is placed on.
+`[turnstile] keep_console_settings_on_front = true` in the front's `settings/weightroom.toml`
+keeps console settings there. A node whose store has the `loadcoach.retirement` migration
+refuses local task, batch and schedule creation and points callers at turnstile; there is no
+switch for this on the node. Task IDs the front does not know (older tasks and schedules a
+node created itself) are still forwarded to the node that has them.
+
+`[turnstile] allow_caller_to_specify_destination` (Settings → General, "Allow callers to
+choose the node", default on) decides whether a request may name its node (a benchmark
+target's `machine`, or `"node"` in an API body). Off, a request that names a node gets a 400
+that says how to turn it on; requests that leave the node out are placed as usual.
+
+Renamed keys (peer-nodes Phase 1): `front_settings` is now `keep_console_settings_on_front`
+and `front_toollocker` is now `toollocker_runs_on_front`. The old names are still read when
+the new one is absent, with a note in the journal; setting both to different values stops
+the service with an error. `owg update` renames them in `settings/weightroom.toml` and
+`settings/loadcoach.toml` and keeps the previous file as `<name>.before-peer-nodes`.
+`front_tasks` is retired and ignored. The table and stream renames run as task-record
+migration 4 at the next start; a database restored from before it is renamed again on start.
 
 For another installation: drain and pause benchmark creation, take verified paired/outside
 recovery, deploy matching code, then preview/apply the terminal task/history, grant and
-front-program settings imports with `python -m db.consolidation_import`. Enable ownership
-only after exact comparison and console checks. The existing services, ports and credentials
+front-program settings imports with `python -m db.consolidation_import`. Turn on
+`keep_console_settings_on_front` only after exact comparison and console checks. The existing services, ports and credentials
 are reused. Front-only settings must not be reset through compute's CLI or API.
 
 `python -m db.consolidation_retire --help` describes explicit proof preparation, preview and
@@ -1182,8 +1197,8 @@ clean, committed checkout: with any uncommitted or untracked change they stop an
 Services normally run the code in their installed folder. Inspect effective unit/drop-ins for
 [runtime source overrides](#runtime-source-overrides) before assuming that folder is active.
 
-Before an ownership rollback, disable new front task creation and drain or cancel existing
-front tasks; their IDs remain front-owned. Transfer current front-program settings back before
+Before a rollback, drain or cancel existing tasks; their records stay on the front.
+Transfer current front-program settings back before
 changing their authority. After retirement, stop every shared store writer (LoadCoach,
 ToolLocker and Spotter), restore the verified pre-retirement compute copy with compatible
 code/settings, then restart and verify forwarding. Never recreate empty legacy tables or
@@ -1236,7 +1251,7 @@ port = 9443
 ```
 
 In `weightroom.toml`, set `toollocker_url = "http://127.0.0.1:9443"` under `[turnstile]`,
-with `front_settings = true` and port 8443 retained in `ports`. The front service unit must
+with `keep_console_settings_on_front = true` and port 8443 retained in `ports`. The front service unit must
 use the front installation's executable/settings paths; retain `tooldoor.service` as its alias.
 `deploy-front.sh` updates configured front ToolLocker instances and restarts their existing
 unit. It also refreshes LoadCoach defaults/examples used by an optional front CPU worker, so
@@ -1260,19 +1275,19 @@ shared maintenance barrier. Disable and stop compute's gateway, snapshot its fin
 then use `db.consolidation_import.settings(..., programs={'toollocker'})` and `copy_missing`
 for `tool_schemas` against front's migrated `TOOL_SCHEMAS` table. Preview first; compare exact
 rows and repeat imports before starting the front gateway. Preserve source records and audit
-serialization. Set `front_toollocker = true` in primary LoadCoach's machine file and restart
+serialization. Set `toollocker_runs_on_front = true` in primary LoadCoach's machine file and restart
 it when idle: its API/CLI then refuse stale ownership and a compute gateway cannot restart.
 
 After cutover, check signed MCP calls and identical offered schemas, manager tools/settings,
-permissions, revocation, trace sensitivity and the audit chain. Check front-owned tools/pages
-with LoadCoach unavailable, then gateway outage/refusal/recovery, restart persistence and a
+permissions, revocation, trace sensitivity and the audit chain. Check the tools and pages the front
+serves with LoadCoach unavailable, then gateway outage/refusal/recovery, restart persistence and a
 new verified pair. Restore all normal services; retain the owner's benchmark pause.
 [Canonical results and receipt locations](database-storage.md#front-toollocker-and-remaining-telemetry-milestone-128).
 
 Rollback: stop the front gateway and prevent new tool/settings requests; preserve current
 front schemas, settings and tool events first. Restore the previous routing and unit from
 the private recovery copy, transfer any newer settings back to the old owner with exact
-conflict checks, then unset `front_toollocker`, restart LoadCoach and enable compute's
+conflict checks, then unset `toollocker_runs_on_front`, restart LoadCoach and enable compute's
 ToolLocker. Keep tool events on front's audit chain; never overwrite the whole accounts
 store just to move the gateway back. Raw SSH/bearer/machine keys remain separate private
 recovery inputs. No physical power/sleep changes or live engine switch are part of this move.

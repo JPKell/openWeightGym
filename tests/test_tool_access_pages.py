@@ -9,7 +9,7 @@ from test_weightroom import desk, sign_in  # noqa: F401  the fixture, used by na
 
 def test_tool_levels_and_tool_sets_are_changed_on_the_tools_page(desk, tmp_path):  # noqa: F811
     browser, switch, _ = desk
-    changes = switch.front.state.front_settings.changes
+    changes = switch.front.state.console_settings.changes
     database = changes.db.database
     config = {"call_timeout": 30, "servers": {"nas": {"url": "http://nas:9100/mcp", "key_file": "k", "level": "sensitive", "description": "the NAS"}},
               "toolsets": {"reading": {"tools": ["nas__*"]}}, "tool_levels": {}}  # fmt: skip

@@ -51,7 +51,7 @@ from db.recovery import RecoveryStore
 from db.maintenance import Barrier, Gate
 from loadcoach import batches as batch_rules
 from loadcoach import hub
-from loadcoach.batches import Batches, FrontOwnedBatches
+from loadcoach.batches import Batches, NoLocalBatches
 from loadcoach.backups import (
     backup_root,
     compute_plan,
@@ -171,10 +171,10 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     core = databases.database("loadcoach.core")
     from loadcoach.component_versions import Versions
     component_versions = Versions(core)
-    if not config.front_tasks:
-        with core.connection() as connection:
-            if schema_version(connection, "loadcoach.retirement"):
-                raise ValueError("This store has retired front-owned tables; enable front_tasks or restore its pre-retirement backup.")
+    # A store retired after the DB1 cutover keeps no task, batch, schedule or console-settings
+    # records: the front keeps them. Any other store still serves its older records.
+    with core.connection() as connection:
+        retired = bool(schema_version(connection, "loadcoach.retirement"))
     gate = Gate(config.path)
     # No read timeout: a model can think for minutes before its first token.
     client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5.0))
@@ -243,7 +243,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     # Another, which never leaves this program. With it LoadCoach asks itself on a user's behalf, when the user is not there with a key:
     # a batch's request, answered hours after it was handed in.
     inner_token = secrets.token_urlsafe(32)
-    batches = FrontOwnedBatches() if config.front_tasks else Batches(core)
+    batches = NoLocalBatches() if retired else Batches(core)
     batches.bind_models(library)
 
     async def who(request: Request) -> User | Response:
@@ -2533,7 +2533,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     def local_settings():
         """List only settings whose authority remains on this compute node."""
-        return [one for one in changes.everything() if one['program'] not in front_programs(config)]
+        return [one for one in changes.everything() if one['program'] not in front_programs(config, retired)]
 
     async def settings_all(request: Request, user: User) -> Response:
         """Every program that has said what it runs with, and each of its settings: its value, the file's, what was changed, and when a change holds."""
@@ -2543,8 +2543,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """ToolLocker's published configuration and last observed tool descriptions."""
         if denied := lacks(user, "manage-settings"):
             return denied
-        if config.front_toollocker:
-            return error(410, 'ToolLocker records are front-owned; use front\'s Tools page.')
+        if config.toollocker_runs_on_front:
+            return error(410, 'The front keeps ToolLocker\'s records; use the Tools page on the front.')
         program = next((one for one in changes.everything() if one['program'] == 'toollocker'), None)
         exists = "tool_schemas" in log.db.database.tables(log.db)
         schemas = [{"name": name, "schema": json.loads(schema)} for name, schema in
@@ -2578,8 +2578,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if denied := lacks(user, "manage-settings"):
             return denied
         program = program_name(request.path_params.get("program", "loadcoach"))
-        if program in front_programs(config):
-            return error(410, 'This program is front-owned; use front\'s Settings page.')
+        if program in front_programs(config, retired):
+            return error(410, 'The front keeps this program\'s settings; use the Settings page on the front.')
         if request.url.path == "/loadcoach/cards":
             report()
         known = next((one for one in changes.everything() if one["program"] == program), None)
@@ -2641,7 +2641,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """For a program's own key: what was changed for that program, to lay over its file."""
         if not user.can("manage-settings") and (denied := lacks(user, "follow-settings")):
             return denied
-        if program_name(request.path_params['program']) in front_programs(config):
+        if program_name(request.path_params['program']) in front_programs(config, retired):
             return error(410, 'This program follows settings on front.')
         return JSONResponse(changes.of(request.path_params["program"]))
 
@@ -2649,7 +2649,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """For a program's own key: what it runs with now, and what it would not take of what was changed."""
         if denied := lacks(user, "follow-settings"):
             return denied
-        if program_name(request.path_params['program']) in front_programs(config):
+        if program_name(request.path_params['program']) in front_programs(config, retired):
             return error(410, 'This program reports settings on front.')
         asked = await read_json(request, {"told", "refused"})
         if isinstance(asked, Response):
@@ -2704,7 +2704,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 )
                 candidates.extend(("spotter", bound) for bound in registry.bound_stores())
             locker_path = settings_folder / "toollocker.toml"
-            if locker_path.is_file() and not config.front_toollocker:
+            if locker_path.is_file() and not config.toollocker_runs_on_front:
                 told = read_settings(locker_path)
                 registry = DatabaseRegistry.from_config(
                     told.get("databases"), locker_path.parent, {"toollocker.identity": core}
@@ -2773,7 +2773,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 rows,
                 excluded,
                 ["loadcoach.service", "spotter.service", "voice.service",
-                 *([] if config.front_toollocker else ["toollocker.service"])],
+                 *([] if config.toollocker_runs_on_front else ["toollocker.service"])],
                 retention,
                 model_recovery_inventory(),
                 stores=stores,
@@ -2814,8 +2814,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     async def schedule_register(request: Request, user: User) -> Response:
         """Register a hashed schedule grant when compute retains schedule authority."""
-        if config.front_tasks:
-            return error(410, 'Schedule grants are front-owned; use turnstile.')
+        if retired:
+            return error(410, 'The front keeps schedules for this node; use turnstile.')
         asked = await read_json(request, {'id', 'token', 'spec'})
         if isinstance(asked, Response):
             return asked
@@ -2831,8 +2831,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     async def schedule_edit(request: Request, user: User) -> Response:
         """Replace a compute-owned schedule grant after current permission checks."""
-        if config.front_tasks:
-            return error(410, 'Schedule grants are front-owned; use turnstile.')
+        if retired:
+            return error(410, 'The front keeps schedules for this node; use turnstile.')
         asked = await read_json(request, {'token', 'spec', 'enabled'})
         if isinstance(asked, Response):
             return asked
@@ -2849,8 +2849,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     async def schedule_control(request: Request, user: User) -> Response:
         """Enable or disable a compute-owned schedule grant."""
-        if config.front_tasks:
-            return error(410, 'Schedule grants are front-owned; use turnstile.')
+        if retired:
+            return error(410, 'The front keeps schedules for this node; use turnstile.')
         if denied := lacks(user, 'manage-settings'):
             return denied
         asked = await read_json(request, {'enabled'})
@@ -2870,8 +2870,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     async def schedule_dispatch(request: Request) -> Response:
         """Only the saved job, under its live owner; no general impersonation or wake path."""
-        if config.front_tasks:
-            return error(410, 'Schedule grants are front-owned; dispatch through turnstile.')
+        if retired:
+            return error(410, 'The front keeps schedules for this node; dispatch through turnstile.')
         try:
             identifier = request.path_params['identifier']
             await users.fresh()  # the owner as front says they are now

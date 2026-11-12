@@ -1,4 +1,4 @@
-"""DB1 front task ownership through real signed front/compute ASGI boundaries."""
+"""Task records kept on the front, through real signed front/node ASGI boundaries."""
 
 import asyncio
 import hashlib
@@ -17,17 +17,51 @@ from test_tasks import create
 from test_weightroom import gguf
 
 
+def retire(path):
+    """Mark a node store as retired after the DB1 cutover, as `db.consolidation_retire` does, keeping its tables."""
+    from dataclasses import replace
+    from db import Database, migrate
+    from db.schemas import COMPUTE_RETIREMENT
+    database = Database.sqlite(path)
+    connection = database.connect()
+    try:
+        migrate(database, connection, 'loadcoach.retirement', (replace(COMPUTE_RETIREMENT[0], sqlite=lambda *_: None),))
+    finally:
+        connection.close()
+
+
 def task_gateway(fake_llama_server, fake_cards, tmp_path, stateless=False):
+    """A front and one node. `stateless`: the node's store is retired, so it keeps no records of its own."""
     gguf('small.gguf', general__architecture='tiny', tiny__context_length=2048)
+    if stateless and not (tmp_path / 'compute.db').exists():
+        retire(tmp_path / 'compute.db')
     return gateway(fake_llama_server, models={'small': model('small.gguf', ['GPU0'], **{'ctx-size': 2048, 'mib': 1000})},
-                   nvidia_smi=fake_cards[0], database=str(tmp_path / 'compute.db'), front_tasks=stateless)
+                   nvidia_smi=fake_cards[0], database=str(tmp_path / 'compute.db'))
 
 
-def enable(caller):
-    caller.front.state.front_tasks.enabled = True
+def legacy_task(caller, name):
+    """A task the node created and keeps itself, as nodes did before the front kept every task record."""
+    import httpx
+    from front_helpers import KEY
+    from loadcoach import statement
+    body = {'id': 'batch_' + secrets.token_hex(12), 'token': secrets.token_urlsafe(32), 'model': 'small'}
+    encoded = json.dumps(body).encode()
+    async def made():
+        user = caller.front.state.users.by_name(name)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=caller.compute), base_url='http://compute') as node:
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                signed, _nonce = statement.make(KEY, 'POST', '/loadcoach/tasks', encoded, statement.caller_of(user))
+                response = await node.post('/loadcoach/tasks', content=encoded, headers={statement.HEADER: signed, 'content-type': 'application/json'})
+                if response.status_code == 201:
+                    return body
+                assert 'fingerprinted' in response.text, response.text
+                await asyncio.sleep(.02)
+            raise AssertionError(response.text)
+    return caller.portal.call(made)
 
 
-def test_stateless_compute_api_and_cli_cannot_read_or_reset_front_settings(fake_llama_server, fake_cards, tmp_path, capsys):
+def test_retired_node_api_and_cli_cannot_read_or_reset_console_settings(fake_llama_server, fake_cards, tmp_path, capsys):
     import httpx
     from front_helpers import KEY
     from loadcoach import statement
@@ -61,7 +95,7 @@ def test_stateless_compute_api_and_cli_cannot_read_or_reset_front_settings(fake_
         output = capsys.readouterr().out
         assert 'UTC' not in output and 'managed on front' in output
         import pytest
-        with pytest.raises(ValueError, match='front-owned'):
+        with pytest.raises(ValueError, match='The front keeps'):
             settings_command(changes, 'reset', 'weightroom', 'timezone', excluded=FRONT_PROGRAMS)
         assert changes.of('weightroom') == {'timezone': 'UTC'}
         changes.db.close()
@@ -70,7 +104,6 @@ def test_stateless_compute_api_and_cli_cannot_read_or_reset_front_settings(fake_
 def test_front_creation_probe_receipt_finish_are_local_atomic_and_idempotent(fake_llama_server, fake_cards, tmp_path):
     with task_gateway(fake_llama_server, fake_cards, tmp_path) as caller:
         owner = add_user(caller, 'owner', 'admin')
-        enable(caller)
         intent = create(caller, owner)
         path = '/loadcoach/tasks/' + intent['id']
         scoped = {'x-loadcoach-task': intent['token']}
@@ -95,11 +128,11 @@ def test_front_creation_probe_receipt_finish_are_local_atomic_and_idempotent(fak
         assert caller.post(path + '/finish', headers=scoped, json={'state': 'completed', 'result': {'different': True}}).status_code == 409
         assert caller.get('/v1/batches/' + intent['id'], headers=owner).json()['status'] == 'completed'
         with sqlite3.connect(tmp_path / 'compute.db') as compute:
-            assert compute.execute('SELECT COUNT(*) FROM external_tasks').fetchone() == (0,)
+            assert compute.execute('SELECT COUNT(*) FROM benchmark_tasks').fetchone() == (0,)
             assert compute.execute('SELECT COUNT(*) FROM batches').fetchone() == (0,)
-        front = caller.front.state.front_tasks
+        front = caller.front.state.task_records
         async def counts():
-            return [front.batches.db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0] for table in ('external_tasks', 'batches', 'batch_lines', 'files')]
+            return [front.batches.db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0] for table in ('benchmark_tasks', 'batches', 'batch_lines', 'files')]
         assert caller.portal.call(counts) == [1, 1, 1, 2]
 
 
@@ -119,23 +152,20 @@ def test_dispatch_is_private_and_wrong_scope_never_touches_compute(fake_llama_se
                 signed = statement.make(KEY, 'POST', '/loadcoach/front-probes', b'{}', statement.caller_of(user), purpose='front-probe')[0]
                 assert (await compute.post('/loadcoach/front-probes', content=b'{"changed":true}', headers={statement.HEADER: signed})).status_code == 401
         caller.portal.call(signed_refusals)
-        enable(caller)
         intent = create(caller, owner)
         path = '/loadcoach/tasks/' + intent['id']
         assert caller.get(path, headers={'x-loadcoach-task': 'wrong-token'}).status_code == 404
         assert caller.post(path + '/probe', headers={'x-loadcoach-task': intent['token']}, json={'context': 128, 'inputs': 120, 'outputs': 16}).status_code == 400
 
 
-def test_front_task_survives_disabled_creation_and_revocation_and_legacy_ids_stay_compute(fake_llama_server, fake_cards, tmp_path):
+def test_front_task_survives_revocation_and_legacy_ids_stay_on_their_node(fake_llama_server, fake_cards, tmp_path):
     with task_gateway(fake_llama_server, fake_cards, tmp_path) as caller:
         owner = add_user(caller, 'owner', 'admin')
         manager = add_user(caller, 'manager', 'admin', by=owner)
-        legacy = create(caller, owner)
-        enable(caller)
+        legacy = legacy_task(caller, 'owner')
         intent = create(caller, owner)
         scoped = {'x-loadcoach-task': intent['token']}
         path = '/loadcoach/tasks/' + intent['id']
-        caller.front.state.front_tasks.enabled = False
         assert caller.get(path, headers=scoped).json()['allowed']
         legacy_status = caller.get('/loadcoach/tasks/' + legacy['id'], headers={'x-loadcoach-task': legacy['token']})
         assert legacy_status.json()['id'] == legacy['id'] and 'x-suite-data-owner' not in legacy_status.headers
@@ -151,7 +181,6 @@ def test_front_task_survives_disabled_creation_and_revocation_and_legacy_ids_sta
 def test_front_task_tracks_model_rename_then_refuses_reused_name(fake_llama_server, fake_cards, tmp_path):
     with task_gateway(fake_llama_server, fake_cards, tmp_path) as caller:
         owner = add_user(caller, 'owner', 'admin')
-        enable(caller)
         intent = create(caller, owner)
         path = '/loadcoach/tasks/' + intent['id']
         scoped = {'x-loadcoach-task': intent['token']}
@@ -171,7 +200,7 @@ def test_front_settings_followers_and_changes_use_front_store(fake_llama_server,
     with task_gateway(fake_llama_server, fake_cards, tmp_path) as caller:
         owner = add_user(caller, 'owner', 'admin')
         plain = add_user(caller, 'plain', 'plain', by=owner)
-        caller.front.state.front_settings.enabled = True
+        caller.front.state.console_settings.enabled = True
         def follower():
             caller.users.groups.put('settings-follower', {'can': ['follow-settings']})
             caller.users.add('follower', 'settings-follower')
@@ -195,7 +224,6 @@ def test_front_scheduled_benchmark_uses_front_grant_and_task(fake_llama_server, 
     import turnstile.tasks
     with task_gateway(fake_llama_server, fake_cards, tmp_path) as caller:
         owner = add_user(caller, 'owner', 'admin')
-        enable(caller)
         identity = caller.get('/v1/models', headers=owner).json()['data'][0]['model_id']
         value = spec(kind='benchmark', model_id=identity, benchmark='context')
         identifier, token = 'a' * 32, secrets.token_urlsafe(32)
@@ -211,14 +239,13 @@ def test_front_scheduled_benchmark_uses_front_grant_and_task(fake_llama_server, 
             assert dispatched.status_code in (200, 201), dispatched.text
             assert dispatched.json()['id'] == occurrence_ids(identifier, due)[0]
         with sqlite3.connect(tmp_path / 'compute.db') as compute:
-            assert compute.execute('SELECT COUNT(*) FROM external_tasks').fetchone() == (0,)
+            assert compute.execute('SELECT COUNT(*) FROM benchmark_tasks').fetchone() == (0,)
             assert compute.execute('SELECT COUNT(*) FROM schedule_grants').fetchone() == (0,)
 
 
 def test_fresh_stateless_compute_runs_signed_probes_without_legacy_tables(fake_llama_server, fake_cards, tmp_path):
     with task_gateway(fake_llama_server, fake_cards, tmp_path, stateless=True) as caller:
         owner = add_user(caller, 'owner', 'admin')
-        enable(caller)
         intent = create(caller, owner)
         path = '/loadcoach/tasks/' + intent['id']
         scoped = {'x-loadcoach-task': intent['token']}
@@ -229,7 +256,7 @@ def test_fresh_stateless_compute_runs_signed_probes_without_legacy_tables(fake_l
         assert OnCompute(caller).post('/loadcoach/schedules/' + 'a' * 32 + '/dispatch', headers={'x-suite-schedule': 'old-grant-token'}, json={}).status_code == 410
         with sqlite3.connect(tmp_path / 'compute.db') as compute:
             tables = {name for name, in compute.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            assert not tables.intersection({'users','groups','keys','roles','role_evidence','reliability_outcomes','external_tasks','batches','batch_lines','files','benchmark_runs','services'})
+            assert not tables.intersection({'users','groups','keys','roles','role_evidence','reliability_outcomes','benchmark_tasks','batches','batch_lines','files','benchmark_runs','services'})
             assert {'events','forwarded','file_hashes','schedule_grants','models'} <= tables
 
 
@@ -243,7 +270,6 @@ def test_front_probe_interrupt_finishes_cleanup_before_retry(fake_llama_server, 
     monkeypatch.setattr(Probes, 'sample', slow)
     with task_gateway(fake_llama_server, fake_cards, tmp_path, stateless=True) as caller, ThreadPoolExecutor() as pool:
         owner = add_user(caller, 'owner', 'admin')
-        enable(caller)
         intent = create(caller, owner)
         path = '/loadcoach/tasks/' + intent['id']
         scoped = {'x-loadcoach-task': intent['token'], 'x-loadcoach-probe-id': 'a' * 64}
@@ -262,7 +288,6 @@ def test_front_evidence_is_frozen_and_recovers_publication_after_finish_commit(f
     with task_gateway(fake_llama_server, fake_cards, tmp_path, stateless=True) as caller:
         owner = add_user(caller, 'owner', 'admin')
         manager = add_user(caller, 'manager', 'admin', by=owner)
-        enable(caller)
         intent = {'id': 'batch_' + secrets.token_hex(12), 'token': secrets.token_urlsafe(32), 'model': 'small',
                   'metadata': {'benchmark': 'context', 'benchmark_version': 1}}
         for _ in range(100):
@@ -295,8 +320,8 @@ def test_front_evidence_is_frozen_and_recovers_publication_after_finish_commit(f
         monkeypatch.setattr(RoleEvidence, 'accept', original)
         assert caller.post(path + '/finish', headers=scoped, json=finish).status_code == 200
         async def saved():
-            front = caller.front.state.front_tasks
-            return (front.batches.db.execute('SELECT published FROM front_task_evidence').fetchone(),
+            front = caller.front.state.task_records
+            return (front.batches.db.execute('SELECT published FROM benchmark_task_evidence').fetchone(),
                     caller.front.state.routing.evidence.db.execute('SELECT COUNT(*) FROM role_evidence').fetchone())
         assert caller.portal.call(saved) == ((1,), (1,))
         second = {**intent, 'id': 'batch_' + secrets.token_hex(12), 'token': secrets.token_urlsafe(32)}
@@ -314,13 +339,13 @@ def test_front_evidence_is_frozen_and_recovers_publication_after_finish_commit(f
         assert caller.post('/loadcoach/users/owner', headers=manager, json={'own': {'remove': ['benchmark']}}).status_code == 200
         assert caller.post(second_path + '/finish', headers=second_scoped, json=second_finish).status_code == 200
         assert caller.post('/loadcoach/users/owner', headers=manager, json={'own': {}}).status_code == 200
-        caller.portal.call(caller.front.state.front_tasks.publish_pending)
+        caller.portal.call(caller.front.state.task_records.publish_pending)
         async def retained_run():
             return json.loads(caller.front.state.routing.evidence.db.execute('SELECT evidence FROM role_evidence').fetchone()[0])['run']
         assert caller.portal.call(retained_run) == task['id']
 
 
-def test_two_machine_selection_freezes_owner_and_refuses_wrong_weights_and_outage(tmp_path):
+def test_two_machine_selection_places_on_the_named_copy_and_refuses_wrong_weights_outage_and_disallowed_choice(tmp_path):
     import httpx
     from starlette.requests import Request
     from loadcoach.batches import Batches
@@ -328,7 +353,7 @@ def test_two_machine_selection_freezes_owner_and_refuses_wrong_weights_and_outag
     from loadcoach.role_evidence import RoleEvidence
     from loadcoach.users import Users
     from loadcoach.groups import read_group
-    from turnstile.tasks import FrontTasks
+    from turnstile.tasks import TaskRecords
     source = str(tmp_path / 'front.db')
     users = Users(source, {'admin': read_group('admin', {'can': ['superuser']})})
     users.add('owner', 'admin')
@@ -352,7 +377,9 @@ def test_two_machine_selection_freezes_owner_and_refuses_wrong_weights_and_outag
         if args[1].endswith('/interrupt'):
             return httpx.Response(200, json={'ok': True})
         raise AssertionError('An unavailable pinned machine must never dispatch elsewhere')
-    tasks = FrontTasks(batches, users, log, RoleEvidence(log.db), ask, dispatch, ['compute', 'rig'], True)
+    allowed = [True]  # Settings → General, 'Allow callers to choose the node'
+    tasks = TaskRecords(batches, users, log, RoleEvidence(log.db), ask, dispatch, ['compute', 'rig'],
+                        destination_allowed=lambda: allowed[0])
     intent = {'id': 'batch_' + secrets.token_hex(12), 'token': secrets.token_urlsafe(32), 'model': 'small', 'model_id': 'rig-id'}
     def request(method, path, body=None):
         async def receive():
@@ -364,9 +391,15 @@ def test_two_machine_selection_freezes_owner_and_refuses_wrong_weights_and_outag
         rejected = await tasks.create(request('POST', '/loadcoach/tasks', intent), users.by_name('owner'))
         assert rejected.status_code == 400 and b'weights' in rejected.body
         hashes['rig'] = hashes['compute']
+        allowed[0] = False
+        pinned = await tasks.create(request('POST', '/loadcoach/tasks', {**intent, 'machine': 'rig'}), users.by_name('owner'))
+        assert pinned.status_code == 400 and 'Settings → General' in json.loads(pinned.body)['error']['message']
+        assert tasks.get(intent['id']) is None
+        # Without a node named, the copy the model ID points at is used, whatever the setting.
         made = await tasks.create(request('POST', '/loadcoach/tasks', intent), users.by_name('owner'))
         assert made.status_code == 201, made.body
         assert tasks.get(intent['id'])['machine'] == 'rig'
+        allowed[0] = True
         online['rig'] = False
         calls.clear()
         response = await tasks.handle(request('GET', '/loadcoach/tasks/' + intent['id']), None)
@@ -386,13 +419,12 @@ def test_interrupted_front_creation_rolls_back_file_batch_line_and_token(fake_ll
     from db.connection import Connection
     with task_gateway(fake_llama_server, fake_cards, tmp_path) as caller:
         owner = add_user(caller, 'owner', 'admin')
-        enable(caller)
         # Wait for the ordinary model-file fingerprint before injecting the write fault.
         seed = create(caller, owner)
-        front = caller.front.state.front_tasks
+        front = caller.front.state.task_records
         original = Connection.execute
         def broken(self, sql, args=()):
-            if self is front.batches.db and sql.startswith('INSERT INTO external_tasks'):
+            if self is front.batches.db and sql.startswith('INSERT INTO benchmark_tasks'):
                 raise RuntimeError('injected before task ownership commit')
             return original(self, sql, args)
         intent = {**seed, 'id': 'batch_' + secrets.token_hex(12), 'token': secrets.token_urlsafe(32)}
@@ -402,7 +434,7 @@ def test_interrupted_front_creation_rolls_back_file_batch_line_and_token(fake_ll
             assert interrupted.status_code == 500 and interrupted.headers['x-request-id']
             assert 'injected' not in interrupted.text
         async def counts():
-            return [front.batches.db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0] for table in ('external_tasks','batches','batch_lines','files')]
+            return [front.batches.db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0] for table in ('benchmark_tasks','batches','batch_lines','files')]
         assert caller.portal.call(counts) == [1, 1, 1, 1]
         assert caller.post('/loadcoach/tasks', headers=owner, json=intent).status_code == 201
 
@@ -413,7 +445,7 @@ def test_terminal_legacy_import_deduplicates_lists_and_recreated_username_cannot
     with task_gateway(fake_llama_server, fake_cards, tmp_path) as caller:
         owner = add_user(caller, 'owner', 'admin')
         manager = add_user(caller, 'manager', 'admin', by=owner)
-        intent = create(caller, owner)  # compute-owned before the switch
+        intent = legacy_task(caller, 'owner')  # kept on the node, from before the front kept every task
         path = '/loadcoach/tasks/' + intent['id']
         scoped = {'x-loadcoach-task': intent['token']}
         assert caller.post(path + '/finish', headers=scoped, json={'state': 'completed', 'result': {'ok': True}}).status_code == 200
@@ -423,8 +455,8 @@ def test_terminal_legacy_import_deduplicates_lists_and_recreated_username_cannot
         old.backup(new); old.close(); new.close()
         async def move():
             with readonly(snapshot) as source:
-                return import_tasks(source, caller.front.state.front_tasks.batches.db, apply=True)
-        assert caller.portal.call(move)['tables']['external_tasks']['missing'] == 1
+                return import_tasks(source, caller.front.state.task_records.batches.db, apply=True)
+        assert caller.portal.call(move)['tables']['benchmark_tasks']['missing'] == 1
         listed = caller.get('/v1/batches', headers=owner).json()['data']
         assert [one['id'] for one in listed].count(intent['id']) == 1
         batch = caller.get('/v1/batches/' + intent['id'], headers=owner).json()

@@ -1,4 +1,4 @@
-"""Front-owned audio assets, voices, sharing and existing-batch ownership bindings."""
+"""Audio assets, kept on the front,, voices, sharing and existing-batch ownership bindings."""
 from db.migrations import Migration
 
 SOUNDROOM = (Migration(1, "private audio assets, voices, group shares and job bindings", """

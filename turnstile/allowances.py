@@ -130,7 +130,7 @@ class Allowances:
 
 
 def routes(users, log, caller, ask_compute):
-    """Authenticated front-owned reporting and management; compute is never woken."""
+    """Authenticated reporting and management of allowances the front keeps; compute is never woken."""
     allowances = Allowances(users, log)
 
     async def handle(request, user):

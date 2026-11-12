@@ -34,7 +34,7 @@ def test_toollocker_setup_guide_is_available_without_compute_and_stays_private(d
     assert response.status_code == 200
     for anchor in ('requirements', 'install-toollocker-on-front', 'verify-the-connection', 'add-a-python-tool', 'troubleshooting'):
         assert f'href="#{anchor}"' in response.text and f'id="{anchor}"' in response.text
-    for instruction in ('front_settings', 'toollocker_url', 'install-suite.sh --services toollocker',
+    for instruction in ('keep_console_settings_on_front', 'toollocker_url', 'install-suite.sh --services toollocker',
                         'restart toollocker.service', 'example__greet'):
         assert instruction in response.text
     sign_in(browser, 'pat')
