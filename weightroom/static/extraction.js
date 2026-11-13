@@ -297,7 +297,11 @@
       if (!active && records.size) { active = records.keys().next().value; loadDraft(); }
       historyRows(); render(); schedulePoll();
     }
-    function toggleBatch(open = root.dataset.batch !== 'open') { root.dataset.batch = open ? 'open' : 'closed'; $('#toggle-batch').setAttribute('aria-expanded', String(open)); }
+    function toggleBatch(open = root.dataset.batch !== 'open') {
+      root.dataset.batch = open ? 'open' : 'closed';
+      $('#toggle-batch').setAttribute('aria-expanded', String(open));
+      $('#toggle-batch').textContent = open ? 'Hide batch' : 'Batch inbox';
+    }
     $('#toggle-batch').addEventListener('click', () => toggleBatch());
     $('#extraction-form').addEventListener('submit', event => { event.preventDefault(); if (!$('#run').disabled) run([current()]); });
     $('#extraction-form').addEventListener('change', () => { controls(); saveDraft(); inbox(); result(); });
