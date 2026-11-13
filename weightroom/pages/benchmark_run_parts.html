@@ -1,0 +1,22 @@
+{% from 'parts.html' import empty_row %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+
+{% macro verdict(title, note, title_id='', note_id='') %}
+<div class="br-verdict"><div><span class="eyebrow">The result</span><p class="br-statement mt-2 mb-2"{% if title_id %} id="{{ title_id }}"{% endif %}>{{ title }}</p><p class="text-secondary mb-0"{% if note_id %} id="{{ note_id }}"{% endif %}>{{ note }}</p></div><span class="br-record-tag">RETAINED<br>EVIDENCE <span aria-hidden="true">↗</span></span></div>
+{% endmacro %}
+
+{% macro fact_row(label='', value='') %}<div><dt data-fact-label>{{ label }}</dt><dd data-fact-value>{{ value }}</dd></div>{% endmacro %}
+
+{% macro sample_tools(budgets, quality=true, regressions=true) %}
+<div class="br-sample-tools"><label class="br-search"><span class="visually-hidden">Search samples</span><input id="sample-search" class="form-control" type="search" placeholder="Find a sample, case or category…"></label><label><span class="visually-hidden">Filter outcome</span><select class="form-select" id="outcome"><option value="all">All outcomes</option><option value="pass">{{ 'Passed' if quality else 'Available' }}</option>{% if quality %}<option value="fail">Failed checks</option><option value="ungraded">Not graded</option>{% endif %}<option value="unscored">Unsupported / unavailable</option>{% if regressions %}<option value="regression">New failures</option>{% endif %}</select></label><label><span class="visually-hidden">Filter input budget</span><select class="form-select" id="budget"><option value="all">All input budgets</option>{% for n in budgets %}<option value="{{ n }}">{{ '{:,}'.format(n) }} tokens</option>{% endfor %}</select></label><button type="button" class="btn btn-outline-secondary" id="clear-filters">Reset</button></div>
+{% endmacro %}
+
+{% macro measurement_choices() %}
+<div class="br-measurement-views"><span class="small text-secondary">Columns</span>{% call pills('Measurement columns', buttons=true, class_='gap-1 mb-0') %}{% for key,label in [('results','Results'),('timing','Timing & speed'),('memory','Memory'),('all','All measurements')] %}{{ pill_button(label, key == 'results', attrs={'data-columns':key}) }}{% endfor %}{% endcall %}<button type="button" class="btn btn-link btn-sm ms-auto" id="export-samples">Export filtered CSV ↓</button></div>
+{% endmacro %}
+
+{% macro check_row(check=none) %}<tr><th scope="row" data-field>{{ check.get('field', 'Check') if check else '' }}</th><td><span class="badge{% if check %} bg-{{ 'green' if check.get('passed') is sameas true else 'red' if check.get('passed') is sameas false else 'secondary' }}-lt{% endif %}" data-result>{% if check %}{{ 'Pass' if check.get('passed') is sameas true else 'Fail' if check.get('passed') is sameas false else 'Not recorded' }}{% endif %}</span></td><td><code data-expected>{% if check %}{{ check.expected|tojson if 'expected' in check else 'Not recorded' }}{% endif %}</code></td><td><code data-actual>{% if check %}{{ check.actual|tojson if 'actual' in check else 'Not recorded' }}{% endif %}</code></td></tr>{% endmacro %}
+
+{% macro check_table(checks=(), body_id='') %}
+<div class="table-responsive"><table class="table table-sm align-middle"><caption class="visually-hidden">Expected and actual values for each field</caption><thead><tr><th scope="col">Field</th><th scope="col">Check</th><th scope="col">Expected</th><th scope="col">Actual</th></tr></thead><tbody{% if body_id %} id="{{ body_id }}"{% endif %}>{% for check in checks %}{{ check_row(check) }}{% endfor %}</tbody></table></div>
+{% endmacro %}

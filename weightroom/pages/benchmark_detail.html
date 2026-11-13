@@ -1,60 +1,70 @@
-{% from "parts.html" import card, section_title , empty_row %}
-{% from "benchmark_parts.html" import number, token_count, settings_note %}
-{% set embedding = detail.subject.get('protocol', {}).get('embedding', false) %}
+{% from 'parts.html' import card, section_title, more, alert %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'benchmark_parts.html' import number, token_count, settings_note %}
+{% from 'benchmark_run_parts.html' import verdict, fact_row, sample_tools, measurement_choices %}
+{% from 'benchmark_sample_parts.html' import sample_evidence %}
+{% set embedding = briefing.embedding %}
+<div id="benchmark-run" class="benchmark-briefing" data-run-briefing>
+<div class="d-flex flex-wrap gap-2 align-items-center mb-4"><span class="badge bg-{{ 'green' if detail.state == 'completed' else 'red' if detail.state == 'failed' else 'secondary' }}-lt">{{ detail.state|title }}</span><strong>{{ briefing.name }}</strong><span class="text-secondary small">Benchmark version {{ detail.version }} · {{ detail.location or 'historical location' }} · {{ detail.created|timestamp }}</span></div>
 {% if detail.retired %}<p class="small text-secondary">Removed model · saved evidence remains available.</p>{% endif %}
-<dl class="benchmark-facts"><div><dt>Fingerprint</dt><dd><a href="/fingerprints?start={{ detail.fingerprint }}"><code>{{ detail.fingerprint }}</code></a></dd></div><div><dt>Engine</dt><dd>{{ detail.environment.engine }}<small class="d-block text-secondary"><code>{{ detail.environment.get('engine_hash', '')[:12] }}</code></small></dd></div><div><dt>Location / machine / state</dt><dd>{{ detail.location or 'historical location' }} · {{ detail.environment.get('machine', {}).get('host', 'Not recorded') }} · {{ detail.state }}</dd></div></dl>
 {{ settings_note(detail) }}
 {% if detail.model_at_run and detail.model_at_run != detail.model %}<p class="small text-secondary">Recorded model name: <code>{{ detail.model_at_run }}</code>. Current name: <code>{{ detail.model }}</code>.</p>{% endif %}
-{% if detail.version != detail.latest_version %}<p class="small text-warning-emphasis mt-3 mb-0">Made under version {{ detail.version }} of this benchmark, which is now at version {{ detail.latest_version }}. Rerun it to compare with newer results.</p>{% endif %}
-<p class="small text-secondary mt-3">Benchmark version {{ detail.version }} · {{ detail.reason }} · {{ detail.created|timestamp }} · {{ detail.samples_count }} samples · Score: {{ number(detail.score) }} · <code>{{ detail.formula }}</code></p>
-{% if detail.breakdown %}
-{% if detail.subject.get('protocol', {}).get('transport') == 'native chat completions with function calls' %}
-{{ section_title("Tool results by category", level=3) }}
-<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Category</th><th>Selection</th><th>Arguments</th><th>Completed tasks</th><th>Recovery</th><th>Executed / recorded</th><th>Unsupported</th></tr></thead><tbody>{% for group in detail.breakdown %}<tr><td>{{ group.category }}</td><td>{{ number(group.get('selection_accuracy')) }}</td><td>{{ number(group.get('argument_accuracy')) }}</td><td>{{ number(group.get('task_completion')) }}</td><td>{{ number(group.get('recovery_accuracy')) }}</td><td>{{ group.available_cases }} / {{ group.cases }}</td><td>{{ group.unsupported_cases }}</td></tr>{% endfor %}</tbody></table></div>
-<p class="small text-secondary">Accuracy and completion values are percentages. Unsupported configurations receive no score. Input/output tokens and load/request durations sum all turns in a case; they include repeated history. Every turn's input and counts are retained below.</p>
-{% else %}
-{% set retrieval = detail.subject.get('protocol', {}).get('dataset') in ('retrieval-v2', 'retrieval-v3') %}
-{% set unsupported_coverage = detail.get('metrics',{}).get('unsupported_cases',0) > 0 %}
-{{ section_title("Results by input size and category", level=3) }}
-<div class="table-responsive"><table class="table table-sm">
-<thead><tr><th>Input budget</th><th>Category</th><th>Correct checks</th><th>All-correct cases</th><th>Executed / recorded</th>{% if unsupported_coverage %}<th>Unsupported</th>{% endif %}{% if retrieval %}<th>Invented / absent</th><th>Start</th><th>Middle</th><th>End</th>{% endif %}</tr></thead>
-<tbody>{% for group in detail.breakdown %}<tr>
-<td>{{ number(group.input_tokens) if group.input_tokens else 'Unpadded' }}</td><td>{{ group.category }}</td><td>{{ number(group.accuracy) }}{{ '%' if group.get('accuracy') is number else '' }}</td><td>{{ group.get('passed_cases',0) }} / {{ group.cases }}</td><td>{{ group.available_cases }} / {{ group.cases }}</td>{% if unsupported_coverage %}<td>{{ group.get('unsupported_cases',0) }} / {{ group.cases }}</td>{% endif %}
-{% if retrieval %}<td>{{ group.get('invented_fields', 0) }} / {{ group.get('absent_fields', 0) }} ({{ number(group.get('invention')) }}%)</td>{% for region in ('start', 'middle', 'end') %}<td>{{ number(group.get(region ~ '_accuracy')) }}%</td>{% endfor %}{% endif %}
-</tr>{% endfor %}</tbody></table></div>
-{% if retrieval %}<p class="small text-secondary">Start, middle and end show field accuracy by supporting evidence block: the first, three interior and last blocks. Combined fields may count in several positions; absent fields have no position. Exact token offsets are kept with each sample. Invention counts non-null values supplied for absent fields; missing answers receive no null credit. Each native gap reuses the archive prefix and includes only what fits.</p>{% endif %}
-{% endif %}
-{% endif %}
-{% if embedding %}<p class="small text-secondary">Context is the capacity allocated for each attempt. Input is the complete token sequence processed into one pooled vector. Throughput and request time cover the local embedding request through receiving the vector, excluding tokenization, warm-up and model startup. Load-only samples request no vector.</p>{% else %}<p class="small text-secondary">Context is the capacity allocated for each attempt; input and output counts show the tokens actually processed and generated. Load measures model startup. First-token time starts after loading and includes reading the prompt; request time also includes generating the answer. Read and write rates measure these two phases separately.</p>{% endif %}
-{% set memory = namespace(cpu=false) %}{% for sample in detail.samples %}{% if sample['values'].get('device') == 'cpu' or 'peak_ram_mib' in sample['values'] or (sample.evidence and (sample.evidence.get('resource') or {}).get('device') == 'cpu') %}{% set memory.cpu = true %}{% endif %}{% endfor %}
-<div class="table-responsive"><table class="table table-sm">
-  <thead><tr><th>Sample</th><th>Context tokens</th><th>Probe</th>{% if detail.plan %}<th>Answer</th><th>Correct checks</th>{% endif %}<th>Input tokens</th>{% if embedding %}<th>Input tokens/s</th><th>Embeddings/s</th><th>Dimensions</th>{% else %}<th>Output tokens</th><th>Read tokens/s</th><th>Write tokens/s</th><th>First token (s)</th>{% endif %}<th>Request (s)</th><th>Load (s)</th><th>GPU MiB</th>{% if memory.cpu %}<th>CPU peak RAM (MiB)</th>{% endif %}</tr></thead>
-  <tbody>{% for sample in detail.samples %}<tr>
-    <td><a href="#sample-{{ loop.index }}">{{ sample.id }}</a></td>
-    <td>{{ token_count(sample['values'].context_tokens) }}</td>
-    <td>{{ 'unsupported' if sample['values'].get('unsupported') else ('ok' if sample['values'].success else 'unavailable') }}</td>
-    {% if detail.plan %}{% set no_answer_score = sample['values'].get('unsupported') or (sample['values'].get('decoding') == 'forced' and not sample['values'].get('success')) %}<td>{{ '—' if no_answer_score else ('pass' if sample['values'].get('passed') else 'fail') }}</td><td>{% if no_answer_score %}—{% else %}{{ sample['values'].get('correct',0) }} / {{ sample['values'].get('checks',0) }}{% endif %}</td>{% endif %}
-    <td>{{ token_count(sample['values'].get('input_tokens')) }}</td>{% if embedding %}<td>{{ number(sample['values'].get('embedding_tokens_per_second')) }}</td><td>{{ number(sample['values'].get('embeddings_per_second')) }}</td><td>{{ token_count(sample['values'].get('embedding_dimensions')) }}</td>{% else %}<td>{{ token_count(sample['values'].get('output_tokens')) }}</td>
-    <td>{{ number(sample['values'].get('prompt_tokens_per_second')) }}</td><td>{{ number(sample['values'].get('generation_tokens_per_second')) }}</td>
-    <td>{{ number(sample['values'].get('ttft_seconds'), 's') }}</td>{% endif %}<td>{{ number(sample['values'].get('request_seconds'), 's') }}</td>
-    <td>{{ number(sample['values'].get('load_seconds'), 's') }}</td><td>{{ number(sample['values'].get('peak_gpu_mib')) }}</td>{% if memory.cpu %}<td>{{ number(sample['values'].get('peak_ram_mib') or (sample.evidence.get('resource') or {}).get('peak_ram_mib') if sample.evidence else sample['values'].get('peak_ram_mib')) }}</td>{% endif %}
-  </tr>{% else %}{{ empty_row((10 if embedding else 11) + (2 if detail.plan else 0) + (1 if memory.cpu else 0), "No samples recorded for this run.") }}{% endfor %}</tbody>
-</table></div>
-{% if memory.cpu %}<p class="small text-secondary">CPU peak RAM is the highest measured resident memory of the probe process and its children; <code>rss_mib</code> in Measurements is the final resident sample. GPU MiB remains assigned-card VRAM only.</p>{% endif %}
+{% if detail.version != detail.latest_version %}{{ alert('warning', 'Made under version ' ~ detail.version ~ ' of this benchmark, which is now at version ' ~ detail.latest_version ~ '. Rerun it to compare with newer results.', class_='py-2') }}{% endif %}
+{% if detail.get('rerun') %}{{ alert('info', 'Rerun recommended: ' ~ detail.rerun|join(', ') ~ '. This record retains its original configuration and environment.', class_='py-2') }}{% endif %}
+<div class="br-layout" data-has-plan="{{ 'true' if detail.plan else 'false' }}">
+<section id="summary" class="br-summary" aria-label="Run overview">
+{% set overview_note %}{{ briefing.counts.executed }} of {{ detail.samples_count }} recorded attempts executed successfully.{% if briefing.quality %} {{ briefing.counts.passed }} passed every check.{% endif %} The score uses this run's configured formula.{% endset %}
+{{ verdict(briefing.summary, overview_note) }}
+{% call kpi_row('Run headline measurements', class_='br-kpis mb-0') %}
+{{ kpi('Saved score', number(detail.score), note=briefing.unit ~ ' · formula: ' ~ detail.formula, value_attrs={'id':'run-score'}) }}
+{{ kpi('All-correct cases' if briefing.quality else 'Successful probes', briefing.counts.passed ~ ' / ' ~ briefing.counts.executed if briefing.quality else briefing.counts.executed ~ ' / ' ~ detail.samples_count, note='among executed cases' if briefing.quality else 'received a complete response') }}
+{{ kpi('Recorded samples', detail.samples_count ~ (' / ' ~ briefing.planned if briefing.planned else ''), note=briefing.counts.unsupported ~ ' unsupported · ' ~ briefing.counts.unavailable ~ ' unavailable') }}
+{{ kpi(briefing.timing_label, number(briefing.timing_value, 's'), note=briefing.timing_note) }}
+{% endcall %}
+</section>
+<aside class="br-passport" id="run-passport" aria-label="Run passport">
+{% call card('Run passport', hint='The configuration behind this result.', class_='mb-0') %}
+<dl class="br-facts">{{ fact_row('Run', detail.id) }}{{ fact_row('Node', detail.location or 'historical location') }}{{ fact_row('Host', detail.environment.get('machine', {}).get('host') or 'Not recorded') }}{{ fact_row('Engine', detail.environment.get('engine') or 'Not recorded') }}{{ fact_row('Build', detail.environment.get('engine_hash', '')[:12] or 'Not recorded') }}{{ fact_row('Configured context', token_count(detail.context_size)) }}{{ fact_row('Reason', detail.reason or 'Not recorded') }}{{ fact_row('Started by', detail.user or 'Not recorded') }}{% if detail.started %}{{ fact_row('Started', detail.started|timestamp) }}{% endif %}{% if detail.ended %}{{ fact_row('Finished', detail.ended|timestamp) }}{% endif %}</dl>
+<div class="br-fingerprint"><span class="small text-secondary d-block mb-2">Model fingerprint</span>{% if detail.fingerprint %}<a href="/fingerprints?start={{ detail.fingerprint }}"><code>{{ detail.fingerprint }}</code></a><button type="button" class="btn btn-outline-secondary btn-sm mt-3" data-copy-fingerprint hidden>Copy fingerprint</button>{% else %}<span class="small text-secondary">Not recorded</span>{% endif %}</div>
+<nav class="br-outline mt-4" aria-label="Run sections"><a href="#summary">01 <span>Overview</span></a>{% if detail.breakdown %}<a href="#breakdown">02 <span>Category results</span></a>{% endif %}<a href="#samples-panel">03 <span>Sample measurements</span></a><a href="#evidence-panel">04 <span>Sample evidence</span></a><a href="#provenance">05 <span>Settings & logs</span></a></nav>
+{% endcall %}
+</aside>
+{% call card(briefing.chart_title, id='chart-panel', class_='br-chart', hint=briefing.chart_budget_label) %}
+<div class="br-chart-key small"><span><i class="br-line-key" aria-hidden="true"></i>{{ briefing.chart_label }} ({{ briefing.chart_unit }})</span><span class="text-secondary">From saved samples</span></div>
+<div class="br-chart-surface" data-budget-chart aria-label="{{ briefing.chart_label }} by recorded budget">{% if not briefing.chart %}<p class="text-secondary p-3">No chart measurements recorded.</p>{% else %}<p class="small text-secondary p-3">{% for point in briefing.chart %}{{ token_count(point.budget) }} tokens: {{ number(point.value, briefing.chart_unit) }}{{ briefing.chart_unit }}{{ '; ' if not loop.last }}{% endfor %}</p>{% endif %}</div>
+<p class="small text-secondary mb-0">{{ briefing.chart_note }}</p>
+{% endcall %}
+{% call card('Worth your attention', id='findings-panel', class_='br-findings', hint='A short route to the evidence.') %}
+<div class="br-finding"><span class="br-finding-number">01</span><div><strong>{% if briefing.quality %}{{ briefing.counts.failed }} cases contain failed checks{% else %}{{ briefing.counts.executed }} successful probes retained{% endif %}</strong><p class="small text-secondary mb-2">{% if briefing.quality %}Inspect the answer and individual checks before drawing a conclusion.{% if briefing.counts.ungraded %} {{ briefing.counts.ungraded }} executed cases have no saved pass/fail grade.{% endif %}{% else %}Compare measurements at the same input size and context capacity. Startup and request timing remain separate.{% endif %}</p><button type="button" class="btn btn-link btn-sm p-0" data-inspect="{{ 'fail' if briefing.quality else 'all' }}" hidden>{{ 'Inspect failing cases' if briefing.quality else 'Inspect measurements' }} →</button></div></div>
+<div class="br-finding"><span class="br-finding-number">02</span><div><strong>{{ briefing.counts.unsupported + briefing.counts.unavailable }} attempts have no successful response</strong><p class="small text-secondary mb-2">{{ briefing.counts.unsupported }} unsupported configurations; {{ briefing.counts.unavailable }} requests unavailable. These remain separate from failed answer checks.</p><button type="button" class="btn btn-link btn-sm p-0" data-inspect="unscored" hidden>Review unscored samples →</button></div></div>
+<div class="br-method-note">{% call more('How this result is calculated') %}<p>Saved score formula: <code>{{ detail.formula }}</code>. This page displays the saved score without recalculating it.</p><p class="mb-0">{{ briefing.method or 'The sample measurements and recorded protocol are retained below.' }}</p>{% endcall %}</div>
+{% endcall %}
+{% include 'benchmark_regressions.html' %}
+{% if detail.breakdown %}{% call card('Results by category', id='breakdown', class_='br-breakdown', body_class='p-0') %}<div class="p-3">{% include 'benchmark_breakdown.html' %}</div>{% endcall %}{% endif %}
+{% call card('Sample measurements', id='samples-panel', class_='br-samples', body=false, hint='Select a sample to read its exact input, answer and checks.', actions=('<span class="small text-secondary" id="visible-count" role="status" aria-live="polite">' ~ detail.samples_count ~ ' samples</span>')|safe) %}
+<div data-sample-controls hidden>{{ sample_tools(briefing.chart|map(attribute='budget')|list, briefing.quality, regression is not none) }}{{ measurement_choices() }}</div>
+{% include 'benchmark_sample_table.html' %}
+<div class="card-footer"><span class="small text-secondary">{% if embedding %}Context is allocated capacity. Input tokens form one pooled vector.{% else %}Context is allocated capacity; input and output are actual token counts.{% endif %}</span></div>
+{% endcall %}
+<section id="evidence-panel" class="br-evidence" aria-label="Sample evidence">
+{{ section_title('Sample evidence', wrapper_class='mb-3') }}
+<div class="d-flex flex-wrap gap-2 align-items-center mb-3" data-evidence-controls hidden><span class="small text-secondary me-auto" data-selected-label></span><button type="button" class="btn btn-outline-secondary btn-sm" data-previous-sample aria-label="Previous filtered sample">←</button><button type="button" class="btn btn-outline-secondary btn-sm" data-next-sample aria-label="Next filtered sample">→</button><button type="button" class="btn btn-outline-secondary btn-sm" data-copy-evidence>Copy this evidence</button></div>
+{% call pills('Sample evidence views', buttons=true, class_='br-evidence-tabs gap-1 mb-3', attrs={'data-evidence-tabs':'','hidden':''}) %}{% endcall %}
+<p class="text-secondary p-3" data-evidence-empty{% if detail.samples %} hidden{% endif %}>No sample selected. Choose a sample from the measurements.</p>
+{% for sample in detail.samples %}{% call card(sample.id ~ ' · measurements, output & server log', open=false, id='sample-' ~ loop.index, class_='benchmark-sample mb-0', attrs={'data-sample-evidence':loop.index}) %}{{ sample_evidence(sample, embedding) }}{% endcall %}{% endfor %}
+</section>
+<section id="provenance" class="br-provenance" aria-label="Recorded configuration and run log">{{ section_title('Reproduce & investigate', scope='As recorded') }}
+<div class="br-provenance-grid">{% call card('Recorded model settings & environment', open=false, class_='mb-0') %}<p class="small text-secondary">Frozen at run time. Current settings may differ.</p><pre class="kept frame">{{ {'subject':detail.subject,'environment':detail.environment}|tojson(indent=2) }}</pre>{% endcall %}
+{% call card('Run log', open=false, class_='mb-0') %}<pre class="benchmark-log frame">{% for message in detail.messages %}{{ message.at|timestamp }} {{ message.text }}
+{% else %}No log messages recorded.{% endfor %}</pre>{% endcall %}</div>
+{% if embedding %}<p class="small text-secondary mt-3">Context is the capacity allocated for each attempt. Input is the complete token sequence processed into one pooled vector. Throughput and request time cover the local embedding request through receiving the vector, excluding tokenization, warm-up and model startup. Load-only samples request no vector.</p>{% else %}<p class="small text-secondary mt-3">Context is the capacity allocated for each attempt; input and output counts show the tokens actually processed and generated. Load measures model startup. First-token time starts after loading and includes reading the prompt; request time also includes generating the answer. Read and write rates measure these two phases separately.</p>{% endif %}
+{% if briefing.cpu %}<p class="small text-secondary">CPU peak RAM is the highest measured resident memory of the probe process and its children; <code>rss_mib</code> in Measurements is the final resident sample. GPU MiB remains assigned-card VRAM only.</p>{% endif %}
 {% if detail.plan %}<p class="small text-secondary">{{ detail.samples_count }} / {{ detail.plan.cases|length }} case results recorded. Each case keeps its question, expected answers and individual checks. Input sizes include the model's chat template.</p>{% endif %}
-<details class="mt-3"><summary>Run log</summary><pre class="benchmark-log frame">{% for message in detail.messages %}{{ message.at|timestamp }} {{ message.text }}
-{% endfor %}</pre></details>
-<details class="mt-3"><summary>Recorded model settings &amp; environment</summary><pre class="kept frame">{{ {'subject':detail.subject,'environment':detail.environment}|tojson(indent=2) }}</pre></details>
-{% for sample in detail.samples %}{% set _card_title1 %}{{ sample.id }} · measurements, output &amp; server log{% endset %}
-{% call card(_card_title1, open=false, id="sample-" ~ (loop.index), class_="benchmark-sample") %}
-{% if embedding %}<details class="sample-section"><summary>Embedding receipt</summary><pre class="kept frame">{{ sample.evidence|tojson(indent=2) }}</pre></details>{% else %}
-<details class="sample-section"><summary>Exact rendered input</summary>{% if sample.evidence %}<pre class="kept frame">{{ sample.evidence.get('prompt', 'Probe unavailable before input preparation.') }}</pre><small class="text-secondary">Token digest: {{ sample.evidence.get('prompt_tokens_sha256','unavailable') }}</small>{% else %}<p class="small text-secondary">This probe did not save rendered input.</p>{% endif %}</details>
-<details class="sample-section"><summary>Graded final answer</summary><pre class="kept frame">{{ sample.evidence.answer if sample.evidence else sample.output }}</pre></details>{% endif %}
-{% if sample.evidence and sample.evidence.get('case') %}<details class="sample-section"><summary>Checks and answer key</summary><pre class="kept frame">{{ sample.evidence.checks|tojson(indent=2) }}</pre><pre class="kept frame">{{ sample.evidence.case|tojson(indent=2) }}</pre></details>{% endif %}
-{% if sample.evidence and sample.evidence.get('native_dialogue') %}<details class="sample-section"><summary>Native conversation response</summary><p class="small text-secondary">Server-parsed assistant text, reasoning and calls; no model-generated tool or code is executed by this probe.</p><pre class="kept frame">{{ sample.evidence.native_message|tojson(indent=2) }}</pre>{{ section_title("Native usage and timings", level=3) }}<pre class="kept frame">{{ sample.evidence.get('native_usage',{})|tojson(indent=2) }}</pre><pre class="kept frame">{{ sample.evidence.get('native_timings',{})|tojson(indent=2) }}</pre>{% if sample.evidence.get('response_format') %}{{ section_title("Requested response format", level=3) }}<pre class="kept frame">{{ sample.evidence.response_format|tojson(indent=2) }}</pre>{% endif %}{% if sample.evidence.get('native_error') %}<p class="text-warning-emphasis">Unavailable at {{ sample.evidence.unavailable_stage }}: {{ sample.evidence.native_error }}</p>{% endif %}</details>{% endif %}
-{% if sample.evidence and sample.evidence.get('tool_exchanges') %}<details class="sample-section"><summary>Tool conversation and actual responses</summary><p class="small text-secondary">Tokens and request/load durations above sum every turn. Each turn below keeps its exact native input, output, token counts and tool responses.</p><pre class="kept frame">{{ sample.evidence.conversation|tojson(indent=2) }}</pre><pre class="kept frame">{{ sample.evidence.tool_exchanges|tojson(indent=2) }}</pre></details>{% endif %}
-{% if sample['values'].get('error') %}<p class="small text-warning-emphasis">{{ sample['values'].error }}</p>{% endif %}
-<details class="sample-section"><summary>Server log</summary><pre class="kept frame">{{ sample.log }}</pre></details>
-<details class="sample-section"><summary>Measurements</summary><pre class="kept frame">{{ sample['values']|tojson(indent=2) }}</pre></details>
-<details class="sample-section"><summary>Raw output</summary><pre class="kept frame">{{ sample.output }}</pre></details>
-{% endcall %}{% endfor %}
+</section>
+</div>
+<p id="run-feedback" class="br-feedback" role="status" aria-live="polite" hidden></p>
+<template id="run-sort-button"><button type="button"></button></template>
+<template id="run-evidence-tab">{{ pill_button('', attrs={'data-evidence-tab':''}) }}</template>
+<script type="application/json" id="benchmark-run-data">{{ {'id':detail.id, 'model':detail.model, 'name':briefing.name, 'score':detail.score, 'unit':briefing.unit, 'formula':detail.formula, 'fingerprint':detail.fingerprint, 'chart':briefing.chart, 'chart_label':briefing.chart_label, 'chart_unit':briefing.chart_unit, 'quality':briefing.quality, 'embedding':embedding, 'rows':briefing.rows, 'values':detail.samples|map(attribute='values')|list, 'regression':regression}|tojson }}</script>
+</div>

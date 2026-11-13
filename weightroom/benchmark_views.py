@@ -3,6 +3,91 @@
 from loadcoach.log import LEGACY  # the old default node, which rows and catalogues without a node name mean
 
 
+def run_briefing(detail, definition):
+    """Present retained evidence; never recalculate the configured run score or grading."""
+    import math
+    from statistics import median
+
+    def numeric(value):
+        return type(value) in (int, float) and math.isfinite(value)
+
+    plan = detail.get('plan') or {}
+    protocol = detail.get('subject', {}).get('protocol', {})
+    quality = bool(plan or definition.get('quality'))
+    embedding = bool(protocol.get('embedding') or definition.get('embedding'))
+    kind = detail['benchmark'].removeprefix('embedding_')
+    samples, rows = detail.get('samples', []), []
+    counts = dict(passed=0, failed=0, unsupported=0, unavailable=0, ungraded=0, executed=0)
+    for index, sample in enumerate(samples, 1):
+        values = sample['values']
+        state = ('unsupported' if values.get('unsupported') else 'unavailable' if values.get('success') is not True
+                 else 'failed' if quality and values.get('passed') is False
+                 else 'ungraded' if quality and values.get('passed') is not True else 'passed')
+        counts[state] += 1
+        counts['executed'] += values.get('success') is True and not values.get('unsupported')
+        evidence = sample.get('evidence') or {}
+        resource = evidence.get('resource') or {}
+        cpu_ram = values.get('peak_ram_mib')
+        if cpu_ram is None:
+            cpu_ram = resource.get('peak_ram_mib')
+        budget = values.get('context_tokens') if kind == 'load' else values.get('target_input_tokens')
+        if budget is None:
+            budget = values.get('input_tokens') if quality or kind == 'speed' else values.get('context_tokens')
+        rows.append(dict(index=index, id=sample['id'], state=state, category=values.get('category', ''),
+                         budget=budget, cpu_ram=cpu_ram,
+                         cpu=values.get('device') == 'cpu' or 'peak_ram_mib' in values or resource.get('device') == 'cpu'))
+    has_cpu = any(row['cpu'] for row in rows)
+    metric = ('checks' if quality else 'load_seconds' if kind == 'load' else
+              'embedding_tokens_per_second' if embedding and kind == 'speed' else
+              'generation_tokens_per_second' if kind == 'speed' else 'request_seconds')
+    metric_label, metric_unit = {'checks': ('Correct checks', '%'), 'load_seconds': ('Median load time', 's'),
+        'embedding_tokens_per_second': ('Median input throughput', 'tokens/s'),
+        'generation_tokens_per_second': ('Median write speed', 'tokens/s'),
+        'request_seconds': ('Median request time', 's')}[metric]
+    groups = {}
+    for sample, row in zip(samples, rows):
+        if numeric(row['budget']) and row['budget'] >= 0:
+            groups.setdefault(row['budget'], []).append(sample['values'])
+    chart = []
+    for budget, values in sorted(groups.items()):
+        supported = [v for v in values if not v.get('unsupported')]
+        if quality:
+            checks = sum(v['checks'] for v in supported if numeric(v.get('checks')))
+            correct = sum(v['correct'] for v in supported if numeric(v.get('correct')))
+            value = 100 * correct / checks if checks else None
+        else:
+            measured = [v[metric] for v in supported if v.get('success') is True and numeric(v.get(metric))]
+            value = median(measured) if measured else None
+        chart.append(dict(budget=budget, value=value))
+    summary = ("No samples recorded for this run." if not samples else
+               "Partial evidence. No final score." if detail['state'] != 'completed' else
+               "Every recorded case passed." if quality and counts['passed'] == len(samples) else
+               "Saved results, with the evidence behind them.")
+    metrics = detail.get('metrics', {})
+    # Prefer the suite's saved summary; label a sample-median fallback explicitly.
+    timing = ('load_seconds' if kind == 'load' else 'request_seconds' if embedding else 'ttft_seconds')
+    timing_value = metrics.get(timing)
+    timing_label = 'Load time' if timing == 'load_seconds' else 'Request time' if embedding else 'First token'
+    timing_note = 'seconds · saved benchmark summary'
+    if not numeric(timing_value):
+        measured = [sample['values'][timing] for sample in samples
+                    if sample['values'].get('success') is True and not sample['values'].get('unsupported')
+                    and numeric(sample['values'].get(timing))]
+        timing_value = median(measured) if measured else None
+        timing_label = 'Median ' + timing_label.lower()
+        timing_note = 'seconds · successful recorded attempts'
+    chart_title = ('Measurements by context capacity' if kind == 'load' else 'Request time by tested context' if kind == 'context' else 'Performance across input sizes')
+    chart_budget_label = 'Context capacity (tokens)' if kind in ('load', 'context') else 'Input budget (tokens)'
+    return dict(name=definition.get('name', detail['benchmark']), unit=definition.get('score_unit', ''),
+                method=definition.get('method', ''), quality=quality, embedding=embedding,
+                rows=rows, counts=counts, cpu=has_cpu, planned=len(plan.get('cases', [])),
+                chart=chart, chart_label=metric_label, chart_unit=metric_unit,
+                chart_title=chart_title, chart_budget_label=chart_budget_label,
+                chart_note='Field-check accuracy across supported attempts; unavailable checks retain the grader’s treatment.' if quality else
+                           'Median successful measurement within each recorded budget. Missing measurements remain unavailable.',
+                summary=summary, timing_value=timing_value, timing_label=timing_label, timing_note=timing_note)
+
+
 def model_kind(model: dict) -> str:
     """Classify model metadata without confusing language-model vision with image generation."""
     capabilities = model.get('capabilities', {})

@@ -88,7 +88,7 @@ from weightroom.database_console import DatabaseConsole, owner_of
 from weightroom.conversations import build_app as build_conversations
 from weightroom import pairing
 from weightroom.plugin_pages import build_routes as plugin_routes
-from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, run_lanes, run_model_rows, measurement_matrix, model_kind as benchmark_model_kind
+from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, run_lanes, run_model_rows, measurement_matrix, run_briefing, model_kind as benchmark_model_kind
 from benchmarks.identity import variant
 from turnstile.model_configuration import (configuration as model_configuration, generation as generation_settings, comparable, shared as shared_values,
                                            translate, GLOBAL_FLAGS, PROFILE_GLOBALS)
@@ -1674,6 +1674,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return detail
             recorded = next((run for run in runs if run['id'] == number), {})
             detail.update({key: recorded[key] for key in ('current_fingerprint', 'rerun') if key in recorded})
+            if request.query_params.get('export') == 'json':
+                return JSONResponse(detail, headers={'Content-Disposition': 'attachment; filename="benchmark-run.json"'})
             if request.query_params.get('baseline'):
                 compared = await ask('GET', '/benchmarks/regressions', person.key,
                                      params={'run':number, 'baseline':request.query_params['baseline']})
@@ -1746,6 +1748,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     section=section, benchmarks=definitions, benchmark=selected, models=models, selected_models=chosen,
                     comparisons=comparisons, columns=columns, history=filtered_history, history_filter=history_filter,
                     selected_runs=selected_runs, detail=detail, queue=queue, pagination=pagination,
+                    briefing=run_briefing(detail, next((bench for bench in definitions if bench['id'] == detail['benchmark']), {})) if detail else None,
                     history_query=history_query, live_query=live_query,
                     lanes=lanes, run_models=run_model_rows(lanes), live_runs=live_runs, selected_target=(request.query_params.get('pick_model'), request.query_params.get('pick_node')),
                     regression=regression, regression_error=regression_error,
