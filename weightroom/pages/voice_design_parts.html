@@ -1,0 +1,14 @@
+{% from 'icons.html' import icon %}
+{# Shared by all three desktop layouts; one set of controls and one conversation draft. #}
+{% macro signal(count=45, class_='') %}
+<div class="vd-wave {{ class_ }}" aria-hidden="true">{% for i in range(count) %}<i style="--bar:{{ (i * 17 + i * i * 3) % 49 + 7 }};--delay:{{ i % 9 }}"></i>{% endfor %}</div>
+{% endmacro %}
+
+{% macro device(label, id, kind, options) %}
+<label for="{{ id }}" class="form-label">{{ icon(kind) }} {{ label }}</label>
+<select id="{{ id }}" name="{{ id }}" class="form-select mb-3" data-connection-field>{% for value in options %}<option>{{ value }}</option>{% endfor %}</select>
+{% endmacro %}
+
+{% macro message_template() %}
+<template id="vd-message"><article class="vd-message"><div class="vd-avatar" aria-hidden="true"></div><div class="vd-message-body"><div class="vd-message-byline"><strong data-speaker></strong><time data-time></time></div><div data-message-text></div></div></article></template>
+{% endmacro %}
