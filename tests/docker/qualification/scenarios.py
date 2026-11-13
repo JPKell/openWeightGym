@@ -35,14 +35,14 @@ def download_model(page, origin, repository, filename, place):
     raise AssertionError('The model download did not appear in Files.')
 
 
-def install_llm(page, origin, name, nodes):
+def install_llm(page, origin, name, nodes, filename, context):
     page.goto(origin + '/models?new=1')
-    option = page.locator('#file option').filter(has_text='SmolLM2-135M-Instruct-Q4_K_M.gguf').first
+    option = page.locator('#file option').filter(has_text=filename).first
     expect(option).to_have_count(1, timeout=60000)
     page.locator('#file').select_option(option.get_attribute('value'))
     page.locator('#name').fill(name)
     page.locator('#min-context').fill('512')
-    page.locator('#ctx').fill('2048')
+    page.locator('#ctx').fill(str(context))
     select_nodes(page.locator('input[name=node]'), nodes)
     page.get_by_role('button', name='Add', exact=True).click()
     page.wait_for_url('**/models*', timeout=60000)
@@ -180,6 +180,36 @@ def tools(page, origin):
     return {'tools': ['files__list_folder', 'files__read_file'], 'read': True, 'outside_root_refused': True}
 
 
+def workflow(page, origin, name, collection):
+    page.goto(origin + '/workflows')
+    page.locator('#workflow-title').fill('Qualification complete workflow')
+    choice = page.locator('#workflow-collection option').filter(has_text=collection).first
+    expect(choice).to_have_count(1)
+    page.locator('#workflow-collection').select_option(choice.get_attribute('value'))
+    page.locator('#workflow-question').fill('What time does the gym open and close?')
+    page.locator('#workflow-minimum').fill('0.1')
+    for step in ['research', 'draft']:
+        page.locator('#' + step + '-model').select_option(name)
+        page.locator('#' + step + '-prompt').select_option('builtin:' + step + '-v1')
+    page.get_by_role('button', name='Create workflow', exact=True).click()
+    for step in ['research', 'draft']:
+        page.get_by_role('button', name='Start ' + step, exact=True).click()
+        deadline = time.monotonic() + 180
+        accept = page.get_by_role('button', name='Accept ' + step, exact=True)
+        while time.monotonic() < deadline and not accept.count():
+            page.wait_for_timeout(2000)
+            page.reload()
+            assert not page.get_by_role('button', name='Resume / retry ' + step, exact=True).count(), page.locator('main').inner_text()
+        expect(accept).to_be_visible()
+        output = page.locator('#' + step + '-output')
+        expect(output).to_contain_text('06:30')
+        expect(output).to_contain_text('21:00')
+        expect(output).to_contain_text('qualification.txt')
+        accept.click()
+    expect(page.locator('main')).to_contain_text('normal · completed')
+    return {'workflow': page.url, 'model': name, 'research': 'accepted', 'draft': 'accepted'}
+
+
 def wake_overflow(page, origin, api_origin, name):
     """Receive real WOL on the isolated network and emulate only gamma powering on."""
     container = 'owg-qualification-gamma-1'
@@ -266,12 +296,16 @@ def routing(page, origin, api_origin, name, nodes):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('scenario', choices=['download-llm', 'download-image', 'install-image', 'install-llm',
-                                           'benchmark', 'generate-image', 'speech', 'transcribe', 'backups', 'routing', 'tools', 'wake'])
+                                           'benchmark', 'generate-image', 'speech', 'transcribe', 'backups', 'routing', 'tools', 'wake', 'workflow'])
     parser.add_argument('--origin', default='http://127.0.0.1:19440')
     parser.add_argument('--name', default='qualification-smollm')
     parser.add_argument('--api-origin', default='http://127.0.0.1:19442')
     parser.add_argument('--file', type=Path)
     parser.add_argument('--benchmark', default='load')
+    parser.add_argument('--repository')
+    parser.add_argument('--model-file')
+    parser.add_argument('--context', type=int, default=2048)
+    parser.add_argument('--collection', default='Qualification knowledge')
     parser.add_argument('--node', action='append', default=[])
     parser.add_argument('--output', type=Path, default=Path('/tmp/owg-qualification-scenarios'))
     args = parser.parse_args()
@@ -284,10 +318,10 @@ if __name__ == '__main__':
         context.on('page', lambda page: page.on('pageerror', lambda error: errors.append(str(error))))
         page = context.new_page()
         try:
-            result = (download_model(page, args.origin, 'bartowski/SmolLM2-135M-Instruct-GGUF',
-                                     'SmolLM2-135M-Instruct-Q4_K_M.gguf', 'storage_llm') if args.scenario == 'download-llm' else
-                      download_model(page, args.origin, 'OlegSkutte/sdxl-turbo-GGUF',
-                                     'sd_xl_turbo_1.0.q8_0.gguf', 'storage_image') if args.scenario == 'download-image' else
+            result = (download_model(page, args.origin, args.repository or 'bartowski/SmolLM2-135M-Instruct-GGUF',
+                                     args.model_file or 'SmolLM2-135M-Instruct-Q4_K_M.gguf', 'storage_llm') if args.scenario == 'download-llm' else
+                      download_model(page, args.origin, args.repository or 'OlegSkutte/sdxl-turbo-GGUF',
+                                     args.model_file or 'sd_xl_turbo_1.0.q8_0.gguf', 'storage_image') if args.scenario == 'download-image' else
                       install_image(page, args.origin, args.name, args.node or ['beta']) if args.scenario == 'install-image' else
                       benchmark_nodes(page, args.origin, args.name, args.node or ['alpha', 'beta', 'gamma'], args.benchmark) if args.scenario == 'benchmark' else
                       generate_image(page, args.origin, args.name, args.output) if args.scenario == 'generate-image' else
@@ -295,9 +329,11 @@ if __name__ == '__main__':
                       transcribe(page, args.origin, args.name, args.file) if args.scenario == 'transcribe' else
                       backups(page, args.origin, args.node or ['front', 'alpha', 'beta', 'gamma']) if args.scenario == 'backups' else
                       tools(page, args.origin) if args.scenario == 'tools' else
+                      workflow(page, args.origin, args.name, args.collection) if args.scenario == 'workflow' else
                       wake_overflow(page, args.origin, args.api_origin, args.name) if args.scenario == 'wake' else
                       routing(page, args.origin, args.api_origin, args.name, args.node or ['alpha', 'beta', 'gamma']) if args.scenario == 'routing' else
-                      install_llm(page, args.origin, args.name, args.node or ['alpha']))
+                      install_llm(page, args.origin, args.name, args.node or ['alpha'],
+                                  args.model_file or 'SmolLM2-135M-Instruct-Q4_K_M.gguf', args.context))
             assert not errors, errors
             print(json.dumps(result))
             (args.output / (args.scenario + '.json')).write_text(json.dumps(result, indent=2))
