@@ -64,7 +64,7 @@
 {% macro transcript_panel(preview=true) %}
 {% set actions %}<button id="new-conversation" type="button" class="btn btn-outline-secondary btn-sm">New conversation</button>{% endset %}
 {% call card('Conversation', id='transcript-panel', class_='vc-transcript mb-0', actions=actions, body_class='p-0') %}
-  <div class="vc-transcript-tools"><span class="vc-overline" id="transcript-count">{{ 'SAMPLE TRANSCRIPT' if preview else 'LIVE TRANSCRIPT' }}</span>{% if preview %}<label class="form-check mb-0"><input type="checkbox" class="form-check-input" id="show-translations" checked><span class="form-check-label small">Translations</span></label>{% else %}<span class="small text-secondary">Words appear as you talk</span>{% endif %}</div>
+  {% if preview %}<div class="vc-transcript-tools"><span class="vc-overline" id="transcript-count">SAMPLE TRANSCRIPT</span><label class="form-check mb-0"><input type="checkbox" class="form-check-input" id="show-translations" checked><span class="form-check-label small">Translations</span></label></div>{% endif %}
   <div class="vc-column-labels" aria-hidden="true"><span>Your original words</span><span>Model response</span></div>
   <div class="vc-transcript-scroll" id="transcript-scroll" tabindex="0" aria-label="Scrollable conversation transcript">
     <div id="transcript" role="log" aria-label="Conversation transcript" aria-live="polite" aria-relevant="additions" aria-busy="false"></div>
