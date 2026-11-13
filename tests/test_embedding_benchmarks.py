@@ -616,12 +616,11 @@ def test_embedder_page_cards_results_and_model_page_keep_families_separate(desk,
     page=browser.get('/benchmarks/embedders').text
     assert '<h1 class="page-title wrap">Node measurements</h1>' in page
     assert 'kind=embedding&amp;benchmark=embedding_context" aria-current="page"' in page
-    assert 'href="/benchmarks/compare?family=embedding"' in page and 'href="/benchmarks/embedders"' not in page
+    assert 'Compare embedders' not in page and 'href="/benchmarks/embedders"' not in page
     workspace=page.split('id="measurement-runs"',1)[1]
     assert 'name="run-target"' in workspace and 'vector-only' in workspace
     assert 'text-only' not in workspace and 'private-vector' not in workspace
     assert 'id="benchmark-resource-heatmap"' not in page
-    assert 'Compare embedders' not in browser.get('/benchmarks/node-measurements?kind=llm').text
     assert '<h1 class="page-title wrap">Runs</h1>' in browser.get('/benchmarks').text
     assert 'vector-only' not in browser.get('/benchmarks/results').text
     for kind, unit in zip(KINDS, ('tokens', 'tokens/s', '1/s')):
@@ -640,9 +639,8 @@ def test_embedder_page_cards_results_and_model_page_keep_families_separate(desk,
     assert 'text-only' in language and 'vector-only' not in language
     assert '?benchmark=speed&amp;kind=llm#node-measurements' in language
     compare=browser.get('/benchmarks/compare?family=embedding&selection=1&model=vector-only&model=text-only&bench=embedding_speed').text
-    assert 'name="family" value="embedding"' in compare and 'text-only' not in compare
-    assert '<th scope="row">Input throughput</th>' in compare
-    assert 'First token' not in compare
+    assert 'name="family"' not in compare and 'value="vector-only"' not in compare and 'value="text-only"' in compare
+    assert 'Input throughput' not in compare
     sign_in(browser,'jordan')
     store=browser.app.state.benchmarks.state.store
     number=store.create('jordan','vector-only','embedding_speed')

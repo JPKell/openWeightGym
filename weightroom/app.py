@@ -1597,7 +1597,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if kind in ('image', 'audio'):
                 embedding_family = False
                 definitions = [bench for bench in definitions if bench['id'] == 'load']
-        elif section == 'results':
+        elif section in ('results', 'compare'):  # text language models only
             embedding_family = False
             models = [model for model in models if benchmark_model_kind(model) == 'llm']
         if section in ('node-measurements', 'results', 'compare'):
@@ -1687,8 +1687,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             """Extract a stable identity for catalogue and retained-evidence matching."""
             return (run.get('model_id') or run['model'], run['fingerprint'], run['environment'].get('engine_hash'), run['environment'].get('machine_hash'))
         history, identities = [], set()
+        media_models = {model['id'] for model in catalogue['data'] if benchmark_model_kind(model) != 'llm'}
         for run in runs:
-            if section == 'compare' and (run['benchmark'] in embedding_ids) != embedding_family:
+            if section == 'compare' and (run['benchmark'] in embedding_ids or run['model'] in media_models):
                 continue
             if run['state'] == 'completed' and identity(run) not in identities:
                 identities.add(identity(run))

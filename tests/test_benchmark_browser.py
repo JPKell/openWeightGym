@@ -237,7 +237,7 @@ def test_embedder_cards_picker_and_mobile_results_are_separate(desk,tmp_path):
           return result;
         }''')
         assert enabled_only == [False, True]
-        playwright.expect(page.get_by_role('link', name='Compare embedders')).to_have_attribute('href', '/benchmarks/compare?family=embedding')
+        playwright.expect(page.get_by_role('link', name='Compare embedders')).to_have_count(0)
         images=Path('data/benchmark-previews');images.mkdir(parents=True,exist_ok=True)
         page.screenshot(path=str(images/'embedders-desktop.png'))
         page.set_viewport_size({'width':390,'height':844})
