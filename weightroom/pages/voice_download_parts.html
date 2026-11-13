@@ -1,0 +1,61 @@
+{# Canonical download/setup content, shared by the live page and design proposals. #}
+{% from 'parts.html' import card, section_title, more %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'docs_parts.html' import doc_code %}
+{% from 'icons.html' import icon %}
+{% set platforms = [
+  {'id':'windows', 'name':'Windows', 'mark':'⊞', 'requirements':'Python 3.13 with Tcl/Tk and the Python launcher', 'launcher':'Voice.cmd', 'verb':'Double-click', 'note':'Include Tcl/Tk and the Python launcher when installing Python.', 'instructions':'Install Python 3.13 with Tcl/Tk and the Python launcher, then open Voice.cmd.'},
+  {'id':'macos', 'name':'macOS', 'mark':'⌘', 'requirements':'Python 3.13 · universal installer', 'launcher':'Voice.command', 'verb':'Open', 'note':'Allow microphone access when macOS asks.', 'instructions':'Install Python 3.13 using the universal installer, then open Voice.command. Allow microphone access when asked.'},
+  {'id':'linux', 'name':'Linux', 'mark':'>_', 'requirements':'Python 3.13 or newer, Tk, venv and PortAudio', 'launcher':'sh Voice.command', 'verb':'Run', 'note':'Install the desktop dependencies using your distribution’s packages.', 'instructions':'Install Python 3.13 or newer, Tk, venv and PortAudio, then run sh Voice.command.'}
+] %}
+
+{% macro download_action(class_='btn-primary', label='Download Voice app') %}<a class="btn {{ class_ }}" href="/static/LoadCoach-Voice.zip" download>{{ icon('arrow-right') }}{{ label }}</a>{% endmacro %}
+
+{% macro extraction_note() %}Extract the entire ZIP before opening a launcher. The included README has setup and troubleshooting instructions.{% endmacro %}
+
+{% macro platform_cards(detailed=false) %}
+{% for platform in platforms %}
+<div class="{{ 'vdl-platform' if detailed else 'col-md-4' }}">
+{% set platform_actions %}{% if detailed %}<span class="vdl-os-mark" aria-hidden="true">{{ platform.mark }}</span>{% endif %}{% endset %}
+{% call card(platform.name, class_='h-100 mb-0' if detailed else 'h-100', actions=platform_actions) %}
+{% if detailed %}<span class="vdl-label">REQUIREMENTS</span><p class="vdl-requirements">{{ platform.requirements }}</p><div class="vdl-launcher"><span>{{ platform.verb }}</span><code>{{ platform.launcher }}</code></div><p class="small text-secondary mb-0 mt-3">{{ platform.note }}</p>
+{% else %}{{ platform.instructions }}{% endif %}
+{% endcall %}
+</div>
+{% endfor %}
+{% endmacro %}
+
+{% macro connection_steps(class_='mb-2', detailed=false) %}
+<ol class="{{ class_ }}">
+<li>{% if detailed %}<strong>Server address</strong>{% endif %}<span>Open the app's Settings tab and enter the desktop server address provided by your administrator.</span></li>
+<li>{% if detailed %}<strong>API key</strong>{% endif %}<span>Copy your API key from <a href="/account">My account</a>, or import its existing key file.</span></li>
+<li>{% if detailed %}<strong>Start talking</strong>{% endif %}<span>Choose Direct or Hermes, select your microphone and speakers, save, then press Start.</span></li>
+</ol>
+{% endmacro %}
+
+{% macro access_note() %}Your account needs Voice access, access to the selected model and permission to load it when needed. In Hermes mode, your speech is transcribed, the transcript is sent to Hermes, and Hermes's text reply is synthesized back to you.{% endmacro %}
+
+
+{# The selected Guided setup is rendered unchanged in the live page and preview. #}
+{% macro guided_setup() %}
+<div class="vdl-layout vdl-guide" data-voice-download>
+<div class="vdl-guide-intro"><p class="vdl-guide-title">From download to your first conversation.</p><p class="text-secondary mb-0">A short setup guide for your desktop. Prefer to get straight to it? <a href="/voice">Open Voice in your browser.</a></p></div>
+  <div class="vdl-guide-grid">
+    <nav class="vdl-guide-rail" aria-label="Setup steps"><span class="vdl-label">GETTING STARTED</span><a href="#vdl-guide-download"><span>01</span><strong>Download<small>Get the app</small></strong></a><a href="#vdl-guide-install"><span>02</span><strong>Set up<small>Choose your platform</small></strong></a><a href="#vdl-guide-connect"><span>03</span><strong>Connect<small>Start a conversation</small></strong></a><p>Speech and language models run on your server. The desktop app is your microphone and speakers.</p></nav>
+    <div class="vdl-guide-content">
+      <section id="vdl-guide-download" class="vdl-guide-step">{{ section_title('Download & extract',level=2,wrapper_class='mb-2') }}<div class="vdl-download-row"><div><strong>Voice desktop app</strong><span class="small text-secondary d-block mt-1">Windows · macOS · Linux / ZIP archive</span></div>{{ download_action() }}</div><p class="small text-secondary mb-0">{{ extraction_note() }}</p></section>
+      <section id="vdl-guide-install" class="vdl-guide-step">{{ section_title('Set up your platform',wrapper_class='mb-3') }}
+      {% call pills('Operating system',buttons=true,class_='vdl-platform-nav gap-2 mb-3',attrs={'data-platform-navigation':'','hidden':''}) %}{% for platform in platforms %}{{ pill_button(platform.name,loop.first,attrs={'data-platform':platform.id,'aria-controls':'vdl-install-' ~ platform.id}) }}{% endfor %}{% endcall %}
+      {% for platform in platforms %}
+      <section class="vdl-install-panel" id="vdl-install-{{ platform.id }}" data-platform-panel="{{ platform.id }}" aria-label="{{ platform.name }} setup">
+        <div class="vdl-install-heading"><span class="vdl-os-mark" aria-hidden="true">{{ platform.mark }}</span><div>{{ section_title(platform.name ~ ' setup',level=3,wrapper_class='mb-0') }}<span class="small text-secondary">Python 3.13{{ ' or newer' if platform.id == 'linux' }}</span></div></div>
+        <ol class="vdl-install-list"><li><strong>Install the requirements</strong><p>{{ platform.requirements }}.</p></li><li><strong>Open the extracted folder</strong><p>Keep the entire extracted package together.</p></li><li><strong>{{ platform.verb }} the launcher</strong><p><code>{{ platform.launcher }}</code></p></li></ol>
+        <p class="small text-secondary mb-0">{{ platform.note }}</p>
+        {% if platform.id == 'linux' %}<details class="mt-3"><summary class="small">Ubuntu dependency command</summary><p class="small text-secondary mt-2">For Ubuntu with Python 3.13 or newer already available:</p>{% call doc_code('vdl-ubuntu-deps') %}sudo apt install python3-tk python3-venv libportaudio2{% endcall %}</details>{% endif %}
+      </section>{% endfor %}
+      </section>
+      <section id="vdl-guide-connect" class="vdl-guide-step">{{ section_title('Connect to your server',wrapper_class='mb-3') }}{{ connection_steps('vdl-steps vdl-steps-vertical',detailed=true) }}{% call more('Account access & Hermes') %}{{ access_note() }}{% endcall %}</section>
+    </div>
+  </div>
+</div>
+{% endmacro %}
