@@ -489,6 +489,7 @@ details.more > summary { color: var(--bs-secondary-color); font-size: .8rem; cur
 
 /* Paired min/max filters start beside the single-choice filters. */
 .request-column-filters td { vertical-align: top; }
+.node-filter { min-width: 8rem; }
 
 /* A reusable frame also styles Markdown code blocks, which have no template classes. */
 .frame, .answer pre { border: 1px solid var(--bs-border-color); border-radius: var(--suite-frame-radius); }
@@ -700,3 +701,4 @@ form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
   .model-matrix.is-single thead .matrix-label { display: none; }
   .model-matrix.is-single .matrix-label { border-bottom: 0; padding-bottom: 0; }
 }
+[hidden] { display: none !important; }

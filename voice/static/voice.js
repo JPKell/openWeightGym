@@ -50,7 +50,7 @@ function engineControls(){
   for(const id of ['call-synthesis','call-recognition'])if(!speechModelsChosen.has(id))$(id).value='';
   choices('call-synthesis',configuration.synthesis_models||[],profile.synthesis_model);
   choices('call-recognition',configuration.recognition_models||[],profile.recognition_model);
-  choices('call-speaker',configuration.speakers||[],profile.speaker);
+  choices('call-speaker',[{id:'',name:'Default voice'},...(configuration.speakers||[])],profile.speaker);
   if(cloned)choices('voice',configuration.voices||[]);
 }
 /** Enumerate only device labels the browser permits this page to see. */

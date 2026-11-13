@@ -91,6 +91,9 @@ build_dependency_packages() {  # build_dependency_packages tools|openssl|cuda|vu
     pacman:openssl) echo pkgconf openssl ;;
     dnf:openssl) echo pkgconf-pkg-config openssl-devel ;;
     zypper:openssl) echo pkg-config libopenssl-devel ;;
+    apt:espeak|zypper:espeak) echo libespeak-ng1 ;;
+    dnf:espeak) echo espeak-ng-libs ;;
+    pacman:espeak) echo espeak-ng ;;
     apt:cuda) echo nvidia-cuda-toolkit ;;
     pacman:cuda) echo cuda ;;
     dnf:cuda|zypper:cuda) echo cuda-toolkit ;;

@@ -1,5 +1,7 @@
 """Caller-scoped current work for the Status dispatch workspace."""
 
+from loadcoach.log import LEGACY  # the old default node, which rows and catalogues without a node name mean
+
 
 def present(now, nodes, counts=None):
     live = now or {}
@@ -12,11 +14,11 @@ def present(now, nodes, counts=None):
     processing += [{**item, 'batch': True} for item in batches]
     queued = [{**item, 'description': 'waiting'} for item in live.get('waiting', [])]
     for node in nodes:
-        if node['name'] == 'compute' and now and len(nodes) == 1:
+        if now and len(nodes) == 1:  # one node: everything under way is its
             node['running'] = len(live.get('running', [])) + live.get('others_running', 0)
             node['waiting'] = len(live.get('waiting', [])) + live.get('others_waiting', 0)
         for model in node.get('loaded', []):
-            matches = lambda item: item.get('model') == model['model'] and item.get('machine', 'compute') == node['name']
+            matches = lambda item: item.get('model') == model['model'] and item.get('machine', LEGACY) == node['name']
             model['work'] = ('Unknown' if now is None else 'In use' if any(matches(item) for item in live.get('running', []))
                              else 'Queued' if any(matches(item) for item in live.get('waiting', [])) else 'Idle')
         node['status_search'] = ' '.join([node['name'], node.get('hostname') or '',

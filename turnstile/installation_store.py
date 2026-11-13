@@ -3,13 +3,7 @@ import json
 import time
 
 from db import database, migrate
-from db.migrations import Migration
-
-MIGRATIONS=(Migration(1,'recoverable model installation requests',"""
-    CREATE TABLE IF NOT EXISTS model_installations (
-        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, request TEXT NOT NULL,
-        progress TEXT NOT NULL, updated DOUBLE PRECISION NOT NULL);
-"""),)
+from db.schemas import MODEL_INSTALLATIONS as MIGRATIONS
 TERMINAL=frozenset({'complete','failed','cancelled'})
 
 

@@ -8,6 +8,14 @@ x-app: &app
   init: true
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: [postgres]
+    environment:
+      POSTGRES_USER: owg
+      POSTGRES_DB: accounts
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes: ["postgres:/var/lib/postgresql/data"]
   seed:
     <<: *app
     command: [seed]
@@ -15,6 +23,7 @@ services:
   turnstile:
     <<: *app
     command: [turnstile]
+    ports: ["127.0.0.1:19442:8442", "127.0.0.1:19443:8443"]
     depends_on:
       seed: {condition: service_completed_successfully}
     volumes: ["front:/state/front"]
@@ -25,9 +34,39 @@ services:
       seed: {condition: service_completed_successfully}
     volumes: ["front:/state/front"]
     ports: ["127.0.0.1:${OWG_QUALIFICATION_PORT:-19440}:8440"]
+  toollocker:
+    <<: *app
+    command: [toollocker]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["front:/state/front"]
+  voice-gateway:
+    <<: *app
+    command: [voice-gateway]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    volumes: ["front:/state/front"]
+  alpha-voice:
+    <<: *app
+    command: [voice, alpha]
+    network_mode: service:alpha
+    depends_on:
+      alpha: {condition: service_started}
+    volumes: ["alpha:/state/alpha", "front:/state/front:ro", "runtimes:/opt/owg-runtimes:ro"]
+  beta-voice:
+    <<: *app
+    command: [voice, beta]
+    network_mode: service:beta
+    depends_on:
+      beta: {condition: service_started}
+    volumes: ["beta:/state/beta", "front:/state/front:ro", "runtimes:/opt/owg-runtimes:ro"]
   alpha:
     <<: *app
+    hostname: alpha
     command: [loadcoach, alpha]
+    cap_add: [SYS_ADMIN]
+    mem_limit: 16g
+    memswap_limit: 16g
     depends_on:
       seed: {condition: service_completed_successfully}
     volumes: ["alpha:/state/alpha", "runtimes:/opt/owg-runtimes"]
@@ -40,7 +79,11 @@ services:
     volumes: ["alpha:/state/alpha"]
   beta:
     <<: *app
+    hostname: beta
     command: [loadcoach, beta]
+    cap_add: [SYS_ADMIN]
+    mem_limit: 16g
+    memswap_limit: 16g
     depends_on:
       seed: {condition: service_completed_successfully}
     volumes: ["beta:/state/beta", "runtimes:/opt/owg-runtimes"]
@@ -53,7 +96,11 @@ services:
     volumes: ["beta:/state/beta"]
   gamma:
     <<: *app
+    hostname: gamma
     command: [loadcoach, gamma]
+    cap_add: [SYS_ADMIN]
+    mem_limit: 16g
+    memswap_limit: 16g
     depends_on:
       seed: {condition: service_completed_successfully}
     volumes: ["gamma:/state/gamma", "runtimes:/opt/owg-runtimes"]
@@ -66,6 +113,7 @@ services:
     volumes: ["gamma:/state/gamma"]
 
 volumes:
+  postgres:
   front:
   alpha:
   beta:

@@ -14,7 +14,7 @@ def timing(spec, enabled=True, now=None):
         runs, after = [], now
         for _ in range(3):
             after = next_at(spec, after)
-            runs.append(datetime.fromtimestamp(after, ZoneInfo(spec['timezone'])).strftime('%a %d %b, %H:%M %Z'))
+            runs.append(datetime.fromtimestamp(after, ZoneInfo(spec['timezone'])).strftime('%a %d %b, %H:%M UTC%z'))
         return dict(spec=spec, next_runs=runs if enabled else [], enabled=enabled, timing_error='')
     except (ValueError, KeyError, TypeError) as error:
         return dict(spec=spec, next_runs=[], enabled=enabled, timing_error=str(error))
@@ -31,5 +31,5 @@ def decorate(row, now):
     row['attention'] = bool(row['last'] and row['last']['state'] in ('failed', 'deferred', 'rejected'))
     row['work'] = (f"{row['model_name'] or spec['model_id']} · {spec['benchmark']}" if spec['kind'] == 'benchmark' else
                    f"One eligible pair · {spec.get('machine') or 'default'}" if spec['kind'] == 'outstanding' else
-                   f"Recovery sets · retain {spec['retention'] or 'all'} per machine")
+                   f"Backups · {', '.join(spec.get('nodes') or ['all nodes'])} · retain {spec['retention'] or 'all'} per node")
     return row

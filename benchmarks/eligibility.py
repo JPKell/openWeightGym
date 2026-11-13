@@ -2,6 +2,8 @@
 import hashlib
 import json
 
+from loadcoach.log import LEGACY
+
 
 def evidence_matches(run, definition, fingerprint, environment):
     """Match the frozen protocol and environment; formula and display edits are irrelevant."""
@@ -22,20 +24,20 @@ def compatible(model, definition):
 
 
 def resolve_location(model, preferred='', unavailable=()):
-    """Fallback only after a responding catalogue proves absence on the preferred node."""
+    """A named benchmark destination is a pin; an omitted destination may be placed."""
     if preferred in unavailable:
-        raise ValueError('Preferred node '+preferred+' is unavailable; its inventory is unknown.')
+        raise ValueError('Node '+preferred+' is unavailable; this benchmark will wait for it.')
     locations = [one for one in model.get('locations', []) if one.get('enabled', True)]
     if not locations:
         if model.get('locations'):
             raise ValueError('No enabled location for '+model['id']+'.')
-        return {**model, 'machine': 'compute'}, ''
+        return {**model, 'machine': LEGACY}, ''  # an older single-node catalogue without locations
     chosen = next((one for one in locations if one['machine'] == preferred), locations[0])
-    reason = ('Model absent on '+preferred+'; using '+chosen['machine']+'.'
-              if preferred and chosen['machine'] != preferred else '')
-    return {**model, **chosen}, reason
+    if preferred and chosen['machine'] != preferred:
+        raise ValueError('Model '+model['id']+' has no enabled copy on node '+preferred+'.')
+    return {**model, **chosen}, ''
 
 
 def reservation_key(model_id, machine, benchmark):
     """One active native run per local identity, node and definition across all submitters."""
-    return hashlib.sha256(json.dumps([model_id, machine or 'compute', benchmark]).encode()).hexdigest()
+    return hashlib.sha256(json.dumps([model_id, machine or LEGACY, benchmark]).encode()).hexdigest()

@@ -165,7 +165,7 @@ def test_model_timing_report_does_not_block_other_front_requests(tmp_path, monke
     users.db.close()
 
 
-def test_primary_compute_body_drop_returns_502_before_output(tmp_path):
+def test_node_body_drop_returns_retryable_503_before_output(tmp_path):
     users = Users(str(tmp_path / 'accounts.db'), {'plain': Group(can=frozenset({'load'}))})
     users.add('pat', 'plain')
     headers = {'authorization': 'Bearer ' + users.new_key('pat')}
@@ -194,5 +194,6 @@ def test_primary_compute_body_drop_returns_502_before_output(tmp_path):
             for streaming in (False, True):
                 answer = front.post('/v1/chat/completions', headers=headers,
                                     json={'model': 'small', 'messages': [], 'stream': streaming})
-                assert answer.status_code == 502
+                # Every node is a peer: a broken answer is retryable on another node, so it is a 503 with Retry-After.
+                assert answer.status_code == 503 and answer.headers['retry-after']
                 assert 'complete answer' in answer.json()['error']['message'] or 'sent an answer' in answer.json()['error']['message']

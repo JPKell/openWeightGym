@@ -1,5 +1,7 @@
 """Presentation of verified Models inventory; every node retains its own configuration."""
 
+from loadcoach.log import LEGACY
+
 from urllib.parse import quote, urlencode
 
 
@@ -16,7 +18,7 @@ def catalogue(known, node=''):
     rows, machines = [], set()
     offline = set(known.get('unavailable_machines') or [])
     for model in known.get('models', []):
-        copies = model.get('locations') or [{**model, 'machine': node or 'compute'}]
+        copies = model.get('locations') or [{**model, 'machine': node or LEGACY}]
         placements = []
         for copy in copies:
             machine = copy['machine']

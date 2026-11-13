@@ -16,6 +16,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from db import DatabaseSource
+from loadcoach.log import LEGACY
 from turnstile.reporting import ReportTimeout, run as run_report
 from .store import Benchmarks, TERMINAL
 from .worker import BenchmarkWorker, Retry
@@ -84,23 +85,42 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             return None
         return next((model for model in catalogue if model['id']==run['model']),None)
 
-    async def retired_ids(request, user):
-        """Return stable model identities whose retained benchmark history is retired."""
+    async def retired_ids(request, user, nodes=()):
+        """Return stable model identities whose retained benchmark history is retired, on any answering node."""
         if not may(user, 'manage-models'):
             return set()
-        try:
-            models = (await ask(request, 'GET', '/loadcoach/retired-models'))['models']
+        found = set()
+        for node in nodes:
+            try:
+                models = (await ask(request, 'GET', '/loadcoach/retired-models', params={'node': node}))['models']
+            except httpx.HTTPError:
+                continue  # an older or silent node cannot prove removal
             store.bind_models(models)
-            return {model['model_id'] for model in models}
-        except httpx.HTTPStatusError:
-            return set()  # older compute servers cannot prove removal
+            found |= {model['model_id'] for model in models}
+        return found
+
+    async def node_aliases(request) -> dict:
+        """Old node names and the nodes they now are, such as the old default node's, for runs that still carry them."""
+        try:
+            return (await ask(request, 'GET', '/turnstile/machines')).get('aliases', {})
+        except httpx.HTTPError:
+            return {}
+
+    def located(location, aliases) -> str:
+        """The node a run ran on. A run from before nodes were named ran on the old default node."""
+        name = location or LEGACY
+        return aliases.get(name, name)
+
+    def answering(catalogue) -> bool:
+        """Whether any node answered for the catalogue. An older one that does not say is taken as answering."""
+        return 'available_machines' not in catalogue or bool(catalogue['available_machines'])
 
     async def listing(request, user):
         """List benchmark definitions and retained runs visible to the caller."""
         try:
             catalogue = await ask(request, 'GET', '/v1/models')
             visible = {model['id']:model for model in catalogue['data'] if model['owned_by']=='loadcoach'}
-            compute_unavailable = not catalogue.get('available_machines', ['compute'])
+            compute_unavailable = not answering(catalogue)
             store.bind_models(list(visible.values()))
         except httpx.HTTPStatusError as problem:
             if problem.response.status_code != 503:
@@ -108,24 +128,28 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             catalogue, visible, compute_unavailable = {'data': []}, {}, True
         except httpx.HTTPError:
             catalogue, visible, compute_unavailable = {'data': []}, {}, True
-        retired = await retired_ids(request, user) if not compute_unavailable else set()
+        nodes = catalogue.get('available_machines', [])
+        retired = await retired_ids(request, user, nodes) if not compute_unavailable else set()
+        aliases = await node_aliases(request)
         runs_read = await run_report(store, lambda view: view.listing())
         publication_warning = ''
         if may(user, 'manage-models') and not compute_unavailable:
             publication_warning = await refresh_snapshot(request, user, list(visible.values()), runs=runs_read)
         try:
-            environment = await ask(request, 'GET', '/loadcoach/probe-environment')
+            environment = (await ask(request, 'GET', '/turnstile/machines/' + quote(nodes[0], safe='') + '/probe-environment')
+                           if nodes else {})
         except httpx.HTTPError:
             environment = {}
-        environments = {('compute', 'llama_cpp'): environment}
+        environments = {(nodes[0], 'llama_cpp'): environment} if nodes else {}
         runs = []
         for run in runs_read:
             current = current_model(run,list(visible.values()))
-            if compute_unavailable or (run.get('location') or 'compute') in catalogue.get('unavailable_machines', []) or current or run.get('model_id') in retired:
+            run['location'] = located(run.get('location'), aliases)
+            if compute_unavailable or run['location'] in catalogue.get('unavailable_machines', []) or current or run.get('model_id') in retired:
                 run['retired'] = not compute_unavailable and current is None
                 run['model_at_run'], run['model'] = run['model'], current['id'] if current else run['model']
                 run['current_fingerprint'] = bool(current and run['fingerprint'] == current.get('fingerprint'))
-                location = run.get('location') or 'compute'
+                location = run['location']
                 engine = run.get('subject', {}).get('settings', {}).get('engine', 'llama_cpp')
                 environment_key = (location, engine)
                 if environment_key not in environments:
@@ -142,7 +166,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
                     run['rerun'].append('benchmark implementation')
                 if not run.get('current_server', True):
                     run['rerun'].append('benchmark server mode')
-                run['may_control'] = not compute_unavailable and (run.get('location') or 'compute') not in catalogue.get('unavailable_machines', []) and may(user,'benchmark') and (run['user']==user['name'] or may(user,'stop'))
+                run['may_control'] = not compute_unavailable and run['location'] not in catalogue.get('unavailable_machines', []) and may(user,'benchmark') and (run['user']==user['name'] or may(user,'stop'))
                 runs.append(run)
         return JSONResponse({'definitions':store.definitions(), 'runs':runs, 'paused':store.paused(), 'environment':environment,
                              'role_evidence_warning': publication_warning, 'compute_unavailable': compute_unavailable,
@@ -153,12 +177,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
         try:
             catalogue = await ask(request, 'GET', '/v1/models')
             visible = [model for model in catalogue['data'] if model['owned_by']=='loadcoach']
-            compute_unavailable = not catalogue.get('available_machines', ['compute'])
+            compute_unavailable = not answering(catalogue)
             store.bind_models(visible)
         except httpx.HTTPError:
-            visible, compute_unavailable = [], True
-        retired = await retired_ids(request, user) if not compute_unavailable else set()
+            catalogue, visible, compute_unavailable = {}, [], True
+        retired = await retired_ids(request, user, catalogue.get('available_machines', [])) if not compute_unavailable else set()
         run = store.get(request.path_params['number'], True)
+        if run:
+            run['location'] = located(run.get('location'), await node_aliases(request))
         current = current_model(run,visible)
         if not run or not compute_unavailable and not current and run.get('model_id') not in retired:
             return error(404, 'No such benchmark run.')
@@ -194,11 +220,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             machine = target.get('machine')
             places = logical.get('locations', [])
             place = next((one for one in places if one.get('machine') == machine), None) if machine else None
-            if machine and place is None and (places or machine != 'compute'):
+            if machine and place is None:
                 return error(404, f"{logical['id']} is not available at {machine}.")
             if not machine and places:
                 place = places[0]
-            machine = machine or (place or {}).get('machine', 'compute')
+            machine = machine or (place or {}).get('machine', '')
             if machine in catalogue.get('unavailable_machines', []):
                 return error(409, f"{machine} is unavailable; refresh its inventory before queueing.")
             if place is not None and not place.get('enabled', True):
@@ -237,7 +263,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
         """Create LoadCoach tasks for already-authorized, type-compatible targets."""
         result = {'runs': [], 'active': [], 'errors': [], 'pending': [], 'outcomes': []}
         for target in selected:
-            outcome = {'model': target['model'], 'machine': target['machine'] or 'compute', 'benchmark': definition['id']}
+            outcome = {'model': target['model'], 'machine': target['machine'], 'benchmark': definition['id']}
             number = store.create(user['name'], target['model'], definition['id'], target['model_id'], location=target['machine'], reserve=True)
             if number is None:
                 existing = store.active_for(target['model_id'] or target['model'], target['machine'], definition['id'], by_name=not target['model_id'])
@@ -298,6 +324,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
         if logical.get('capabilities', {}).get('native_probes') is False and not logical.get('capabilities', {}).get('load_probes') and not logical.get('locations'):
             return error(400, 'This engine does not support native benchmark probes; no run was queued.')
         store.bind_models(list(visible.values()))
+        aliases = await node_aliases(request)
         definitions = [definition for definition in store.definitions() if definition['enabled']
                        and (not logical.get('capabilities', {}).get('load_probes') or definition['id'] == 'load')]
         runs = store.listing()
@@ -305,10 +332,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
 
         async def environment(machine: str) -> dict:
             """Resolve the current probe environment for a candidate model."""
-            key = machine or 'compute'
+            key = machine
             if key not in environments:
-                path = ('/loadcoach/probe-environment' if key == 'compute' else
-                        '/turnstile/machines/' + quote(key, safe='') + '/probe-environment')
+                path = '/turnstile/machines/' + quote(key, safe='') + '/probe-environment'
                 path += '?engine=' + quote(logical.get('engine_id', 'llama_cpp'), safe='')
                 try:
                     environments[key] = await ask(request, 'GET', path)
@@ -347,7 +373,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             candidates = [run for run in runs if run['benchmark'] == definition['id']
                           and current_model(run, [logical])
                           and (not target['model_id'] or run.get('model_id') == target['model_id'])
-                          and (run.get('location') or 'compute') == (target['machine'] or 'compute')]
+                          and located(run.get('location'), aliases) == target['machine']]
             current_environment = await environment(target['machine'])
             label = definition['id'] + (f" at {target['machine']}" if target['machine'] else '')
             if current_environment is None or not all(current_environment.get(key) for key in ('engine_hash', 'machine_hash')):

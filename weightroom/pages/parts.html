@@ -25,7 +25,7 @@
 
 {# Persistent notices; caller content may contain links/forms, while plain messages stay escaped. #}
 {% macro alert(kind='info', message='', class_='', attrs={}, tag='div', role=None) -%}
-<{{ tag }} class="alert{{ ' alert-' ~ kind if kind }}{{ ' ' ~ class_ if class_ }}" role="{{ role or ('alert' if kind in ('danger', 'warning') else 'status') }}"{{ attrs|xmlattr }}>{{ message }}{% if caller is defined %}{{ caller() }}{% endif %}</{{ tag }}>
+<{{ tag }} class="alert{{ ' alert-' ~ kind if kind }}{{ ' d-block' if 'd-flex' not in class_ and 'd-inline-flex' not in class_ }}{{ ' ' ~ class_ if class_ }}" role="{{ role or ('alert' if kind in ('danger', 'warning') else 'status') }}"{{ attrs|xmlattr }}>{{ message }}{% if caller is defined %}{{ caller() }}{% endif %}</{{ tag }}>
 {%- endmacro %}
 
 {# What the last action said. It stays under the top bar and is removed after 7 seconds by static/pieces.js. #}

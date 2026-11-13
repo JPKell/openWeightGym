@@ -3,8 +3,8 @@
 An administrator makes a code, under Settings → Compute nodes or with `weightroom pair`. Within
 ten minutes the node's installer sends it to POST /pair. The console answers with the machine key
 the two will sign with, the name the node goes by and the address of turnstile, and records the
-node in settings/weightroom.toml: as the main compute node when there is none yet, otherwise as a
-further [machines.NAME] with a key of its own. Turnstile and weightroom then restart to use it.
+node in settings/weightroom.toml as a [machines.NAME] of its own: every node is a peer
+(docs/peer-nodes-plan.md). Turnstile and weightroom then restart to use it.
 
 A code works once. Codes are kept only as hashes, in the data folder, beside a lock that keeps the
 console and a `weightroom pair` from writing at the same moment.
@@ -26,6 +26,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from loadcoach.log import LEGACY
+from loadcoach.setting_names import comment_out
 from weightroom.settings_file import save_settings, set_toml_value
 
 ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"  # no 0 and O, no 1, I and L
@@ -98,7 +100,7 @@ def url_host(address: str) -> str:
 def node_name(wanted: str, taken: set[str]) -> str:
     """A name for a further node: the one it asked for, made safe and unique, or node-2, node-3..."""
     base = re.sub(r"[^a-z0-9-]+", "-", wanted.lower()).strip("-")[:28] or "node"
-    if not NAME.fullmatch(base) or base == "compute":
+    if not NAME.fullmatch(base) or base in (LEGACY, "front"):
         base = "node"
     name, number = base, 2
     while name in taken:
@@ -109,10 +111,11 @@ def node_name(wanted: str, taken: set[str]) -> str:
 def join(settings_path: Path, address: str, wanted: str = "", voice: bool = False) -> dict:
     """Record the node at `address` and say which name and machine key it signs with.
 
-    With no compute node yet (compute names this machine and no LoadCoach runs here) it becomes
-    the main one, signing with the machine key turnstile already holds. Otherwise it becomes a
-    further node with a new key of its own. A node that pairs again from the same address keeps
-    its name and key.
+    Every node is a [machines.NAME]. The first one, while the install still has the placeholder
+    top-level `compute` (this machine, with no LoadCoach here), signs with the machine key
+    turnstile already holds, and the placeholder is commented out. A later node gets a new key of
+    its own. A node that pairs again from the same address keeps its name and key; the old
+    default node, still a top-level `compute` until `owg update` moves it, keeps the name compute.
     """
     folder = settings_path.parent
     original = settings_path.read_text()
@@ -127,20 +130,29 @@ def join(settings_path: Path, address: str, wanted: str = "", voice: bool = Fals
         voice_port = turnstile.get("voice_port", 8445)
         if voice_port not in ports:
             text = set_toml_value(text, "turnstile.ports", [*ports, voice_port])
-    none_yet = compute in LOOPBACK and not (folder / "loadcoach.toml").exists()
-    primary = none_yet or compute == address
-    if primary:
-        name = "compute"
+    none_yet = (compute in LOOPBACK and not (folder / "loadcoach.toml").exists()) or (not compute and not machines)
+    legacy = bool(compute) and compute == address
+    primary = none_yet or legacy  # the node voice was set up for
+    if legacy:
+        name = LEGACY
         key_file = folder / turnstile.get("machine_key_file", "../keys/machine.key")
-        text = set_toml_value(text, "compute", f"http://{host}:8442")
-        text = set_toml_value(text, "spotter", f"http://{host}:8444")
+    elif none_yet:
+        name = node_name(wanted, set(machines))
+        key_file = folder / turnstile.get("machine_key_file", "../keys/machine.key")
+        text = comment_out(text, ("compute", "spotter"), f"replaced by [machines.{name}] when it paired")
+        for key, value in (("compute", f"http://{host}:8442"), ("spotter", f"http://{host}:8444"),
+                           ("machine_key_file", turnstile.get("machine_key_file", "../keys/machine.key"))):
+            text = set_toml_value(text, f"machines.{name}.{key}", value)
     else:
         name = next((known for known, machine in machines.items()
                      if urlsplit(machine.get("compute", "")).hostname == address), "")
         if name:
             key_file = folder / machines[name].get("machine_key_file", "../keys/machine.key")
             # Repair a legacy collision without copying an API key into a signing-key file.
-            reserved = {folder / turnstile.get("machine_key_file", "../keys/machine.key"),
+            shared = turnstile.get("machine_key_file", "../keys/machine.key")
+            first = machines[name].get("machine_key_file") == shared and not compute and not any(
+                machine.get("machine_key_file", "../keys/machine.key") == shared for other, machine in machines.items() if other != name)
+            reserved = {*(() if first else (folder / shared,)),  # the first node keeps the key turnstile held before it paired
                         folder / told.get("key_file", "../keys/weightroom.key"),
                         *(folder / f"../keys/{service}.key" for service in ("voice-service", "voice-gateway", "voice-browser"))}
             if key_file.resolve() in {path.resolve() for path in reserved}:

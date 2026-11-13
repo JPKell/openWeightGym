@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% from "parts.html" import page_header, card, section_title, alert %}
 {% block title %}Speech · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=8" defer></script><script src="/soundroom-static/speech.js?v=3" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=8" defer></script><script src="/soundroom-static/speech.js?v=4" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom" data-mode="speech" data-defaults="{{ audio | tojson | forceescape }}">
   {{ page_header("Speech", lead="Generate speech, transcribe audio and manage speaker voices.") }}
@@ -70,6 +70,7 @@
       {{ section_title("Talk with a model in one of your voices") }}
       <p class="small">A hands-free conversation: speak, and the answer is spoken back in the voice you choose. You can interrupt it. Each exchange is kept as a conversation under Chat → Conversations.</p>
       <label class="form-label" for="sc-voice">Voice</label><select id="sc-voice" class="form-select mb-2"></select>
+      <p id="sc-unavailable" class="form-text">Save a voice on the Voices tab first.</p>
       <div class="form-check mb-3"><input id="sc-record" class="form-check-input" type="checkbox"><label for="sc-record" class="form-check-label">Record the call, for testing</label></div>
       <a id="sc-open" class="btn btn-primary" href="/voice" data-base="/voice">Open spoken chat</a>
       <p class="form-text mb-0">It opens on the Voice page, where you talk as yourself: you can speak in your own voices and those shared with your groups.</p>
@@ -90,10 +91,11 @@
         <hr>
         {{ section_title("Design a voice") }}
         <label class="form-label" for="vo-design-model">Voice-design model</label><select id="vo-design-model" class="form-select mb-2"></select>
+        <p id="vo-design-unavailable" class="form-text">No voice-design model is available.{% if 'manage-models' in person.can %} <a href="/models/audio">Add one in Audio models</a>.{% else %} Ask an administrator to add one.{% endif %}</p>
         <label class="form-label" for="vo-description">Description</label><textarea id="vo-description" class="form-control mb-2" rows="2" maxlength="1000" placeholder="A bright, friendly young voice with a slight smile"></textarea>
         <label class="form-label" for="vo-sample">Sample sentence</label><input id="vo-sample" class="form-control mb-2" maxlength="400" value="Hello! This is how I sound when I read aloud for you.">
         <label class="form-label" for="vo-design-name">Name</label><input id="vo-design-name" class="form-control mb-3" maxlength="80">
-        <button id="vo-design" type="button" class="btn btn-outline-primary">Design and save</button>
+        <button id="vo-design" type="button" class="btn btn-outline-primary" disabled>Design and save</button>
       {% endcall %}</div>
       <div class="col-lg-7">{{ section_title("Your voices and voices shared with you") }}<div id="vo-list" class="list-group"></div></div>
     </div>

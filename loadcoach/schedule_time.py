@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 def validate(spec):
     """Validate and normalize a daily or weekday schedule specification."""
-    optional = {'machine', 'model_ids', 'benchmarks'}
+    optional = {'machine', 'model_ids', 'benchmarks', 'nodes'}
     if not isinstance(spec, dict) or set(spec) - optional != {'kind', 'model_id', 'benchmark', 'timezone', 'time', 'weekdays', 'missed', 'retention'}:
         raise ValueError('Choose a backup or benchmark, timezone, time, weekdays and missed-run policy.')
     if spec['kind'] not in ('backup', 'benchmark', 'outstanding') or spec['missed'] not in ('skip', 'latest'):
@@ -34,9 +34,9 @@ def validate(spec):
         raise ValueError('A backup has no model or benchmark.')
     if not isinstance(spec.get('machine', ''), str) or len(spec.get('machine', '')) > 100:
         raise ValueError('Choose a configured preferred node.')
-    for field in ('model_ids', 'benchmarks'):
+    for field in ('model_ids', 'benchmarks', 'nodes'):
         values = spec.get(field, [])
-        if not isinstance(values, list) or len(values) > 100 or any(not isinstance(value, str) or not value or len(value)>200 for value in values):
+        if not isinstance(values, list) or len(values) > 100 or len(set(values)) != len(values) or any(not isinstance(value, str) or not value or len(value)>200 for value in values):
             raise ValueError('Select up to 100 distinct models and benchmarks.')
     if spec['kind'] == 'outstanding' and (spec['model_id'] or spec['benchmark']):
         raise ValueError('Missing/outdated work uses model and benchmark scopes.')

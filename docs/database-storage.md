@@ -383,7 +383,11 @@ owner-only DSN file. The password is removed from the command-line connection st
 to the child-process environment and never written to manifests or errors. Each machine enumerates
 its configured stores before adding discovered SQLite files; a required missing or unreachable
 store fails recovery-set creation instead of producing a misleading partial inventory. The host
-must provide compatible `pg_dump` and `pg_restore` programs before a PostgreSQL recovery can run.
+must provide `pg_dump` and `pg_restore` matching the server's major version before recovery can run.
+The driver selects matching tools from `/usr/lib/postgresql/VERSION/bin`,
+`/usr/pgsql-VERSION/bin`, or `PATH`, and names the required version when missing.
+Newer tools can create dumps that fail to restore to the original older server; see the
+[PostgreSQL pg_dump compatibility guidance](https://www.postgresql.org/docs/17/app-pgdump.html).
 
 ### P4 - offline engine migration
 

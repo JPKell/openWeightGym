@@ -12,15 +12,18 @@ class ModelLocations:
         """Bind model-location enablement to the configuration store the front keeps."""
         self.source = database(source)
         self.db = self.source.connect(check_same_thread=False)
+        self.former: dict[str, str] = {}  # old node name → its current name, until stored rows are renamed
         migrate(self.source, self.db, "weightroom.model_locations", MODEL_LOCATIONS)
 
     def enabled(self, machine: str, model_id: str | None) -> bool:
         """Return whether a model is enabled on the selected compute node."""
         if not model_id:
             return True
+        names = (machine, *(old for old, new in self.former.items() if new == machine))
         row = self.db.execute(
-            "SELECT enabled FROM model_locations WHERE machine=? AND model_id=?",
-            (machine, model_id),
+            f"SELECT enabled FROM model_locations WHERE machine IN ({','.join('?' * len(names))}) AND model_id=? "
+            "ORDER BY machine = ? DESC LIMIT 1",
+            (*names, model_id, machine),
         ).fetchone()
         return row is None or bool(row[0])
 

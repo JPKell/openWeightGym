@@ -2,7 +2,7 @@
    (usage_designs.html) arrange the same pieces, so each keeps its names, IDs and `form` links here.
    static/usage.js finds them by those IDs and keeps the figures, bars and trend lines current; usage.css lays them out. #}
 {% from "parts.html" import card, empty_row, section_title %}
-{% from "filter_parts.html" import users_groups %}
+{% from "filter_parts.html" import users_groups, node_filter %}
 {% from "navigation_parts.html" import pills, pill_button %}
 {% from 'kpi_parts.html' import kpi_row, kpi, kpi_value %}
 
@@ -29,6 +29,7 @@
       </div>
     </div>
     <div class="{{ field_class }}" data-usage-field="people">{{ users_groups('usage', report.choices.group, report.user_groups, report.filters.user, report.filters.group, report.everyone) }}</div>
+    <div class="{{ field_class }}" data-usage-field="node">{{ node_filter('usage', report.choices.get('node', []), report.filters.get('node', '')) }}</div>
     {% for key, label in [('model', 'Model'), ('source', 'Source'), ('outcome', 'Outcome'), ('level', 'Level')] %}
     <div class="{{ field_class }}" data-usage-field="{{ key }}">
       <label class="form-label" for="usage-{{ key }}">{{ label }}</label>

@@ -63,6 +63,7 @@ LABELS = {
     'profile': ('Conversation profile', 'Direct conversations', '', 'text'),
     'modes': ('Conversation modes', 'Direct conversations', '', 'text'),
     'soundroom_profile': ('Audio model', 'Speech', '', 'text'),
+    'preferred_voice_node': ('Preferred voice node', 'Speech', '', 'text'),
     'hermes_model': ('Model', 'Hermes agent', '', 'text'),
     'hermes_system_prompt': ('Instructions', 'Hermes agent', '', 'text'),
     'hermes_max_turns': ('Agent turn limit', 'Hermes agent', '', 'number'),

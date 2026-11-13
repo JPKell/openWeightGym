@@ -9,17 +9,16 @@ from loadcoach.tasks import error
 class ConsoleSettings:
     """Live settings of the front's own programs and their compatibility endpoints.
 
-    `enabled` is keep_console_settings_on_front: when false these requests go on to compute as before.
+    Console settings remain available independently of compute-node availability.
     """
-    def __init__(self, source, log, ask, enabled=False, *, programs=PROGRAMS):
+    def __init__(self, source, log, ask, enabled=True, *, programs=PROGRAMS, voice_nodes=lambda: ()):
         """Bind the console's program settings and their authenticated management API."""
         self.changes, self.log, self.ask, self.enabled = Changes(source), log, ask, enabled
         self.programs = programs
+        self.voice_nodes = voice_nodes
 
     async def handle(self, request, user):
         """Read or change the console's program settings through the shared settings contract."""
-        if not self.enabled:
-            return None
         path = request.url.path
         if path == '/loadcoach/tools' and request.method == 'GET' and 'toollocker' in self.programs:
             if not user or not user.can('manage-settings'):
@@ -34,11 +33,12 @@ class ConsoleSettings:
         if path == '/loadcoach/settings' and request.method == 'GET':
             if not user or not user.can('manage-settings'):
                 return error(403, 'Settings require manage-settings.')
-            remote = await self.ask(user, 'GET', path)
-            programs = [one for one in remote.json().get('programs', []) if one['program'] not in self.programs] if remote is not None and remote.status_code == 200 else []
-            programs += [one for one in self.changes.everything() if one['program'] in self.programs]
-            return JSONResponse({'programs': sorted(programs, key=lambda one: one['program']),
-                                 'compute_unavailable': remote is None or remote.status_code != 200})
+            programs = [one for one in self.changes.everything() if one['program'] in self.programs]
+            for program in programs:
+                for setting in program['settings']:
+                    if program['program'] == 'turnstile' and setting['name'] == 'preferred_voice_node':
+                        setting.update(select=True, editor='text', choices=[('', 'Automatic'), *((name, name) for name in self.voice_nodes())])
+            return JSONResponse({'programs': sorted(programs, key=lambda one: one['program']), 'compute_unavailable': False})
         parts = path.split('/')
         if len(parts) not in (4, 5) or parts[1:3] != ['loadcoach', 'settings']:
             return None
@@ -94,6 +94,8 @@ class ConsoleSettings:
                     interval_seconds(value)
                 if program == 'turnstile' and name == 'image_adult_previews' and value is not None and type(value) is not bool:
                     raise ValueError('image_adult_previews must be true or false.')
+                if program == 'turnstile' and name == 'preferred_voice_node' and value and value not in self.voice_nodes():
+                    raise ValueError('Choose a node that reports Voice installed, or Automatic.')
                 if program == 'weightroom' and name == 'alert_gpu_temperature' and value is not None and (type(value) not in (int, float) or not 50 <= value <= 110):
                     raise ValueError('alert_gpu_temperature must be from 50 through 110 degrees Celsius.')
                 if program == 'weightroom' and value is not None:

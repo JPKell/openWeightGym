@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById('mw-' + id);
   const params = new URLSearchParams(location.search);
-  let node = params.get('node') || '', defaultNode = 'compute';
+  let node = params.get('node') || '', defaultNode = '';
   const SLOTS = ['diffusion', 'text_encoder', 'vae', 'clip_l', 'clip_g', 'upscaler'];
   const FAMILIES = SuiteImageProfiles.labels;
   const modelDrafts = new Map();

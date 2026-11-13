@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from loadcoach.usage import ENDINGS
 
 FIELDS = ('request_min', 'request_max', 'date_min', 'date_max', 'duration_min', 'duration_max',
-          'model', 'user', 'ip', 'status')
+          'model', 'user', 'ip', 'status', 'node')
 STATUSES = (*ENDINGS, 'unfinished')
 
 

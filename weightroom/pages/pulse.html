@@ -1,8 +1,6 @@
-{# The mark at the start of the band: whether compute is answering. It asks for itself again every 15 seconds, so it is true without a reload.
-   A small dot and the word, the size of the meters beside it. The dot is green when compute answers. When it does not, the dot is red
-   and the words say so as well, since colour alone tells some people nothing. Since when is left out where the numbers are, on a narrower screen. #}
+{# Front connectivity; each compute node has its own availability notice. #}
 <span id="pulse" class="meter pulse" hx-get="/pulse" hx-trigger="every 15s" hx-swap="outerHTML"
-      title="{{ 'compute is answering' if compute.up else 'compute has not been heard from yet' if compute.up is none else 'compute is not answering' }}">
-  <span class="dot {{ 'bg-success' if compute.up else 'bg-secondary' if compute.up is none else 'bg-danger' }}"></span>
-  <b>{% if compute.up %}compute{% elif compute.up is none %}looking for compute{% else %}compute off<span class="reading"> since {{ compute.since|timestamp }}</span>{% endif %}</b>
+      title="{{ 'Front is answering' if front_state.up else 'Checking front connection' if front_state.up is none else 'Front is not answering' }}">
+  <span class="dot {{ 'bg-success' if front_state.up else 'bg-secondary' if front_state.up is none else 'bg-danger' }}"></span>
+  <b>{% if front_state.up %}Front{% elif front_state.up is none %}Checking front{% else %}Front unavailable<span class="reading"> since {{ front_state.since|timestamp }}</span>{% endif %}</b>
 </span>

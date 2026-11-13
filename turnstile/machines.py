@@ -48,6 +48,7 @@ def logical_catalogue(found: dict[str, dict]) -> list[dict]:
             key = (content, model.get("engine_id", "llama_cpp"), machine)
             counts[key] = counts.get(key, 0) + 1
     grouped = {}
+    order = {name: index for index, name in enumerate(found)}
     for machine, model in rows:
         content = model.get("content_sha256")
         engine = model.get("engine_id", "llama_cpp")
@@ -56,7 +57,7 @@ def logical_catalogue(found: dict[str, dict]) -> list[dict]:
         grouped.setdefault(key, []).append((machine, model))
     listed = []
     for choices in grouped.values():
-        choices.sort(key=lambda item: (item[0] != "compute", item[0], item[1].get("id", "")))
+        choices.sort(key=lambda item: (order.get(item[0], len(order)), item[0], item[1].get("id", "")))  # nodes in configured order
         machine, canonical = choices[0]
         locations = [{"machine": name, **{key: model[key] for key in
                       ("id", "model_id", "fingerprint", "content_sha256", "embedding", "context_tokens", "build", "engine_id", "capabilities", "chat_template_caps") if key in model}}
@@ -69,7 +70,7 @@ def logical_catalogue(found: dict[str, dict]) -> list[dict]:
 
 
 def placement_order(variants: list[tuple[str, dict]], reports: dict[str, dict]) -> list[tuple[str, dict]]:
-    """Prefer an eligible resident, then a fit without eviction, then the shorter line.
+    """Prefer work that can start now, then estimated finish and fewer evictions.
 
     These are hints only: LoadCoach rechecks real memory and admits or refuses the request.
     """
@@ -77,11 +78,24 @@ def placement_order(variants: list[tuple[str, dict]], reports: dict[str, dict]) 
         """Return the configured placement priority for a candidate compute location."""
         name, fact = item
         report = reports.get(name, {})
-        free = sum(card.get("free", 0) for card in report.get("cards", []))
-        waiting = report.get("waiting", 0) + report.get("running", 0)
-        return (bool(fact.get("why_not")), not bool(fact.get("warm")), not bool(fact.get("resident")),
-                fact.get("fit") != "fits now", len(fact.get("evictions") or []), waiting, -free, name)
+        ready = report.get('state', READY) == READY and report.get('status_live', True)
+        immediate = ready and can_start_now(fact, report)
+        seconds = (fact.get('wait') or {}).get('seconds')
+        if not isinstance(seconds, (int, float)):
+            seconds = float('inf')
+        return (bool(fact.get('why_not')), not ready, not immediate,
+                not bool(fact.get('resident') or fact.get('warm')) if immediate else False,
+                seconds, len(fact.get('evictions') or []), name)
     return sorted(variants, key=priority)
+
+
+def can_start_now(fact: dict, report: dict) -> bool:
+    """A capable model can begin without a queue or unloading another model."""
+    if fact.get('why_not') or fact.get('evictions'):
+        return False
+    if fact.get('free_now'):
+        return True
+    return fact.get('fit') == 'fits now' and not report.get('waiting', 0) and not report.get('running', 0)
 
 
 class Machines:

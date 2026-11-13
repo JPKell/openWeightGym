@@ -1,12 +1,11 @@
 {% extends "frame.html" %}
 {% from "parts.html" import page_header, card %}
-{% block title %}Compute is off · openWeightGym{% endblock %}
+{% block title %}Service unavailable · openWeightGym{% endblock %}
 {% block main %}
 {% call card("", class_="mx-auto mt-4 entry") %}
-    {{ page_header("Compute is not answering", lead="Information the front keeps remains available.") }}
-    <p>Since {{ compute.since|timestamp }}. This page cannot show anything that compute owns until it is back.</p>
+    {{ page_header("Service not answering", lead="The service needed for this action is unavailable.") }}
+    <p>Check the node notices for availability and try again when the service reconnects.</p>
     <p>Your sign-in is kept. <a href="/status">Open Status</a> to check the nodes.</p>
-    {% if spotter_available and person and person.key %}<p>The machine itself may still be up. Open <a href="/telemetry">Telemetry</a>, select its physical host and use the service controls to start compute again.</p>{% endif %}
-    <p class="text-secondary mb-0">If you are one of the people who can do something while compute is off, <a href="/sign-in">sign in again</a> with your password.</p>
+    {% if spotter_available and person and person.key %}<p>The host may still be up. Open <a href="/telemetry">Telemetry</a> and select its physical host to check services.</p>{% endif %}
   {% endcall %}
 {% endblock %}

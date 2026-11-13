@@ -25,6 +25,11 @@ SCHEDULES = (Migration(1, "recurring schedules and durable occurrences", """
     CREATE INDEX IF NOT EXISTS schedule_history ON schedule_occurrences(due_at);
 """), Migration(2, "retain deleted schedule history", """
     ALTER TABLE recurring_schedules ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;
+"""), Migration(3, "independent scheduled backup node results", """
+    CREATE TABLE schedule_backup_results (
+        occurrence TEXT NOT NULL, node TEXT NOT NULL, backup_id TEXT NOT NULL,
+        state TEXT NOT NULL, message TEXT NOT NULL, updated DOUBLE PRECISION NOT NULL,
+        PRIMARY KEY(occurrence, node));
 """))
 
 ALERTS = (Migration(1, "operational alert episodes and source freshness", """
@@ -245,6 +250,9 @@ LOG = (
         CREATE TABLE machine_lifecycle (
             name TEXT PRIMARY KEY, state TEXT NOT NULL,
             changed_at DOUBLE PRECISION NOT NULL, changed_by TEXT NOT NULL);
+    """),
+    Migration(12, "former node names", """
+        CREATE TABLE node_aliases (old TEXT PRIMARY KEY, new TEXT NOT NULL, at DOUBLE PRECISION NOT NULL);
     """),
 )
 
@@ -728,7 +736,20 @@ COMPUTE_RETIREMENT = (Migration(1, "retire verified compute copies of records th
                                 formerly="retire verified front-owned compute copies"),)
 
 
+PEER_NODE_REFERENCES = (Migration(1, 'rename former default node references', 'SELECT 1;'),)
+MODEL_INSTALLATIONS = (Migration(1, 'recoverable model installation requests', """
+    CREATE TABLE IF NOT EXISTS model_installations (
+        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, request TEXT NOT NULL,
+        progress TEXT NOT NULL, updated DOUBLE PRECISION NOT NULL);
+"""),)
+# These modules own the media schemas; transfers must recognize their ledgers too.
+from mirrorwall.schema import MIRRORWALL
+from soundroom.schema import SOUNDROOM
+# The owner supplies the alias-dependent data rewrite at startup. Logical transfers
+# copy those rewritten rows and their ledger, so reproducing the schema is a no-op.
 STREAMS = {
+    'mirrorwall.front': MIRRORWALL, 'soundroom.front': SOUNDROOM,
+    'turnstile.installations': MODEL_INSTALLATIONS,
     "components.versions": COMPONENT_VERSIONS,
     "loadcoach.retirement": COMPUTE_RETIREMENT,
     "loadcoach.settings": SETTINGS, "loadcoach.groups": GROUPS,
@@ -741,3 +762,5 @@ STREAMS = {
     "weightroom.plugins": PLUGINS, "weightroom.alerts": ALERTS, "weightroom.schedules": SCHEDULES, "plugins.runtime": PLUGIN_RUNTIME,
     "spotter.history": SPOTTER, "toollocker.tools": TOOL_SCHEMAS,
 }
+STREAMS.update({'peer_nodes.' + owner: PEER_NODE_REFERENCES for owner in
+                ('weightroom.accounts', 'weightroom.roles', 'weightroom.benchmarks', 'loadcoach.core')})

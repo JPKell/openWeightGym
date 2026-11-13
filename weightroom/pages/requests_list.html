@@ -1,3 +1,4 @@
+{% from 'filter_parts.html' import node_filter %}
 {% from "parts.html" import swaps, alert, empty_row %}
 {% set filters = request_filters|default({}) %}
 {% set choices = request_choices|default({}) %}
@@ -14,16 +15,17 @@
   {% if request_choices is defined %}<button class="btn btn-primary btn-sm">Apply filters</button><a class="btn btn-outline-secondary btn-sm" href="/requests?limit={{ paging.limit }}{{ '&amp;completed=1'|safe if completed }}" {{ swaps('recent-requests', true) }}>Clear filters</a>{% else %}<noscript><button class="btn btn-primary btn-sm">Show</button></noscript>{% endif %}
 </div>
 <div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0">
-<thead><tr><th>Request</th><th>Time requested</th><th>Duration</th><th>Model</th><th>User</th><th>IP</th>{% if not completed %}<th>Status</th>{% endif %}</tr>
+<thead><tr><th>Request</th><th>Time requested</th><th>Duration</th><th>Node</th><th>Model</th><th>User</th><th>IP</th>{% if not completed %}<th>Status</th>{% endif %}</tr>
 {% if request_choices is defined %}<tr class="request-column-filters">
 {% for key, kind, label, step, width in [('request', 'number', 'request number', '1', '8rem'), ('date', 'datetime-local', 'date', '1', '12rem'), ('duration', 'number', 'duration in seconds', 'any', '7rem')] %}
 <td style="min-width:{{ width }}">{% for edge, caption in [('min','Minimum'),('max','Maximum')] %}<input class="form-control form-control-sm mb-0" type="{{ kind }}"{% if kind == 'datetime-local' %} data-input-zone="{{ server_timezone }}" data-instant="{{ input_utc(filters.get(key ~ '_' ~ edge, ''), server_timezone) }}"{% endif %} name="{{ key }}_{{ edge }}" aria-label="{{ caption }} {{ label }}" title="{{ request_timezone if key == 'date' else label }}" placeholder="{{ caption }}" value="{{ filters.get(key ~ '_' ~ edge, '') }}" step="{{ step }}"{% if kind == 'number' %} min="0"{% endif %}>{% endfor %}</td>
 {% endfor %}
+<td>{{ node_filter('request', choices.get('node', []), filters.get('node', ''), show_label=false) }}</td>
 {% for key, label in [('model','model'),('user','user'),('ip','IP'),('status','status')] %}{% if key != 'status' or not completed %}
 <td style="min-width:{{ '11rem' if key in ('model','status') else '8rem' }}"><select name="{{ key }}" class="form-select form-select-sm" aria-label="Filter {{ label }}"><option value="">All {{ label ~ ('s' if key != 'status' else 'es') }}</option>{% for value in choices.get(key, []) %}<option value="{{ value }}" {{ 'selected' if filters.get(key) == value }}>{{ 'Under way / no ending' if value == 'unfinished' and key == 'status' else value }}</option>{% endfor %}{% if filters.get(key) and filters[key] not in choices.get(key, []) %}<option value="{{ filters[key] }}" selected>{{ filters[key] }} (unavailable)</option>{% endif %}</select></td>
 {% endif %}{% endfor %}
 </tr>{% endif %}</thead>
-<tbody>{% for row in recent %}<tr><td>{% if row.can_open|default(true) %}<a href="/requests/{{ row.id }}">{{ row.id }}</a>{% else %}{{ row.id }}{% endif %}</td><td class="when">{{ row.at|timestamp }}</td><td>{{ ('%.2f'|format(row.duration) ~ ' s') if row.duration is not none else '—' }}</td><td>{{ row.model or '' }}</td><td>{{ row.user }}</td><td>{{ row.caller }}</td>{% if not completed %}<td>{{ row.state }}</td>{% endif %}</tr>{% else %}{% call empty_row((6 if completed else 7)) %}No requests on record.{% endcall %}{% endfor %}</tbody>
+<tbody>{% for row in recent %}<tr><td>{% if row.can_open|default(true) %}<a href="/requests/{{ row.id }}">{{ row.id }}</a>{% else %}{{ row.id }}{% endif %}</td><td class="when">{{ row.at|timestamp }}</td><td>{{ ('%.2f'|format(row.duration) ~ ' s') if row.duration is not none else '—' }}</td><td>{{ row.node|default('front') }}</td><td>{{ row.model or '' }}</td><td>{{ row.user }}</td><td>{{ row.caller }}</td>{% if not completed %}<td>{{ row.state }}</td>{% endif %}</tr>{% else %}{% call empty_row((7 if completed else 8)) %}No requests on record.{% endcall %}{% endfor %}</tbody>
 </table></div>
 </form>
 {% if not embedded %}{% with target='recent-requests' %}{% include 'pagination.html' %}{% endwith %}{% endif %}

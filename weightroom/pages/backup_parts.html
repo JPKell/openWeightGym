@@ -1,0 +1,12 @@
+{% from "parts.html" import empty_row, more %}
+
+{% macro inventory(rows, root='') %}
+{% call more('Recovery inventory') %}
+{% if root %}<p class="small text-secondary">Archives: <code>{{ root }}</code></p>{% endif %}
+<div class="table-responsive"><table class="table table-sm align-middle mb-0">
+<thead><tr><th>Data</th><th>Source</th><th>Status</th><th>Size</th></tr></thead><tbody>
+{% for row in rows %}<tr><td>{{ row.kind }}{% if row.engine %}<div class="small text-secondary">{{ row.engine }}{% if row.bindings %} · {{ row.bindings|join(', ') }}{% endif %}</div>{% endif %}</td><td><code>{{ row.source }}</code></td><td>{{ row.status }}{% if row.reason or row.error %}<div class="small text-secondary">{{ row.reason or row.error }}</div>{% endif %}</td><td>{{ row.size|size if row.status == 'included' else '—' }}</td></tr>
+{% else %}{% call empty_row(4) %}Inventory unavailable.{% endcall %}{% endfor %}
+</tbody></table></div>
+{% endcall %}
+{% endmacro %}

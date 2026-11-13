@@ -1,0 +1,10 @@
+**/__pycache__
+**/*.py[cod]
+.git
+.venv
+data
+settings/*
+!settings/defaults/
+**/*.key
+**/*.pem
+**/.env*

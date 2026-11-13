@@ -3,6 +3,8 @@
 Each due time is claimed atomically before HTTP. Retries reuse the same job ID/token.
 Only one occurrence per schedule may be open; later overlapping occurrences are skipped.
 """
+
+from loadcoach.log import LEGACY  # the old default node, which rows and catalogues without a node name mean
 import asyncio
 import json
 import os
@@ -91,7 +93,16 @@ class Schedules:
         rows = [dict(zip(columns, row)) for row in self.db.execute(sql, (limit, offset)).fetchall()]
         for row in rows:
             row['spec'] = json.loads(row['spec'])
+            row['backup_nodes'] = [dict(zip(('node','id','state','message'), result)) for result in self.db.execute('SELECT node,backup_id,state,message FROM schedule_backup_results WHERE occurrence=? ORDER BY node', (row['id'],))]
         return rows
+
+    def backup_results(self, occurrence, rows):
+        """Keep one durable receipt per node; verified peers need no further backup."""
+        with self.db:
+            for row in rows:
+                self.db.execute('INSERT INTO schedule_backup_results VALUES(?,?,?,?,?,?) '
+                    'ON CONFLICT(occurrence,node) DO UPDATE SET backup_id=excluded.backup_id,state=excluded.state,message=excluded.message,updated=excluded.updated',
+                    (occurrence, row['node'], row['id'], row['state'], row['message'], time.time()))
 
     def freeze_target(self, occurrence, target):
         """Persist the chosen pair before creating any native task; retries reuse it."""
@@ -179,7 +190,7 @@ class ScheduleWorker:
                 if not definition['enabled'] or spec.get('benchmarks') and definition['id'] not in spec['benchmarks'] or not compatible(selected, definition):
                     continue
                 matching = [run for run in runs if run['model_id'] == model_id and
-                            (run.get('location') or 'compute') == machine and run['benchmark'] == definition['id']]
+                            (run.get('location') or LEGACY) == machine and run['benchmark'] == definition['id']]
                 if any(run['state']=='completed' and evidence_matches(run, definition, selected['fingerprint'], environment) for run in matching):
                     continue
                 if any(run['state'] not in ('completed','failed','cancelled') for run in matching):
@@ -261,10 +272,21 @@ class ScheduleWorker:
                             continue
                         remote = answer.json()
                         if spec['kind'] == 'backup':
-                            _, backup_id = occurrence_ids(occurrence['schedule_id'], occurrence['due_at'])
-                            await self.front_backup(backup_id, spec['retention'])
-                            if not self.gate.token():
-                                self.store.finish(number, 'completed', 'Paired recovery set '+backup_id+' verified.', now)
+                            outcomes = remote.get('nodes', [])
+                            if remote.get('include_front', True):
+                                _, front_id = occurrence_ids(occurrence['schedule_id'] + ':front', occurrence['due_at'])
+                                try:
+                                    await self.front_backup(front_id, spec['retention'])
+                                    outcomes.append({'node':'front', 'id':front_id, 'state':'verified', 'message':'Archive verified.'})
+                                except Exception as problem:
+                                    outcomes.append({'node':'front', 'id':front_id, 'state':'missed', 'message':str(problem)})
+                            self.store.backup_results(number, outcomes)
+                            missed = [row for row in outcomes if row['state'] != 'verified']
+                            message = '; '.join(row['node'] + ': ' + row['state'] + (' — ' + row['message'] if row['state'] != 'verified' else '') for row in outcomes)
+                            if missed:
+                                self.store.waiting(number, message + '. Only unverified nodes will be retried.')
+                            elif not self.gate.token():
+                                self.store.finish(number, 'completed', message, now)
                         else:
                             if spec['kind'] != 'outstanding':
                                 self.benchmarks.create(remote['user'], remote['model'], spec['benchmark'], remote.get('model_id'),
@@ -275,7 +297,7 @@ class ScheduleWorker:
                             if self.benchmarks.state_of(number) == 'creating':
                                 self.benchmarks.activate(number, remote)
                             with self.store.db:
-                                self.store.db.execute("UPDATE schedule_occurrences SET state='running',message=? WHERE id=?", ('Submitted at '+remote.get('machine','compute')+'. Preferred: '+spec.get('machine','default')+'. '+(target.get('fallback_reason','') if target else remote.get('schedule_resolution',{}).get('fallback_reason','')), number))
+                                self.store.db.execute("UPDATE schedule_occurrences SET state='running',message=? WHERE id=?", ('Submitted at '+remote.get('machine',LEGACY)+'. Preferred: '+spec.get('machine','default')+'. '+(target.get('fallback_reason','') if target else remote.get('schedule_resolution',{}).get('fallback_reason','')), number))
                             self.wake.set()
                     except httpx.HTTPStatusError as problem:
                         status = problem.response.status_code

@@ -1,14 +1,7 @@
-"""What still depends on the default compute node (Phase 0 of docs/peer-nodes-plan.md).
+"""Peer-routing guard and compatibility-literal ratchet after default dispatch removal.
 
-Two ratchets, each against a checked-in list in tests/fixtures:
-
-- default_node_fallthrough.txt: every console request that turnstile sends to the default node
-  only because nothing else routed it. Later phases route these paths; the list must shrink to
-  nothing, and a new entry fails the test.
-- compute_literals.json: how many times each source file names the node "compute". A new or
-  extra reference fails; a removed one asks for the list to be lowered, so it never grows back.
-
-After a deliberate change, rewrite both lists with OWG_UPDATE_INVENTORY=1 and review the diff.
+The console-path scan must never forward an unscoped request directly to a worker.
+Remaining literal references cover protocol fields and explicit legacy readers.
 """
 
 import json
@@ -98,19 +91,18 @@ def test_each_route_is_printed_once_and_the_memory_is_bounded():
     seen.note("GET", "/loadcoach/stop/2", 8442)
     seen.note("POST", "/loadcoach/tasks", 8442)
     seen.note("GET", "/loadcoach/peek/3", 8442)  # over the limit: neither remembered nor printed
-    assert said == ["turnstile: default-node fallthrough GET /loadcoach/stop/{id} on port 8442",
-                    "turnstile: default-node fallthrough POST /loadcoach/tasks on port 8442"]
+    assert said == ["turnstile: unrouted request GET /loadcoach/stop/{id} on port 8442",
+                    "turnstile: unrouted request POST /loadcoach/tasks on port 8442"]
     assert seen.seen == {("GET", "/loadcoach/stop/{id}", 8442): 2, ("POST", "/loadcoach/tasks", 8442): 1}
     assert seen.routes() == {"GET /loadcoach/stop/{id} 8442", "POST /loadcoach/tasks 8442"}
 
 
-def test_console_requests_that_fall_through_to_the_default_node(tmp_path):
-    """Send every console request through turnstile and list those that reach the fallthrough.
-
-    The default node here only records what reaches it. Its answers carry no proof, so
-    turnstile refuses them, which is enough: the fallthrough is noted before anything is sent.
-    """
+def test_unscoped_console_requests_do_not_dispatch_to_a_default_node(tmp_path):
+    """Unscoped console calls may aggregate or refuse; they never guess a worker."""
+    forwarded = []
     async def anything(request):
+        if request.headers.get("x-suite-unscoped-check"):
+            forwarded.append((request.method, request.url.path))
         return JSONResponse({})
 
     compute = httpx.ASGITransport(app=Starlette(routes=[Route("/{path:path}", anything, methods=["GET", "POST", "PUT", "PATCH", "DELETE"])]))
@@ -121,17 +113,11 @@ def test_console_requests_that_fall_through_to_the_default_node(tmp_path):
     # The switches as the live front has them: console settings and ToolLocker on the front. The front
     # keeps every task record (peer-nodes Phase 1), so task creation no longer reaches a node.
     front = turnstile_to(tmp_path, users, {8442: compute}, wait=0, keep_console_settings_on_front=True, toollocker_url="http://127.0.0.1:9443")
-    headers = {"authorization": "Bearer " + users.new_key("jordan"), "x-turnstile-no-wake": "1"}
+    headers = {"authorization": "Bearer " + users.new_key("jordan"), "x-turnstile-no-wake": "1", "x-suite-unscoped-check": "1"}
     with TestClient(front, base_url="http://front:8442", raise_server_exceptions=False) as api:
         for method, path in sorted(console_requests()):
             api.request(method, path, headers=headers, **({"json": {}} if method != "GET" else {}))
-        found = sorted(front.state.fallthrough.routes())
-    if UPDATE:
-        FALLTHROUGH.write_text(HEADER + "".join(line + "\n" for line in found))
-    expected = [line for line in FALLTHROUGH.read_text().splitlines() if line and not line.startswith("#")]
-    added, gone = sorted(set(found) - set(expected)), sorted(set(expected) - set(found))
-    assert not added, f"New requests fall through to the default node; route them to a named node: {added}"
-    assert not gone, f"These no longer fall through; remove them from {FALLTHROUGH.name} (OWG_UPDATE_INVENTORY=1): {gone}"
+    assert not forwarded, f"Unscoped requests dispatched to a worker instead of naming their node: {forwarded}"
 
 
 def test_no_new_references_to_the_compute_node_name():
