@@ -40,10 +40,35 @@
   let region = null, peaks = null, licenceNoted = false;
   let older = [], nextPage = null, libraryQuery = '', loadingOlder = false;
   let speakerSignature = '';
+  let speechModel = null, voiceSignature = '';
+  const speechDrafts = new Map();
+
+  function rememberSpeechModel() {
+    if (!speechModel) return;
+    speechDrafts.set(speechModel, {voice: $('voice').value, preset: $('preset').value,
+      design: $('design').value, options: advanced(),
+      speakers: Object.fromEntries([...$('speakers').querySelectorAll('[data-speaker]')].map(node => [node.dataset.speaker, node.value]))});
+  }
 
   const profile = () => state.models.find(row => row.id === $('model').value)?.audio_profile || {};
+  function updateAvailability() {
+    const available = state.models.some(ours);
+    const needsVoice = page === 'speech' && profile().kind === 'clone' && !state.voices.length;
+    $('generate').disabled = !available || needsVoice;
+    $('availability').textContent = !available ? 'No ' + page + ' model is available to you yet. An administrator adds one under Models → Audio models.' : needsVoice ? 'Save a voice on the Voices tab, or choose a built-in or voice-design model.' : '';
+  }
   function chooseModel() {
     const one = profile();
+    let draft;
+    if (page === 'speech') {
+      rememberSpeechModel();
+      speechModel = $('model').value;
+      draft = speechDrafts.get(speechModel);
+      $('voice').value = draft?.voice || state.preferences?.voice || '';
+      $('preset').value = draft?.preset || '';
+      $('design').value = draft?.design || '';
+      speakerSignature = '';
+    }
     const commercial = {yes: 'commercial use allowed', no: 'non-commercial only', conditional: 'commercial use has conditions'}[one.commercial] || '';
     $('licence').textContent = one.licence ? one.licence + ' · ' + commercial : '';
     if ($('model-help')) $('model-help').textContent = (one.help || '') + (one.turbo ? ' Turbo uses at most 8 denoising steps; diffusion guidance has no effect.' : '');
@@ -61,7 +86,7 @@
       $('lyrics').required = !!one.lyrics_required;
       $('lyrics').disabled = $('instrumental').checked;
     }
-    if (page === 'speech') chooseVoice();
+    if (page === 'speech') chooseVoice(draft?.speakers || {});
     $('advanced').replaceChildren();
     $('musical')?.replaceChildren();
     for (const option of (one.options || []).filter(row => !MAPPED.has(row.name))) {
@@ -96,7 +121,9 @@
     }
     if ($('musical-wrap')) $('musical-wrap').hidden = !$('musical').children.length;
     if (!$('advanced').children.length) $('advanced').append(element('p', 'This model has no further settings.', 'text-secondary small mb-0'));
+    if (draft) root.querySelectorAll('[data-option]').forEach(node => { node.value = String(draft.options[node.dataset.option] ?? ''); });
     chooseMode();
+    updateAvailability();
   }
   function chooseMode() {
     if (!$('mode')) return;
@@ -125,35 +152,73 @@
   function voiceSelect(id, chosen) {
     const select = element('select', undefined, 'form-select form-select-sm');
     select.id = id;
+    select.disabled = !state.voices.length;
     state.voices.forEach(voice => select.add(new Option(voice.name + (voice.mine ? '' : ' · shared'), voice.id)));
     if (chosen && [...select.options].some(row => row.value === chosen)) select.value = chosen;
     return select;
   }
-  function chooseVoice() {
+  const speakerKey = (kind, names) => JSON.stringify([kind, names, state.voices.map(voice => [voice.id, voice.name]), !names.length && [$('voice').value, $('preset').value, $('design').value]]);
+  function renderSpeechVoices() {
+    const template = document.getElementById('speech-voice-template');
+    if (!template) return;
+    const query = document.getElementById('voice-search').value.trim().toLowerCase();
+    const signature = JSON.stringify([state.voices, $('voice').value, query]);
+    if (signature === voiceSignature) return;
+    voiceSignature = signature;
+    const voices = state.voices.filter(voice => (voice.name + ' ' + (voice.description || '')).toLowerCase().includes(query));
+    document.getElementById('voice-count').textContent = state.voices.length + ' voices';
+    document.getElementById('voice-empty').hidden = !!voices.length || !state.voices.length;
+    document.getElementById('voice-choices').replaceChildren(...voices.map(voice => {
+      const button = template.content.firstElementChild.cloneNode(true);
+      button.dataset.voice = voice.id;
+      button.querySelector('[data-name]').textContent = voice.name;
+      button.querySelector('[data-initials]').textContent = voice.name.slice(0, 2).toUpperCase();
+      button.querySelector('[data-description]').textContent = voice.description || '';
+      button.querySelector('[data-source]').textContent = voice.mine ? 'Your voice' : 'Shared with you';
+      button.querySelector('[data-note]').hidden = true;
+      button.setAttribute('aria-pressed', String(voice.id === $('voice').value));
+      button.addEventListener('click', () => { $('voice').value = voice.id; $('voice').dispatchEvent(new Event('change', {bubbles:true})); });
+      return button;
+    }));
+  }
+  function chooseVoice(saved) {
     const kind = profile().kind;
     $('voice-wrap').hidden = kind !== 'clone';
     $('preset-wrap').hidden = kind !== 'speech';
     $('design-wrap').hidden = kind !== 'design';
-    const old = $('voice').value || state.preferences?.voice;
+    const old = $('voice').value || state.preferences?.voice || state.voices[0]?.id;
     if (JSON.stringify([...$('voice').options].map(row => [row.value, row.text])) !== JSON.stringify(state.voices.map(voice => [voice.id, voice.name + (voice.mine ? '' : ' · shared')]))) {
       $('voice').replaceChildren(...voiceSelect('sr-voice-list').options);
     }
     if ([...$('voice').options].some(row => row.value === old)) $('voice').value = old;
     $('voice-help').textContent = state.voices.length ? '' : 'Save a voice on the Voices tab first.';
+    renderSpeechVoices();
     const names = speakers();
-    const signature = JSON.stringify([kind, names, state.voices.map(voice => [voice.id, voice.name])]);
+    const signature = speakerKey(kind, names);
     if (signature === speakerSignature) return;
     speakerSignature = signature;
-    const kept = Object.fromEntries([...$('speakers').querySelectorAll('[data-speaker]')].map(node => [node.dataset.speaker, node.value]));
-    $('speakers').replaceChildren(...names.map(name => {
-      const label = element('label', name, 'form-label small mb-0');
-      const input = kind === 'clone' ? voiceSelect('', kept[name] || $('voice').value) : element(kind === 'design' ? 'textarea' : 'input', undefined, 'form-control form-control-sm');
+    const kept = saved || Object.fromEntries([...$('speakers').querySelectorAll('[data-speaker]')].map(node => [node.dataset.speaker, node.value]));
+    const template = document.getElementById('speech-speaker-template');
+    $('speakers').replaceChildren(...(names.length ? names : ['Narrator']).map(name => {
+      const label = template.content.firstElementChild.cloneNode(true);
+      const input = kind === 'clone' ? voiceSelect('', names.length ? kept[name] || $('voice').value : $('voice').value) : element(kind === 'design' ? 'textarea' : 'input', undefined, 'form-control form-control-sm');
       if (kind !== 'clone') {
-        input.value = kept[name] ?? (kind === 'design' ? $('design').value : $('preset').value);
+        input.value = (names.length ? kept[name] : null) ?? (kind === 'design' ? $('design').value : $('preset').value);
+        input.maxLength = kind === 'design' ? 1000 : 80;
         input.placeholder = kind === 'design' ? 'Describe this speaker’s voice' : 'Built-in voice name (optional)';
       }
-      input.dataset.speaker = name;
-      label.append(input);
+      if (names.length) input.dataset.speaker = name;
+      else input.dataset.narrator = '';
+      input.setAttribute('aria-label', name + (kind === 'design' ? ' voice description' : ' voice'));
+      label.querySelector('[data-speaker-name]').textContent = name;
+      label.querySelector('.sp-speaker-initial').textContent = name.slice(0, 2).toUpperCase();
+      label.querySelector('[data-speaker-choice]').replaceWith(input);
+      if (!names.length) input.addEventListener('input', () => {
+        const field = kind === 'clone' ? $('voice') : kind === 'design' ? $('design') : $('preset');
+        field.value = input.value;
+        speakerSignature = speakerKey(kind, names);
+        renderSpeechVoices();
+      });
       return label;
     }));
   }
@@ -248,6 +313,7 @@
       });
       if (profile().kind === 'clone' && lines.some(line => !state.voices.some(voice => voice.id === line.voice_id))) throw new Error('A saved voice is unavailable; choose a voice for each speaker before generating.');
     }
+    if (page === 'speech') root.dispatchEvent(new Event('soundroom:studio'));
   }
 
   const query = () => 'state?kinds=' + kinds + ($('favourites').checked ? '&favourites=1' : '') + ($('filter').value.trim() ? '&tag=' + encodeURIComponent($('filter').value.trim()) : '');
@@ -270,14 +336,14 @@
       if (!current && state.preferences?.format) $('format').value = state.preferences.format;
       chooseModel();
     }
-    $('generate').disabled = !wanted.length;
-    $('availability').textContent = wanted.length ? '' : 'No ' + page + ' model is available to you yet. An administrator adds one under Models → Audio models.';
+    updateAvailability();
     if (page === 'speech') chooseVoice();
     $('temporary-wrap').hidden = !state.can_unlogged;
     renderList();
     renderJobs();
     if (selected && !state.assets.some(row => row.id === selected.id)) select(null);
     if (!polling && state.jobs.some(row => ['in_progress', 'validating', 'cancelling'].includes(row.status))) poll();
+    if (page === 'speech') root.dispatchEvent(new Event('soundroom:studio'));
   }
   function renderList() {
     const signature = JSON.stringify(state.assets.map(row => [row.id, row.favourite, row.tags, row.filename]));
@@ -520,7 +586,11 @@
   }));
   $('model').addEventListener('change', chooseModel);
   $('mode')?.addEventListener('change', chooseMode);
-  if (page === 'speech') $('prompt').addEventListener('input', chooseVoice);
+  if (page === 'speech') {
+    $('prompt').addEventListener('input', () => chooseVoice());
+    ['voice', 'preset', 'design'].forEach(id => $(id).addEventListener('change', () => chooseVoice()));
+    document.getElementById('voice-search')?.addEventListener('input', renderSpeechVoices);
+  }
   root.querySelectorAll('[data-tag]').forEach(button => button.addEventListener('click', () => {
     const area = $('lyrics'), at = area.selectionStart;
     const before = area.value.slice(0, at), text = (before && !before.endsWith('\n') ? '\n' : '') + button.dataset.tag + '\n';
@@ -542,6 +612,7 @@
     const values = settings();
     if (page === 'speech' && !values.script.length) throw new Error('Write something to say.');
     if (page === 'speech' && profile().kind === 'clone' && values.script.some(line => !line.voice_id)) throw new Error('Choose a saved voice for every speaker.');
+    if (page === 'speech' && profile().kind === 'design' && values.script.some(line => !line.instructions)) throw new Error('Describe the voice for every speaker.');
     if (profile().lyrics_required && !values.lyrics?.trim()) throw new Error('This model needs lyrics. Write lyrics or use the song-writing helper first.');
     if (values.mode && !source) throw new Error('Choose source audio for this mode.');
     if (values.mode === 'repaint' && (!(values.repaint_end > values.repaint_start) || values.repaint_start < 0 || source.seconds && values.repaint_end > source.seconds)) throw new Error('Choose a repaint range within the source recording.');
@@ -549,7 +620,7 @@
     try {
       await api('jobs', {request: values, source: values.mode ? source.id : undefined, temporary: $('temporary').checked});
       await refresh();
-    } finally { $('generate').disabled = false; }
+    } finally { updateAvailability(); }
   }));
   function reuseSelected(variation = false) {
     if (!selected) return;

@@ -1,47 +1,27 @@
 {% extends "frame.html" %}
 {% from "parts.html" import page_header, card, section_title, alert %}
+{% from "navigation_parts.html" import pills, pill_button %}
+{% from "speech_parts.html" import studio_inputs, voice_card, speaker_row %}
 {% block title %}Speech · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=8" defer></script><script src="/soundroom-static/speech.js?v=4" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><link rel="stylesheet" href="/static/speech.css?v=1"><script src="/soundroom-static/music.js?v=9" defer></script><script src="/soundroom-static/speech.js?v=5" defer></script>{% endblock %}
 {% block main %}
-<div id="soundroom" data-mode="speech" data-defaults="{{ audio | tojson | forceescape }}">
-  {{ page_header("Speech", lead="Generate speech, transcribe audio and manage speaker voices.") }}
+<div id="soundroom" class="speech-live" data-layout="script" data-mode="speech" data-defaults="{{ audio | tojson | forceescape }}">
+  {{ page_header("Speech") }}
+  {% call pills('Speech modes', buttons=true, class_='gap-1 mb-4') %}
+  {% for key, label in [('studio', 'Generate'), ('voices', 'Voices'), ('transcribe', 'Transcribe'), ('chat', 'Spoken chat')] %}
+  {{ pill_button(label, key == 'studio', attrs={'data-tab': key, 'aria-controls': 'speech-' ~ key}) }}
+  {% endfor %}
+  {% endcall %}
   {% call alert('danger', role='alert', attrs={'id': 'sr-message', 'hidden': ''}) %}{% endcall %}
-  <ul class="nav nav-tabs mb-3" role="tablist">
-    <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link active" data-tab="studio" type="button" role="tab" aria-selected="true">Studio</button></li>
-    <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link" data-tab="transcribe" type="button" role="tab" aria-selected="false">Transcribe</button></li>
-    <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link" data-tab="chat" type="button" role="tab" aria-selected="false">Spoken chat</button></li>
-    <li class="nav-item" role="presentation"><button class="btn btn-sm nav-link" data-tab="voices" type="button" role="tab" aria-selected="false">Voices</button></li>
-  </ul>
-
-  <section data-panel="studio" class="sr-studio studio">
-    {% call card("", tag="form", id="sr-form", class_="sr-settings studio-settings") %}
-      <label class="form-label" for="sr-model">Speech model</label>
-      <select id="sr-model" name="model" class="form-select mb-1" required></select>
-      <p id="sr-licence" class="form-text mb-3"></p>
-      <div id="sr-voice-wrap" class="mb-3">
-        <label class="form-label" for="sr-voice">Voice</label>
-        <select id="sr-voice" class="form-select"></select>
-        <div class="form-text" id="sr-voice-help"></div>
-      </div>
-      <div id="sr-preset-wrap" class="mb-3" hidden><label class="form-label" for="sr-preset">Built-in voice name <span class="text-secondary">optional</span></label><input id="sr-preset" class="form-control" maxlength="80"></div>
-      <div id="sr-design-wrap" class="mb-3" hidden><label class="form-label" for="sr-design">Describe the voice</label><textarea id="sr-design" class="form-control" rows="2" maxlength="1000" placeholder="A warm, calm older narrator with a low voice"></textarea></div>
-      <label class="form-label" for="sr-prompt">Text or script</label>
-      <textarea id="sr-prompt" name="prompt" class="form-control mb-1" rows="9" required maxlength="20000" placeholder="Speaker 1: Welcome back to the show.&#10;Speaker 2: Thanks, it's good to be here."></textarea>
-      <div class="form-text mb-2">Plain text is read by one voice. Lines that start with a name and a colon, such as <code>Speaker 1:</code>, are read by the voice chosen for that name.</div>
-      <div id="sr-speakers" class="d-grid gap-2 mb-3"></div>
-      <div class="row g-2 mb-3 align-items-end">
-        <div class="col-6"><label for="sr-gap" class="form-label">Pause between lines (s)</label><input id="sr-gap" type="number" min="0" max="5" step="0.05" value="0.3" class="form-control"></div>
-        <div class="col-6"><label for="sr-seed" class="form-label">Seed</label><input id="sr-seed" name="seed" type="number" min="-1" max="4294967295" value="-1" class="form-control"></div>
-      </div>
-      <details class="mb-3"><summary>Advanced settings</summary><div id="sr-advanced" class="pt-3"></div></details>
-      <div id="sr-temporary-wrap" class="form-check mb-3" hidden><input id="sr-temporary" class="form-check-input" type="checkbox"><label for="sr-temporary" class="form-check-label">Temporary · no retained history</label></div>
-      <button id="sr-generate" class="btn btn-primary w-100" type="submit">Speak</button>
-      <p id="sr-availability" class="form-text mb-0"></p>
-    {% endcall %}
+  <section id="speech-studio" data-panel="studio" class="sp-grid" aria-label="Speech generation">
+    <form id="sr-form" class="speech-inputs" data-hold-refresh>
+      {{ studio_inputs(live=true) }}
+    </form>
     {% include "soundroom_player.html" %}
   </section>
+  {{ voice_card() }}{{ speaker_row() }}
 
-  <section data-panel="transcribe" hidden>
+  <section id="speech-transcribe" data-panel="transcribe" hidden>
     <div class="row g-3">
       <div class="col-lg-5">{% call card("") %}
         <label class="form-label" for="tr-model">Transcription model</label><select id="tr-model" class="form-select mb-3"></select>
@@ -65,7 +45,7 @@
     </div>
   </section>
 
-  <section data-panel="chat" hidden>
+  <section id="speech-chat" data-panel="chat" hidden>
     {% call card("", attrs={"style": "max-width:40rem"}) %}
       {{ section_title("Talk with a model in one of your voices") }}
       <p class="small">A hands-free conversation: speak, and the answer is spoken back in the voice you choose. You can interrupt it. Each exchange is kept as a conversation under Chat → Conversations.</p>
@@ -77,7 +57,7 @@
     {% endcall %}
   </section>
 
-  <section data-panel="voices" hidden>
+  <section id="speech-voices" data-panel="voices" hidden>
     <div class="row g-3">
       <div class="col-lg-5">{% call card("") %}
         {{ section_title("New voice from a recording") }}

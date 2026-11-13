@@ -3,6 +3,8 @@ import copy
 import json
 from urllib.parse import parse_qs
 
+import pytest
+
 from test_console_browser import browser_context, playwright
 from test_soundroom import wav_bytes
 from test_weightroom import desk as audio_desk
@@ -167,7 +169,7 @@ def test_speech_uses_default_voice_and_reuses_every_speakers_voice(desk):
         page.get_by_role("button", name="Reuse settings", exact=True).click()
         playwright.expect(page.locator('[data-speaker="Speaker 1"]')).to_have_value("voice_one")
         playwright.expect(page.locator('[data-speaker="Speaker 2"]')).to_have_value("voice_two")
-        page.get_by_role("button", name="Speak", exact=True).click()
+        page.get_by_role("button", name="Generate speech", exact=False).click()
         page.wait_for_function("document.querySelector('#sr-generate').disabled === false")
         assert sent[0]["request"]["script"] == script and sent[0]["request"]["gap"] == .4
         browser.close()
@@ -280,10 +282,132 @@ def test_transcription_library_can_open_older_recordings(desk):
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server, capture=capture_audio(first, [], older))
         page.goto("http://console.test/chat/speech")
-        page.get_by_role("tab", name="Transcribe", exact=True).click()
+        page.get_by_role("button", name="Transcribe", exact=True).click()
         page.get_by_role("button", name="Load older recordings", exact=True).click()
         playwright.expect(page.locator("#tr-list button")).to_have_count(2)
         page.locator("#tr-list button").last.click()
         playwright.expect(page.locator("#tr-result")).to_contain_text("An older recording")
         playwright.expect(page.locator("#tr-older")).to_be_hidden()
+        browser.close()
+
+
+def speech_state(**values):
+    return state(models=[audio_model('clone', 'clone', options=[]),
+                         audio_model('designed', 'design', options=[{'name': 'temperature', 'type': 'float', 'default': .8}]),
+                         audio_model('builtin', 'speech', options=[])],
+                 voices=[{'id': 'one', 'name': 'Juniper', 'mine': True},
+                         {'id': 'two', 'name': 'Ellis', 'mine': False}], **values)
+
+
+def test_script_room_cast_model_drafts_and_real_generation_requests(desk):
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    sent = []
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(speech_state(can_unlogged=True), sent))
+        errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/chat/speech')
+        page.locator('#script-example').select_option('dialogue')
+        page.locator('[data-speaker="Maya"]').select_option('two')
+        page.locator('[data-speaker="Alex"]').select_option('one')
+        script = page.locator('#sr-prompt').input_value()
+        page.locator('#sr-model').select_option('designed')
+        page.locator('[data-speaker="Maya"]').fill('Warm and measured')
+        page.locator('[data-speaker="Alex"]').fill('Bright and lively')
+        page.get_by_text('Model settings', exact=True).click()
+        page.locator('#sr-option-temperature').fill('0.6')
+        page.locator('#sr-model').select_option('clone')
+        playwright.expect(page.locator('[data-speaker="Maya"]')).to_have_value('two')
+        for mode in ('voices', 'transcribe', 'chat', 'studio'):
+            page.locator(f'[data-tab="{mode}"]').click()
+            playwright.expect(page.locator(f'[data-tab="{mode}"]')).to_have_attribute('aria-pressed', 'true')
+        playwright.expect(page.locator('#sr-prompt')).to_have_value(script)
+        page.locator('#sr-generate').click()
+        playwright.expect(page.locator('#sr-generate')).to_be_enabled()
+        assert [line['voice_id'] for line in sent[0]['request']['script']] == ['two', 'one', 'two', 'one']
+        page.locator('#sr-model').select_option('designed')
+        playwright.expect(page.locator('[data-speaker="Maya"]')).to_have_value('Warm and measured')
+        playwright.expect(page.locator('#sr-option-temperature')).to_have_value('0.6')
+        page.locator('#sr-prompt').press('Control+Enter')
+        playwright.expect(page.locator('#sr-generate')).to_be_enabled()
+        assert sent[1]['request']['options'] == {'temperature': .6}
+        assert [line['instructions'] for line in sent[1]['request']['script']] == ['Warm and measured', 'Bright and lively'] * 2
+        assert not errors
+        browser.close()
+
+
+def test_script_room_import_narrator_and_built_in_voice(desk):
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    sent = []
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(speech_state(), sent))
+        page.goto('http://console.test/chat/speech')
+        page.locator('#script-import').set_input_files({'name': 'script.txt', 'mimeType': 'text/plain', 'buffer': b'A script from a local file.'})
+        playwright.expect(page.locator('#sr-prompt')).to_have_value('A script from a local file.')
+        playwright.expect(page.locator('#script-count')).to_contain_text('6 words')
+        page.locator('[data-narrator]').select_option('two')
+        playwright.expect(page.locator('[data-voice="two"]')).to_have_attribute('aria-pressed', 'true')
+        page.locator('#sr-generate').click()
+        playwright.expect(page.locator('#sr-generate')).to_be_enabled()
+        assert sent[0]['request']['script'] == [{'text': 'A script from a local file.', 'voice_id': 'two'}]
+        page.locator('[data-voice="one"]').click()
+        playwright.expect(page.locator('[data-narrator]')).to_have_value('one')
+        page.locator('#sr-model').select_option('builtin')
+        page.locator('[data-narrator]').fill('custom-preset')
+        page.evaluate('window.soundroomRefresh()')
+        playwright.expect(page.locator('[data-narrator]')).to_be_focused()
+        playwright.expect(page.locator('[data-narrator]')).to_have_value('custom-preset')
+        page.locator('#sr-generate').click()
+        playwright.expect(page.locator('#sr-generate')).to_be_enabled()
+        assert sent[1]['request']['script'][0]['voice'] == 'custom-preset'
+        page.locator('#script-import').set_input_files({'name': 'long.txt', 'mimeType': 'text/plain', 'buffer': b'x' * 20001})
+        playwright.expect(page.locator('#sr-message')).to_contain_text('exceeds 20,000')
+        playwright.expect(page.locator('#sr-prompt')).to_have_value('A script from a local file.')
+        browser.close()
+
+
+@pytest.mark.parametrize('width', [390, 1050, 1500])
+@pytest.mark.parametrize('appearance', ['light', 'dark'])
+def test_script_room_heading_layout_and_empty_states(desk, tmp_path, width, appearance):
+    from test_ui_consistency import MEASURE
+
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    payload = speech_state()
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(payload, []))
+        page.set_viewport_size({'width': width, 'height': 1000})
+        page.emulate_media(color_scheme=appearance)
+        page.goto('http://console.test/chat/speech')
+        playwright.expect(page.locator('#sr-voice')).to_have_value('one')
+        assert page.locator('#soundroom').evaluate("root => root.children[0].matches('.page-header') && root.children[1].getAttribute('aria-label') === 'Speech modes'")
+        playwright.expect(page.locator('h1')).to_have_text('Speech')
+        assert not page.locator('.sp-review, .sp-intro, .eyebrow').count()
+        for mode in ('studio', 'voices', 'transcribe', 'chat'):
+            page.locator(f'[data-tab="{mode}"]').click()
+            measured = page.evaluate(MEASURE)
+            assert not measured['overflow'], (width, mode)
+            assert not measured['namelessFields'], measured['namelessFields']
+            assert not measured['mismatches'], measured['mismatches']
+            assert not measured['invalidControls'], measured['invalidControls']
+        page.locator('[data-tab="studio"]').click()
+        playwright.expect(page.get_by_role('heading', name='The listening desk', exact=True)).to_be_visible()
+        page.locator('#script-example').select_option('dialogue')
+        page.screenshot(path=str(tmp_path / f'speech-{width}-{appearance}.png'), full_page=True)
+        if width == 1500:
+            cast = page.locator('.sp-cast-area').bounding_box()
+            script = page.locator('.sp-editor-area').bounding_box()
+            controls = page.locator('.sp-controls-area').bounding_box()
+            assert cast['x'] < script['x'] < controls['x']
+        payload['voices'] = []
+        page.evaluate('window.soundroomRefresh()')
+        playwright.expect(page.locator('#sr-generate')).to_be_disabled()
+        playwright.expect(page.locator('#sr-voice-help')).to_contain_text('Save a voice')
+        page.locator('#sr-model').select_option('builtin')
+        playwright.expect(page.locator('#sr-generate')).to_be_enabled()
+        payload['models'] = []
+        page.evaluate('window.soundroomRefresh()')
+        playwright.expect(page.locator('#sr-availability')).to_contain_text('No speech model')
+        assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
         browser.close()
