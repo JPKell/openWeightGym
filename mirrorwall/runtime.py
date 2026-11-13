@@ -364,7 +364,7 @@ async def workflow(job,asked,native,cache=None,owner=None):
             yield {"type":"image_generation.progress","stage":"preparing","reference":index+1}
             image=await asyncio.to_thread(decode_image,encoded)
             sources.append(image)
-            target=reference_size(*image.size,resolved['reference_megapixels'])
+            target=(resolved['width'],resolved['height']) if resolved.get('detail_resize') else reference_size(*image.size,resolved['reference_megapixels'])
             key=await asyncio.to_thread(cache.key,owner,encoded,target,options.get('upscaler')) if cache else None
             cached=cache.get(key) if cache and key else None
             if cached:
@@ -419,7 +419,8 @@ async def workflow(job,asked,native,cache=None,owner=None):
                         preview_count+=1
                 else:
                     yield {**event,"image_index":index}
-        if resolved["upscale"]>1:
+        resize_target=resolved.get('detail_resize')
+        if resolved["upscale"]>1 or resize_target:
             await native.stop()
         for index,(data,native_seconds) in enumerate(generated):
             image=decode_image(data["b64_json"])
@@ -427,7 +428,14 @@ async def workflow(job,asked,native,cache=None,owner=None):
                 mask=edit_mask.resize(image.size,Image.Resampling.LANCZOS)
                 original=sources[0].resize(image.size,Image.Resampling.LANCZOS)
                 image=Image.composite(image,original,mask)
-            if resolved["upscale"]>1:
+            if resize_target:
+                final=(resize_target['width'],resize_target['height'])
+                if final[0]>image.width or final[1]>image.height:
+                    yield {"type":"image_generation.progress","stage":"upscaling","image_index":index}
+                    image=await upscale(job,image,final,folder,"detail-output-"+str(index))
+                elif image.size!=final:
+                    image=image.resize(final,Image.Resampling.LANCZOS)
+            elif resolved["upscale"]>1:
                 yield {"type":"image_generation.progress","stage":"upscaling","image_index":index}
                 target=(round(image.width*resolved["upscale"]),round(image.height*resolved["upscale"]))
                 image=await upscale(job,image,target,folder,"output-"+str(index))

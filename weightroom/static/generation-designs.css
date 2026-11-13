@@ -1,0 +1,49 @@
+/* The three workspaces rearrange one shared form and result browser. */
+.ig-page { max-width: 1880px; margin: auto; padding: 22px 32px 14px; }
+.ig-topbar { padding: 17px 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--theme-surface); border-bottom: 1px solid var(--theme-border); }
+.ig-brand { display: flex; align-items: center; gap: 12px; color: var(--theme-text); text-decoration: none; font-size: 15px; }
+.ig-brand .icon { width: 25px; height: 25px; }
+.ig-overline { font-size: 10px; font-weight: 650; letter-spacing: .12em; color: var(--theme-muted); }
+.ig-review { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid var(--theme-border); }
+.ig-designs { flex-shrink: 0; gap: 4px; }
+.ig-designs .nav-link { padding: 10px 16px; font-size: 12px; }
+.ig-review p { max-width: 435px; text-align: right; }
+#workspace > .page-header { margin-bottom: 16px !important; }
+.ig-page .page-title { font-size: 30px; letter-spacing: -.045em; font-weight: 650; }
+/* Batch lab: large contact sheet above the queue, with prompt and controls side by side. */
+[data-layout=lab] .ig-workspace { grid-template-columns: minmax(0,1fr) 340px; grid-template-areas: 'tools tools' 'compose settings' 'sweep settings' 'viewer settings' 'history settings' 'queue queue'; }
+[data-layout=lab] .ig-tools { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 30px; padding: 18px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface); }
+[data-layout=lab] .ig-model-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; align-items: center; }
+[data-layout=lab] .ig-model-picker .ig-overline, [data-layout=lab] #model-description { grid-column: 1/-1; }
+[data-layout=lab] .ig-model-picker label { margin-top: 0 !important; margin-bottom: 0; }
+[data-layout=lab] .ig-tool-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; margin: 0; }
+[data-layout=lab] .ig-tool-list > .ig-overline { grid-column: 1/-1; }
+[data-layout=lab] .ig-tool { padding: 8px; margin: 0; }
+[data-layout=lab] .ig-tool small, [data-layout=lab] .ig-tool-footer { display: none; }
+[data-layout=lab] .ig-artboard { height: 340px; }
+[data-layout=lab] .ig-thumbnails { grid-template-columns: repeat(3,minmax(0,1fr)); }
+[data-layout=lab] #jobs { grid-template-columns: repeat(3,minmax(0,1fr)); }
+/* Creative desk: a brief-first editor beside a generous proof and moodboard. */
+[data-layout=desk] .ig-workspace { grid-template-columns: minmax(300px,.85fr) minmax(0,1.4fr); grid-template-areas: 'tools viewer' 'compose viewer' 'settings history' 'sweep history' 'queue history'; gap: 24px; }
+[data-layout=desk][data-sweep=false] .ig-workspace { grid-template-areas: 'tools viewer' 'compose viewer' 'settings history' 'queue history'; }
+[data-layout=desk] .ig-tools { border: 0; padding: 0; }
+[data-layout=desk] .ig-model-picker { padding: 22px; border-radius: 10px; background: var(--theme-surface); border: 1px solid var(--theme-border); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+[data-layout=desk] .ig-model-picker .ig-overline, [data-layout=desk] #model-description { grid-column: 1/-1; }
+[data-layout=desk] .ig-model-picker label { margin: 0 !important; align-self: center; }
+[data-layout=desk] .ig-tool-list, [data-layout=desk] .ig-tool-footer { display: none; }
+[data-layout=desk] .ig-viewer { height: 100%; display: flex; flex-direction: column; }
+[data-layout=desk] .ig-artboard { flex: 1; min-height: 380px; }
+[data-layout=desk] .ig-prompt { min-height: 155px; font-size: 15px; }
+[data-layout=desk] .ig-thumbnails { grid-template-columns: repeat(2,minmax(0,1fr)); }
+[data-view=library] .ig-workspace { grid-template-columns: minmax(0,1fr) minmax(0,1fr); grid-template-areas: 'viewer history'; }
+[data-view=queue] .ig-workspace { display: block; }
+[data-view=library][data-sweep=false] .ig-workspace { grid-template-areas: 'viewer history'; }
+[data-view=library] .ig-tools, [data-view=library] .ig-compose, [data-view=library] .ig-settings-panel, [data-view=library] .ig-queue, [data-view=library] .ig-sweep-panel,
+[data-view=queue] .ig-tools, [data-view=queue] .ig-compose, [data-view=queue] .ig-settings-panel, [data-view=queue] .ig-viewer, [data-view=queue] .ig-history, [data-view=queue] .ig-sweep-panel { display: none; }
+@media (min-width: 1700px) { .ig-workspace { grid-template-columns: 215px minmax(0,1fr) 345px; gap: 26px; } }
+@media (max-width: 1150px) { .ig-workspace { grid-template-columns: 160px minmax(0,1fr) 280px; gap: 14px; } .ig-page { padding: 20px; } .ig-tools { padding-right: 12px; } .ig-review { align-items: start; } .ig-result-bar { flex-wrap: wrap; } .ig-thumbnails { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 900px) { .ig-workspace { grid-template-columns: minmax(0,1fr) 290px; grid-template-areas: 'tools tools' 'viewer settings' 'compose settings' 'history settings' 'sweep settings' 'queue queue'; } .ig-tools { border: 0; padding: 0; } .ig-model-picker { display: grid; grid-template-columns: 1fr 2fr; gap: 7px 14px; } .ig-model-picker > .ig-overline, #model-description { grid-column: 1/-1; } .ig-model-picker label { margin-top: 0 !important; } .ig-tool-list, .ig-tool-footer { display: none; } .ig-review { flex-direction: column; gap: 12px; } .ig-review p { text-align: left; max-width: none; } .ig-demo-label { display: none; } [data-layout=lab] .ig-tools { grid-template-columns: 1fr; } [data-layout=lab] .ig-tool-list { display: none; } [data-layout=desk] .ig-workspace { grid-template-columns: minmax(0,1fr) minmax(0,1.2fr); } .ig-session-status > .text-secondary { display: none; } }
+@media (max-width: 650px) { .ig-page { padding: 16px 12px; } .ig-topbar { padding: 13px 12px; } .ig-brand { gap: 6px; font-size: 12px; } .ig-brand > .text-secondary { display: none; } .ig-designs { width: 100%; gap: 3px; } .ig-designs .nav-link { flex: 1; padding: 9px 5px; font-size: 10px; } .ig-page .page-title { font-size: 27px; } .ig-session-status { display: none; } .ig-workspace, [data-layout=lab] .ig-workspace, [data-layout=desk] .ig-workspace, [data-view=library] .ig-workspace { grid-template-columns: minmax(0,1fr); grid-template-areas: 'tools' 'compose' 'settings' 'sweep' 'viewer' 'history' 'queue'; gap: 16px; } [data-view=library] .ig-workspace { grid-template-areas: 'viewer' 'history'; } .ig-model-picker, [data-layout=desk] .ig-model-picker, [data-layout=lab] .ig-model-picker { grid-template-columns: 1fr 1.5fr; } .ig-compose { padding: 16px; } .ig-prompt-actions { flex-wrap: wrap; } .ig-artboard, [data-layout=lab] .ig-artboard, [data-layout=desk] .ig-artboard { height: 310px; min-height: 260px; } .ig-viewer-bar { padding: 10px; flex-wrap: wrap; } .ig-thumbnails, [data-layout=lab] .ig-thumbnails, [data-layout=desk] .ig-thumbnails { grid-template-columns: repeat(2,minmax(0,1fr)); } .ig-footer { flex-wrap: wrap; } .ig-roadmap { grid-template-columns: 1fr; } body > dialog { padding: 18px; } [data-layout=lab] #jobs { grid-template-columns: 1fr; } .ig-settings .row > .col-md-6 { width: 50%; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+@media (max-width: 900px) and (min-width: 651px) { [data-layout=canvas][data-sweep=false] .ig-workspace { grid-template-areas: 'tools tools' 'viewer settings' 'compose settings' 'history settings' 'queue queue'; } [data-view=library][data-sweep=false] .ig-workspace { grid-template-areas: 'viewer history'; } }
+@media (max-width: 650px) { [data-layout][data-sweep=false] .ig-workspace { grid-template-areas: 'tools' 'compose' 'settings' 'viewer' 'history' 'queue'; } [data-view=library][data-sweep=false] .ig-workspace { grid-template-areas: 'viewer' 'history'; } }

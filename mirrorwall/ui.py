@@ -7,14 +7,14 @@ from starlette.routing import Route
 
 from loadcoach import observability as observation
 from mirrorwall.front import Front
-from mirrorwall.model import check_name
+from mirrorwall.model import check_name, SAMPLERS, SCHEDULERS
 
 
 def routes(for_people, page, ask, model_api):
     """Keep browser credentials server-side and reuse the ordinary session authority."""
     async def studio(request, person):
         """Render the private image-generation window."""
-        return page(request, "mirrorwall_studio.html", person)
+        return page(request, "mirrorwall_studio.html", person, image_samplers=SAMPLERS, image_schedulers=SCHEDULERS)
 
     async def workflows(request, person):
         """Render versioned image workflow settings."""

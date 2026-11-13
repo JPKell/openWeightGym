@@ -107,7 +107,7 @@ def envelope(asked,settings):
     maximum=limits(settings)
     options=settings['sdcpp']
     normal=defaults(settings)
-    return (asked['width']==maximum['max_width'] and asked['height']==maximum['max_height'] and
+    return (not asked.get('detail_resize') and asked['width']==maximum['max_width'] and asked['height']==maximum['max_height'] and
             len(asked['references'])==maximum['max_references'] and
             asked['reference_megapixels']==options.get('reference_megapixels',1) and
             asked['upscale']==maximum['max_upscale'] and

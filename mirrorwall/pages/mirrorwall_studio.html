@@ -1,48 +1,41 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, card, section_title , confirm_loss, alert %}
+{% from "parts.html" import page_header, card, section_title, alert %}
+{% from "navigation_parts.html" import pills, pill_button %}
+{% from "generation_design_parts.html" import settings, sweep, templates, prompt, viewer, tool_catalogue %}
 {% block title %}Image generation · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/mirrorwall-static/images.css?v=3"><script src="/mirrorwall-static/image-profiles.js?v=1" defer></script><script src="/mirrorwall-static/images.js?v=5" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/generation.css?v=1"><link rel="stylesheet" href="/mirrorwall-static/canvas.css?v=1"><script src="/mirrorwall-static/image-profiles.js?v=1" defer></script><script src="/mirrorwall-static/images.js?v=6" defer></script>{% endblock %}
 {% block main %}
-<div id="mirrorwall" data-mode="studio">
-  <div class="d-flex justify-content-between align-items-start gap-3 mb-3"><div>{{ page_header("Image generation", lead="Generate images, reuse workflows and compare your results.") }}</div><a class="btn btn-outline-secondary btn-sm" href="/models/images/workflows">Workflows</a></div>
-  {% call alert('danger', role='alert', attrs={'id': 'mw-message', 'hidden': ''}) %}{% endcall %}
-  <div class="mw-studio studio">
-    {% call card("", tag="form", id="mw-form", class_="mw-settings studio-settings") %}
-      <label class="form-label" for="mw-model">Image model</label><select id="mw-model" name="model" class="form-select mb-3" required></select>
-      <label class="form-label" for="mw-preset">Workflow</label><div class="d-flex gap-2 mb-3"><select id="mw-preset" class="form-select"><option value="">Model defaults</option></select><button id="mw-save-preset" type="button" class="btn btn-outline-secondary">Save</button></div>
-      <label class="form-label" for="mw-prompt">Prompt</label><textarea id="mw-prompt" name="prompt" class="form-control mb-3" rows="5" placeholder="Describe the image you want to create…" required maxlength="24000"></textarea>
-      <div id="mw-negative-wrap" hidden><label for="mw-negative" class="form-label">Negative prompt</label><textarea id="mw-negative" name="negative_prompt" class="form-control mb-3" rows="2"></textarea></div>
-      <div class="row g-2 mb-3">{% for name,label,value,min,max,step in [('width','Width',1024,256,4096,16),('height','Height',1024,256,4096,16),('steps','Steps',6,1,200,1),('n','Images',1,1,64,1)] %}<div class="col-6"><label for="mw-{{name}}" class="form-label">{{label}}</label><input id="mw-{{name}}" name="{{name}}" type="number" value="{{value}}" min="{{min}}" max="{{max}}" step="{{step}}" class="form-control" required></div>{% endfor %}</div>
-      <label for="mw-seed" class="form-label">Seed <span class="text-secondary">−1 for random</span></label><input id="mw-seed" name="seed" class="form-control mb-3" type="number" min="-1" max="2147483647" value="-1">
-      <fieldset id="mw-reference-box" class="mw-reference-box mb-3">
-        <div class="d-flex justify-content-between align-items-center gap-2"><legend class="form-label mb-0 fs-6">Reference images <span id="mw-reference-count" class="badge rounded-pill text-bg-light border"></span></legend><button id="mw-library" type="button" class="btn btn-link btn-sm">Saved references</button></div>
-        <p id="mw-reference-help" class="mw-reference-help small mb-2"></p>
-        <label for="mw-upload" class="visually-hidden">Add reference images</label><input id="mw-upload" type="file" accept="image/png,image/jpeg,image/webp" multiple class="form-control mb-2" aria-describedby="mw-reference-help">
-        <div id="mw-references" class="mw-reference-list"></div>
-        <div id="mw-strength-wrap" class="mt-2" hidden><label for="mw-strength" class="form-label mb-0">Strength <output id="mw-strength-value" for="mw-strength">0.75</output></label><input id="mw-strength" name="strength" type="range" class="form-range" min="0.05" max="1" step="0.05" value="0.75"><div class="form-text mt-0">Low keeps the reference picture; high follows the prompt more.</div></div>
-      </fieldset>
-      <details class="mb-3"><summary>Advanced settings</summary><div class="pt-3">
-        <div class="row g-2 mb-3"><div class="col-6"><label for="mw-guidance" class="form-label">Guidance</label><input id="mw-guidance" name="guidance" class="form-control" type="number" min="0" max="30" step="0.1" value="1"></div><div class="col-6"><label for="mw-cfg" class="form-label">CFG scale</label><input id="mw-cfg" name="cfg_scale" class="form-control" type="number" min="0" max="30" step="0.1" value="1"></div></div>
-        <div class="row g-2 mb-3"><div class="col-6"><label for="mw-sampler" class="form-label">Sampler</label><select id="mw-sampler" name="sampler" class="form-select">{% for name in ['euler','euler_a','heun','dpm2','dpmpp2s_a','dpmpp2m','dpmpp2mv2','lcm','ipndm','ipndm_v'] %}<option>{{name}}</option>{% endfor %}</select></div><div class="col-6"><label for="mw-scheduler" class="form-label">Scheduler</label><select id="mw-scheduler" name="scheduler" class="form-select">{% for name in ['flux2','discrete','karras','exponential','ays','simple','smoothstep','sgm_uniform','flux'] %}<option>{{name}}</option>{% endfor %}</select></div></div>
-        <label for="mw-upscale" class="form-label">Output upscale</label><select id="mw-upscale" name="upscale" class="form-select mb-3"><option value="1">Original size</option><option value="2">2×</option><option value="4">4×</option></select>
-        <label for="mw-reference-mp" class="form-label">Reference size (megapixels)</label><input id="mw-reference-mp" name="reference_megapixels" type="number" min="0.1" max="4" step="0.01" value="1" class="form-control mb-3">
-        <div id="mw-loras" class="mb-3"></div>
-        <label for="mw-mask" class="form-label">Edit mask <span id="mw-mask-state" class="badge rounded-pill text-bg-light border fw-normal"></span></label><input id="mw-mask" type="file" accept="image/png" class="form-control"><div class="form-text mb-3">Match the first reference’s dimensions and preserve its output aspect ratio. Composite after generation: transparent or white areas are replaced; the rest of the first reference is preserved. This is not model-native inpainting.</div><button id="mw-clear-mask" type="button" class="btn btn-link btn-sm" hidden>Remove mask</button>
-        <label for="mw-sweep" class="form-label">Parameter sweep</label><textarea id="mw-sweep" class="form-control font-monospace" rows="2" placeholder='{"seed":[42,43],"steps":[6,12]}'></textarea><div class="form-text">Optional JSON lists: seed, steps, guidance, CFG, width or height. At most 128 images per job.</div>
-      </div></details>
-      <div class="form-check mb-2"><input id="mw-preview" class="form-check-input" type="checkbox" checked><label for="mw-preview" class="form-check-label">Live previews</label></div>
-      <div id="mw-temporary-wrap" class="form-check mb-3" hidden><input id="mw-temporary" class="form-check-input" type="checkbox"><label for="mw-temporary" class="form-check-label">Temporary · no retained history</label></div>
-      <button id="mw-generate" class="btn btn-primary w-100" type="submit">Generate</button><p id="mw-availability" class="form-text mb-0"></p>
-    {% endcall %}
-    <section class="mw-results studio-results" aria-label="Generated images">
-      {% call card("", tag="div", class_="mw-viewer", body=false) %}<div id="mw-empty" class="mw-empty studio-empty"><span class="section-title">Your images appear here</span><span class="text-secondary">Choose a model and describe an image to begin.</span></div><img id="mw-large" alt="Selected generated image" hidden><span id="mw-preview-label" class="mw-preview-label badge text-bg-dark" hidden>Live preview</span>{% endcall %}
-      <div class="d-flex flex-wrap align-items-center gap-2 my-2"><button id="mw-prev" class="btn btn-outline-secondary btn-sm" aria-label="Previous image">←</button><button id="mw-next" class="btn btn-outline-secondary btn-sm" aria-label="Next image">→</button><button id="mw-zoom" class="btn btn-outline-secondary btn-sm">Original size</button><span id="mw-image-info" class="text-secondary small me-auto"></span><button id="mw-reuse" class="btn btn-outline-secondary btn-sm">Reuse settings</button><a id="mw-download" class="btn btn-outline-secondary btn-sm" hidden>Download</a><button  id="mw-delete" class="btn btn-outline-danger btn-sm" {{ confirm_loss() }}>Delete</button></div>
-      <div id="mw-thumbnails" class="mw-thumbnails" aria-label="Image browser"></div>
-      <button id="mw-older" class="btn btn-link btn-sm" hidden>Load older images</button>
-      {% call card("", id="mw-live", class_="mw-live mt-3", attrs={"hidden": ""}, body_class="d-flex align-items-center gap-3") %}<img id="mw-live-image" alt="Current generation preview"><div>{{ section_title("Live preview") }}<span id="mw-live-info" class="text-secondary small"></span></div>{% endcall %}
-      <section class="mt-4">{{ section_title("Jobs") }}<div id="mw-jobs" class="d-grid gap-2"></div></section>
-    </section>
-  </div>
-  <dialog id="mw-dialog" class="mw-dialog studio-dialog frame"><form method="dialog"><button class="btn-close float-end" aria-label="Close"></button></form>{{ section_title("", id="mw-dialog-title") }}<div id="mw-dialog-content" class="mt-3"></div></dialog>
+<div id="mirrorwall" class="ig-canvas" data-mode="studio" data-layout="canvas" data-view="generate" data-sweep="false">
+{% call page_header('Image generation') %}<button type="button" id="mw-toolkit" class="btn btn-outline-secondary btn-sm">Toolkit</button><button type="button" id="mw-model-guide" class="btn btn-outline-secondary btn-sm">Model guide</button><button type="button" id="mw-save-preset" class="btn btn-outline-secondary btn-sm">Save workflow</button><a class="btn btn-outline-secondary btn-sm" href="/models/images/workflows">Workflows</a>{% endcall %}
+<div class="ig-subnav">{% call pills('Image workspace views',buttons=true,class_='mb-0') %}{{ pill_button('Generate',true,attrs={'data-mw-view':'generate','aria-label':'Generation workspace'}) }}{{ pill_button('Library',attrs={'data-mw-view':'library'}) }}{{ pill_button('Queue',attrs={'data-mw-view':'queue'}) }}{% endcall %}<span class="ig-session-status"><span class="ig-status-dot"></span> Private image workspace</span></div>
+{{ alert('danger',class_='mb-3',attrs={'id':'mw-message','hidden':'','aria-live':'polite'}) }}
+<div class="ig-workspace">
+<aside class="ig-tools" aria-label="Model and creative tools">
+<div class="ig-model-picker"><span class="ig-overline">01 / YOUR MODEL</span><label for="mw-model" class="form-label mt-3">Image model</label><select id="mw-model" name="model" form="mw-form" required class="form-select"></select><span id="mw-model-description" class="small text-secondary d-block mt-2"></span><p class="form-text">Runs use the model’s configured compute nodes.</p><label for="mw-preset" class="form-label mt-3">Workflow</label><select id="mw-preset" class="form-select form-select-sm"><option value="">Model defaults</option></select></div>
+<div class="ig-tool-list"><span class="ig-overline">CREATIVE TOOLS</span>{% for tool,label,hint,symbol in [('generate','Create image','Prompt to picture','✧'),('reference','Reference & remix','Use visual direction','▧'),('mask','Masked composite','Keep selected pixels','◩'),('sweep','Explore variations','Seeds & parameter sweeps','⊞'),('resize','Resize & add detail','Upload, enlarge & refine','↗')] %}<button type="button" class="ig-tool{{ ' active' if tool=='generate' }}" data-mw-tool="{{ tool }}" aria-pressed="{{ 'true' if tool=='generate' else 'false' }}"><span aria-hidden="true">{{ symbol }}</span><span>{{ label }}<small>{{ hint }}</small></span></button>{% endfor %}</div>
+<div class="ig-tool-footer"><a href="/docs/modules/mirrorwall" class="small">Image generation guide ↗</a></div>
+</aside>
+{{ viewer(live=true) }}
+{% call prompt(live=true) %}
+<div id="mw-resize-panel" hidden>
+{{ section_title('Resize & add detail') }}
+<p class="small text-secondary">Upload an image, choose its final size, then refine its detail with SDXL. Lower detail strength preserves more of the source; the result can change fine features.</p>
+<div id="mw-resize-dropzone" class="ig-dropzone"><label for="mw-resize-upload" class="form-label">Source image · PNG, JPEG or WebP</label><input id="mw-resize-upload" type="file" accept="image/png,image/jpeg,image/webp" class="form-control"></div>
+<div class="d-flex flex-wrap gap-2 mt-2"><button id="mw-resize-library" class="btn btn-outline-secondary btn-sm" type="button">Saved references</button><button id="mw-resize-selected" class="btn btn-outline-secondary btn-sm" type="button">Use selected result</button></div>
+<div id="mw-resize-source" class="ig-resize-source mt-3" hidden><img id="mw-resize-image" alt="Source for AI detail resizing"><div><strong id="mw-resize-name" class="small"></strong><p class="small text-secondary mb-0" id="mw-resize-source-size"></p></div></div>
+<div class="row g-2 mt-3"><div class="col-sm-4"><label for="mw-resize-scale" class="form-label">Resize</label><select id="mw-resize-scale" class="form-select"><option value="2">2× larger</option><option value="4">4× larger</option><option value="1">Same size · refine</option><option value="custom">Custom size</option></select></div>{% for name,label in [('width','Final width · px'),('height','Final height · px')] %}<div class="col-sm-4"><label for="mw-resize-{{ name }}" class="form-label">{{ label }}</label><input id="mw-resize-{{ name }}" type="number" min="16" max="8192" step="1" class="form-control" form="mw-form"></div>{% endfor %}</div>
+<label class="form-check my-3"><input id="mw-resize-lock" type="checkbox" class="form-check-input" checked><span class="form-check-label">Keep source proportions</span></label>
+<label for="mw-resize-strength" class="form-label">New detail strength <output id="mw-resize-strength-value">0.25</output></label><input id="mw-resize-strength" form="mw-form" type="range" min="0.05" max="0.75" step="0.05" value="0.25" class="form-range">
+<label for="mw-resize-prompt" class="form-label mt-3">Detail instructions <span class="text-secondary">· optional</span></label><textarea id="mw-resize-prompt" form="mw-form" class="form-control" rows="2" maxlength="24000" placeholder="e.g. retain the composition, refine natural textures and fine edges"></textarea><p id="mw-resize-help" class="form-text mb-0" role="status"></p>
+</div>
+{% endcall %}
+<aside class="ig-settings-panel" aria-label="Settings inspector">{{ settings(image_samplers,image_schedulers,live=true) }}</aside>
+<section class="ig-history" aria-label="Private image library"><div class="d-flex flex-wrap justify-content-between gap-2 mb-3">{{ section_title('Your images',wrapper_class='mb-0') }}<label for="mw-library-filter" class="visually-hidden">Filter your images</label><select id="mw-library-filter" class="form-select form-select-sm w-auto"><option value="all">All images</option><option value="favorites">Session favorites</option></select></div><div id="mw-thumbnails" class="ig-thumbnails" role="listbox" aria-label="Generated images"></div><p id="mw-library-empty" class="small text-secondary" hidden>No images match this view.</p><button id="mw-older" class="btn btn-link btn-sm" type="button" hidden>Load older images</button></section>
+<section class="ig-queue" aria-label="Generation queue">{% call card('Run queue') %}<div id="mw-jobs" class="d-grid gap-3"></div><p id="mw-queue-empty" class="small text-secondary mb-0">Your next run will appear here.</p><div id="mw-live" class="ig-live mt-3" hidden><img id="mw-live-image" alt="Current generation preview"><span id="mw-live-info" class="small text-secondary"></span></div>{% endcall %}</section>
+<section id="mw-sweep-panel" class="ig-sweep-panel" hidden>{{ sweep(live=true) }}</section>
+</div>
+<dialog id="mw-dialog" class="ig-dialog frame" aria-labelledby="mw-dialog-title"><form method="dialog"><button class="btn-close float-end" aria-label="Close"></button></form>{{ section_title('',id='mw-dialog-title') }}<div id="mw-dialog-content" class="mt-3"></div></dialog>
+<template id="mw-toolkit-template"><p class="small text-secondary">Additional tools planned for this workspace. They will appear when their model and runtime support is available.</p>{{ tool_catalogue() }}</template>
+{{ templates(live=true) }}
 </div>
 {% endblock %}

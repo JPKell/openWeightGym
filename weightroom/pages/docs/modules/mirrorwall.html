@@ -1,6 +1,6 @@
 {% from "docs_parts.html" import doc_contents, doc_section, doc_heading, doc_table %}
 {{ doc_contents([('workflow', 'How an image is made'), ('models', 'Models and their parts'), ('adding', 'Adding a model'),
-                 ('references', 'Reference images'), ('trouble', 'When something goes wrong'), ('source', 'Code reference')]) }}
+                 ('canvas', 'Canvas studio'), ('references', 'Reference images'), ('resize', 'Resize and add detail'), ('trouble', 'When something goes wrong'), ('source', 'Code reference')]) }}
 
   {% call doc_section("Overview", "overview") %}
   <p>Mirror Wall makes images on the compute machine with stable-diffusion.cpp. You write a prompt under <a href="/chat/images">Chat → Images</a>, optionally add reference images, and the finished pictures are kept privately on front. Administrators set up models under <a href="/models/images">Models → Images</a>.</p>
@@ -136,6 +136,16 @@
       <li><strong>Choose the cards.</strong> One GPU suits klein; Flux 2 Dev needs both cards with <em>diffusion layers</em> split. Leave the host RAM cap at 8 GiB unless the job needs more (Dev uses 12 GiB).</li>
       <li><strong>Save, then try it</strong> in <a href="/chat/images">Chat → Images</a>. The first full job is measured; until then the model keeps its cards to itself, so other models wait.</li>
     </ol>
+  {% endcall %}
+
+  {% call doc_section("Canvas studio", "canvas") %}
+    <p>Choose a model and workflow on the left, describe the image beneath the canvas, and adjust size, sampling and references in the settings inspector. Unsent changes stay with each model while you switch models or views. Generate, Library and Queue keep the same workspace; new results do not replace your selected image. Use Compare to view another owned image alongside it.</p>
+    <p>Explore variations offers a simple parameter sweep and optional JSON for multiple axes. Queue supports pause after an image, resume and stop; temporary jobs support stop only. Image details exposes the resolved seed and settings, with explicit JSON export. Session favorites last only while this page is open.</p>
+  {% endcall %}
+
+  {% call doc_section("Resize and add detail", "resize") %}
+    <p>Choose <em>Resize &amp; add detail</em>, upload one image or select a saved source, and choose 2×, 4×, same-size refinement or custom final dimensions. Keep source proportions enabled to preserve its shape. Detail strength starts at 0.25; lower values preserve more of the source. Optional instructions describe the details to refine. This generates new detail and may change fine features.</p>
+    <p>The tool requires an exclusive SDXL workflow with one source-image slot. It runs image-to-image at the workflow’s permitted working size, uses the configured AI upscaler whenever enlargement is needed, and returns the exact final dimensions. A missing or failed upscaler stops the job. Final output is limited to 8192 pixels per side, 32 megapixels and the workflow’s upscale limit, at most 4× the detail-pass dimensions. The original remains unchanged and private; temporary sources require a temporary job.</p>
   {% endcall %}
 
   {% call doc_section("Reference images", "references") %}
