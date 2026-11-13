@@ -19,6 +19,7 @@
       {% if session %}<p id="sr-jobs-empty" class="small text-secondary mb-0">Nothing in the queue.</p>{% endif %}
 {% endmacro %}
     <section class="sr-results studio-results" aria-label="Generated audio">
+      {% if session %}<div class="music-playback-column">{% endif %}
       {% call card("The listening desk" if mode == "speech" else "", tag="div", class_="sr-player") %}
         {% if session %}{{ player_intro(mode=mode) }}{% endif %}
         <div id="sr-empty" class="sr-empty studio-empty"><span id="sr-empty-title" class="section-title">Your {{ {'music': 'takes', 'sound': 'sounds'}.get(mode, 'recordings') }} appear here</span><span id="sr-empty-help" class="text-secondary">Choose a model and describe what you want to hear.</span></div>
@@ -48,8 +49,9 @@
         </div>
       {% endcall %}
       {% if session %}
-      {% call card('',class_='music-library') %}{{ library(mode, true) }}{% endcall %}
       {% call card('',class_='music-queue') %}{{ jobs(true) }}{% endcall %}
+      </div>
+      {% call card('',class_='music-library') %}{{ library(mode, true) }}{% endcall %}
       {% else %}
       {{ library(mode, false) }}
       <section class="mt-4">{{ jobs(false) }}</section>
