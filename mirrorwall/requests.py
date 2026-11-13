@@ -43,7 +43,7 @@ def request_body(content_type, body):
             if not name or name in value:
                 raise ValueError('Repeated or missing image form field.')
             decoded=content.decode('utf-8')
-            value[name]=json.loads(decoded) if name in numbers|{'stream','live_previews','loras','metadata'} else decoded
+            value[name]=json.loads(decoded) if name in numbers|{'stream','live_previews','loras','metadata','detail_resize'} else decoded
     if images:
         value['image']=images
     checked_request(value)
@@ -75,7 +75,7 @@ def checked_request(asked,settings=None):
         raise ValueError("Image request must be an object.")
     allowed={"model","prompt","negative_prompt","n","size","width","height","steps","seed","guidance","cfg_scale",
              "sampler","scheduler","references","image","mask","strength","loras","upscale","stream","partial_images",
-             "response_format","output_format","user","quality","background","moderation","metadata","live_previews","reference_megapixels"}
+             "response_format","output_format","user","quality","background","moderation","metadata","live_previews","reference_megapixels","detail_resize"}
     unknown=asked.keys()-allowed
     if unknown:
         raise ValueError("Unsupported image settings: "+", ".join(sorted(unknown)))
@@ -158,6 +158,27 @@ def checked_request(asked,settings=None):
         raise ValueError("This workflow has no configured output upscaler.")
     if settings and upscale>model.limits(settings)['max_upscale']:
         raise ValueError('Upscale exceeds this workflow limit.')
+    if 'detail_resize' in asked:
+        target=asked['detail_resize']
+        if not isinstance(target,dict) or target.keys()!={'width','height'} or any(
+                type(value) is not int or not 16<=value<=8192 for value in target.values()):
+            raise ValueError('Detail resize requires integer width and height from 16 to 8192.')
+        if target['width']*target['height']>33554432:
+            raise ValueError('Detail resize exceeds 32 megapixels.')
+        if upscale!=1 or 'mask' in asked or result['n']!=1:
+            raise ValueError('Detail resize uses one image, an explicit final size, no output upscale factor and no mask.')
+        largest=max(target['width']/result['width'],target['height']/result['height'])
+        if largest>4:
+            raise ValueError('Detail resize can enlarge the detail pass by at most 4×.')
+        if settings:
+            if settings['sdcpp']['family']!='sdxl' or not settings.get('alone',False):
+                raise ValueError('Detail resize requires an exclusive SDXL image-to-image workflow.')
+            if len(result['references'])!=1:
+                raise ValueError('Detail resize requires one source image.')
+            if largest>1 and not settings['sdcpp'].get('upscaler'):
+                raise ValueError('Detail resize needs a configured AI upscaler for the requested final size.')
+            if largest>model.limits(settings)['max_upscale']:
+                raise ValueError('Detail resize exceeds this workflow upscale limit.')
     if settings and not settings.get('alone',False):
         ordinary=model.defaults(settings)
         if any(result[key]!=ordinary[key] for key in ('sampler','scheduler','cfg_scale')):

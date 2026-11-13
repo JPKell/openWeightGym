@@ -1,0 +1,50 @@
+/* Live Canvas studio retains the console's common headings and controls. */
+.ig-canvas .ig-workspace { grid-template-columns: 180px minmax(0,1fr) 300px; }
+.ig-canvas .ig-tool-list { margin-top: 26px; }
+.ig-canvas .ig-generate > .btn { min-height: 40px; }
+.ig-canvas :is(.ig-settings,.ig-tools) :is(.form-select-sm,.form-control-sm) { min-height: 32px; }
+.ig-canvas .ig-reference .min-w-0 { max-width: none; flex: 1; }
+.ig-canvas .ig-reference > img { width: 44px; height: 44px; }
+.ig-canvas .ig-thumbnail[aria-selected=true] { outline: 2px solid var(--theme-accent); outline-offset: 2px; }
+.ig-canvas .ig-dialog { width: min(780px,calc(100% - 32px)); }
+.ig-canvas .ig-artboard.mw-original { overflow: auto; justify-content: start; align-items: start; }
+.ig-canvas .ig-artboard.mw-original > img { width: auto; height: auto; max-width: none; }
+.ig-canvas .ig-artboard:fullscreen { height: 100vh; }
+.ig-canvas .mw-preview-label { margin: 12px; }
+.ig-canvas .ig-live { display: flex; gap: 12px; align-items: center; }
+.ig-canvas .ig-live img { width: 100px; height: 80px; object-fit: contain; }
+.ig-canvas .mw-library { display: grid; grid-template-columns: repeat(auto-fill,minmax(130px,1fr)); gap: 14px; }
+.ig-canvas .mw-library img { width: 100%; height: 90px; object-fit: contain; }
+.ig-resize-source { display: flex; gap: 15px; align-items: center; }
+.ig-resize-source img { width: 90px; height: 75px; object-fit: contain; border-radius: 6px; background: var(--theme-subtle); }
+.ig-canvas [data-mw-tool][aria-disabled=true] { opacity: .6; }
+@media (max-width: 1200px) {
+ .ig-canvas .ig-workspace { grid-template-columns: minmax(0,1fr) 290px; grid-template-areas: 'tools tools' 'viewer settings' 'compose settings' 'history settings' 'sweep settings' 'queue queue'; }
+ .ig-canvas[data-sweep=false] .ig-workspace { grid-template-areas: 'tools tools' 'viewer settings' 'compose settings' 'history settings' 'queue queue'; }
+ .ig-canvas .ig-tools { border: 0; padding: 0; }
+ .ig-canvas .ig-model-picker { display: grid; grid-template-columns: 1fr 2fr; gap: 6px 14px; align-items: center; }
+ .ig-canvas .ig-model-picker > .ig-overline, .ig-canvas #mw-model-description, .ig-canvas .ig-model-picker > .form-text { grid-column: 1/-1; }
+ .ig-canvas .ig-model-picker label { margin: 0 !important; }
+ .ig-canvas .ig-tool-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 15px; }
+ .ig-canvas .ig-tool-list > .ig-overline, .ig-canvas .ig-tool small, .ig-canvas .ig-tool-footer { display: none; }
+ .ig-canvas .ig-tool { width: auto; padding: 8px 10px; margin: 0; }
+}
+.ig-canvas[data-view=library] .ig-workspace { grid-template-columns: minmax(0,1fr) minmax(0,1fr); grid-template-areas: 'viewer history'; }
+.ig-canvas[data-view=queue] .ig-workspace { display: block; }
+.ig-canvas[data-view=library] :is(.ig-tools,.ig-compose,.ig-settings-panel,.ig-queue,.ig-sweep-panel),
+.ig-canvas[data-view=queue] :is(.ig-tools,.ig-compose,.ig-settings-panel,.ig-viewer,.ig-history,.ig-sweep-panel) { display: none; }
+@media (max-width: 750px) {
+ .ig-canvas .ig-workspace, .ig-canvas[data-sweep=false] .ig-workspace { grid-template-columns: minmax(0,1fr); grid-template-areas: 'tools' 'compose' 'settings' 'sweep' 'viewer' 'history' 'queue'; gap: 16px; }
+ .ig-canvas[data-sweep=false] .ig-workspace { grid-template-areas: 'tools' 'compose' 'settings' 'viewer' 'history' 'queue'; }
+ .ig-canvas[data-view=library] .ig-workspace { grid-template-areas: 'viewer' 'history'; }
+ .ig-canvas .ig-session-status { display: none; }
+ .ig-canvas .ig-tool { font-size: 11px; padding: 6px; gap: 5px; }
+ .ig-canvas .ig-compose { padding: 16px; }
+ .ig-canvas .ig-prompt-actions, .ig-canvas .ig-result-bar { flex-wrap: wrap; }
+ .ig-canvas .ig-viewer-bar { flex-wrap: wrap; padding: 10px; }
+ .ig-canvas .ig-artboard { height: 310px; min-height: 240px; }
+ .ig-canvas .ig-thumbnails { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .ig-canvas .ig-roadmap { grid-template-columns: minmax(0,1fr); }
+ .ig-canvas .ig-settings .row > .col-md-6 { width: 50%; }
+ .ig-canvas .ig-facts { grid-template-columns: minmax(0,1fr); }
+}

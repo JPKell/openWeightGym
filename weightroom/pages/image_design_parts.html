@@ -1,18 +1,19 @@
 {# Shared controls across all three image proposals, including DOM-generated entries. #}
 {% from 'parts.html' import card, form_section, empty_row %}
 {% from 'model_form.html' import number %}
-{% macro field(id, label, type='text', value='', min='', max='', step='1', required=true, wide=false) %}
-{% if type == 'number' %}{{ number(id,label,min=min,max=max,value=value,step=step,required=required) }}{% else %}
+{% macro field(id, label, type='text', value='', min='', max='', step='1', required=true, wide=false, name='') %}
+{% if type == 'number' %}{{ number(id,label,min=min,max=max,value=value,step=step,required=required,name=name) }}{% else %}
 <div class="{{ 'col-12' if wide else 'col-md-6' }}"><label class="form-label" for="{{ id }}">{{ label }}</label><input id="{{ id }}" name="{{ id }}" class="form-control" type="{{ type }}" value="{{ value }}"{% if required %} required{% endif %} maxlength="{{ max if max != '' else 128 }}"></div>
 {% endif %}
 {% endmacro %}
-{% macro select(id, label, options, wide=false) %}
-<div class="{{ 'col-12' if wide else 'col-md-6' }}"><label class="form-label" for="{{ id }}">{{ label }}</label><select class="form-select" id="{{ id }}" name="{{ id }}">{% for option in options %}<option value="{{ option }}">{{ option }}</option>{% endfor %}</select></div>
+{% macro select(id, label, options, wide=false, name='') %}
+<div class="{{ 'col-12' if wide else 'col-md-6' }}"><label class="form-label" for="{{ id }}">{{ label }}</label><select class="form-select" id="{{ id }}" name="{{ name or id }}">{% for option in options %}<option value="{{ option }}">{{ option }}</option>{% endfor %}</select></div>
 {% endmacro %}
 {% macro templates() %}
 <template id="model-option"><button class="model-option" type="button"><span class="model-monogram" aria-hidden="true"></span><span class="min-w-0"><strong data-name></strong><small class="text-secondary d-block" data-detail></small></span><span class="badge ms-auto" data-count></span></button></template>
 <template id="workflow-option"><button type="button" class="workflow-option"><span class="workflow-symbol" aria-hidden="true"><span></span><span></span><span></span></span><span class="workflow-copy"><span class="d-flex flex-wrap gap-2 align-items-center"><strong data-name></strong><small class="text-secondary" data-version></small></span><span class="text-secondary small d-block mt-1" data-detail></span><span class="small d-block mt-2" data-sharing></span></span><span class="workflow-arrow" aria-hidden="true">↗</span></button></template>
 <template id="matrix-row"><tr><td><button type="button" class="btn btn-link p-0 text-start" data-open></button><small class="d-block text-secondary" data-sharing></small></td><td data-size></td><td data-steps></td><td data-sampling></td><td data-upscale></td><td data-version></td></tr></template>
 <template id="matrix-empty">{{ empty_row(6, 'No workflows match. Create one or clear your search.') }}</template>
-<template id="lora-control"><label class="col-md-6 form-label"><span data-label></span><input type="number" class="form-control mt-2" min="-4" max="4" step=".05" required></label></template>
+{{ lora_template() }}
 {% endmacro %}
+{% macro lora_template(id='lora-control',required=true) %}<template id="{{ id }}"><label class="col-md-6 form-label"><span data-label></span><input type="number" class="form-control mt-2" min="-4" max="4" step=".05"{% if required %} required{% endif %}></label></template>{% endmacro %}

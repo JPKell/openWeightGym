@@ -184,6 +184,53 @@ Confirmed rows record owner answers from 2026-10-23. Implementation defaults use
 
 ## Execution status
 
+### Canvas studio and creative tools — 2026-11-13
+
+The selected generation design is **01 Canvas studio**. Its live page and the design
+previews share the inspector, prompt, viewer, sweep editor, result/reference/job templates
+and palette-driven surfaces. Keep work in Mirror Wall and use existing front assets,
+model permissions, admission and batch execution; do not add another job service.
+
+| Step | Deliverable and acceptance | State |
+|---|---|---|
+| 1 | Canvas studio: real model/workflow selection, per-model drafts, family-aware fields, ordered uploads/drop, composite masks, LoRAs, sweeps, queue pause/resume/stop, library, comparison, settings reuse/export, keyboard and narrow layouts. Polls preserve edits and selection; unavailable models explain the next action. | Implemented; validation below |
+| 2 | **Resize & add detail**: upload or select an owned image, choose 2×/4×/custom dimensions or same-size refinement, lock source proportions, adjust detail strength and optional instructions. Run an exclusive SDXL image-to-image detail pass; use the configured neural upscaler for required source/final enlargement and finish at the exact requested dimensions. Never substitute plain enlargement if the AI upscaler is missing or fails. | Implemented; native visual qualification pending |
+| 3 | Painted composite masks: brush/erase, zoom, undo/redo, invert and feather; export a source-sized PNG through the current mask API. Follow with native inpainting as a separate capability and compatible model profile. Verify protected pixels, alpha, EXIF orientation and cancellation. | Next |
+| 4 | Expand canvas: anchors, target aspect/size, overlap and mask preview; requires qualified native inpainting and tiled work beyond the normal pixel envelope. Preserve the original and show how its pixels will be placed. | After 3 |
+| 5 | Qwen instruction editing: explicit Edit/2.1 vision profile, compatible vision projection, ordered inputs and instruction controls. Update catalogue capabilities, component validation and resource measurements; keep current text-only profiles unchanged. | Planned |
+| 6 | Structure/pose and identity/style: ControlNet depth/edges/pose plus supported image adapters; declare exact family compatibility, configured assets, strengths and start/end timing. Qualify each combination before offering it. | Planned |
+| 7 | Remove/isolate: segmentation, editable selection, transparent PNG output and background replacement. Requires its own bounded model capability, alpha-preserving asset/export contracts and private derivatives. | Planned |
+| 8 | Refine/restore: tiled generative enlargement, seam blending and optional face restoration. Keep restoration opt-in and separate from the implemented SDXL detail resize. Measure tile overlap, identity drift, memory peaks, recovery and full-image output dimensions. | Planned |
+| 9 | Prompt assistance: saved fragments first; then optional caption/rewrite calls using authorized language/vision models. Show proposed text for review, preserve the original draft and never send private images to a cloud service implicitly. | Planned |
+
+**Resize contract.** `detail_resize: {width, height}` extends the ordinary image edit
+request. It requires one owned source, one output, an exclusive SDXL workflow, no mask
+and `upscale=1`; the explicit target replaces factor-based output enlargement. Final
+dimensions are 16–8192 pixels, at most 32 megapixels, and at most the configured
+upscale limit (never above 4× the detail-pass dimensions). The working diffusion size
+still obeys the selected workflow’s dimensions, alignment and pixel budget. Source
+preparation uses that working size. Low strength preserves more of the input; generated
+detail can alter fine features and is not evidence of details in the original. Preserve
+the immutable source, per-user ownership, temporary/no-log policy and clean PNG exports.
+Existing resource-sharing qualifications do not qualify the new operation.
+
+**Completion checks.** Exercise authenticated routes and real stored assets, exact final
+sizes, parameter forwarding, source immutability, unsupported-family/profile rejection,
+upscaler failure, temporary inputs, cross-user refusal, cancellation and retained outputs.
+Run affected image tests plus the UI component audit and all-page browser checks after
+shared component changes. Before production qualification, measure native SDXL detail
+resize and AI-upscaler stages on a compatible installed profile, including same-size,
+2×, custom aspect, output limit and cancellation cases; owner reviews source fidelity
+and invented detail. This change does not install weights or restart services. Any later
+deployment uses `owg update; owg restart` and verifies the effective source and behavior.
+
+**Validation (2026-11-13):** 84 affected checks passed, including authenticated browser
+flows at 1600/390/320px and native-workflow contract tests with a fake inference engine.
+The broader run had 124 passes and eight unrelated failures: six Backup raw-`None`
+checks, Status copy, and the legacy Civitai policy route returning 404. The image page
+passed all audited appearances/widths. Native GPU visual qualification and deployment
+have not been performed.
+
 The canonical machine record is [delivery.json](../data/qualification/mirrorwall-20261023/delivery.json); large logs and row-level results stay under ignored `data/qualification/`.
 
 | Area | Result / evidence |

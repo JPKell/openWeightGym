@@ -320,6 +320,18 @@ class Front:
         """Refuse before queueing what the model would refuse later: too many references, or small ones it cannot enlarge."""
         workflow=selected.get('image_workflow') or {}
         refs=asked.get('references',[])
+        sent=asked.get('request') or {}
+        if 'detail_resize' in sent:
+            if workflow.get('family')!='sdxl' or not workflow.get('exclusive',False):
+                raise ValueError('Detail resize requires an exclusive SDXL image-to-image workflow.')
+            if len(refs)!=1:
+                raise ValueError('Detail resize requires one source image.')
+            target=sent['detail_resize']
+            largest=max(target['width']/sent.get('width',1024),target['height']/sent.get('height',1024))
+            if largest>1 and not workflow.get('upscaling'):
+                raise ValueError('Detail resize needs a configured AI upscaler for the requested final size.')
+            if largest>(workflow.get('limits') or {}).get('max_upscale',4 if workflow.get('upscaling') else 1):
+                raise ValueError('Detail resize exceeds this workflow upscale limit.')
         most=(workflow.get('limits') or {}).get('max_references',2)
         if len(refs)>most:
             raise ValueError(f"{selected['id']} uses at most {most} reference image{'s' if most!=1 else ''}." if most else f"{selected['id']} does not use reference images.")
@@ -328,6 +340,14 @@ class Front:
         if not refs:
             return
         from mirrorwall.runtime import reference_size
+        # The detail pass prepares its single source at the requested diffusion size.
+        if 'detail_resize' in sent:
+            if workflow.get('upscaling'):
+                return
+            record=self.store.asset(user.identity,refs[0])
+            if record['width']*record['height']<sent.get('width',1024)*sent.get('height',1024):
+                raise ValueError('The source needs AI enlargement before the detail pass; configure an upscaler or lower its working size.')
+            return
         maximum=workflow.get('reference_megapixels',1)
         megapixels=(asked.get('request') or {}).get('reference_megapixels',maximum)
         if type(megapixels) not in (int,float) or not math.isfinite(megapixels) or not .1<=megapixels<=maximum:
