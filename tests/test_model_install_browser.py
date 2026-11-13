@@ -119,6 +119,7 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
         page.get_by_role('button',name='Save model',exact=True).click()
         notice=page.locator('#mw-message')
         playwright.expect(notice).to_contain_text('Use 1–128 letters')
+        assert notice.evaluate("el => getComputedStyle(el).backgroundColor") == dialog.evaluate("el => getComputedStyle(el).backgroundColor")
         assert dialog.evaluate('el => el.scrollTop > el.clientHeight')
         for fraction in (1,.5,.25):
             dialog.evaluate('(el,fraction) => {el.scrollTop=el.scrollHeight*fraction;}',fraction)
