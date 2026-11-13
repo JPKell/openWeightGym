@@ -1,0 +1,95 @@
+{% from 'parts.html' import page_header, card, section_title, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'icons.html' import icon %}
+{% from 'voice_design_parts.html' import signal, device, message_template %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="coffee">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Voice desktop · Three design directions · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}<form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Appearance"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></form></div>
+<a class="visually-hidden-focusable" href="#voice-app">Skip to Voice</a>
+<header class="vd-review">
+  <div class="vd-review-brand">{{ icon('barbell') }} <strong>openWeightGym</strong><span>DESIGN STUDIES / VOICE DESKTOP</span></div>
+  <div class="vd-review-controls">
+  {% call pills('Design directions',buttons=true,class_='vd-designs mb-0') %}
+  {{ pill_button('01 Conversation desk',true,attrs={'data-design':'desk'}) }}
+  {{ pill_button('02 Focus',attrs={'data-design':'focus'}) }}
+  {{ pill_button('03 Control room',attrs={'data-design':'control'}) }}
+  {% endcall %}
+  <label class="vd-preview-state">Preview state<select id="vd-scenario" class="form-select form-select-sm"><option value="listening">Listening</option><option value="ready">Ready to connect</option><option value="replying">Assistant speaking</option><option value="empty">Empty conversation</option><option value="no-key">First-time setup</option><option value="offline">Server unavailable</option><option value="no-mic">No microphone</option></select></label>
+  <button type="button" id="vd-theme" class="btn btn-outline-secondary btn-sm">Dark mode</button>
+  </div>
+  <div class="vd-review-note"><span id="vd-design-note">A calm, transcript-first workspace. Everything you need, within reach.</span><span id="vd-feedback" role="status">Interactive preview · simulated calls · no audio captured</span></div>
+</header>
+<main id="voice-app" data-layout="desk" data-state="listening" tabindex="-1">
+  <header class="vd-appbar"><a href="#desk" class="vd-wordmark" aria-label="Voice, Conversation desk design"><span class="vd-logo">{{ icon('activity') }}</span>Voice<span class="vd-app-brand">by openWeightGym</span></a><div class="vd-appbar-right"><span class="vd-connection"><i></i><span id="vd-connection-label">Connected</span></span><button type="button" id="vd-settings-toggle" class="btn btn-outline-secondary btn-sm" aria-controls="vd-settings" aria-expanded="true">{{ icon('manage') }} Settings</button></div></header>
+  <div class="vd-workspace">
+    <header class="vd-heading">
+      {{ page_header('A little room to think.',id='vd-page-heading') }}
+      <div class="vd-heading-meta"><span id="vd-mode-summary">Direct model</span><span class="vd-meta-separator">/</span><span>Local conversation</span></div>
+    </header>
+    <section class="vd-presence" aria-label="Conversation status">
+      <div class="vd-presence-top"><span class="vd-overline">THE CONVERSATION</span><span class="vd-session-time" id="vd-duration">02:22</span></div>
+      <div class="vd-orbit" aria-hidden="true"><div class="vd-orbit-ring"></div><div class="vd-orbit-core">{{ icon('activity') }}</div></div>
+      <div class="vd-state-label"><span class="vd-state-dot"></span><strong id="vd-call-status" role="status">Listening</strong></div>
+      <p id="vd-call-hint">Take your time. I’m listening.</p>
+      {{ signal() }}
+      <div class="vd-presence-bottom"><span id="vd-input-status">Microphone active</span><span id="vd-echo-status">Echo cancellation on</span></div>
+    </section>
+    <section class="vd-transcript-area" aria-label="Conversation transcript">
+    {% set transcript_actions %}<button id="vd-transcript-toggle" type="button" class="btn btn-outline-secondary btn-sm" aria-expanded="true" aria-controls="vd-transcript-body">Hide transcript</button>{% endset %}
+    {% call card('Conversation',class_='vd-transcript-card mb-0',actions=transcript_actions) %}
+      <div id="vd-transcript-body"><div class="vd-transcript-marker"><span>THIS SESSION</span><span>Visible only in this window</span></div><div id="vd-transcript" role="log" aria-label="Transcript messages" aria-live="polite" tabindex="0"></div>
+      <div class="vd-transcript-empty" id="vd-empty" hidden>{{ icon('chat') }}{{ section_title('Good conversations start here.',wrapper_class='mt-3 mb-2') }}<p>Your words and the replies will appear here.</p></div>
+      </div><span id="vd-transcript-note" class="visually-hidden">Listening for your next thought</span>
+    {% endcall %}
+    </section>
+    <aside id="vd-settings" class="vd-settings" aria-label="Conversation settings">
+    {% call card('Your setup',class_='vd-setup-card mb-0',actions='<span class="vd-overline">THIS DEVICE</span>'|safe) %}
+      <form id="vd-settings-form">
+      <label class="form-label" for="vd-mode">Conversation mode</label><select id="vd-mode" name="mode" class="form-select" data-connection-field><option value="direct">Direct model</option><option value="hermes">Hermes agent</option></select><p class="form-text" id="vd-mode-help">Talk directly to your local model.</p>
+      <div class="vd-settings-divider"></div>
+      {{ section_title('Audio devices',level=3,wrapper_class='mb-3') }}
+      {{ device('Microphone','vd-input','activity',['System default microphone','USB microphone','Headset microphone']) }}
+      {{ device('Speakers','vd-output','system',['System default speakers','Desktop speakers','Headphones']) }}
+      <button id="vd-refresh" type="button" class="btn btn-outline-secondary btn-sm w-100" data-connection-field>Refresh devices</button>
+      <label class="form-check form-switch vd-echo"><input id="vd-echo" name="echo" class="form-check-input" type="checkbox" checked><span class="form-check-label">Echo cancellation</span></label>
+      <p class="form-text">Keep your mic open while replies play. Speak to interrupt.</p>
+      <details id="vd-connection-settings" class="vd-connection-settings"><summary>Server & API key <span id="vd-key-state">Configured</span></summary><div class="pt-3">
+        <label for="vd-server" class="form-label">Server address</label><input type="url" name="server" id="vd-server" class="form-control mb-3" value="http://voice.local:8447" required data-connection-field>
+        <label for="vd-key" class="form-label">API key</label><input type="password" name="key" id="vd-key" class="form-control" placeholder="Sample credential configured" autocomplete="off" spellcheck="false" data-connection-field>
+        <p class="form-text">Preview credentials stay in this tab. Use a sample key.</p>
+        <button id="vd-import" type="button" class="btn btn-outline-secondary btn-sm" data-connection-field>Import key file…</button><input type="file" id="vd-key-file" accept=".txt,.key" hidden>
+      </div></details>
+      <button type="submit" id="vd-save" class="btn btn-outline-secondary w-100 mt-3">Save settings</button>
+      <p id="vd-settings-notice" class="form-text mb-0" role="status">Connection and devices lock during a call.</p>
+      </form>
+    {% endcall %}
+    <div class="vd-privacy-note">{{ icon('check') }}<p><strong>A conversation, not a recording.</strong><br>The desktop app does not save audio or the visible transcript. Requests use normal server logging.</p></div>
+    </aside>
+    <aside class="vd-session" aria-label="Session details">
+    {% call card('Session',class_='mb-0',actions=icon('activity')) %}
+      <div class="vd-session-mode"><span class="vd-small-label">ROUTING</span><strong id="vd-route">Direct model</strong><span class="text-secondary small">Desktop → local server</span></div>
+      <dl class="vd-session-facts"><div><dt>Duration</dt><dd id="vd-detail-duration">02:22</dd></div><div><dt>Messages</dt><dd id="vd-message-count">4</dd></div><div><dt>Audio retention</dt><dd>Off</dd></div></dl>
+      <div class="vd-signal-heading"><span>Input signal</span><span class="vd-overline">ILLUSTRATIVE</span></div>{{ signal(24,'vd-small-wave') }}
+      <div class="vd-session-event">{{ icon('check') }}<span id="vd-event">Audio devices connected</span></div>
+    {% endcall %}
+    <div class="vd-shortcuts">{{ section_title('At your fingertips',level=3) }}<div><span>Mute microphone</span><kbd>Alt M</kbd></div><div><span>Finish speaking</span><kbd>Alt ↵</kbd></div><div><span>Interrupt reply</span><kbd>Alt I</kbd></div><p>Shortcuts work outside text fields.</p></div>
+    </aside>
+    <div class="vd-callbar">
+      <div class="vd-callbar-context">{{ icon('activity') }}<div><strong id="vd-callbar-title">Your mic is open</strong><span id="vd-callbar-note">Speak naturally to interrupt a reply.</span></div></div>
+      <div class="vd-call-buttons" role="group" aria-label="Call controls">
+        <button type="button" id="vd-start" class="btn btn-primary" hidden>{{ icon('play') }} Start conversation</button>
+        <button type="button" id="vd-mute" class="btn btn-outline-secondary" aria-pressed="false">{{ icon('activity') }} <span>Mute</span></button>
+        <button type="button" id="vd-finish" class="btn btn-outline-secondary">{{ icon('check') }} Finish speaking</button>
+        <button type="button" id="vd-interrupt" class="btn btn-outline-secondary" disabled>{{ icon('stop') }} Interrupt</button>
+        <button type="button" id="vd-hangup" class="btn vd-hangup">{{ icon('close') }} <span>Hang up</span></button>
+      </div>
+    </div>
+    <div class="vd-error" id="vd-error" hidden>{{ alert('warning',attrs={'id':'vd-error-text'}) }}</div>
+  </div>
+</main>
+<div class="vd-design-caption"><span id="vd-caption-index">01 / 03</span><p id="vd-caption"><strong>Conversation desk.</strong> A generous reading space, a quiet listening indicator and a persistent setup panel.</p><span>DESIGNED TO BE USED, NOT JUST LOOKED AT.</span></div>
+{{ message_template() }}
+<script>{{ javascript|safe }}</script>
+</body></html>
