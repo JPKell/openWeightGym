@@ -317,10 +317,20 @@ class Probes:
                 raise ValueError('GPU telemetry is unavailable; isolated measurement cannot be verified.')
         settings = at_context(original, context)
         if original.get("gpus") == "any":
-            placed = self.runner.fit(task["model"], {**settings, "min_context": context}, set())
-            if placed is None:
-                raise ValueError("This model cannot fit on the enabled cards.")
-            settings, cards, _ = placed
+            if kept and kept['server'].settings['flags'].get('ctx-size') == context:
+                # This task already owns the fitted devices and native process. A
+                # second admission would mistake its own probe for unavailable room.
+                settings, cards = kept['server'].settings, kept['server'].cards
+            else:
+                if kept:
+                    await self.runner.stop(kept['server'])
+                    if self.runner.servers.get(task['model']) is kept['server']:
+                        del self.runner.servers[task['model']]
+                    kept = None
+                placed = self.runner.fit(task["model"], {**settings, "min_context": context}, set())
+                if placed is None:
+                    raise ValueError("This model cannot fit on the enabled cards.")
+                settings, cards, _ = placed
         indexes = {int(re.search(r'\d+$', card)[0]) for card in cards}
         if not cpu and not kept and (outside := self.outside_processes(indexes)):
             # Outside model servers finish themselves. Desktop/monitor allocations are allowed.
@@ -444,7 +454,7 @@ class Probes:
             elif options.get('evaluation') is not None:
                 prompt, evidence = await self.evaluation_prompt(server, options)
                 budget = min(outputs, context - len(prompt) - 32)  # leave native BOS/stop bookkeeping room
-                if budget < 32:
+                if budget < 1:
                     raise ValueError('Evaluation prompt exceeds the available context with answer space.')
                 sampling = self.evaluation_sampling(options['evaluation'])
                 measured, content = await self.completion(server, prompt, budget, ignore_eos=False,
@@ -726,7 +736,7 @@ class Probes:
         evidence['prompt_tokens_sha256'] = hashlib.sha256(json.dumps(tokens).encode()).hexdigest()
         evidence['prompt_token_count'] = len(tokens)
         budget = min(options['outputs'],options['context']-len(tokens)-32)
-        if budget < 32:
+        if budget < 1:
             if general:
                 return unavailable('context','Conversation exceeds the available context with answer space.',False)
             raise ValueError('Tool dialogue exceeds the available context with answer space.')

@@ -124,12 +124,12 @@ outside the checkout by `tests/docker/qualification/browser.py` and `scenarios.p
 
 | Contract | Observed result |
 |---|---|
-| Navigation | 60 live routes at 1440 and 390 px: 120 PostgreSQL visits, all 200, no browser errors, failed requests or document overflow. SQLite received the same full crawl; an Audio fragment encountered the deliberate gamma outage and passed both widths after recovery. |
+| Navigation | 60 live routes at 1440 and 390 px: complete SQLite and PostgreSQL crawls each passed 120 visits, all 200, no browser errors, failed requests or document overflow. |
 | Install and inference | Hugging Face download; one-node CPU install and three-node installation; real CPU and NVIDIA llama.cpp replies. |
 | Destination policy | Alpha/beta/gamma pins answered on their node; unknown node 404; off switch refused pins with its General-settings explanation while unpinned inference answered; pinned role and embedding calls succeeded. |
 | Busy placement | Beta generated 1,800 tokens while a new unpinned request loaded and answered on idle alpha. |
 | Wake overflow | Passive Status/Models/Usage/Backups reads sent no wake. With beta busy and gamma stopped, a real 102-byte magic packet reached the isolated receiver; starting only the disposable gamma container let the waiting request answer successfully. |
-| Benchmarks | Real load measurements completed nine samples on each of alpha, beta and gamma. An imported two-case quality benchmark completed on all three, each scoring 50%; the tiny model passed exact text and failed strict JSON. |
+| Benchmarks | Real load measurements completed nine samples on each of alpha, beta and gamma. An imported two-case quality benchmark executed both cases on all three, each scoring 50%: strict JSON passed, exact text failed. This exposed and verified fixes for output budgets below 32 tokens and retained GPU-process reuse between cases. |
 | Images | Complete SDXL Turbo GGUF installed on beta and gamma; real 512×512 generation persisted, decoded and downloaded as PNG. |
 | Speech and retrieval | Kokoro produced a playable, downloaded 3.15 s WAV; Moonshine transcribed it correctly. A local embedder indexed a source into 768 dimensions and retrieved the matching excerpt. |
 | Workflows | Browser-created research run retrieved sources and recorded model requests; malformed citations from the tiny model were refused, with retry controls and request evidence retained. Successful research-to-draft output with a capable model remains unqualified. |
