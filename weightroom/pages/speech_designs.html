@@ -4,7 +4,7 @@
 {% from 'icons.html' import icon %}
 <!doctype html>
 <html lang="en" data-bs-theme="light" data-site-theme="sage">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Speech · Three design directions · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Voice generation · Three design directions · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
 <body>
 <div hidden>{{ icons_svg|safe }}<form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Appearance"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></form></div>
 <a class="visually-hidden-focusable" href="#speech-workspace">Skip to Speech</a>
@@ -15,12 +15,11 @@
 {{ pill_button('01 / Voice desk', true, attrs={'data-design':'desk'}) }}{{ pill_button('02 / Script room', attrs={'data-design':'script'}) }}{{ pill_button('03 / Listening room', attrs={'data-design':'listen'}) }}
 {% endcall %}<p id="design-note" class="small text-secondary mt-3 mb-0"></p></section>
 <div id="speech-workspace" data-layout="desk">
-{% call page_header('Speech', pretitle='SOUNDROOM / CREATE') %}<span class="sp-private">{{ icon('locker') }} Your private workspace</span>{% endcall %}
+{% call page_header('Voice generation', pretitle='SOUNDROOM / CREATE') %}<span class="sp-private">{{ icon('locker') }} Your private workspace</span>{% endcall %}
 <div class="sp-intro"><p id="design-headline">Give your words a voice.</p><span class="sp-overline">WRITE. SHAPE. LISTEN.</span></div>
 <p class="sp-demo-note">Design preview · sample models and recordings · generation is simulated. Browser audition uses your device’s voice, not the selected model.</p>
 <div id="availability-note" hidden>{{ alert('warning', attrs={'id':'availability-text'}) }}</div>
-<div class="sp-workspace-nav">{% call pills('Speech workspace',buttons=true,class_='gap-1 mb-0') %}{{ pill_button('Generate',true,attrs={'data-view':'generate'}) }}{{ pill_button('Voices',attrs={'data-view':'voices'}) }}{{ pill_button('Transcribe',attrs={'data-view':'transcribe'}) }}{{ pill_button('Spoken chat',attrs={'data-view':'chat'}) }}{% endcall %}<span class="sp-ready" id="compute-state">● Sample compute ready</span></div>
-<section id="auxiliary" hidden tabindex="-1">{% call card('Explore SoundRoom',header_id='aux-title') %}<p id="aux-copy" class="text-secondary"></p><button type="button" id="back-to-generate" class="btn btn-outline-secondary">Back to generation</button>{% endcall %}</section>
+<div class="sp-workspace-nav">{% call pills('Speech workspace',buttons=true,class_='gap-1 mb-0') %}{{ pill_button('Generate',true,attrs={'data-view':'generate'}) }}{{ pill_button('Voices',attrs={'data-view':'voices'}) }}{% endcall %}<span class="sp-ready" id="compute-state">● Sample compute ready</span></div>
 <form id="sr-form" data-hold-refresh>
 <div class="sp-grid">
 {{ studio_inputs(data) }}

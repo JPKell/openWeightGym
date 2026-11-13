@@ -142,8 +142,7 @@ def speak(page, origin, name, output):
 def transcribe(page, origin, name, file):
     if not file or not file.is_file():
         raise ValueError('Transcription needs --file pointing to an audio recording.')
-    page.goto(origin + '/chat/speech')
-    page.get_by_role('tab', name='Transcribe', exact=True).click()
+    page.goto(origin + '/chat/transcribe')
     page.locator('#tr-model').select_option(name)
     page.locator('#tr-file').set_input_files(file)
     page.locator('#tr-go').click()

@@ -1,12 +1,13 @@
 ## Chat
 
-- [x] Conversations
+- [x] Text chat
 - [x] Conversation
 - [ ] Image generation
 - [ ] Music
 - [ ] Sounds
-- [ ] Speech
-- [ ] Voice
+- [ ] Voice generation
+- [ ] Transcribe
+- [ ] Voice chat
 - [ ] Voice desktop app
 
 ## Models

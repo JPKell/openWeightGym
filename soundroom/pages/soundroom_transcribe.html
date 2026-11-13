@@ -1,0 +1,34 @@
+{% extends "frame.html" %}
+{% from "parts.html" import page_header, card, section_title, alert %}
+{% block title %}Transcribe · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/audio-tools.js?v=1" defer></script><script src="/soundroom-static/transcribe.js?v=1" defer></script>{% endblock %}
+{% block main %}
+<div id="soundroom-transcribe" data-defaults="{{ audio | tojson | forceescape }}">
+  {{ page_header("Transcribe") }}
+  {% call alert('danger', role='alert', attrs={'id': 'sr-message', 'hidden': ''}) %}{% endcall %}
+  <section aria-label="Audio transcription">
+    <div class="row g-3">
+      <div class="col-lg-5">{% call card("") %}
+        <label class="form-label" for="tr-model">Transcription model</label><select id="tr-model" class="form-select mb-3"></select>
+        <label class="form-label" for="tr-diarize">Who spoke when <span class="text-secondary">optional</span></label><select id="tr-diarize" class="form-select mb-3"></select>
+        <label class="form-label" for="tr-language">Language <span class="text-secondary">optional, such as en</span></label><input id="tr-language" class="form-control mb-3" maxlength="16">
+        <label class="form-label" for="tr-file">Audio</label><input id="tr-file" type="file" accept="audio/*" class="form-control mb-2">
+        <div class="d-flex gap-2 mb-3"><button id="tr-record" type="button" class="btn btn-outline-secondary">● Record</button><span id="tr-recording" class="text-secondary small align-self-center"></span></div>
+        <button id="tr-go" type="button" class="btn btn-primary w-100" disabled>Transcribe</button>
+      {% endcall %}</div>
+      <div class="col-lg-7">
+        {% call card("") %}
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-2"><strong class="me-auto">Transcript</strong>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-copy>Copy</button>
+            {% for format in ['txt','srt','vtt','json'] %}<button class="btn btn-outline-secondary btn-sm" type="button" data-save="{{format}}">{{format}}</button>{% endfor %}</div>
+          <audio id="tr-audio" controls class="w-100 mb-2" hidden></audio>
+          <div id="tr-result" class="sr-transcript text-secondary">Choose a recording and a model.</div>
+        {% endcall %}
+        {{ section_title("Recordings") }}<div id="tr-list" class="list-group sr-list"></div>
+        <button id="tr-older" class="btn btn-outline-secondary btn-sm mt-2" type="button" hidden>Load older recordings</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+{% endblock %}

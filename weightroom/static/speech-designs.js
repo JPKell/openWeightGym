@@ -329,17 +329,9 @@
       const active = button.dataset.view === view;
       button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
     });
-    const auxiliary = view === 'transcribe' || view === 'chat';
-    $('sr-form').hidden = auxiliary; $('auxiliary').hidden = !auxiliary;
-    if (view === 'voices') { $('voice-search').focus(); notice('Saved voices are in the Voice & model panel. Voice management remains on the live Speech page.'); }
-    if (auxiliary) {
-      $('aux-title').textContent = view === 'transcribe' ? 'Transcribe audio' : 'Spoken chat';
-      $('aux-copy').textContent = view === 'transcribe' ? 'Transcription stays available as a neighbouring workflow. This study focuses on voice generation; recording, file uploads, diarization and transcript exports remain on the live Speech page.' : 'Spoken chat stays available as a neighbouring workflow. The live page opens a hands-free conversation using a saved voice. This preview does not start a microphone or a call.';
-      $('auxiliary').focus();
-    }
+    if (view === 'voices') { $('voice-search').focus(); notice('Saved voices are in the Voice & model panel. Voice management remains on the live Voice generation page.'); }
   }
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
-  $('back-to-generate').addEventListener('click', () => switchView('generate'));
   $('theme').addEventListener('click', () => {
     const select = document.querySelector('[data-theme-form] [name=mode]');
     select.value = document.documentElement.dataset.bsTheme === 'dark' ? 'light' : 'dark';

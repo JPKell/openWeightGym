@@ -26,8 +26,12 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
         return page(request, "soundroom_music.html", person, mode="sound", audio=defaults())
 
     async def speech(request, person):
-        """Render the private speech studio, transcription and voice library."""
+        """Render private voice generation and the saved voice library."""
         return page(request, "soundroom_speech.html", person, mode="speech", audio=defaults())
+
+    async def transcribe(request, person):
+        """Render the independent authenticated transcription workspace."""
+        return page(request, "soundroom_transcribe.html", person, audio=defaults())
 
     async def preferences(request, person):
         """Render the person's own audio choices."""
@@ -36,8 +40,8 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
     DEFAULTS = (("audio_lyrics_model", "Lyrics helper model", "A chat model or role, such as chat, that writes the style caption and lyrics."),
                 ("audio_music_model", "Music page model", "Selected first on Chat → Music; empty selects the first available."),
                 ("audio_sound_model", "Sounds page model", "Selected first on Chat → Sounds."),
-                ("audio_speech_model", "Speech page model", "Selected first on Chat → Speech."),
-                ("audio_transcription_model", "Transcription model", "Selected first on the Transcribe tab."))
+                ("audio_speech_model", "Voice generation model", "Selected first on Chat → Voice generation."),
+                ("audio_transcription_model", "Transcription model", "Selected first on Chat → Transcribe."))
 
     async def system(request, person):
         """Show and change the administrator's audio defaults, kept with weightroom's own settings."""
@@ -204,6 +208,7 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
     return [Route("/chat/music", for_people(music)),
             Route("/chat/sounds", for_people(sounds)),
             Route("/chat/speech", for_people(speech)),
+            Route("/chat/transcribe", for_people(transcribe)),
             Route("/account/audio", for_people(preferences)),
             Route("/system/audio", for_people(system), methods=["GET", "POST"]),
             Route("/models/audio", for_people(models)),
