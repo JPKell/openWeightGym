@@ -406,6 +406,9 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
                 'synthesis_models': [one['id'] for one in models if one.get('capabilities', {}).get('audio') == 'clone'],
                 'recognition_models': [one['id'] for one in models if one.get('capabilities', {}).get('audio') == 'transcription'],
                 'speakers': [{'id': identifier, 'name': label} for identifier, label in speaker_choices(settings.get('synthesis', {}))],
+                'audio_models': [call_options.audio_choices(one) for one in models
+                                 if call_options.audio_kind(one) in ('speech', 'clone', 'transcription')],
+                'languages': [{'id': code, 'name': label} for code, label in call_options.LANGUAGES.items()],
             }, headers={'cache-control': 'no-store'})
         except Refused as problem:
             return JSONResponse({'error': {'code': problem.code}}, status_code=problem.status)
@@ -428,7 +431,7 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
                                                speaker_choices(settings.get('synthesis', {})))
             except ValueError:
                 raise Refused('invalid_options', 400) from None
-            if options.keys() & {'model', 'synthesis_model', 'recognition_model'}:
+            if options.keys() & {'model', 'synthesis_model', 'recognition_model', 'speech_voice', 'language', 'response_language'}:
                 catalogue = await coach('GET', '/v1/models', service_key)
                 for field, capability in (('model', 'chat'), ('synthesis_model', 'clone'), ('recognition_model', 'transcription')):
                     if field not in options:
@@ -436,8 +439,21 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
                     if not may_use(person, options[field]):
                         raise Refused('unauthorized', 403)
                     selected = next((one for one in catalogue.get('data', []) if one['id'] == options[field] and one.get('owned_by') == 'loadcoach'), {})
-                    if not selected.get('capabilities', {}).get(capability):
+                    if not (selected.get('capabilities', {}).get(capability) or
+                            call_options.audio_kind(selected) in (('speech', 'clone') if field == 'synthesis_model' else (capability,))):
                         raise Refused('model_unavailable', 400)
+                effective = {**settings['profiles'][name], **options}
+                for field, language in (('recognition_model', 'language'), ('synthesis_model', 'response_language')):
+                    if settings['profiles'][name].get('speech') != 'audiocpp':
+                        continue
+                    selected = next((one for one in catalogue.get('data', []) if one['id'] == effective[field]), {})
+                    declared = call_options.audio_choices(selected) if selected else {}
+                    if language in options and options[language] != 'auto' and declared.get('languages') and options[language] not in declared['languages']:
+                        raise Refused('invalid_options', 400)
+                    if field == 'synthesis_model' and 'speech_voice' in options and (
+                            declared.get('kind') != 'speech' or options['speech_voice'] not in
+                            {voice['id'] for voice in declared.get('voices', [])}):
+                        raise Refused('invalid_options', 400)
             agent_model = asked.get("agent_model", settings["profiles"][name]["model"]) if mode == "hermes" else ""
             if not isinstance(agent_model, str) or (mode == "hermes" and not agent_model):
                 raise Refused("invalid_session", 400)
@@ -582,7 +598,7 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
                     await model_slot.acquire()
                 try:
                     p = profile(session)
-                    messages = [{"role": "system", "content": p.get("system_prompt", "Answer briefly for a spoken conversation.")
+                    messages = [{"role": "system", "content": call_options.instructions(p)
                                  + "\n" + protocol.PLAYBACK_INSTRUCTIONS}]
                     messages += heard_history(session)
                     await session.send(dict(type="model.request", turn=turn, observation=observation.wire(), body={
@@ -617,6 +633,7 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
         stream = heard.stream()
         loud_ms = 0
         had_speech = False
+        last_partial = ''
         last_loud = endpoint = None
         while True:
             pcm, finish, received = await session.incoming.get()
@@ -638,6 +655,11 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
             final_at = time.monotonic()
             if partial:
                 session.touched = time.monotonic()
+                if final is None and had_speech and partial != last_partial:
+                    await session.send(dict(type='transcript.partial', turn=session.turn + 1, text=partial[:4096]))
+                    last_partial = partial
+            if final is not None:
+                last_partial = ''
             if final is not None and not had_speech:
                 last_loud = endpoint = None
                 continue  # a recognizer hallucination over silence is never a conversation turn

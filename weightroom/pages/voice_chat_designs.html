@@ -1,0 +1,33 @@
+{% from 'parts.html' import page_header, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'icons.html' import icon %}
+{% from 'voice_chat_parts.html' import settings_panel, language_panel, call_panel, transcript_panel, message_template %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="lagoon">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Voice chat · Three design directions · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}<form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Appearance"><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a class="visually-hidden-focusable" href="#voice-workspace">Skip to Voice workspace</a>
+<header class="vc-topbar"><div class="vc-brand">{{ icon('barbell') }}<strong>weightRoom</strong><span class="vc-divider"></span><span class="text-secondary">Voice</span></div><div class="d-flex align-items-center gap-3"><span class="vc-overline vc-preview-label">INTERACTIVE DESIGN STUDY</span><button id="theme" type="button" class="btn btn-outline-secondary btn-sm">Dark mode</button></div></header>
+<main class="vc-page">
+  <section class="vc-review" aria-label="Compare Voice designs">
+    <div class="vc-design-intro"><span class="vc-overline">ONE CONVERSATION. THREE PERSPECTIVES.</span><label class="d-flex align-items-center gap-2 small text-secondary">Preview state<select id="scenario" class="form-select form-select-sm w-auto"><option value="ready">Prepared conversation</option><option value="empty">Empty conversation</option><option value="offline">Service unavailable</option><option value="no-models">No models available</option><option value="denied">Microphone denied</option></select></label></div>
+    {% call pills('Voice design directions', buttons=true, class_='vc-design-nav gap-2 mb-0') %}
+    {{ pill_button('01 / Conversation desk', true, attrs={'data-design':'desk'}) }}{{ pill_button('02 / Transcript studio', attrs={'data-design':'transcript'}) }}{{ pill_button('03 / Interpreter', attrs={'data-design':'interpreter'}) }}
+    {% endcall %}<p class="small text-secondary mb-0 mt-3" id="design-description"></p>
+  </section>
+  <div id="voice-workspace" data-layout="desk">
+    {% set actions %}<span class="vc-sample-label"><span class="vc-dot" aria-hidden="true"></span>Browser-local demo</span>{% endset %}
+    {{ page_header('Voice', pretitle='THINK OUT LOUD', actions=actions) }}
+    <div class="vc-title-line"><p id="design-tagline">A natural rhythm. A clearer connection.</p><span class="vc-overline">LISTEN / THINK / SPEAK</span></div>
+    {% call alert('warning', attrs={'id':'call-notice', 'hidden':true}, class_='mb-3') %}<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 w-100"><span id="notice-text"></span><button id="recover" type="button" class="btn btn-outline-secondary btn-sm">Restore sample service</button></div>{% endcall %}
+    {% call alert('warning', attrs={'id':'compatibility-notice', 'hidden':true}, class_='mb-3') %}<span id="compatibility-text"></span>{% endcall %}
+    <div class="vc-workspace-grid">{{ language_panel(data.languages) }}{{ call_panel() }}{{ settings_panel() }}{{ transcript_panel() }}</div>
+    <div id="action-status" class="small mt-3" role="status" aria-live="polite"></div>
+    <footer class="vc-footnote"><span>{{ icon('voice-chat-lock', source='/static/voice-chat-icons.svg?v=1') }} Preview stays in this tab. Audio is neither captured nor played.</span><span>Sample models, voices, capabilities & translations · No live inference</span></footer>
+  </div>
+</main>
+{{ message_template() }}
+<script type="application/json" id="voice-samples">{{ data|tojson }}</script>
+<script>{{ javascript|safe }}</script>
+</body></html>
