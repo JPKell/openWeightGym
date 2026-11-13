@@ -82,6 +82,10 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
                 'licence':'MIT','commercial':'yes','packages':[{'id':'ace','name':'ACE','folder':'/cache/audio/ace',
                     'files':{'ace.gguf':'/cache/audio/ace/ace.gguf'},'installed':None}]}]}}
         if base in ('/mirrorwall-models','/soundroom-models') and route.request.method == 'POST':
+            if base == '/mirrorwall-models' and json.loads(route.request.post_data)['name'] == 'bad name':
+                route.fulfill(status=409,content_type='application/json',body=json.dumps({'error':{
+                    'message':'Use 1–128 letters, numbers, dots, underscores or hyphens for the model name.'}}))
+                return True
             sent.append(json.loads(route.request.post_data))
             value={'jobs':[{'kind':'model-install','id':'primary'},{'kind':'model-install','id':'rig'}]} if base=='/mirrorwall-models' else {'kind':'model-install','id':'fixture'}
             route.fulfill(status=202,content_type='application/json',body=json.dumps(value))
@@ -109,6 +113,23 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
         assert not sent
         targets.locator('.form-selectgroup-item').filter(has_text='compute').click()
         targets.locator('.form-selectgroup-item').filter(has_text='rig').click()
+        page.locator('#mw-name').fill('bad name')
+        dialog=page.locator('#model-dialog')
+        dialog.evaluate('el => {el.scrollTop=el.scrollHeight;}')
+        page.get_by_role('button',name='Save model',exact=True).click()
+        notice=page.locator('#mw-message')
+        playwright.expect(notice).to_contain_text('Use 1–128 letters')
+        assert dialog.evaluate('el => el.scrollTop > el.clientHeight')
+        for fraction in (1,.5,.25):
+            dialog.evaluate('(el,fraction) => {el.scrollTop=el.scrollHeight*fraction;}',fraction)
+            playwright.expect(notice).to_be_in_viewport()
+            assert notice.evaluate('''el => {
+                const box=el.getBoundingClientRect(),dialog=el.closest('dialog').getBoundingClientRect();
+                return Math.abs(box.top-dialog.top-1)<2 && box.bottom<=dialog.bottom &&
+                    el.contains(document.elementFromPoint(box.left+box.width/2,box.top+box.height/2));
+            }''')
+        playwright.expect(page.locator('#mw-name')).to_have_value('bad name')
+        page.locator('#mw-name').fill('picture')
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         page.get_by_role('button',name='Save model',exact=True).click()
         page.wait_for_url('**/models?kind=image&install=primary&install=rig')
@@ -116,7 +137,7 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
         assert sent[-1]['machines']==['compute','rig']
         page.goto('http://console.test/models/audio?new=1')
         playwright.expect(page.locator('#am-file option[data-path="/store/audio/ace/ace.gguf"]')).to_have_count(1)
-        page.locator('#am-file').select_option(label='front · ace')
+        page.locator('#am-file').select_option(page.locator('#am-file option[data-path="/store/audio/ace/ace.gguf"]').get_attribute('value'))
         page.locator('#am-family').select_option('ace_step')
         assert page.get_by_role('heading',name='Catalogue',exact=True).count() == 0
         assert page.get_by_role('button',name='Install',exact=True).count() == 0
