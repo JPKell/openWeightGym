@@ -1,0 +1,40 @@
+{% from 'parts.html' import page_header, section_title, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'music_design_parts.html' import templates %}
+{% from 'icons.html' import icon %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="forest">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Music · Three designs · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a class="visually-hidden-focusable" href="#music-workspace">Skip to music workspace</a>
+<header class="music-topbar"><a href="#music-workspace" class="music-brand">{{ icon('barbell') }} weightRoom <span>/</span> <span class="fw-normal">Music</span></a><div class="d-flex flex-wrap align-items-center gap-3"><span class="music-eyebrow">INTERACTIVE DESIGN PREVIEW</span><select id="palette" class="form-select form-select-sm w-auto" aria-label="Preview palette"><option value="sage">Sage</option><option value="clay">Clay</option><option value="slate">Slate</option></select><button id="theme" type="button" class="btn btn-outline-secondary btn-sm">Dark mode</button></div></header>
+<main class="music-page">
+  <section class="music-review" aria-label="Compare music designs">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3"><span class="music-eyebrow">ONE WORKFLOW. THREE PERSPECTIVES.</span><label class="d-flex align-items-center gap-2 small text-secondary">Sample state<select id="scenario" class="form-select form-select-sm w-auto"><option value="normal">Populated studio</option><option value="empty">Empty library</option><option value="no-model">No models</option><option value="error">Failed generation</option></select></label></div>
+    {% call pills('Design proposals',buttons=true,class_='music-design-nav gap-2 mb-0') %}
+    {{ pill_button('01 / Session studio',true,attrs={'data-design':'studio'}) }}{{ pill_button('02 / Songwriter desk',attrs={'data-design':'writer'}) }}{{ pill_button('03 / Take lab',attrs={'data-design':'lab'}) }}
+    {% endcall %}
+    <p id="design-note" class="small text-secondary mt-3 mb-0"></p>
+  </section>
+  <div id="music-workspace" data-layout="studio">
+    {% call page_header('Music',pretitle='SOUNDROOM / CREATE') %}<span class="music-session-state"><span aria-hidden="true"></span> Browser-local session</span>{% endcall %}
+    <div class="music-lead"><p>Make something worth listening to.</p><span class="small text-secondary">From the first idea to your favourite take.</span></div>
+    <div class="music-brief"><label for="session-name" class="music-eyebrow">YOUR SESSION</label><input id="session-name" class="form-control" value="After the last light" maxlength="120"><div class="music-brief-note"><span class="music-eyebrow">DESCRIBE → SHAPE → LISTEN</span><span class="small text-secondary">Explore the controls. Your drafts follow you between designs.</span></div></div>
+    {{ alert('info','Interactive prototype · generation and writing are simulated. Playback and WAV downloads use original 16-second synth demos. Edits stay in this tab until reload.',class_='music-demo-note') }}
+    <div id="soundroom" data-mode="music">
+      {{ alert('danger',attrs={'id':'sr-message','hidden':''}) }}
+      {{ alert('success',attrs={'id':'music-status','hidden':''},role='status') }}
+      <div class="music-workbench">
+        {% include 'soundroom_music_form.html' %}
+        {% include 'soundroom_player.html' %}
+      </div>
+    </div>
+    <p class="music-footer small text-secondary">Designed for local music models · sample availability and model limits · no server requests or model execution</p>
+  </div>
+</main>
+<dialog id="sr-dialog" aria-labelledby="sr-dialog-title"><form method="dialog"><button class="btn btn-outline-secondary btn-sm float-end">Close</button></form>{{ section_title('',id='sr-dialog-title') }}<div id="sr-dialog-content"></div></dialog>
+{{ templates() }}
+<script id="music-data" type="application/json">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>

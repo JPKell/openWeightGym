@@ -42,6 +42,18 @@
   let speakerSignature = '';
   let speechModel = null, voiceSignature = '';
   const speechDrafts = new Map();
+  const generationDrafts = new Map();
+  let generationModel = null;
+  const session = root.classList.contains('music-session');
+
+  function rememberGenerationModel() {
+    if (!generationModel) return;
+    const draft = {options: advanced(), source, instrumental: $('instrumental')?.checked, loop: $('loop')?.checked};
+    for (const id of ['prompt', 'lyrics', 'duration', 'n', 'seed', 'mode', 'start', 'end', 'idea', 'helper-model']) {
+      if ($(id)) draft[id] = $(id).value;
+    }
+    generationDrafts.set(generationModel, draft);
+  }
 
   function rememberSpeechModel() {
     if (!speechModel) return;
@@ -68,23 +80,32 @@
       $('preset').value = draft?.preset || '';
       $('design').value = draft?.design || '';
       speakerSignature = '';
+    } else {
+      rememberGenerationModel();
+      generationModel = $('model').value;
+      draft = generationDrafts.get(generationModel);
     }
     const commercial = {yes: 'commercial use allowed', no: 'non-commercial only', conditional: 'commercial use has conditions'}[one.commercial] || '';
     $('licence').textContent = one.licence ? one.licence + ' · ' + commercial : '';
     if ($('model-help')) $('model-help').textContent = (one.help || '') + (one.turbo ? ' Turbo uses at most 8 denoising steps; diffusion guidance has no effect.' : '');
     if ($('mode')) {
-      const modes = page === 'music' ? (one.modes || ['song']) : ['song'];
+      const modes = one.modes || ['song'];
       $('mode').replaceChildren(...modes.map(mode => new Option({song: page === 'music' ? 'Song' : 'Sound', continue: 'Continue a track', cover: 'Cover / restyle', repaint: 'Repaint a range'}[mode] || mode, mode)));
       $('mode-wrap').hidden = modes.length < 2;
       $('duration').max = one.limits?.max_seconds || 600;
       $('n').max = one.limits?.max_takes || 8;
     }
     if ($('lyrics-wrap')) $('lyrics-wrap').hidden = !one.lyrics;
+    if (session) {
+      root.dataset.hasLyrics = String(!!one.lyrics);
+      const guidance = document.getElementById('music-no-lyrics');
+      if (guidance) guidance.hidden = !generationModel || !!one.lyrics;
+    }
     if ($('instrumental')) {
       $('instrumental').disabled = !!one.lyrics_required;
       if (one.lyrics_required) $('instrumental').checked = false;
       $('lyrics').required = !!one.lyrics_required;
-      $('lyrics').disabled = $('instrumental').checked;
+      $('lyrics').disabled = !one.lyrics || $('instrumental').checked;
     }
     if (page === 'speech') chooseVoice(draft?.speakers || {});
     $('advanced').replaceChildren();
@@ -119,9 +140,28 @@
       const target = page === 'music' && MUSICAL[option.name] ? $('musical') : $('advanced');
       target.append(label, input);
     }
-    if ($('musical-wrap')) $('musical-wrap').hidden = !$('musical').children.length;
+    if ($('musical-wrap')) {
+      $('musical-wrap').hidden = !$('musical').children.length;
+      if (session) $('musical-wrap').parentElement.hidden = $('musical-wrap').hidden;
+    }
     if (!$('advanced').children.length) $('advanced').append(element('p', 'This model has no further settings.', 'text-secondary small mb-0'));
-    if (draft) root.querySelectorAll('[data-option]').forEach(node => { node.value = String(draft.options[node.dataset.option] ?? ''); });
+    if (draft) {
+      if (page !== 'speech') {
+        for (const id of ['prompt', 'lyrics', 'duration', 'n', 'seed', 'start', 'end', 'idea', 'helper-model']) {
+          if ($(id) && draft[id] !== undefined) $(id).value = draft[id];
+        }
+        if ([...$('mode').options].some(option => option.value === draft.mode)) $('mode').value = draft.mode;
+        if ($('instrumental')) {
+          $('instrumental').checked = !!draft.instrumental && !one.lyrics_required;
+          $('lyrics').disabled = !one.lyrics || $('instrumental').checked;
+        }
+        if ($('loop')) $('loop').checked = !!draft.loop;
+        source = draft.source;
+        $('source-name').textContent = source?.filename || '';
+        $('source').value = '';
+      }
+      root.querySelectorAll('[data-option]').forEach(node => { node.value = String(draft.options[node.dataset.option] ?? ''); });
+    }
     chooseMode();
     updateAvailability();
   }
@@ -130,12 +170,16 @@
     const mode = $('mode').value || 'song';
     $('source-wrap').hidden = mode === 'song';
     $('window').hidden = mode !== 'repaint';
+    if ($('loop')) {
+      $('loop').disabled = mode !== 'song';
+      $('loop-wrap').hidden = mode !== 'song';
+    }
     const locked = profile().family === 'ace_step' && ['cover', 'repaint'].includes(mode);
     $('duration').disabled = locked;
     if (locked && source?.seconds) $('duration').value = Math.ceil(source.seconds);
     if ($('mode-help')) $('mode-help').textContent = {
       song: page === 'sound' ? 'Describe the sound, its setting and distance. Generate variations; use Seamless loop for repeating ambience.' : 'Describe genre, mood, instruments and vocals. Generate a few takes, then reuse your favourite seed to refine it.',
-      continue: 'Use a recording as the starting point and describe how the music should develop.',
+      continue: 'Use a recording as the starting point and describe how the audio should develop.',
       cover: 'Choose source audio and describe the new style.' + (locked ? ' The source sets the track length.' : ''),
       repaint: 'Choose source audio and the time range to replace.' + (locked ? ' The rest of the track keeps its length.' : '')
     }[mode] || '';
@@ -263,7 +307,7 @@
       else if ($('lyrics').value.trim()) values.lyrics = $('lyrics').value;
     }
     if (values.mode === 'repaint') { values.repaint_start = Number($('start').value); values.repaint_end = Number($('end').value); }
-    if ($('loop')?.checked) values.loop = true;
+    if ($('loop')?.checked && !$('loop').disabled) values.loop = true;
     const options = advanced();
     if (Object.keys(options).length) values.options = options;
     if (values.mode === 'song') delete values.mode;
@@ -342,29 +386,54 @@
     renderList();
     renderJobs();
     if (selected && !state.assets.some(row => row.id === selected.id)) select(null);
-    if (!polling && state.jobs.some(row => ['in_progress', 'validating', 'cancelling'].includes(row.status))) poll();
     if (page === 'speech') root.dispatchEvent(new Event('soundroom:studio'));
+    if (!polling && state.jobs.some(row => ['in_progress', 'validating', 'cancelling'].includes(row.status))) poll();
   }
   function renderList() {
-    const signature = JSON.stringify(state.assets.map(row => [row.id, row.favourite, row.tags, row.filename]));
+    const order = document.getElementById('take-sort')?.value || 'newest';
+    const signature = JSON.stringify([order, query(), nextPage, state.assets]);
     if (signature === listSignature) return;
     listSignature = signature;
-    $('list').replaceChildren(...state.assets.map(row => {
-      const item = element('button', undefined, 'list-group-item list-group-item-action sr-item');
+    const wordsFor = row => row.metadata?.settings?.prompt || row.metadata?.settings?.lines?.map(line => line.text).join(' ') || row.filename;
+    const rows = [...state.assets];
+    if (order === 'name') rows.sort((a, b) => wordsFor(a).localeCompare(wordsFor(b)));
+    else if (order === 'seed') rows.sort((a, b) => (a.metadata?.seed ?? Infinity) - (b.metadata?.seed ?? Infinity));
+    else rows.sort((a, b) => b.created - a.created || b.id.localeCompare(a.id));
+    const template = session && document.getElementById('music-take-template');
+    $('list').replaceChildren(...rows.map(row => {
+      const item = template ? template.content.firstElementChild.cloneNode(true) : element('button', undefined, 'list-group-item list-group-item-action sr-item');
       item.type = 'button';
       item.setAttribute('aria-selected', String(selected?.id === row.id));
-      const words = row.metadata?.settings?.prompt || row.metadata?.settings?.lines?.map(line => line.text).join(' ') || row.filename;
-      item.append(element('span', (row.favourite ? '★ ' : '') + words, 'sr-item-title'),
-        element('span', [seconds(row.seconds), row.metadata?.model || '', row.metadata?.seed !== undefined ? 'seed ' + row.metadata.seed : '',
+      const words = wordsFor(row);
+      const facts = [row.metadata?.model || '', row.metadata?.seed !== undefined ? 'seed ' + row.metadata.seed : '',
           row.metadata?.settings?.mode && row.metadata.settings.mode !== 'song' ? row.metadata.settings.mode : '',
           new Date(row.created * 1000).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}),
-          row.mine ? '' : 'shared', ...(row.tags || [])].filter(Boolean).join(' · '), 'text-secondary small'));
+          row.mine ? '' : 'shared'].filter(Boolean).join(' · ');
+      if (template) {
+        item.setAttribute('aria-pressed', String(selected?.id === row.id));
+        item.querySelector('[data-take-title]').textContent = words;
+        item.querySelector('[data-take-description]').textContent = facts;
+        item.querySelector('[data-take-tags]').textContent = (row.tags || []).join(' / ');
+        item.querySelector('[data-take-length]').textContent = seconds(row.seconds);
+        item.querySelector('[data-take-star]').textContent = row.favourite ? '★' : '';
+      } else {
+        item.append(element('span', (row.favourite ? '★ ' : '') + words, 'sr-item-title'),
+          element('span', [seconds(row.seconds), facts, ...(row.tags || [])].filter(Boolean).join(' · '), 'text-secondary small'));
+      }
       item.addEventListener('click', () => select(row));
       return item;
     }));
     $('empty').hidden = !!selected;
     $('empty-title').textContent = state.assets.length ? 'Select audio below' : 'Your ' + ({music: 'takes', sound: 'sounds', speech: 'recordings'}[page]) + ' appear here';
     $('empty-help').textContent = state.assets.length ? 'Choose a recording to listen, reuse its settings or make a new variation.' : 'Choose a model and describe what you want to hear.';
+    if (session) {
+      const label = page === 'music' ? 'take' : 'sound';
+      document.getElementById('take-count').textContent = state.assets.length + ' ' + label + (state.assets.length === 1 ? '' : 's') + (nextPage ? ' loaded' : '');
+      $('library-empty').hidden = !!state.assets.length;
+      const filtered = $('filter').value.trim() || $('favourites').checked;
+      $('library-empty').querySelector('.section-title').textContent = filtered ? 'No matching audio' : 'No saved audio yet';
+      $('library-empty').querySelector('p').textContent = filtered ? 'Clear the tag or favourite filter to see more audio.' : 'Generate ' + (page === 'music' ? 'a take' : 'a sound') + ' to start your library.';
+    }
   }
   function renderJobs() {
     const signature = JSON.stringify(state.jobs.map(row => [row.id, row.status, row.request_counts, row.progress, row.error]));
@@ -374,6 +443,7 @@
       const model = state.models.find(model => model.id === row.model);
       return !model || ours(model);
     });
+    if ($('jobs-empty')) $('jobs-empty').hidden = !!jobs.length;
     $('jobs').replaceChildren(...jobs.slice(0, 8).map(row => {
       const box = element('div', undefined, 'sr-job studio-job frame');
       const counts = row.request_counts || {};
@@ -598,6 +668,14 @@
     area.focus();
   }));
   $('instrumental')?.addEventListener('change', () => { $('lyrics').disabled = $('instrumental').checked; });
+  root.querySelectorAll('[data-style-prompt]').forEach(button => button.addEventListener('click', () => {
+    $('prompt').value = button.dataset.stylePrompt;
+    if ($('instrumental') && !$('instrumental').disabled && profile().lyrics) {
+      $('instrumental').checked = button.dataset.instrumental === 'true';
+      $('lyrics').disabled = $('instrumental').checked;
+    }
+    $('prompt').focus();
+  }));
   $('write')?.addEventListener('click', safe(async () => {
     $('write').disabled = true;
     try {
@@ -691,6 +769,12 @@
   }));
   $('filter').addEventListener('change', safe(refresh));
   $('favourites').addEventListener('change', safe(refresh));
+  document.getElementById('take-sort')?.addEventListener('change', renderList);
+  document.getElementById('clear-take-filters')?.addEventListener('click', safe(async () => {
+    $('filter').value = '';
+    $('favourites').checked = false;
+    await refresh();
+  }));
   $('older').addEventListener('click', safe(async () => {
     if (!nextPage || loadingOlder) return;
     loadingOlder = true;

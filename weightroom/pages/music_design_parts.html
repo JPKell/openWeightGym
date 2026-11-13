@@ -1,0 +1,12 @@
+{% from 'parts.html' import section_title, card %}
+{% from "music_parts.html" import record, take_template, prompt_guidance, style_starters, library_tools, player_intro %}
+
+{% macro templates() %}
+{{ take_template() }}
+<template id="music-player-intro">{{ player_intro(demo=true) }}</template>
+<template id="music-job-template"><div class="music-job"><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><strong data-job-name></strong><button type="button" class="btn btn-outline-secondary btn-sm" data-job-action>Cancel</button></div><p data-job-status class="small text-secondary my-2"></p><progress max="100" value="0" aria-label="Simulation progress" class="w-100"></progress></div></template>
+<template id="music-presets">{{ style_starters() }}</template>
+<template id="music-library-tools">{{ library_tools() }}</template>
+<template id="music-empty-library"><div class="music-empty-library">{{ record() }}{{ section_title('Room for your next idea',level=3,wrapper_class='mt-3') }}<p class="small text-secondary">Describe a sound, write a few lines, and simulate your first takes.</p></div></template>
+<template id="music-no-lyrics-template">{{ prompt_guidance() }}</template>
+{% endmacro %}

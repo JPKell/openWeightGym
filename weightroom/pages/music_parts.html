@@ -1,0 +1,26 @@
+{% from "parts.html" import card, section_title %}
+{% macro record() %}
+<svg class="music-record" viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="58" fill="currentColor" opacity=".08"/>{% for r in [55,49,43,37,31] %}<circle cx="60" cy="60" r="{{ r }}" stroke="currentColor" opacity=".28"/>{% endfor %}<circle cx="60" cy="60" r="22" fill="currentColor" opacity=".7"/><circle cx="60" cy="60" r="4" fill="var(--theme-surface)"/><path d="M16 27L37 47M83 73L104 93" stroke="var(--theme-surface)" stroke-width="12" opacity=".5"/></svg>
+{% endmacro %}
+
+{% macro take_template() %}
+<template id="music-take-template">
+  <button type="button" class="music-take" aria-pressed="false">
+    <span class="music-take-art">{{ record() }}</span>
+    <span class="music-take-main"><strong data-take-title></strong><span data-take-description class="small text-secondary"></span><span data-take-tags class="small"></span></span>
+    <canvas class="music-mini-wave" width="160" height="36" aria-hidden="true"></canvas>
+    <span data-take-length class="small font-monospace"></span><span data-take-star aria-hidden="true"></span>
+  </button>
+</template>
+{% endmacro %}
+{% macro style_starters(mode='music') %}
+{% set starters = [('Night drive','Dreamy synth-pop, warm analogue pads, rounded bass, crisp drums, intimate vocals, 120 bpm. A quiet verse opening into a luminous chorus.',false),('Soft focus','Instrumental ambient piano, soft felt keys, warm tape texture, slow unfolding strings, spacious and reflective, no drums.',true),('Indie morning','Bright indie folk, fingerpicked acoustic guitar, brushed drums, gentle harmonies, hopeful and unhurried, 96 bpm.',false)] if mode == 'music' else [('Rain','Rain on a tin roof, distant thunder, close perspective, steady natural ambience.',false),('Room tone','Quiet room tone, soft ventilation, distant street noise, no voices or music.',false),('Mechanical','A small mechanical latch clicking shut, dry close recording, a short metallic resonance.',false)] %}
+<div class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="{{ 'Style' if mode == 'music' else 'Sound' }} starters">{% for name,prompt,instrumental in starters %}<button type="button" class="btn btn-outline-secondary btn-sm" data-preset="{{ name }}" data-style-prompt="{{ prompt }}"{% if mode == 'music' %} data-instrumental="{{ 'true' if instrumental else 'false' }}"{% endif %}>{{ name }}</button>{% endfor %}</div>
+{% endmacro %}
+{% macro library_tools(label='Order') %}
+<div class="music-library-tools"><span id="take-count" class="small text-secondary" role="status" aria-live="polite"></span><label class="small text-secondary">{{ label }}<select id="take-sort" class="form-select form-select-sm"><option value="newest">Newest first</option><option value="name">Title A–Z</option><option value="seed">Seed</option></select></label><button type="button" id="clear-take-filters" class="btn btn-outline-secondary btn-sm">Clear filters</button></div>
+{% endmacro %}
+{% macro player_intro(demo=false,mode='music') %}
+<div class="music-player-intro">{{ record() }}<div>{% if demo %}<span class="music-eyebrow">THE LISTENING ROOM</span><p class="small text-secondary mb-0 mt-1">Original synth demo · not model-generated</p>{% else %}{{ section_title('Listening room',wrapper_class='mb-0') }}<p class="small text-secondary mb-0">Listen, select a region and refine your {{ 'take' if mode == 'music' else 'sound' }}.</p>{% endif %}</div>{% if demo %}<span class="music-edition">16<br><small>SECONDS</small></span>{% endif %}</div>
+{% endmacro %}
+{% macro prompt_guidance() %}{% call card('Prompt-driven music',id='music-no-lyrics',class_='music-no-lyrics',attrs={'hidden':''}) %}{{ record() }}{{ section_title('Your prompt is the score',level=3) }}<p class="text-secondary small">This model does not accept a separate lyrics sheet. Describe the instruments, rhythm, arrangement and atmosphere in Style.</p><p class="text-secondary small">Your lyrics draft stays here for when you return to a model that supports it.</p><button type="button" class="btn btn-outline-secondary btn-sm" id="refine-style">Refine style</button>{% endcall %}{% endmacro %}
