@@ -46,7 +46,7 @@
 <div id="mirrorwall-models">
 <template id="mw-family-warning">{% call alert('warning', class_='py-2 my-2') %}<span data-message></span> <button type="button" class="btn btn-sm btn-warning"></button>{% endcall %}</template>
 <dialog id="model-dialog" aria-labelledby="mw-heading"><div class="d-flex justify-content-end p-3"><button id="studio-close-model" class="btn btn-outline-secondary btn-sm" type="button">Close model setup</button></div>
-{% call alert('danger', role='alert', attrs={'id':'mw-message','hidden':''}) %}{% endcall %}{% call alert('secondary', attrs={'id':'mw-runtime','hidden':''}) %}{% endcall %}
+{% call alert('danger', class_='sticky-top shadow', role='alert', attrs={'id':'mw-message','hidden':''}) %}{% endcall %}{% call alert('secondary', attrs={'id':'mw-runtime','hidden':''}) %}{% endcall %}
 {% include 'mirrorwall_model_setup.html' %}
 </dialog>
 </div>
