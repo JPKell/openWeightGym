@@ -1,0 +1,43 @@
+/* Preview shell and alternate layouts; the Account desk uses cloud-apis.css. */
+body { background:var(--theme-bg); }
+.ca-topbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:1.1rem 3.5vw; border-bottom:1px solid var(--theme-border); background:var(--theme-surface); }
+.ca-brand { display:flex; align-items:center; gap:.7rem; font-weight:700; letter-spacing:-.025em; color:var(--theme-text); text-decoration:none; }
+.ca-brand > .suite-icon { color:var(--theme-accent); width:26px; height:26px; }
+.ca-page { max-width:1600px; margin:auto; padding:1.75rem 3.5vw 2.5rem; }
+.ca-review { padding:1.1rem 1.3rem; background:var(--theme-surface); border:1px solid var(--theme-border); border-radius:12px; margin-bottom:2rem; }
+.ca-design-nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.75rem; }
+.ca-design-nav .nav-link { border:1px solid var(--theme-border); text-align:left; padding:.8rem 1rem; color:var(--theme-text); }
+.ca-design-nav .nav-link.active { color:var(--theme-accent); background:var(--theme-accent-bg); border-color:var(--theme-accent); }
+.ca-lead { margin-top:-1rem; margin-bottom:1.75rem; }
+.ca-editor-heading .section-title { font-size:1.5rem; font-weight:600; letter-spacing:-.03em; }
+.ca-card-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1.25rem; }
+.ca-account-card .card-body { padding:1.5rem; }
+.ca-account-card .ca-identity strong { font-size:1rem; }
+.ca-account-card .ca-url { min-height:2.4rem; }
+.ca-card-links { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; padding-top:1rem; border-top:1px solid var(--theme-border); }
+.ca-card-links .btn { display:flex; justify-content:space-between; }
+.ca-gallery-intro { display:flex; align-items:center; justify-content:space-between; gap:2rem; margin-bottom:1.5rem; padding:1.6rem 2rem; border-radius:12px; background:var(--theme-accent-bg); border:1px solid var(--theme-border); }
+.ca-gallery-intro .section-title { font-size:1.25rem; letter-spacing:-.025em; }
+.ca-gallery-symbol .suite-icon { width:60px; height:60px; color:var(--theme-accent); opacity:.65; }
+.ca-matrix { min-width:950px; }
+.ca-matrix th, .ca-matrix td { padding:1rem 1.2rem; }
+.ca-matrix th:first-child { width:25%; }
+.ca-matrix tbody tr[data-selected="true"] { background:var(--theme-accent-bg); }
+.ca-matrix .ca-name { font-size:.65rem; }
+.ca-cell { display:flex; flex-direction:column; gap:.4rem; background:transparent; border:0; text-align:left; color:var(--theme-text); width:100%; padding:.25rem 0; font-size:.85rem; }
+.ca-cell small { color:var(--theme-muted); font-size:.7rem; }
+.ca-cell:hover { color:var(--theme-accent); }
+.ca-matrix-scroll { max-height:560px; }
+.ca-matrix thead { position:sticky; top:0; z-index:1; background:var(--theme-subtle); }
+.ca-matrix-editor { max-width:1100px; margin:1.75rem auto 0; }
+.ca-footer { border-top:1px solid var(--theme-border); margin:2.5rem 0 0; padding-top:1rem; }
+#settings-dialog, #add-dialog { color:var(--theme-text); background:var(--theme-bg); border:1px solid var(--theme-border); border-radius:14px; max-height:92vh; padding:1.25rem; width:min(900px,calc(100% - 2rem)); }
+#add-dialog { width:min(560px,calc(100% - 2rem)); }
+#settings-dialog::backdrop, #add-dialog::backdrop { background:color-mix(in srgb,var(--theme-text) 35%,transparent); backdrop-filter:blur(4px); }
+.ca-page [hidden], dialog [hidden] { display:none !important; }
+.ca-page button:focus-visible, dialog button:focus-visible { outline:2px solid var(--theme-accent); outline-offset:3px; }
+@media(min-width:1700px) { .ca-page { padding-left:1rem; padding-right:1rem; } }
+@media(max-width:1150px) { .ca-card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .ca-desk { grid-template-columns:240px minmax(0,1fr); gap:1.25rem; } .ca-context { flex-wrap:wrap; } .ca-context .btn { margin-left:0; } }
+@media(max-width:800px) { .ca-desk { grid-template-columns:minmax(0,1fr); } .ca-account-rail { border-right:0; border-bottom:1px solid var(--theme-border); padding:0 0 1rem; } #account-choices { display:flex; gap:1rem; overflow:auto; max-height:240px; } .ca-provider-group { min-width:210px; flex:none; margin-bottom:.3rem; } .ca-rail-footer { display:none; } }
+@media(max-width:600px) { .ca-topbar { padding:1rem; } .ca-brand { font-size:.85rem; flex-wrap:wrap; gap:.4rem; } .ca-preview-label { display:none; } .ca-page { padding:1.2rem 1rem; } .ca-review { padding:1rem; margin-bottom:1.5rem; } .ca-design-nav { grid-template-columns:1fr; gap:.4rem; } .ca-design-nav .nav-link { padding:.65rem .8rem; } .ca-toolbar { gap:.5rem; } .ca-search { min-width:100%; max-width:none; } .ca-toolbar > .form-select { width:auto; } .ca-card-grid { grid-template-columns:1fr; } .ca-gallery-intro { padding:1.25rem; } .ca-gallery-symbol { display:none; } .ca-editor-content .card-body { padding:1rem; } .ca-settings-nav .nav-link { padding:.5rem; font-size:.73rem; } #settings-dialog { padding:.8rem; } .ca-status { max-width:130px; } }
+@media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; transition:none !important; } }

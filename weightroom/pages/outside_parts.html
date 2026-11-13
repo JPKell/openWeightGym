@@ -1,0 +1,81 @@
+{# Cloud account identities, settings and model mapping rows; shared by live and previews. #}
+{% from 'parts.html' import card, section_title, alert, swaps, confirm_two, empty_row %}
+{% from 'navigation_parts.html' import pills, pill_button, pill_link %}
+{% from 'icons.html' import icon %}
+{% macro cloud_model_row(ours='', model={}) %}
+<tr>
+<td><input name="ours" class="form-control" value="{{ ours }}" placeholder="Name shown here" aria-label="{{ 'our name' if ours else "another model's name here" }}" autocapitalize="none" spellcheck="false"></td>
+<td><input name="theirs" class="form-control" value="{{ model.theirs|default('') }}" placeholder="Model ID at the service" aria-label="{{ "the service's name" if ours else 'its name at the service' }}" autocapitalize="none" spellcheck="false"></td>
+<td><input name="in" class="form-control" value="{{ model['in']|default('') }}" aria-label="{{ 'price in' if ours else 'its price in' }}" inputmode="decimal"></td>
+<td><input name="out" class="form-control" value="{{ model.out|default('') }}" aria-label="{{ 'price out' if ours else 'its price out' }}" inputmode="decimal"></td>
+</tr>
+{% endmacro %}
+
+{% macro identity(service={}) %}
+<span class="ca-identity"><span class="ca-monogram" data-mark aria-hidden="true">{{ service.mark|default('') }}</span><span class="min-w-0"><strong class="d-block" data-label>{{ service.label|default(service.name)|default('') }}</strong><small class="text-secondary d-block" data-provider>{{ service.provider|default('') }}</small></span></span>
+{% endmacro %}
+
+{% macro form_attrs(kind, service, preview) %}
+id="{{ kind }}-form"{% if not preview %} method="post" action="/cloud-apis?account={{ service.name|urlencode }}&amp;section={{ {'key':'access','offers':'models'}.get(kind,kind) }}" {{ swaps() }} data-cloud-form="{{ kind }}" data-cloud-name="{{ service.name }}"{% endif %}
+{% endmacro %}
+
+{% macro settings_navigation(service, preview, section) %}
+{% call pills('Settings groups',buttons=preview,class_='gap-1 mb-0') %}
+{% for key, number, label in [('connection','01','Connection'),('access','02','API key'),('models','03','Models'),('limits','04','Spending & removal')] %}
+{% set attrs={'data-editor-section':key,'aria-controls':'panel-' ~ key} %}
+{% if preview %}{{ pill_button(number ~ ' · ' ~ label,key==section,attrs=attrs) }}{% else %}{{ pill_link(number ~ ' · ' ~ label,'/cloud-apis?account=' ~ service.name|urlencode ~ '&section=' ~ key,key==section,attrs=attrs) }}{% endif %}
+{% endfor %}{% endcall %}
+{% endmacro %}
+
+{% macro editor(service={}, preview=true, section='connection', asked='', offers=[], why='') %}
+{% set url_id = 'account-url' if preview else 'url-' ~ service.index %}
+{% set key_id = 'account-key' if preview else 'key-' ~ service.index %}
+{% set limit_id = 'account-limit' if preview else 'ceiling-' ~ service.index %}
+<section id="account-editor" aria-label="Account settings">
+<div class="ca-editor-heading"><div class="d-flex align-items-center gap-3 min-w-0"><span class="ca-monogram ca-monogram-lg" id="editor-mark" aria-hidden="true">{{ service.mark|default('') }}</span><div class="min-w-0"><span class="ca-eyebrow" id="editor-provider">{{ service.provider|default('') }}</span>{{ section_title(service.label|default(service.name)|default(''),id='editor-title',wrapper_class='mb-0 mt-1') }}<span class="small text-secondary font-monospace ca-name" id="editor-name">{{ service.name|default('') }}</span></div></div><span class="badge ca-status" id="editor-status" data-kind="{{ service.state|default('') }}">{{ service.status|default('') }}</span></div>
+<div class="ca-settings-nav">{{ settings_navigation(service, preview, section) }}</div>
+<div id="editor-message" hidden>{{ alert('info',attrs={'id':'editor-message-text','aria-live':'polite'}) }}</div>
+<div class="ca-editor-content">
+<div id="panel-connection" data-panel="connection"{% if section != 'connection' %} hidden{% endif %}>
+{% call card('Connection',hint='A distinct account, even when the endpoint is shared.') %}
+<form {{ form_attrs('connection', service, preview) }} class="row g-3"><input type="hidden" name="name" value="{{ service.name|default('') }}" data-account-name>
+<div class="col-12"><label class="form-label" for="{{ url_id }}">API endpoint</label><input id="{{ url_id }}" name="url" type="url" class="form-control font-monospace" value="{{ service.url|default('') }}" autocapitalize="none" spellcheck="false" required><div class="form-text">Use the full base address, including /v1 where required.</div></div>
+<div class="col-12"><label class="form-label" for="account-id">Account name</label><input id="account-id" class="form-control" value="{{ service.name|default('') }}" readonly><div class="form-text">The unique saved name identifies this account. Other accounts can use the same endpoint with their own key, models and spending limit.</div></div>
+<div class="col-12 d-flex flex-wrap gap-2 align-items-center"><button class="btn btn-primary" name="do" value="save">Save connection</button><span class="small text-secondary" data-draft="connection"></span></div></form>
+{% endcall %}
+<div class="ca-context"><span>{{ icon('locker') }}</span><div><strong>One endpoint. Separate accounts.</strong><p class="small text-secondary mb-0" id="endpoint-context">{{ service.endpoint_context|default('') }}</p></div>{% if preview %}<button type="button" class="btn btn-outline-secondary btn-sm" data-editor-section="access">Manage API key →</button>{% else %}<a class="btn btn-outline-secondary btn-sm" data-editor-section="access" href="/cloud-apis?account={{ service.name|urlencode }}&amp;section=access">Manage API key →</a>{% endif %}</div>
+</div>
+<div id="panel-access" data-panel="access"{% if section != 'access' %} hidden{% endif %}>
+{% call card('API key',hint='Credentials belong to this account alone.') %}
+<p id="key-state" class="mb-4" role="status" data-kind="{{ 'ready' if service.key else 'key' }}">{% if service.key %}API key installed.{% else %}No API key installed. Install a key to use this account’s models.{% endif %}</p>
+<form {{ form_attrs('key', service, preview) }} class="row g-3"><input type="hidden" name="name" value="{{ service.name|default('') }}" data-account-name><input type="hidden" name="do" value="key"><div class="col-12"><label for="{{ key_id }}" class="form-label" id="key-label">{{ 'Replace API key' if service.key else 'API key' }}</label><input id="{{ key_id }}" name="api_key" type="password" autocomplete="new-password" autocapitalize="none" spellcheck="false" maxlength="8192" class="form-control" required><div class="form-text">The saved key is never displayed. A replacement applies to new requests immediately.</div></div><div class="col-12 d-flex flex-wrap gap-2 align-items-center"><button class="btn btn-primary" id="save-key">{{ 'Update API key' if service.key else 'Install API key' }}</button><span class="small text-secondary" data-draft="{{ 'access' if preview else 'key' }}"></span></div></form>
+{% endcall %}
+{{ alert('info','With a key installed, open Models to choose which models this account offers.') }}
+</div>
+<div id="panel-models" data-panel="models"{% if section != 'models' %} hidden{% endif %}>
+{% call card('Models & pricing',hint='Choose the names callers use and the fallback token prices.') %}
+<p class="small text-secondary">Prices are USD per million tokens, used when the service does not report a cost. Empty a local name to remove a model.</p>
+<form {{ form_attrs('models', service, preview) }}><input type="hidden" name="name" value="{{ service.name|default('') }}" data-account-name><div class="table-responsive mb-3"><table class="table table-sm align-middle ca-model-table"><caption class="visually-hidden">Local names, service model IDs and input/output token prices</caption><thead><tr><th scope="col">Our name</th><th scope="col">Service model ID</th><th scope="col">Price in</th><th scope="col">Price out</th></tr></thead><tbody id="model-rows">{% if not preview %}{% for ours, model in service.models.items() %}{{ cloud_model_row(ours, model) }}{% endfor %}{{ cloud_model_row() }}{% endif %}</tbody></table></div><div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" name="do" value="models">Save models</button><button type="button" class="btn btn-outline-secondary" id="add-model-row">+ Model row</button>{% if preview %}<button type="button" class="btn btn-outline-secondary" id="discover">Discover models</button>{% else %}<a class="btn btn-outline-secondary" id="discover" href="/cloud-apis?account={{ service.name|urlencode }}&amp;section=models&amp;offers={{ service.name|urlencode }}#offers" {{ swaps(push=true) }}>Discover models</a>{% endif %}</div><p class="small text-secondary mb-0 mt-2" data-draft="models"></p></form>
+{% endcall %}
+<div id="offers-panel"{% if preview or asked != service.name %} hidden{% endif %}>
+{% call card('Available models',id='offers',hint='Sample discovery results for this preview.' if preview else 'Select the models to offer from this account.') %}
+{% if why %}{{ alert('danger',why) }}{% else %}
+{% if not preview %}<input type="search" class="form-control mb-3" data-filter="offers-table" placeholder="Find one of its {{ offers|length }} models" aria-label="Find a model" autocapitalize="none" spellcheck="false">{% endif %}
+<form {{ form_attrs('offers',service,preview) }}><input type="hidden" name="name" value="{{ service.name|default('') }}"><div id="offers-list">{% if not preview %}<div class="table-responsive ca-offers-scroll"><table id="offers-table" class="table table-sm align-middle mb-3"><tbody>{% set have = service.models.values()|map(attribute='theirs')|list %}{% for theirs in offers %}<tr><td><div class="form-check mb-0"><input id="offer-{{ loop.index }}" name="offer" value="{{ theirs }}" type="checkbox" class="form-check-input" {{ 'checked disabled' if theirs in have }}><label for="offer-{{ loop.index }}" class="form-check-label wrap">{{ theirs }}</label></div></td></tr>{% else %}{{ empty_row(1,'No models returned by this service.') }}{% endfor %}</tbody></table></div>{% endif %}</div><button class="btn btn-primary" name="do" value="offer">Add selected models</button></form>
+{% endif %}{% endcall %}</div>
+</div>
+<div id="panel-limits" data-panel="limits"{% if section != 'limits' %} hidden{% endif %}>
+{% call card('Daily spending',hint='A rolling 24-hour limit for this account, in USD.') %}<div class="ca-spend-summary"><strong id="spend-value">${{ '%.2f'|format(service.spent|default(0)) }}</strong><span class="small text-secondary" id="spend-note">{% if not preview %}{{ service.models|length }} model{{ '' if service.models|length == 1 else 's' }} · ${{ '%.2f'|format(service.spent) }} in the last 24 hours{% if service.ceiling %} of ${{ '%.2f'|format(service.ceiling) }}{% endif %}{% endif %}</span></div><progress id="editor-progress" class="ca-progress mb-4" max="100" value="{{ service.percent|default(0) }}" data-kind="{{ service.state|default('') }}" aria-label="Daily spending limit used"></progress><div id="limit-warning"{% if service.state != 'limit' %} hidden{% endif %}>{{ alert('warning','Daily limit reached. This account’s models are refused until rolling 24-hour spending falls below its limit.') }}</div><form {{ form_attrs('limits',service,preview) }} class="row g-3"><input type="hidden" name="name" value="{{ service.name|default('') }}" data-account-name><div class="col-md-8"><label for="{{ limit_id }}" class="form-label">Daily spending limit</label><div class="input-group"><span class="input-group-text">USD</span><input id="{{ limit_id }}" name="ceiling" class="form-control" type="number" min="0" step="any" value="{{ service.ceiling if service.ceiling is defined and service.ceiling is not none else '' }}" placeholder="No limit"></div><div class="form-text">Leave empty for no limit. This does not set a provider billing limit.</div></div><div class="col-12 d-flex flex-wrap align-items-center gap-2"><button class="btn btn-primary" name="do" value="save">Save spending limit</button><span class="small text-secondary" data-draft="limits"></span></div></form>{% endcall %}
+{% call card('Remove account',class_='border-danger',hint='Removes this account and its offered models from openWeightGym.') %}<form {{ form_attrs('remove',service,preview) }}><input type="hidden" name="name" value="{{ service.name|default('') }}"><p class="small text-secondary">Other accounts at the same endpoint are kept. The provider account is not deleted.</p><button class="btn btn-outline-danger" name="do" value="remove" {{ confirm_two() }}>Remove account</button></form>{% endcall %}
+</div>
+</div>
+</section>
+{% endmacro %}
+
+{% macro add_form(preview=true, form={}) %}
+<form id="add-form" class="row g-3"{% if not preview %} method="post" action="/cloud-apis?open=add" {{ swaps() }} data-cloud-form="add" data-cloud-name="@add"{% endif %}>
+<div class="col-12"><label for="new-provider" class="form-label">Provider preset</label><select id="new-provider" class="form-select"><option value="">Custom endpoint</option>{% for provider,url in [('OpenRouter','https://openrouter.ai/api/v1'),('OpenAI','https://api.openai.com/v1'),('Together','https://api.together.xyz/v1'),('Groq','https://api.groq.com/openai/v1'),('Fireworks','https://api.fireworks.ai/inference/v1')] %}<option value="{{ url }}">{{ provider }}</option>{% endfor %}</select></div>
+<div class="col-12"><label for="new-name" class="form-label">Unique account name</label><input id="new-name" name="name" class="form-control" value="{{ form.name|default('') }}" pattern="[a-z0-9][a-z0-9-]{0,39}" maxlength="40" placeholder="openrouter-research" required autocapitalize="none" spellcheck="false"><div class="form-text">Lowercase letters, digits and dashes. For example, openrouter-personal and openrouter-work.</div></div>
+<div class="col-12"><label for="new-url" class="form-label">API endpoint</label><input id="new-url" name="url" class="form-control" type="url" value="{{ form.url|default('') }}" autocapitalize="none" spellcheck="false" required></div>
+<div class="col-12"><label for="new-ceiling" class="form-label">Daily spending limit · USD</label><input id="new-ceiling" name="ceiling" class="form-control" type="number" min="0" step="any" value="{{ form.ceiling|default('') }}" placeholder="No limit"><div class="form-text">Optional. Each account has its own rolling 24-hour limit.</div></div><p class="text-danger mb-0" id="add-error" role="alert" hidden></p><div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-primary" name="do" value="add">Add account & continue to key</button><button class="btn btn-outline-secondary" type="button" id="cancel-add">Cancel</button></div></form>
+{% endmacro %}

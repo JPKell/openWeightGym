@@ -42,3 +42,23 @@ def test_the_cloud_apis_page_registers_a_service_and_its_models_are_ticked_from_
     assert "ceiling" not in kept.get("rented") and list(kept.get("rented")["models"]) == ["big-out"]
     removed = browser.post("/cloud-apis", data={"do": "remove", "name": "rented"})
     assert "Removed rented." in removed.text and kept.get("rented") is None
+
+
+def test_account_desk_section_saves_preserve_other_settings_and_same_endpoint_accounts(desk, tmp_path):
+    browser, _, _ = desk
+    sign_in(browser, 'sam')
+    kept = Services(str(tmp_path / 'data/accounts.db'), str(tmp_path))
+    for name in ('work', 'personal'):
+        browser.post('/cloud-apis', data={'do':'add', 'name':name, 'url':'https://example.invalid/v1', 'ceiling':'25'})
+    changed = browser.post('/cloud-apis?section=connection', data={'do':'save', 'name':'work', 'url':'https://example.invalid/new/v1'})
+    assert changed.status_code == 200 and 'data-cloud-account="work"' in changed.text
+    assert kept.get('work')['ceiling'] == 25
+    browser.post('/cloud-apis?section=limits', data={'do':'save', 'name':'work', 'ceiling':'42'})
+    assert kept.get('work') == {'url':'https://example.invalid/new/v1', 'models':{}, 'ceiling':42}
+    assert kept.get('personal')['ceiling'] == 25 and kept.get('personal')['url'] == 'https://example.invalid/v1'
+    browser.post('/cloud-apis?section=limits', data={'do':'save', 'name':'work', 'ceiling':''})
+    assert 'ceiling' not in kept.get('work')
+    page = browser.get('/cloud-apis?account=personal&section=limits').text
+    assert 'data-cloud-account="personal"' in page and 'data-cloud-section="limits"' in page
+    removal = page.split('id="remove-form"')[1].split('</form>')[0]
+    assert 'data-confirm-two' in removal and 'data-loss-confirm' not in removal
