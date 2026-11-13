@@ -1,6 +1,9 @@
 """No system controls: cgroup contracts use private temporary control-file fixtures."""
 import os
 from pathlib import Path
+import subprocess
+import sys
+import uuid
 
 import pytest
 
@@ -116,3 +119,36 @@ def test_missing_delegation_refuses_runner_launch_before_spawning(monkeypatch):
             await runner.start(server)
         assert server.process is None and not runner.retiring
     asyncio.run(exercise())
+
+
+@pytest.mark.skipif(os.environ.get('OWG_NATIVE_MEMORY') != '1', reason='Opt-in native systemd qualification')
+def test_native_systemd_engine_child_enters_its_cap_and_cleans_up():
+    """Exercise real Linux controls and the actual pre-exec helper without a container."""
+    root = Path(__file__).resolve().parents[1]
+    code = '''
+import subprocess,sys
+from pathlib import Path
+from loadcoach.engine_memory import MemoryGroup,delegated_parent
+parent=delegated_parent()
+before=(parent/'memory.max').read_text()
+group=MemoryGroup.create(32)
+try:
+    answer=subprocess.run([sys.executable,'-I','-B','loadcoach/engine_child.py',
+        '--cgroup',str(group.path),'--memory-mib','32','--',sys.executable,'-I','-c',
+        "from pathlib import Path;print(Path('/proc/self/cgroup').read_text())"],
+        text=True,capture_output=True,check=True)
+    assert group.path.name in answer.stdout,answer.stdout
+    assert group.observation()['peak_mib']>0
+    assert (parent/'memory.max').read_text()==before
+finally:
+    group.close()
+assert not group.path.exists()
+print('native bounded engine launch and cleanup passed')
+'''
+    answer = subprocess.run(['systemd-run', '--user', '--wait', '--pipe', '--collect', '--quiet',
+        '--unit=owg-engine-memory-test-' + uuid.uuid4().hex[:12], '--working-directory=' + str(root),
+        '-p', 'Delegate=memory', '-p', 'DelegateSubgroup=supervisor',
+        '-p', 'MemoryMax=128M', '-p', 'MemorySwapMax=0', sys.executable, '-c', code],
+        text=True, capture_output=True, timeout=30)
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    assert 'native bounded engine launch and cleanup passed' in answer.stdout
