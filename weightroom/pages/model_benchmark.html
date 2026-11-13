@@ -25,7 +25,7 @@
     {% for pair in ([["", "Score", bench.score_unit]] + bench.kpis)|batch(2) %}
     <tr>{% for key, label, unit in pair %}
       <th scope="row" class="w-25 fw-normal text-secondary">{{ label }} <small>{{ unit }}</small></th>
-      <td class="w-25">{{ number(result.metrics.get(key) if key else result.score) }}{% if not key and result.rerun %}<span title="Rerun recommended: {{ result.rerun|join(', ') }}">*</span>{% endif %}</td>
+      <td class="w-25">{{ number(result.metrics.get(key) if key else result.score, unit) }}{% if not key and result.rerun %}<span title="Rerun recommended: {{ result.rerun|join(', ') }}">*</span>{% endif %}</td>
     {% endfor %}{% if pair|length == 1 %}<th class="w-25"></th><td class="w-25"></td>{% endif %}</tr>
     {% endfor %}
     </tbody>

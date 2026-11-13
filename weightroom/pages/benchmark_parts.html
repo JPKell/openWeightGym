@@ -1,5 +1,8 @@
-{% macro number(value) -%}
+{% macro number(value, unit='') -%}
 {%- if value is number -%}
+  {%- if unit == 's' and 0 < value < 1 -%}
+    {{- '<0.001' if value < 0.001 else '%.3f'|format(value) -}}
+  {%- else -%}
   {%- set compact = namespace(value=value, suffix='') -%}
   {%- for suffix in ('K', 'M', 'B', 'T') -%}
     {%- if compact.value|abs >= 999.95 -%}
@@ -8,6 +11,7 @@
     {%- endif -%}
   {%- endfor -%}
   {{- '%.1f'|format(compact.value) -}}{{- compact.suffix -}}
+  {%- endif -%}
 {%- else -%}—{%- endif -%}
 {%- endmacro %}
 {% macro token_count(value) -%}

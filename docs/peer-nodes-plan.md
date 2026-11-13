@@ -139,7 +139,7 @@ outside the checkout by `tests/docker/qualification/browser.py` and `scenarios.p
 | Migration | SQLite and PostgreSQL attribution migrations kept valid audit chains. A verified older backup transferred 49 tables to PostgreSQL, then renamed old attribution at startup; restart was idempotent. Retention preserves renamed historical request text while removing orphan text. |
 | PostgreSQL recovery | Browser SQL export contained all ten selected stores; encrypted PostgreSQL backup passed a real temporary-database restore after matching-client selection was fixed. |
 | Update configuration | Existing migration helper ran inside containers: front/node hostname rename, original recovery copies, unchanged rerun, collision refusal and preserved custom library paths. |
-| Critic | Independent desktop/mobile reviews covered populated, empty and outage states; the final Audio/Speech/Voice review approved all remaining findings. |
+| Critic | Independent desktop/mobile reviews covered populated, empty and outage states; final reviews approved Audio/Speech/Voice, completed workflows and expanded benchmark evidence, including question visibility and subsecond timing precision. |
 
 The source component audit and syntax checks supplement these browser checks. Unit suites are
 not used as a substitute for browser qualification. Actual physical-host power-on, production SSH rollout,
