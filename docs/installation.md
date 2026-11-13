@@ -155,6 +155,11 @@ downloads, transcription, backups and tool calls through browser controls. For e
 `scenarios.py generate-image --name MODEL`, `speech --name MODEL`,
 `transcribe --name MODEL --file /tmp/owg-qualification-scenarios/generated-speech.wav`,
 `routing --name MODEL`, `backups`, and `tools` use the installed qualification models.
+`download-llm --repository REPO --model-file FILE` selects another Hugging Face GGUF;
+`install-llm --model-file FILE --name MODEL --node alpha --context 8192` installs it.
+With the qualification collection indexed from `qualification.txt` (gym hours 06:30–21:00),
+`workflow --name MODEL` exercises both cited steps and their acceptance. Use a capable
+instruction model; Qwen2.5 3B passed, while smaller models' invalid citations were refused.
 `gpu.compose.yaml` optionally grants alpha NVIDIA devices and read-only driver/toolkit
 access; inspect its host paths before using it. Install the CUDA runtime inside alpha at
 `/opt/owg-runtimes/llamacpp-gpu` with the same installer before running GPU models.
