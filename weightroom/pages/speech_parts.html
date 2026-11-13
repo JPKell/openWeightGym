@@ -1,0 +1,57 @@
+{# Live Speech and design proposals share the script-room inputs and DOM templates. #}
+{% from 'parts.html' import card, section_title %}
+{% from 'icons.html' import icon %}
+
+{% macro voice_card() %}
+<template id="speech-voice-template">
+  <button type="button" class="sp-voice" aria-pressed="false">
+    <span class="sp-avatar" data-initials aria-hidden="true"></span>
+    <span class="min-w-0"><strong data-name></strong><small data-description></small><small class="sp-voice-note" data-note></small><span class="sp-source" data-source></span></span>
+    <span class="sp-choice-mark" aria-hidden="true">✓</span>
+  </button>
+</template>
+{% endmacro %}
+
+{% macro speaker_row() %}
+<template id="speech-speaker-template"><label class="sp-speaker"><span class="sp-speaker-initial" aria-hidden="true"></span><span class="min-w-0"><strong data-speaker-name></strong><select class="form-select form-select-sm" data-speaker-choice></select></span></label></template>
+{% endmacro %}
+
+{% macro take_row() %}
+<template id="speech-take-template"><div class="sp-take"><button type="button" data-open-take class="sp-take-open"><span class="sp-take-symbol" aria-hidden="true">{{ icon('play') }}</span><span class="min-w-0"><strong data-title></strong><small data-meta></small></span><span class="sp-take-duration" data-duration></span></button><button type="button" class="btn btn-outline-secondary btn-sm" data-favourite aria-pressed="false">☆</button></div></template>
+{% endmacro %}
+
+{% macro wave() %}
+<svg class="sp-wave" viewBox="0 0 800 100" preserveAspectRatio="none" role="img" aria-label="Illustrative waveform; sample artwork, not measured audio">
+  <path class="sp-wave-baseline" d="M0 50H800"/>
+  {% for i in range(160) %}{% set amplitude = [4,8,13,22,16,31,39,24,15,32,42,28,19,8,5,9,24,36,44,31,15,21,32,25,11,4,2,6,15,25,34,18][i % 32] %}<path d="M{{ i * 5 + 2 }} {{ 50 - amplitude }}V{{ 50 + amplitude }}"/>{% endfor %}
+</svg>
+{% endmacro %}
+
+{% macro editor(script='', live=false) %}
+{% set editor_actions %}<label class="btn btn-outline-secondary btn-sm mb-0" for="script-import">{{ icon('arrow-up') }} Import .txt</label><input type="file" id="script-import" accept=".txt,text/plain" class="visually-hidden">{% endset %}
+{% call card('Your script', class_='sp-script mb-0', actions=editor_actions, body_class='p-0') %}
+  <div class="sp-script-tools">{% if not live %}<span class="sp-overline">WORDS INTO SOMETHING MORE</span>{% endif %}<label class="d-flex gap-2 align-items-center small">Example<select id="script-example" class="form-select form-select-sm"><option value="">Choose…</option><option value="narration">Narration</option><option value="dialogue">Dialogue</option><option value="announcement">Announcement</option></select></label></div>
+  <label for="sr-prompt" class="visually-hidden">Text or script</label>
+  <textarea id="sr-prompt" name="prompt" class="form-control sp-script-input" rows="10" maxlength="20000" required placeholder="Every great recording starts with a few words…">{{ script }}</textarea>
+  <div class="sp-script-footer"><span id="script-count"></span><span id="script-estimate"></span><span class="ms-auto">Draft kept until you leave this page</span></div>
+  <div class="sp-script-tip">{{ icon('docs') }} Add <code>Name:</code> before a line to give each speaker a voice.</div>
+{% endcall %}
+{% endmacro %}
+
+{% macro studio_inputs(data=none, live=false) %}
+<aside class="sp-cast-area">
+{% call card('Cast',class_='sp-cast mb-0') %}<p class="small text-secondary mb-3">One voice, or a whole conversation.</p><div id="sr-speakers" class="d-grid gap-3"></div><button type="button" class="btn btn-outline-secondary btn-sm mt-3 w-100" id="add-speaker"><span aria-hidden="true">+</span> Add speaker</button><p class="form-text mt-3 mb-0">Names are detected from your script. Voice choices follow the selected model.</p>{% endcall %}
+</aside>
+<div class="sp-editor-area">{{ editor('' if live else data.scripts.narration, live) }}</div>
+<aside class="sp-controls-area">
+{% call card('Voice & model',class_='sp-controls mb-0') %}
+<label class="form-label" for="sr-model">Speech model</label><select id="sr-model" name="model" class="form-select mb-1" required>{% if not live %}{% for model in data.models %}<option value="{{ model.id }}"{{ ' selected' if model.id == 'qwen-clone' }}>{{ model.name }}</option>{% endfor %}{% endif %}</select>
+<div class="sp-model-facts small text-secondary"><span id="sr-licence"></span>{% if not live %}<span id="model-node"></span>{% endif %}</div>
+<div id="sr-voice-wrap"><div class="d-flex align-items-center justify-content-between my-3"><label for="voice-search" class="form-label mb-0">Saved voices</label><span class="small text-secondary" id="voice-count">{{ '' if live else '3 voices' }}</span></div><input aria-label="Find a saved voice" id="voice-search" type="search" class="form-control form-control-sm mb-2" placeholder="Find a voice…"><div id="voice-choices" class="sp-voices"></div><p id="voice-empty" class="form-text" hidden>No voices match your search.</p>{% if live %}<label for="sr-voice" class="form-label mt-2">Default voice</label><select id="sr-voice" class="form-select"></select><div id="sr-voice-help" class="form-text"></div>{% else %}<input type="hidden" id="sr-voice" value="juniper">{% endif %}{% if not live %}<p id="voice-note" class="form-text mb-0">Voice descriptions are sample library metadata.</p>{% endif %}</div>
+<div id="sr-preset-wrap" class="mt-3" hidden><label for="sr-preset" class="form-label">Built-in voice name <span class="text-secondary">optional</span></label><input id="sr-preset" class="form-control" maxlength="80" placeholder="Use the model’s default"><p class="form-text">Use a voice name supported by this model.</p></div>
+<div id="sr-design-wrap" class="mt-3" hidden><label for="sr-design" class="form-label">Describe the voice</label><textarea id="sr-design" class="form-control" rows="3" maxlength="1000" placeholder="Warm and calm, with a low register and an unhurried pace"></textarea></div>
+<details class="sp-advanced mt-3"><summary>Generation settings <span class="text-secondary small">Pause · seed · privacy</span></summary><div class="row g-3 pt-3"><div class="col-6"><label for="sr-gap" class="form-label">Line pause (s)</label><input id="sr-gap" name="gap" type="number" min="0" max="5" step="0.05" value="0.3" class="form-control"></div><div class="col-6"><label for="sr-seed" class="form-label">Seed</label><input id="sr-seed" name="seed" type="number" min="-1" max="4294967295" value="-1" class="form-control"></div><p class="form-text col-12 mt-2 mb-0">−1 chooses a fresh seed for each request.</p><label id="sr-temporary-wrap" class="form-check col-12 ms-2"{% if live %} hidden{% endif %}><input id="sr-temporary" type="checkbox" class="form-check-input"><span class="form-check-label">Temporary · do not retain history</span></label></div></details>{% if live %}<details class="mt-3"><summary>Model settings</summary><div id="sr-advanced" class="pt-3"></div></details>{% endif %}
+{% endcall %}
+</aside>
+<div class="sp-action-area"><div class="sp-generation-summary"><span class="sp-generation-icon" aria-hidden="true">{{ icon('play') }}</span><div><strong id="generation-summary">{{ '' if live else 'Juniper on Qwen3' }}</strong><small class="text-secondary" id="generation-detail"></small></div></div><div class="d-flex gap-2 flex-wrap">{% if not live %}<button id="audition-script" type="button" class="btn btn-outline-secondary">{{ icon('play') }} Browser audition</button>{% endif %}<button id="sr-generate" type="submit" class="btn btn-primary">{{ icon('play') }} Generate speech <span class="sp-key-hint">⌘ / Ctrl ↵</span></button></div>{% if live %}<p id="sr-availability" class="form-text mb-0 w-100"></p>{% endif %}</div>
+{% endmacro %}

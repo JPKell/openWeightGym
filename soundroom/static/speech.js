@@ -1,4 +1,4 @@
-/* SoundRoom speech page: tabs, transcription and the voice library. The Studio tab is music.js. */
+/* SoundRoom speech: script-room tools, modes, transcription and the voice library. */
 (() => {
   'use strict';
   const root = document.querySelector('#soundroom[data-mode="speech"]');
@@ -26,10 +26,60 @@
   const defaults = JSON.parse(root.dataset.defaults || '{}');
 
   root.querySelectorAll('[data-tab]').forEach(tab => tab.addEventListener('click', () => {
-    root.querySelectorAll('[data-tab]').forEach(other => { other.classList.toggle('active', other === tab); other.setAttribute('aria-selected', String(other === tab)); });
+    root.querySelectorAll('[data-tab]').forEach(other => { other.classList.toggle('active', other === tab); other.setAttribute('aria-pressed', String(other === tab)); });
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== tab.dataset.tab; });
     if (tab.dataset.tab !== 'studio') safe(refresh)();
   }));
+
+  const studio = $('sr-form');
+  function updateScript() {
+    if (!$('script-count')) return;
+    const text = $('sr-prompt').value, words = (text.trim().match(/\S+/g) || []).length;
+    $('script-count').textContent = `${text.length.toLocaleString()} / 20,000 characters · ${words} words`;
+    $('script-estimate').textContent = words ? `~${Math.max(1, Math.round(words / 2.5))}s at 150 words/min` : 'Add some words to begin';
+  }
+  studio.addEventListener('input', updateScript);
+  root.addEventListener('soundroom:studio', updateScript);
+  updateScript();
+  function replaceScript(text) {
+    $('sr-prompt').value = text;
+    $('sr-prompt').dispatchEvent(new Event('input', {bubbles:true}));
+    $('sr-prompt').focus();
+  }
+  $('script-example')?.addEventListener('change', () => {
+    const examples = {
+      narration: 'Some ideas start with a little space. A quiet room. An open window. A moment to hear yourself think.\n\nMake room for what comes next.',
+      dialogue: 'Maya: What if we started with something simple?\nAlex: A little space. A clear idea.\nMaya: And a voice that makes it feel human.\nAlex: That sounds like a good place to begin.',
+      announcement: 'Welcome to the next chapter. Your workspace is ready. Take a breath, settle in, and make something that matters.',
+    };
+    const text = examples[$('script-example').value];
+    if (text) replaceScript(text);
+    $('script-example').value = '';
+  });
+  $('script-import')?.addEventListener('change', async () => {
+    const file = $('script-import').files[0];
+    if (!file) return;
+    try {
+      if (!/\.txt$/i.test(file.name) || file.size > 80000) throw new Error('Choose a UTF-8 .txt file with at most 20,000 characters.');
+      const text = await file.text();
+      if (text.length > 20000) throw new Error('The script exceeds 20,000 characters. Shorten it before importing.');
+      replaceScript(text); message('');
+    } catch (error) { message(error.message); }
+    finally { $('script-import').value = ''; }
+  });
+  $('add-speaker')?.addEventListener('click', () => {
+    if ($('sr-prompt').value.length > 19940) { message('Shorten the script before adding a speaker.'); return; }
+    let number = 1;
+    const names = new Set([...$('sr-prompt').value.matchAll(/^\s*([^:\n]{1,40}):/gm)].map(match => match[1].trim()));
+    while (names.has(`Speaker ${number}`)) number++;
+    replaceScript($('sr-prompt').value + ($('sr-prompt').value ? '\n' : '') + `Speaker ${number}: Your next line.`);
+    message('');
+  });
+  document.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && root.isConnected && !root.querySelector('[data-panel="studio"]').hidden && !$('sr-generate').disabled) {
+      event.preventDefault(); studio.requestSubmit();
+    }
+  });
 
   async function refresh() {
     const latest = await api('state?kinds=recording,reference');

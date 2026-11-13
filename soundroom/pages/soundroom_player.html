@@ -1,6 +1,6 @@
 {% from "parts.html" import card, section_title %}
     <section class="sr-results studio-results" aria-label="Generated audio">
-      {% call card("", tag="div", class_="sr-player") %}
+      {% call card("The listening desk" if mode == "speech" else "", tag="div", class_="sr-player") %}
         <div id="sr-empty" class="sr-empty studio-empty"><span id="sr-empty-title" class="section-title">Your {{ {'music': 'takes', 'sound': 'sounds'}.get(mode, 'recordings') }} appear here</span><span id="sr-empty-help" class="text-secondary">Choose a model and describe what you want to hear.</span></div>
         <div id="sr-selected" hidden>
           <div class="d-flex flex-wrap gap-2 align-items-baseline mb-2"><strong id="sr-title"></strong><span id="sr-info" class="text-secondary small"></span><span id="sr-nc" class="badge text-bg-warning" hidden>Non-commercial licence</span></div>
