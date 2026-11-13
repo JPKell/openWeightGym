@@ -591,7 +591,7 @@ def test_lyrics_helper_uses_duration_and_instrumental_choice():
 def test_collections_and_workflows_are_benchmark_pages_used_to_compare_models():
     from weightroom.navigation import navigation
     chat = navigation("/chat", [], False)
-    assert chat["section"] == "Chat" and chat["links"][0] == ("Text chat", "/chat")
+    assert chat["section"] == "Interact" and chat["links"][0] == ("Text chat", "/chat")
     assert not {"/collections", "/workflows"} & {url for _, url in chat["links"]}
     for path, active in (("/collections", "/collections"), ("/collections/example", "/collections"),
                          ("/collections/example/sources/3", "/collections"), ("/workflows", "/workflows"),

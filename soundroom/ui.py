@@ -38,10 +38,10 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
         return page(request, "soundroom_preferences.html", person)
 
     DEFAULTS = (("audio_lyrics_model", "Lyrics helper model", "A chat model or role, such as chat, that writes the style caption and lyrics."),
-                ("audio_music_model", "Music page model", "Selected first on Chat → Music; empty selects the first available."),
-                ("audio_sound_model", "Sounds page model", "Selected first on Chat → Sounds."),
-                ("audio_speech_model", "Voice generation model", "Selected first on Chat → Voice generation."),
-                ("audio_transcription_model", "Transcription model", "Selected first on Chat → Transcribe."))
+                ("audio_music_model", "Music page model", "Selected first on Interact → Music; empty selects the first available."),
+                ("audio_sound_model", "Sounds page model", "Selected first on Interact → Sounds."),
+                ("audio_speech_model", "Voice generation model", "Selected first on Interact → Voice generation."),
+                ("audio_transcription_model", "Transcription model", "Selected first on Interact → Transcribe."))
 
     async def system(request, person):
         """Show and change the administrator's audio defaults, kept with weightroom's own settings."""
