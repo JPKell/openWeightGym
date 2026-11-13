@@ -5,6 +5,36 @@ from __future__ import annotations
 from .migrations import Migration, add_column
 
 
+EXTRACTIONS = (Migration(1, 'private extraction sources, jobs and correction revisions', '''
+    CREATE TABLE extraction_assets (
+        id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL,
+        width INTEGER NOT NULL, height INTEGER NOT NULL, size INTEGER NOT NULL,
+        digest TEXT NOT NULL, original TEXT NOT NULL, prepared TEXT NOT NULL,
+        created DOUBLE PRECISION NOT NULL, expires DOUBLE PRECISION NOT NULL);
+    CREATE INDEX extraction_assets_owner ON extraction_assets(owner,created,id);
+    CREATE TABLE extraction_jobs (
+        id TEXT PRIMARY KEY, owner TEXT NOT NULL, asset TEXT NOT NULL, spec TEXT NOT NULL,
+        state TEXT NOT NULL, result TEXT NOT NULL, raw TEXT NOT NULL, error TEXT NOT NULL,
+        provenance TEXT NOT NULL, usage TEXT NOT NULL, revision INTEGER NOT NULL,
+        reviewed INTEGER NOT NULL, idempotency TEXT NOT NULL, request_hash TEXT NOT NULL,
+        created DOUBLE PRECISION NOT NULL, updated DOUBLE PRECISION NOT NULL,
+        expires DOUBLE PRECISION NOT NULL);
+    CREATE UNIQUE INDEX extraction_idempotency ON extraction_jobs(owner,idempotency);
+    CREATE INDEX extraction_jobs_owner ON extraction_jobs(owner,created,id);
+    CREATE TABLE extraction_revisions (
+        job TEXT NOT NULL, revision INTEGER NOT NULL, data TEXT NOT NULL,
+        reviewed INTEGER NOT NULL, created DOUBLE PRECISION NOT NULL,
+        PRIMARY KEY(job,revision));
+    CREATE TABLE extraction_presets (
+        id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, spec TEXT NOT NULL,
+        created DOUBLE PRECISION NOT NULL);
+    CREATE INDEX extraction_presets_owner ON extraction_presets(owner);
+'''), Migration(2, 'count original and derived extraction image storage', '''
+    ALTER TABLE extraction_assets ADD COLUMN stored_size INTEGER NOT NULL DEFAULT 0;
+    UPDATE extraction_assets SET stored_size=length(original)+length(prepared);
+'''))
+
+
 SCHEDULE_GRANTS = (Migration(1, "scoped recurring work grants", """
     CREATE TABLE IF NOT EXISTS schedule_grants (
         id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, token_hash TEXT NOT NULL,
@@ -758,7 +788,7 @@ STREAMS = {
     "weightroom.model_locations": MODEL_LOCATIONS,
     "loadcoach.reliability": RELIABILITY, "loadcoach.role_evidence": ROLE_EVIDENCE,
     "loadcoach.batches": BATCHES, "loadcoach.tasks": TASKS, "turnstile.benchmark_tasks": TASK_RECORDS, "loadcoach.schedules": SCHEDULE_GRANTS,
-    "weightroom.chat": CHAT, "weightroom.benchmarks": BENCHMARKS,
+    "weightroom.chat": CHAT, "weightroom.extractions": EXTRACTIONS, "weightroom.benchmarks": BENCHMARKS,
     "weightroom.plugins": PLUGINS, "weightroom.alerts": ALERTS, "weightroom.schedules": SCHEDULES, "plugins.runtime": PLUGIN_RUNTIME,
     "spotter.history": SPOTTER, "toollocker.tools": TOOL_SCHEMAS,
 }

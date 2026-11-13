@@ -2576,9 +2576,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     ceiling = read(one('ceiling')) if one('ceiling') else None
             if do == "models":  # the table of its models, as it was sent: a row with a name emptied is a model taken away
                 models = {}
-                for ours, theirs, cost_in, cost_out in zip(form.get("ours", []), form.get("theirs", []), form.get("in", []), form.get("out", [])):
+                capabilities = form.get('extraction_capability', ['text'] * len(form.get('ours', [])))
+                for ours, theirs, cost_in, cost_out, capability in zip(form.get("ours", []), form.get("theirs", []), form.get("in", []), form.get("out", []), capabilities):
                     if ours.strip() and theirs.strip():
                         models[ours.strip()] = {"theirs": theirs.strip()} | {way: read(text.strip()) for way, text in (("in", cost_in), ("out", cost_out)) if text.strip()}
+                        if capability in ('vision', 'schema'):
+                            models[ours.strip()]['vision'] = True
+                        if capability == 'schema':
+                            models[ours.strip()]['json_schema'] = True
             if do == "offer":  # ticked in the service's own list: each is offered under the service's name for it, to be renamed afterwards
                 have = [model["theirs"] for model in models.values()]
                 models |= {theirs: {"theirs": theirs} for theirs in form.get("offer", []) if theirs not in have}
@@ -5167,6 +5172,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     from mirrorwall.ui import routes as image_routes
     from soundroom.ui import routes as audio_routes
+    from weightroom.extraction_views import routes as extraction_routes
 
     app = Starlette(
         lifespan=lifespan,
@@ -5174,6 +5180,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         routes=[
             *image_routes(for_people, page, ask, model_api),
             *audio_routes(for_people, page, ask, model_api, settings, platform),
+            *extraction_routes(for_people, page, ask),
             *plugin_routes(plugins, plugin_controller, for_people, page, go, typed),
             *conversations.routes,
             Route("/sign-in", sign_in_page),

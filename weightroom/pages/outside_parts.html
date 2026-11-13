@@ -5,7 +5,7 @@
 {% macro cloud_model_row(ours='', model={}) %}
 <tr>
 <td><input name="ours" class="form-control" value="{{ ours }}" placeholder="Name shown here" aria-label="{{ 'our name' if ours else "another model's name here" }}" autocapitalize="none" spellcheck="false"></td>
-<td><input name="theirs" class="form-control" value="{{ model.theirs|default('') }}" placeholder="Model ID at the service" aria-label="{{ "the service's name" if ours else 'its name at the service' }}" autocapitalize="none" spellcheck="false"></td>
+<td><input name="theirs" class="form-control" value="{{ model.theirs|default('') }}" placeholder="Model ID at the service" aria-label="{{ "the service's name" if ours else 'its name at the service' }}" autocapitalize="none" spellcheck="false"><select name="extraction_capability" class="form-select form-select-sm mt-2" aria-label="{{ ours or 'New model' }} image extraction support"><option value="text"{{ ' selected' if not model.vision|default(false) }}>Text</option><option value="vision"{{ ' selected' if model.vision|default(false) and not model.json_schema|default(false) }}>Vision</option><option value="schema"{{ ' selected' if model.vision|default(false) and model.json_schema|default(false) }}>Vision + JSON Schema</option></select></td>
 <td><input name="in" class="form-control" value="{{ model['in']|default('') }}" aria-label="{{ 'price in' if ours else 'its price in' }}" inputmode="decimal"></td>
 <td><input name="out" class="form-control" value="{{ model.out|default('') }}" aria-label="{{ 'price out' if ours else 'its price out' }}" inputmode="decimal"></td>
 </tr>

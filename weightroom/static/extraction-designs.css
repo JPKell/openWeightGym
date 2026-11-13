@@ -1,0 +1,81 @@
+/* Extraction proposals rearrange one set of components and retain tab-local state. */
+.ex-review { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; padding: .75rem var(--suite-page-gutter); background: var(--tblr-bg-surface); }
+.ex-page { max-width: 1800px; margin: auto; padding: 1rem var(--suite-page-gutter) 2rem; }
+.ex-review-controls, .ex-result-toolbar, .ex-result-footer { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.ex-review-controls > select { width: auto; max-width: 100%; }
+.ex-review-controls .nav-link { border: 1px solid var(--bs-border-color); font-weight: 600; }
+.ex-intro { margin-top: -1rem; }
+.ex-sample-strip { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin: 1.5rem 0; }
+.ex-layout { display: grid; grid-template-columns: minmax(240px, .78fr) minmax(280px, 1fr) minmax(350px, 1.3fr); gap: 1rem; align-items: start; }
+.ex-layout > * { min-width: 0; margin-bottom: 0 !important; }
+.ex-settings { grid-area: 1 / 1; }
+.ex-source { grid-area: 1 / 2; }
+.ex-result { grid-area: 1 / 3; }
+.ex-inbox { display: none; }
+.ex-settings-fields { display: grid; gap: 1rem; }
+#drop-zone { border: 1px dashed var(--bs-border-color); border-radius: var(--tblr-border-radius); background: var(--theme-subtle); padding: 1rem; }
+#drop-zone:focus-visible, #drop-zone[data-dragging] { outline: 2px solid var(--bs-primary); outline-offset: 3px; }
+.ex-image-stage { position: relative; width: min(100%, 355px); margin: auto; }
+#source-image { display: block; width: 100%; height: auto; border-radius: 2px; box-shadow: 0 5px 20px color-mix(in srgb, var(--theme-text) 12%, transparent); }
+.ex-region { position: absolute; padding: 0; min-height: 0; border: 2px solid transparent; border-radius: 3px; background: transparent; }
+.ex-region:hover, .ex-region:focus-visible, .ex-region[data-active] { border-color: var(--bs-primary); background: color-mix(in srgb, var(--theme-accent) 14%, transparent); }
+.ex-region-key { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.ex-empty { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 240px; text-align: center; padding: 1rem; }
+.ex-output { white-space: pre; overflow: auto; max-height: 540px; min-height: 220px; margin: 1rem 0 0; padding: 1rem; border: 1px solid var(--bs-border-color); border-radius: var(--tblr-border-radius); background: var(--theme-subtle); color: var(--theme-text); font-size: .82rem; line-height: 1.7; tab-size: 4; }
+#text-preview[data-format="plain"], #text-preview[data-format="markdown"] { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ex-merchant { font-size: 1.45rem; font-weight: 650; letter-spacing: -.025em; }
+.ex-receipt-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.ex-receipt-field { min-width: 0; }
+.ex-receipt-field[data-unclear] input { border-color: var(--bs-warning); }
+.ex-image-choice { display: flex; align-items: center; gap: .65rem; width: 100%; min-width: 0; padding: .7rem .5rem; border: 0; border-radius: var(--tblr-border-radius); background: transparent; color: inherit; text-align: left; }
+.ex-image-choice > span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ex-image-choice strong { font-size: .85rem; }
+.ex-image-choice img { width: 36px; height: 48px; object-fit: cover; border: 1px solid var(--bs-border-color); }
+.ex-image-choice[aria-current="true"], .ex-image-choice:hover { background: var(--theme-accent-bg); }
+.ex-inbox-item { display: flex; align-items: center; gap: .5rem; }
+.ex-inbox-list { display: grid; gap: .35rem; }
+#action-status:not(:empty) { border-left: 3px solid var(--bs-primary); padding: .6rem .8rem; background: var(--tblr-bg-surface); }
+[data-layout="review"] .ex-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+[data-layout="review"] .ex-settings { grid-area: 1 / 1 / auto / span 2; }
+[data-layout="review"] .ex-settings-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+[data-layout="review"] .ex-instructions { grid-column: 1 / -1; }
+[data-layout="review"] .ex-source { grid-area: 2 / 1; }
+[data-layout="review"] .ex-result { grid-area: 2 / 2; }
+[data-layout="review"] .ex-image-stage { width: min(100%, 460px); }
+[data-layout="review"] #drop-zone { padding: 1.5rem; }
+[data-layout="batch"] .ex-layout { grid-template-columns: minmax(240px, .75fr) minmax(260px, .85fr) minmax(350px, 1.5fr); }
+[data-layout="batch"] .ex-inbox { display: block; grid-area: 1 / 1; }
+[data-layout="batch"] .ex-settings { grid-area: 1 / 2; }
+[data-layout="batch"] .ex-result { grid-area: 1 / 3 / span 2; }
+[data-layout="batch"] .ex-source { grid-area: 2 / 1 / auto / span 2; }
+[data-layout="batch"] .ex-image-stage { width: min(100%, 230px); }
+[data-layout="batch"] .ex-source .card-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 1rem; }
+[data-layout="batch"] #drop-zone { grid-row: span 3; }
+[data-layout="batch"] .ex-region-key { grid-column: 1 / -1; }
+@media (max-width: 1150px) {
+  .ex-layout, [data-layout="batch"] .ex-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ex-settings { grid-area: 1 / 1 / auto / span 2; }
+  .ex-settings-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ex-instructions { grid-column: 1 / -1; }
+  .ex-source { grid-area: 2 / 1; }
+  .ex-result { grid-area: 2 / 2; }
+  [data-layout="batch"] .ex-inbox { grid-area: 1 / 1; }
+  [data-layout="batch"] .ex-settings { grid-area: 1 / 2; }
+  [data-layout="batch"] .ex-settings-fields { grid-template-columns: minmax(0, 1fr); }
+  [data-layout="batch"] .ex-source { grid-area: 2 / 1; }
+  [data-layout="batch"] .ex-result { grid-area: 2 / 2; }
+  [data-layout="batch"] .ex-source .card-body { display: block; }
+}
+@media (max-width: 760px) {
+  .ex-review-controls { align-items: stretch; }
+  .ex-review-controls > * { width: 100%; }
+  .ex-review-controls .nav-link { flex: 1 1 150px; }
+  .ex-layout, [data-layout="review"] .ex-layout, [data-layout="batch"] .ex-layout { display: flex; flex-direction: column; }
+  .ex-layout > * { width: 100%; }
+  .ex-inbox { order: -2; }
+  .ex-source { order: -1; }
+  .ex-settings-fields, [data-layout="review"] .ex-settings-fields { grid-template-columns: minmax(0, 1fr); }
+  .ex-receipt-fields { grid-template-columns: minmax(0, 1fr); }
+  .ex-result-toolbar > * { flex-wrap: wrap; }
+  .ex-output { max-height: 420px; }
+}

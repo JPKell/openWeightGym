@@ -363,11 +363,51 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return statement.read_key(settings.machine_key_file) if settings.machine_key_file else ""
 
     internal_token = secrets.token_urlsafe(32)  # never leaves this process: turnstile asking itself, for a batch, in the name of whoever handed it in
+    extraction_delegations = {}
+    extraction_nonces = statement.Nonces()
+
+    def delegated_user(claimed):
+        """Recheck the original key, app restrictions and immutable owner for a tool delegation."""
+        from dataclasses import replace
+        from loadcoach.users import key_identity
+        current = users.by_identity(claimed.identity) if claimed.identity else None
+        if not current:
+            return None
+        for verifier, expires, via in users.db.execute('SELECT hash,expires,via FROM keys WHERE user=?', (current.name,)).fetchall():
+            if key_identity(verifier) == claimed.key_identity and (expires is None or expires > time.time()):
+                fresh = users.user(current.name, current.group_name, json.dumps(users.own(current.name)), expires, via)
+                return replace(fresh, key_identity=claimed.key_identity) if fresh else None
+        return None
+
+    def extraction_delegate(request, body):
+        """Only ToolLocker can mint a short-lived, caller-bound extraction invocation."""
+        from weightroom.extraction import Problem
+        try:
+            key = machine_key()
+            said = statement.check(key, request.headers.get(statement.HEADER, ''), request.method, request.url.path, body, extraction_nonces)
+            if said.get('purpose') != 'extraction-tool' or not said.get('caller'):
+                raise ValueError()
+            user = delegated_user(statement.user_of(said['caller']))
+            if not user:
+                raise ValueError()
+        except (ValueError, KeyError, TypeError):
+            raise Problem('Invalid or expired caller-bound tool delegation.', 403, 'invalid_delegation') from None
+        token = internal_token + ':extraction:' + secrets.token_urlsafe(24)
+        # A queued job may wait up to 900 seconds; each use still rechecks the original key.
+        extraction_delegations[token] = (user, time.time() + 960)
+        if len(extraction_delegations) > 1000:
+            for old, (_, expires) in list(extraction_delegations.items()):
+                if expires < time.time():
+                    extraction_delegations.pop(old, None)
+        return user, 'Bearer ' + token, {statement.PROOF: statement.proof(key, said['nonce'])}
 
     @observation.traced("authentication")
     def caller(key: str) -> User | None:
         """The user this key belongs to. With no accounts yet and turnstile on this machine only, anyone may do anything, as a fresh install."""
-        if key.startswith(internal_token + ":"):
+        if key in extraction_delegations:
+            claimed, expires = extraction_delegations[key]
+            user = delegated_user(claimed) if expires > time.time() else None
+        elif key.startswith(internal_token + ":"):
             user = users.by_name(key.split(":", 1)[1])
         elif settings.host in LOOPBACK and not users.any():
             user = ANONYMOUS
@@ -713,6 +753,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(502, "The answer did not prove it came from compute: it was not signed with the machine key.")
         if name:
             upstream.extensions["suite_machine"] = name
+            upstream.headers['x-loadcoach-node'] = name
             if number := upstream.headers.get("x-loadcoach-request-id", ""):
                 if number.isdigit():
                     upstream.headers["x-loadcoach-request-id"] = str(public_number(name, int(number)))
@@ -942,6 +983,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     routing.hosted = hosted
     # Batches are front's: their files and requests are kept in the accounts store, and each request goes in through turnstile's own door.
     batch_work = FrontBatches(Batches(stores.database("weightroom.accounts")), log, lambda *asked: ask_all(*asked), None, lambda name: f"{internal_token}:{name}")
+    from turnstile.extractions import ExtractionService
+    extractions = ExtractionService(stores.database('weightroom.accounts'), caller)
+    extractions.maintenance = gate
+    extractions.role_models = lambda name: (routing.roles.get(name) or {}).get('models', {})
 
     async def dispatch_probe(user, path, payload, machine):
         """Send a signed scoped benchmark probe to its owning compute node."""
@@ -1730,6 +1775,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         while True:
             await task_records.retry_publication()
             await publish_file_settings()
+            if not gate.token():
+                extractions.store.prune()
             if last_pruned is None or time.monotonic() - last_pruned >= 86400:
                 users.forget_sessions()
                 log.prune()
@@ -3209,6 +3256,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Keep the plugin synchronization and the daily tidying with turnstile, independent of the weightroom page process."""
         own = Path(settings.auth_key_file) if settings.auth_key_file else None
         batch_work.door = httpx.AsyncClient(transport=httpx.ASGITransport(app=observation.internal(app), client=("127.0.0.1", 1)), base_url=f"http://turnstile.internal:{settings.ports[0]}")
+        extractions.door = batch_work.door
+        extractions.store.interrupted()
+        extractions.store.prune()
         tasks = [asyncio.create_task(tidy()), asyncio.create_task(machines.run()), asyncio.create_task(rotate_due_keys()),
                  asyncio.create_task(checkpoint_installations())]
         await task_records.retry_publication()
@@ -3224,6 +3274,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         try:
             yield
         finally:
+            await extractions.close()
             await front_files.close()
             maintenance_stop.set()
             for work in list(task_records.working.values()):
@@ -3260,7 +3311,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         import loadcoach
         return diagnostic_page(Path(loadcoach.__file__).with_name('test.html'))
 
-    app = Starlette(lifespan=lifespan, routes=[Route('/', diagnostic), *image_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
+    from turnstile.responses import routes as response_routes
+    app = Starlette(lifespan=lifespan, routes=[Route('/', diagnostic), *extractions.routes(caller, extraction_delegate), *response_routes(caller, extractions), *image_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
                             Route("/turnstile/power", power_notice, methods=["POST"]),
                             Route("/turnstile/accounts", accounts_list),
                             Route("/turnstile/machines", machines_list),
@@ -3313,7 +3365,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/log-facts", log_facts),
                             *events.routes(log, users, caller, ask_all, lambda: hosted.models(), request_model_choices),
                             *observations.routes(log, caller),
-                            *accounts.routes(users, log, caller, ask_all, routing.roles_for, hosted.offered, batch_work),
+                            *accounts.routes(users, log, caller, ask_all, routing.roles_for, hosted.offered, batch_work,
+                                             hosted_models=hosted.models, forget_extractions=extractions.forget),
                             *allowances.routes(users, log, caller, ask_all),
                             *routing.routes(),
                             Route("/{path:path}", pass_on, methods=methods)])
@@ -3325,6 +3378,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     app.state.task_records = task_records
     app.state.mirrorwall = image_work
     app.state.soundroom = audio_work
+    app.state.extractions = extractions
     app.state.console_settings = console_settings
     app.state.fallthrough = fallthrough
     app.state.front_files = front_files

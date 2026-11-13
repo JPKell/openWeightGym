@@ -1,0 +1,88 @@
+{# One component set for all extraction proposals and a future live workspace. #}
+{% from 'parts.html' import card, alert, more, empty_row %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+
+{% macro source_panel(live=false) %}
+{% set actions %}<button type="button" class="btn btn-outline-secondary btn-sm" id="choose-image">Choose image</button>{% endset %}
+{% call card('Source image', actions=actions, class_='ex-source', attrs={'id': 'source-panel'}) %}
+  <input type="file" id="image-file" accept="image/png,image/jpeg,image/webp" class="visually-hidden" aria-label="Upload image"{% if live %} multiple{% endif %}>
+  <div id="drop-zone" tabindex="0" role="group" aria-label="Image drop area. Drop or paste an image, or press Enter to choose one.">
+    <div class="ex-image-stage" id="image-stage"{% if live %} hidden{% endif %}><img id="source-image" alt="{{ 'Selected source image' if live else 'Sample receipt from Cedar Market' }}"><div id="regions" aria-label="Source regions"></div></div>
+    <div id="source-empty" class="ex-empty"{% if not live %} hidden{% endif %}><strong>Start with an image</strong><p class="text-secondary mb-2">Drop a receipt, document or photo here.</p><button type="button" id="empty-choose" class="btn btn-primary btn-sm">Browse images</button></div>
+  </div>
+  <div class="d-flex justify-content-between flex-wrap gap-2 small mt-3"><strong id="source-name">{{ 'No image selected' if live else 'cedar-market.png' }}</strong><span class="text-secondary" id="source-size">{% if not live %}600 × 800 · sample{% endif %}</span></div>
+  <p class="form-hint mb-0 mt-2">PNG, JPEG or WebP · up to 5 MiB and 16 megapixels. Paste an image with Ctrl/⌘ V.</p>
+  <div class="ex-region-key mt-3"><span class="badge bg-azure-lt">Source evidence</span><span id="region-help" class="small text-secondary">Select a field to locate it in the image.</span></div>
+{% endcall %}
+{% endmacro %}
+
+{% macro settings_panel(live=false) %}
+{% call card('What do you need?', class_='ex-settings', attrs={'id': 'settings-panel'}) %}
+  <form id="extraction-form" data-hold-refresh>
+    <div class="ex-settings-fields">
+      <div><label class="form-label" for="task">Task</label><select class="form-select" id="task" name="task"><option value="describe">Describe image</option><option value="text"{{ ' selected' if live }}>Extract text</option><option value="receipt"{{ ' selected' if not live }}>Extract receipt</option><option value="table">Extract table</option><option value="custom">Custom fields</option></select></div>
+      <div><label class="form-label" for="format">Output format</label><select class="form-select" id="format" name="format"><option value="plain"{{ ' selected' if live }}>Plain string</option><option value="layout">Layout text</option><option value="markdown">Formatted Markdown</option><option value="json"{{ ' selected' if not live }}>JSON</option><option value="csv">CSV · tables and receipts</option></select><p id="format-hint" class="form-hint mb-0">{{ 'A Unicode string in reading order.' if live else 'Structured fields with explicit missing values.' }}</p></div>
+      <div><label class="form-label" for="model">Vision model</label><select class="form-select" id="model" name="model">{% if live %}<option value="">Loading permitted models…</option>{% else %}<option value="local">Local vision · sample node</option><option value="cloud">Cloud vision · sample account</option>{% endif %}</select><p id="model-hint" class="form-hint mb-0">{{ 'Choose where this image is processed.' if live else 'Illustrative models · no inference connection.' }}</p></div>
+      <div><label class="form-label" for="detail">Description detail</label><select class="form-select" id="detail" name="detail"><option value="concise">Concise</option><option value="detailed">Detailed</option></select><p class="form-hint mb-0">Text extraction keeps the original language.</p></div>
+      <div class="ex-instructions"><label class="form-label" for="instructions">Instructions <span class="text-secondary fw-normal">optional</span></label><textarea class="form-control" id="instructions" name="instructions" rows="2" placeholder="For example: keep line breaks; omit background text."></textarea></div>
+    </div>
+    <div id="schema-fields" class="mt-3" hidden><label class="form-label" for="schema">Field schema · JSON Schema</label><textarea id="schema" name="schema" class="form-control font-monospace" rows="7" spellcheck="false">{"type":"object","properties":{"merchant":{"type":["string","null"]},"total":{"type":["{{ 'string' if live else 'number' }}","null"]}},"required":["merchant","total"],"additionalProperties":false}</textarea><p class="form-hint mb-0">{{ 'Use a closed object schema. Require all fields and use nullable types for missing values.' if live else 'Try merchant and total with the receipt sample. Custom schemas are validated when tools are implemented.' }}</p></div>
+    {% call more('Reading and layout') %}<label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="keep-breaks" name="keep_breaks" checked><span class="form-check-label">Preserve line breaks</span></label><label class="form-check"><input class="form-check-input" type="checkbox" id="mark-unclear" name="mark_unclear" checked><span class="form-check-label">Mark unreadable text with [unclear]</span></label><p class="mb-0 mt-2">Layout text keeps approximate columns and spacing in a monospace view. Exact typography is outside this format.</p>{% endcall %}
+    {% if live %}<label class="form-check mt-3"><input class="form-check-input" type="checkbox" name="temporary" id="temporary" checked><span class="form-check-label">Temporary · remove after 24 hours</span></label><p class="form-hint">Uncheck to retain for 30 days. Delete sources and results at any time.</p>{% endif %}
+    <div class="d-flex gap-2 mt-3"><button class="btn btn-primary flex-grow-1" id="run" type="submit"{% if live %} disabled{% endif %}>{{ 'Extract image' if live else 'Run sample extraction' }}</button><button class="btn btn-outline-secondary" id="cancel" type="button" hidden>Cancel</button></div>
+    <p class="form-hint mt-2 mb-0" id="run-hint">{{ 'Choose an image and a vision model to begin.' if live else 'Uses a prepared sample result. Your images stay in this tab.' }}</p>
+  </form>
+{% endcall %}
+{% endmacro %}
+
+{% macro review_button(id='review-toggle', hidden=false) %}<button class="btn btn-outline-secondary btn-sm" id="{{ id }}" type="button" aria-pressed="false"{% if hidden %} hidden{% endif %}>Mark reviewed</button>{% endmacro %}
+
+{% macro result_panel(live=false) %}
+{% set actions %}<span class="badge bg-orange-lt" id="result-state">{{ 'No result yet' if live else 'Needs review' }}</span>{% endset %}
+{% call card('Extraction result', class_='ex-result', attrs={'id': 'result-panel'}, actions=actions) %}
+  <div class="ex-result-toolbar">
+    {% call pills('Result view', buttons=true, class_='gap-1 mb-0') %}{{ pill_button('Preview', true, attrs={'data-result-view': 'preview'}) }}{{ pill_button('Raw output', attrs={'data-result-view': 'raw'}) }}{% endcall %}
+    <div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" id="copy">Copy</button><button type="button" class="btn btn-outline-secondary btn-sm" id="download">Download</button></div>
+  </div>
+  {% call alert('warning', class_='small py-2 mt-3 mb-3', attrs={'id': 'review-notice', 'hidden': live}) %}{% if not live %}Tax is partly unreadable. Check the source before using this receipt.{% endif %}{% endcall %}
+  <div id="result-empty" class="ex-empty"{% if not live %} hidden{% endif %}><strong>No result yet</strong><p class="text-secondary mb-0">Choose an image and run an extraction.</p></div>
+  <div id="result-preview"{% if live %} hidden{% endif %}>
+    <div id="receipt-preview">
+      <div class="d-flex align-items-start justify-content-between gap-2 mb-3"><div><span class="eyebrow">RECEIPT</span><p class="ex-merchant mb-0" id="receipt-merchant">{{ 'Receipt' if live else 'Cedar Market' }}</p><span class="small text-secondary">{{ 'Check fields against the original image' if live else 'Fields link back to the source image' }}</span></div>{{ review_button() }}</div>
+      <div id="receipt-fields" class="ex-receipt-fields"></div>
+      <div class="table-responsive mt-3"><table class="table table-sm align-middle" aria-label="Receipt items"><thead><tr><th scope="col">Item</th><th scope="col" class="text-end">Qty</th><th scope="col" class="text-end">Amount</th></tr></thead><tbody id="receipt-items"></tbody></table></div>
+      <p class="small text-secondary mb-0" id="reconciliation">Totals cannot be checked until tax is confirmed.</p>
+    </div>
+    <pre class="ex-output" id="text-preview" tabindex="0" aria-label="Text output" hidden></pre>
+    {% if live %}<div id="markdown-preview" class="ex-markdown mt-3" hidden></div>{% endif %}
+    <div id="table-preview" class="table-responsive" hidden><table class="table table-sm" aria-label="Extracted table"><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div>
+  </div>
+  <pre class="ex-output" id="raw-output" tabindex="0" aria-label="Raw extraction output" hidden></pre>
+  {% if live %}<div id="correction-editor" class="mt-3" hidden><label class="form-label" for="raw-editor">Correct extracted data · JSON</label><textarea id="raw-editor" class="form-control font-monospace" rows="10" spellcheck="false"></textarea><p class="form-hint mb-0">Corrections save as a new revision. Original model output stays available.</p></div>{% endif %}
+  {% if live %}<div class="mt-3">{{ review_button('review-general', hidden=true) }}</div>{% endif %}
+  <div class="ex-result-footer border-top pt-3 mt-3"><span class="small text-secondary" id="result-provenance">{% if not live %}Prepared sample · receipt v1 · no model called{% endif %}</span><span class="badge bg-secondary-lt" id="output-type">{{ 'text/plain' if live else 'application/json' }}</span></div>
+{% endcall %}
+{% endmacro %}
+
+{% macro batch_panel(live=false) %}
+{% set actions %}<span class="badge bg-azure-lt" id="batch-count">{{ '0 selected' if live else '3 images' }}</span>{% endset %}
+{% call card('Image inbox', class_='ex-inbox', attrs={'id': 'inbox-panel'}, actions=actions) %}
+  <label class="visually-hidden" for="inbox-search">Search images</label><input id="inbox-search" class="form-control form-control-sm mb-3" type="search" placeholder="Find an image…">
+  <div id="inbox-list" class="ex-inbox-list" role="group" aria-label="Sample images"></div>
+  <p class="small text-secondary" id="inbox-empty" hidden>No matching images.</p>
+  <button type="button" id="run-batch" class="btn btn-outline-primary w-100 mt-3">{{ 'Extract selected images' if live else 'Run selected samples' }}</button>
+  <p class="form-hint mt-2 mb-0">Each image keeps its own task and result. Batch runs use each image’s settings.</p>
+{% endcall %}
+{% endmacro %}
+
+{% macro receipt_field() %}
+<div class="ex-receipt-field"><div class="d-flex justify-content-between align-items-center gap-2"><label class="form-label mb-1" data-field-label></label><button type="button" class="btn btn-link btn-sm p-0" data-locate>Locate</button></div><input class="form-control form-control-sm" data-field-input><small class="text-secondary" data-field-note></small></div>
+{% endmacro %}
+
+{% macro inbox_item() %}
+<div class="ex-inbox-item"><input type="checkbox" class="form-check-input m-0" data-inbox-select><button type="button" class="ex-image-choice"><img alt="" data-inbox-thumbnail><span><strong data-inbox-name></strong><small class="text-secondary d-block" data-inbox-detail></small></span><span class="badge bg-secondary-lt" data-inbox-status></span></button></div>
+{% endmacro %}
+
+{% macro region_button() %}<button type="button" class="ex-region" data-region><span class="visually-hidden" data-region-label></span></button>{% endmacro %}
+{% macro data_row() %}<tr data-output-row></tr>{% endmacro %}
+{% macro no_items() %}{{ empty_row(3, 'No receipt items found.') }}{% endmacro %}

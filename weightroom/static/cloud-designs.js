@@ -21,7 +21,7 @@
   const current = () => accounts.find(account => account.id === selected);
   const kind = account => !account.key ? 'key' : account.ceiling && account.spent >= account.ceiling ? 'limit' : 'ready';
   const status = account => ({key:'Needs API key',limit:'Limit reached',ready:'Key installed'})[kind(account)];
-  const rows = account => Object.entries(account.models).map(([ours, model]) => ({ours, ...model}));
+  const rows = account => Object.entries(account.models).map(([ours, model]) => ({ours, ...model, extraction_capability:model.vision ? (model.json_schema ? 'schema' : 'vision') : 'text'}));
   function draft(account = current()) {
     if (!drafts.has(account.id)) drafts.set(account.id, {url:account.url, ceiling:account.ceiling ?? '', key:'', rows:rows(account), dirty:new Set()});
     return drafts.get(account.id);
@@ -117,7 +117,7 @@
     if (!entries.some(row => !row.ours && !row.theirs)) entries.push({ours:'',theirs:'',in:'',out:''});
     entries.forEach(row => {
       const element = clone('#model-row');
-      ['ours','theirs','in','out'].forEach(name => { element.querySelector(`[name="${name}"]`).value = row[name] ?? ''; });
+      ['ours','theirs','in','out','extraction_capability'].forEach(name => { element.querySelector(`[name="${name}"]`).value = row[name] ?? (name === 'extraction_capability' ? 'text' : ''); });
       $('#model-rows').append(element);
     });
   }
@@ -215,7 +215,7 @@
   $('#search').addEventListener('input', renderInventory);
   $('#status-filter').addEventListener('change', renderInventory);
   function collectModels() {
-    return $$('#model-rows tr').map(row => Object.fromEntries(['ours','theirs','in','out'].map(name => [name,row.querySelector(`[name="${name}"]`).value])));
+    return $$('#model-rows tr').map(row => Object.fromEntries(['ours','theirs','in','out','extraction_capability'].map(name => [name,row.querySelector(`[name="${name}"]`).value])));
   }
   editor.addEventListener('input', event => {
     if (!current() || event.target.id === 'remove-confirm') return;
@@ -258,6 +258,8 @@
       if (models[name]) return notice('Each model needs a unique local name.',true);
       if (['in','out'].some(key => row[key] !== '' && (!Number.isFinite(Number(row[key])) || Number(row[key]) < 0))) return notice('Token prices must be zero or a positive number.',true);
       models[name] = {theirs:row.theirs.trim(),...Object.fromEntries(['in','out'].filter(key => row[key] !== '').map(key => [key,Number(row[key])]))};
+      if (row.extraction_capability !== 'text') models[name].vision = true;
+      if (row.extraction_capability === 'schema') models[name].json_schema = true;
     }
     current().models = models; draft().rows = rows(current()); saved('models',`Models saved for ${current().name}.`);
   });

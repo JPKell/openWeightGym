@@ -85,7 +85,8 @@ class Hosted:
         found = {}
         for name in self.offered(user):
             model_id, fingerprint = self.identity(name)
-            found[name] = {"hosted": True, "why_not": self.why_not(name, user), "sees": True, "tools": True, "room": None, "warm": True, "resident": False,
+            found[name] = {"hosted": True, "why_not": self.why_not(name, user), "sees": self.models()[name].get('vision', False),
+                           "capabilities": {'json_schema': self.models()[name].get('json_schema', False)}, "tools": True, "room": None, "warm": True, "resident": False,
                            "speed": None, "load": None, "placed": False, "context": None, "fit": "hosted", "cards": [], "evictions": [],
                            "model_id": model_id, "fingerprint": fingerprint, "prompt_speed": None,
                            "wait": {"seconds": 0.0, "basis": "no local queue; outside scheduling is unobserved"}}

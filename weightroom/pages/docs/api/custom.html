@@ -1,5 +1,10 @@
 {% from "docs_parts.html" import doc_section, api_endpoints %}
 {% call doc_section("Custom endpoints", "api-custom") %}
+  <p><a href="/docs/web-app/image-extraction">Image extraction</a> uses caller-private <code>/owg/extraction-assets</code>,
+    <code>/owg/extractions</code> and <code>/owg/extraction-presets</code> on front. Upload one raster image, then submit its asset ID
+    with a permitted vision/schema model and task; poll the returned status URL. Submit <code>Idempotency-Key</code> to prevent duplicate jobs.
+    Review requires the current revision; exports support <code>revision=original</code>. Inference uses normal admission and accounting.
+    <code>/owg/extraction-tools/{tool}</code> is reserved for signed caller-bound ToolLocker dispatch.</p>
   <p>Benchmark submissions accept explicit <code>targets: [{model, machine}]</code> for quality and resource runs.
     Recurring schedules also accept <code>machine</code>; kind <code>outstanding</code> uses optional
     <code>model_ids</code>/<code>benchmarks</code> scopes and freezes one missing/stale pair per occurrence.

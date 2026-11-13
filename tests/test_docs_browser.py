@@ -57,7 +57,7 @@ def test_docs_sections_open_their_topics_and_fit_a_phone(desk, tmp_path):
         definition.locator('summary').click()
         assert 'Raises SignInRefused' in definition.inner_text()
 
-        for address in ('/docs/modules/loadcoach', '/docs/api/openai', '/docs/operations/installation', '/docs/web-app/chat'):
+        for address in ('/docs/modules/loadcoach', '/docs/api/openai', '/docs/operations/installation', '/docs/web-app/chat', '/docs/web-app/image-extraction'):
             page.goto('http://console.test' + address)
             for width in (390, 320):
                 page.set_viewport_size({'width': width, 'height': 844})

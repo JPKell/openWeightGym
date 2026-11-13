@@ -49,6 +49,7 @@ SECTIONS = (
     )),
     _section("web-app", "Web app", "Using the web console: chat, collections, workflows, voice and media, tools, and your API keys.", (
         _topic("chat", "Chat", "Start a conversation, choose its model and change its options."),
+        _topic("image-extraction", "Image extraction", "Describe images, extract text and receipts, review corrections and run independent image batches.", doc="docs/image-extraction-plan.md", parts=("Using Image extraction", "Tasks and output", "Storage and recovery")),
         _topic("collections", "Collections", "Keep private sources and ask questions answered from them."),
         _topic("workflows", "Workflows", "Run research and drafting as repeatable steps you review."),
         _topic("voice", "Voice and media", "Talk with a model by voice, and make images, music, sounds and speech."),
@@ -144,6 +145,7 @@ def written(topic: dict) -> dict | None:
 SOURCES = {
     "api": ("loadcoach/app.py", "loadcoach/tasks.py", "soundroom/packages.py", "turnstile/app.py",
             "turnstile/accounts.py", "turnstile/events.py", "turnstile/roles.py", "turnstile/observations.py",
+            "turnstile/extractions.py", "turnstile/responses.py",
             "turnstile/allowances.py", "turnstile/tasks.py", "turnstile/settings.py", "turnstile/hosted.py",
             "soundroom/front.py", "mirrorwall/front.py", "plugins/_turnstile.py", "plugins/_runtime.py",
             "voice/gateway.py", "voice/service.py", "spotter/app.py", "toollocker/door.py"),
@@ -271,6 +273,10 @@ def api_headers(relative: str, path: str, method: str) -> tuple[str, ...]:
         headers.append('X-Suite-Schedule (internal scoped grant)')
     if path.startswith('/mcp'):
         headers.extend(('X-ToolLocker-Sets', 'X-LoadCoach-Sensitivity', 'X-LoadCoach-Trace', 'Mcp-Session-Id'))
+    if path == '/owg/extractions' and method == 'POST':
+        headers.append('Idempotency-Key')
+    if path.startswith('/owg/extraction-tools/'):
+        headers.append('X-Suite-Statement (internal caller-bound delegation)')
     if path == '/voice/prompts' and method == 'GET':
         headers.append('If-None-Match (standard HTTP)')
     if relative == 'voice/gateway.py':

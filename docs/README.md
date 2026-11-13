@@ -8,6 +8,8 @@ openWeightGym provides a web console, an OpenAI-compatible model API, MCP tools 
 Start with the [app walkthrough](../app-walkthrough.md) to evaluate each section and record findings.
 The [agent walkthrough](agent-walkthrough.md) maps every page to automated checks, live-test boundaries and owner/device evaluation.
 
+Image extraction: [workspace, API contracts, operating instructions and qualification](image-extraction-plan.md).
+
 ## Install
 
 ```bash
