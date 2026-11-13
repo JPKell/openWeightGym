@@ -57,9 +57,12 @@
   library.insertBefore(library.querySelector('.music-library-tools'), library.querySelector('#sr-list'));
   library.append(clone('music-empty-library'));
   results.insertBefore(library, queue);
+  const playbackColumn = make('div', undefined, 'music-playback-column');
+  results.append(playbackColumn);
+  playbackColumn.append(player, queue);
   player.querySelector('.card-body').prepend(clone('music-player-intro'));
   $('prompt').after(clone('music-presets'));
-  document.querySelector('.music-workbench').append(clone('music-no-lyrics-template'));
+  document.querySelector('.music-direction-column').append(clone('music-no-lyrics-template'));
   byId('refine-style').addEventListener('click', () => $('prompt').focus());
   // Put the optional helper after the primary style controls.
   document.querySelector('[data-music-section="direction"]').append($('helper'));

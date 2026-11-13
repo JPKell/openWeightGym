@@ -1,6 +1,7 @@
 {% from "parts.html" import card %}
-{% from "music_parts.html" import style_starters %}
+{% from "music_parts.html" import style_starters, prompt_guidance %}
     {% call card("", tag="form", id="sr-form", class_="sr-settings studio-settings", attrs={'data-hold-refresh':''}) %}
+      <div class="music-settings-column">
       <div data-music-section="model">
       <label class="form-label" for="sr-model">{{ 'Music' if mode == 'music' else 'Sound' }} model</label>
       <select id="sr-model" name="model" class="form-select mb-1" required></select>
@@ -12,26 +13,7 @@
       </div>
       <p id="sr-mode-help" class="form-text mb-3"></p>
       </div>
-      <div data-music-section="direction">
-      <label class="form-label" for="sr-prompt">{{ 'Style' if mode == 'music' else 'Sound' }}</label>
-      <textarea id="sr-prompt" name="prompt" class="form-control mb-3" rows="3" required maxlength="4000" placeholder="{{ 'upbeat synth pop, female vocal, bright drums, 120 bpm' if mode == 'music' else 'rain on a tin roof, distant thunder, close perspective' }}"></textarea>
-      {% if music_studio|default(false) %}{{ style_starters(mode) }}{% endif %}
       {% if mode == 'music' %}
-      <details id="sr-helper" class="mb-3"><summary>Write with a model</summary><div class="pt-2">
-        <label class="form-label" for="sr-idea">Song idea</label>
-        <textarea id="sr-idea" class="form-control mb-2" rows="2" maxlength="4000" placeholder="A hopeful synth-pop song about leaving a small town at night"></textarea>
-        <div class="d-flex gap-2"><input id="sr-helper-model" class="form-control" value="{{ audio.lyrics or 'chat' }}" aria-label="Chat model or role for writing"><button id="sr-write" type="button" class="btn btn-outline-secondary text-nowrap">Write</button></div>
-        <div class="form-text">Drafts style and lyrics for the chosen duration and instrumental setting, using your account.</div>
-      </div></details>
-      {% endif %}
-      </div>
-      {% if mode == 'music' %}
-      <div id="sr-lyrics-wrap" data-music-section="lyrics">
-        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-end"><label class="form-label" for="sr-lyrics">Lyrics</label>
-          <div class="btn-group btn-group-sm mb-1" role="group" aria-label="Insert section tag">{% for tag in ['verse','chorus','bridge','outro'] %}<button type="button" class="btn btn-outline-secondary" data-tag="[{{tag}}]">{{tag}}</button>{% endfor %}</div></div>
-        <textarea id="sr-lyrics" name="lyrics" class="form-control font-monospace mb-2" rows="8" maxlength="20000" placeholder="[verse]&#10;…&#10;[chorus]&#10;…"></textarea>
-        <div class="form-check mb-3"><input id="sr-instrumental" name="instrumental" class="form-check-input" type="checkbox"><label for="sr-instrumental" class="form-check-label">Instrumental</label></div>
-      </div>
       <div data-music-section="musical"><fieldset id="sr-musical-wrap" class="mb-3" hidden><legend class="section-title">Musical direction <span class="text-secondary fw-normal">optional</span></legend><div id="sr-musical"></div></fieldset>
       </div>
       {% endif %}
@@ -61,5 +43,30 @@
       <div data-music-section="generate">
       <button id="sr-generate" class="btn btn-primary w-100" type="submit">Generate</button>
       <p id="sr-availability" class="form-text mb-0"></p>
+      </div>
+      </div>
+      <div class="music-direction-column">
+      <div data-music-section="direction">
+      <label class="form-label" for="sr-prompt">{{ 'Style' if mode == 'music' else 'Sound' }}</label>
+      <textarea id="sr-prompt" name="prompt" class="form-control mb-3" rows="3" required maxlength="4000" placeholder="{{ 'upbeat synth pop, female vocal, bright drums, 120 bpm' if mode == 'music' else 'rain on a tin roof, distant thunder, close perspective' }}"></textarea>
+      {% if music_studio|default(false) %}{{ style_starters(mode) }}{% endif %}
+      {% if mode == 'music' %}
+      <details id="sr-helper" class="mb-3"><summary>Write with a model</summary><div class="pt-2">
+        <label class="form-label" for="sr-idea">Song idea</label>
+        <textarea id="sr-idea" class="form-control mb-2" rows="2" maxlength="4000" placeholder="A hopeful synth-pop song about leaving a small town at night"></textarea>
+        <div class="d-flex gap-2"><input id="sr-helper-model" class="form-control" value="{{ audio.lyrics or 'chat' }}" aria-label="Chat model or role for writing"><button id="sr-write" type="button" class="btn btn-outline-secondary text-nowrap">Write</button></div>
+        <div class="form-text">Drafts style and lyrics for the chosen duration and instrumental setting, using your account.</div>
+      </div></details>
+      {% endif %}
+      </div>
+      {% if mode == 'music' %}
+      <div id="sr-lyrics-wrap" data-music-section="lyrics">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-end"><label class="form-label" for="sr-lyrics">Lyrics</label>
+          <div class="btn-group btn-group-sm mb-1" role="group" aria-label="Insert section tag">{% for tag in ['verse','chorus','bridge','outro'] %}<button type="button" class="btn btn-outline-secondary" data-tag="[{{tag}}]">{{tag}}</button>{% endfor %}</div></div>
+        <textarea id="sr-lyrics" name="lyrics" class="form-control font-monospace mb-2" rows="8" maxlength="20000" placeholder="[verse]&#10;…&#10;[chorus]&#10;…"></textarea>
+        <div class="form-check mb-3"><input id="sr-instrumental" name="instrumental" class="form-check-input" type="checkbox"><label for="sr-instrumental" class="form-check-label">Instrumental</label></div>
+      </div>
+      {% if music_studio|default(false) %}{{ prompt_guidance() }}{% endif %}
+      {% endif %}
       </div>
     {% endcall %}

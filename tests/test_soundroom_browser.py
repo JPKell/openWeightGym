@@ -147,6 +147,21 @@ def test_session_studio_layout_model_states_and_headers(desk, tmp_path, path, ki
     server, _, _ = desk
     sign_in(server, 'jordan')
     payload = state(models=[audio_model('ace', kind, lyrics=kind == 'music')], assets=[asset()])
+    gaps = '''() => [...document.querySelectorAll('.music-settings-column, .music-direction-column, .music-playback-column')].flatMap(column => {
+        const cards = [...column.children].filter(card => !card.closest('[hidden]') && card.getBoundingClientRect().height > 0);
+        const expected = parseFloat(getComputedStyle(column).rowGap);
+        return cards.slice(1).map((card, index) => ({
+            column: column.className,
+            expected,
+            actual: card.getBoundingClientRect().top - cards[index].getBoundingClientRect().bottom
+        }));
+    })'''
+
+    def check_gaps(page):
+        if width > 760:
+            for gap in page.evaluate(gaps):
+                assert abs(gap['actual'] - gap['expected']) < 1, (path, width, gap)
+
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server, capture=capture_audio(payload, []))
         page.set_viewport_size({'width':width, 'height':1000})
@@ -156,6 +171,16 @@ def test_session_studio_layout_model_states_and_headers(desk, tmp_path, path, ki
         playwright.expect(page.locator('#sr-model option')).to_have_count(1)
         page.locator('#sr-list button').click()
         playwright.expect(page.locator('#sr-selected')).to_be_visible()
+        check_gaps(page)
+        if kind == 'music':
+            settings_top = page.locator('[data-music-section="settings"]').bounding_box()['y']
+            queue_top = page.locator('.music-queue').bounding_box()['y']
+            page.locator('#sr-helper').evaluate('details => details.open = true')
+            check_gaps(page)
+            if width > 1250:
+                assert page.locator('[data-music-section="settings"]').bounding_box()['y'] == settings_top
+                assert page.locator('.music-queue').bounding_box()['y'] == queue_top
+            page.locator('#sr-helper').evaluate('details => details.open = false')
         page.screenshot(path=str(tmp_path / f'{kind}-{width}-selected.png'), full_page=True)
         assert page.get_by_role('heading', level=1).all_text_contents() == ['Music' if kind == 'music' else 'Sounds']
         assert not page.locator('.page-header .eyebrow').count()
@@ -174,6 +199,7 @@ def test_session_studio_layout_model_states_and_headers(desk, tmp_path, path, ki
                 assert not measurements['overflow'], (path, width, scenario)
                 assert not measurements['namelessFields'], measurements['namelessFields']
                 assert not measurements['invalidControls'], measurements['invalidControls']
+                check_gaps(page)
             page.screenshot(path=str(tmp_path / f'{kind}-{width}-{mode}.png'), full_page=True)
         assert not errors, errors
         browser.close()
@@ -522,6 +548,7 @@ def test_script_room_heading_layout_and_empty_states(desk, tmp_path, width, appe
             script = page.locator('.sp-editor-area').bounding_box()
             controls = page.locator('.sp-controls-area').bounding_box()
             assert cast['x'] < script['x'] < controls['x']
+            assert abs(cast['width'] - controls['width']) < 1
         payload['voices'] = []
         page.evaluate('window.soundroomRefresh()')
         playwright.expect(page.locator('#sr-generate')).to_be_disabled()
