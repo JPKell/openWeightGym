@@ -2,12 +2,11 @@
 {% from 'parts.html' import page_header, card, alert, more %}
 {% from 'extraction_parts.html' import source_panel, settings_panel, result_panel, batch_panel, receipt_field, inbox_item, data_row, no_items %}
 {% block title %}Image extraction · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/extraction-designs.css?v=1"><link rel="stylesheet" href="/static/extraction.css?v=1"><script src="/static/extraction.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/extraction-designs.css?v=1"><link rel="stylesheet" href="/static/extraction.css?v=1"><script src="/static/extraction.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div id="extraction-workspace" class="ex-live" data-layout="desk" data-batch="closed" data-extraction-root>
   {% set actions %}<button class="btn btn-outline-secondary" type="button" id="toggle-batch" aria-expanded="false" aria-controls="inbox-panel">Batch inbox</button><button class="btn btn-outline-secondary" type="button" id="refresh-history">Refresh history</button>{% endset %}
   {{ page_header('Image extraction', actions=actions) }}
-  <p class="text-secondary ex-intro">Turn images into descriptions, readable text and useful data.</p>
   {% call alert('danger', attrs={'id': 'error-notice', 'hidden': true}) %}<span id="error-message"></span><button type="button" class="btn btn-outline-danger btn-sm ms-2" id="retry">Retry extraction</button>{% endcall %}
   {% call alert('warning', attrs={'id': 'model-notice', 'hidden': true}) %}No permitted vision model supports JSON Schema output. Configure a projector in Models or confirm Vision + JSON Schema support for a Cloud APIs mapping.{% endcall %}
   <div id="action-status" class="small mb-3" role="status" aria-live="polite"></div>

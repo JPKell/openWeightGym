@@ -49,8 +49,19 @@ def upload(page, names):
 
 def test_batch_has_independent_settings_and_waits_for_all_results(workspace):
     page, api, calls = workspace
+    expect(page.get_by_text('Turn images into descriptions, readable text and useful data.', exact=True)).to_have_count(0)
+    expect(page.locator('#toggle-batch')).to_have_text('Batch inbox')
     upload(page, ['receipt.png', 'table.png'])
     expect(page.locator('#toggle-batch')).to_have_attribute('aria-expanded', 'true')
+    expect(page.locator('#toggle-batch')).to_have_text('Hide batch')
+    expect(page.locator('#inbox-panel')).to_be_visible()
+    page.locator('#toggle-batch').click()
+    expect(page.locator('#toggle-batch')).to_have_text('Batch inbox')
+    expect(page.locator('#toggle-batch')).to_have_attribute('aria-expanded', 'false')
+    expect(page.locator('#inbox-panel')).to_be_hidden()
+    page.locator('#toggle-batch').click()
+    expect(page.locator('#toggle-batch')).to_have_text('Hide batch')
+    expect(page.locator('#inbox-panel')).to_be_visible()
     page.locator('#task').select_option('receipt'); page.locator('#format').select_option('json')
     page.locator('#instructions').fill('Keep all line items.')
     page.get_by_role('button', name=re.compile('table.png')).click()
