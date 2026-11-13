@@ -103,7 +103,7 @@ def test_categories_keep_detail_pages_and_voice_in_their_section():
     nav = navigation("/file", ["manage-models", "front-voice"], True)
     assert nav["section"] == "Models" and nav["active"] == "/files"
     chat = next(group for group in nav["groups"] if group["name"] == "Chat")
-    assert ("Voice", "/voice") in chat["links"] and ("Voice desktop app", "/voice/desktop") in chat["links"]
+    assert ("Voice chat", "/voice") in chat["links"] and ("Voice desktop app", "/voice/desktop") in chat["links"]
     assert navigation("/voice/desktop", ["front-voice"], False)["active"] == "/voice/desktop"
     assert navigation("/chat/abc", [], False)["active"] == "/chat"
     assert navigation("/benchmarks/manage", ["manage-settings"], False)["section"] == "Benchmark"

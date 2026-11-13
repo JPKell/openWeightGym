@@ -153,7 +153,7 @@ requests bypass that cache. Load older images pages through retained outputs.
 
 ### Audio
 
-Under **Chat**, image and audio tools follow Conversations. Collections and Workflows are under **Benchmark**, after Compare.
+Under **Chat**, image and audio tools follow Text chat. Collections and Workflows are under **Benchmark**, after Compare.
 In **Music**, choose a model and read its input guidance. HeartMuLa requires lyrics; use ACE-Step
 for an instrumental. Where supported, **Musical direction** supplies tempo, key, time signature
 and vocal language. Turbo caps denoising at eight steps and ignores diffusion guidance.
@@ -167,8 +167,9 @@ duration and instrumental setting; the writing helper uses both.
 Use **Load older audio** to browse beyond the newest 100 recordings. Tag filtering searches the
 whole permitted library. Failed jobs show one status and the retained reason; **Retry** submits
 their saved request again, while **Use settings** lets you edit it first. Status polling retries
-temporary connection failures. **My account → Audio** sets the initial saved voice for Studio
-and Spoken chat. These controls improve direction and reproducibility; musical quality still
+temporary connection failures. **My account → Audio** sets the initial saved voice for
+Voice generation. Transcription has its own **Chat → Transcribe** page; **Voice chat** opens
+the conversational voice client. These controls improve direction and reproducibility; musical quality still
 depends on the model and prompt.
 
 Select a recording, then drag its waveform or enter **Region start/end** to select a playback

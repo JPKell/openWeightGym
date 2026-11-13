@@ -379,7 +379,7 @@ def test_audio_pages_assets_sharing_and_voices_require_identity_origin_and_conse
     browser, switch, users = desk
     assert browser.get("/chat/music", follow_redirects=False).status_code == 303
     sign_in(browser, "jordan")
-    for path, title in (("/chat/music", "Music"), ("/chat/sounds", "Sounds"), ("/chat/speech", "Speech"), ("/models/audio", "Audio models"),
+    for path, title in (("/chat/music", "Music"), ("/chat/sounds", "Sounds"), ("/chat/speech", "Voice generation"), ("/chat/transcribe", "Transcribe"), ("/models/audio", "Audio models"),
                         ("/account/audio", "Download format"), ("/system/audio", "Audio settings")):
         answer = browser.get(path)
         assert answer.status_code == 200 and title in answer.text, path
@@ -591,7 +591,7 @@ def test_lyrics_helper_uses_duration_and_instrumental_choice():
 def test_collections_and_workflows_are_benchmark_pages_used_to_compare_models():
     from weightroom.navigation import navigation
     chat = navigation("/chat", [], False)
-    assert chat["section"] == "Chat" and chat["links"][0] == ("Conversations", "/chat")
+    assert chat["section"] == "Chat" and chat["links"][0] == ("Text chat", "/chat")
     assert not {"/collections", "/workflows"} & {url for _, url in chat["links"]}
     for path, active in (("/collections", "/collections"), ("/collections/example", "/collections"),
                          ("/collections/example/sources/3", "/collections"), ("/workflows", "/workflows"),

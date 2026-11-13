@@ -67,7 +67,7 @@ class PlatformServices:
             return self.downloads
         if path.startswith(('/chat/images', '/models/images', '/mirrorwall-', '/settings/image', '/mirrorwall/')):
             return self.images
-        if path.startswith(('/voice', '/system/voice', '/chat/speech')):
+        if path.startswith(('/voice', '/system/voice', '/chat/speech', '/chat/transcribe')):
             return self.speech
         if path.startswith(('/chat/music', '/chat/sounds')):
             return self.audio

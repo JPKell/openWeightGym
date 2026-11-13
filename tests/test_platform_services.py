@@ -26,7 +26,7 @@ def test_every_service_combination_keeps_navigation_consistent(images, speech, a
     nav = navigation('/models', can, True, services)
     links = {url for group in nav['groups'] for _, url in group['links']}
     for url, enabled in {'/chat/images': images, '/models/images': images, '/settings/image': images,
-                         '/chat/music': audio, '/chat/sounds': audio, '/chat/speech': speech,
+                         '/chat/music': audio, '/chat/sounds': audio, '/chat/speech': speech, '/chat/transcribe': speech,
                          '/voice': speech, '/voice/desktop': speech, '/system/voice': speech,
                          '/models/audio': speech or audio, '/system/audio': speech or audio,
                          '/hub': downloads, '/civitai': images and downloads}.items():
@@ -49,7 +49,7 @@ def test_general_switches_apply_immediately_to_links_fragments_and_api_requests(
     sign_in(server, 'jordan')
     saved = save_services(server, **dict.fromkeys(SERVICE_SETTINGS, False))
     assert saved.status_code == 200 and 'Platform services' in saved.text
-    for url in ('/chat/images', '/chat/music', '/chat/sounds', '/chat/speech', '/models/images',
+    for url in ('/chat/images', '/chat/music', '/chat/sounds', '/chat/speech', '/chat/transcribe', '/models/images',
                 '/models/audio', '/hub', '/civitai', '/voice', '/system/voice', '/account/audio'):
         assert f'href="{url}"' not in saved.text, url
         assert server.get(url).status_code == 403, url

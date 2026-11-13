@@ -193,14 +193,9 @@ def test_designs_fit_both_appearances_and_all_states(preview, layout, width):
     assert page.locator('svg use').evaluate_all("(els) => els.every(e => document.getElementById(e.getAttribute('href').slice(1)))")
 
 
-def test_adjacent_workflows_keep_generation_drafts(preview):
+def test_voice_mode_keeps_generation_drafts(preview):
     page = preview
     page.locator('#sr-prompt').fill('Keep this work.')
-    for view in ('transcribe', 'chat'):
-        page.locator(f'[data-view="{view}"]').click()
-        playwright.expect(page.locator('#auxiliary')).to_be_visible()
-        page.locator('#back-to-generate').click()
-        playwright.expect(page.locator('#sr-prompt')).to_have_value('Keep this work.')
     page.locator('#sr-model').select_option('qwen-design')
     page.locator('[data-view="voices"]').click()
     playwright.expect(page.locator('#voice-search')).to_be_focused()

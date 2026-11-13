@@ -12,7 +12,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
     """
     services = services or PlatformServices()
     groups = [
-        {"name": "Chat", "links": [("Conversations", "/chat"), ("Image generation", "/chat/images"), ("Image extraction", "/chat/extraction"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Speech", "/chat/speech")]},
+        {"name": "Chat", "links": [("Text chat", "/chat"), ("Image generation", "/chat/images"), ("Image extraction", "/chat/extraction"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Voice generation", "/chat/speech"), ("Transcribe", "/chat/transcribe")]},
         {"name": "Models", "links": []},
         # Collections and workflows keep their own addresses; they are here because they are used to compare models.
         {"name": "Benchmark", "links": [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements"), ("Compare", "/benchmarks/compare"), ("Collections", "/collections"), ("Workflows", "/workflows")]},
@@ -21,7 +21,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
         {"name": "Settings", "links": []},
     ]
     if "front-voice" in can or "superuser" in can:
-        groups[0]["links"].append(("Voice", '/voice'))
+        groups[0]["links"].append(("Voice chat", '/voice'))
         groups[0]["links"].append(("Voice desktop app", '/voice/desktop'))
     if "manage-models" in can:
         groups[1]["links"] = [("Models", "/models"), ("Images", "/models/images"), ("Audio", "/models/audio"), ("Roles", "/roles")]
@@ -71,7 +71,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
             active = '/benchmarks/runs'
     if path.startswith("/models/images"):
         active = "/models/images"
-    elif path.startswith(("/chat/images", "/chat/extraction", "/chat/music", "/chat/sounds", "/chat/speech", "/models/audio")):
+    elif path.startswith(("/chat/images", "/chat/extraction", "/chat/music", "/chat/sounds", "/chat/speech", "/chat/transcribe", "/models/audio")):
         active = "/" + "/".join(path.strip("/").split("/")[:2])
     selected = next((group for group in groups if any(url == active for _, url in group["links"])), None)
     if root == "/plugins" and active != "/plugins/activity":

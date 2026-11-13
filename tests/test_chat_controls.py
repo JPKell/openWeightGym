@@ -62,7 +62,7 @@ def test_chat_option_save_and_sidebar_actions_preserve_owner_checks(desk, tmp_pa
     assert page.status_code == 200 and 'chat-side"' not in page.text and 'chat-settings' not in page.text
     assert 'Plugin conversation' in page.text and 'data-plugin-conversation' in page.text
     assert 'd-none" data-plugin-conversation data-plugin-active="false" hidden' in page.text
-    assert page.text.index('>Conversations</a>') < page.text.index('>Voice</a>') < page.text.index('aria-label="Your conversations"')
+    assert page.text.index('>Text chat</a>') < page.text.index('>Voice chat</a>') < page.text.index('aria-label="Your conversations"')
     for path in ('/collections', '/workflows', '/voice'):
         section = server.get(path)
         assert 'aria-label="Your conversations"' not in section.text and 'Find a conversation' not in section.text
@@ -402,7 +402,7 @@ def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
         page.get_by_role('button', name='Menu', exact=True).click()
         expect(page.locator('#mobile-navigation .chat-conversations-scroll')).to_be_visible()
         page.screenshot(path=str(images / 'mobile-rail.png'))
-        page.get_by_role('link', name='Voice', exact=True).click()
+        page.get_by_role('link', name='Voice chat', exact=True).click()
         expect(page.get_by_role('button', name='Start conversation', exact=True)).to_be_visible()
         page.get_by_role('button', name='Menu', exact=True).click()
         expect(page.get_by_role('searchbox', name='Find a conversation')).to_have_count(0)

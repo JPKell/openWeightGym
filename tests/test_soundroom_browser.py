@@ -404,8 +404,7 @@ def test_transcription_library_can_open_older_recordings(desk):
     older = state(models=first["models"], assets=[earlier])
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server, capture=capture_audio(first, [], older))
-        page.goto("http://console.test/chat/speech")
-        page.get_by_role("button", name="Transcribe", exact=True).click()
+        page.goto("http://console.test/chat/transcribe")
         page.get_by_role("button", name="Load older recordings", exact=True).click()
         playwright.expect(page.locator("#tr-list button")).to_have_count(2)
         page.locator("#tr-list button").last.click()
@@ -441,7 +440,7 @@ def test_script_room_cast_model_drafts_and_real_generation_requests(desk):
         page.locator('#sr-option-temperature').fill('0.6')
         page.locator('#sr-model').select_option('clone')
         playwright.expect(page.locator('[data-speaker="Maya"]')).to_have_value('two')
-        for mode in ('voices', 'transcribe', 'chat', 'studio'):
+        for mode in ('voices', 'studio'):
             page.locator(f'[data-tab="{mode}"]').click()
             playwright.expect(page.locator(f'[data-tab="{mode}"]')).to_have_attribute('aria-pressed', 'true')
         playwright.expect(page.locator('#sr-prompt')).to_have_value(script)
@@ -504,10 +503,10 @@ def test_script_room_heading_layout_and_empty_states(desk, tmp_path, width, appe
         page.emulate_media(color_scheme=appearance)
         page.goto('http://console.test/chat/speech')
         playwright.expect(page.locator('#sr-voice')).to_have_value('one')
-        assert page.locator('#soundroom').evaluate("root => root.children[0].matches('.page-header') && root.children[1].getAttribute('aria-label') === 'Speech modes'")
-        playwright.expect(page.locator('h1')).to_have_text('Speech')
+        assert page.locator('#soundroom').evaluate("root => root.children[0].matches('.page-header') && root.children[1].getAttribute('aria-label') === 'Voice generation modes'")
+        playwright.expect(page.locator('h1')).to_have_text('Voice generation')
         assert not page.locator('.sp-review, .sp-intro, .eyebrow').count()
-        for mode in ('studio', 'voices', 'transcribe', 'chat'):
+        for mode in ('studio', 'voices'):
             page.locator(f'[data-tab="{mode}"]').click()
             measured = page.evaluate(MEASURE)
             assert not measured['overflow'], (width, mode)

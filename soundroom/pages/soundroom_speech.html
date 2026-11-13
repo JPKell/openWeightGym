@@ -2,60 +2,24 @@
 {% from "parts.html" import page_header, card, section_title, alert %}
 {% from "navigation_parts.html" import pills, pill_button %}
 {% from "speech_parts.html" import studio_inputs, voice_card, speaker_row %}
-{% block title %}Speech · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><link rel="stylesheet" href="/static/speech.css?v=1"><script src="/soundroom-static/music.js?v=9" defer></script><script src="/soundroom-static/speech.js?v=5" defer></script>{% endblock %}
+{% block title %}Voice generation · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><link rel="stylesheet" href="/static/speech.css?v=1"><script src="/soundroom-static/audio-tools.js?v=1" defer></script><script src="/soundroom-static/music.js?v=9" defer></script><script src="/soundroom-static/speech.js?v=6" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom" class="speech-live" data-layout="script" data-mode="speech" data-defaults="{{ audio | tojson | forceescape }}">
-  {{ page_header("Speech") }}
-  {% call pills('Speech modes', buttons=true, class_='gap-1 mb-4') %}
-  {% for key, label in [('studio', 'Generate'), ('voices', 'Voices'), ('transcribe', 'Transcribe'), ('chat', 'Spoken chat')] %}
+  {{ page_header("Voice generation") }}
+  {% call pills('Voice generation modes', buttons=true, class_='gap-1 mb-4') %}
+  {% for key, label in [('studio', 'Generate'), ('voices', 'Voices')] %}
   {{ pill_button(label, key == 'studio', attrs={'data-tab': key, 'aria-controls': 'speech-' ~ key}) }}
   {% endfor %}
   {% endcall %}
   {% call alert('danger', role='alert', attrs={'id': 'sr-message', 'hidden': ''}) %}{% endcall %}
-  <section id="speech-studio" data-panel="studio" class="sp-grid" aria-label="Speech generation">
+  <section id="speech-studio" data-panel="studio" class="sp-grid" aria-label="Voice generation">
     <form id="sr-form" class="speech-inputs" data-hold-refresh>
       {{ studio_inputs(live=true) }}
     </form>
     {% include "soundroom_player.html" %}
   </section>
   {{ voice_card() }}{{ speaker_row() }}
-
-  <section id="speech-transcribe" data-panel="transcribe" hidden>
-    <div class="row g-3">
-      <div class="col-lg-5">{% call card("") %}
-        <label class="form-label" for="tr-model">Transcription model</label><select id="tr-model" class="form-select mb-3"></select>
-        <label class="form-label" for="tr-diarize">Who spoke when <span class="text-secondary">optional</span></label><select id="tr-diarize" class="form-select mb-3"></select>
-        <label class="form-label" for="tr-language">Language <span class="text-secondary">optional, such as en</span></label><input id="tr-language" class="form-control mb-3" maxlength="16">
-        <label class="form-label" for="tr-file">Audio</label><input id="tr-file" type="file" accept="audio/*" class="form-control mb-2">
-        <div class="d-flex gap-2 mb-3"><button id="tr-record" type="button" class="btn btn-outline-secondary">● Record</button><span id="tr-recording" class="text-secondary small align-self-center"></span></div>
-        <button id="tr-go" type="button" class="btn btn-primary w-100" disabled>Transcribe</button>
-      {% endcall %}</div>
-      <div class="col-lg-7">
-        {% call card("") %}
-          <div class="d-flex flex-wrap gap-2 align-items-center mb-2"><strong class="me-auto">Transcript</strong>
-            <button class="btn btn-outline-secondary btn-sm" type="button" data-copy>Copy</button>
-            {% for format in ['txt','srt','vtt','json'] %}<button class="btn btn-outline-secondary btn-sm" type="button" data-save="{{format}}">{{format}}</button>{% endfor %}</div>
-          <audio id="tr-audio" controls class="w-100 mb-2" hidden></audio>
-          <div id="tr-result" class="sr-transcript text-secondary">Choose a recording and a model.</div>
-        {% endcall %}
-        {{ section_title("Recordings") }}<div id="tr-list" class="list-group sr-list"></div>
-        <button id="tr-older" class="btn btn-outline-secondary btn-sm mt-2" type="button" hidden>Load older recordings</button>
-      </div>
-    </div>
-  </section>
-
-  <section id="speech-chat" data-panel="chat" hidden>
-    {% call card("", attrs={"style": "max-width:40rem"}) %}
-      {{ section_title("Talk with a model in one of your voices") }}
-      <p class="small">A hands-free conversation: speak, and the answer is spoken back in the voice you choose. You can interrupt it. Each exchange is kept as a conversation under Chat → Conversations.</p>
-      <label class="form-label" for="sc-voice">Voice</label><select id="sc-voice" class="form-select mb-2"></select>
-      <p id="sc-unavailable" class="form-text">Save a voice on the Voices tab first.</p>
-      <div class="form-check mb-3"><input id="sc-record" class="form-check-input" type="checkbox"><label for="sc-record" class="form-check-label">Record the call, for testing</label></div>
-      <a id="sc-open" class="btn btn-primary" href="/voice" data-base="/voice">Open spoken chat</a>
-      <p class="form-text mb-0">It opens on the Voice page, where you talk as yourself: you can speak in your own voices and those shared with your groups.</p>
-    {% endcall %}
-  </section>
 
   <section id="speech-voices" data-panel="voices" hidden>
     <div class="row g-3">

@@ -23,7 +23,7 @@ HOST = '5855323a162516e680c785a3dd60f563bfc44129d809af71eb8674ff7316901d'
 # Explicit routes keep this check portable: it does not depend on ignored audit artifacts.
 PAGES = (
     '/', '/chat', '/collections', '/workflows', '/chat/images', '/chat/music',
-    '/chat/sounds', '/chat/speech', '/voice', '/voice/desktop', '/models',
+    '/chat/sounds', '/chat/speech', '/chat/transcribe', '/voice', '/voice/desktop', '/models',
     '/models/images/workflows', '/models/audio', '/dry-fit', '/roles', '/files',
     '/hub', '/civitai', '/fingerprints', '/cloud-apis', '/benchmarks', '/benchmarks/runs',
     '/benchmarks/results', '/benchmarks/compare',
