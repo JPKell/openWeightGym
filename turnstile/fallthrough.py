@@ -1,9 +1,7 @@
-"""Requests turnstile sends to the default node only because nothing else routed them.
+"""Bounded diagnostics for refused requests with no route or explicit node.
 
-Phase 0 of docs/peer-nodes-plan.md. Turnstile's last resort sends a request to the default
-compute node whatever node it was meant for. Each distinct method, path pattern and port that
-reaches that resort is printed once per process, so the journal lists what still depends on a
-default node. Later phases route those paths and the list shrinks to nothing.
+There is no default-node dispatch. Keep record IDs out of route diagnostics and
+print each route once per process so missing caller routes can be investigated.
 """
 
 import re
@@ -21,7 +19,7 @@ def pattern(path: str) -> str:
 
 
 class Fallthrough:
-    """Counts the requests that reached the default node by fallthrough, by route."""
+    """Count refused unmapped requests by route."""
 
     def __init__(self, limit: int = LIMIT, say=print) -> None:
         """Remember at most `limit` routes; `say` prints the first of each (the journal, by default)."""
@@ -37,7 +35,7 @@ class Fallthrough:
         if len(self.seen) >= self.limit:
             return
         self.seen[key] = 1
-        self.say(f"turnstile: default-node fallthrough {method} {key[1]} on port {port}", flush=True)
+        self.say(f"turnstile: unrouted request {method} {key[1]} on port {port}", flush=True)
 
     def routes(self) -> set[str]:
         """Every route seen so far, as `METHOD pattern port`."""

@@ -2,6 +2,14 @@
 {% from "parts.html" import card, said_box, swaps, section_title , confirm_check, confirm_loss, alert %}
 {% from "parts.html" import page_header, form_section, more %}
 {% block title %}Cloud APIs · openWeightGym{% endblock %}
+{% macro cloud_model_row(ours='', model={}) %}
+<tr>
+<td><input name="ours" class="form-control" value="{{ ours }}" placeholder="Name shown here" aria-label="{{ 'our name' if ours else "another model's name here" }}" autocapitalize="none" spellcheck="false"></td>
+<td><input name="theirs" class="form-control" value="{{ model.theirs|default('') }}" placeholder="Model ID at the service" aria-label="{{ "the service's name" if ours else 'its name at the service' }}" autocapitalize="none" spellcheck="false"></td>
+<td><input name="in" class="form-control" value="{{ model['in']|default('') }}" aria-label="{{ 'price in' if ours else 'its price in' }}" inputmode="decimal"></td>
+<td><input name="out" class="form-control" value="{{ model.out|default('') }}" aria-label="{{ 'price out' if ours else 'its price out' }}" inputmode="decimal"></td>
+</tr>
+{% endmacro %}
 {% block main %}
 {{ page_header('Cloud APIs', 'Connect external model services and manage their access.') }}
 {{ said_box(said, failed) }}
@@ -48,20 +56,8 @@
       <table class="sortable table table-sm align-middle">
         <thead><tr><th>Our name</th><th>The service's name for it</th><th>Price in</th><th>Price out</th></tr></thead>
         <tbody>
-        {% for ours, model in service.models.items() %}
-        <tr>
-          <td><input name="ours" class="form-control" value="{{ ours }}" aria-label="our name" autocapitalize="none" spellcheck="false"></td>
-          <td><input name="theirs" class="form-control" value="{{ model.theirs }}" aria-label="the service's name" autocapitalize="none" spellcheck="false"></td>
-          <td><input name="in" class="form-control" value="{{ model["in"] if model["in"] is defined else "" }}" aria-label="price in" inputmode="decimal"></td>
-          <td><input name="out" class="form-control" value="{{ model.out if model.out is defined else "" }}" aria-label="price out" inputmode="decimal"></td>
-        </tr>
-        {% endfor %}
-        <tr>
-          <td><input name="ours" class="form-control" placeholder="another, such as gpt-big" aria-label="another model's name here" autocapitalize="none" spellcheck="false"></td>
-          <td><input name="theirs" class="form-control" placeholder="its name at the service" aria-label="its name at the service" autocapitalize="none" spellcheck="false"></td>
-          <td><input name="in" class="form-control" aria-label="its price in" inputmode="decimal"></td>
-          <td><input name="out" class="form-control" aria-label="its price out" inputmode="decimal"></td>
-        </tr>
+        {% for ours, model in service.models.items() %}{{ cloud_model_row(ours, model) }}{% endfor %}
+        {{ cloud_model_row() }}
         </tbody>
       </table>
       </div>
@@ -99,7 +95,7 @@
 
     <form method="post" action="/cloud-apis" class="row g-3 align-items-center mt-3" {{ swaps() }}>
       <input type="hidden" name="name" value="{{ service.name }}">
-      <div class="col-md-6">{% set confirmation_label %}Yes, remove {{ service.name }} and its models from here{% endset %}{{ confirm_check(confirmation_label, "sure-{{ loop.index }}") }}</div>
+      <div class="col-md-6">{% set confirmation_label %}Yes, remove {{ service.name }} and its models from here{% endset %}{{ confirm_check(confirmation_label, 'sure-' ~ loop.index) }}</div>
       <div class="col-md-6"><button  class="btn btn-outline-danger" name="do" value="remove" {{ confirm_loss() }}>Remove the service</button></div>
     </form>
   {% endcall %}

@@ -28,12 +28,12 @@
   </div>
   <p class="small text-secondary mb-3" id="design-description"></p>
   {% call page_header('Compute nodes', pretitle='SETTINGS / INFRASTRUCTURE') %}
-    <button type="button" class="btn btn-primary" id="add-node" aria-expanded="false" aria-controls="pairing-panel">+ Add GPU node</button>
+    <button type="button" class="btn btn-primary" id="add-node" aria-expanded="false" aria-controls="pairing-panel">+ Add compute node</button>
   {% endcall %}
   <div class="fleet-summary small" aria-label="Fleet summary"><span><strong id="node-total">6</strong> nodes</span><span><i class="state-dot is-ready" aria-hidden="true"></i><strong id="available-total">3</strong> available</span><span id="attention-total"></span><span class="text-secondary">Policy, runtimes &amp; access in one place</span></div>
 
   {% set pairing_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" id="close-pairing">Close</button>{% endset %}
-  {% call card('Add a GPU node', id='pairing-panel', actions=pairing_actions, attrs={'hidden': '', 'aria-labelledby': 'pairing-title'}, header_id='pairing-title', class_='pairing-panel') %}
+  {% call card('Add a compute node', id='pairing-panel', actions=pairing_actions, attrs={'hidden': '', 'aria-labelledby': 'pairing-title'}, header_id='pairing-title', class_='pairing-panel') %}
     <div class="pairing-layout">
       <div><strong>Run this on the new machine</strong><p class="small text-secondary mb-0">The installer registers the node with this console. A real pairing code is single-use and expires.</p></div>
       <div class="min-w-0"><div class="d-flex gap-2 align-items-start"><pre class="mb-0 flex-grow-1"><code id="pairing-command">{{ pairing_command }}</code></pre><button type="button" class="btn btn-outline-secondary btn-sm" id="copy-command">Copy</button></div><span class="form-hint">Demo command · deliberately nonfunctional. Production generates a fresh code.</span></div>

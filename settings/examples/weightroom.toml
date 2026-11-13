@@ -54,8 +54,9 @@ port = 8440
 # otherwise compute.
 # chat_model_url = "http://127.0.0.1:8442"
 
-# Where LoadCoach is.
-compute = "http://compute.lan:8442"
+# The compute nodes are the [machines.NAME] tables at the end of this file, all peers. Pairing adds
+# them. An older install's top-level `compute` is read as a node named compute until `owg update`
+# moves it to [machines.<its host name>] with formerly = "compute".
 
 # The file that holds weightroom's own key at LoadCoach, and nothing else. Make the key on
 # compute, in the group "system", and give the account the two things weightroom needs:
@@ -112,22 +113,18 @@ data = "../data"
 # plugin-local settings.json files; pairing keys and authorization snapshots stay in keys/data.
 plugins_dir = "../plugins"
 
-# Where the primary compute machine's Spotter is. Its charts, service and power controls
-# continue at /machine. System > Telemetry uses signed Spotter URLs from [machines.NAME]
-# for other hosts, and front keeps its own sampled history by physical-host fingerprint.
-spotter = "http://compute.lan:8444"
+# Each node's Spotter is its [machines.NAME].spotter. System > Telemetry asks it through
+# turnstile, and front keeps its own sampled history by physical-host fingerprint.
 
 # Private voice-gateway listener for System → Voice status, recording and synthesis controls.
 # Do not use its public Twilio or desktop port. Operator sessions are checked by turnstile.
 voice_gateway = "http://127.0.0.1:8446"
 
-# The hardware address of compute's network card, for waking it: `ip link` on compute shows it
-# after "link/ether". With this set, those whose group has "front-wake" get a Wake button while
-# compute is not answering, and turnstile wakes compute for a request. Left out, nothing is woken.
-# The packet goes to everyone on the home network; name that network's own broadcast address
-# if this machine has more than one network and the default picks the wrong one.
-# wake_mac = "aa:bb:cc:dd:ee:ff"
-# wake_address = "192.168.1.255"
+# Waking a node: its [machines.NAME] wake_mac (the network card's address, `ip link` on the node
+# shows it after "link/ether") and wake_address. With them, those whose group has "front-wake"
+# get a Wake button while that node is not answering, and turnstile may wake it for a request no
+# awake node can start. The packet goes to everyone on the home network; name that network's own
+# broadcast address if this machine has more than one network and the default picks the wrong one.
 
 
 # SoundRoom audio pages (Chat → Music, Sounds and Speech). The chat model or role that writes
@@ -150,8 +147,8 @@ toollocker = ""
 # compute and needs no other change. weightroom's own pages reach compute through it too.
 #   host              the address turnstile listens on. 0.0.0.0 for every address this machine has
 #   ports             the ports passed on: LoadCoach's first, then the ToolLocker's and spotter's
-#   machine_key_file  the key this machine shares with compute, counted from this file. The same
-#                     file as LoadCoach's machine_key_file on compute, copied here, readable by you alone
+#   machine_key_file  the key the first node paired shares with this machine, counted from this file. Each
+#                     node's own is its [machines.NAME].machine_key_file, readable by you alone
 #   keep_days         days the event log is kept here, which since milestone 91 is the suite's log. 0 keeps everything
 #   max_in_flight     requests turnstile carries to compute at once. One more is turned away at once with 503 and
 #                     Retry-After instead of being held here, outside LoadCoach's line and its priorities. Keep it
@@ -183,16 +180,17 @@ toollocker_url = "http://127.0.0.1:9443"
 # Use "front" for front's built-in file manager, or an explicitly configured worker name.
 # artifact_machine = "front_cpu"
 
-# Further LoadCoach instances, inventoried on System > Telemetry and eligible for model
-# placement. The one named by `compute` above is "compute". Each instance has its own secret;
-# its LoadCoach machine_name must match the table name here. A Spotter URL lets front sample
+# The compute nodes: LoadCoach instances, inventoried on System > Telemetry and all eligible for
+# model placement. Each has its own secret; its LoadCoach machine_name must match the table
+# name here. `formerly` keeps an old name resolving in stored rows, links and request numbers. A Spotter URL lets front sample
 # CPU, RAM and GPU readings on that physical host. Several instances on one host share a
 # fingerprint and appear on one telemetry card. See docs/installation.md#multi-machine-telemetry.
 # [machines.rig]
 # compute = "http://compute.lan:9442"
 # machine_key_file = "../keys/rig.key"
 # spotter = "http://compute.lan:9444"
-# Optional wake settings for this node (otherwise only the default compute can wake).
+# formerly = "compute"
+# Optional wake settings for this node (otherwise it cannot be woken).
 # wake_mac = "aa:bb:cc:dd:ee:ff"
 # wake_address = "192.168.1.255"
 # With voice installed, include 8445 in ports above. Readiness probes never wake compute.

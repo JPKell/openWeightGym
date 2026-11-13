@@ -1,6 +1,6 @@
 {% if model.get('engine', 'llama_cpp') == 'llama_cpp' %}
 {% set template_caps = model.get('chat_template_caps', {}) %}
-<p class="small text-secondary mb-0 mt-1">Reasoning effort on {{ selected_node|default(request.query_params.get("node", "compute") if request else "compute") }}:
+<p class="small text-secondary mb-0 mt-1">Reasoning effort on {{ selected_node|default(request.query_params.get("node", "") if request else "") }}:
   {% if 'reasoning_effort_levels' in template_caps %}
     {% if template_caps.reasoning_effort_levels %}{{ template_caps.reasoning_effort_levels|join(', ') }} (lowest to highest).{% else %}The running template reports no distinct levels.{% endif %}
   {% elif template_caps.get('supports_reasoning_effort') is sameas false %}The running template does not support configurable reasoning effort.

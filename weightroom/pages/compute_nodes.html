@@ -9,7 +9,7 @@
 <div class="settings-page compute-nodes" data-compute-nodes data-machine="{{ selected_machine }}">
 {% set pairing_open = pairing_code or opened|default('') == 'add-node' %}
 {% call page_header('Compute nodes') %}
-{% if may_pair %}<form method="get" action="/compute-nodes"><input type="hidden" name="machine" value="{{ selected_machine }}"><input type="hidden" name="open" value="add-node"><button class="btn btn-primary btn-sm" data-toggle-pairing aria-expanded="{{ 'true' if pairing_open else 'false' }}" aria-controls="add-node">+ Add GPU node</button></form>{% endif %}
+{% if may_pair %}<form method="get" action="/compute-nodes"><input type="hidden" name="machine" value="{{ selected_machine }}"><input type="hidden" name="open" value="add-node"><button class="btn btn-primary btn-sm" data-toggle-pairing aria-expanded="{{ 'true' if pairing_open else 'false' }}" aria-controls="add-node">+ Add compute node</button></form>{% endif %}
 {% endcall %}
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% call kpi_row('Fleet summary', class_='compute-fleet-summary mb-3') %}
@@ -19,7 +19,7 @@
 {{ said_box(said, failed) }}
 {% if may_pair %}
 {% set pairing_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" data-close-pairing>Close</button>{% endset %}
-{% call card('Add a GPU node', id='add-node', actions=pairing_actions, attrs={} if pairing_open else {'hidden': ''}, class_='compute-pairing') %}
+{% call card('Add a compute node', id='add-node', actions=pairing_actions, attrs={} if pairing_open else {'hidden': ''}, class_='compute-pairing') %}
 <div class="compute-pairing-layout"><div><strong>Connect a new machine</strong><p class="small text-secondary mb-0">Install openWeightGym with a one-time pairing code. The installer registers this node and restarts the gateway to use it.</p></div><div class="min-w-0">
 {% if pairing_code %}
 <p class="small mb-2">On the GPU machine, run:</p><div class="d-flex align-items-start gap-2 mb-2"><pre class="mb-0 flex-grow-1 text-wrap"><code id="pairing-command">{{ pairing_code.command }}</code></pre><button type="button" class="btn btn-outline-secondary btn-sm" data-copy-target="pairing-command">Copy</button></div>
@@ -58,6 +58,6 @@
   {% if selected_node.lifecycle|default('active') != 'retired' and selected_node.configured|default(true) %}{% include 'settings_machine_values.html' %}{% endif %}
 </section>
 </div>
-{% else %}{% call card('No compute nodes yet') %}<p class="text-secondary mb-0">{{ 'Use Add GPU node to connect your first machine.' if may_pair else 'Ask a superuser to pair or configure a compute node.' }}</p>{% endcall %}{% endif %}
+{% else %}{% call card('No compute nodes yet') %}<p class="text-secondary mb-0">{{ 'Use Add compute node to connect your first machine.' if may_pair else 'Ask a superuser to pair or configure a compute node.' }}</p>{% endcall %}{% endif %}
 </div>
 {% endblock %}

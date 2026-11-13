@@ -229,6 +229,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         playback_times = {}
         timed_turn = None
         token = ""  # the voice session's own, for its sound socket, given when it is made
+        session_voice = voice  # the node the session started on, which keeps it until it ends; the front says which
         conversation = None  # the WeightRoom conversation a SoundRoom call's exchanges are kept in
         heard_pcm, said_pcm = bytearray(), bytearray()  # both sides' sound, kept only when recording
 
@@ -391,7 +392,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
 
         async def prepare():
             """Authorize and prepare the requested compute voice session."""
-            nonlocal bridge, token
+            nonlocal bridge, token, session_voice
             agent_settings = configuration(settings) if mode == "hermes" and settings.get("hermes") else None
             agent_model = {"agent_model": agent_settings["model"]} if agent_settings else {}
             readiness = await ask("GET", turnstile + "/turnstile/ready", key if source == "desktop" else app_key,
@@ -445,6 +446,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                     code = failure.get('code') if isinstance(failure, dict) else None
                     raise ValueError(code if code in START_FAILURES else "busy" if result.status_code == 429 else "unavailable")
                 token = result.json()["token"]
+                session_voice = (result.json().get("voice_url") or voice).rstrip("/")
                 if mode == "direct":
                     # Exercise the chosen model with the caller's own key, as every turn will.
                     tried = await ask("POST", turnstile + "/v1/chat/completions", key, json={
@@ -485,7 +487,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             nonlocal upstream, active, agent_task
             async with asyncio.timeout(settings.get("startup_seconds", 60)) as startup:
                 await prepare()
-                uri = voice.replace("http://", "ws://").replace("https://", "wss://") + "/voice/stream?session_id=" + sid
+                uri = session_voice.replace("http://", "ws://").replace("https://", "wss://") + "/voice/stream?session_id=" + sid
                 # The session's own token, not the caller's key: the key goes only to turnstile.
                 async with connector(uri, additional_headers={"authorization": "Bearer " + token},
                                      max_size=protocol.ASK_LIMIT, max_queue=4, write_limit=4096, open_timeout=5) as connected:
@@ -640,7 +642,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             await asyncio.gather(listener, running, *([agent_task] if agent_task else []), return_exceptions=True)
             with suppress(Exception):
                 if token:
-                    await ask("DELETE", voice + "/voice/sessions/" + sid, token, timeout=2)
+                    await ask("DELETE", session_voice + "/voice/sessions/" + sid, token, timeout=2)
             if record:
                 with suppress(Exception):
                     await keep_recordings()

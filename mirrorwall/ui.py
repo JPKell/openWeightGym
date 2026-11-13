@@ -73,13 +73,13 @@ def routes(for_people, page, ask, model_api):
         facts = value.get('nodes', {})
         value['node_cards'] = {name: (one.get('engine_cards') or {}).get('sdcpp', one.get('cards') or [])
                                for name, one in facts.items()}
-        value['default_node'] = 'compute' if 'compute' in facts else next(iter(facts), 'compute')
+        value['default_node'] = next(iter(facts), '')
         selected_node = request.query_params.get('node', '')
-        value['models'] = [{**copy, 'node':copy.get('machine', 'compute'),
+        value['models'] = [{**copy, 'node':copy.get('machine', ''),
                             'workflow_model':one['name'], 'workflow_model_id':one.get('model_id')}
                            for one in value['models'] if one.get('engine') == 'sdcpp'
                            for copy in one.get('locations') or [one]
-                           if not selected_node or copy.get('machine', 'compute') == selected_node]
+                           if not selected_node or copy.get('machine', '') == selected_node]
         value['cards'] = value['node_cards'].get(selected_node or value['default_node'],
                             (value.get('engine_cards') or {}).get('sdcpp', value.get('cards') or []))
         names = list(facts) or [value['default_node']]

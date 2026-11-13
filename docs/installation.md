@@ -8,7 +8,7 @@ curl -fsSL https://raw.githubusercontent.com/JPKell/openWeightGym/main/install.s
 ```
 
 From a checkout, `./install.sh` does the same and the checkout becomes the installation. Running
-the installer again offers **Update**, **Repair**, **Install components**, **Add a GPU node**
+the installer again offers **Update**, **Repair**, **Install components**, **Add a compute node**
 (on a console) and **Uninstall**.
 
 A new console installation asks whether to enable image generation, speech (TTS, STT and Voice),
@@ -130,6 +130,55 @@ docker compose -f tests/docker/images/compose.yaml down -v
 
 Installed services continue to use `owg update; owg restart`.
 
+## Docker qualification with real models
+
+`tests/docker/qualification/compose.yaml` runs a disposable front and three peer nodes
+(alpha, beta and gamma), each with a separate Docker volume and generated credentials.
+The console is published on `127.0.0.1:19440`; API and MCP diagnostic pages use loopback
+ports 19442 and 19443. It never reads an installed suite's
+settings, accounts, model folders or databases. Downloads consume real storage; choose
+small models and account for the front's storage/cache copies and each destination copy.
+
+```bash
+docker compose -f tests/docker/qualification/compose.yaml build seed
+docker compose -f tests/docker/qualification/compose.yaml up -d --no-build
+docker compose -f tests/docker/qualification/compose.yaml exec alpha bash scripts/install-llamacpp.sh --prebuilt --backend cpu --prefix /opt/owg-runtimes/llamacpp --yes
+.venv/bin/python tests/docker/qualification/browser.py --output /tmp/owg-browser-review
+.venv/bin/python tests/docker/qualification/scenarios.py download-llm
+.venv/bin/python tests/docker/qualification/scenarios.py install-llm --node beta
+```
+
+The browser runner discovers actual navigation links, waits for deferred content, and
+records screenshots, status codes, browser errors and page overflow at desktop and phone
+widths. Scenario checks perform real downloads and installations through browser controls.
+`gpu.compose.yaml` optionally grants alpha NVIDIA devices and read-only driver/toolkit
+access; inspect its host paths before using it. Install the CUDA runtime inside alpha at
+`/opt/owg-runtimes/llamacpp-gpu` with the same installer before running GPU models.
+Runtime installations and model downloads are confined to the containers and named volumes.
+Each worker has a private cgroup namespace, a 16 GiB ceiling and no swap. `SYS_ADMIN` is used
+only to delegate that container's cgroup; startup refuses an unbounded or non-private mount.
+No host cgroup mount or installed service policy is changed.
+
+Optional native media engines and CPU voice bundles are installed inside the same runtime volume:
+
+```bash
+docker compose -f tests/docker/qualification/compose.yaml exec beta python scripts/install-sdcpp.py --backend cpu --prefix /opt/owg-runtimes/sdcpp --jobs 8
+docker compose -f tests/docker/qualification/compose.yaml exec beta python -m soundroom.install --root /app --backend cpu --prefix /opt/owg-runtimes/audiocpp --jobs 8
+docker compose -f tests/docker/qualification/compose.yaml exec beta python scripts/voice-models.py /opt/owg-runtimes/voice
+```
+
+The optional `postgres` profile runs an unexposed PostgreSQL 16 container. After restoring an
+accounts store into it and writing the owner-only `/state/front/qualification-postgres.dsn`,
+`postgres.compose.yaml` temporarily binds front's accounts to that store. The normal Compose
+file restores SQLite bindings; its original files remain intact. The image includes matching
+PostgreSQL 16 recovery tools as well as the distribution's client tools.
+
+Remove only this qualification environment when finished:
+
+```bash
+docker compose -f tests/docker/qualification/compose.yaml -f tests/docker/qualification/gpu.compose.yaml down -v
+```
+
 ## ToolLocker on the console machine
 
 New **Console only** and **Everything on this machine** installations include ToolLocker with
@@ -211,7 +260,7 @@ the `pg_hba.conf` lines to add.
 
 | Command | Does |
 |---|---|
-| `owg` | shows what is running, then a menu: restart services (choosing which), restart another machine's services over SSH, update, repair, install components, doctor, logs, add a GPU node, uninstall |
+| `owg` | shows what is running, then a menu: restart services (choosing which), restart another machine's services over SSH, update, repair, install components, doctor, logs, add a compute node, uninstall |
 | `owg status` | programs, addresses, the llama.cpp build and the models' size |
 | `owg start`, `stop`, `restart [PROGRAM…]` | controls the services, all of them by default |
 | `owg restart --host USER@HOST [PROGRAM…]` | restarts services over SSH using that host's OWG installation; all installed services by default |

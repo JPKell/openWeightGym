@@ -15,6 +15,7 @@ from pathlib import Path
 
 from db import DatabaseConfigurationError, DatabaseRegistry, DatabaseSource
 from loadcoach.models import check_model, check_order, effective
+from loadcoach.log import LEGACY
 from loadcoach.devices import discover
 from loadcoach.gpu_type import is_integrated
 from engines import checked_installations
@@ -46,7 +47,8 @@ class Config:
     engine_gpus: dict[str, list[str]] = field(default_factory=dict)  # absent engine: all compatible enabled cards; []: CPU only
     gpu_details: list[dict] = field(default_factory=list)  # descriptions from device discovery
     machine_key_file: str = ""  # the key compute shares with front: turnstile signs what it sends on with it. Empty: only this machine may ask, as anyone
-    machine_name: str = "compute"  # the stable name this instance uses when it sends logs and asks front for accounts
+    machine_name: str = LEGACY  # the stable name this instance uses when it sends logs and asks front for accounts
+    former_machine_name: str = ""  # pre-peer name retained for historical links and stored references
     front: str = ""  # turnstile's address, such as http://10.77.10.42:8442, which compute asks for the accounts
     toollocker_runs_on_front: bool = False  # ToolLocker runs on the front: this node refuses its settings and reports. Formerly front_toollocker
     database: DatabaseSource = ":memory:"  # resolved core store; a path remains accepted for compatibility
@@ -166,7 +168,7 @@ def config_from(path: Path, data: dict, file: dict) -> Config:
         )
     if not isinstance(data.get("model_defaults", {}), dict) or not isinstance(data.get("models", {}), dict):
         raise SystemExit(f"{path}: [model_defaults] and [models] must be tables")
-    machine_name = data.get("machine_name", "compute")
+    machine_name = data.get("machine_name", LEGACY)
     if not isinstance(machine_name, str) or not (machine_name.isidentifier() or re.fullmatch(r"[a-z0-9][a-z0-9-]{0,30}", machine_name)):
         raise SystemExit(f"{path}: machine_name must be a stable identifier, matching [machines.NAME] on front")
     for gone in ("hosted", "keys"):  # outside services are the front machine's since milestone 114: their keys are files there, and compute makes no outside calls

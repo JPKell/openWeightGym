@@ -1,12 +1,12 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, page_header, section_title, alert, empty_row %}
+{% from "parts.html" import card, page_header, section_title, alert, empty_row, more %}
 {% block title %}Restore preview · openWeightGym{% endblock %}
 {% block main %}
 {{ page_header("Restore preview", lead="Review the selected backup before restoring data.", back=("/backups", "Backups")) }}
 <p><code>{{ backup_id }}</code></p>
-{% if compute_error %}{% call alert('warning', class_='py-2') %}{{ compute_error }}{% endcall %}{% endif %}
 
-{% for label, part in [("Front machine", front), ("Compute machine", compute_part)] %}
+
+{% for label, part in [("Front" if backup_node == "front" else backup_node, backup_part)] %}
 {% call card(label, true) %}
 {% if part %}
 {% if not part.get('protection', {}).get('encrypted') %}
@@ -22,7 +22,7 @@
 <div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr><th>Destination</th><th>Contents</th><th>Size</th><th>SHA-256</th></tr></thead><tbody>
 {% for file in part.get("files", []) %}<tr><td><code>{{ file.source }}</code></td><td>{{ file.kind }}{% if file.contains_protected_identity %}<div class="small text-warning-emphasis">Contains protected account recovery data</div>{% endif %}</td><td>{{ file.size|size }}</td><td><code>{{ file.sha256[:12] }}…</code></td></tr>{% else %}{% call empty_row(4) %}The file list is unavailable.{% endcall %}{% endfor %}
 </tbody></table></div>
-{% if part.get("verification", {}).get("counts") %}<div class="small"><span class="text-secondary">Isolated restore check:</span> {% for name, count in part.verification.counts.items() %}<span class="me-2">{{ name|replace("_", " ") }} <strong>{{ count }}</strong></span>{% endfor %}</div>{% endif %}
+{% if part.get("verification", {}).get("counts") %}{% call more('Isolated restore checks') %}<div class="small">{% for name, count in part.verification.counts.items() %}<div>{{ name|replace("_", " ") }} <strong>{{ count }}</strong></div>{% endfor %}</div>{% endcall %}{% endif %}
 {% if part.get("stores") %}
 {{ section_title("Verified database stores") }}
 <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Store</th><th>Engine</th><th>Owners</th><th>Server</th><th>Schema streams</th><th>Method</th></tr></thead><tbody>
@@ -35,7 +35,7 @@
 {% for model in part.models %}<tr><td>{{ model.name }}</td><td><code>{{ model.model_id }}</code></td><td><code>{{ model.path }}</code></td><td>{{ model.recovery_source or "not recorded" }}</td><td>{{ "yes" if model.present else "no" }}</td></tr>{% endfor %}
 </tbody></table></div>
 {% endif %}
-{% else %}<p class="text-secondary mb-0">This half of the recovery set is missing.</p>{% endif %}
+{% else %}<p class="text-secondary mb-0">This node’s recovery archive is missing.</p>{% endif %}
 {% endcall %}
 {% endfor %}
 

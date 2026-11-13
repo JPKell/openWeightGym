@@ -51,7 +51,9 @@ def audit(origin, output, widths=(1440, 390), paths=None):
                 row = {'path': path, 'width': width}
                 try:
                     response = page.goto(origin + path, wait_until='domcontentloaded', timeout=60000)
-                    page.wait_for_timeout(900)
+                    page.locator('[data-deferred-loader][aria-busy=true]').wait_for(state='detached', timeout=30000) if page.locator('[data-deferred-loader][aria-busy=true]').count() == 1 else None
+                    page.wait_for_function("!document.querySelector('[data-deferred-loader][aria-busy=true]')", timeout=30000)
+                    page.wait_for_timeout(300)
                     row.update(status=response.status if response else None,
                                title=page.title(), headings=page.locator('main h1').all_text_contents(),
                                overflow=page.evaluate('document.documentElement.scrollWidth > innerWidth'),

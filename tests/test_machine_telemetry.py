@@ -130,14 +130,16 @@ def test_telemetry_stream_defers_updates_while_a_select_has_focus():
     assert 'pending = html' in script
 
 
-def test_signed_sleep_notice_marks_only_primary_host_sleeping_until_it_answers_again():
-    hosts = [{"hostname": "main", "machines": ["compute"], "state": "not answering"},
+def test_signed_sleep_notice_marks_only_its_own_host_sleeping_until_it_answers_again():
+    hosts = [{"hostname": "main", "machines": ["jpk-main"], "state": "not answering"},
              {"hostname": "remote", "machines": ["remote"], "state": "not answering"}]
-    notice = {"action": "sleep", "at": 20.0}
-    shown = with_power_state(hosts, {"compute": {"at": 10.0}}, notice)
+    notice = {"action": "sleep", "at": 20.0, "machine": "jpk-main"}
+    shown = with_power_state(hosts, {"jpk-main": {"at": 10.0}}, notice)
     assert [host["state"] for host in shown] == ["sleeping", "not answering"]
-    assert with_power_state(hosts, {"compute": {"at": 21.0}}, notice) == hosts
-    assert notice == {"action": None, "at": 0.0}
+    assert with_power_state(hosts, {"jpk-main": {"at": 21.0}}, notice) == hosts
+    assert notice == {"action": None, "at": 0.0, "machine": "jpk-main"}
+    # The notice of a node the front does not know marks nothing.
+    assert with_power_state(hosts, {}, {"action": "sleep", "at": 20.0, "machine": ""}) == hosts
 
 
 def test_host_wake_controls_are_node_specific_and_explain_missing_configuration():

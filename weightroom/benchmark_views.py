@@ -1,5 +1,7 @@
 """Choose recorded benchmark evidence without hiding it when model settings change."""
 
+from loadcoach.log import LEGACY  # the old default node, which rows and catalogues without a node name mean
+
 
 def model_kind(model: dict) -> str:
     """Classify model metadata without confusing language-model vision with image generation."""
@@ -67,7 +69,7 @@ def history_page(runs, query):
     outcome = query.get('outcome', '')
     if outcome not in ('completed', 'failed', 'cancelled'):
         outcome = ''
-    terminal = [run for run in terminal if (not node or (run.get('location') or 'compute') == node)
+    terminal = [run for run in terminal if (not node or (run.get('location') or LEGACY) == node)
                 and (not outcome or run['state'] == outcome)
                 and (not search or search.casefold() in ' '.join(str(run.get(key) or '') for key in
                      ('id', 'model', 'benchmark', 'location', 'reason')).casefold())]
@@ -88,14 +90,14 @@ def run_lanes(catalogue, inventory, models, definition, runs, location_latest, l
     names = dict.fromkeys(['front', *configured, *sorted(available | unavailable)])
     candidates = {}
     for model in models:
-        for place in model.get('locations') or [{'machine': 'compute'}]:
+        for place in model.get('locations') or [{'machine': LEGACY}]:
             name = place['machine']
             names.setdefault(name, None)
             local = {**model, **place, 'id': model['id']}
             if compatible(local, definition):
                 candidates.setdefault(name, []).append((model, place, local))
     for run in runs:
-        names.setdefault(run.get('location') or 'compute', None)
+        names.setdefault(run.get('location') or LEGACY, None)
     nodes = []
     for name in names:
         report = configured.get(name, {})
@@ -105,15 +107,15 @@ def run_lanes(catalogue, inventory, models, definition, runs, location_latest, l
         state = 'disabled' if disabled else 'unavailable' if name in unavailable else 'ready' if known else 'unknown'
         if not service:
             state = 'front'
-        active = [run for run in runs if (run.get('location') or 'compute') == name and run['state'] == 'running']
-        waiting = [run for run in runs if (run.get('location') or 'compute') == name and run['state'] not in ('running', 'completed', 'failed', 'cancelled')]
+        active = [run for run in runs if (run.get('location') or LEGACY) == name and run['state'] == 'running']
+        waiting = [run for run in runs if (run.get('location') or LEGACY) == name and run['state'] not in ('running', 'completed', 'failed', 'cancelled')]
         choices = []
         for model, place, local in candidates.get(name, []):
             result = location_latest.get((model['id'], name, definition['id']))
-            if not model.get('locations') and name == 'compute':
+            if not model.get('locations') and name == LEGACY:
                 result = result or latest.get(model['id'], {}).get(definition['id'])
             matching = next((run for run in runs if run['model'] == model['id'] and
-                             (run.get('location') or 'compute') == name and run['benchmark'] == definition['id']
+                             (run.get('location') or LEGACY) == name and run['benchmark'] == definition['id']
                              and run['state'] not in ('completed', 'failed', 'cancelled')), None)
             reason = ('Node disabled' if disabled else 'Inventory unavailable' if state != 'ready' else
                       'Model disabled here' if not place.get('enabled', True) else
@@ -184,10 +186,10 @@ def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs,
     attempts = {}
     for run in runs:
         if not run.get('retired'):
-            attempts.setdefault((run['model'], run.get('location') or 'compute', run['benchmark']), run)
+            attempts.setdefault((run['model'], run.get('location') or LEGACY, run['benchmark']), run)
     rows = []
     for model in models:
-        placements = {place['machine']: {**model, **place} for place in model.get('locations') or [{'machine': 'compute'}]}
+        placements = {place['machine']: {**model, **place} for place in model.get('locations') or [{'machine': LEGACY}]}
         cells = []
         for node in nodes:
             name = node['name']
@@ -199,12 +201,12 @@ def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs,
                         continue
                     node['total'] += 1
                     saved = location_latest.get((model['id'], name, bench['id']))
-                    if not model.get('locations') and name == 'compute':
+                    if not model.get('locations') and name == LEGACY:
                         saved = saved or legacy.get(model['id'], {}).get(bench['id'])
                     node['current'] += bool(saved and saved.get('current_fingerprint') and not saved.get('rerun')
                                             and (numeric(saved.get('score')) or any(numeric(value) for value in saved.get('metrics', {}).values())))
             result = location_latest.get((model['id'], name, selected['id']))
-            if not model.get('locations') and name == 'compute':
+            if not model.get('locations') and name == LEGACY:
                 result = result or legacy.get(model['id'], {}).get(selected['id'])
             attempt = attempts.get((model['id'], name, selected['id']))
             if model.get('locations') and attempt and not attempt.get('location'):

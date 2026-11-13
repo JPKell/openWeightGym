@@ -85,6 +85,27 @@ def _tool(name: str) -> str:
     raise PostgreSQLToolError(f"{name} is required but is not installed")
 
 
+def _server_tool(database: Database, name: str) -> str:
+    """Use the server's major version: newer dumps may not restore to it."""
+    with database.connection(connect_timeout=10) as connection:
+        major = int(connection.execute('SHOW server_version_num').fetchone()[0]) // 10000
+    candidates = [Path(f'/usr/lib/postgresql/{major}/bin/{name}'),
+                  Path(f'/usr/pgsql-{major}/bin/{name}')]
+    if found := shutil.which(name):
+        candidates.append(Path(found))
+    for candidate in dict.fromkeys(candidates):
+        if not candidate.is_file() or not os.access(candidate, os.X_OK):
+            continue
+        try:
+            version = tool_version(str(candidate))
+        except PostgreSQLToolError:
+            continue
+        if re.search(r'\(PostgreSQL\)\s+' + str(major) + r'(?:\.|\s|$)', version):
+            return str(candidate)
+    raise PostgreSQLToolError(f'PostgreSQL {major} needs matching {name} client tools for restorable backups. '
+                              f'Install the PostgreSQL {major} client tools on this node and retry.')
+
+
 def _failure(name: str, problem: subprocess.CalledProcessError | subprocess.TimeoutExpired, password: str) -> PostgreSQLToolError:
     """Return a redacted PostgreSQL tool failure for the operator."""
     stderr = getattr(problem, "stderr", b"") or b""
@@ -100,7 +121,7 @@ def _run(database: Database, name: str, arguments: list[str], *, dbname: str | N
          capture: bool = False, timeout: int = 900, guarded_output: Path | None = None) -> subprocess.CompletedProcess:
     """Run a PostgreSQL maintenance tool with private connection environment."""
     connection, environment, password = _connection(database, dbname)
-    command = [_tool(name), *arguments, f"--dbname={connection}"]
+    command = [_server_tool(database, name), *arguments, f"--dbname={connection}"]
     try:
         if guarded_output is not None:
             started = time.monotonic()
@@ -152,7 +173,7 @@ def dump_custom(database: Database, output: Path) -> dict:
     listing = restore_list(database, output)
     return {
         "method": "pg_dump custom format",
-        "tools": {"pg_dump": tool_version("pg_dump"), "pg_restore": tool_version("pg_restore")},
+        "tools": {name: tool_version(_server_tool(database, name)) for name in ('pg_dump', 'pg_restore')},
         "restore_list_entries": listing,
     }
 

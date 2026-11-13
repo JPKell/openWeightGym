@@ -33,12 +33,13 @@ cuda_build_ready() {
 
 # One missing group per line; development headers matter even when the runtime library is present.
 missing_build_requirements() {
-  local backend=$1 tool missing=0 hip_root
+  local backend=$1 label=${2:-engine} tool missing=0 hip_root
   for tool in git cmake cc c++ make; do
     command -v "$tool" >/dev/null || missing=1
   done
   ((missing == 0)) || echo tools
   if ! command -v pkg-config >/dev/null || ! pkg-config --exists openssl; then echo openssl; fi
+  if [[ $label == audio.cpp ]] && ! python3 -c "import ctypes; ctypes.CDLL('libespeak-ng.so.1')" >/dev/null 2>&1; then echo espeak; fi
   case "$backend" in
     cuda|cuda-*) cuda_build_ready || echo cuda ;;
     vulkan)
@@ -56,7 +57,7 @@ missing_build_requirements() {
 install_build_requirements() {
   local backend=$1 label=${2:-llama.cpp} group names package
   local missing=() packages=() root=() hints=()
-  mapfile -t missing < <(missing_build_requirements "$backend")
+  mapfile -t missing < <(missing_build_requirements "$backend" "$label")
   ((${#missing[@]})) || return 0
   detect_package_manager
   ((${#PKG_INSTALL[@]})) || ui_die "Building $label needs: ${missing[*]}, and no supported package manager was found." \
@@ -83,7 +84,7 @@ install_build_requirements() {
       "?$(pkg_refresh_hint)" "Check the packages: $(pkg_command "${packages[@]}")" \
       "${hints[@]}"
   hash -r
-  mapfile -t missing < <(missing_build_requirements "$backend")
+  mapfile -t missing < <(missing_build_requirements "$backend" "$label")
   ((${#missing[@]} == 0)) || ui_die "The packages were installed, but $label still needs: ${missing[*]}." \
     "Check the package installation and toolkit paths, then retry the installation."
 }

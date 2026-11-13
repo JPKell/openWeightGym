@@ -9,7 +9,7 @@
       const url = new URL(form.action, location.href);
       if (!/^\/(models(?:\/|$)|measure-models$|control$|unload|lock|compute-nodes\/(?:engines|resources|gpus|machine-key$)|settings\/(?:loadcoach|spotter)$)/.test(url.pathname)) continue;
       const fields = new FormData(form);
-      const node = fields.get('machine') || fields.get('node') || url.searchParams.get('node') || new URL(location.href).searchParams.get('node') || new URL(location.href).searchParams.get('machine') || 'compute';
+      const node = fields.get('machine') || fields.get('node') || url.searchParams.get('node') || new URL(location.href).searchParams.get('node') || new URL(location.href).searchParams.get('machine') || notice.dataset.defaultNode;
       if (!offline.has(node)) continue;
       form.dataset.nodeUnavailable = 'true';
       // form.elements also includes submit buttons associated through form="...".

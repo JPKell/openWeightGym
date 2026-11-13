@@ -91,10 +91,10 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         memberships = users.memberships(None if user.can('see-log') else user.name)
         members = [name for name, group in memberships.items() if group == asked['group']] if asked.get('group') else None
         entries = await report(lambda view: view.read(after, limit, whose, asked.get("kind"), asked.get("trace"), with_text,
-                                                      asked.get("what"), asked.get("model"), before, since=since, until=until, members=members))
+                                                      asked.get("what"), asked.get("model"), before, since=since, until=until, members=members, node=asked.get('node')))
         if isinstance(entries, Response):
             return entries
-        return JSONResponse({"events": resolve(entries)})
+        return JSONResponse({"events": [{**entry, "machine": log.former.get(entry.get("machine"), entry.get("machine")) or "front"} for entry in resolve(entries)]})
 
     async def event_choices(request: Request, user: User) -> Response:
         """List authorized event filter values and current group membership."""
@@ -103,6 +103,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         choices = await report(lambda view: view.choices(owner))
         if isinstance(choices, Response):
             return choices
+        choices['node'] = ['front', *log.machine_names]
         for name in choices['user']:
             memberships.setdefault(name, '(unknown)')
         return JSONResponse({'choices': choices, 'user_groups': memberships, 'groups': sorted(set(memberships.values()))})
@@ -159,7 +160,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
             row['can_open'] = row['user'] == user.name or user.can('see-log')
         access = users.client_accesses(None if user.can('see-log') else user.identity or user.name)
         choices = {'model': sorted(model_choices(user)), 'user': sorted(memberships),
-                   'ip': access['ips'], 'status': list(STATUSES)}
+                   'ip': access['ips'], 'status': list(STATUSES), 'node': ['front', *log.machine_names]}
         return JSONResponse({**found, 'limit': limit, 'choices': choices, 'accesses': access['rows']})
 
     async def request_facts(request: Request, user: User) -> Response:
@@ -190,8 +191,9 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         ended = next((entry for entry in reversed(entries[1:]) if entry["kind"] == "request" and entry["what"] in ENDINGS), None)
         # How far one still under way has got is compute's to say. Not woken for it.
         machine = asked.get("machine")  # none for front's own requests, such as hosted answers: compute has nothing to say of them
-        local = number & ((1 << MACHINE_SHIFT) - 1) if machine != "compute" else number
-        live = None if ended or machine is None else await ask_compute(user, "GET", f"/loadcoach/diagnostics/{local}", machine="" if machine == "compute" else machine)
+        local = number & ((1 << MACHINE_SHIFT) - 1) if number >= 1 << MACHINE_SHIFT else number  # an unprefixed number is the old default node's
+        machine = log.former.get(machine, machine) if machine else machine
+        live = None if ended or machine is None else await ask_compute(user, "GET", f"/loadcoach/diagnostics/{local}", machine=machine)
         state = None if ended else live.json()["state"] if live is not None and live.status_code == 200 else "under way"
         observed = live.json().get('diagnostics') if live is not None and live.status_code == 200 else None
         details = await report(lambda view: (
@@ -231,7 +233,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
 
             def build(view):
                 """Build the requested usage report using the independent reader."""
-                result = usage_report(view.db, request.query_params, owner, memberships, costs)
+                result = usage_report(view.db, request.query_params, owner, memberships, costs, log.former)
                 if user.can('see-summaries'):
                     recorded = view.db.execute(f"SELECT DISTINCT {view.json_value('detail', 'group')} FROM events WHERE kind = 'request'")
                     result['summary_groups'] = sorted(set(all_memberships.values()) | {row[0] for row in recorded if row[0]})
@@ -268,7 +270,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
             if key is not None and (hit := home_cache.get(key)) and now - hit[0] < HOME_TTL:
                 return Response(hit[1], media_type='application/json', headers={'x-turnstile-report-cache': 'hit', 'cache-control': 'private, no-store'})
             await asyncio.gather(*(asyncio.wait_for(ask_compute(user, "POST", "/loadcoach/send-log",
-                                                               machine="" if name == "compute" else name), timeout=5)
+                                                               machine=name), timeout=5)
                                    for name in log.machine_names), return_exceptions=True)
             answer = await handler(request, user)
             if key is not None and answer.status_code == 200:

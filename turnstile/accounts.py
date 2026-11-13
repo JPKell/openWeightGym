@@ -184,7 +184,8 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         }
         answer = await ask_compute(user, "GET", "/loadcoach/me")
         if answer is not None and answer.status_code == 200:
-            said.update(answer.json(), compute="compute" not in answer.json().get("unavailable_machines", []))  # models, chat, usage: compute's to say
+            told = answer.json()  # models, chat, usage: the nodes' to say
+            said.update(told, compute=bool(set(told.get("machines", [])) - set(told.get("unavailable_machines", []))))
         hosted = [name for name in outside(user) if name not in said["models"]]
         if hosted:  # the models at outside services are front's: compute does not know them
             said["models"] = [*said["models"], *hosted]
@@ -337,7 +338,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
             return error(409, f"{name} has a batch under way. Rename the account when it has ended.")
         there = await ask_compute(user, "POST", f"/loadcoach/users/{name}/rename", json.dumps({"name": new}).encode())
         if there is None:
-            return error(503, "Compute is not answering, and it must agree that the account has no work under way before it is renamed.")
+            return error(503, "A node is not answering, and every node must agree that the account has no work under way before it is renamed.")
         if there.status_code != 200:
             return JSONResponse(there.json(), status_code=there.status_code)
         try:

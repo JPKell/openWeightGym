@@ -366,7 +366,7 @@ menu() {
     actions+=(discard-install)
     labels+=("Discard failed install|remove partial engine builds and cancel saved choices")
   fi
-  if ((console)); then actions+=(pair); labels+=("Add a GPU node|make a one-time code for another machine"); fi
+  if ((console)); then actions+=(pair); labels+=("Add a compute node|make a one-time code for another machine"); fi
   actions+=(uninstall quit)
   labels+=("Uninstall|remove openWeightGym, choosing what to keep" "Quit|do nothing")
   ui_choose choice "What would you like to do?" 0 "${labels[@]}"

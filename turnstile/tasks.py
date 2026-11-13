@@ -143,6 +143,10 @@ class TaskRecords:
             return error(403, "Your account may not run measurements.")
         try:
             body = await self.body(request)
+            if 'node' in body:
+                if body.get('machine') and body['machine'] != body['node']:
+                    raise ValueError('node and machine must name the same destination.')
+                body['machine'] = body['node']
             number, token, model = body.get("id"), body.get("token"), body.get("model")
             if not isinstance(number, str) or not re.fullmatch(r"batch_[a-f0-9]{24}", number) or not isinstance(token, str) or not 32 <= len(token) <= 128:
                 raise ValueError("Provide a random batch ID and a scoped task token.")
@@ -263,14 +267,25 @@ class TaskRecords:
                         raise ValueError('An outstanding occurrence needs one frozen target.')
                     if spec.get('benchmarks') and chosen['benchmark'] not in spec['benchmarks']:
                         raise PermissionError('The selected benchmark is outside the schedule scope.')
+                if spec['kind'] == 'backup':
+                    selected = spec.get('nodes') or ['front', *self.names]
+                    async def backup(node):
+                        _, node_id = occurrence_ids(identifier + ':' + node, due)
+                        receipt = {'node': node, 'id': node_id}
+                        existing = await self.ask(owner, 'GET', '/loadcoach/backups/' + node_id, machine=node)
+                        if existing is not None and existing.status_code == 200 and existing.json().get('verification', {}).get('state') == 'verified':
+                            return {**receipt, 'state': 'verified', 'message': 'Previously verified; no retry needed.'}
+                        waiting = await self.prepare_schedule(request, owner, {**spec, 'machine': node}, identifier, due)
+                        if waiting is not None:
+                            return {**receipt, 'state': 'missed', 'message': json.loads(waiting.body).get('error', {}).get('message', 'Node unavailable.')}
+                        answer = await self.ask(owner, 'POST', '/loadcoach/backups', json.dumps({'id': node_id, 'retention': spec['retention']}).encode(), machine=node)
+                        if answer is not None and answer.is_success and answer.json().get('verification', {}).get('state') == 'verified':
+                            return {**receipt, 'state': 'verified', 'message': 'Archive created and verified.'}
+                        return {**receipt, 'state': 'missed', 'message': 'Node is unavailable.' if answer is None else refusal(answer) or 'Backup did not verify.'}
+                    outcomes = await asyncio.gather(*(backup(node) for node in selected if node != 'front'))
+                    return JSONResponse({'nodes': outcomes, 'include_front': 'front' in selected})
                 if waiting := await self.prepare_schedule(request, owner, spec, identifier, due):
                     return waiting
-                if spec['kind'] == 'backup':
-                    existing = await self.ask(owner, 'GET', '/loadcoach/backups/' + backup_id, machine='compute')
-                    if existing is not None and existing.status_code == 200 and existing.json().get('verification', {}).get('state') == 'verified':
-                        return JSONResponse(existing.json())
-                    answer = await self.ask(owner, 'POST', '/loadcoach/backups', json.dumps({'id': backup_id, 'retention': spec['retention']}).encode(), machine='compute')
-                    return error(503, 'Compute is unavailable.', retry=True) if answer is None else JSONResponse(answer.json(), status_code=answer.status_code)
                 from benchmarks.eligibility import resolve_location
                 if chosen is not None:
                     inventory = await self.schedule_inventory(owner)
@@ -321,6 +336,10 @@ class TaskRecords:
             if len(parts) != 3 and not (len(parts) == 5 and parts[4] == 'edit'):
                 return error(404, 'No such schedule operation.')
             spec = validate(body.get('spec'))
+            if spec.get('nodes') and any(node not in ['front', *self.names] for node in spec['nodes']):
+                raise ValueError('Choose configured backup nodes, or leave the selection empty for every node.')
+            if spec.get('machine') and spec['machine'] not in self.names:
+                raise ValueError('Choose a configured benchmark node.')
             if not self.grants.permitted(user, spec):
                 return error(403, 'The owner is not permitted to schedule this work.')
             name = ''
@@ -337,11 +356,15 @@ class TaskRecords:
         except (ValueError, TypeError, KeyError, OverflowError) as problem:
             return error(400, str(problem))
 
+    def schedule_node(self, spec) -> str:
+        """The node a schedule's work runs on: the one it names, otherwise the first configured node."""
+        return spec.get('machine') or (self.names[0] if self.names else '')
+
     async def prepare_schedule(self, request, owner, spec, identifier, due):
         """Only a validated due grant may request its configured execution node's wake."""
         if self.wake_node is None or 'x-turnstile-no-wake' in request.headers:
             return None
-        machine = 'compute' if spec['kind'] == 'backup' else spec.get('machine') or 'compute'
+        machine = self.schedule_node(spec)
         return await self.wake_node(owner, machine, identifier, due, request.headers.get('x-suite-schedule', ''))
 
     async def refresh(self, task):

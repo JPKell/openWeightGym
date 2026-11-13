@@ -44,6 +44,7 @@ DECIMALS = {"tokens_per_second": 1, "cost": 6}  # the counts that are not whole 
 COLUMNS = "id, at, kind, what, user, caller, model, trace, level, detail, text, hash"
 SENT_KEPT = 86400  # seconds compute keeps an entry after front has it, for its own checks
 MACHINE_SHIFT = 40  # public IDs for secondary machines fit exactly in JavaScript's 53-bit integers
+LEGACY = "compute"  # the old default node's name: its requests kept unprefixed numbers, which now resolve through `node_aliases`
 FRONT = "front"  # the range of the front machine's own requests, such as hosted answers, numbered by front's entries
 
 
@@ -57,7 +58,7 @@ def public_number(machine: str | None, source: int) -> int:
 
     Front numbers its entries with its own counter, so a hosted answer's entry number would otherwise meet a
     compute request with the same number as compute's counter catches up."""
-    if machine == "compute":
+    if machine == LEGACY:
         return source
     machine = machine or FRONT
     if not 0 < source < 1 << MACHINE_SHIFT:
@@ -65,12 +66,14 @@ def public_number(machine: str | None, source: int) -> int:
     return machine_slot(machine) << MACHINE_SHIFT | source
 
 
-def origin_number(number: int, names: tuple[str, ...]) -> tuple[str, int] | None:
-    """Resolve a public request ID to its configured machine and local number."""
+def origin_number(number: int, names: tuple[str, ...], former: dict[str, str] | None = None) -> tuple[str, int] | None:
+    """Resolve a public request ID to its configured machine and local number.
+
+    An unprefixed number is the old default node's, which `former` (old name → node) may have renamed."""
     if number < 1 << MACHINE_SHIFT:
-        return "compute", number
+        return (former or {}).get(LEGACY, LEGACY), number
     slot, local = number >> MACHINE_SHIFT, number & ((1 << MACHINE_SHIFT) - 1)
-    return next(((name, local) for name in names if name != "compute" and machine_slot(name) == slot), None)
+    return next(((name, local) for name in names if name != LEGACY and machine_slot(name) == slot), None)
 
 
 def token_counts(tail: bytes) -> dict:
@@ -101,7 +104,8 @@ class Log:
     def __init__(self, path: DatabaseSource, keep_days: float = 90, keep_text: int = 0, chained: bool = True) -> None:
         """`chained` false for compute, which sends its entries to front, where the chain is."""
         self.keep_days, self.keep_text, self.chained = keep_days, keep_text, chained
-        self.machine_names = ("compute",)
+        self.machine_names = (LEGACY,)
+        self.former: dict[str, str] = {}  # old node name → its current name, from `node_aliases` on front
 
         # isolation_level=None: transactions begin and end only where this class says so.
         source = database(path)
@@ -153,7 +157,7 @@ class Log:
                 pass  # standalone log stores and pre-migration databases have no registry
         added = self.write((time.time(), kind, what, user, caller, model, trace, level, json.dumps(detail), text and json.dumps(text)), must)
         if kind == 'request' and what == 'asked' and added:
-            machine = getattr(getattr(self, 'observations', None), 'machine', 'compute')
+            machine = getattr(getattr(self, 'observations', None), 'machine', LEGACY)
             annotate(request_number=public_number(machine if not self.chained else None, added),
                      model_id=detail.get('model_id', ''), benchmark=bool(detail.get('benchmark')))
         if kind == 'request' and what in ('done', 'failed', 'refused', 'hung up', 'stopped'):
@@ -211,6 +215,7 @@ class Log:
         since: float | None = None,
         until: float | None = None,
         members: list[str] | None = None,
+        node: str | None = None,
     ) -> list[dict]:
         """Entries in the order they happened.
 
@@ -220,6 +225,12 @@ class Log:
         unless `with_text` is set.
         """
         where, values = ["id > ?"], [after]
+        if node == FRONT:
+            where.append('machine IS NULL')
+        elif node:
+            names = self.known_as(node)
+            where.append(f"machine IN ({','.join('?' for _ in names)})")
+            values.extend(names)
         for expression, value in (("at >= ?", since), ("at <= ?", until)):
             if value is not None:
                 where.append(expression)
@@ -300,6 +311,12 @@ class Log:
             values.extend([group, *members])
         duration = self.db.greatest("0", "e.at - a.at")
         filters = filters or {}
+        if filters.get('node') == FRONT:
+            where += ' AND a.machine IS NULL'
+        elif filters.get('node'):
+            names = self.known_as(filters['node'])
+            where += f" AND a.machine IN ({','.join('?' for _ in names)})"
+            values.extend(names)
         for key, expression in (('model', 'a.model'), ('user', 'a.user'), ('ip', 'a.caller')):
             if filters.get(key):
                 where += f' AND {expression} = ?'
@@ -319,7 +336,7 @@ class Log:
         if any(key in filters for key in ('request_min', 'request_max')):
             # SQL compares displayed public IDs, including front and historical node prefixes.
             names = {row[0] for row in self.db.execute('SELECT DISTINCT machine FROM events')}
-            names.update((None, 'compute', *self.machine_names))
+            names.update((None, LEGACY, *self.machine_names))
             prefixes = [(name, public_number(name, 1) - 1) for name in sorted(names, key=lambda value: value or '')]
             cases = ' '.join(f'WHEN a.machine {"IS NULL" if name is None else "= ?"} THEN {prefix}'
                              for name, prefix in prefixes)
@@ -337,8 +354,8 @@ class Log:
             CASE WHEN e.id IS NOT NULL THEN {duration} END """ + join + where +
             " ORDER BY a.id DESC LIMIT ? OFFSET ?", (*ENDINGS, *values, limit, offset))
         return {"total": total, 'page': offset // limit + 1, "requests": [dict(zip(
-            ("id", "at", "model", "user", "caller", "outcome", "duration", "timestamp"),
-            (public_number(machine, number), datetime.fromtimestamp(at).isoformat(timespec="seconds"), model, user, caller, outcome, duration, at)))
+            ("id", "at", "model", "user", "caller", "outcome", "duration", "timestamp", "node"),
+            (public_number(machine, number), datetime.fromtimestamp(at).isoformat(timespec="seconds"), model, user, caller, outcome, duration, at, self.former.get(machine, machine) if machine else FRONT)))
             for number, at, model, user, caller, outcome, machine, duration in rows]}
 
     @staticmethod
@@ -346,7 +363,7 @@ class Log:
         """One row of the table as it is handed out: its columns, with its details beside them."""
         number, at, kind, what, user, caller, model, trace, level, detail, text, _, source, machine = row
         details = json.loads(detail)
-        if machine and machine != "compute" and isinstance(details.get("of"), int):
+        if machine and machine != LEGACY and isinstance(details.get("of"), int):
             details["of"] = public_number(machine, details["of"])
         elif not machine and kind == "request" and isinstance(details.get("of"), int) and 0 < details["of"] < 1 << MACHINE_SHIFT:
             details["of"] = public_number(None, details["of"])  # how one of front's own requests ended, under its public number
@@ -381,15 +398,16 @@ class Log:
                                     (local,)).fetchone()
         elif request and number >= 1 << MACHINE_SHIFT:
             slot, local = number >> MACHINE_SHIFT, number & ((1 << MACHINE_SHIFT) - 1)
-            machine = next((name for name in self.machine_names if name != "compute" and machine_slot(name) == slot), None)
+            machine = next((name for name in self.machine_names if name != LEGACY and machine_slot(name) == slot), None)
             if machine is None:
                 return []
             first = self.db.execute("SELECT id, source FROM events WHERE machine = ? AND source = ? AND kind = 'request' AND what = 'asked'",
                                     (machine, local)).fetchone()
         elif request:
-            first = self.db.execute("""SELECT id, COALESCE(source, id), machine FROM events
-                WHERE (machine = 'compute' AND source = ? OR machine IS NULL AND id = ?)
-                  AND kind = 'request' AND what = 'asked' ORDER BY source IS NULL LIMIT 1""", (number, number)).fetchone()
+            legacy = self.legacy_names()
+            first = self.db.execute(f"""SELECT id, COALESCE(source, id), machine FROM events
+                WHERE (machine IN ({','.join('?' * len(legacy))}) AND source = ? OR machine IS NULL AND id = ?)
+                  AND kind = 'request' AND what = 'asked' ORDER BY source IS NULL LIMIT 1""", (*legacy, number, number)).fetchone()
             machine = first[2] if first else None
         else:
             first = self.db.execute("SELECT id, COALESCE(source, id), machine FROM events WHERE id = ?", (number,)).fetchone()
@@ -436,7 +454,7 @@ class Log:
             entry = entry & ((1 << MACHINE_SHIFT) - 1)  # front's own request: its text is kept under its entry here
         elif entry >= 1 << MACHINE_SHIFT:
             slot, local = entry >> MACHINE_SHIFT, entry & ((1 << MACHINE_SHIFT) - 1)
-            machine = next((name for name in self.machine_names if name != "compute" and machine_slot(name) == slot), None)
+            machine = next((name for name in self.machine_names if name != LEGACY and machine_slot(name) == slot), None)
             if machine is None:
                 return None
             row = self.db.execute("SELECT id FROM events WHERE machine = ? AND source = ? AND kind = 'request' AND what = 'asked'",
@@ -445,8 +463,9 @@ class Log:
                 return None
             entry = row[0]
         else:
-            row = self.db.execute("SELECT id FROM events WHERE machine = 'compute' AND source = ? AND kind = 'request' AND what = 'asked'",
-                                  (entry,)).fetchone()
+            legacy = self.legacy_names()
+            row = self.db.execute(f"SELECT id FROM events WHERE machine IN ({','.join('?' * len(legacy))}) AND source = ? AND kind = 'request' AND what = 'asked'",
+                                  (*legacy, entry)).fetchone()
             if row is not None:
                 entry = row[0]
         row = self.db.execute("SELECT asked, said FROM texts WHERE entry = ?", (entry,)).fetchone()
@@ -471,10 +490,20 @@ class Log:
         self.db.execute("DELETE FROM forwarded")
         self.db.execute("INSERT INTO forwarded (through) VALUES (?)", (through,))
 
+    def known_as(self, machine: str) -> tuple[str, ...]:
+        """`machine` and every old name that now means it."""
+        return (machine, *(old for old, new in self.former.items() if new == machine and old != machine))
+
+    def legacy_names(self) -> tuple[str, ...]:
+        """The names rows of the old default node may carry: its old name, and its new one once renamed."""
+        return tuple(dict.fromkeys((LEGACY, self.former.get(LEGACY, LEGACY))))
+
     def take(self, machine: str, entries: list[dict], texts: list[dict], keep_text: int) -> int:
         """On front: entries a compute machine sent, chained here as they come. One already here is not taken again. Gives the last one's number there."""
         for one in entries:
-            if self.db.execute("SELECT 1 FROM events WHERE machine = ? AND source = ?", (machine, one["id"])).fetchone():
+            names = self.known_as(machine)
+            if self.db.execute(f"SELECT 1 FROM events WHERE machine IN ({','.join('?' * len(names))}) AND source = ?",
+                               (*names, one["id"])).fetchone():
                 continue
             # Its columns exactly as compute stored them: its details may hold any name, `machine` among them.
             self.write(tuple(one[column] for column in COLUMNS.split(", ")[1:-1]), must=True, machine=machine, source=one["id"])
@@ -626,5 +655,5 @@ class Log:
         else:  # compute: what front has, after a day. What it does not have yet is kept, however old: it is the spool
             through = self.db.execute("SELECT MAX(through) FROM forwarded").fetchone()[0] or 0
             gone = self.db.execute("DELETE FROM events WHERE at < ? AND id <= ?", (time.time() - SENT_KEPT, through)).rowcount
-        self.db.execute("DELETE FROM texts WHERE entry NOT IN (SELECT id FROM events UNION SELECT source FROM events WHERE machine = 'compute' AND source IS NOT NULL)")
+        self.db.execute("DELETE FROM texts WHERE entry NOT IN (SELECT id FROM events UNION SELECT source FROM events WHERE machine = ? AND source IS NOT NULL)", (LEGACY,))
         return gone

@@ -67,6 +67,7 @@ from db.maintenance import Barrier, Gate
 from db.migration import (MigrationError, load_profile as migration_profile, profile_names as migration_profiles,
                           preview as migration_preview, launch as migration_launch, reports as migration_reports)
 from loadcoach.config import CLI, read_settings, said_in
+from loadcoach.log import LEGACY
 from loadcoach.hub import search_order as hub_search_order
 from loadcoach.backups import (
     backup_root,
@@ -128,7 +129,7 @@ HERE = Path(__file__).parent
 COOKIE = "weightroom"
 LEGACY_COOKIE = "frontdesk"
 # What the front machine itself lets people do, in the words LoadCoach uses for its own. Someone who can do everything can do these.
-FRONT_ABILITIES = {"front-wake": "wake compute from the first page while it is off", "front-voice": "use voice conversations"}
+FRONT_ABILITIES = {"front-wake": "wake an unavailable compute node from the site", "front-voice": "use voice conversations"}
 LOOK_EVERY = 15  # seconds between looks at compute
 # The addresses turnstile answers itself, from the accounts. Their answers say nothing about whether compute is up.
 # Answered by turnstile from what is kept on front, so an answer to them says nothing about compute: the accounts, and the log (milestone 91).
@@ -143,14 +144,14 @@ THIRD_PARTY_NAMES = {name for name, _ in THIRD_PARTY_SERVICES}
 class Settings:
     """Everything weightroom is told. One TOML file, one key per field, except `key`."""
 
-    compute: str  # LoadCoach's address, such as http://10.77.10.84:8442. Its host is compute's; everything is asked through turnstile
     key: str  # weightroom's own key, read from the file `key_file` names
+    compute: str = ""  # retired: the nodes are turnstile's [machines.NAME]; everything is asked through turnstile
     door: str = "http://127.0.0.1"  # turnstile on this machine, without a port: every request to compute goes through it
     data: str = "."  # the folder for what weightroom keeps
     host: str = "127.0.0.1"
     port: int = 8440
     secure: bool = False  # set true once it is served over HTTPS: the cookie then travels only that way
-    spotter: str = ""  # spotter's address on compute, such as http://10.77.10.84:8444. Empty: primary service/power controls and logs unavailable. Asked through turnstile
+    spotter: str = ""  # retired: each node's Spotter is [machines.NAME].spotter, asked through turnstile
     chat_model_url: str = ""  # model door for web chat; turnstile on this machine unless said
     toollocker: str = ""  # MCP service base URL; empty uses turnstile on this machine, port 8443
     toollocker_runs_on_front: bool = False  # derived from Turnstile routing for recovery ownership
@@ -239,8 +240,8 @@ def load_settings(path: Path) -> Settings:
     raise SystemExit(f"{path}: {type(why).__name__}: {why}. It needs `compute` and `key_file`.") from None
 
 
-class ComputeOff(Exception):
-    """LoadCoach did not answer."""
+class ServiceUnavailable(Exception):
+    """The front or the explicitly selected node did not answer."""
 
 
 class MachineOff(Exception):
@@ -248,8 +249,8 @@ class MachineOff(Exception):
 
 
 @dataclass
-class Compute:
-    """What weightroom knows of compute right now, and the last it saw of it."""
+class FrontState:
+    """Front connection state and the latest combined fleet snapshot."""
 
     up: bool | None = None  # None until the first look
     since: float = field(default_factory=time.time)  # when `up` last changed
@@ -333,10 +334,12 @@ def status_nodes(inventory: dict, poll_seconds: float, now: dict | None = None) 
     hosts = {host["fingerprint"]: host for host in inventory.get("hosts", []) if host.get("fingerprint")}
     current: dict[str, dict] = {}
     if now:
+        for machine, lock in now.get('locks', {}).items():
+            current.setdefault(machine, {'cards': [], 'loaded': []})['lock'] = lock
         for key, room in (now.get("memory") or {}).items():
             # PCI addresses contain colons too; only a prefix before the vendor is a node name.
             prefix = key.split(":", 1)[0]
-            machine, card = key.split(":", 1) if ":" in key and "@" not in prefix else ("compute", key)
+            machine, card = key.split(":", 1) if ":" in key and "@" not in prefix else (LEGACY, key)
             # Keep an empty service entry so excluded devices do not return from cached inventory.
             current.setdefault(machine, {"cards": [], "loaded": []})
             if "model_cards" in now and key not in now["model_cards"]:
@@ -345,19 +348,19 @@ def status_nodes(inventory: dict, poll_seconds: float, now: dict | None = None) 
                 {"card": card, "total": (room or {}).get("total"), "free": (room or {}).get("free"),
                  "others": (room or {}).get("others")})
         for model in now.get("loaded", []):
-            machine = model.get("machine", "compute")
+            machine = model.get("machine", LEGACY)
             current.setdefault(machine, {"cards": [], "loaded": []})["loaded"].append(
                 {**model, "cards": model.get("gpus", [])})
     machines = inventory.get("machines", [])
     if not machines and now:
-        machines = [{"name": name, "hostname": now.get("hostname") if name == "compute" else name,
-                     "fingerprint": now.get("machine_fingerprint") if name == "compute" else None,
+        machines = [{"name": name, "hostname": now.get("hostname") if name == LEGACY else name,
+                     "fingerprint": now.get("machine_fingerprint") if name == LEGACY else None,
                      "state": "unknown", "status_live": False, "telemetry": None, "telemetry_age": None}
-                    for name in (current or {"compute": {}})]
+                    for name in (current or {LEGACY: {}})]
     shown = []
     for node in machines:
         fresh = current.get(node["name"])
-        if fresh or (now and len(machines) == 1 and node["name"] == "compute"):
+        if fresh or (now and len(machines) == 1 and node["name"] == LEGACY):
             fresh = fresh or {"cards": [], "loaded": []}
             node = {**node, **fresh, "state": "ready", "status_live": True}
         # Older workers can still report PCI-only integrated graphics as model capacity.
@@ -413,7 +416,7 @@ def tail(text: str, most: int) -> str:
     return whole or end
 
 # What every log entry has. Whatever else an entry holds is particular to its kind, and a page shows it as it is.
-EVERY_ENTRY = {"id", "at", "kind", "what", "user", "caller", "model", "trace", "level", "of", "text"}
+EVERY_ENTRY = {"machine", "id", "at", "kind", "what", "user", "caller", "model", "trace", "level", "of", "text"}
 
 
 # What turns a model's answer into HTML. An answer is written in Markdown. Raw HTML in it is not passed on but shown as
@@ -511,11 +514,11 @@ def fit_cpu_limit(memory: dict) -> int:
 
 def fit_node(known: dict, machine: str) -> dict:
     """Turn a logical catalogue into one node's local dry-fit catalogue."""
-    nodes = known.get("nodes") or {"compute": {key: known.get(key) for key in ("defaults", "cards", "build", "to_measure", "measuring")}}
+    nodes = known.get("nodes") or {LEGACY: {key: known.get(key) for key in ("defaults", "cards", "build", "to_measure", "measuring")}}
     node = nodes[machine]
     models = []
     for logical in known.get("models", []):
-        locations = logical.get("locations") or [{**logical, "machine": "compute"}]
+        locations = logical.get("locations") or [{**logical, "machine": LEGACY}]
         location = next((one for one in locations if one.get("machine") == machine), None)
         if location is not None:
             models.append({**location, "name": logical["name"], "local_name": location.get("name", logical["name"])})
@@ -527,7 +530,7 @@ def node_measuring(known: dict, node: str = "") -> dict[str, dict]:
 
     `known` is the merged catalogue, which carries every node under `nodes`, or one node's own
     catalogue when `node` names it. With `node`, only that node is kept."""
-    nodes = known.get("nodes") or {node or "compute": known}
+    nodes = known.get("nodes") or {node or LEGACY: known}
     return {name: {"to_measure": list(one.get("to_measure") or []), "measuring": one.get("measuring")}
             for name, one in nodes.items() if not node or name == node}
 
@@ -540,8 +543,8 @@ def measure_plan(nodes: dict[str, dict], copies: set[tuple[str, str]] | None = N
 
 def model_copies(model: dict, node: str = "") -> set[tuple[str, str]]:
     """Every (node, name there) of one model in the catalogue; a catalogue of one node has no locations and is that node's."""
-    return {(place.get("machine", "compute"), place.get("name", model["name"]))
-            for place in model.get("locations") or [{"machine": node or "compute", "name": model["name"]}]}
+    return {(place.get("machine", LEGACY), place.get("name", model["name"]))
+            for place in model.get("locations") or [{"machine": node or LEGACY, "name": model["name"]}]}
 
 
 def measure_button(models: list[dict], nodes: dict[str, dict], node: str = "") -> dict:
@@ -605,7 +608,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     tools_url = settings.toollocker or settings.door + ":8443"
     tool_http = tools_client or httpx.AsyncClient(base_url=tools_url, timeout=httpx.Timeout(130, connect=2))
     voice_http = voice_client or httpx.AsyncClient(base_url=settings.voice_gateway, timeout=httpx.Timeout(130, connect=2))
-    spotter = watcher or (httpx.AsyncClient(base_url=settings.door + ":8444", timeout=httpx.Timeout(15, connect=2)) if settings.spotter else None)
+    # Spotter is asked through turnstile, which knows each node's Spotter from [machines.NAME].
+    spotter = watcher or httpx.AsyncClient(base_url=settings.door + ":8444", timeout=httpx.Timeout(15, connect=2))
     zone = ZoneInfo(settings.timezone) if settings.timezone else None
 
     def clock(at) -> str:
@@ -667,6 +671,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     benchmarks = build_benchmarks(
         BenchmarkSettings(compute=settings.door + ":8442", database=database_registry.database("weightroom.benchmarks")), client  # through turnstile, like every page
     )
+    from turnstile.nodes import remember_aliases, rename_stored, verified_backup
+    from loadcoach.log import Log as AliasLog
+    alias_log = AliasLog(database_registry.database('weightroom.accounts'))
+    former_nodes = remember_aliases(alias_log.db, {})
+    benchmarks.state.store.node_aliases = former_nodes
+    if former_nodes:
+        rename_stored('weightroom.benchmarks', benchmarks.state.store.db, former_nodes, verified_backup(settings.data))
+    alias_log.db.close()
     benchmark_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=benchmarks), base_url='http://benchmarks')
     chat_inference = (httpx.AsyncClient(base_url=settings.chat_model_url, timeout=httpx.Timeout(None, connect=2))
                       if settings.chat_model_url and client is None else loadcoach)
@@ -688,7 +700,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     alert_lock = asyncio.Lock()
     observation_alert_previous = {}
     chat_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=conversations), base_url="http://chat")
-    compute = Compute()
+    front_state = FrontState()
     slow: set[asyncio.Task] = set()  # things asked of LoadCoach that nobody is waiting for, such as an unload
 
     def kept(name: str, otherwise):
@@ -704,12 +716,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             json.dump(thing, file)
 
     last = kept("last.json", {})
-    compute.status, compute.seen = last.get("status"), last.get("seen")
+    front_state.status, front_state.seen = last.get("status"), last.get("seen")
 
     def noted(up: bool) -> None:
         """Retain the latest observed compute availability and status."""
-        if compute.up is not up:
-            compute.up, compute.since = up, time.time()
+        if front_state.up is not up:
+            front_state.up, front_state.since = up, time.time()
 
     async def ask(method: str, path: str, key: str, **more) -> httpx.Response:
         """Call local benchmark handlers, or compute through turnstile, with the caller's key; track compute outages.
@@ -729,12 +741,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if path.startswith('/benchmarks'):
                 return httpx.Response(503,json={'error':{'message':'Benchmark processing is unavailable.'}})
             noted(False)
-            raise ComputeOff from None
+            raise ServiceUnavailable from None
+        if target is loadcoach:
+            noted(True)  # A node refusal still proves that the front is answering.
         if answer.headers.get("x-turnstile") == "compute-off":
-            noted(False)
-            raise ComputeOff
-        if answer.headers.get('x-suite-data-owner') != 'front' and not path.startswith(('/benchmarks', '/turnstile/', '/loadcoach/conversations', '/loadcoach/collections', '/loadcoach/workflows', *ACCOUNTS)):
-            noted(True)
+            raise ServiceUnavailable
         return answer
 
     async def ask_spotter(method: str, path: str, key: str | None, **more) -> httpx.Response:
@@ -805,14 +816,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             try:
                 status = await ask("GET", "/loadcoach/status", settings.key)
                 if status.status_code == 200:
-                    compute.status, compute.seen = status.json(), time.time()
-                    keep("last.json", {"status": compute.status, "seen": compute.seen})
+                    front_state.status, front_state.seen = status.json(), time.time()
+                    keep("last.json", {"status": front_state.status, "seen": front_state.seen})
                 await plugins.auth.refresh(loadcoach, "/loadcoach/plugins/mirror", key=settings.key)
-            except ComputeOff:
+            except ServiceUnavailable:
                 pass
             try:
                 await in_step()  # Front settings remain available while compute is offline.
-            except ComputeOff:
+            except ServiceUnavailable:
                 pass
             await asyncio.sleep(LOOK_EVERY)
 
@@ -876,7 +887,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     # ---- who is asking ----------------------------------------------------------------------
 
     async def who(request: Request) -> Person | None:
-        """Whoever this request's cookie belongs to, or None. Raises ComputeOff if turnstile does not answer.
+        """Whoever this request's cookie belongs to, or None. Raises ServiceUnavailable if turnstile does not answer.
 
         Turnstile answers /loadcoach/me from the accounts, which are on this machine, so this holds
         while compute is off. Only what compute adds to it, such as the models, is missing then.
@@ -889,7 +900,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return None
         info = plugins.enrich(me.json())
         if "unavailable_machines" in info:
-            noted("compute" not in info["unavailable_machines"])
+            noted(bool(set(info.get("machines", [])) - set(info["unavailable_machines"])))
         from types import SimpleNamespace
         observation.identify(SimpleNamespace(identity=info.get('identity'), name=info['name'], key_identity=None,
                                              can=lambda ability: ability in info['can']))
@@ -906,7 +917,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if template == 'refused.html' and status >= 500:
             context = getattr(request.state, 'observation', None)
             error_request_id = context.root.request_id if context else uuid.uuid4().hex
-        response = pages.TemplateResponse(request, template, {"person": person, "compute": compute, "strip": strip, "spotter_available": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, **more}, status_code=status)
+        response = pages.TemplateResponse(request, template, {"person": person, "front_state": front_state, "strip": strip, "spotter_available": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, **more}, status_code=status)
         if error_request_id:
             response.headers['x-request-id'] = error_request_id
         response.headers['cache-control'] = 'no-store'
@@ -950,7 +961,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if person is None:
             try:
                 person = await who(request)
-            except ComputeOff:
+            except ServiceUnavailable:
                 pass  # The error page must remain usable when sign-in cannot be checked.
         why = 'There is no page at this address.' if problem.status_code == 404 else str(problem.detail)
         answer = page(request, 'refused.html', person, status=problem.status_code, why=why)
@@ -1009,7 +1020,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return Response("This form was not sent from weightroom's own page.", status_code=403)
             try:
                 person = await who(request)
-            except ComputeOff:
+            except ServiceUnavailable:
                 # Their sign-in is turnstile's to confirm, and turnstile is not answering.
                 return page(request, "off.html", status=503)
             if person is None:
@@ -1022,7 +1033,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                               else Response(why, status_code=403))
                 else:
                     answer = await handler(request, person)
-            except ComputeOff:
+            except ServiceUnavailable:
                 answer = page(request, "off.html", person, status=503)
             if (request.method == 'GET' and answer.status_code in (403, 404)
                     and answer.headers.get('content-type', '').split(';')[0] in ('', 'text/plain')):
@@ -1130,7 +1141,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             # Turnstile checks it, from the accounts on this machine. weightroom only says where the person is, for the log.
             from_where = {"x-loadcoach-from": request.client.host if request.client else "?"}
             answer = await ask("POST", "/loadcoach/sign-in", settings.key, json=asked, headers=from_where)
-        except ComputeOff:
+        except ServiceUnavailable:
             print('weightroom: sign-in unavailable; administrator: systemctl --user start turnstile', file=sys.stderr)
             return again("Sign-in is unavailable right now. Try again in a minute, or tell your administrator.")
         told = answer.json()
@@ -1149,7 +1160,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if ours(request) and cookie:
             try:
                 await ask("POST", "/loadcoach/sign-out", cookie)  # so the key stops working, not only the cookie
-            except ComputeOff:
+            except ServiceUnavailable:
                 pass
         answer = go("/sign-in")
         answer.delete_cookie(COOKIE)
@@ -1172,7 +1183,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if inventory.status_code == 200:
                 told = inventory.json()
                 poll_seconds = told.get("poll_seconds", 10)
-        except ComputeOff:
+        except ServiceUnavailable:
             pass
         # Never wait for a node already known to be unavailable. Live status stays
         # caller-scoped; shared monitoring data is used only for availability.
@@ -1185,7 +1196,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 if answer.status_code == 200:
                     now = answer.json()
                     now['active_batches'] = current_batch_jobs(now, person, benchmarks.state.worker, benchmarks.state.store)
-            except ComputeOff:
+            except ServiceUnavailable:
                 pass
         nodes = status_nodes(told, poll_seconds, now)
         from weightroom.status_workspace import present
@@ -1194,7 +1205,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             counts = await ask('GET', '/loadcoach/requests/counts', person.key)
             if counts.status_code == 200:
                 summary = counts.json()
-        except ComputeOff:
+        except ServiceUnavailable:
             pass
         workspace = present(now, nodes, summary)
         context = dict(now=now, nodes=nodes, poll_seconds=poll_seconds, address=model_address, workspace=workspace)
@@ -1210,17 +1221,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Ask LoadCoach for something that may take minutes, without anyone waiting for the answer."""
         try:
             await ask(method, path, key, timeout=None)
-        except ComputeOff:
+        except ServiceUnavailable:
             pass
 
     async def control(request: Request, person: Person) -> Response:
         """The buttons that steer a selected LoadCoach. That node checks the caller's ability."""
         form = await typed(request)
-        do, model, machine = form.get("do", ""), form.get("model", ""), form.get("machine", "compute")
+        do, model, machine = form.get("do", ""), form.get("model", ""), node_named(person, form.get("machine") or first_node(person))
         def node_path(action: str) -> str:
             """Resolve the selected node's status-control API path."""
-            return ("/loadcoach/" + action if machine == "compute" else
-                    "/turnstile/machines/" + quote(machine, safe="") + "/control/" + action)
+            return "/turnstile/machines/" + quote(machine, safe="") + "/control/" + action
 
         if do == "unload":
             # Ask the selected node about locks before starting its potentially long queued unload.
@@ -1241,18 +1251,20 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             asked = {"on": False} if do == "open" else {"why": form.get("why", "").strip()}
             answer = await ask("POST", node_path("drain"), person.key, json=asked)
         elif do in ("lock-model", "unlock-model"):
-            path = "/loadcoach/model-lock" if machine == "compute" else "/turnstile/machines/" + quote(machine, safe="") + "/model-lock"
+            path = "/turnstile/machines/" + quote(machine, safe="") + "/model-lock"
             answer = await ask("POST", path, person.key, json={"name": model, "on": do == "lock-model"})
         else:
-            answer = await ask("POST", node_path("clear") if do == "clear" else "/loadcoach/unlock" if do == "unlock" else "/loadcoach/nothing", person.key)
+            if do not in ("clear", "unlock"):
+                return go("/status?failed=1&said=" + quote("That is not something LoadCoach can be asked to do."))
+            answer = await ask("POST", node_path(do), person.key)
         if answer.status_code != 200:
             return go("/status?failed=1&said=" + quote(answer.json().get("error", {}).get("message", "LoadCoach would not do that.")))
         removed, here = answer.json().get("removed", 0), answer.json().get("busy", 0)
         done = {
             "clear": f"Turned away {removed} waiting request{'' if removed == 1 else 's'}. Answers under way carry on. LoadCoach: {machine}.",
             "unlock": "The lock is broken.",
-            "lock-model": f"Locked {model} in place. It stays loaded until it is unlocked here." + (f" LoadCoach: {machine}." if machine != "compute" else ""),
-            "unlock-model": f"Unlocked {model}. It can be unloaded again." + (f" LoadCoach: {machine}." if machine != "compute" else ""),
+            "lock-model": f"Locked {model} in place. It stays loaded until it is unlocked here. LoadCoach: {machine}.",
+            "unlock-model": f"Unlocked {model}. It can be unloaded again. LoadCoach: {machine}.",
             "drain": (f"No new requests are taken. The {here} already here will be finished." if here else "No new requests are taken. Nothing was under way.") + f" LoadCoach: {machine}.",
             "open": f"Requests are taken again. LoadCoach: {machine}.",
         }[do]
@@ -1345,7 +1357,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     so_far = look.json()["said"]
                 elif look.status_code == 403:
                     unreadable = "Reading what someone else's request is being answered needs the ability to read kept text."
-            except ComputeOff:
+            except ServiceUnavailable:
                 unreadable = "Compute is unavailable. Retained records remain readable; live progress is unknown."
         template = "request_live.html" if request.query_params.get("part") == "live" else "request.html"  # the page asking for itself again
         feedback = {}
@@ -1353,7 +1365,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             try:
                 response = await ask('GET', f'/loadcoach/requests/{number}/feedback', person.key)
                 feedback = response.json() if response.status_code == 200 else {'unavailable': True}
-            except ComputeOff:
+            except ServiceUnavailable:
                 feedback = {'unavailable': True}
         return page(request, template, person, facts=facts, so_far=so_far, unreadable=unreadable,
                     feedback=feedback,
@@ -1448,6 +1460,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Build a model-management address preserving the selected compute node."""
         return "/models/" + quote(name, safe="/:")  # a name may hold a slash or a colon, and little else
 
+    def first_node(person: Person | None) -> str:
+        """The node a page shows when none is chosen: the first active node the front lists. Empty when it lists none."""
+        return next(iter((person.me if person else {}).get("machines") or []), "")
+
+    def node_named(person: Person | None, name: str) -> str:
+        """A node's current name for one an older row or link may still use, such as the old default node's."""
+        return (person.me if person else {}).get("aliases", {}).get(name, name)
+
     async def fetch(request: Request, person: Person, path: str, **more) -> dict | Response:
         """What LoadCoach answers when asked for something a page shows, or the page that says why it would not."""
         answer = await ask("GET", path, person.key, **more)
@@ -1456,8 +1476,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return answer.json()
 
     def node_model_path(request: Request, path: str) -> str:
-        """Build the node-specific path for a model-management operation."""
-        node = request.query_params.get("node", "")
+        """Build the node-specific path for a model-management operation: the chosen node's, or the first node's."""
+        node = request.query_params.get("node", "") or first_node(getattr(request.state, "person", None))
         return ("/turnstile/machines/" + quote(node, safe="") + "/model-api/" + path.removeprefix("/loadcoach/")
                 if node else path)
 
@@ -1500,10 +1520,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if more.pop("prepare_files", False):
             return await ask("POST", "/turnstile/models/install", person.key, json={
                 "name": unquote(path.removeprefix("/loadcoach/models/")),
-                **({"machines":machines} if machines is not None else {"machine":request.query_params.get("node") or "compute"}),
+                **({"machines":machines} if machines is not None else {"machine":request.query_params.get("node") or first_node(person)}),
                 "settings": more["json"], "source_machine": source_machine}, timeout=None)
         if method == "POST" and (path.startswith("/loadcoach/models/") or path == "/loadcoach/model-setup"):
-            node = request.query_params.get("node") or "compute"
+            node = request.query_params.get("node") or first_node(person)
             return await ask(method, "/turnstile/machines/" + quote(node, safe="") + "/model-api/" + path.removeprefix("/loadcoach/"), person.key, **more)
         return await ask(method, node_model_path(request, path), person.key, **more)
 
@@ -1626,7 +1646,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     benchmark_inventory.update({node['name']: node for node in inventory['machines']})
                 else:
                     inventory_warning = 'Node inventory could not be refreshed. Showing last known nodes and saved evidence.'
-            except (ComputeOff, httpx.HTTPError):
+            except (ServiceUnavailable, httpx.HTTPError):
                 inventory_warning = 'Node inventory could not be refreshed. Showing last known nodes and saved evidence.'
         visible_models = {model['id'] for model in models}
         colours = {}
@@ -1864,7 +1884,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         said=said or asked.get('said', ''), failed=False)
         try:
             known = await all_models(request, person) if part != 'editor' else {'models': []}
-        except ComputeOff:
+        except ServiceUnavailable:
             known = {"models": [], "to_measure": [], "measuring": None}
         if isinstance(known, Response):
             return fragment_error(request, person, 'models', 'list', known) if part == 'list' else known
@@ -1875,7 +1895,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         wanted_jobs = asked.getlist("install")
         try:
             progress = await ask("GET", "/turnstile/artifacts/distributions", person.key) if 'manage-models' in person.can else None
-        except ComputeOff:
+        except ServiceUnavailable:
             progress = None
         installations = [job for job in progress.json().get("distributions", []) if job.get('kind') == 'model-install' and
                          (job["id"] in wanted_jobs or job.get('state') not in ('complete', 'failed', 'cancelled') or
@@ -1892,7 +1912,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             answer = await ask("GET", "/turnstile/machines/" + quote(name, safe="") + "/engines", person.key)
             return answer.json().get("engines", []) if answer.is_success else [
                 {"id": "llama_cpp", "label": "llama.cpp", "enabled": True, "schema": engine_for().schema()}] if answer.status_code == 404 else []
-        engine_nodes = names or ["compute"]
+        engine_nodes = names or [name for name in [first_node(person)] if name]
         engine_choices = {}
         for name, rows in zip(engine_nodes, await asyncio.gather(*(engines_of(name) for name in engine_nodes))):
             for row in rows:
@@ -1983,10 +2003,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return known
         asked = request.query_params
         multi_node = bool(known.get("nodes")) or bool(known.get('unavailable_machines'))
-        nodes = known.get("nodes") or {"compute": {key: known.get(key) for key in ('cards', 'defaults', 'engine_cards', 'devices', 'memory_policy')}}
+        nodes = known.get("nodes") or {first_node(person): {key: known.get(key) for key in ('cards', 'defaults', 'engine_cards', 'devices', 'memory_policy')}}
         nodes = {**nodes, **{name: {} for name in known.get('unavailable_machines', []) if name not in nodes}}
         known = {**known, 'nodes': nodes}
-        machine = machine_override or asked.get("machine", "compute" if "compute" in nodes else next(iter(nodes)))
+        machine = node_named(person, machine_override or asked.get("machine") or next(iter(nodes)))
         if machine not in nodes:
             return page(request, "refused.html", person, status=404, why=f"There is no answering compute node named {machine}.")
         known = fit_node(known, machine)
@@ -2029,7 +2049,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def fit_do(request: Request, person: Person) -> Response:
         """Validate and apply the selected Dry fit operation."""
         form = await typed(request)
-        machine = form.get('machine') or request.query_params.get('machine') or 'compute'
+        machine = node_named(person, form.get('machine') or request.query_params.get('machine') or first_node(person))
         action = form.get('do', '')
         if action == 'preview-undo':
             action = 'preview'
@@ -2082,7 +2102,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if not nodes:
                 return await models_page(request, person, "Choose at least one compute node.", failed=True, form=kept)
             answer = await ask("POST", "/turnstile/models/install", person.key, json={"name": name, "machines": nodes,
-                               "settings": made, "source_machine": form.get("source_machine", [""])[-1]}, timeout=None)
+                               "settings": made, "auto_hardware": True, "source_machine": form.get("source_machine", [""])[-1]}, timeout=None)
             if answer.status_code == 202:
                 shown = form.get("shown_node", [""])[-1]
                 where = nodes[0] if len(nodes) == 1 else ", ".join(nodes[:-1]) + " and " + nodes[-1]
@@ -2109,8 +2129,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         model = next((one for one in known["models"] if one["name"] == name), None)
         if model is None:
             return page(request, "refused.html", person, status=404, why=f"There is no model named {name}.")
-        selected_node = request.query_params.get("node") or "compute"
-        if not request.query_params.get("node") and model.get("locations") and model["locations"][0]["machine"] != "compute":
+        selected_node = node_named(person, request.query_params.get("node") or first_node(person))
+        if not request.query_params.get("node") and model.get("locations") and model["locations"][0]["machine"] != selected_node:
             location = model["locations"][0]
             return go(model_address(location["name"]) + "?node=" + quote(location["machine"]))
         logical_nodes = known.get("nodes") or {}  # each node's defaults and cards, when the catalogue is the logical one
@@ -2134,7 +2154,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             benchmarks = [bench for bench in benchmarks if bench['id'] == 'load']
         benchmarks = [bench for bench in benchmarks if bool(bench.get('embedding')) == bool(model['flags'].get('embedding'))]
         local_runs = [{**run, 'model':name} for run in scored.json().get('runs', [])
-                      if (run.get('location') or 'compute') == selected_node
+                      if node_named(person, run.get('location') or LEGACY) == selected_node
                       and (run.get('model_id') == model.get('model_id') if run.get('model_id') and model.get('model_id') else run['model'] == name)]
         results = latest_results(local_runs).get(name, {})
         # The benchmark whose figures are shown: the one asked for, or the first this model has run, or the first there is.
@@ -2271,7 +2291,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             text = "No changes to save." if not where else "Saved." if where == [here] else "Saved on " + (
                 where[0] if len(where) == 1 else ", ".join(where[:-1]) + " and " + where[-1]) + "."
             return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(text + note))
-        here = request.query_params.get("node") or "compute"
+        here = request.query_params.get("node") or first_node(person)
         if not others:
             applied = await apply_setup(request, person, name, {"configuration": candidate})
             if isinstance(applied, str):
@@ -2337,7 +2357,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     **({'machines': destinations} if len(destinations) > 1 else {'machine': destinations[0]}),
                     **({'move': True} if move else {}),
                     'generation': generation_settings(engine_for(model).model.effective(model_configuration(model), known.get('defaults') or {})),
-                    'source_machine': request.query_params.get('node') or (model.get('locations') or [{'machine':'compute'}])[0]['machine']}, timeout=None)
+                    'source_machine': request.query_params.get('node') or (model.get('locations') or [{'machine': first_node(person)}])[0]['machine']}, timeout=None)
                 if answer.status_code == 202:
                     kind = {'sdcpp':'image','audiocpp':'audio'}.get(engine,'llm')
                     jobs = answer.json().get('jobs') or [answer.json()]
@@ -2398,7 +2418,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return go("/models?said=" + quote(f"Removed {name}.{finishing} Its file is left where it is."))
         if form.get("do", [""])[-1] == "measure":
             # Every copy of this model, on whichever node, that has no measure at its minimum and maximum context.
-            node = request.query_params.get("node") or "compute"
+            node = request.query_params.get("node") or first_node(person)
             logical = await ask("GET", "/turnstile/models", person.key)
             if logical.is_success:
                 catalogue = logical.json()
@@ -2648,109 +2668,71 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         rows = [*store_inventory(stores), *backup_inventory(files, excluded)]
         return backup_root(settings.data), files, excluded, rows, stores
 
-    def recovery_sets(front: list[dict], remote: list[dict]) -> list[dict]:
-        """Join the independently stored machine archives by their shared recovery-set ID."""
-        joined: dict[str, dict] = {}
-        for machine, rows in (("front", front), ("compute", remote)):
-            for row in rows:
-                joined.setdefault(row["id"], {"id": row["id"]})[machine] = row
-        answer = []
-        for backup_id, row in joined.items():
-            halves = [row.get("front"), row.get("compute")]
-            verified = [part for part in halves if part and part.get("verification", {}).get("state") == "verified"]
-            legacy = any(part and part.get("verification", {}).get("state") == "legacy-unencrypted" for part in halves)
-            state = "verified" if len(verified) == 2 else "partial" if verified else "legacy-unencrypted" if legacy else "failed"
-            counts: dict[str, int] = {}
-            for part in verified:
-                counts.update(part["verification"].get("counts", {}))
-            answer.append(
-                {
-                    **row,
-                    "id": backup_id,
-                    "state": state,
-                    "created_at": max((part.get("created_at", "") for part in halves if part), default=""),
-                    "archive_size": sum(part.get("archive_size", 0) for part in halves if part),
-                    "payload_size": sum(part.get("payload_size", 0) for part in halves if part),
-                    "counts": counts,
-                }
-            )
-        return sorted(answer, key=lambda item: (item['created_at'], item['id']), reverse=True)
+    async def backup_nodes(person):
+        """Read each node's backup inventory independently, without waking it."""
+        root, _, excluded, inventory, _ = await asyncio.to_thread(front_backup_context)
+        result = [{'name': 'front', 'label': 'Front', 'inventory': inventory,
+                   'archive_root': str(root), 'excluded': excluded,
+                   'backups': backup_manifests(root),
+                   'protection': await asyncio.to_thread(encryption_status, root), 'error': ''}]
+        async def read(name):
+            try:
+                answer = await ask('GET', '/turnstile/machines/' + quote(name, safe='') + '/databases/backups', person.key)
+                if answer.is_success:
+                    return {'name': name, 'label': name, **answer.json(), 'error': ''}
+                why = answer.json().get('error', {}).get('message', 'Backup inventory unavailable.')
+            except (MachineOff, httpx.HTTPError, ValueError):
+                why = 'Node ' + name + ' is not answering. Its backups remain on that node.'
+            return {'name': name, 'label': name, 'inventory': [], 'backups': [], 'archive_root': '',
+                    'protection': {'ready': False, 'reason': why}, 'error': why}
+        result.extend(await asyncio.gather(*(read(name) for name in person.me.get('machines', []))))
+        return result
 
     async def backups_page(request: Request, person: Person, said: str = "", failed: bool = False) -> Response:
-        """Render retained paired recovery sets and their verification state."""
-        if "manage-settings" not in person.can:
-            return page(request, "refused.html", person, status=403, why="You may not manage backups.")
-        root, _, excluded, local_inventory, _ = await asyncio.to_thread(front_backup_context)
-        remote_error = ""
-        try:
-            answer = await ask("GET", "/loadcoach/backups", person.key)
-            if answer.status_code == 200:
-                remote = answer.json()
-            else:
-                remote, remote_error = {"inventory": [], "backups": [], "archive_root": ""}, answer.json()["error"]["message"]
-        except ComputeOff:
-            remote, remote_error = {"inventory": [], "backups": [], "archive_root": ""}, "Compute is not answering. Front backups remain visible."
-        sets = recovery_sets(backup_manifests(root), remote["backups"])
-        last_verified = next((one for one in sets if one["state"] == "verified"), None)
-        return page(
-            request,
-            "backups.html",
-            person,
-            status=400 if failed else 200,
-            said=said or request.query_params.get("said", ""),
-            failed=failed,
-            retention=settings.backup_retention,
-            sets=sets,
-            last_verified=last_verified,
-            front_inventory=local_inventory,
-            front_excluded=excluded,
-            front_root=str(root),
-            compute_inventory=remote["inventory"],
-            compute_root=remote["archive_root"],
-            compute_error=remote_error,
-            front_protection=await asyncio.to_thread(encryption_status, root),
-            compute_protection=remote.get("protection", {"ready": False, "reason": "Compute encryption readiness is unavailable."}),
-        )
+        """Show every node's independent recovery archive and verification status."""
+        if 'manage-settings' not in person.can:
+            return page(request, 'refused.html', person, status=403, why='You may not manage backups.')
+        nodes = await backup_nodes(person)
+        selected = request.query_params.get('node', '')
+        backups = [{**row, 'node': node['name'], 'node_label': node['label']}
+                   for node in nodes for row in node.get('backups', [])
+                   if not selected or selected == node['name']]
+        backups.sort(key=lambda row: (row.get('created_at', 0), row['id']), reverse=True)
+        return page(request, 'backups.html', person, status=400 if failed else 200,
+                    said=said or request.query_params.get('said', ''), failed=failed,
+                    retention=settings.backup_retention, backup_nodes=nodes, backups=backups, selected_node=selected)
 
     async def backup_create(request: Request, person: Person) -> Response:
-        """Create and verify a paired front and compute recovery set."""
-        if "manage-settings" not in person.can:
-            return page(request, "refused.html", person, status=403, why="You may not manage backups.")
-        try:
-            await asyncio.to_thread(backup_recipients, backup_root(settings.data))
-        except (OSError, ValueError, subprocess.SubprocessError) as problem:
-            return await backups_page(request, person, str(problem), failed=True)
-        backup_id = new_backup_id()
-        try:
-            remote = await ask("POST", "/loadcoach/backups", person.key,
-                               json={"id": backup_id, "retention": settings.backup_retention})
-        except ComputeOff:
-            return await backups_page(request, person, "Compute is not answering, so no recovery set was created.", failed=True)
-        if remote.status_code != 201:
-            return await backups_page(request, person, remote.json()["error"]["message"], failed=True)
-        root, files, excluded, rows, stores = front_backup_context()
-        try:
-            await asyncio.to_thread(
-                create_backup,
-                root,
-                backup_id,
-                "front",
-                files,
-                rows,
-                excluded,
-                ["weightroom.service", "turnstile.service", "voice-gateway.service",
-                 *(["toollocker.service"] if settings.toollocker_runs_on_front else [])],
-                settings.backup_retention,
-                stores=stores,
-            )
-        except (OSError, ValueError, TypeError, sqlite3.Error, subprocess.SubprocessError, RuntimeError) as problem:
-            return await backups_page(
-                request,
-                person,
-                f"Compute was backed up, but the front backup failed: {problem}. The set is shown as partial.",
-                failed=True,
-            )
-        return go("/backups?said=" + quote(f"Recovery set {backup_id} was created and restored into isolated folders successfully."))
+        """Back up selected peers independently; a failed node never discards successes."""
+        if 'manage-settings' not in person.can:
+            return page(request, 'refused.html', person, status=403, why='You may not manage backups.')
+        form = await typed_lists(request)
+        configured = ['front', *person.me.get('machines', [])]
+        selected = list(dict.fromkeys(form.get('node') or []))
+        if not selected:
+            return await backups_page(request, person, 'Choose at least one node to back up.', failed=True)
+        if any(name not in configured for name in selected):
+            return await backups_page(request, person, 'Choose configured nodes for backup.', failed=True)
+        identifier = new_backup_id()
+        async def create(name):
+            try:
+                if name == 'front':
+                    await scheduled_front_backup(identifier, settings.backup_retention)
+                else:
+                    answer = await ask('POST', '/turnstile/machines/' + quote(name, safe='') + '/databases/backups',
+                                       person.key, json={'id': identifier, 'retention': settings.backup_retention})
+                    if not answer.is_success:
+                        return name, answer.json().get('error', {}).get('message', 'Backup failed.')
+                return name, ''
+            except (OSError, ValueError, RuntimeError, sqlite3.Error, subprocess.SubprocessError, MachineOff, httpx.HTTPError) as problem:
+                return name, str(problem)
+        outcomes = await asyncio.gather(*(create(name) for name in selected))
+        completed = [name for name, why in outcomes if not why]
+        errors = [name + ': ' + why for name, why in outcomes if why]
+        message = ('Verified backups: ' + ', '.join(completed) + '. ' if completed else '') + '; '.join(errors)
+        if errors:
+            return await backups_page(request, person, message, failed=True)
+        return go('/backups?said=' + quote(message))
 
     async def backup_retention(request: Request, person: Person) -> Response:
         """Validate and save the configured recovery-set retention limit."""
@@ -2771,24 +2753,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return go("/backups?said=" + quote("Retention saved. It is applied after each successful backup."))
 
     async def backup_preview(request: Request, person: Person) -> Response:
-        """Render a recovery manifest and its restore preview without switching stores."""
-        if "manage-settings" not in person.can:
-            return page(request, "refused.html", person, status=403, why="You may not manage backups.")
-        backup_id = request.path_params["backup_id"]
-        root, _, _, _, _ = front_backup_context()
-        front = backup_manifest(root, backup_id)
-        compute_part, compute_error = None, ""
-        try:
-            answer = await ask("GET", f"/loadcoach/backups/{backup_id}", person.key)
-            if answer.status_code == 200:
-                compute_part = answer.json()
-            elif answer.status_code != 404:
-                compute_error = answer.json()["error"]["message"]
-        except ComputeOff:
-            compute_error = "Compute is not answering, so its preview is unavailable."
-        if front is None and compute_part is None:
-            return page(request, "refused.html", person, status=404, why="There is no such recovery set.")
-        return page(request, "backup.html", person, backup_id=backup_id, front=front, compute_part=compute_part, compute_error=compute_error)
+        """Preview the archive only on the explicitly selected owning node."""
+        if 'manage-settings' not in person.can:
+            return page(request, 'refused.html', person, status=403, why='You may not manage backups.')
+        identifier = request.path_params['backup_id']
+        target = request.query_params.get('node', 'front')
+        if target not in ['front', *person.me.get('machines', [])]:
+            return page(request, 'refused.html', person, status=404, why='No such backup node.')
+        if target == 'front':
+            part = backup_manifest(backup_root(settings.data), identifier)
+        else:
+            answer = await ask('GET', '/turnstile/machines/' + quote(target, safe='') + '/databases/backups/' + quote(identifier, safe=''), person.key)
+            if answer.status_code != 200:
+                return page(request, 'refused.html', person, status=answer.status_code,
+                            why=answer.json().get('error', {}).get('message', 'The owning node cannot provide this backup.'))
+            part = answer.json()
+        if not part:
+            return page(request, 'refused.html', person, status=404, why='No such backup on node ' + target + '.')
+        return page(request, 'backup.html', person, backup_id=identifier, backup_node=target, backup_part=part)
 
     # ---- database inventory and exports -----------------------------------------------------
 
@@ -2877,7 +2859,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             answer = await ask(request.method, database_console.remote_path(machine, operation), person.key,
                                **({'json': await request.json()} if request.method == 'POST' else {}))
             return Response(answer.content, status_code=answer.status_code, media_type=answer.headers.get('content-type'), headers={'cache-control': 'no-store'})
-        except (ComputeOff, httpx.HTTPError):
+        except (ServiceUnavailable, httpx.HTTPError):
             return JSONResponse({'error': {'message': 'The owning node is unavailable.'}}, status_code=503)
 
     async def database_details(request: Request, person: Person) -> Response:
@@ -2890,7 +2872,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         try:
             answer = await ask('GET', database_console.remote_path(machine, 'stores/' + quote(identifier, safe='') + '/details'), person.key, timeout=60)
             return Response(answer.content, status_code=answer.status_code, media_type='application/json', headers={'cache-control': 'no-store'})
-        except ComputeOff:
+        except ServiceUnavailable:
             return Response('The owning node is unavailable.', status_code=503)
 
     async def database_dump(request: Request, person: Person) -> Response:
@@ -2993,7 +2975,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         sid = socket.path_params['sid']
         try:
             person = await who(socket)
-        except ComputeOff:
+        except ServiceUnavailable:
             person = None
         call = voice_calls.pop(sid, None)
         if not platform().speech or person is None or not may_talk(person) or not ours(socket) or call is None or call[1] != person.name:
@@ -3060,7 +3042,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         programs.append(program)
             else:
                 problem += f' Voice configuration is unavailable (HTTP {found.status_code}).'
-        except ComputeOff:
+        except ServiceUnavailable:
             problem += ' Compute is unavailable; settings cannot be read or changed.'
         synthesis = next((program['settings'] for program in programs if program['program'] == 'voice'), [])
         return page(request, 'voice_status.html' if request.url.path == '/system/voice/status' else 'voice_admin.html', person, status=400 if failed else 200,
@@ -3087,7 +3069,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                            and setting.get('changed') and setting['changed']['value'] != setting['value']]
                 if pending:
                     return await voice_admin_page(request, person, 'Voice has not reported the saved speaker or greeting changes yet. Wait, refresh status, then regenerate.', failed=True)
-            except ComputeOff:
+            except ServiceUnavailable:
                 return await voice_admin_page(request, person, 'Compute is unavailable. Previous recordings remain on front.', failed=True)
         try:
             more = {}
@@ -3125,7 +3107,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, 'refused.html', person, status=403, why='Your account may not manage settings.')
         try:
             found = await fetch(request, person, "/loadcoach/settings")
-        except ComputeOff:
+        except ServiceUnavailable:
             found = {'programs': []}
         if isinstance(found, Response):
             return found
@@ -3140,7 +3122,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         machine_report = machines_answer.json() if machines_answer.status_code == 200 else {}
         machine_choices = [{'name': 'front', 'state': 'ready'}, *machine_report.get("machines", [])]
         names = {row.get("name") for row in machine_choices}
-        default_machine = machine_report.get("artifact_machine", "front_cpu" if "front_cpu" in names else "compute")
+        default_machine = machine_report.get("artifact_machine", "front_cpu" if "front_cpu" in names else first_node(person) or "front")
         selected_machine = (typed_in or {}).get("file_machine") or asked.get("file_machine", 'front')
         file_locations, location_error, file_pending, file_offline, file_delivery_error = {}, "", False, False, ''
         if selected_machine not in names:
@@ -3223,7 +3205,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             elif row.get("state") == "ready" and row.get("status_live") is False:
                 row["state"] = "not answering"
         if not selected:
-            selected = 'compute' if any(row.get('name') == 'compute' for row in choices) else choices[0]['name'] if choices else ''
+            selected = choices[0]['name'] if choices else ''
         if selected and selected not in {row.get("name") for row in choices}:
             return Response("That compute node is not configured.", status_code=404)
         if not choices:
@@ -3399,7 +3381,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def new_machine_key(request: Request, person: Person) -> Response:
         """Have turnstile replace one selected node's key only after that node accepts it."""
         form = await typed(request)
-        machine = form.get("machine", "compute")
+        machine = form.get("machine") or first_node(person)
         answer = await ask("POST", "/turnstile/machines/" + quote(machine, safe="") + "/machine-key", person.key)
         if answer.status_code != 200:
             return await compute_nodes_page(request, person, answer.json()["error"]["message"], failed=True,
@@ -3410,7 +3392,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def schedule_machine_key(request: Request, person: Person) -> Response:
         """Validate and save the selected node's key-rotation schedule."""
         form = await typed(request)
-        machine = form.get("machine", "compute")
+        machine = form.get("machine") or first_node(person)
         try:
             days = int(form.get("rotation_days", ""))
             if not 0 <= days <= 3650:
@@ -3432,7 +3414,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, 'refused.html', person, status=403, why='Your account may not manage tools.')
         try:
             found = await fetch(request, person, '/loadcoach/tools')
-        except ComputeOff:
+        except ServiceUnavailable:
             found = {'program': None, 'tools': []}
         if isinstance(found, Response):
             return found
@@ -3495,7 +3477,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def change_cards(request: Request, person: Person) -> Response:
         """Save exclusions on compute, preserving exclusions for temporarily missing cards."""
         form = await typed_lists(request)
-        machine = form.get("machine", ["compute"])[-1]
+        machine = (form.get("machine") or [first_node(person)])[-1]
         base = "/turnstile/machines/" + quote(machine, safe="")
         found = await fetch(request, person, base + "/cards")
         if isinstance(found, Response):
@@ -3531,7 +3513,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response("Only LoadCoach and Spotter use a host selection.", status_code=400)
         settings_path = ("/turnstile/machines/" + quote(selected_machine, safe="") + "/settings"
                          if selected_machine else "/loadcoach/settings")
-        destination_query = "machine=" + quote(selected_machine or "compute", safe="") + "&" if node_return else ""
+        destination_query = "machine=" + quote(selected_machine or first_node(person), safe="") + "&" if node_return else ""
         found = await fetch(request, person, settings_path)
         if isinstance(found, Response):
             return found
@@ -3624,7 +3606,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 models=[m for m in catalogue.json()['data'] if m.get('owned_by')=='loadcoach']
             else:
                 unavailable='The model catalogue is unavailable. Saved sources remain on front.'
-        except ComputeOff:
+        except ServiceUnavailable:
             unavailable='Compute is unavailable. Saved sources remain on front; indexing and queries need compute.'
         maximum=person.me.get('max_sensitivity','normal')
         levels=['normal','sensitive','restricted']
@@ -3726,7 +3708,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 models=[m for m in catalog.json()['data'] if m.get('owned_by')=='loadcoach' and not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and m.get('local_model_guard')]
             else:
                 unavailable='The model catalogue is unavailable. Saved prompts and outputs remain on front.'
-        except ComputeOff:
+        except ServiceUnavailable:
             unavailable='Compute is unavailable. Saved prompts and outputs remain on front; generation needs compute.'
         response=page(request,'workflows.html',person,status=400 if failed else 200,workflows=listed['workflows'],
             workflow=run,prompts=listed['prompts'],builtins=listed['builtins'],collections=collections['collections'],
@@ -3905,7 +3887,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if initial_page(request):
             return page(request, 'log.html', person, deferred=True, fragment_url=fragment_url(request, 'page'),
                         said=asked.get('said', ''), failed=asked.get('failed') == '1')
-        wanted = {key: asked[key].strip() for key in ("kind", "what", "user", "group", "model", "trace", "start", "end") if asked.get(key, "").strip()}
+        wanted = {key: asked[key].strip() for key in ("kind", "what", "user", "group", "model", "trace", "start", "end", "node") if asked.get(key, "").strip()}
         limit, _ = controls(asked, 100)
         going_back = {"before": asked["before"]} if asked.get("before") else {}
         found = await fetch(request, person, "/loadcoach/events", params={**wanted, **going_back, 'timezone': settings.timezone or 'UTC', "limit": limit})
@@ -3978,6 +3960,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, "refused.html", person, status=403,
                         why="Your account needs the restart-services ability to read system logs.")
         asked = request.query_params
+        selected_node = asked.get('node') or first_node(person)
+        if selected_node not in person.me.get('machines', []):
+            return page(request, 'refused.html', person, status=404, why='Choose a configured node for system logs.')
         owner = person.me.get('identity') or person.name
         previous = next((value for key, value in reversed(journal_cache.items()) if key[0] == owner), {})
         sources = [name for name in previous.get('sources', ['loadcoach', 'kernel'])
@@ -4004,12 +3989,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
         def cache_key():
             """Keep snapshots private and specific to the source, filters and service policy."""
-            return owner, source, tuple(sorted(wanted.items())), tuple(settings.third_party_services)
+            return owner, selected_node, source, tuple(sorted(wanted.items())), tuple(settings.third_party_services)
 
         source, offline, saved = selected_source(), False, {}
         try:
             now = await ask_spotter("GET", "/spotter/now", person.key,
-                                    params={"system_services": ",".join(settings.third_party_services)})
+                                    params={"node": selected_node, "system_services": ",".join(settings.third_party_services)})
             if now.status_code >= 500:
                 raise MachineOff
             if now.status_code != 200:
@@ -4017,7 +4002,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             sources = [service["name"] for service in now.json()["services"]] + ["kernel"]
             source = selected_source()
             if not why:
-                printed = await ask_spotter("GET", f"/spotter/services/{quote(source, safe='')}/journal", person.key, params=wanted)
+                printed = await ask_spotter("GET", f"/spotter/services/{quote(source, safe='')}/journal", person.key, params={**wanted, "node": selected_node})
                 if printed.status_code >= 500:
                     raise MachineOff
                 if printed.status_code == 200:
@@ -4037,10 +4022,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 saved = journal_cache.get(cache_key(), {})
         models = []
         if not offline:
-            with suppress(ComputeOff):
+            with suppress(ServiceUnavailable):
                 models = await local_models(person)
         return page(request, "output.html", person, status=400 if why else 200,
-                    sources=sources, source=source, at=asked.get("at", ""), before=before, after=after,
+                    sources=sources, source=source, nodes=person.me.get("machines", []), selected_node=selected_node, at=asked.get("at", ""), before=before, after=after,
                     most=wanted['lines'], lines=saved.get('lines', []), output_command=saved.get('command', ''),
                     offline=offline, fetched=saved.get('fetched'), said=why, models=models)
 
@@ -4059,7 +4044,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         except httpx.TimeoutException:
             return page(request, "answer.html", person, why="No answer after fifteen minutes. The request may still be under way: the first page shows it if it is.")
         except httpx.HTTPError:
-            raise ComputeOff from None
+            raise ServiceUnavailable from None
         if answer.status_code != 200:
             return page(request, "answer.html", person, why=answer.json()["error"]["message"])
         message = (answer.json().get("choices") or [{}])[0].get("message") or {}  # an answer in another shape is no answer
@@ -4683,7 +4668,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 found = await fetch(request, person, "/turnstile/machines")
                 if isinstance(found, Response):
                     break
-                rendered = template.render(person=person, compute=compute, strip=True,
+                rendered = template.render(person=person, front_state=front_state, strip=True,
                                            hosts=found.get("hosts", []))
                 if rendered != previous:
                     previous = rendered
@@ -4702,7 +4687,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         name = request.path_params["name"]
         form = await typed(request)
         destination = form.get("return_to", "/telemetry")
-        if not re.fullmatch(r"/telemetry(?:/[0-9a-f]{64})?", destination):
+        # Back to the page the Wake button was on: telemetry, or any page's node notice. Only a local path.
+        if not re.fullmatch(r"/(?:[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.%-]+)*)?", destination):
             destination = "/telemetry"
         answer = await ask("POST", "/turnstile/machines/" + quote(name, safe="") + "/wake", person.key)
         said = (f"Asked {name} to wake." if answer.is_success else answer.json()["error"]["message"])
@@ -4772,7 +4758,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                       "identity": identity or "", "hours": hours, "until": asked.get("until", ""),
                       "initial_group": 'gpu-' + asked['gpu'] if asked.get('gpu', '').isdigit() else 'processor'}
         template = "telemetry_workspace.html" if asked.get("part") == "workspace" else "telemetry_host.html" if host else "machines.html"
-        if host and 'compute' in host['machines'] and host.get('fingerprint'):
+        if host and host.get('fingerprint'):  # the controls check that their Spotter is on this very host
             snapshot, _ = await physical_host_controls(person, host['fingerprint'])
             if snapshot:
                 uptime = number(snapshot.get('up_for'))
@@ -4782,7 +4768,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if 'manage-settings' in person.can:
                 try:
                     components, _ = await component_inventory(person)
-                except ComputeOff:
+                except ServiceUnavailable:
                     components = None
                 if components is not None:
                     host['components'] = component_pills(host, components)
@@ -4917,7 +4903,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "pulse.html")
 
     async def scheduled_front_backup(identifier, retention):
-        """Create the front's half of a scheduled paired recovery set."""
+        """Create the front's independent scheduled backup."""
         root, files, excluded, rows, stores = front_backup_context()
         existing = backup_manifest(root, identifier)
         if existing and existing.get('verification', {}).get('state') == 'verified':
@@ -4955,7 +4941,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 answer = await ask('GET', '/v1/models', person.key)
                 if answer.is_success:
                     catalogue = [row for row in answer.json()['data'] if row['owned_by'] == 'loadcoach' and row.get('model_id')]
-            except ComputeOff:
+            except ServiceUnavailable:
                 pass
         rows = schedules.rows()
         for row in rows:
@@ -4995,10 +4981,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             else:
                 from loadcoach.schedule_time import occurrence_ids
                 _, backup_id = occurrence_ids(row['schedule_id'], row['due_at'])
-                row['href'] = '/backups/' + backup_id if row['state'] == 'completed' else ''
+                row['href'] = '/backups' if row.get('backup_nodes') else ''
         return page(request, 'schedules.html', person, status=400 if failed else 200,
             schedules=rows, history=history[:25], history_page=number, more_history=len(history)>25,
-            catalogue=catalogue, schedule_nodes=sorted({'compute', *(one['machine'] for model in catalogue for one in model.get('locations', []))}), definitions=[row for row in benchmarks.state.store.definitions() if row['enabled']],
+            catalogue=catalogue, schedule_nodes=sorted({*person.me.get('machines', []), *(one['machine'] for model in catalogue for one in model.get('locations', []))}), definitions=[row for row in benchmarks.state.store.definitions() if row['enabled']],
             timezone=settings.timezone or 'America/Vancouver', retention=settings.backup_retention,
             editing=editing, selected=selected, form_spec=form_spec, upcoming=upcoming,
             active_count=sum(bool(row['enabled']) for row in rows), paused_count=sum(not row['enabled'] for row in rows),
@@ -5017,7 +5003,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             'benchmark': one('benchmark') if kind == 'benchmark' else '', 'timezone': one('timezone'),
             'time': one('time'), 'weekdays': [int(day) for day in form.get('weekdays', [])],
             'missed': one('missed'), 'retention': int(one('retention', '10')),
-            **({'machine':one('machine')} if kind in ('benchmark','outstanding') else {}),
+            **({'machine':one('machine')} if kind in ('benchmark','outstanding') else {'nodes':form.get('nodes', [])}),
             **({'model_ids':form.get('model_ids',[]), 'benchmarks':form.get('benchmarks',[])} if kind=='outstanding' else {})})
         if kind == 'benchmark' and not any(row['id'] == spec['benchmark'] and row['enabled'] for row in benchmarks.state.store.definitions()):
             raise ValueError('Choose an enabled benchmark.')
@@ -5039,8 +5025,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if not answer.is_success:
                 raise ValueError(answer.json()['error']['message'])
             schedules.create(identifier, name, person.me['identity'], person.name, spec, token, model_name=answer.json().get('model_name', ''))
-        except (ValueError, TypeError, KeyError, ComputeOff) as problem:
-            return await schedules_page(request, person, 'Compute is unavailable.' if isinstance(problem, ComputeOff) else str(problem), failed=True, new_form=True)
+        except (ValueError, TypeError, KeyError, ServiceUnavailable) as problem:
+            return await schedules_page(request, person, 'The front is unavailable.' if isinstance(problem, ServiceUnavailable) else str(problem), failed=True, new_form=True)
         return go('/schedules?edit='+identifier+'&said=Schedule+created.')
 
     async def schedule_edit(request: Request, person: Person):
@@ -5067,8 +5053,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 if not answer.is_success:
                     raise ValueError(answer.json()['error']['message'])
                 schedules.update(identifier, name, spec, token, model_name=answer.json().get('model_name', ''))
-        except (ValueError, TypeError, KeyError, ComputeOff) as problem:
-            return await schedules_page(request, person, 'Compute is unavailable; the edit was not saved.' if isinstance(problem, ComputeOff) else str(problem), failed=True, editing_id=identifier)
+        except (ValueError, TypeError, KeyError, ServiceUnavailable) as problem:
+            return await schedules_page(request, person, 'The front is unavailable; the edit was not saved.' if isinstance(problem, ServiceUnavailable) else str(problem), failed=True, editing_id=identifier)
         return go('/schedules?edit='+identifier+'&said=Schedule+saved.')
 
     async def schedule_action(request: Request, person: Person):
@@ -5098,8 +5084,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     if not answer.is_success:
                         raise ValueError(answer.json()['error']['message'])
                 schedules.enable(identifier, action == 'resume')
-        except (ValueError, ComputeOff) as problem:
-            return await schedules_page(request, person, 'Compute is unavailable.' if isinstance(problem, ComputeOff) else str(problem), failed=True, selected_id=identifier)
+        except (ValueError, ServiceUnavailable) as problem:
+            return await schedules_page(request, person, 'The front is unavailable.' if isinstance(problem, ServiceUnavailable) else str(problem), failed=True, selected_id=identifier)
         return go('/schedules?view='+identifier)
 
     async def alert_page(request: Request, person: Person) -> Response:
@@ -5521,9 +5507,9 @@ def log_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metavar="F
     rows = taken.execute(f"SELECT {COLUMNS} FROM events ORDER BY id")
     count = 0
     while batch := rows.fetchmany(1000):
-        log.take("compute", [dict(zip(COLUMNS.split(", "), row)) for row in batch], [], 0)
+        log.take(LEGACY, [dict(zip(COLUMNS.split(", "), row)) for row in batch], [], 0)
         count += len(batch)
-    log.take("compute", [], texts, len(texts))
+    log.take(LEGACY, [], texts, len(texts))
     log.add("log", "moved-here", "command-line", entries=count, texts=len(texts), source=str(file))
     print(f"Took {count} entries and {len(texts)} requests kept in full from {file}.")
 

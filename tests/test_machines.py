@@ -70,9 +70,16 @@ def test_further_machines_are_read_and_checked(tmp_path):
     file = tmp_path / "weightroom.toml"
     file.write_text('compute = "http://c:8442"\n[machines.rig]\ncompute = "http://c:9442"\nmachine_key_file = "rig.key"\n[turnstile]\nmachines_poll_seconds = 4\n')
     settings = load_settings(file)
-    assert settings.machines == {"rig": {"compute": "http://c:9442", "spotter": "", "machine_key_file": str(tmp_path / "rig.key"), "wake_mac": "", "wake_address": "255.255.255.255"}} and settings.machines_poll_seconds == 4
+    # The old top-level `compute` is one more node, named "compute", ahead of the others: every node is a peer.
+    legacy = {"compute": "http://c:8442", "spotter": "http://c:8444", "machine_key_file": str((tmp_path / "../keys/machine.key").resolve()),
+              "wake_mac": "", "wake_address": "255.255.255.255"}
+    assert settings.machines == {"compute": legacy, "rig": {"compute": "http://c:9442", "spotter": "", "machine_key_file": str(tmp_path / "rig.key"),
+                                                            "wake_mac": "", "wake_address": "255.255.255.255"}} and settings.machines_poll_seconds == 4
     file.write_text('compute = "http://c:8442"\n')
-    assert load_settings(file).machines == {} and load_settings(file).machines_poll_seconds == 10
+    assert load_settings(file).machines == {"compute": legacy} and load_settings(file).machines_poll_seconds == 10
+    # After `owg update` moves it, the node has its own name and remembers the old one.
+    file.write_text('[machines.jpk-main]\ncompute = "http://c:8442"\nformerly = "compute"\n')
+    assert load_settings(file).machines["jpk-main"]["formerly"] == "compute"
     for wrong in ('[machines.compute]\ncompute = "http://c:9442"', '[machines.rig]\ncompute = "c:9442"', '[machines.rig]\nmachine_key_file = "x"',
                   '[turnstile]\nmachines_poll_seconds = 0'):
         file.write_text('compute = "http://c:8442"\n' + wrong)

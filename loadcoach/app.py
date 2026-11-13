@@ -2389,6 +2389,11 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         return {'snapshot': snapshot, 'signed': sign(read_key(config.machine_key_file), json.dumps(snapshot, sort_keys=True))} if config.machine_key_file else None
 
     tasks = Tasks(batches, runner, users, who, lambda: bool(draining), log, on_result=publish_task_result)
+    if config.former_machine_name and config.former_machine_name != config.machine_name:
+        from turnstile.nodes import remember_aliases, rename_stored, verified_backup
+        log.former = remember_aliases(log.db, {config.former_machine_name: config.machine_name})
+        rename_stored('loadcoach.core', log.db, log.former,
+                      verified_backup(config.data, machine=config.machine_name))
 
     # ---- batches are front's ---------------------------------------------------------------------
     #

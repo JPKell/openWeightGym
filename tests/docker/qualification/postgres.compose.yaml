@@ -1,0 +1,8 @@
+# Temporary qualification of a restored accounts store; no host port is exposed.
+services:
+  console:
+    environment:
+      OWG_QUALIFICATION_POSTGRES: "1"
+  turnstile:
+    environment:
+      OWG_QUALIFICATION_POSTGRES: "1"

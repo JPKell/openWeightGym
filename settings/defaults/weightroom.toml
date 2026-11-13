@@ -201,8 +201,11 @@ wait = 180
 # name a node. When off, the front picks the node and a request that names one is refused with a
 # message saying so. The front keeps task records for every node either way. Changes apply immediately.
 allow_caller_to_specify_destination = true
+# The node new voice sessions start on. When it is full or not answering, another node running voice
+# takes the session, which stays there until it ends. Empty: the first node running voice. Changes apply immediately.
+preferred_voice_node = ""
 # LoadCoach on the front host that owns the model-file storage library and active cache. Empty prefers
-# front_cpu when configured, otherwise compute. Changing it requires restarting turnstile.
+# front_cpu when configured, otherwise the first node. Changing it requires restarting turnstile.
 artifact_machine = ""
 # Allow each user to opt in to adult Civitai previews. Off hides the user control and
 # enforces safe previews for every account. Changes apply immediately.

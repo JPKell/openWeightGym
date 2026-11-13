@@ -1,7 +1,7 @@
 {% if person and 'front-wake' in person.can %}
 {% for name in host.machines %}
-<form method="post" action="/telemetry/nodes/{{ name|urlencode }}/wake" class="position-relative d-inline-block mb-2" style="z-index:2">
-<input type="hidden" name="return_to" value="/telemetry{% if host.fingerprint %}/{{ host.fingerprint }}{% endif %}">
+<form method="post" action="/telemetry/nodes/{{ name|urlencode }}/wake" class="position-relative d-inline-block{{ '' if return_to is defined else ' mb-2' }}" style="z-index:2">
+<input type="hidden" name="return_to" value="{{ return_to|default('/telemetry' ~ ('/' ~ host.fingerprint if host.fingerprint else '')) }}">
 <button class="btn btn-sm btn-outline-primary"{% if name not in host.wake_nodes|default([]) %} disabled title="{{ 'Enable this node in Compute nodes before waking it' if name in host.disabled_nodes|default([]) else 'Configure Wake-on-LAN for this node' }}"{% endif %}>Wake {{ name }}</button>
 </form>
 {% endfor %}

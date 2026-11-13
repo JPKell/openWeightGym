@@ -4,11 +4,12 @@
 <div id="log" {% if not going_back %}hx-get="/log?part=list{{ "&" ~ narrowed if narrowed }}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
 <div class="table-responsive">
 <table id="log-table" class="table table-sm table-hover align-middle sortable">
-  <thead><tr><th data-sort="value">When</th><th data-sort="text">Kind</th><th data-sort="text">What</th><th data-sort="text">User</th><th data-sort="text">Model</th><th>More</th></tr></thead>
+  <thead><tr><th data-sort="value">When</th><th data-sort="text">Node</th><th data-sort="text">Kind</th><th data-sort="text">What</th><th data-sort="text">User</th><th data-sort="text">Model</th><th>More</th></tr></thead>
   <tbody>
   {% for event in events %}
   <tr>
     <td class="when" data-value="{{ event.id }}">{{ event.at|timestamp }}</td>
+    <td>{{ event.machine|default("front") }}</td>
     <td>{{ event.kind }}</td>
     {# A request has a page of its own. An entry about a request, such as how it ended, leads to the same page. Any other entry has a page with all of it. #}
     <td><a href="{% if event.kind == "request" %}/requests/{{ event.of or event.source or event.id }}{% else %}/log/{{ event.id }}{% endif %}">{{ event.what }}</a></td>
@@ -17,7 +18,7 @@
     <td class="wrap log-more">{% for name, value in (event|rest).items() %}<span class="text-secondary">{{ name }}</span> {{ value|shown }}{{ " · " if not loop.last }}{% endfor %}</td>
   </tr>
   {% else %}
-  {% call empty_row(6) %}Nothing on record{{ " that fits" if narrowed }}.{% endcall %}
+  {% call empty_row(7) %}Nothing on record{{ " that fits" if narrowed }}.{% endcall %}
   {% endfor %}
   </tbody>
 </table>

@@ -31,6 +31,7 @@ import httpx
 
 from loadcoach.statement import HEADER, PROOF, make, proof, read_key, user_of
 from loadcoach.users import User
+from loadcoach.log import LEGACY
 
 FRESH_FOR = 10  # seconds a list of the accounts is used before front is asked again
 SEND_EVERY = 2  # seconds between sending front the log entries it does not have
@@ -40,7 +41,7 @@ TRUSTED_FOR = 60  # seconds without an answer from front after which no account 
 class Accounts:
     """The accounts as front last said them. Ask `fresh()` first; the rest only reads what it fetched."""
 
-    def __init__(self, front: str, key_file: str, client: httpx.AsyncClient | None = None, machine_name: str = "compute") -> None:
+    def __init__(self, front: str, key_file: str, client: httpx.AsyncClient | None = None, machine_name: str = LEGACY) -> None:
         """Configure the signed front-account client and its current account cache."""
         self.front, self.key_file, self.machine_name = front.rstrip("/"), key_file, machine_name
         self.client = client or httpx.AsyncClient(timeout=httpx.Timeout(5, connect=2))

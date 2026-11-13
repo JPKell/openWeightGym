@@ -105,7 +105,7 @@ def has_hours(db) -> bool:
 
 
 def report(db, params, owner: str | None = None, groups: dict[str, str] | None = None,
-           models: dict[str, dict] | None = None) -> dict:
+           models: dict[str, dict] | None = None, node_aliases: dict[str, str] | None = None) -> dict:
     """Aggregate authorized endings once; inclusive date filters use local midnight boundaries."""
     rates = {}
     for side, default in (("input", "1"), ("output", "3")):
@@ -124,7 +124,17 @@ def report(db, params, owner: str | None = None, groups: dict[str, str] | None =
     placeholders = ",".join("?" for _ in ENDINGS)
     scope = " AND e.user = ?" if owner is not None else ""
     scope_values = (owner,) if owner is not None else ()
-    hours = has_hours(db)
+    selected_node = params.get('node', '').strip()
+    aliases = node_aliases or {}
+    node_choices = {aliases.get(row[0], row[0]) if row[0] else 'front' for row in db.execute(
+        'SELECT DISTINCT e.machine FROM events e WHERE 1=1' + scope, scope_values)}
+    hours = has_hours(db) and not selected_node
+    if selected_node == 'front':
+        scope += ' AND e.machine IS NULL'
+    elif selected_node:
+        names = [selected_node, *(old for old, new in aliases.items() if new == selected_node)]
+        scope += f" AND e.machine IN ({','.join('?' for _ in names)})"
+        scope_values = (*scope_values, *names)
     oldest = db.execute(
         f"SELECT MIN(hour) FROM usage_hours WHERE 1 = 1{scope.replace('e.user', 'person')}" if hours else
         f"SELECT MIN(e.at) FROM events e WHERE e.kind = 'request' AND e.what IN ({placeholders}){scope}",
@@ -248,10 +258,10 @@ def report(db, params, owner: str | None = None, groups: dict[str, str] | None =
     return {
         "start": start.isoformat(), "end": end.isoformat(), "timezone": timezone,
         "bucket": bucket, "hourly": hourly_rows,
-        "group_by": group_by, "filters": filters,
+        "group_by": group_by, "filters": {**filters, "node": selected_node},
         "mock_pricing": {"currency": "USD", "per_tokens": 1_000_000,
                          **{f"{side}_rate": float(rate) for side, rate in rates.items()}},
-        "choices": {key: sorted(values) for key, values in choices.items()},
+        "choices": {**{key: sorted(values) for key, values in choices.items()}, "node": sorted(node_choices)},
         "user_groups": {name: sorted(memberships) for name, memberships in user_groups.items()},
         "totals": totals,
         "daily": [{"date": day, **values} for day, values in daily.items()],

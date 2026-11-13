@@ -596,6 +596,13 @@ def topology_values(config_name: str, topology: str, root: Path, address: str, f
     """The settings a machine's part decides, by dotted TOML key: one machine (all), front or compute."""
     alone = topology == "all"
     here = "127.0.0.1" if alone else address
+    if topology in ('all', 'compute') and not machine_name:
+        # One machine: its node is a peer like any other, named for its host (docs/peer-nodes-plan.md).
+        import socket
+        from loadcoach.setting_names import node_name_for
+        machine_name = node_name_for(socket.gethostname())
+        if not machine_name:
+            raise ValueError('This hostname is not a valid compute-node name; supply --machine-name with its peer name.')
     front = "http://127.0.0.1:8442" if alone else front.rstrip("/")
     compute_host = urlsplit(compute).hostname if compute else ""
 
@@ -627,11 +634,26 @@ def topology_values(config_name: str, topology: str, root: Path, address: str, f
     if config_name == "weightroom":
         extra = {"turnstile.ports": [8442, 8443, 8444, 8445], "turnstile.voice_port": 8445} if voice else {}
         if alone:
-            return {"compute": "http://127.0.0.1:9442", "spotter": "http://127.0.0.1:9444", **extra}
+            return {f"machines.{machine_name}.compute": "http://127.0.0.1:9442",
+                    f"machines.{machine_name}.spotter": "http://127.0.0.1:9444",
+                    f"machines.{machine_name}.machine_key_file": "../keys/machine.key", **extra}
         if compute:
-            return {"compute": compute.rstrip("/"), "spotter": f"http://{compute_host}:8444", **extra}
-        # No compute node yet: the console runs and shows compute as not answering until one is added.
-        return {"compute": "http://127.0.0.1:9442", "spotter": "", **extra}
+            from loadcoach.setting_names import node_name_for
+            import ipaddress
+            try:
+                ipaddress.ip_address(compute_host)
+                hostname = ''
+            except ValueError:
+                hostname = compute_host
+            peer = machine_name or node_name_for(hostname)
+            if not node_name_for(peer) or node_name_for(peer) != peer:
+                raise ValueError('--compute-url needs --machine-name matching the node, or a URL with its hostname. Pair the node with owg pair instead.')
+            host = f'[{compute_host}]' if ':' in compute_host else compute_host
+            return {f'machines.{peer}.compute': compute.rstrip('/'),
+                    f'machines.{peer}.spotter': f'http://{host}:8444',
+                    f'machines.{peer}.machine_key_file': '../keys/machine.key', **extra}
+        # No compute node yet: the console runs and says so until one pairs.
+        return extra
     if config_name == "voice-gateway":
         voice_url = f"http://{compute_host}:8445" if compute_host and not alone else "http://127.0.0.1:9445"
         return {"voice": voice_url, "origins": ["http://localhost:8446", "http://127.0.0.1:8446"]}

@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import parse_qsl, quote, urlencode, urlsplit
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit
 
 import httpx
 import typer
@@ -63,7 +63,7 @@ from loadcoach.users import ANONYMOUS, User, Users
 from plugins._registry import Registry
 from plugins._sdk import AdapterError
 from plugins._turnstile import Router as PluginRouter
-from turnstile import accounts, events, roles, allowances
+from turnstile import accounts, events, roles, allowances, nodes
 from loadcoach.outside import Services
 from loadcoach.batches import Batches
 from turnstile.batches import FrontBatches
@@ -85,6 +85,7 @@ from loadcoach.platform_services import PlatformServices, PlatformServiceGate, S
 
 # Headers that belong to one connection, not to the request. They are made afresh on each side.
 HOP_HEADERS = {"connection", "content-length", "host", "keep-alive", "te", "trailer", "transfer-encoding", "upgrade"}
+NODE_HEADER = "x-suite-node"  # names the node a request is for, as ?node= does
 NO_WAKE = "x-turnstile-no-wake"  # a request with this header is never held to wake compute
 NO_WAKE_PATHS = frozenset({"/loadcoach/loadouts", "/loadcoach/plugins/mirror", "/loadcoach/alert-evidence",
                            "/spotter/alert-evidence", "/loadcoach/observation-metrics"})
@@ -95,17 +96,17 @@ TRY_EVERY = 2  # seconds between tries while compute is waking
 class Settings:
     """Everything turnstile is told. It reads the front machine's one file, settings/weightroom.toml."""
 
-    compute: str  # compute's address without a port, such as 10.77.10.84. Each port is passed on to the same port there
+    compute: str = ""  # the old top-level node address without a port. Read as the node named LEGACY until `owg update` moves it to [machines.NAME]
     data: str = "."  # the folder the accounts are kept in, unless [databases] says otherwise
     host: str = "127.0.0.1"
     ports: tuple[int, ...] = (8442, 8443, 8444)  # LoadCoach's, the ToolLocker's and spotter's
-    wake_mac: str = ""  # the hardware address of compute's network card. Empty: turnstile never wakes it
+    wake_mac: str = ""  # with the old top-level `compute`: that node's network card. Each [machines.NAME] has its own
     wake_address: str = "255.255.255.255"  # where the waking packet is sent: everyone on the home network
     wait: float = 180  # seconds to wait for compute to wake before giving up
     max_in_flight: int = 200  # requests turnstile carries to compute at once. One more is turned away at once with 503 and Retry-After, rather than held here out of LoadCoach's line. A change needs a restart
     busy_retry_seconds: float = 5  # the Retry-After of that 503
     hosted_keys: str = ""  # the folder with outside services' private NAME.key files. Empty: the folder of machine_key_file
-    machines: dict = field(default_factory=dict)  # further LoadCoach instances, optionally with a Spotter URL for host telemetry
+    machines: dict = field(default_factory=dict)  # every compute node, a peer of the others: [machines.NAME] with compute, spotter, machine_key_file and wake settings
     machines_poll_seconds: float = 10  # how often each machine is asked about itself, and how long a fact stays "ready" (three times this)
     keep_days: float = 90  # days the event log is kept here. 0 keeps everything
     voice_port: int = 8445
@@ -115,7 +116,8 @@ class Settings:
     path: str = ""  # shared settings path for the persistent maintenance barrier
     databases: dict = field(default_factory=dict)  # shares weightroom's named accounts and plugin stores
     groups: dict = field(default_factory=dict)  # the first groups, taken into the accounts once, while there are none
-    keep_console_settings_on_front: bool = False  # the front stores and serves the settings of its own programs (weightroom, turnstile, voice-gateway); formerly front_settings
+    keep_console_settings_on_front: bool = True  # compatibility key; the front always stores its console settings
+    preferred_voice_node: str = ""  # the node new voice sessions go to first; another node running voice takes them when it is full or down. Settings → General, Speech
     allow_caller_to_specify_destination: bool = True  # callers may name the node a task or request runs on. Off: the front picks. Settings → General
     toollocker_url: str = ""  # optional front ToolLocker upstream; port 8443 never wakes compute
     artifact_machine: str = ""  # front-side LoadCoach that owns downloads; empty prefers front_cpu
@@ -128,11 +130,13 @@ class Settings:
     allow_model_downloads: bool = True
     files_every: float = 10  # minutes between looks through front's own model folders for the Files page. 0: only when asked
     component_versions_every: float = 60  # minutes between installed component version checks
-    compute_offset: int = 0  # how far compute's ports sit from `ports`, from the port in compute's URL. 0 unless both run on one machine
+    compute_offset: int = 0  # with the old top-level `compute`: how far its ports sit from `ports`. 0 unless both run on one machine
 
-    def upstream(self, port: int) -> str:
-        """The main compute machine's address for one of `ports`, moved by `compute_offset`."""
-        return f"http://{self.compute}:{port + self.compute_offset}"
+    def __post_init__(self) -> None:
+        """Read the old top-level `compute` as one more node, named LEGACY, ahead of the others."""
+        if self.compute and nodes.LEGACY not in self.machines:
+            legacy = nodes.legacy_entry(self.compute, self.ports, self.compute_offset, self.machine_key_file, self.wake_mac, self.wake_address)
+            object.__setattr__(self, "machines", {nodes.LEGACY: legacy, **self.machines})
 
 
 def load_settings(path: Path) -> Settings:
@@ -150,16 +154,19 @@ def load_settings(path: Path) -> Settings:
             ports = tuple(mine.get("ports", (8442, 8443, 8444)))
             # A port in compute's URL other than LoadCoach's first one moves every port by the same amount:
             # compute = "http://127.0.0.1:9442" lets turnstile keep 8442-8444 on a machine that also runs LoadCoach.
-            compute_port = urlsplit(told["compute"]).port
+            old = urlsplit(told["compute"]) if told.get("compute") else None
+            if old and nodes.LEGACY in told.get("machines", {}):
+                raise TypeError(f"the top-level compute and [machines.{nodes.LEGACY}] name the same node; keep one")
             settings = Settings(
-                compute=urlsplit(told["compute"]).hostname,
-                compute_offset=compute_port - ports[0] if compute_port else 0,
+                compute=old.hostname if old else "",
+                compute_offset=old.port - ports[0] if old and old.port else 0,
                 path=str(path),
                 databases=told.get("databases", {}),
                 groups={name: read_group(name, section) for name, section in told.get("groups", {}).items()},
                 machines={name: {"compute": section.get("compute"), "spotter": section.get("spotter", ""),
                                  "machine_key_file": str((path.parent / section.get("machine_key_file", "../keys/machine.key")).resolve()),
-                                 "wake_mac": section.get("wake_mac", ""), "wake_address": section.get("wake_address", "255.255.255.255")}
+                                 "wake_mac": section.get("wake_mac", ""), "wake_address": section.get("wake_address", "255.255.255.255"),
+                                 **({"formerly": section["formerly"]} if section.get("formerly") else {})}
                           for name, section in told.get("machines", {}).items()},
                 data=str(data),
                 wake_mac=told.get("wake_mac", ""),
@@ -177,6 +184,12 @@ def load_settings(path: Path) -> Settings:
                 raise TypeError("wait is a number of seconds above 0")
             if type(settings.keep_console_settings_on_front) is not bool:
                 raise TypeError("keep_console_settings_on_front must be a boolean")
+            if not settings.keep_console_settings_on_front:
+                raise TypeError("keep_console_settings_on_front=false is no longer supported; the front stores its console settings. Remove this key or set it to true")
+            if 'keep_console_settings_on_front' in file:
+                print('turnstile: keep_console_settings_on_front is ignored; console settings always live on the front.', flush=True)
+            if type(settings.preferred_voice_node) is not str:
+                raise TypeError("preferred_voice_node names a node, or is empty")
             if type(settings.allow_caller_to_specify_destination) is not bool:
                 raise TypeError("allow_caller_to_specify_destination must be a boolean")
             if type(settings.image_adult_previews) is not bool:
@@ -202,20 +215,22 @@ def load_settings(path: Path) -> Settings:
                 raise TypeError("busy_retry_seconds is a number of seconds above 0")
             if type(settings.machines_poll_seconds) not in (int, float) or settings.machines_poll_seconds <= 0:
                 raise TypeError("machines_poll_seconds is a number of seconds above 0")
-            if "compute" in settings.machines or any(type(one["compute"]) is not str or not one["compute"].startswith("http") for one in settings.machines.values()):
-                raise TypeError("[machines.NAME] needs compute = a URL such as http://host:8442, and the name compute is the main machine's own")
+            if any(type(one["compute"]) is not str or not one["compute"].startswith("http") for one in settings.machines.values()):
+                raise TypeError("[machines.NAME] needs compute = a URL such as http://host:8442")
+            if any(type(one.get("formerly", "")) is not str for one in settings.machines.values()):
+                raise TypeError("[machines.NAME].formerly is the node's old name, such as compute")
             if any(one.get("spotter") and (type(one["spotter"]) is not str or not one["spotter"].startswith("http")) for one in settings.machines.values()):
                 raise TypeError("[machines.NAME].spotter must be a URL such as http://host:8444")
             checked_roots({'models_folder': settings.models_folder, 'models_storage_folder': settings.models_storage_folder})
-            if settings.artifact_machine and settings.artifact_machine not in {"front", "compute", *settings.machines}:
-                raise TypeError("artifact_machine must name front, compute or a configured machine")
+            if settings.artifact_machine and settings.artifact_machine not in {"front", *settings.machines, *nodes.aliases_from(settings.machines)}:
+                raise TypeError("artifact_machine must name front or a configured node")
             slots = [machine_slot(name) for name in (*settings.machines, FRONT)]
             if FRONT in settings.machines or len(slots) != len(set(slots)):
                 raise TypeError("Configured machine names collide in the public request-ID range; rename one machine")
             return settings
         except (KeyError, TypeError, ValueError) as problem:
             why = problem
-    raise SystemExit(f"{path}: {type(why).__name__}: {why}. turnstile needs `compute`, and reads [turnstile] for the rest.") from None
+    raise SystemExit(f"{path}: {type(why).__name__}: {why}. turnstile reads its nodes from [machines.NAME], and [turnstile] for the rest.") from None
 
 
 def say_what_runs(path: Path, settings: Settings) -> None:
@@ -223,13 +238,14 @@ def say_what_runs(path: Path, settings: Settings) -> None:
     defaults = path.parent / "defaults" / path.name
     text = (defaults.read_text() if defaults.is_file() else "") + path.read_text()  # its settings are explained in either file
     file = current_names(read_settings(path).get("turnstile", {}), str(path), say=lambda text: None)
-    artifact_machine = settings.artifact_machine or ("front_cpu" if "front_cpu" in settings.machines else "compute")
+    artifact_machine = settings.artifact_machine or ("front_cpu" if "front_cpu" in settings.machines else next(iter(settings.machines), "front"))
     running = {**file, "host": settings.host, "ports": list(settings.ports), "wait": settings.wait,
                "voice_port": settings.voice_port, "artifact_machine": artifact_machine,
                "models_folder": settings.models_folder, "models_storage_folder": settings.models_storage_folder,
                "image_adult_previews": settings.image_adult_previews, "files_every": settings.files_every,
                "component_versions_every": settings.component_versions_every,
-               "allow_caller_to_specify_destination": settings.allow_caller_to_specify_destination}
+               "allow_caller_to_specify_destination": settings.allow_caller_to_specify_destination,
+               "preferred_voice_node": settings.preferred_voice_node}
     (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))))
 
 
@@ -263,24 +279,25 @@ def compute_client(settings: Settings) -> httpx.AsyncClient:
 
 
 def with_power_state(hosts: list[dict], seen: dict[str, dict], notice: dict) -> list[dict]:
-    """Mark the primary host asleep only from its signed sleep notice, never from silence alone."""
-    if notice.get("action") != "sleep":
+    """Mark a host asleep only from its node's signed sleep notice, never from silence alone."""
+    name = notice.get("machine", "")
+    if notice.get("action") != "sleep" or not name:
         return hosts
-    answered_at = (seen.get("compute") or {}).get("at")
+    answered_at = (seen.get(name) or {}).get("at")
     if answered_at is not None and answered_at > notice.get("at", 0):
         notice.update(action=None, at=0.0)
         return hosts
-    return [{**host, "state": "sleeping"} if "compute" in host.get("machines", []) else host for host in hosts]
+    return [{**host, "state": "sleeping"} if name in host.get("machines", []) else host for host in hosts]
 
 
 def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker=wake, adapter_client: httpx.AsyncClient | None = None,
               users: Users | None = None, hosted_client: httpx.AsyncClient | None = None) -> Starlette:
     """Build the web app. `client` is how it reaches compute and `waker` what wakes it; tests hand in their own, and their own `users`."""
     slots = [machine_slot(name) for name in (*settings.machines, FRONT)]
-    if "compute" in settings.machines or FRONT in settings.machines or len(slots) != len(set(slots)):
-        raise ValueError("Machine names must be distinct from compute and must have distinct public request-ID slots")
-    if settings.machines:
-        key_files = [settings.machine_key_file, *(one["machine_key_file"] for one in settings.machines.values())]
+    if FRONT in settings.machines or len(slots) != len(set(slots)):
+        raise ValueError("Node names must be distinct from front and must have distinct public request-ID slots")
+    if len(settings.machines) > 1:
+        key_files = [one["machine_key_file"] for one in settings.machines.values()]
         if any(not path or not Path(path).is_file() for path in key_files):
             raise ValueError("Every configured compute machine needs its own existing machine-key file on front")
         key_values = [statement.read_key(path) for path in key_files]
@@ -290,7 +307,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     # What turnstile asks of compute for itself (the log, facts, the plugin model list) has a pool of its own, so that a full house of callers cannot starve it.
     internal = client or httpx.AsyncClient(timeout=httpx.Timeout(30, connect=2), limits=httpx.Limits(max_connections=20))
     gate = Gate(settings.path)
-    notice = {"action": None, "at": 0.0}
+    notice = {"action": None, "at": 0.0, "machine": ""}
     ready_cache = {}
     nonces = statement.Nonces()  # of compute's own requests to turnstile
     adapters = adapter_client or httpx.AsyncClient(timeout=httpx.Timeout(None, connect=2))
@@ -307,8 +324,39 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     users = users or Users(stores.database("weightroom.accounts"), settings.groups)
     # The one event log: what was done here to the accounts, and since milestone 91 every entry compute sends.
     log = Log(stores.database("weightroom.accounts"), keep_days=settings.keep_days)
-    log.machine_names = ("compute", *settings.machines)
-    fallthrough = Fallthrough()  # what still reaches the default node only because nothing routed it
+    log.machine_names = tuple(settings.machines)
+    # Old node names (`formerly`) stay readable: rows, request numbers and statements that still use them.
+    log.former = model_locations.former = nodes.remember_aliases(log.db, nodes.aliases_from(settings.machines))
+    if log.former:
+        backup = nodes.verified_backup(settings.data)
+        if backup is None:
+            print("turnstile: stored node names keep their old names until a verified front backup exists; "
+                  "they are read through node_aliases meanwhile", flush=True)
+        nodes.rename_stored("weightroom.accounts", log.db, log.former, backup)
+        nodes.rename_stored("weightroom.roles", model_locations.db, log.former, backup)
+    fallthrough = Fallthrough()  # requests with no route and no node, refused with 404
+
+    def node(machine: str = "") -> str:
+        """The configured node `machine` names, an old name giving its new one. With none named, the only node. '' for none."""
+        if machine:
+            return machine if machine in settings.machines else log.former.get(machine, machine)
+        return next(iter(settings.machines)) if len(settings.machines) == 1 else ""
+
+    def node_base(name: str, port: int) -> str:
+        """Where node `name` answers on one of the front's ports."""
+        return nodes.base(settings.machines[name], port, settings.ports)
+
+    def key_file_of(name: str) -> str:
+        """The machine-key file the front shares with node `name`."""
+        return settings.machines.get(name, {}).get("machine_key_file", "")
+
+    def no_node(path: str) -> JSONResponse:
+        """The answer for a request no route or node name leads anywhere."""
+        if not settings.machines:
+            return error(404, "No route for this request: no compute node is configured.")
+        if path.startswith("/v1/"):
+            return error(404, "No node offers the model this request names.")
+        return error(404, "No route for this request: name its node with ?node=NAME or the x-suite-node header.")
 
     def machine_key() -> str:
         """Read the current shared key for the selected compute authority."""
@@ -332,9 +380,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Build a JSON failure response using the service error envelope."""
         return JSONResponse({"error": {"message": message, "type": "turnstile_error"}}, status_code=status, headers=headers)
 
-    def off() -> JSONResponse:
-        """Compute is not answering. Said in a header too, so that weightroom can tell this from any other refusal."""
-        return error(503, "Compute is not answering.", {"x-turnstile": "compute-off"})
+    def off(name: str) -> JSONResponse:
+        """A node is not answering. Said in headers too, so that weightroom can tell this from any other refusal, and which node it is."""
+        return error(503, f"Node {name} is not answering.", {"x-turnstile": "compute-off", "x-turnstile-node": name})
 
     def passive(request: Request) -> bool:
         """Page reads may use the configured monitor instead of retrying offline nodes."""
@@ -372,7 +420,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         Unless another `port` is given, LoadCoach is asked: the first of `ports`. `machine` names one of
         `settings.machines` instead of the main machine, which is signed with its own key.
         """
-        if why := lifecycle_refusal(machine or "compute", method, where):
+        name = node(machine)
+        if not name or name not in settings.machines:
+            return httpx.Response(404, json={"error": {"message": f"No node called {machine}." if machine else
+                                                       "Name the node this request is for."}})
+        if why := lifecycle_refusal(name, method, where):
             try:
                 releasing = where == '/loadcoach/loadouts' and method == 'POST' and json.loads(body).get('action') == 'release'
             except (ValueError, AttributeError):
@@ -381,22 +433,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 return httpx.Response(409, json={"error": {"message": why}})
         # Log flushing is observation too; its POST must not make offline reports wait.
         observing = method == "GET" or (method == "POST" and where == "/loadcoach/send-log")
-        if observing and passive_reads.get() and settings.auth_key_file and machines.available(machine or "compute") is False:
+        if observing and passive_reads.get() and settings.auth_key_file and machines.available(name) is False:
             return None
         if method == "GET":
             where = image_work.discovery_path(user, where)
-        port = port or settings.ports[0]
-        other = settings.machines.get(machine, {})
-        base = (other.get("spotter") if len(settings.ports) > 2 and port == settings.ports[2] and other.get("spotter") else other["compute"]).rstrip("/") if other else settings.upstream(port)
+        base = node_base(name, port or settings.ports[0])
+        key_file = key_file_of(name)
         headers, nonce = signed_headers(user, method, where, body,
                                         ([('content-type', 'application/json')] if body else []) + list(forwarded),
-                                        key_file=other.get("machine_key_file", ""))
+                                        key_file=key_file)
         try:
             answer = await internal.request(method, f"{base}{where}", headers=headers, content=body,
                                             timeout=httpx.Timeout(timeout, connect=2))
+        except httpx.PoolTimeout:  # every connection is in use: busy, not off
+            return httpx.Response(503, json={"error": {"message": f"Turnstile is already carrying {settings.max_in_flight} requests to compute. Try again shortly."}},
+                                  headers={"x-turnstile": "busy", "retry-after": f"{settings.busy_retry_seconds:g}"})
         except httpx.HTTPError:
             return None
-        return answer if proven(answer, nonce, other.get("machine_key_file", "")) else None
+        return answer if proven(answer, nonce, key_file) else None
 
     # Cache only discovery/configuration, under the complete current caller policy.
     # Runtime status and authorization failures are never replaced with old successes.
@@ -407,8 +461,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Bind retained node metadata to the current identity, policy and target."""
         import hashlib
         from dataclasses import asdict
-        target = settings.machines.get(machine, {}) if machine and machine != "compute" else {"compute": settings.compute}
-        scope = json.dumps([user.identity or user.name, asdict(user.group), machine or "compute", target, path],
+        name = node(machine)
+        target = {key: value for key, value in settings.machines.get(name, {}).items() if key != "formerly"}
+        scope = json.dumps([user.identity or user.name, asdict(user.group), name, target, path],
                            sort_keys=True, default=lambda value: sorted(value))
         return hashlib.sha256(scope.encode()).hexdigest()
 
@@ -437,10 +492,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                   headers={"x-suite-retained": "1"} if available is False else {})
 
         names = machines.active_names
+        # Which nodes there are, and which of them the console may offer to wake (it never wakes one itself).
+        listed = {"machines": list(names), "wake_nodes": [name for name in names if settings.machines.get(name, {}).get("wake_mac")],
+                  "aliases": dict(log.former), "node_status": {row["name"]: {"age": row.get("age"), "state": row["state"]} for row in machines.report()}}
         answers = await asyncio.gather(*(metadata(name) for name in names))
         good = [answer.json() for answer in answers if answer is not None and answer.status_code == 200]
         if not good:
-            return httpx.Response(200, json={"models": [], "chat": {"models": {}}, "unavailable_machines": names})
+            return httpx.Response(200, json={"models": [], "chat": {"models": {}}, "unavailable_machines": names, **listed})
         result = {**good[0], "models": [], "chat": {**good[0].get("chat", {}), "models": {}}}
         for told in good:
             result["models"].extend(name for name in told.get("models", []) if name not in result["models"])
@@ -467,14 +525,35 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                     result["chat"]["models"][logical["id"]] = metadata
         result["unavailable_machines"] = [name for name, answer in zip(names, answers)
                                           if answer is None or answer.headers.get("x-suite-retained") or answer.status_code != 200]
-        return httpx.Response(200, json=result)
+        return httpx.Response(200, json={**result, **listed})
+
+    async def ask_all(user: User, method: str, where: str, body: bytes = b"", **kwargs) -> httpx.Response | None:
+        """For the account, log and allowance routes, which concern every node.
+
+        Who someone is (`/loadcoach/me`) combines every node's answer. A log flush goes to every
+        node; it is None only if none answers. Any other change goes to every node, which must all
+        agree: None if one is not answering, otherwise the first refusal. A question naming its node
+        goes to that node alone.
+        """
+        if method == "GET" and where == "/loadcoach/me":
+            return await remembered(user, method, where, body, **kwargs)
+        if kwargs.get("machine") or method == "GET":
+            return await ask_compute(user, method, where, body, **kwargs)
+        names = list(machines.active_names)
+        answers = await asyncio.gather(*(ask_compute(user, method, where, body, machine=name, **kwargs) for name in names))
+        if where == "/loadcoach/send-log":
+            return next((answer for answer in answers if answer is not None), None)
+        if any(answer is None for answer in answers):
+            return None
+        return next((answer for answer in answers if answer.status_code != 200), answers[0] if answers else httpx.Response(200, json={}))
 
     async def ask_live(user: User, method: str, where: str, machine: str = "", port: int | None = None, *, prime: bool = False, passive: bool = False) -> httpx.Response | None:
         """A bounded inventory/placement question; one silent machine must not stall the others."""
-        if why := lifecycle_refusal(machine or "compute", method, where):
+        machine = node(machine)
+        if why := lifecycle_refusal(machine, method, where):
             return httpx.Response(409, json={"error": {"message": why}})
         try:
-            answer = (None if passive and machines.available(machine or "compute") is False else
+            answer = (None if passive and machines.available(machine) is False else
                       await asyncio.wait_for(ask_compute(user, method, where, machine=machine, port=port), timeout=5))
         except TimeoutError:
             answer = None
@@ -520,7 +599,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                  "headers": [(NO_WAKE.encode(), b"1")]})
             answer = await combined_view(discovery, user, where)
             return httpx.Response(answer.status_code, content=answer.body, headers=dict(answer.headers))
-        return await ask_compute(user, method, where) if user else None
+        return await remembered(user, method, where) if user else None
 
     @observation.traced("reach_and_readiness")
     async def woken(request: Request, user: User | None, attempt, machine: str = ""):
@@ -528,43 +607,46 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
         `attempt()` gives None while compute is not there. Any valid key may wake it; a request that says NO_WAKE, or has no key, never does.
         """
-        policy = settings.machines.get(machine, {}) if machine and machine != "compute" else {
-            "wake_mac": settings.wake_mac, "wake_address": settings.wake_address}
-        if why := lifecycle_refusal(machine or "compute", request.method, request.url.path):
+        name = node(machine)
+        if not name:
+            return no_node(request.url.path)
+        policy = settings.machines.get(name, {})
+        if why := lifecycle_refusal(name, request.method, request.url.path):
             return error(409, why)
-        got = None if passive(request) and machines.available(machine or "compute") is False else await attempt()
+        got = None if passive(request) and machines.available(name) is False else await attempt()
         if got is None:
-            if not machines.enabled(machine or "compute"):
-                return error(409, f"Compute node {machine or 'compute'} is {machines.state(machine or 'compute')}; wake is disabled.")
+            if not machines.enabled(name):
+                return error(409, f"Compute node {name} is {machines.state(name)}; wake is disabled.")
+            # A request that named its node wakes it only for model work; one routed to the only node wakes it for anything, as before.
             if (not policy.get("wake_mac") or user is None or NO_WAKE in request.headers or
                 request.url.path.rstrip('/') in NO_WAKE_PATHS or
                 (machine and not request.url.path.startswith("/v1/"))):
-                return (error(503, f"Machine {machine} is not answering.", {"retry-after": f"{settings.busy_retry_seconds:g}"})
-                        if machine else off())
-            print(f"turnstile: waking compute for a request to {request.url.path}", flush=True)
+                return (error(503, f"Machine {name} is not answering.", {"retry-after": f"{settings.busy_retry_seconds:g}", "x-turnstile-node": name})
+                        if machine else off(name))
+            print(f"turnstile: waking {name} for a request to {request.url.path}", flush=True)
             give_up = time.monotonic() + settings.wait
             while got is None:
-                if not machines.enabled(machine or "compute"):
-                    return error(409, f"Compute node {machine or 'compute'} is no longer active; wake was cancelled.")
+                if not machines.enabled(name):
+                    return error(409, f"Compute node {name} is no longer active; wake was cancelled.")
                 if time.monotonic() > give_up:
-                    return error(504, f"Compute was asked to wake and has not answered in {settings.wait:g} seconds.")
+                    return error(504, f"Node {name} was asked to wake and has not answered in {settings.wait:g} seconds.")
                 try:
                     waker(policy["wake_mac"], policy.get("wake_address", "255.255.255.255"))
                 except (OSError, ValueError):
                     return error(503, "Could not send the wake packet. Check the node wake configuration.")
                 remaining = give_up - time.monotonic()
                 if remaining <= 0:
-                    return error(504, f"Node {machine or 'compute'} was asked to wake and has not answered in {settings.wait:g} seconds.")
+                    return error(504, f"Node {name} was asked to wake and has not answered in {settings.wait:g} seconds.")
                 await asyncio.sleep(min(TRY_EVERY, remaining))
                 try:
                     got = await asyncio.wait_for(attempt(), max(0.001, give_up - time.monotonic()))
                 except TimeoutError:
-                    return error(504, f"Node {machine or 'compute'} was asked to wake and has not answered in {settings.wait:g} seconds.")
+                    return error(504, f"Node {name} was asked to wake and has not answered in {settings.wait:g} seconds.")
         return got
 
     @observation.traced("transport_headers")
     async def through(request: Request, user: User | None, method: str, where: str, body: bytes, headers: list, port: int | None = None,
-                      machine: str = "") -> httpx.Response | Response:
+                      machine: str = "", wake_allowed: bool = True) -> httpx.Response | Response:
         """Compute's answer to a request, with its body still to come, and proven to be compute's. Or the response that ends the request.
 
         `where` is the path with its query, as it is signed. Unless another `port` is given, LoadCoach is asked.
@@ -572,16 +654,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if method == "GET":
             where = image_work.discovery_path(user, where)
         port = port or settings.ports[0]
-        other = settings.machines.get(machine, {}) if machine != "compute" else {}
         front_tools = not machine and port == 8443 and bool(settings.toollocker_url)
-        if not front_tools and (why := lifecycle_refusal(machine or "compute", method, where)):
+        name = "" if front_tools else node(machine)
+        if not front_tools and name not in settings.machines:
+            return error(404, f"No node called {machine}.") if machine else no_node(where)
+        if not front_tools and (why := lifecycle_refusal(name, method, where)):
             return error(409, why)
-        base = settings.toollocker_url.rstrip("/") if front_tools else other["compute"].rstrip("/") if other else settings.upstream(port)
-        key_file = other.get("machine_key_file", "")
+        base = settings.toollocker_url.rstrip("/") if front_tools else node_base(name, port)
+        key_file = key_file_of(name)
 
         async def reach() -> tuple[httpx.Response, str] | Response | None:
             """Send the request to the selected compute service and verify its machine proof."""
-            if not front_tools and (why := lifecycle_refusal(machine or "compute", method, where)):
+            if not front_tools and (why := lifecycle_refusal(name, method, where)):
                 return error(409, why)
             signed, nonce = signed_headers(user, method, where, body, headers, request.client.host if request.client else "", key_file)
             async def disconnected():
@@ -610,7 +694,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                     await sending.result().aclose()
 
         try:
-            reached = await reach() if front_tools else await woken(request, user, reach, machine)
+            reached = await reach() if front_tools or not wake_allowed else await woken(request, user, reach, machine)
         except httpx.PoolTimeout:  # max_in_flight are already under way: say so at once, so that the caller retries
             return error(503, f"Turnstile is already carrying {settings.max_in_flight} requests to compute. Try again shortly.",
                          {"x-turnstile": "busy", "retry-after": f"{settings.busy_retry_seconds:g}"})
@@ -620,18 +704,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if reached is None:
             if front_tools:
                 return error(503, "Front ToolLocker is not answering.", {"retry-after": f"{settings.busy_retry_seconds:g}"})
-            return error(503, f"Machine {machine} is not answering.", {"retry-after": f"{settings.busy_retry_seconds:g}"})
+            return error(503, f"Machine {name} is not answering.", {"retry-after": f"{settings.busy_retry_seconds:g}", "x-turnstile-node": name})
         if isinstance(reached, Response):
             return reached
         upstream, nonce = reached
         if not proven(upstream, nonce, key_file):
             await upstream.aclose()
             return error(502, "The answer did not prove it came from compute: it was not signed with the machine key.")
-        if machine:
-            upstream.extensions["suite_machine"] = machine
+        if name:
+            upstream.extensions["suite_machine"] = name
             if number := upstream.headers.get("x-loadcoach-request-id", ""):
                 if number.isdigit():
-                    upstream.headers["x-loadcoach-request-id"] = str(public_number(machine, int(number)))
+                    upstream.headers["x-loadcoach-request-id"] = str(public_number(name, int(number)))
         try:
             streaming = json.loads(body).get("stream") is True
         except (ValueError, AttributeError):
@@ -640,7 +724,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         # Read JSON/admin and non-streaming model answers before sending their status. A
         # dropped compute connection can then become a clean 502 (or a retryable 503 on a
         # secondary machine), instead of a success/error status with a broken body.
-        buffer_answer = not streaming and (machine or upstream.headers.get("content-type", "").startswith("application/json")
+        buffer_answer = not streaming and (machine and method != "GET" or upstream.headers.get("content-type", "").startswith("application/json")
                                            or method == "POST" and path.startswith("/v1/") and not path.startswith(("/v1/files", "/v1/batches")))
         if buffer_answer:
             try:
@@ -652,7 +736,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                              {"retry-after": f"{settings.busy_retry_seconds:g}"} if machine else None)
             await upstream.aclose()
             return httpx.Response(upstream.status_code, headers=upstream.headers, content=complete,
-                                  request=upstream.request, extensions={"suite_machine": machine, "suite_complete": complete})
+                                  request=upstream.request, extensions={"suite_machine": name, "suite_complete": complete})
         if machine or streaming and method == "POST" and path.startswith("/v1/"):
             iterator = upstream.aiter_raw()
             try:
@@ -744,23 +828,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     async def facts_for(request: Request, user: User) -> dict | Response:
         """Choose from front's retained fleet inventory; single-node facts keep their live path."""
-        scope = discovery_key(user, "", "/loadcoach/facts")
+        scope = discovery_key(user, ",".join(settings.machines), "/loadcoach/facts")
         seen = facts_seen.get(scope)
         if not settings.machines and seen and time.monotonic() - seen[0] < roles.FACTS_FOR:
             return seen[1]
         if not machines.active_names:
             return {"models": hosted.facts(user), "environment": {}, "compute_unavailable": True,
                     "placements": {}, "location_models": {}}
-        if not settings.machines:
-            answer = await woken(request, user, lambda: ask_live(user, "GET", "/loadcoach/facts"))
-            if isinstance(answer, Response):
-                return answer
-            if answer.status_code != 200:
-                return JSONResponse(answer.json(), status_code=answer.status_code)
-            said = answer.json()
-            said["models"] = {**said["models"], **hosted.facts(user)}
-            facts_seen[scope] = (time.monotonic(), said)
-            return said
         reports = {one["name"]: one for one in machines.report()}
         names = machines.active_names
         own = monitoring_user()
@@ -770,7 +844,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         catalogue = logical_catalogue({machine_name: {"data": [
             {"id": name, "owned_by": "loadcoach",
              "content_sha256": next((one["content"] for one in reports.get(machine_name, {}).get("models", []) if one["name"] == name), None),
-             **{key: fact[key] for key in ("model_id", "fingerprint") if key in fact}}
+             **{key: fact[key] for key in ("model_id", "fingerprint", "engine_id") if key in fact}}
             for name, fact in told.get("models", {}).items()]}
             for machine_name, told in fresh.items()})
         variants: dict[str, list[tuple[str, dict]]] = {}
@@ -794,10 +868,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                          "model_ids": [fact.get("model_id") for _, fact in choices if fact.get("model_id")]}
                   for name, choices in ordered.items()}
         said = {"models": {**models, **hosted.facts(user)}, "compute_unavailable": not bool(live),
-                "environment": fresh.get("compute", next(iter(fresh.values()))).get("environment", {}),
+                "environment": next(iter(fresh.values())).get("environment", {}),
                 "placements": {name: [machine_name for machine_name, fact in choices if not fact.get("why_not")]
                                for name, choices in ordered.items()},
                 "location_models": location_models}
+        said['node_facts'] = {alias: dict(choices) for alias, choices in ordered.items()}
+        said['node_reports'] = reports
         # A cached, caller-visible alias on an unavailable worker is known but down,
         # rather than an unknown model to forward to the primary for a misleading 404.
         known = {model["name"] for report in reports.values() for model in report.get("models", [])
@@ -805,14 +881,59 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         said["unavailable_models"] = sorted(known - said["models"].keys())
         return said
 
-    routing = roles.Routing(stores.database("weightroom.roles"), log, caller, facts_for, through, relay, placed=bool(settings.machines))
+    routing = roles.Routing(stores.database("weightroom.roles"), log, caller, facts_for, through, relay, placed=True)
+    routing.node_names = lambda: list(machines.active_names)
+
+    async def overflow_candidates(request, user, model, facts, candidates):
+        """Wake a capable peer when awake copies would queue or evict a model."""
+        from turnstile.machines import can_start_now
+        copies = facts.get('node_facts', {}).get(model, {})
+        reports = facts.get('node_reports', {})
+        awake = [name for name in candidates if machines.available(name) is not False]
+        if any(can_start_now(copies.get(name, {}), reports.get(name, {})) for name in awake):
+            return candidates
+        sleeping = [name for name in candidates if machines.available(name) is False
+                    and settings.machines.get(name, {}).get('wake_mac') and machines.enabled(name)]
+        if not sleeping or NO_WAKE in request.headers:
+            return candidates
+        for name in sleeping:
+            policy = settings.machines[name]
+            try:
+                waker(policy['wake_mac'], policy.get('wake_address', '255.255.255.255'))
+            except (OSError, ValueError):
+                continue
+            log.add('wake', 'overflow', user.name, machine=name, model=model)
+        deadline = time.monotonic() + settings.wait
+        while time.monotonic() < deadline:
+            await asyncio.sleep(min(TRY_EVERY, max(0, deadline - time.monotonic())))
+            current = await facts_for(request, user)
+            if isinstance(current, Response):
+                continue
+            copies = current.get('node_facts', {}).get(model, {})
+            reports = current.get('node_reports', {})
+            ready = [name for name in current.get('placements', {}).get(model, [])
+                     if machines.available(name) and can_start_now(copies.get(name, {}), reports.get(name, {}))]
+            if ready:
+                return ready
+            newly_awake = [name for name in sleeping if machines.available(name)]
+            if newly_awake:
+                return newly_awake + [name for name in awake if name not in newly_awake]
+        return awake or candidates
+
+    routing.prepare_candidates = overflow_candidates
+    routing.resolve_node = node
+    routing.destination_allowed = lambda: console_settings.changes.of('turnstile').get(
+        'allow_caller_to_specify_destination', settings.allow_caller_to_specify_destination) is True
 
     async def local_names(user: User) -> set[str]:
-        """The names compute's models go by now, asked of it, and failing that as the inventory last saw them: an outside service may not take one."""
-        answer = await ask_compute(user, "GET", "/v1/models")
-        if answer is not None and answer.status_code == 200:
-            return {one["id"] for one in answer.json().get("data", []) if one.get("owned_by") == "loadcoach"}
-        return {name for one in machines.models() for name in one["names"]}
+        """The names every node's models go by now, asked of each, and for one not answering as the inventory last saw them: an outside service may not take one."""
+        names = list(machines.active_names)
+        answers = await asyncio.gather(*(ask_live(user, "GET", "/v1/models", machine=name) for name in names))
+        found = {one["id"] for answer in answers if answer is not None and answer.status_code == 200
+                 for one in answer.json().get("data", []) if one.get("owned_by") == "loadcoach"}
+        if all(answer is not None and answer.status_code == 200 and not answer.headers.get("x-suite-retained") for answer in answers):
+            return found
+        return found | {name for one in machines.models() for name in one["names"]}
     # The outside services, their keys and the checks on what may leave are front's. Their keys are files beside the machine key.
     keys_folder = settings.hosted_keys or (str(Path(settings.machine_key_file).parent) if settings.machine_key_file else str(Path(settings.data)))
     hosted = Hosted(Services(stores.database("weightroom.accounts"), keys_folder),
@@ -820,20 +941,20 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                     routing.reliability, users, local_names)
     routing.hosted = hosted
     # Batches are front's: their files and requests are kept in the accounts store, and each request goes in through turnstile's own door.
-    batch_work = FrontBatches(Batches(stores.database("weightroom.accounts")), log, lambda *asked: ask_compute(*asked), None, lambda name: f"{internal_token}:{name}")
+    batch_work = FrontBatches(Batches(stores.database("weightroom.accounts")), log, lambda *asked: ask_all(*asked), None, lambda name: f"{internal_token}:{name}")
 
     async def dispatch_probe(user, path, payload, machine):
         """Send a signed scoped benchmark probe to its owning compute node."""
-        other = settings.machines.get(machine, {})
-        if machine != "compute" and not other:
+        machine = node(machine)
+        if machine not in settings.machines:
             return None  # a removed frozen machine is never silently replaced
-        key_file = other.get("machine_key_file") or settings.machine_key_file
+        key_file = key_file_of(machine)
         if not key_file:
             return None
         body = json.dumps(payload).encode()
         key = statement.read_key(key_file)
         header, nonce = statement.make(key, "POST", path, body, statement.caller_of(user), purpose="front-probe")
-        base = other["compute"].rstrip("/") if other else settings.upstream(settings.ports[0])
+        base = node_base(machine, settings.ports[0])
         try:
             answer = await compute.post(base + path, content=body,
                 headers={statement.HEADER: header, "content-type": "application/json"}, timeout=httpx.Timeout(None, connect=2))
@@ -845,6 +966,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     async def scheduled_node_ready(owner, name, identifier, due, token):
         """Wake a due schedule's node after current owner and node-policy checks; retry later."""
+        name = node(name)
         if name not in machines.names:
             return error(409, 'The scheduled compute node is no longer configured.')
         if not machines.enabled(name):
@@ -859,10 +981,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             current, _ = task_records.grants.authorized(identifier, token, due)
         except PermissionError as problem:
             return error(403, str(problem))
-        if not current.can('front-wake'):
+        if not (current.can('front-wake') or current.can('superuser')):
             return error(403, 'Waking a scheduled node requires the owner to retain manage-settings and front-wake.')
-        policy = settings.machines.get(name, {}) if name != 'compute' else {
-            'wake_mac': settings.wake_mac, 'wake_address': settings.wake_address}
+        policy = settings.machines.get(name, {})
         if not policy.get('wake_mac'):
             return error(503, f'Node {name} is not answering; configure its Wake-on-LAN settings or wake it manually.', {'retry-after': '15'})
         now = time.monotonic()
@@ -876,14 +997,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return error(503, f'Asked {name} to wake; waiting for the node to answer before submitting scheduled work.', {'retry-after': '15'})
 
     task_records = TaskRecords(batch_work.store, users, log, routing.evidence, ask_compute,
-                               dispatch_probe, ["compute", *settings.machines], scheduled_node_ready,
+                               dispatch_probe, list(settings.machines), scheduled_node_ready,
                                destination_allowed=lambda: console_settings.changes.of('turnstile').get(
                                    'allow_caller_to_specify_destination', settings.allow_caller_to_specify_destination) is True)
     task_records.locations = model_locations
     from mirrorwall.store import Store as ImageStore
     from mirrorwall.front import Front as ImageFront
-    console_settings = ConsoleSettings(stores.database('weightroom.accounts'), log, ask_compute, settings.keep_console_settings_on_front,
-                                   programs=FRONT_PROGRAMS | {'toollocker'} if settings.toollocker_url else FRONT_PROGRAMS)
+    console_settings = ConsoleSettings(stores.database('weightroom.accounts'), log, ask_all, True,
+                                   programs=FRONT_PROGRAMS | {'toollocker'},
+                                   voice_nodes=lambda: voice_order())
 
     def platform():
         return PlatformServices.from_settings(settings, console_settings.changes.of('weightroom'))
@@ -954,7 +1076,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         try:
             encoded = request.headers.get(statement.HEADER, "").partition(".")[0]
             name = json.loads(base64.urlsafe_b64decode(encoded))["machine"]
-            key_file = settings.machine_key_file if name == "compute" else settings.machines[name]["machine_key_file"]
+            known = node(name)  # a node still signing with its old name is known by it
+            if known not in settings.machines and nodes.LEGACY in settings.machines:
+                # The old default node was renamed by its own update before the front's: the key decides.
+                known = nodes.LEGACY
+            key_file = settings.machines[known]["machine_key_file"]
         except (ValueError, KeyError, TypeError, UnicodeError, binascii.Error):
             return False
         if not isinstance(name, str) or not key_file:
@@ -967,7 +1093,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 continue
             if said.get("machine") != name:
                 return False
-            request.state.nonce, request.state.key, request.state.machine = said["nonce"], key, name
+            request.state.nonce, request.state.key, request.state.machine = said["nonce"], key, known
             return True
         return False
 
@@ -980,7 +1106,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     def rotation_file(name: str) -> str:
         """Resolve the private state file used for machine-key rotation."""
-        return settings.machine_key_file if name == "compute" else settings.machines.get(name, {}).get("machine_key_file", "")
+        return key_file_of(node(name))
 
     def rotation_status(name: str) -> dict:
         """Read the selected node's saved machine-key rotation status."""
@@ -996,7 +1122,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         new, salt = secrets.token_urlsafe(32), secrets.token_hex(16)
         body = json.dumps({"salt": salt, "sealed": statement.seal(statement.read_key(key_file), salt, new)}).encode()
         answer = await ask_compute(user, "POST", "/loadcoach/machine-key", body,
-                                   machine="" if name == "compute" else name)
+                                   machine=name)
         if answer is None:
             return f"LoadCoach {name} did not answer, so its key was not changed."
         if answer.status_code != 200:
@@ -1015,7 +1141,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
-        name = request.path_params.get("name") or "compute"
+        name = node(request.path_params.get("name", ""))
         if name not in machines.names:
             return error(404, "That LoadCoach is not configured.")
         if not user.can("manage-settings") or not rotation_file(name):
@@ -1070,7 +1196,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     async def log_from_compute(request: Request) -> Response:
         """Compute's log entries, which it sends every few seconds: kept and chained here, the one log (milestone 91)."""
         body = await request.body()
-        if not machine_key() or not from_compute(request, body):
+        if not from_compute(request, body):
             return error(403, "Only compute, with the machine key, may send this.")
         sent = json.loads(body)
         through = log.take(request.state.machine, sent["entries"], sent["texts"], sent["keep_text"])
@@ -1083,7 +1209,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     async def log_facts(request: Request) -> Response:
         """For compute: how fast each model answers, how long it last took to load, and when it was last used, from the log kept here."""
-        if not machine_key() or not from_compute(request, await request.body()):
+        if not from_compute(request, await request.body()):
             return error(403, "Only compute, with the machine key, may ask this.")
         try:
             facts = await run_report(log, lambda view: {**view.paces(), "last_used": view.last_used()})
@@ -1093,14 +1219,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     async def accounts_list(request: Request) -> Response:
         """For compute: every enabled account, as a statement would carry it. For work done later in someone's name, until that work moves here."""
-        if not machine_key() or not from_compute(request, await request.body()):
+        if not from_compute(request, await request.body()):
             return error(403, "Only compute, with the machine key, may ask this.")
         listed = [statement.caller_of(user) for user in map(users.by_name, users.memberships()) if user]
         return to_compute(request, JSONResponse({"accounts": listed}))
 
     async def pick_for(request: Request) -> Response:
         """For compute, answering a batch's request in someone's name: the model their role would be picked as now."""
-        if not machine_key() or not from_compute(request, await request.body()):
+        if not from_compute(request, await request.body()):
             return error(403, "Only compute, with the machine key, may ask this.")
         user = users.by_name(request.query_params.get("for", ""))
         if user is None:
@@ -1111,7 +1237,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     async def power_notice(request: Request) -> Response:
         """Accept spotter's word, signed with the machine key; silence itself never means asleep."""
         body = await request.body()
-        if not machine_key() or not from_compute(request, body):
+        if not from_compute(request, body):
             return error(403, "Not authorized.")
         try:
             action = json.loads(body)["action"]
@@ -1119,7 +1245,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 raise ValueError()
         except (ValueError, KeyError, TypeError):
             return error(400, "Expected a power action.")
-        notice.update(action=action, at=time.time())
+        notice.update(action=action, at=time.time(), machine=node(request.state.machine))
         ready_cache.clear()
         return to_compute(request, JSONResponse({"noted": True}))
 
@@ -1136,29 +1262,79 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if cache_key in ready_cache and now - ready_cache[cache_key][0] < 2:
             cached = ready_cache[cache_key]
             return JSONResponse({**cached[1], "age_seconds": round(now - cached[0], 3)})
-        state, details = "not_known", {}
-        try:
-            async with asyncio.timeout(1):
-                where = "/voice/ready?" + urlencode({"conversation_mode": mode, "agent_model": agent_model})
-                result = await ask_compute(user, "GET", where, port=settings.voice_port)
-                if result is None:
-                    raise TimeoutError
+        state, details, chosen_node = "not_known", {}, ""
+        where = "/voice/ready?" + urlencode({"conversation_mode": mode, "agent_model": agent_model})
+        order = voice_order()
+
+        async def asked(name: str) -> httpx.Response | None:
+            """One node's voice readiness, within the second the whole answer has."""
+            try:
+                async with asyncio.timeout(1):
+                    return await ask_compute(user, "GET", where, port=settings.voice_port, machine=name)
+            except TimeoutError:
+                return None
+
+        # Every node running voice is asked at once; the first ready one in preference order answers for them.
+        for name, result in zip(order, await asyncio.gather(*(asked(name) for name in order))):
+            if result is None:
+                continue
+            if notice.get("machine") == name:
                 notice.update(action=None, at=0)
-                state = "awake_not_ready"
-                if result.is_success:
-                    details = result.json()
-                    chosen = details.get("profiles", {}).get(profile, {})
-                    if chosen.get("can_start") and mode in chosen.get("modes", []):
-                        state = "ready"
-        except (TimeoutError, ValueError):
-            if state == "not_known" and notice["action"] == "sleep":
-                state = "asleep"
-        result = dict(state=state, profile=profile, conversation_mode=mode, voice=details,
+            try:
+                told = result.json() if result.is_success else {}
+            except ValueError:
+                told = {}
+            selected = told.get("profiles", {}).get(profile, {})
+            if selected.get("can_start") and mode in selected.get("modes", []):
+                state, details, chosen_node = "ready", told, name
+                break
+            if state == "not_known":
+                state, details, chosen_node = "awake_not_ready", told, name
+        if state == "not_known" and notice["action"] == "sleep" and notice.get("machine") in order[:1]:
+            state = "asleep"
+        result = dict(state=state, profile=profile, conversation_mode=mode, voice=details, node=chosen_node,
                       checked_at=time.time(), age_seconds=0)
         if len(ready_cache) >= 100:
             ready_cache.clear()
         ready_cache[cache_key] = (now, result)
         return JSONResponse(result)
+
+    def voice_order() -> list[str]:
+        """The nodes voice sessions are tried on: the preferred node, then every other active node in the configured order."""
+        preferred = node(console_settings.changes.of('turnstile').get('preferred_voice_node', settings.preferred_voice_node) or "")
+        names = [name for name in machines.active_names if any(
+            one.get('name') == 'voice' and one.get('installed') is not False
+            for one in machines.seen.get(name, {}).get('telemetry', {}).get('services', []))]
+        names.sort(key=lambda name: (machines.available(name) is False,
+                                    machines.seen.get(name, {}).get('waiting', 0), name))
+        return [preferred, *(name for name in names if name != preferred)] if preferred in names else names
+
+    async def voice_session(request: Request, user: User | None, where: str, body: bytes, target: str = '') -> Response:
+        """Start a voice session on the preferred node, or on the next node running voice when it is full or not answering.
+
+        The session stays where it started: the answer says which node (`node`) and where its
+        stream is (`voice_url`), and the gateway talks to that node until the session ends.
+        """
+        last: Response | None = None
+        headers = [(name, value) for name, value in request.headers.items() if name != NODE_HEADER]
+        for name in ([target] if target else voice_order()):
+            upstream = await through(request, user, "POST", where, body, headers, settings.voice_port, machine=name,
+                                     wake_allowed=bool(target))
+            if isinstance(upstream, Response):
+                last = upstream
+                continue
+            if upstream.status_code in (429, 502, 503, 504):  # full, or not able to start one now: try the next
+                await upstream.aread()
+                await upstream.aclose()
+                last = JSONResponse(json.loads(upstream.extensions.get("suite_complete") or b"{}") or {"error": {"message": "Voice is busy."}},
+                                    status_code=upstream.status_code)
+                continue
+            said = json.loads(await upstream.aread())
+            await upstream.aclose()
+            if upstream.status_code == 200 and isinstance(said, dict):
+                said.update(node=name, voice_url=node_base(name, settings.voice_port))
+            return JSONResponse(said, status_code=upstream.status_code)
+        return last or error(503, "No node running voice can take a session now.", {"retry-after": f"{settings.busy_retry_seconds:g}"})
 
     async def pass_on(request: Request) -> Response:
         """Check the caller, then send their request on to compute, to the port it came in on, and hand the answer back as it arrives."""
@@ -1211,10 +1387,101 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             request._body = body
         else:
             body = await request.body()
-        query = urlencode([(name, value) for name, value in parse_qsl(request.url.query, keep_blank_values=True) if name != "key"])
+        asked_query = parse_qsl(request.url.query, keep_blank_values=True)
+        # The node a request is for: ?node=NAME or the x-suite-node header. Neither is sent on.
+        named = next((value for name, value in asked_query if name == "node"), "") or request.headers.get(NODE_HEADER, "")
+        if port == settings.voice_port and request.method == 'POST' and request.url.path == '/voice/sessions':
+            try:
+                asked = json.loads(body)
+                requested = asked.pop('node', '')
+                if not isinstance(requested, str):
+                    raise ValueError()
+            except (ValueError, AttributeError):
+                return error(400, 'Use a JSON object; node must be a configured node name.')
+            if requested and named and node(requested) != node(named):
+                return error(400, 'The node field and request destination must name the same node.')
+            named = requested or named
+            if named:
+                from turnstile.tasks import DESTINATION_OFF
+                if not task_records.destination_allowed():
+                    return error(400, DESTINATION_OFF)
+                if node(named) not in settings.machines:
+                    return error(404, f'No node called {named}.')
+                if node(named) not in voice_order():
+                    return error(404, f'Node {named} does not report a voice service.')
+            return await voice_session(request, user, '/voice/sessions', json.dumps(asked).encode(), node(named) if named else '')
+        query = urlencode([(name, value) for name, value in asked_query if name not in ("key", "node")])
         # Sent on, and signed, as the caller sent it: decoding "a%2Fb" to "a/b" would make it another address.
         where = statement.address((request.scope.get("raw_path") or request.url.path.encode()).decode(), query)
         path = request.url.path
+        if port == settings.ports[0] and user is not None and path == '/loadcoach/hold' and request.method == 'POST':
+            try:
+                held_model = json.loads(body).get('model')
+            except (ValueError, AttributeError):
+                return error(400, 'Choose a local model to hold.')
+            if not isinstance(held_model, str) or not held_model:
+                return error(400, 'Choose a local model to hold.')
+            if held_model in hosted.offered(user) or held_model in routing.roles.names():
+                return error(400, 'Hold a specific local model rather than a hosted model or role.')
+            if named:
+                try:
+                    payload = json.loads(body)
+                    if payload.get('node') and node(payload['node']) != node(named):
+                        return error(400, 'The node in the request body and URL must match.')
+                    body = json.dumps({**payload, 'node': node(named)}).encode()
+                except (ValueError, TypeError, AttributeError):
+                    return error(400, 'Send a JSON object with a model and optional node.')
+            return await routing.answer(request, user, where, body)
+        if port == settings.ports[0] and user is not None and path.startswith('/loadcoach/hold/') and request.method == 'DELETE' and not named:
+            # A hold belongs to this account. Releasing its copies never wakes a
+            # node, changes another account's hold or leaves a renamed alias pinned.
+            model = unquote(path.removeprefix('/loadcoach/hold/'))
+            facts = await facts_for(request, user)
+            aliases = facts.get('location_models', {}).get(model, {}) if isinstance(facts, dict) else {}
+            names = list(machines.names)
+            replies = await asyncio.gather(*(ask_compute(user, 'DELETE', '/loadcoach/hold/' + quote(aliases.get(name, model), safe=''),
+                                                        machine=name, timeout=5) for name in names))
+            return JSONResponse({'model': model, 'released': True,
+                                 'unavailable_nodes': [name for name, reply in zip(names, replies) if reply is None or not reply.is_success]})
+        if path == '/loadcoach/plugins/mirror' and request.method == 'GET' and not named:
+            if user is None or not user.can('mirror-users'):
+                return error(403, 'Mirroring model availability requires mirror-users.')
+            found = await combined_view(request, user, '/v1/models')
+            if found.status_code != 200:
+                return found
+            return JSONResponse({'generated_at': time.time(), 'keys': [],
+                                 'models': json.loads(found.body).get('data', []), 'unlogged': False})
+        if path == '/spotter/alert-evidence' and request.method == 'GET' and not named:
+            if user is None or not (user.can('manage-settings') or user.can('mirror-users')):
+                return error(403, 'Operational alert evidence requires manage-settings or mirror-users.')
+            names = list(machines.names)
+            answers = await asyncio.gather(*(ask_compute(user, 'GET', where, machine=name, port=port,
+                                                         forwarded=((NO_WAKE, '1'),)) for name in names))
+            readings = [(name, answer.json()) for name, answer in zip(names, answers)
+                        if answer is not None and answer.status_code == 200]
+            return JSONResponse({'services': [{**row, 'name': name + ': ' + row['name'], 'unit': name + ':' + row['unit']}
+                                              for name, reading in readings for row in reading.get('services', [])],
+                                 'cards': [{**row, 'card': name + ':' + str(row['card'])}
+                                           for name, reading in readings for row in reading.get('cards', [])],
+                                 'memory kills': [{**row, 'key': name + ':' + row['key']}
+                                                  for name, reading in readings for row in (reading.get('memory kills') or [])],
+                                 'kernel_available': len(readings) == len(names) and all(reading.get('kernel_available') for _, reading in readings),
+                                 'unavailable_nodes': [name for name, answer in zip(names, answers)
+                                                       if answer is None or answer.status_code != 200]})
+        if path == '/loadcoach/fingerprints' and request.method == 'GET' and not named:
+            if user is None:
+                return error(401, 'Missing or wrong API key.')
+            names = list(machines.names)
+            answers = await asyncio.gather(*(ask_compute(user, 'GET', where, machine=name,
+                                                        forwarded=((NO_WAKE, '1'),)) for name in names))
+            failures = [answer for answer in answers if answer is not None and answer.status_code in (401, 403)]
+            if failures:
+                return JSONResponse(failures[0].json(), status_code=failures[0].status_code)
+            rows = [{**row, 'node': name} for name, answer in zip(names, answers)
+                    if answer is not None and answer.status_code == 200 for row in answer.json().get('fingerprints', [])]
+            return JSONResponse({'fingerprints': sorted(rows, key=lambda row: row.get('first', ''), reverse=True),
+                                 'unavailable_nodes': [name for name, answer in zip(names, answers)
+                                                       if answer is None or answer.status_code != 200]})
         if path == '/loadcoach/downloads' and request.method == 'POST':
             try:
                 if not platform().download_enabled(json.loads(body).get('repository')):
@@ -1230,15 +1497,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if handled is not None:
                 handled.headers['x-suite-data-owner'] = 'front'
                 return handled
-        if port == settings.ports[0] and user is not None and request.method == "GET" and (path == "/v1/models" or settings.machines and path == "/loadcoach/status"):
+        if named and node(named) not in settings.machines:
+            return error(404, f"No node called {named}.")
+        if port == settings.voice_port and not named:
+            if request.method == 'GET' and path in ('/voice/options', '/voice/prompts', '/voice/status', '/voice/ready'):
+                for name in voice_order():
+                    answer = await ask_compute(user, 'GET', where, machine=name, port=port, timeout=5)
+                    if answer is not None and answer.status_code not in (502, 503, 504):
+                        return JSONResponse(answer.json(), status_code=answer.status_code)
+                return error(503, 'No voice service is answering.')
+            named = next(iter(voice_order()), "")  # voice's other pages: the preferred node's
+        if port == settings.ports[0] and user is not None and request.method == "GET" and path in ("/v1/models", "/loadcoach/status") and not named:
             return await combined_view(request, user, path)
         parts = path.split("/")
         if (port == settings.ports[0] and len(parts) == 4 and parts[1] == "loadcoach"
-                and parts[2] in ("stop", "peek", "diagnostics") and parts[3].isdigit()
-                and int(parts[3]) >= 1 << 40):
-            origin = origin_number(int(parts[3]), log.machine_names)
-            if origin is None:
-                return error(404, "There is no configured machine for that request ID.")
+                and parts[2] in ("stop", "peek", "diagnostics") and parts[3].isdigit()):
+            # A request's public number says which node it ran on; an unprefixed one is the old default node's.
+            origin = origin_number(int(parts[3]), log.machine_names, log.former)
+            if origin is not None and origin[0] not in settings.machines and int(parts[3]) < 1 << 40 and node(""):
+                origin = node(""), int(parts[3])
+            if origin is None or origin[0] not in settings.machines:
+                return error(404, "There is no configured node for that request ID.")
             machine_name, local = origin
             upstream = await through(request, user, request.method,
                                      statement.address(f"/loadcoach/{parts[2]}/{local}", query), body,
@@ -1247,18 +1526,29 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if port == settings.ports[0] and user is not None and request.method == "GET" and path.startswith("/v1/models/") and path.removeprefix("/v1/models/") in hosted.offered(user):
             return JSONResponse({"id": path.removeprefix("/v1/models/"), "object": "model", "created": 0, "owned_by": "hosted"})
         if port == settings.ports[0] and user is not None and request.method == "GET" and path in ("/loadcoach/models", "/loadcoach/settings", "/loadcoach/engines"):
-            answer = await ask_live(user, "GET", path, passive=passive(request))
+            if not node(named):
+                fallthrough.note(request.method, path, port)
+                return no_node(path)
+            answer = await ask_live(user, "GET", path, machine=named, passive=passive(request))
             if answer is None:
-                return off()
+                return off(node(named))
             return JSONResponse(answer.json(), status_code=answer.status_code,
                                 headers={"cache-control": "no-store", **({"x-suite-retained": "1"} if answer.headers.get("x-suite-retained") else {})})
-        if settings.machines and port == settings.ports[0] and user is not None and request.method == "GET" and path.startswith("/v1/models/"):
+        if port == settings.ports[0] and user is not None and request.method == "GET" and path.startswith("/v1/models/"):
             catalogue = await combined_view(request, user, "/v1/models")
             if catalogue.status_code != 200:
                 return catalogue
             model = next((one for one in json.loads(catalogue.body)["data"] if one["id"] == path.removeprefix("/v1/models/")), None)
             return JSONResponse(model) if model else error(404, "There is no permitted model with that name.")
         if port == settings.ports[0] and user is not None and request.method == "POST" and path.startswith("/v1/") and not path.startswith(("/v1/files", "/v1/batches")):
+            if named:
+                try:
+                    payload = json.loads(body)
+                    if payload.get('node') and node(payload['node']) != node(named):
+                        return error(400, 'The node in the request body and URL must match.')
+                    body = json.dumps({**payload, 'node': node(named)}).encode()
+                except (ValueError, TypeError, AttributeError):
+                    return error(400, 'Send a JSON object with a model and optional node.')
             if path == '/v1/audio/generations' and not (platform().speech and platform().audio):
                 try:
                     selected = await audio_work.model_of(user, json.loads(body).get('model'))
@@ -1270,8 +1560,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if path == '/v1/audio/generations':
                 return await audio_work.capture(request, user, response, json.loads(body))
             return await image_work.capture(request,user,response) if path in ('/v1/images/generations','/v1/images/edits') else response
-        fallthrough.note(request.method, path, port)
-        upstream = await through(request, user, request.method, where, body, list(request.headers.items()), port)
+        if not named and len(parts) >= 4 and parts[1] in ('v1', 'loadcoach') and parts[2] in ('batches', 'files', 'tasks'):
+            # Older task/file IDs live on their original node; never guess a default owner.
+            identifier = parts[3]
+            lookup = '/v1/' + ('files' if parts[2] == 'files' else 'batches') + '/' + quote(identifier, safe='')
+            proofs = await asyncio.gather(*(ask_compute(user, 'GET', lookup, machine=name,
+                forwarded=tuple((key, value) for key, value in request.headers.items()
+                                if key in ('x-loadcoach-task', NO_WAKE))) for name in machines.names))
+            owners = [name for name, reply in zip(machines.names, proofs) if reply is not None and reply.status_code == 200]
+            if len(owners) > 1:
+                return error(409, 'This legacy ID exists on more than one node; name its node explicitly.')
+            if owners:
+                named = owners[0]
+            elif any(reply is None for reply in proofs):
+                return error(503, 'The legacy record owner cannot be checked while a node is unavailable.', {'retry-after': '5'})
+            else:
+                return error(404, 'No node has this legacy record.')
+        if not named and not (port == 8443 and settings.toollocker_url):
+            fallthrough.note(request.method, path, port)
+            return no_node(path)
+        upstream = await through(request, user, request.method, where, body,
+                                 [(name, value) for name, value in request.headers.items() if name != NODE_HEADER], port, machine=named)
         if isinstance(upstream, Response):
             return upstream
         finished = request.method == "POST" and path.startswith("/loadcoach/tasks/") and path.endswith("/finish")
@@ -1282,33 +1591,35 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     async def combined_view(request: Request, user: User, path: str) -> Response:
         """A caller sees retained deployments and answering machines' active work."""
         names = machines.active_names if path == "/v1/models" else [name for name in machines.names if machines.state(name) != "retired"]
-        answers = await asyncio.gather(*(ask_live(user, "GET", path, machine="" if name == "compute" else name, prime=path == "/v1/models", passive=passive(request))
+        answers = await asyncio.gather(*(ask_live(user, "GET", path, machine=name, prime=path == "/v1/models", passive=passive(request))
                                          for name in names))
         found = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
         if not found and path == "/v1/models" and not names:
             return JSONResponse(routing.with_roles({"object": "list", "data": [
                 {"id": name, "object": "model", "created": 0, "owned_by": "hosted"} for name in hosted.offered(user)],
                 "unavailable_machines": [], "available_machines": []}))
-        if not found and path == "/v1/models":
+        only = node("")
+        if not found and path == "/v1/models" and only:  # one node: wake it, as the old default node was
             if NO_WAKE in request.headers:
-                return off()
+                return off(only)
             upstream = await through(request, user, "GET", path, b"", list(request.headers.items()))
             return upstream if isinstance(upstream, Response) else relay(upstream)
-        if not found:
+        if not found and only:
             answer = await woken(request, user, lambda: ask_compute(user, "GET", path))
             if isinstance(answer, Response):
                 return answer
             if answer.status_code != 200:
                 return JSONResponse(answer.json(), status_code=answer.status_code)
-            found = {"compute": answer.json()}
+            found = {only: answer.json()}
+        # Several nodes and none answering: the views say which are missing, and nothing is woken.
         if path == "/v1/models":
-            listed = logical_catalogue(found) if settings.machines else found.get("compute", {}).get("data", [])
+            listed = logical_catalogue(found)
             for model in listed:
                 for location in model.get("locations", []):
                     location["enabled"] = model_locations.enabled(location["machine"], location.get("model_id"))
             listed = [model for model in listed if
                       (any(one.get("enabled", True) for one in model["locations"]) if model.get("locations") else
-                       model_locations.enabled("compute", model.get("model_id")))]
+                       model_locations.enabled(only, model.get("model_id")))]
             listed.extend({"id": name, "object": "model", "created": 0, "owned_by": "hosted"} for name in hosted.offered(user))
             listed = [model for model in listed if platform().model_enabled(model)]
             missing = sorted(name for name, answer in zip(names, answers)
@@ -1316,12 +1627,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return JSONResponse(routing.with_roles({"object": "list", "data": listed,
                                                     "unavailable_machines": missing,
                                                     "available_machines": sorted(set(names) - set(missing))}))
-        primary = found.get("compute") or next(iter(found.values()))
-        combined = {**primary}
+        primary = next(iter(found.values()), {})
+        combined = {**primary, "unavailable_machines": sorted(set(names) - set(found))}
         for status_field in ("running", "waiting", "holds", "loaded", "active_batches"):
             combined[status_field] = []
         combined["memory"] = {}
         combined["model_cards"] = []
+        combined['locks'] = {name: result['lock'] for name, result in found.items() if result.get('lock')}
+        combined['lock'] = primary.get('lock') if len(found) == 1 else None
         for name, result in found.items():
             for status_field in ("running", "waiting", "holds", "loaded", "active_batches"):
                 for entry in result.get(status_field, []):
@@ -1384,7 +1697,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             # A task's own token is compute's to check, so the request went unsigned: compute signs the evidence itself, with the machine key.
             evidence = said.pop("role_evidence", None)
             if upstream.status_code == 200 and evidence and any(secrets.compare_digest(evidence["signed"], statement.sign(key, json.dumps(evidence["snapshot"], sort_keys=True)))
-                                                               for key in statement.keys(settings.machine_key_file)):
+                                                               for key in statement.keys(key_file_of(upstream.extensions.get("suite_machine", "")) or settings.machine_key_file)):
                 routing.evidence.accept(evidence["snapshot"], definitions=False)
             return JSONResponse(said, status_code=upstream.status_code)
         return await renamed(request, user, body, said)
@@ -1430,26 +1743,25 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         user = monitoring_user()
         if user is None:
             return None
-        answer = await ask_live(user, "GET", path, machine="" if name == "compute" else name,
-                                prime=bool(settings.machines) and path == "/v1/models")
+        answer = await ask_live(user, "GET", path, machine=name, prime=path == "/v1/models")
         return answer.json() if answer is not None and answer.status_code == 200 else None
 
     async def telemetry_says(name: str, path: str) -> dict | None:
         """Read retained telemetry settings for the selected physical host."""
         if len(settings.ports) < 3:
             return None
-        if name != "compute" and not settings.machines[name].get("spotter"):
+        if not settings.machines.get(name, {}).get("spotter"):
             return None
         keyed = Path(settings.auth_key_file) if settings.auth_key_file else None
         user = caller(keyed.read_text().strip()) if keyed and keyed.is_file() else None
         if user is None:
             return None
-        answer = await ask_live(user, "GET", path, machine="" if name == "compute" else name, port=settings.ports[2])
+        answer = await ask_live(user, "GET", path, machine=name, port=settings.ports[2])
         return answer.json() if answer is not None and answer.status_code == 200 else None
 
-    machines = Machines(["compute", *settings.machines], machine_says, settings.machines_poll_seconds,
+    machines = Machines(list(settings.machines), machine_says, settings.machines_poll_seconds,
                         ask_telemetry=telemetry_says, store=log.db)
-    artifact_machine = settings.artifact_machine or ("front_cpu" if "front_cpu" in settings.machines else "compute")
+    artifact_machine = node(settings.artifact_machine) or ("front_cpu" if "front_cpu" in settings.machines else next(iter(settings.machines), "front"))
     from turnstile.installation_store import Installations
     installation_store = Installations(stores.database('weightroom.accounts'))
     distributions: dict[str, dict] = installation_store.recover()
@@ -1501,7 +1813,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                                      or file.get('facts', {}).get('image_component'))]
                 return sorted(files, key=lambda pair: (pair[0]['name'] != source, pair[1].get('tier') == 'storage'))
             # Upgrade older indexes once; unchanged language/audio file descriptions stay cached.
-            if any('image_identity' not in file['facts'] for _, file in image_files()):
+            from mirrorwall.components import IDENTITY_VERSION
+            if any(file['facts'].get('image_identity', {}).get('version') != IDENTITY_VERSION for _, file in image_files()):
                 nodes = await model_file_inventory(user, refresh=True)
             inventory = {}
             for _, file in image_files():
@@ -1587,12 +1900,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     @asynccontextmanager
     async def node_content(user, machine, path):
         """A compute node's model file as a stream, asked for in `user`'s name and proven to come from that node."""
-        other = settings.machines.get(machine, {}) if machine != "compute" else {}
-        base = other["compute"].rstrip("/") if other else settings.upstream(settings.ports[0])
+        machine = node(machine)
+        if machine not in settings.machines:
+            raise ValueError(f"No node called {machine}.")
+        base = node_base(machine, settings.ports[0])
         where = "/loadcoach/files/content?" + urlencode({"path": path})
-        headers, nonce = signed_headers(user, "GET", where, b"", [], key_file=other.get("machine_key_file", ""))
+        headers, nonce = signed_headers(user, "GET", where, b"", [], key_file=key_file_of(machine))
         async with internal.stream("GET", base + where, headers=headers, timeout=None) as upstream:
-            if upstream.status_code != 200 or not proven(upstream, nonce, other.get("machine_key_file", "")):
+            if upstream.status_code != 200 or not proven(upstream, nonce, key_file_of(machine)):
                 raise ValueError("The source file stream could not be authenticated.")
             yield upstream
 
@@ -1687,6 +2002,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         installed = next((one for one in engines.json()["engines"] if one["id"] == selected.id), {})
         if not installed.get("enabled") or not installed.get("available"):
             raise ValueError(f"{selected.label} is not available on {destination}.")
+        if asked.get('auto_hardware') is True and selected.id == 'llama_cpp':
+            cards = (inventory.json().get('engine_cards') or {}).get('llama_cpp', inventory.json().get('cards') or [])
+            candidate = {**candidate, 'gpus': 'any' if cards else 0}
         # Node schema validation is read-only and runs before any transfer.
         selected.model.check_model(name, selected.model.effective({key:value for key,value in candidate.items() if key != 'order'}, inventory.json().get("defaults") or {}),
                                    tuple(inventory.json().get("cards") or []))
@@ -1730,7 +2048,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 job.update(state='creating', working_machine=destination, done=0, of=0, progress_available=False)
                 async with configuration_lock:
                     if asked.get('source_model_id'):
-                        source = await ask_machine(user, 'GET', '/loadcoach/models', machine=asked.get('source_machine') or 'compute', timeout=5)
+                        source = await ask_machine(user, 'GET', '/loadcoach/models', machine=asked.get('source_machine', ''), timeout=5)
                         row = next((row for row in source.json()['models'] if row.get('model_id') == asked['source_model_id']), None) if source and source.is_success else None
                         if row is None or row['flags']['model'] != candidate['flags']['model'] or engine_for(row).id != selected.id:
                             raise ValueError('The source model changed or is unavailable; verify it before adding this node.')
@@ -1777,7 +2095,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if method == 'GET':
                 path = image_work.discovery_path(user, path)
             return await front_files.request(user, method, path, body)
-        return await ask_compute(user, method, path, body, machine="" if name == "compute" else name,
+        return await ask_compute(user, method, path, body, machine=name,
                                  port=settings.ports[2] if spotter else None, timeout=timeout)
 
     async def artifact_proxy(request: Request) -> Response:
@@ -1915,9 +2233,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     def spotter_base(name: str) -> str:
         """Resolve the configured Spotter endpoint for a compute node."""
-        if name == "compute":
-            return settings.upstream(settings.ports[2])
-        return settings.machines[name].get("spotter", "").rstrip("/")
+        return settings.machines[node(name)].get("spotter", "").rstrip("/")
 
     def spotter_failure(name: str) -> str:
         """Identify the file receiver separately from the node's model runner."""
@@ -2192,10 +2508,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     async def batches_listed(request: Request, user: User) -> Response:
         """The batches kept here, and with them what compute keeps of external tasks, as one list."""
         ours = json.loads((await batch_work.batch_list(request, user)).body)
-        theirs = await ask_compute(user, "GET", request.url.path)
-        found = theirs.json() if theirs is not None and theirs.status_code == 200 else {}
         key = "data" if "data" in ours else "batches"
-        legacy = [one for one in found.get(key, []) if batch_work.store.get(one['id']) is None]
+        names = list(machines.active_names)
+        answers = await asyncio.gather(*(ask_live(user, "GET", request.url.path, machine=name, passive=True) for name in names))
+        # External tasks older nodes still keep, each node's listed once beside the batches kept here.
+        legacy = [{**one, "node": name} for name, theirs in zip(names, answers) if theirs is not None and theirs.status_code == 200
+                  for one in theirs.json().get(key, []) if batch_work.store.get(one['id']) is None]
         merged = sorted([*ours.get(key, []), *legacy], key=lambda one: -one.get("created_at", one.get("created", 0)))
         return JSONResponse({**ours, key: merged})
 
@@ -2204,15 +2522,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
-        if not user.can("front-wake"):
+        if not (user.can("front-wake") or user.can("superuser")):
             return error(403, "Your group may not wake nodes.")
-        name = request.path_params["name"]
+        name = node(request.path_params["name"])
         if name not in machines.names:
             return error(404, "Unknown node.")
         if not machines.enabled(name):
             return error(409, f"Compute node {name} is {machines.state(name)}; wake is disabled.")
-        policy = settings.machines.get(name, {}) if name != "compute" else {
-            "wake_mac": settings.wake_mac, "wake_address": settings.wake_address}
+        policy = settings.machines.get(name, {})
         if not policy.get("wake_mac"):
             return error(409, "Wake-on-LAN is not configured for this node.")
         try:
@@ -2228,13 +2545,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         hosts = with_power_state(machines.hosts(), machines.seen, notice)
         for host in hosts:
             host["wake_nodes"] = [name for name in host["machines"] if machines.enabled(name) and
-                (settings.wake_mac if name == "compute" else settings.machines.get(name, {}).get("wake_mac"))]
+                settings.machines.get(name, {}).get("wake_mac")]
         include_retired = request.query_params.get("include_retired") == "1"
         if include_retired and not caller(key_of(request)).can("manage-settings"):
             return error(403, "Node lifecycle settings require manage-settings.")
         return JSONResponse({"machines": machines.report(include_retired), "hosts": hosts,
                              "models": machines.models(), "poll_seconds": settings.machines_poll_seconds,
-                             "artifact_machine": file_store()},
+                             "artifact_machine": file_store(), "aliases": log.former},
                             headers={"cache-control": "no-store"})
 
     async def machine_lifecycle(request: Request) -> Response:
@@ -2244,7 +2561,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-settings"):
             return error(403, "Node lifecycle settings require manage-settings.")
-        name = request.path_params["name"]
+        name = node(request.path_params["name"])
         if name not in machines.all_names():
             return error(404, "Unknown compute node.")
         try:
@@ -2268,8 +2585,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-models"):
             return error(403, "Your account may not add, change and remove models.")
-        names = ["compute", *settings.machines]
-        answers = await asyncio.gather(*(ask_live(user, "GET", "/loadcoach/models", machine="" if name == "compute" else name, passive=passive(request))
+        names = list(settings.machines)
+        answers = await asyncio.gather(*(ask_live(user, "GET", "/loadcoach/models", machine=name, passive=passive(request))
                                          for name in names))
         detailed = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
         if not detailed:
@@ -2292,7 +2609,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             canonical = locations[0]
             rows.append({**canonical, "name": logical["id"], "logical_id": logical.get("logical_id", ""),
                          "machines": logical["machines"], "locations": locations})
-        primary = detailed.get("compute") or next(iter(detailed.values()))
+        primary = next(iter(detailed.values()))
         node_fields = ("defaults", "cards", "engine_cards", "devices", "memory_policy", "build", "to_measure", "measuring")
         return JSONResponse({**{key: primary.get(key) for key in node_fields},
                              "nodes": {name: {key: result.get(key) for key in node_fields} for name, result in detailed.items()},
@@ -2363,7 +2680,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                     continue
                 answer = await ask_compute(owner, 'POST', '/loadcoach/settings/loadcoach',
                                            json.dumps(pending['locations']).encode(),
-                                           machine='' if name == 'compute' else name, timeout=5)
+                                           machine=name, timeout=5)
                 if answer is not None and answer.status_code == 200 and pending_file_settings(name) == pending:
                     console_settings.changes.take_away('node-files:' + name, 'pending')
                     log.add('settings', 'delivered', owner.name, machine=name, program='model-files')
@@ -2400,7 +2717,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-settings"):
             return error(403, "Host settings require manage-settings.")
-        name, program = request.path_params["name"], request.path_params.get("program")
+        name, program = node(request.path_params["name"]), request.path_params.get("program")
         if name not in machines.names:
             return error(404, "That LoadCoach is not configured.")
         if program is not None and program not in ("loadcoach", "spotter"):
@@ -2432,7 +2749,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                     return error(400, str(problem))
                 raw = json.dumps(locations).encode()
                 answer = await ask_compute(user, request.method, path, raw,
-                                           machine='' if name == 'compute' else name, timeout=5)
+                                           machine=name, timeout=5)
                 if answer is None:
                     console_settings.changes.put('node-files:' + name, 'pending',
                                               {'locations': locations, 'owner': user.identity, 'by': user.name,
@@ -2443,7 +2760,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         else:
             answer = (await ask_live(user, "GET", path, machine=name) if request.method == "GET" else
                       await ask_compute(user, request.method, path, raw,
-                                        machine="" if name == "compute" else name, timeout=5))
+                                        machine=name, timeout=5))
         if answer is None:
             if request.method == 'GET':
                 return JSONResponse({**settings_with_pending(name, {}), 'machine': name, 'unavailable': True},
@@ -2464,7 +2781,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-models") and not user.can("manage-settings"):
             return error(403, "Engine settings require manage-models or manage-settings.")
-        name = request.path_params["name"]
+        name = node(request.path_params["name"])
         if name not in machines.names:
             return error(404, "That compute node is not configured.")
         answer = await ask_live(user, "GET", "/loadcoach/engines", machine=name)
@@ -2487,7 +2804,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
         def on_front(name: str) -> bool:
             """Whether this node's LoadCoach is reached on front's own loopback address, so it is the same machine."""
-            address = settings.compute if name == "compute" else urlsplit(settings.machines[name]["compute"]).hostname or ""
+            address = urlsplit(settings.machines[name]["compute"]).hostname or ""
             return address in LOOPBACK
 
         async def node(name: str) -> dict:
@@ -2513,7 +2830,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-models"):
             return error(403, "Model configuration requires manage-models.")
-        name, suffix = request.path_params["name"], request.path_params["operation"]
+        name, suffix = node(request.path_params["name"]), request.path_params["operation"]
         if name not in machines.names:
             return error(404, "That compute node is not configured.")
         if any(part in (".", "..") for part in suffix.split("/")) or "?" in suffix or "#" in suffix:
@@ -2545,7 +2862,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         else:
             answer = (await ask_live(user, "GET", path, machine=name) if request.method == "GET" else
                       await ask_compute(user, request.method, path, raw,
-                                        machine="" if name == "compute" else name, timeout=20))
+                                        machine=name, timeout=20))
         if isinstance(answer, Response):
             return answer
         if answer is None:
@@ -2719,11 +3036,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-settings"):
             return error(403, "GPU settings require manage-settings.")
-        name = request.path_params["name"]
+        name = node(request.path_params["name"])
         if name not in machines.names:
             return error(404, "That LoadCoach is not configured.")
         answer = await ask_compute(user, request.method, "/loadcoach/cards", await request.body(),
-                                   machine="" if name == "compute" else name, timeout=5)
+                                   machine=name, timeout=5)
         if answer is None:
             return error(503, f"LoadCoach {name} is not answering.", {"Retry-After": "5"})
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
@@ -2737,11 +3054,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, 'Missing or wrong API key.')
         if not user.can('manage-settings'):
             return error(403, 'Database operations require manage-settings.')
-        name = request.path_params['name']
-        if name not in machines.names:
+        name = node(request.path_params['name'])
+        if name not in machines.names or name not in settings.machines:
             return error(404, 'That compute node is not configured.')
-        if name != 'compute' and name not in settings.machines:
-            return error(404, 'That compute node has no configured database endpoint.')
         if machines.state(name) == 'retired':
             return error(409, 'This node is retired; its databases are not queried.')
         parts = request.path_params['operation'].split('/')
@@ -2772,10 +3087,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if not path:
             return error(405, 'Unsupported node database operation.')
         # Direct signed HTTP does not enter Turnstile's wake/retry machinery.
-        other = settings.machines.get(name, {}) if name != 'compute' else {}
-        base = other.get('compute', settings.upstream(settings.ports[0])).rstrip('/')
+        base = node_base(name, settings.ports[0])
         body = await request.body() if method == 'POST' else b''
-        headers, nonce = signed_headers(user, method, path, body, [('content-type', 'application/json')], key_file=other.get('machine_key_file', ''))
+        headers, nonce = signed_headers(user, method, path, body, [('content-type', 'application/json')], key_file=key_file_of(name))
         streamed = parts[-1] in {'dump', 'recovery'}
         try:
             upstream = internal.build_request(method, base + path, headers=headers, content=body,
@@ -2783,7 +3097,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             answer = await internal.send(upstream, stream=True)
         except httpx.HTTPError:
             return error(503, f'LoadCoach {name} is not answering. No other node was used.')
-        if not proven(answer, nonce, other.get('machine_key_file', '')):
+        if not proven(answer, nonce, key_file_of(name)):
             await answer.aclose()
             return error(502, 'This node did not prove its database response.')
         if not streamed or answer.status_code != 200:
@@ -2813,11 +3127,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
-        name = request.path_params["name"]
+        name = node(request.path_params["name"])
         if name not in machines.names:
             return error(404, "That LoadCoach is not configured.")
         answer = await ask_compute(user, "POST", "/loadcoach/model-lock", await request.body(),
-                                   machine="" if name == "compute" else name)
+                                   machine=name)
         if answer is None:
             return error(503, f"LoadCoach {name} is not answering.")
         return JSONResponse(answer.json(), status_code=answer.status_code)
@@ -2829,11 +3143,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("benchmark") and not user.can("manage-models"):
             return error(403, "Benchmark environment requires benchmark or manage-models.")
-        name = request.path_params["name"]
+        name = node(request.path_params["name"])
         if name not in machines.names:
             return error(404, "That compute location is not configured.")
-        answer = await ask_compute(user, "GET", "/loadcoach/probe-environment", machine="" if name == "compute" else name,
-                                   params={"engine": request.query_params["engine"]} if "engine" in request.query_params else None, timeout=5)
+        path = '/loadcoach/probe-environment'
+        if 'engine' in request.query_params:
+            path += '?' + urlencode({'engine': request.query_params['engine']})
+        answer = await ask_compute(user, 'GET', path, machine=name, timeout=5)
         if answer is None:
             return error(503, f"LoadCoach {name} is not answering.")
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
@@ -2848,10 +3164,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
-        name, action = request.path_params["name"], request.path_params.get("action", 'loadouts')
+        name, action = node(request.path_params["name"]), request.path_params.get("action", 'loadouts')
         if name not in machines.names:
             return error(404, "That LoadCoach is not configured.")
-        paths = {"status": "status", "drain": "drain", "clear": "clear", "unload": "unload", 'loadouts': 'loadouts'}
+        paths = {"status": "status", "drain": "drain", "clear": "clear", "unload": "unload", "unlock": "unlock", 'loadouts': 'loadouts'}
         if action not in paths or (action != 'loadouts' and (request.method == "GET") != (action == "status")):
             return error(404, "That LoadCoach control is not available.")
         body = await request.body()
@@ -2859,7 +3175,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(413, 'Load-out requests may be at most 64 KiB.')
         forwarded = tuple((key, request.headers[key]) for key in ('x-loadcoach-lock', 'x-loadcoach-priority') if key in request.headers) if action == 'loadouts' else ()
         answer = await ask_compute(user, request.method, "/loadcoach/" + paths[action],
-                                   body, machine="" if name == "compute" else name,
+                                   body, machine=name,
                                    timeout=None if action in ('unload', 'loadouts') else 30, forwarded=forwarded)
         if answer is None:
             return error(503, f"LoadCoach {name} is not answering.")
@@ -2936,7 +3252,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 await hosted.client.aclose()
             await observation.shutdown(app)
 
-    app = Starlette(lifespan=lifespan, routes=[*image_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
+    async def diagnostic(request):
+        """The shared API exerciser targets this gateway and all its peer models."""
+        if request.scope['server'][1] != settings.ports[0]:
+            return await pass_on(request)
+        from loadcoach.web import diagnostic_page
+        import loadcoach
+        return diagnostic_page(Path(loadcoach.__file__).with_name('test.html'))
+
+    app = Starlette(lifespan=lifespan, routes=[Route('/', diagnostic), *image_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
                             Route("/turnstile/power", power_notice, methods=["POST"]),
                             Route("/turnstile/accounts", accounts_list),
                             Route("/turnstile/machines", machines_list),
@@ -2987,10 +3311,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/pick", pick_for),
                             Route("/turnstile/log", log_from_compute, methods=["POST"]),
                             Route("/turnstile/log-facts", log_facts),
-                            *events.routes(log, users, caller, ask_compute, lambda: hosted.models(), request_model_choices),
+                            *events.routes(log, users, caller, ask_all, lambda: hosted.models(), request_model_choices),
                             *observations.routes(log, caller),
-                            *accounts.routes(users, log, caller, remembered, routing.roles_for, hosted.offered, batch_work),
-                            *allowances.routes(users, log, caller, ask_compute),
+                            *accounts.routes(users, log, caller, ask_all, routing.roles_for, hosted.offered, batch_work),
+                            *allowances.routes(users, log, caller, ask_all),
                             *routing.routes(),
                             Route("/{path:path}", pass_on, methods=methods)])
     app.state.plugins, app.state.users, app.state.log, app.state.routing = plugins, users, log, routing

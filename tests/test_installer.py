@@ -688,8 +688,10 @@ def test_installer_refuses_to_switch_a_populated_store(tmp_path):
     assert "Keep the data where it is: --database keep" in answer.stdout
 
 
-def test_one_machine_settings_move_compute_ports_and_fill_in_folders(tmp_path):
+def test_one_machine_settings_move_compute_ports_and_fill_in_folders(tmp_path, monkeypatch):
+    import socket
     import tomllib
+    monkeypatch.setattr(socket, "gethostname", lambda: "Box.lan")
     root, home = tmp_path / "home" / "bob" / "openWeightGym", tmp_path / "home" / "bob"
     made = {}
     for name in ("loadcoach", "weightroom", "toollocker", "spotter"):
@@ -702,7 +704,11 @@ def test_one_machine_settings_move_compute_ports_and_fill_in_folders(tmp_path):
     # turnstile keeps 8442-8444 on this machine; compute's programs sit 1000 above, which weightroom's URL says.
     assert (made["loadcoach"]["host"], made["loadcoach"]["port"], made["loadcoach"]["front"]) == ("127.0.0.1", 9442, "http://127.0.0.1:8442")
     assert made["loadcoach"]["llama_server"] == "/opt/llama/llama-server" and made["loadcoach"]["models_folder"] == str(root / "models")
-    assert made["weightroom"]["compute"] == "http://127.0.0.1:9442" and made["weightroom"]["turnstile"]["ports"] == [8442, 8443, 8444]
+    # Its node is a peer named for the host, and LoadCoach signs with that name.
+    assert "compute" not in made["weightroom"] and made["loadcoach"]["machine_name"] == "box"
+    assert made["weightroom"]["machines"]["box"] == {"compute": "http://127.0.0.1:9442", "spotter": "http://127.0.0.1:9444",
+                                                    "machine_key_file": "../keys/machine.key"}
+    assert made["weightroom"]["turnstile"]["ports"] == [8442, 8443, 8444]
     assert (made["toollocker"]["port"], made["spotter"]["port"]) == (9443, 9444)
     assert made["toollocker"]["servers"]["files"]["command"][-1] == str(root / "data" / "shared")
 
@@ -713,8 +719,8 @@ def test_a_compute_node_listens_on_its_address_and_asks_front(tmp_path):
     support.render(ROOT / "settings/examples/loadcoach.toml", tmp_path / "loadcoach.toml", tmp_path, tmp_path, values)
     made = tomllib.loads((tmp_path / "loadcoach.toml").read_text())
     assert (made["host"], made["port"], made["front"]) == ("192.168.1.50", 8442, "http://192.168.1.10:8442")
-    # A console with no compute node yet still starts; it shows compute as not answering.
-    assert support.topology_values("weightroom", "front", tmp_path, "192.168.1.10", "", "", "")["spotter"] == ""
+    # A console with no compute node yet has none until one pairs.
+    assert support.topology_values("weightroom", "front", tmp_path, "192.168.1.10", "", "", "") == {}
 
 
 def test_setting_a_value_keeps_comments_and_adds_what_is_missing():

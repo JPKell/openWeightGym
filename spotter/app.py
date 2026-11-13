@@ -50,6 +50,7 @@ from loadcoach.config import CLI, data_folder, kept_by_loadcoach, model_places, 
 from loadcoach.component_versions import interval_seconds
 from loadcoach.files import SPARE
 from loadcoach.file_index import NODE_INDEX, FileIndex
+from loadcoach.log import LEGACY
 from loadcoach.log import Log
 from loadcoach import statement, observability as observation
 from loadcoach.groups import ABILITIES
@@ -85,6 +86,7 @@ class Settings:
     busy_gpu: float = 10  # a GPU at this percentage or more counts as the machine being used
     busy_processor: float = 25  # and so does the processor at this
     machine_key_file: str = ""  # the key turnstile signs with, and spotter signs its notice to turnstile with
+    machine_name: str = LEGACY  # LoadCoach's machine_name: the node the notice is about, as [machines.NAME] on front calls it
     database: DatabaseSource = ":memory:"  # resolved identity store; legacy paths remain accepted
     history: str = ":memory:"  # where spotter keeps its readings: a file of its own
     databases: dict = field(default_factory=dict)  # optional named identity/history store bindings
@@ -133,6 +135,7 @@ def settings_from(path: Path, told: dict, file: dict | None = None) -> Settings:
                 "services": {},
                 **told,
                 "machine_key_file": str(path.parent / main["machine_key_file"]) if main.get("machine_key_file") else "",
+                "machine_name": main.get("machine_name", LEGACY),
                 "compute": f"http://{'127.0.0.1' if here in ('0.0.0.0', '::') else here}:{main.get('port', 8442)}",
                 "places": dict(model_places(main.get("models_folder", ""), main.get("places", {}), main.get("models_storage_folder", ""))),
                 "file_index": str(data_folder(path.parent / told.get("loadcoach", "loadcoach.toml"), main) / NODE_INDEX),
@@ -451,7 +454,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
 
         Root's are only done if a polkit rule says this account may. Nothing here asks for a password.
         """
-        asked = await asyncio.create_subprocess_exec("systemctl", "--user" if own else "--no-ask-password", *arguments, stdout=PIPE, stderr=STDOUT)
+        try:
+            asked = await asyncio.create_subprocess_exec("systemctl", "--user" if own else "--no-ask-password", *arguments, stdout=PIPE, stderr=STDOUT)
+        except OSError:
+            return 127, "The service manager is unavailable on this host."
         printed, _ = await asyncio.wait_for(asked.communicate(), 60)
         return asked.returncode or 0, printed.decode(errors="replace").strip()
 
@@ -642,7 +648,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
             if settings.turnstile_notice and settings.machine_key_file:
                 try:
                     body = json.dumps({"action": action}).encode()
-                    notice, _ = statement.make(statement.read_key(settings.machine_key_file), "POST", urlsplit(settings.turnstile_notice).path, body, machine="compute")
+                    notice, _ = statement.make(statement.read_key(settings.machine_key_file), "POST", urlsplit(settings.turnstile_notice).path, body, machine=settings.machine_name)
                     async with httpx.AsyncClient(timeout=1) as turnstile_client:
                         await turnstile_client.post(settings.turnstile_notice, content=body, headers={statement.HEADER: notice, "content-type": "application/json"})
                 except (OSError, httpx.HTTPError):

@@ -2,7 +2,7 @@
 <div id="requests-report">
 {% call card("Trace search", observation_report is not none, 'trace-search') %}
 <form method="get" action="/requests" class="row g-2 mb-3">
-{% for key,label in [('request_id','Ingress ID'),('trace_id','Distributed trace ID'),('service','Service'),('machine','Machine'),('application','Application label'),('outcome','Outcome'),('error_code','Error code'),('since','From (Unix seconds)'),('until','To (Unix seconds)')] %}
+{% for key,label in [('request_id','Ingress ID'),('trace_id','Distributed trace ID'),('service','Service'),('machine','Node'),('application','Application label'),('outcome','Outcome'),('error_code','Error code'),('since','From (Unix seconds)'),('until','To (Unix seconds)')] %}
 <div class="col-12 col-sm-6 col-xl-4"><label for="trace-{{ key }}" class="form-label small">{{ label }}</label><input class="form-control form-control-sm" id="trace-{{ key }}" name="{{ key }}" value="{{ request.query_params.get(key,'') }}" maxlength="128"></div>
 {% endfor %}<div class="col-12"><button class="btn btn-sm btn-primary" name="observe" value="1">Search traces and metrics</button> <a class="btn btn-sm btn-outline-secondary" href="/requests?{{ request.query_params|string }}&amp;export=jsonl">Export metadata</a>{% if request.query_params.get('request_id') %} <a class="btn btn-sm btn-outline-secondary" href="/requests?request_id={{ request.query_params['request_id']|query }}&amp;since=0&amp;export=receipt">Failure receipt</a>{% endif %}</div>
 </form>

@@ -7,6 +7,7 @@ import secrets
 import time
 
 from db import DatabaseSource, database, local_path, migrate
+from loadcoach.log import LEGACY
 from db.schemas import BENCHMARKS as BENCHMARK_MIGRATIONS
 from db.text_codec import pack_text, unpack_text
 
@@ -27,6 +28,7 @@ class Benchmarks:
         if file := local_path(path):
             os.chmod(file, 0o600)  # task-scoped credentials live here, never the user's session key
         migrate(source, self.db, "weightroom.benchmarks", BENCHMARK_MIGRATIONS)
+        self.node_aliases = {}
         self._datasets = {}
         with self.db:
             self.db.execute('INSERT INTO benchmark_state(id,paused) VALUES(1,0) ON CONFLICT(id) DO NOTHING')
@@ -172,9 +174,9 @@ class Benchmarks:
         """Find the existing reservation without exposing its scoped task credential."""
         column = 'model' if by_name else 'model_id'
         found = self.db.execute(f"SELECT id FROM benchmark_runs WHERE {column}=? "
-                                "AND COALESCE(NULLIF(location,''),'compute')=? AND benchmark=? "
+                                "AND COALESCE(NULLIF(location,''),?)=? AND benchmark=? "
                                 "AND state NOT IN ('completed','failed','cancelled') ORDER BY created LIMIT 1",
-                                (identity, location or 'compute', kind)).fetchone()
+                                (identity, LEGACY, location or LEGACY, kind)).fetchone()
         return found[0] if found else None
 
     def activate(self, number: str, task: dict) -> None:
@@ -235,6 +237,7 @@ class Benchmarks:
     def _run(self, number, row, detail, definitions, samples=None) -> dict:
         """Summarize one run from a bounded report's already-read rows and definitions."""
         model, kind, mark, subject, environment, state, created, started, ended, reason, messages, user, location, model_id = row
+        location = self.node_aliases.get(location or LEGACY, location)
         samples = self.samples(number, detail) if samples is None else samples
         subject = json.loads(subject)
         module = self.module(kind, subject.get('protocol'))

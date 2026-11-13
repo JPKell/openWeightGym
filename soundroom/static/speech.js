@@ -42,6 +42,8 @@
     fill($('tr-diarize'), of('diarization'), 'Not needed');
     fill($('vo-asr'), of('transcription'));
     fill($('vo-design-model'), of('design'));
+    $('vo-design').disabled = !of('design').length;
+    $('vo-design-unavailable').hidden = Boolean(of('design').length);
     $('tr-go').disabled = !current || !of('transcription').length;
     renderRecordings();
     renderVoices();
@@ -58,12 +60,16 @@
     if ($('sc-record').checked) url.searchParams.set('record', '1');
     link.href = url.toString();
     link.classList.toggle('disabled', !$('sc-voice').value);
+    link.setAttribute('aria-disabled', String(!$('sc-voice').value));
+    link.tabIndex = $('sc-voice').value ? 0 : -1;
+    $('sc-unavailable').hidden = Boolean($('sc-voice').value);
   }
   $('sc-voice')?.addEventListener('change', chatLink);
   $('sc-record')?.addEventListener('change', chatLink);
   function fill(select, models, none, preferred) {
     const old = select.value;
-    select.replaceChildren(...(none ? [new Option(none, '')] : []), ...models.map(row => new Option(row.id, row.id)));
+    select.replaceChildren(...(none || !models.length ? [new Option(none || 'No compatible models available', '')] : []), ...models.map(row => new Option(row.id, row.id)));
+    select.disabled = !none && !models.length;
     const chosen = [old, preferred].find(name => name && [...select.options].some(row => row.value === name));
     if (chosen) select.value = chosen;
   }
@@ -217,7 +223,7 @@
       await api('voices', {name: $('vo-design-name').value.trim() || description.slice(0, 40), asset: take.id, transcript: sample, description, designed: true});
       await refresh();
       window.soundroomRefresh?.();
-    } finally { $('vo-design').disabled = false; }
+    } finally { $('vo-design').disabled = !state.models.some(row => row.capabilities?.audio === 'design'); }
   }));
   function renderVoices() {
     $('vo-list').replaceChildren(...state.voices.map(voice => {

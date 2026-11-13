@@ -150,7 +150,22 @@ class Routing:
         self.evidence, self.reliability = RoleEvidence(self.roles.db), Reliability(self.roles.db)
         self.log, self.caller, self.facts_for, self.through, self.relay = log, caller, facts_for, through, relay
         self.placed = placed
+        self.node_names = lambda: []  # the active nodes, in order, once turnstile knows them
+        self.destination_allowed = lambda: True
+        self.resolve_node = lambda name: name
+        self.prepare_candidates = None
         self.hosted = None  # the outside services, once turnstile has made them: see turnstile/hosted.py
+
+    async def facts_at(self, request, user):
+        """Apply a caller's destination to the same verified placement facts roles use."""
+        facts = await self.facts_for(request, user)
+        target = getattr(request.state, 'route_node', '')
+        if isinstance(facts, Response) or not target:
+            return facts
+        selected = {name: {**copies[target], 'machine': target}
+                    for name, copies in facts.get('node_facts', {}).items() if target in copies}
+        return {**facts, 'models': selected,
+                'placements': {name: [target] for name, fact in selected.items() if not fact.get('why_not')}}
 
     def roles_for(self, models) -> list[str]:
         """The roles someone who may use `models` can ask for: those with one of them in."""
@@ -232,7 +247,7 @@ class Routing:
         asked = self.roles.asked(name) if isinstance(name, str) else None
         if asked is None:
             return None
-        facts = await self.facts_for(request, user)
+        facts = await self.facts_at(request, user)
         if isinstance(facts, Response):
             return facts
         return None if name in facts["models"] or asked[0] not in self.roles_for(facts["models"]) else (asked, facts)
@@ -249,7 +264,7 @@ class Routing:
                 if number.isdigit():
                     observation.annotate(request_number=int(number))
                 return result
-        candidates = candidates or ["compute"]
+        candidates = candidates or [""]  # a model no node lists: the only node answers for it, or turnstile says there is no route
         last = None
         for index, machine in enumerate(candidates):
             sent = body
@@ -301,14 +316,29 @@ class Routing:
     @observation.traced("routing")
     async def answer(self, request: Request, user: User, where: str, body: bytes) -> Response:
         """A request to a model, sent on to compute. For a role, the model is picked here first. The answer is judged as it passes."""
-        headers = [(name, value) for name, value in request.headers.items() if name not in PICKED]
+        headers = [(name, value) for name, value in request.headers.items() if name not in (*PICKED, 'x-suite-node')]
         try:
             asked = json.loads(body)
             name = asked.get("model")
         except (ValueError, AttributeError):  # not JSON, or JSON that is not an object: compute says what is wrong with it
             name = None
+            asked = {}
+        target = asked.pop('node', '')
+        if not isinstance(target, str):
+            return error(400, 'node must be a configured node name.')
+        if target:
+            from turnstile.tasks import DESTINATION_OFF
+            if not self.destination_allowed():
+                return error(400, DESTINATION_OFF)
+            target = self.resolve_node(target)
+            if target not in self.node_names():
+                return error(404, f'No node called {target}.')
+            request.state.route_node = target
+        body = json.dumps(asked).encode()
         hosted = self.hosted
         if hosted and isinstance(name, str) and name in hosted.offered(user):  # a model at an outside service: asked for from here
+            if target:
+                return error(404, f'Node {target} does not offer model {name}.')
             return await hosted.answer(request, user, asked, name)
         trace = request.headers.get("x-loadcoach-trace")
         level = request.headers.get("x-loadcoach-sensitivity", "normal")
@@ -335,15 +365,19 @@ class Routing:
                 needs["stays"] = needs["stays"] or effective != "normal"
                 if await self.offload(request, user, name, stand_in, needs):
                     return await hosted.answer(request, user, asked, stand_in, instead_of=name)
-            facts = await self.facts_for(request, user) if self.placed else None
+            facts = await self.facts_at(request, user) if self.placed else None
             if isinstance(facts, Response):
                 return facts
+            if target and (name not in facts.get('models', {}) or facts['models'][name].get('why_not')):
+                return error(404, f'Node {target} does not offer an enabled, permitted copy of model {name}.')
             if facts and name in facts.get("unavailable_models", []):
                 refusal = error(503, f"The worker for model {name} is not answering. Try again shortly.")
                 refusal.headers["retry-after"] = "5"
                 return refusal
             candidates = (facts.get("placements", {}).get(name) or
                           [facts["models"][name]["machine"]] if facts and name in facts["models"] and not facts["models"][name].get("hosted") else None)
+            if self.prepare_candidates and not target and candidates:
+                candidates = await self.prepare_candidates(request, user, name, facts, candidates)
             upstream = await self.send_placed(request, user, where, body, headers, candidates,
                                               aliases=facts.get("location_models", {}).get(name) if facts else None)
             return upstream if isinstance(upstream, Response) else self.relay(upstream, self.judge(upstream, user, request.url.path))
@@ -363,11 +397,14 @@ class Routing:
                     and await self.offload(request, user, picked[0], stand_in, needs, facts):
                 return await hosted.answer(request, user, asked, stand_in, chose={"role": name, "picked": picked[0], "because": picked[1]}, instead_of=picked[0], role=role)
             sent = json.dumps({**asked, "model": picked[0]}).encode()
+            candidates = facts.get('placements', {}).get(picked[0])
+            if self.prepare_candidates and not target and candidates:
+                candidates = await self.prepare_candidates(request, user, picked[0], facts, candidates)
             from loadcoach import observability as observation
             with observation.span('model_attempt', attempt=attempt + 1):
                 upstream = await self.send_placed(request, user, where, sent,
                                                   [*headers, ("x-loadcoach-role", name), ("x-loadcoach-because", quote(picked[1]))],
-                                                  facts.get("placements", {}).get(picked[0]), role,
+                                                  candidates, role,
                                                   facts.get("location_models", {}).get(picked[0]))
                 observation.responded(upstream)
                 number = upstream.headers.get('x-loadcoach-request-id', '')
@@ -567,7 +604,8 @@ class Routing:
                    ('x-loadcoach-role-context', str(settings.get('requires', {}).get('tokens', 0)))]
         try:
             async with asyncio.timeout(60):
-                upstream = await self.through(request, user, 'POST', '/v1/chat/completions', body, headers)
+                upstream = await self.send_placed(request, user, '/v1/chat/completions', body, headers,
+                                                  facts.get("placements", {}).get(name), role, facts.get("location_models", {}).get(name))
                 if isinstance(upstream, Response):
                     return upstream
                 async for _ in self.relay(upstream, self.judge(upstream, user, '/v1/chat/completions', role, recovery=True)).body_iterator:
@@ -638,17 +676,37 @@ class Routing:
         facts = await self.facts_for(request, user)
         if isinstance(facts, Response):
             return facts
-        synced = await self.through(request, user, 'POST', '/loadcoach/send-log', b'', [])  # what compute has not sent yet counts toward spending
-        if not isinstance(synced, Response):
-            await synced.aread()
-            await synced.aclose()
-        upstream = await self.through(request, user, 'GET', '/loadcoach/alert-evidence', b'', [])
-        if isinstance(upstream, Response):
-            return upstream
-        said = json.loads(await upstream.aread())
-        await upstream.aclose()
-        if upstream.status_code != 200:
-            return JSONResponse(said, status_code=upstream.status_code)
+        # Every node's evidence, each asked without waking it. With one node, its refusal is the answer.
+        nodes = self.node_names() if len(self.node_names()) > 1 else [""]
+        said, missing, refused = {}, [], None
+        for node in nodes:
+            synced = await self.through(request, user, 'POST', '/loadcoach/send-log', b'', [], machine=node)  # what a node has not sent yet counts toward spending
+            if not isinstance(synced, Response):
+                await synced.aread()
+                await synced.aclose()
+            upstream = await self.through(request, user, 'GET', '/loadcoach/alert-evidence', b'', [], machine=node)
+            if isinstance(upstream, Response):
+                refused = refused or upstream
+                missing.append(node)
+                continue
+            told = json.loads(await upstream.aread())
+            await upstream.aclose()
+            if upstream.status_code != 200:
+                if len(nodes) == 1:
+                    return JSONResponse(told, status_code=upstream.status_code)
+                missing.append(node)
+                continue
+            for field, value in told.items():
+                if isinstance(value, list):
+                    said.setdefault(field, []).extend(value)
+                elif isinstance(value, dict):
+                    said.setdefault(field, {}).update(value)
+                else:
+                    said.setdefault(field, value)
+        if len(missing) == len(nodes) and refused is not None:
+            return refused
+        if missing and nodes != [""]:
+            said["unavailable_machines"] = missing
         names = {one["model_id"]: name for name, one in facts["models"].items()}
         faults = []
         for mid, fingerprint, role in self.reliability.db.execute('SELECT model_id, fingerprint, role FROM reliability_state').fetchall():

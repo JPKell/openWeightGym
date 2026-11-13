@@ -18,7 +18,7 @@ try { document.documentElement.dataset.sidebar = matchMedia("(max-width: 767.98p
 catch { document.documentElement.dataset.sidebar = "closed"; }
 </script>
 <link rel="stylesheet" href="/static/tabler.min.css">
-<link rel="stylesheet" href="/static/style.css?v=49">
+<link rel="stylesheet" href="/static/style.css?v=50">
 <link rel="stylesheet" href="/static/themes.css?v=7">
 {# htmx keeps no copy of a page for the Back button: going back loads the page again, so nothing that was shown is kept in the browser. #}
 <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
@@ -89,9 +89,14 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {# Every page uses the same outer spacing; children only add content-specific classes. #}
 <main id="page-content" class="suite-page {% block page_class %}{% endblock %}" {% block main_attributes %}{% endblock %}>
 {% if person and person.me.get('unavailable_machines') %}
-{% call alert('warning', class_='py-1 small', role='status', attrs={'id': 'node-availability', 'data-offline-nodes': person.me.unavailable_machines|tojson|forceescape}) %}Node unavailable: {{ person.me.unavailable_machines|join(', ') }}. Live node controls are disabled. Selecting a deployed model will request wake and wait for a response.{% endcall %}
-{% if wake_button and 'front-wake' in person.can and 'compute' in person.me.unavailable_machines %}<form method="post" action="/wake" class="mb-2"><button class="btn btn-sm btn-outline-primary">Wake compute</button></form>{% endif %}
-<script src="/static/node-availability.js?v=2" defer></script>
+{# One notice per node that is not answering, with its Wake button when it has wake settings. Pages never wake a node themselves. #}
+<div id="node-availability" data-offline-nodes="{{ person.me.unavailable_machines|tojson|forceescape }}" data-default-node="{{ (person.me.get('machines') or [''])|first }}">
+{% for name in person.me.unavailable_machines %}
+{% call alert('warning', class_='py-1 small d-flex flex-wrap align-items-center gap-2', role='status') %}<span class="flex-grow-1">{{ name }} is not answering{% set age = person.me.get('node_status', {}).get(name, {}).get('age') %}{% if age is not none %}; last seen {{ (age / 60)|round(0)|int }} min ago{% else %}; no contact recorded{% endif %}. Its live controls are unavailable. Unpinned requests can use another node with verified matching weights.</span>
+{% if name in person.me.get('wake_nodes', []) %}{% with host={'machines': [name], 'wake_nodes': person.me.wake_nodes, 'fingerprint': ''}, return_to=request.url.path %}{% include 'host_wake.html' %}{% endwith %}{% endif %}{% endcall %}
+{% endfor %}
+</div>
+<script src="/static/node-availability.js?v=3" defer></script>
 {% endif %}
 {% block main %}{% endblock %}
 </main>

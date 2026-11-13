@@ -128,10 +128,10 @@ def main():
     if args.dry_run:
         print("Would verify/build audiocpp_server and audiocpp_cli, atomically select the release, and configure settings/loadcoach.toml. Model weights are separate.")
         return
+    if not args.adopt_build:
+        from engines.build import build_environment
+        environment = build_environment(args.backend, "audio.cpp")
     if not target.exists():
-        if not args.adopt_build:
-            from engines.build import build_environment
-            environment = build_environment(args.backend, "audio.cpp")
         args.prefix.mkdir(parents=True, exist_ok=True, mode=0o700)
         target.parent.mkdir(exist_ok=True)
         source = args.source.expanduser().resolve() if args.source else args.prefix / "source" / args.revision

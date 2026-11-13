@@ -53,7 +53,7 @@
             <tr><th colspan="6" scope="rowgroup" class="pt-2 pb-1 border-top fw-semibold">{{ node.name }}{{ node_work(node) }}{% if node.hostname and node.hostname != node.name %} <small class="text-secondary fw-normal">{{ node.hostname }}</small>{% endif %}</th></tr>
             {% if node.state == 'ready' and node.status_live %}
               {% for model in node.loaded %}
-              <tr><td>{% if node.name == 'compute' and now and 'manage-models' in person.can %}<a href="{{ address(model.model) }}">{{ model.model }}</a>{% else %}{{ model.model }}{% endif %}{% if model.state != 'ready' %} <small class="text-secondary">{{ model.state }}</small>{% endif %}</td>
+              <tr><td>{% if now and 'manage-models' in person.can %}<a href="{{ address(model.model) }}">{{ model.model }}</a>{% else %}{{ model.model }}{% endif %}{% if model.state != 'ready' %} <small class="text-secondary">{{ model.state }}</small>{% endif %}</td>
                 <td>{{ model.cards|join(' + ') or 'CPU' }}</td>
                 <td>{% if model.mib %}{{ model.mib|sum|memory_mib }} VRAM{% elif model.cards %}the whole card{{ 's' if model.cards|length > 1 }}{% endif %}</td><td>{% if model.rss_mib is defined and model.rss_mib is not none %}{{ model.rss_mib|memory_mib }} RSS{% else %}RSS unavailable{% endif %}</td>
                 <td><span class="badge {{ 'bg-green-lt' if model.work == 'In use' else 'bg-secondary-lt' }}">{{ model.work or 'Unknown' }}</span></td>
@@ -64,8 +64,8 @@
           {% else %}<tbody>{% call empty_row(6) %}No compute nodes have reported to front yet.{% endcall %}</tbody>{% endfor %}
         </table>
       </div>
-      {% if seen %}<div class="list-group-item small">{% if seen.lock %}Primary compute GPUs are held by <b>{{ seen.lock.user }}</b> from {{ seen.lock.caller }}, {{ seen.lock.seconds_left|round|int }} s left{{ ", turning others away" if seen.lock.refuse }}.{% else %}<span class="text-secondary">No GPUs are reserved exclusively on the primary compute node.</span>{% endif %}</div>{% endif %}
-      {% if seen %}{% set others = (seen.others_running or 0) + (seen.others_waiting or 0) + (seen.others_hosted or 0) %}{% if others %}<div class="list-group-item">{{ others }} request{{ "" if others == 1 else "s" }} of other people on primary compute, which you may not see.</div>{% endif %}{% endif %}
+      {% for node in nodes if node.state == 'ready' and node.status_live and node.lock %}<div class="list-group-item small">{{ node.name }} GPUs are held by <b>{{ node.lock.user }}</b> from {{ node.lock.caller }}, {{ node.lock.seconds_left|round|int }} s left{{ ", turning others away" if node.lock.refuse }}.</div>{% endfor %}
+      {% if seen %}{% set others = (seen.others_running or 0) + (seen.others_waiting or 0) + (seen.others_hosted or 0) %}{% if others %}<div class="list-group-item">{{ others }} request{{ "" if others == 1 else "s" }} by other people across the nodes; their details are private.</div>{% endif %}{% endif %}
     </div>
   {% endcall %}
 </div>

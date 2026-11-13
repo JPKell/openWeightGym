@@ -18,6 +18,7 @@ from loadcoach import statement
 from loadcoach.groups import Group
 from loadcoach.users import Users
 from turnstile.app import Settings, build_app, compute_client, listening, load_settings, wake
+from turnstile import nodes
 
 MAC = "bc:fc:e7:3d:90:6c"
 
@@ -202,13 +203,18 @@ def test_the_waking_packet_and_the_settings(tmp_path):
                                           machine_key_file=str((tmp_path / "../keys/machine.key").resolve()))
     file.write_text('compute = "http://10.77.10.84:8442"\n[groups.reader]\ncan = ["load"]\n')  # the first groups are read here too
     assert load_settings(file).ports == (8442, 8443, 8444) and load_settings(file).wake_mac == "" and list(load_settings(file).groups) == ["reader"]
-    assert load_settings(file).upstream(8443) == "http://10.77.10.84:8443"  # compute on its own machine: the same ports
+    assert nodes.base(load_settings(file).machines[nodes.LEGACY], 8443, (8442, 8443, 8444)) == "http://10.77.10.84:8443"  # compute on its own machine: the same ports
     # One machine for both: compute's URL names LoadCoach's own port, and every port moves with it.
     file.write_text('compute = "http://127.0.0.1:9442"\n')
-    assert load_settings(file).compute_offset == 1000 and load_settings(file).upstream(8444) == "http://127.0.0.1:9444"
+    assert load_settings(file).compute_offset == 1000 and load_settings(file).machines[nodes.LEGACY]["spotter"] == "http://127.0.0.1:9444"
     file.write_text('compute = "http://compute.lan"\n')  # no port: as it always was
-    assert load_settings(file).upstream(8442) == "http://compute.lan:8442"
-    for wrong in ('key_file = "x"', 'compute = "http://c:1"\n[turnstile]\ncolour = 1', 'compute = "http://c:1"\n[groups.g]\ncan = ["fly"]'):
+    assert load_settings(file).machines[nodes.LEGACY]["compute"] == "http://compute.lan:8442"
+    file.write_text('key_file = "x"')  # no node at all: a front that serves only its own pages and hosted models
+    assert load_settings(file).machines == {}
+    file.write_text('compute = "http://c:1"\n[machines.compute]\ncompute = "http://c:1"\n')  # the same node twice
+    with pytest.raises(SystemExit, match="name the same node"):
+        load_settings(file)
+    for wrong in ('[machines.rig]\ncompute = "c:1"', 'compute = "http://c:1"\n[turnstile]\ncolour = 1', 'compute = "http://c:1"\n[groups.g]\ncan = ["fly"]'):
         file.write_text(wrong)
         with pytest.raises(SystemExit):
             load_settings(file)

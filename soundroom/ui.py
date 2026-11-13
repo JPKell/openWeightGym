@@ -43,9 +43,9 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
         """Show and change the administrator's audio defaults, kept with weightroom's own settings."""
         if "manage-settings" not in person.can:
             return page(request, "refused.html", person, status=403, why="Your account may not change settings.")
-        from weightroom.app import ComputeOff
+        from weightroom.app import ServiceUnavailable
         found = None
-        with suppress(ComputeOff):
+        with suppress(ServiceUnavailable):
             found = await ask("GET", "/loadcoach/settings", person.key)
         settings_now = next((one["settings"] for one in found.json().get("programs", []) if one["program"] == "weightroom"), []) if found is not None and found.is_success else []
         current = {one["name"]: one for one in settings_now}
@@ -70,14 +70,18 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
             if answer.is_success:
                 return RedirectResponse("/system/audio?said=Saved.+Applied+when+weightroom+restarts.", 303)
             said, failed = answer.json().get("error", {}).get("message", "Not saved."), True
-        engines = await ask("GET", "/turnstile/machines/compute/engines", person.key)
-        audio = next((one for one in (engines.json().get("engines", []) if engines.is_success else []) if one.get("id") == "audiocpp"), None)
-        nodes = [{"name": "compute", "available": bool(audio and audio.get("available")), "why": (audio or {}).get("why", "not answering")}]
+        listed = await ask("GET", "/turnstile/machines", person.key)
+        nodes = []
+        for name in [one["name"] for one in listed.json().get("machines", [])] if listed.is_success else []:
+            # Each node says whether its audio engine is there; one not answering says why not.
+            engines = await ask("GET", "/turnstile/machines/" + quote(name, safe="") + "/engines", person.key)
+            audio = next((one for one in (engines.json().get("engines", []) if engines.is_success else []) if one.get("id") == "audiocpp"), None)
+            nodes.append({"name": name, "available": bool(audio and audio.get("available")), "why": (audio or {}).get("why", "not answering")})
         fields = [{"name": name, "label": label, "help": help, "when": current.get(name, {}).get("when", ""),
                    "value": (current[name]["changed"]["value"] if current.get(name, {}).get("changed") else current.get(name, {}).get("value", ""))}
                   for name, label, help in available_defaults]
         catalogue = None
-        with suppress(ComputeOff):
+        with suppress(ServiceUnavailable):
             catalogue = await ask('GET', '/v1/models', person.key)
         available = catalogue.json().get('data', []) if catalogue is not None and catalogue.is_success else []
         for field in fields:

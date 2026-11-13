@@ -7,7 +7,7 @@
 {% endmacro %}
 {% macro node_targets(nodes=(), selected=(), id='model-nodes', fallback=true) %}
 <fieldset id="{{ id }}" class="m-0 p-0 border-0" aria-label="Compute nodes"><div class="form-selectgroup justify-content-end" data-target-choices>
-{% for node in nodes %}{{ node_target(node,node.name in selected) }}{% else %}{% if fallback %}{{ node_target({'name':'compute','state':'ready'},true) }}{% endif %}{% endfor %}
+{% for node in nodes %}{{ node_target(node,node.name in selected) }}{% else %}{% if fallback and person and person.me.get('machines') %}{{ node_target({'name':person.me.machines[0],'state':'ready'},true) }}{% endif %}{% endfor %}
 </div></fieldset>
 {% endmacro %}
 {% macro subject(name='', meta='', href='', initial='', attrs={}) %}

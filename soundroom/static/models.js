@@ -94,8 +94,8 @@
     const kind=$('kind').value;
     const options=choices.flatMap((file,index)=>{
       if (kind && !fileKinds(file).includes(kind)) return [];
-      const folder=file.path.split('/').filter(Boolean).at(-2) || '/';
-      const option=new Option(file.machine + ' · ' + folder,String(index));
+      const filename=file.path.split('/').filter(Boolean).at(-1) || file.path;
+      const option=new Option(filename + ' · ' + file.machine + ' · ' + file.tier,String(index));
       option.dataset.path=file.path; option.dataset.machine=file.machine; option.dataset.tier=file.tier;
       option.disabled=Boolean(selected && (file.machine !== activeNode || file.tier === 'storage') && file.path !== selected.flags.model);
       return [option];
