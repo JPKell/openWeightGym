@@ -1,0 +1,49 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, section_title, card, more %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'docs_parts.html' import doc_code %}
+{% from 'voice_download_parts.html' import platforms, download_action, extraction_note, platform_cards, connection_steps, access_note, guided_setup %}
+{% from 'icons.html' import icon %}
+{% block title %}Voice desktop app · Download page designs · openWeightGym{% endblock %}
+{% block scripts %}<style>{{ download_css|safe }}
+{{ design_css|safe }}</style><script>{{ download_javascript|safe }}</script><script>{{ design_javascript|safe }}</script>{% endblock %}
+{% block page_class %}vdl-page{% endblock %}
+{% block main %}
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></form></div>
+<div class="vdl-review" aria-label="Compare download page designs">
+  <div class="vdl-review-heading"><span class="vdl-label">VOICE DESKTOP APP / PAGE DESIGNS</span><button id="vdl-theme" type="button" class="btn btn-outline-secondary btn-sm">Light mode</button></div>
+  {% call pills('Download page designs',buttons=true,class_='vdl-design-nav mb-0') %}
+  {{ pill_button('01 / Download hub',true,attrs={'data-download-design':'hub'}) }}{{ pill_button('02 / Guided setup',attrs={'data-download-design':'guide'}) }}{{ pill_button('03 / Quick reference',attrs={'data-download-design':'reference'}) }}
+  {% endcall %}
+  <p id="vdl-design-description" class="small text-secondary mb-0">A clear download, three platform cards and a concise connection guide.</p>
+</div>
+{{ page_header('Voice desktop app') }}
+
+<div data-download-layout="hub" class="vdl-layout vdl-hub">
+  <section class="vdl-hero" aria-label="Download Voice desktop app">
+    <div class="vdl-hero-copy"><span class="vdl-label">OPENWEIGHTGYM, OUT LOUD</span>{{ section_title('Your next conversation.\nRight on your desktop.',class_='vdl-hero-title',wrapper_class='mb-3') }}<p>Talk to openWeightGym from Windows, macOS or Linux.<br class="d-none d-lg-block"> Your models and speech processing stay on the server.</p><div class="d-flex flex-wrap align-items-center gap-3">{{ download_action() }}<a class="vdl-browser-link" href="/voice">Use Voice in your browser {{ icon('arrow-right') }}</a></div><span class="vdl-package-note">One ZIP for all three platforms · Python 3.13 required</span></div>
+    <div class="vdl-package" aria-label="Package contents"><div class="vdl-file-icon">{{ icon('system') }}</div><span class="vdl-label">DESKTOP CLIENT</span><strong>LoadCoach-Voice.zip</strong><div class="vdl-file-contents"><span>Voice.cmd <small>Windows</small></span><span>Voice.command <small>macOS / Linux</small></span><span>README.txt <small>Setup & help</small></span></div></div>
+  </section>
+  <div class="vdl-extract-note">{{ icon('docs') }}<p>{{ extraction_note() }}</p></div>
+  <section aria-label="Platform requirements"><div class="vdl-section-intro">{{ section_title('Set up your platform',wrapper_class='mb-0') }}<span class="small text-secondary">Install Python, then open the included launcher.</span></div><div class="vdl-platform-grid">{{ platform_cards(detailed=true) }}</div></section>
+  <section class="vdl-connect-section" aria-label="Connection instructions"><div class="vdl-section-intro">{{ section_title('Connect in three steps',wrapper_class='mb-0') }}<span class="small text-secondary">After opening the app</span></div>{{ connection_steps('vdl-steps vdl-steps-horizontal',detailed=true) }}</section>
+  {% call more('Access requirements & Hermes') %}{{ access_note() }}{% endcall %}
+</div>
+
+<div data-download-layout="guide" hidden>{{ guided_setup() }}</div>
+
+<div data-download-layout="reference" class="vdl-layout vdl-reference" hidden>
+  <div class="vdl-reference-intro"><div>{{ section_title('Everything you need to get connected.',class_='vdl-reference-title',wrapper_class='mb-2') }}<p class="text-secondary mb-0">Desktop voice for Windows, macOS and Linux. One download, the same conversation.</p></div><div class="vdl-reference-actions">{{ download_action() }}<a class="small" href="/voice">Or use Voice in your browser {{ icon('arrow-right') }}</a></div></div>
+  <div class="vdl-reference-grid">
+    <section aria-label="Installation reference">
+    {% call card('Install & launch',class_='mb-0 vdl-reference-card',actions='<span class="vdl-label">PLATFORM REFERENCE</span>'|safe,body_class='p-0') %}
+    <div class="table-responsive" tabindex="0" role="region" aria-label="Operating system requirements"><table class="table vdl-platform-table mb-0"><thead><tr><th scope="col">Platform</th><th scope="col">Requirements</th><th scope="col">Launcher</th></tr></thead><tbody>{% for platform in platforms %}<tr><th scope="row"><span class="vdl-os-mark" aria-hidden="true">{{ platform.mark }}</span>{{ platform.name }}</th><td>{{ platform.requirements }}<small>{{ platform.note }}</small></td><td><code>{{ platform.launcher }}</code></td></tr>{% endfor %}</tbody></table></div>
+    <div class="vdl-table-note">{{ icon('docs') }}<span>{{ extraction_note() }}</span></div>
+    {% endcall %}
+    <div class="vdl-runtime-note">{{ icon('system') }}<p><strong>The models stay on your server.</strong><br>The first launch installs the client’s dependencies beside the app. Recognition, speech and language models run on the server.</p></div>
+    </section>
+    {% call card('Connect',class_='vdl-reference-connect mb-0',actions='<span class="vdl-label">IN THE APP</span>'|safe) %}{{ connection_steps('vdl-steps vdl-steps-vertical',detailed=true) }}<div class="vdl-access-note">{{ section_title('Access & Hermes',level=3,wrapper_class='mb-2') }}<p class="small text-secondary mb-0">{{ access_note() }}</p></div>{% endcall %}
+  </div>
+</div>
+<p class="vdl-preview-note" role="status" id="vdl-preview-status">Design preview of /voice/desktop · download and account links open your console · no configuration changes</p>
+{% endblock %}

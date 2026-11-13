@@ -1,20 +1,10 @@
-{% extends "frame.html" %}
-{% from "parts.html" import page_header, card %}
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header %}
+{% from 'voice_download_parts.html' import guided_setup %}
 {% block title %}Voice desktop app · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/voice-download.css?v=1"><script src="/static/voice-download.js?v=1" defer></script>{% endblock %}
+{% block page_class %}vdl-page{% endblock %}
 {% block main %}
-{{ page_header("Voice desktop app", lead="Use Voice on Windows, macOS or Linux.") }}
-<p>Talk to openWeightGym with the desktop app for Windows, macOS or Linux, or in your browser on the <a href="/voice">Voice</a> page.</p>
-<a class="btn btn-primary mb-3" href="/static/LoadCoach-Voice.zip" download>Download Voice app</a>
-<p class="text-secondary">Extract the entire ZIP before opening a launcher. The included README has setup and troubleshooting instructions.</p>
-<div class="row g-3 mb-3">
-{% for name, instructions in [('Windows', 'Install Python 3.13 with Tcl/Tk and the Python launcher, then open Voice.cmd.'), ('macOS', 'Install Python 3.13 using the universal installer, then open Voice.command. Allow microphone access when asked.'), ('Linux', 'Install Python 3.13 or newer, Tk, venv and PortAudio, then run sh Voice.command.')] %}
-<div class="col-md-4">{% call card(name, class_="h-100") %}{{ instructions }}{% endcall %}</div>
-{% endfor %}
-</div>
-{% call card("Connect") %}
-<ol class="mb-2"><li>Open the app's Settings tab and enter the desktop server address provided by your administrator.</li>
-<li>Copy your API key from <a href="/account">My account</a>, or import its existing key file.</li>
-<li>Choose Direct or Hermes, select your microphone and speakers, save, then press Start.</li></ol>
-<p class="text-secondary mb-0">Your account needs Voice access, access to the selected model and permission to load it when needed. In Hermes mode, your speech is transcribed, the transcript is sent to Hermes, and Hermes's text reply is synthesized back to you.</p>
-{% endcall %}
+{{ page_header('Voice desktop app') }}
+{{ guided_setup() }}
 {% endblock %}

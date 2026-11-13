@@ -1,0 +1,105 @@
+/* Download-page proposals inside the real console frame. */
+.vdl-review { padding: 16px 20px; border: 1px solid var(--vdl-rule); border-radius: 8px; background: var(--tblr-bg-surface); margin-bottom: 24px; }
+.vdl-review-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.vdl-design-nav { gap: 8px; margin-bottom: 12px !important; }
+.vdl-design-nav .nav-link { padding: 8px 14px; border-radius: 5px; font-size: 12px; }
+.vdl-review p { font-size: 12px; }
+.vdl-page > .page-header { margin-bottom: 20px !important; }
+.vdl-page > .page-header .page-title { font-size: 26px; letter-spacing: -.5px; }
+.vdl-hero { display: grid; grid-template-columns: minmax(0,1fr) 270px; gap: 40px; padding: 30px 36px; border: 1px solid var(--vdl-rule); border-radius: 10px; background: linear-gradient(110deg, color-mix(in srgb,var(--tblr-primary) 6%,var(--tblr-bg-surface)),var(--tblr-bg-surface) 75%); }
+.vdl-page .vdl-hero .vdl-hero-title { font-size: clamp(25px,2.2vw,36px); font-weight: 500; line-height: 1.2; letter-spacing: -1px; white-space: pre-line; }
+.vdl-hero-copy > .vdl-label { display: block; margin-bottom: 16px; color: var(--tblr-primary); }
+.vdl-hero-copy > p { color: var(--tblr-secondary); line-height: 1.75; font-size: 14px; margin-bottom: 22px; }
+.vdl-browser-link { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; }
+.vdl-package-note { display: block; margin-top: 14px; font-size: 11px; color: var(--tblr-secondary); }
+.vdl-package { display: flex; flex-direction: column; align-items: center; justify-content: center; border-left: 1px solid var(--vdl-rule); padding-left: 36px; }
+.vdl-file-icon { display: grid; place-items: center; width: 58px; height: 66px; border: 1px solid var(--tblr-primary); border-radius: 7px 15px 7px 7px; background: color-mix(in srgb,var(--tblr-primary) 7%,var(--tblr-bg-surface)); color: var(--tblr-primary); margin-bottom: 14px; }
+.vdl-file-icon .suite-icon { width: 28px; height: 28px; }
+.vdl-package > .vdl-label { font-size: 8px; }
+.vdl-package > strong { font-size: 15px; font-weight: 500; margin-top: 7px; }
+.vdl-file-contents { display: flex; flex-direction: column; width: 100%; gap: 7px; margin-top: 18px; font-family: var(--tblr-font-monospace); font-size: 10px; }
+.vdl-file-contents > span { display: flex; justify-content: space-between; gap: 12px; }
+.vdl-file-contents small { font-family: var(--tblr-font-sans-serif); color: var(--tblr-secondary); font-size: 10px; }
+.vdl-extract-note { display: flex; gap: 10px; align-items: center; margin: 16px 4px 26px; color: var(--tblr-secondary); }
+.vdl-extract-note p { margin: 0; font-size: 12px; line-height: 1.6; }
+.vdl-section-intro { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.vdl-section-intro > span { font-size: 11px; }
+.vdl-platform-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.vdl-page .card { border-color: var(--vdl-rule); box-shadow: none; background: var(--tblr-bg-surface); }
+.vdl-platform .card-header { min-height: 55px; padding: 14px 20px; border-bottom: 1px solid var(--vdl-rule); background: transparent; }
+.vdl-platform .card-heading { font-size: 14px; }
+.vdl-platform .card-body { padding: 20px; }
+.vdl-requirements { font-size: 13px; line-height: 1.6; min-height: 42px; margin: 9px 0 18px; }
+.vdl-launcher { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--vdl-rule); border-radius: 5px; background: var(--tblr-bg-surface-secondary); }
+.vdl-launcher > span { color: var(--tblr-secondary); font-size: 11px; }
+.vdl-launcher code { padding: 0; background: transparent; font-size: 12px; color: var(--tblr-body-color); }
+.vdl-platform .card-body > .small { font-size: 11px; line-height: 1.6; }
+.vdl-connect-section { margin-top: 28px; }
+.vdl-steps-horizontal { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 28px; padding: 20px 0; border-top: 1px solid var(--vdl-rule); }
+.vdl-hub > .more { padding-top: 12px; border-top: 1px solid var(--vdl-rule); font-size: 12px; }
+.vdl-reference-intro { display: flex; align-items: center; justify-content: space-between; gap: 30px; padding: 8px 0 28px; margin-bottom: 28px; border-bottom: 1px solid var(--vdl-rule); }
+.vdl-reference-intro .vdl-reference-title { font-weight: 500; font-size: 25px; letter-spacing: -.7px; }
+.vdl-reference-intro p { line-height: 1.7; font-size: 13px; }
+.vdl-reference-actions { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; align-items: start; }
+.vdl-reference-actions > a:last-child { font-size: 11px; }
+.vdl-reference-grid { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(300px,1fr); gap: 24px; }
+.vdl-reference-grid > section { min-width: 0; }
+.vdl-reference-grid .card-header { background: transparent; min-height: 56px; padding: 16px 20px; }
+.vdl-reference-grid .card-heading { font-size: 14px; }
+.vdl-platform-table thead th { text-transform: none; letter-spacing: 0; font-size: 11px; padding: 14px 18px; }
+.vdl-platform-table tbody td, .vdl-platform-table tbody th { padding: 24px 18px; font-size: 12px; vertical-align: top; border-color: var(--vdl-rule); }
+.vdl-platform-table tbody th { font-weight: 500; white-space: nowrap; }
+.vdl-platform-table .vdl-os-mark { display: block; font-size: 23px; margin-bottom: 12px; }
+.vdl-platform-table tbody td { line-height: 1.8; }
+.vdl-platform-table code { white-space: nowrap; font-size: 11px; }
+.vdl-platform-table small { display: block; color: var(--tblr-secondary); font-size: 10px; margin-top: 10px; line-height: 1.8; }
+.vdl-table-note { padding: 18px; display: flex; gap: 12px; color: var(--tblr-secondary); font-size: 11px; line-height: 1.8; }
+.vdl-runtime-note { display: flex; gap: 12px; margin: 22px 8px 0; color: var(--tblr-secondary); }
+.vdl-runtime-note p { margin: 0; font-size: 11px; line-height: 1.8; }
+.vdl-runtime-note strong { color: var(--tblr-body-color); font-weight: 500; }
+.vdl-reference-connect .card-body { padding: 24px; }
+.vdl-access-note { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--vdl-rule); }
+.vdl-access-note .section-title { font-size: 12px; }
+.vdl-access-note p { font-size: 11px; line-height: 1.8; }
+.vdl-preview-note { max-width: 1440px; margin: 26px 0 0; padding-top: 16px; border-top: 1px solid var(--vdl-rule); font-size: 10px; line-height: 1.7; color: var(--tblr-secondary); }
+@media(max-width:1250px) {
+  .vdl-reference-grid { grid-template-columns: minmax(0,1fr); }
+  .vdl-reference-connect .vdl-steps { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 24px; }
+  .vdl-hero { grid-template-columns: minmax(0,1fr) 220px; gap: 26px; padding: 26px; }
+  .vdl-package { padding-left: 26px; }
+}
+@media(max-width:1000px) {
+  .vdl-platform-grid { grid-template-columns: minmax(0,1fr); }
+  .vdl-platform .card-body { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px 20px; }
+  .vdl-platform .vdl-label { grid-column: 1; }
+  .vdl-platform .vdl-requirements { grid-column: 1; margin: 0; min-height: 0; }
+  .vdl-platform .vdl-launcher { grid-column: 2; grid-row: 1/3; }
+  .vdl-platform .card-body > .small { grid-column: 1/-1; margin-top: 4px !important; }
+  .vdl-hero { grid-template-columns: minmax(0,1fr); }
+  .vdl-package { display: none; }
+  .vdl-page .vdl-hero .vdl-hero-title { font-size: 30px; }
+  .vdl-section-intro { gap: 8px; }
+  .vdl-steps-horizontal { gap: 18px; }
+}
+@media(max-width:600px) {
+  .vdl-review { padding: 12px; margin-bottom: 20px; }
+  .vdl-review-heading .vdl-label { font-size: 8px; letter-spacing: .06em; }
+  .vdl-design-nav { gap: 5px; }
+  .vdl-design-nav .nav-link { padding: 8px 9px; font-size: 10px; }
+  .vdl-review p { font-size: 11px; }
+  .vdl-hero { padding: 22px 18px; }
+  .vdl-page .vdl-hero .vdl-hero-title { font-size: 27px; }
+  .vdl-hero-copy > p { font-size: 13px; }
+  .vdl-browser-link { font-size: 12px; }
+  .vdl-section-intro { display: block; }
+  .vdl-section-intro > span { display: block; margin-top: 8px; }
+  .vdl-steps-horizontal, .vdl-reference-connect .vdl-steps { grid-template-columns: minmax(0,1fr); gap: 22px; }
+  .vdl-platform .card-body { display: block; }
+  .vdl-platform .vdl-requirements { margin: 8px 0 16px; }
+  .vdl-platform .card-body > .small { margin-top: 14px !important; }
+  .vdl-reference-intro { flex-direction: column; align-items: start; gap: 20px; }
+  .vdl-reference-intro .vdl-reference-title { font-size: 24px; }
+  .vdl-reference-grid .card-header { flex-wrap: wrap; gap: 8px; }
+  .vdl-reference-grid .card-header .vdl-label { font-size: 8px; }
+  .vdl-platform-table { min-width: 490px; }
+}
