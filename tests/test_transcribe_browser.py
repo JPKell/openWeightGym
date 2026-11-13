@@ -23,7 +23,7 @@ def test_transcribe_requires_identity_and_navigation_distinguishes_chat_modes(de
     sign_in(server, 'jordan')
     from weightroom.navigation import navigation
     nav = navigation('/chat/transcribe', ['front-voice'], False)
-    assert nav['active'] == '/chat/transcribe' and nav['section'] == 'Chat'
+    assert nav['active'] == '/chat/transcribe' and nav['section'] == 'Interact'
     assert [('Text chat', '/chat'), ('Voice generation', '/chat/speech'), ('Transcribe', '/chat/transcribe'), ('Voice chat', '/voice')] == [
         row for row in nav['links'] if row[1] in ('/chat', '/chat/speech', '/chat/transcribe', '/voice')]
     assert 'Voice chat' in server.get('/voice').text

@@ -1,4 +1,4 @@
-## Chat
+## Interact
 
 - [x] Text chat
 - [x] Conversation

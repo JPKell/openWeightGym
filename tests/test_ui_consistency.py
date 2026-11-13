@@ -827,7 +827,7 @@ def test_mobile_menu_has_both_levels_keyboard_return_and_desktop_rail(desk):
         menu.click()
         dialog = page.get_by_role('dialog', name='Navigation', exact=True)
         playwright.expect(dialog).to_be_visible()
-        assert dialog.locator('summary').all_text_contents() == ['Chat','Models','Benchmark','Logs','System','Settings','Docs']
+        assert dialog.locator('summary').all_text_contents() == ['Interact','Models','Benchmark','Logs','System','Settings','Docs']
         dialog.locator('summary').filter(has_text='Settings').click()
         playwright.expect(dialog.get_by_role('link', name='General', exact=True)).to_be_visible()
         assert dialog.locator('.chat-sidebar').count() == 1
@@ -837,6 +837,10 @@ def test_mobile_menu_has_both_levels_keyboard_return_and_desktop_rail(desk):
         playwright.expect(menu).not_to_be_visible()
         playwright.expect(page.locator('#site-sidebar')).to_be_visible()
         assert page.locator('[data-desktop-conversations] .chat-sidebar').count() == 1
+        category = page.locator('.category-links a[href="/chat"]')
+        playwright.expect(category).to_have_text('Interact')
+        playwright.expect(category).to_have_attribute('aria-current', 'true')
+        playwright.expect(category.locator('use')).to_have_attribute('href', '/static/icons.svg?v=3#chat')
         links = page.locator('#site-sidebar nav').bounding_box()
         history = page.locator('.chat-sidebar').bounding_box()
         assert links['y'] + links['height'] <= history['y']

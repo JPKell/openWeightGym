@@ -41,7 +41,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
   <button id="mobile-menu-toggle" type="button" class="btn btn-outline-secondary btn-sm d-md-none" aria-controls="mobile-navigation" aria-haspopup="dialog" aria-expanded="false">Menu</button>
   <div class="navbar-nav category-links d-none d-md-flex">
     {% for category in nav.groups %}
-    <a class="nav-link{{ ' active' if nav.section == category.name }}" href="{{ category.links[0][1] }}"{% if nav.section == category.name %} aria-current="true"{% endif %}>{{ icon({"Chat":"chat", "Models":"models", "Benchmark":"benchmark", "Logs":"logs", "System":"system", "Docs":"docs"}.get(category.name, "barbell")) }}{{ category.name }}</a>
+    <a class="nav-link{{ ' active' if nav.section == category.name }}" href="{{ category.links[0][1] }}"{% if nav.section == category.name %} aria-current="true"{% endif %}>{{ icon({"Interact":"chat", "Models":"models", "Benchmark":"benchmark", "Logs":"logs", "System":"system", "Docs":"docs"}.get(category.name, "barbell")) }}{{ category.name }}</a>
     {% endfor %}
   </div>
   {# The name opens a small menu. The browser opens and closes it; static/sort.js closes it when something else is clicked. #}
