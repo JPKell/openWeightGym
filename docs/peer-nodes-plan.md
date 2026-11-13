@@ -1,6 +1,6 @@
 # Peer compute nodes and caller-chosen destinations
 
-Status: **implemented; Docker qualification in progress, 2026-11-12.** Existing computer
+Status: **implemented and Docker-qualified, 2026-11-12.** Existing computer
 installations are untouched. Production rollout is outside this qualification's authorized scope.
 
 ## Problem and decisions
@@ -124,22 +124,25 @@ outside the checkout by `tests/docker/qualification/browser.py` and `scenarios.p
 
 | Contract | Observed result |
 |---|---|
-| Navigation | 60 live routes at 1440 and 390 px: 120 PostgreSQL visits, all 200, no browser errors, failed requests or document overflow. Earlier SQLite passes drove the reported fixes. |
+| Navigation | 60 live routes at 1440 and 390 px: 120 PostgreSQL visits, all 200, no browser errors, failed requests or document overflow. SQLite received the same full crawl; an Audio fragment encountered the deliberate gamma outage and passed both widths after recovery. |
 | Install and inference | Hugging Face download; one-node CPU install and three-node installation; real CPU and NVIDIA llama.cpp replies. |
 | Destination policy | Alpha/beta/gamma pins answered on their node; unknown node 404; off switch refused pins with its General-settings explanation while unpinned inference answered; pinned role and embedding calls succeeded. |
 | Busy placement | Beta generated 1,800 tokens while a new unpinned request loaded and answered on idle alpha. |
-| Benchmarks | Real load measurements completed nine samples on each of alpha, beta and gamma. |
-| Images | Complete SDXL Turbo GGUF installed on beta and gamma; real 512×512 generation persisted with its download action available. |
-| Speech and retrieval | Kokoro produced a playable 3.15 s WAV; Moonshine transcribed it correctly. A local embedder indexed a source into 768 dimensions and retrieved the matching excerpt. |
+| Wake overflow | Passive Status/Models/Usage/Backups reads sent no wake. With beta busy and gamma stopped, a real 102-byte magic packet reached the isolated receiver; starting only the disposable gamma container let the waiting request answer successfully. |
+| Benchmarks | Real load measurements completed nine samples on each of alpha, beta and gamma. An imported two-case quality benchmark completed on all three, each scoring 50%; the tiny model passed exact text and failed strict JSON. |
+| Images | Complete SDXL Turbo GGUF installed on beta and gamma; real 512×512 generation persisted, decoded and downloaded as PNG. |
+| Speech and retrieval | Kokoro produced a playable, downloaded 3.15 s WAV; Moonshine transcribed it correctly. A local embedder indexed a source into 768 dimensions and retrieved the matching excerpt. |
+| Workflows | Browser-created research run retrieved sources and recorded model requests; malformed citations from the tiny model were refused, with retry controls and request evidence retained. Successful research-to-draft output with a capable model remains unqualified. |
+| Tools and accounts | Browser MCP connection listed two tools, listed/read its shared sample, and refused an outside-folder path. Restricted account permissions, password sign-in and immediate key revocation were exercised. |
 | Voice | Real streaming recognition and spoken model reply; simultaneous calls used preferred alpha and fallback beta; stopping alpha's voice service reached Listening on beta and completed a spoken turn. |
 | Backups | Four independently verified archives and correct node-specific restore previews. Scheduled gamma outage retained the other three receipts, then completed gamma after it returned. |
-| Migration | SQLite and PostgreSQL attribution migrations kept valid audit chains. A verified older backup transferred 49 tables to PostgreSQL, then renamed old attribution at startup; restart was idempotent. |
+| Migration | SQLite and PostgreSQL attribution migrations kept valid audit chains. A verified older backup transferred 49 tables to PostgreSQL, then renamed old attribution at startup; restart was idempotent. Retention preserves renamed historical request text while removing orphan text. |
 | PostgreSQL recovery | Browser SQL export contained all ten selected stores; encrypted PostgreSQL backup passed a real temporary-database restore after matching-client selection was fixed. |
 | Update configuration | Existing migration helper ran inside containers: front/node hostname rename, original recovery copies, unchanged rerun, collision refusal and preserved custom library paths. |
-| Critic | Multiple independent desktop/mobile reviews covered populated, empty and outage states; remaining findings are being closed in the final pass. |
+| Critic | Independent desktop/mobile reviews covered populated, empty and outage states; the final Audio/Speech/Voice review approved all remaining findings. |
 
 The source component audit and syntax checks supplement these browser checks. Unit suites are
-not used as a substitute for browser qualification. Physical Wake-on-LAN, production SSH rollout,
+not used as a substitute for browser qualification. Actual physical-host power-on, production SSH rollout,
 external telephone delivery, and every third-party model family require their own environment;
 Docker results do not establish those outcomes.
 

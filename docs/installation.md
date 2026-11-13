@@ -150,7 +150,11 @@ docker compose -f tests/docker/qualification/compose.yaml exec alpha bash script
 
 The browser runner discovers actual navigation links, waits for deferred content, and
 records screenshots, status codes, browser errors and page overflow at desktop and phone
-widths. Scenario checks perform real downloads and installations through browser controls.
+widths. Scenario checks perform real downloads, installations, routing, media generation and
+downloads, transcription, backups and tool calls through browser controls. For example,
+`scenarios.py generate-image --name MODEL`, `speech --name MODEL`,
+`transcribe --name MODEL --file /tmp/owg-qualification-scenarios/generated-speech.wav`,
+`routing --name MODEL`, `backups`, and `tools` use the installed qualification models.
 `gpu.compose.yaml` optionally grants alpha NVIDIA devices and read-only driver/toolkit
 access; inspect its host paths before using it. Install the CUDA runtime inside alpha at
 `/opt/owg-runtimes/llamacpp-gpu` with the same installer before running GPU models.
@@ -173,10 +177,18 @@ accounts store into it and writing the owner-only `/state/front/qualification-po
 file restores SQLite bindings; its original files remain intact. The image includes matching
 PostgreSQL 16 recovery tools as well as the distribution's client tools.
 
+The optional `wake.compose.yaml` configures gamma's wake address to a receiver on the
+isolated Docker network. After installing a CPU text model named `qualification-multi` on
+beta and gamma with one request at once and a 2,048-token context, run
+`scenarios.py wake --name qualification-multi`. The browser driver stops only this project's
+gamma container, verifies that passive pages send no wake, fills beta, receives the real magic
+packet, and starts gamma to emulate power-on. The receiver has no Docker socket access;
+this checks packet delivery and request recovery, not physical hardware wake.
+
 Remove only this qualification environment when finished:
 
 ```bash
-docker compose -f tests/docker/qualification/compose.yaml -f tests/docker/qualification/gpu.compose.yaml down -v
+docker compose -f tests/docker/qualification/compose.yaml -f tests/docker/qualification/gpu.compose.yaml -f tests/docker/qualification/wake.compose.yaml down -v
 ```
 
 ## ToolLocker on the console machine

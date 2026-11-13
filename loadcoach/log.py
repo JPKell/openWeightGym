@@ -655,5 +655,6 @@ class Log:
         else:  # compute: what front has, after a day. What it does not have yet is kept, however old: it is the spool
             through = self.db.execute("SELECT MAX(through) FROM forwarded").fetchone()[0] or 0
             gone = self.db.execute("DELETE FROM events WHERE at < ? AND id <= ?", (time.time() - SENT_KEPT, through)).rowcount
-        self.db.execute("DELETE FROM texts WHERE entry NOT IN (SELECT id FROM events UNION SELECT source FROM events WHERE machine = ? AND source IS NOT NULL)", (LEGACY,))
+        names = self.legacy_names()
+        self.db.execute(f"DELETE FROM texts WHERE entry NOT IN (SELECT id FROM events UNION SELECT source FROM events WHERE machine IN ({','.join('?' * len(names))}) AND source IS NOT NULL)", names)
         return gone

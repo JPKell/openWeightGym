@@ -5,6 +5,9 @@ import subprocess
 import os
 import sys
 import tomllib
+import socket
+import json
+import time
 
 import uvicorn
 
@@ -101,11 +104,12 @@ def application(role, name):
             models_folder=str(base('front') / 'cache'), models_storage_folder=str(base('front') / 'storage'),
             machines={node: {'compute': f'http://{node}:8442', 'spotter': f'http://{node}:8444',
                              'machine_key_file': str(base('front') / (node + '.key')),
+                             **({'wake_mac': '02:00:00:00:00:03', 'wake_address': 'wake-listener'}
+                                if node == 'gamma' and os.environ.get('OWG_QUALIFICATION_WAKE') == '1' else {}),
                              **({'formerly': 'compute'} if node == 'alpha' else {})}
                       for node in NODES},
         )
         from loadcoach.settings import said
-        import json
         from dataclasses import asdict
         (base('front') / 'settings-seen-turnstile.json').write_text(json.dumps(said(asdict(settings), {}, {})))
         return build_app(settings), 8442
@@ -164,8 +168,11 @@ def application(role, name):
         )), 8442
     if role == 'toollocker':
         from toollocker.door import Config, build_app
-        return build_app(Config(servers={'files': {'command': [sys.executable, '-m', 'toollocker.tools', '/app/toollocker/tools'],
-                                                   'description': 'Disposable qualification files and code tools'}},
+        shared = base('front') / 'qualification-shared'
+        shared.mkdir(exist_ok=True)
+        (shared / 'hello.txt').write_text('Hello from the isolated qualification tool server.\n')
+        return build_app(Config(servers={'files': {'command': [sys.executable, '-m', 'toollocker.tools.files', str(shared)],
+                                                   'description': 'Read-only disposable qualification files'}},
                                machine_key_file=str(base('front') / 'alpha.key'),
                                database=str(base('front') / 'accounts.db'), host='0.0.0.0')), 8443
     if role == 'spotter':
@@ -182,6 +189,15 @@ if __name__ == '__main__':
     role = sys.argv[1]
     if role == 'seed':
         seed()
+    elif role == 'wake-listener':
+        # Receives a real magic packet. The host browser driver starts only its
+        # disposable gamma container; this listener has no Docker socket access.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+            receiver.bind(('0.0.0.0', 9))
+            while True:
+                packet, _ = receiver.recvfrom(1024)
+                if packet == b'\xff' * 6 + bytes.fromhex('020000000003') * 16:
+                    (base('front') / 'qualification-wake.json').write_text(json.dumps({'node': 'gamma', 'at': time.time(), 'bytes': len(packet)}))
     else:
         app, port = application(role, sys.argv[2] if len(sys.argv) > 2 else '')
         if role == 'turnstile':

@@ -42,7 +42,7 @@
     return {node: node.value, prefix, total, count, limit, defaults, own, placement,
       context: `${minimum ? `${number(minimum)}–` : ''}${number(String(total))} tokens${minimum ? '' : ' · fixed'}`,
       requests: count === -1 ? 'Server auto · concurrency determined at load' : `${number(String(count))} at once · up to ${number(String(limit))} tokens each`,
-      sharing: checked(form, prefix + 'alone') ? 'Exclusive GPUs' : 'Shares GPUs',
+      sharing: mode === 'CPU' && root.dataset.engine !== 'strata' ? 'No GPU required' : checked(form, prefix + 'alone') ? 'Exclusive GPUs' : 'Shares GPUs',
       split: mode === 'CPU' ? 'CPU only' : pins.length ? 'Pinned placement' : fixed || inherited ? 'Fixed device count' : checked(form, prefix + 'allow_split') ? 'May split across GPUs' : 'Single GPU preferred',
     };
   }
