@@ -121,22 +121,23 @@ document.addEventListener("scroll", event => {
   if (event.target.matches?.("[data-benchmark-rows]")) benchmarkScroll.set(event.target.id, event.target.scrollTop);
 }, true);
 for (const name of ["htmx:afterSettle", "htmx:oobAfterSwap"]) {
-  document.addEventListener(name, () => requestAnimationFrame(() => { refreshBenchmarkPanels(); refreshBenchmarkPoller(); }));
+  document.addEventListener(name, () => requestAnimationFrame(refreshBenchmarkPanels));
 }
 document.addEventListener("toggle", () => requestAnimationFrame(refreshBenchmarkPanels), true);
 window.addEventListener("resize", refreshBenchmarkPanels);
 refreshBenchmarkPanels();
 
-/** Keep polling on this workspace, with its current setup test and history filters. */
-function refreshBenchmarkPoller() {
-  const poller = document.querySelector('[data-benchmark-poller]');
-  if (!poller) return;
-  const url = new URL(poller.getAttribute('hx-get'), location.href);
+/** Keep polling on this workspace, with its current setup test and history filters and page.
+ * htmx fixes a poller's hx-get when it first processes it, so the path is rewritten per request. */
+document.addEventListener('htmx:configRequest', event => {
+  const poller = event.detail.elt;
+  if (!poller?.matches?.('[data-benchmark-poller]')) return;
+  const url = new URL(event.detail.path, location.href);
   const query = document.querySelector('#benchmark-history')?.dataset.liveQuery || url.search;
   const params = new URLSearchParams(query);
   if (benchmarkId()) params.set('benchmark', benchmarkId());
-  poller.setAttribute('hx-get', url.pathname + '?' + params);
-}
+  event.detail.path = url.pathname + '?' + params;
+});
 function filterBenchmarkModels(value) {
   const query = value.trim().toLocaleLowerCase();
   const rows = document.querySelectorAll('[data-model-row]');
