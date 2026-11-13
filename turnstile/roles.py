@@ -88,9 +88,13 @@ def needs_of(request: Request, asked: dict) -> dict:
     """
     said = [one for one in asked.get("messages") or [] if isinstance(one, dict)]
     pictures = any(isinstance(part, dict) and part.get("type") == "image_url" for one in said if isinstance(one.get("content"), list) for part in one["content"])
+    image_count = sum(isinstance(part, dict) and part.get('type') == 'image_url' for one in said if isinstance(one.get('content'), list) for part in one['content'])
+    counted = [{**one, 'content': [({'type': 'image_url'} if isinstance(part, dict) and part.get('type') == 'image_url' else part)
+                                  for part in one['content']]} if isinstance(one.get('content'), list) else one for one in said]
     stays = "x-loadcoach-log" in request.headers or request.headers.get("x-loadcoach-sensitivity", "normal") != "normal"
     # A rough count of the tokens sent: three bytes to a token. The model server remains the judge of what fits.
-    return {"pictures": pictures, "tools": bool(asked.get("tools")), "tokens": len(json.dumps(said)) // 3, "stays": stays,
+    return {"pictures": pictures, "json_schema": isinstance(asked.get('response_format'), dict) and asked['response_format'].get('type') == 'json_schema',
+            "tools": bool(asked.get("tools")), "tokens": len(json.dumps(counted)) // 3 + 2048 * image_count, "stays": stays,
             "work": workload(asked)}
 
 
@@ -188,7 +192,7 @@ class Routing:
         work = needs.get('work', {'prompt_tokens': needs.get('tokens', 0), 'output_tokens': 400,
                                   'basis': 'preview prompt estimate and 400 output tokens'})
         required = settings_role.get("requires", {})
-        needs = {key: max(needs.get(key, 0), required.get(key, 0)) for key in ("pictures", "tools", "tokens", "stays")}
+        needs = {'json_schema': needs.get('json_schema', False), **{key: max(needs.get(key, 0), required.get(key, 0)) for key in ("pictures", "tools", "tokens", "stays")}}
         found = []
         for name in ordered(settings_role):
             fact = facts["models"].get(name)
@@ -198,6 +202,7 @@ class Routing:
                 else fact["why_not"]
                 or ("the request may not leave this machine" if fact["hosted"] and needs["stays"]
                     else "it cannot see pictures" if needs["pictures"] and not fact["sees"]
+                    else "it does not support JSON Schema output" if needs.get('json_schema') and not fact.get('capabilities', {}).get('json_schema')
                     else "it does not take tools" if needs["tools"] and not fact["tools"]
                     else "the request is longer than its context" if fact["room"] and needs["tokens"] > fact["room"]
                     else "the measured GPU fit has too little context for this request" if fact["placed"] and fact["context"] and fact["context"] < needs["tokens"]

@@ -69,6 +69,7 @@ class Config:
     host: str = "127.0.0.1"
     port: int = 8443
     call_timeout: float = 120  # seconds one tool call may take
+    extraction_url: str = ''  # front's model API for caller-bound built-in extraction tools; empty disables them
     path: str = ""  # the settings file itself
     file: dict = field(default_factory=dict)  # what that file says, before anything changed on the site is laid over it
     says: dict = field(default_factory=dict)  # the comment above each setting in the file, shown beside it on the site
@@ -120,12 +121,22 @@ def config_from(path: Path, data: dict, file: dict | None = None) -> Config:
     # kept. The rest of that file is LoadCoach's to check. A model whose file has gone missing
     # stops LoadCoach from starting, and must not stop the ToolLocker.
     key_file, database = shared_store(path, data)
+    if data.get('front') and 'extraction_url' not in data:
+        shared = read_settings(path.parent / data['front'])
+        data['extraction_url'] = 'http://127.0.0.1:' + str(shared.get('turnstile', {}).get('ports', [8442])[0])
     data.pop("loadcoach", None)
     data.pop("front", None)
     try:
         config = Config(**{"servers": {}, **data, "machine_key_file": key_file, "database": database, "path": str(path), "file": file, "says": said_in(path)})
         if type(config.call_timeout) not in (int, float) or config.call_timeout <= 0:
             raise ValueError("call_timeout is a number of seconds above 0")
+        if not isinstance(config.extraction_url, str) or config.extraction_url and not config.extraction_url.startswith(('http://', 'https://')):
+            raise ValueError('extraction_url must be an HTTP service URL or empty')
+        if config.extraction_url:
+            from urllib.parse import urlsplit
+            target = urlsplit(config.extraction_url)
+            if not target.hostname or target.username or target.password or target.path not in ('', '/') or target.query or target.fragment:
+                raise ValueError('extraction_url must be a service base URL without credentials, path or query')
     except (TypeError, ValueError) as problem:  # an unknown key, or a group that makes no sense
         raise SystemExit(f"{path}: {problem}") from None
     for name, server in config.servers.items():
@@ -194,6 +205,9 @@ def build_app(config: Config) -> Starlette:
     folder = Path(config.path).parent if config.path else Path.cwd()
     servers = [Remote(name, server["url"], str(folder / server["key_file"]) if "key_file" in server else None, server.get("level", "normal")) if "url" in server
                else Server(name, server["command"], server.get("level", "normal")) for name, server in config.servers.items()]  # fmt: skip
+    from toollocker.extraction import ExtractionTools
+    if config.extraction_url and 'extraction' not in config.servers:
+        servers.append(ExtractionTools(config.extraction_url, config.machine_key_file))
     # Every tool on offer, by the name a harness sees: the server's name, two underscores, then
     # the tool's own name. Filled in when the servers have started.
     tools: dict[str, tuple[Server | Remote, dict]] = {}
@@ -256,7 +270,8 @@ def build_app(config: Config) -> Starlette:
         started = time.monotonic()
         try:
             with observation.span('tool_execution', tool_executed=False):
-                result = await server.call(tool, arguments, config.call_timeout)
+                result = (await server.call_for(user, tool, arguments, level) if isinstance(server, ExtractionTools)
+                          else await server.call(tool, arguments, config.call_timeout))
                 observation.annotate(tool_executed=True)
                 if result.get('isError'):
                     observation.annotate(outcome='error', error_code='tool_failed')

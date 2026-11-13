@@ -9,7 +9,7 @@
   const values = form => fields(form).map(field => ({name:field.name,type:field.type,value:field.value,checked:field.checked}));
   const key = form => `${form.dataset.cloudName}:${form.dataset.cloudForm}`;
   const modelRows = form => [...form.querySelectorAll('tbody tr')].map(row =>
-    Object.fromEntries([...row.querySelectorAll('input')].map(input => [input.name,input.value])));
+    Object.fromEntries([...row.querySelectorAll('input, select')].map(input => [input.name,input.value])));
   function remember(page) {
     page.querySelectorAll('[data-cloud-form]').forEach(form => {
       const now = values(form), base = baselines.get(form);
@@ -72,7 +72,7 @@
     const body = form.querySelector('tbody'); body.replaceChildren();
     rows.forEach(row => {
       const element = page.querySelector('#model-row').content.firstElementChild.cloneNode(true);
-      element.querySelectorAll('input').forEach(input => { input.value = row[input.name] ?? ''; });
+      element.querySelectorAll('input, select').forEach(input => { input.value = row[input.name] ?? (input.tagName === 'SELECT' ? 'text' : ''); });
       body.append(element);
     });
   }

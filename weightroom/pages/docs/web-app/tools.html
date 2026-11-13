@@ -2,6 +2,9 @@
 {{ doc_contents([('tools', 'Connect a client'), ('tools-missing', 'When no tools appear')]) }}
 {% call doc_section('Connect a client', 'tools') %}
 <p>ToolLocker offers permitted tools to an MCP-capable client or agent at <code>{{ api_base|replace(':8442/v1', ':8443/mcp') }}</code>, using a key from My account. Your group, account, sensitivity level and chosen tool set determine which tools are available.</p>
+<p>The built-in <code>extraction__</code> tools describe images, extract text, receipts, tables or custom fields, and inspect or cancel jobs.
+  Upload the source in <a href="/chat/extraction">Image extraction</a> and copy its asset ID from “Use in API or tools”.
+  Tools use that source under your own account, model permissions and usage limits; results include authenticated status and export references.</p>
 {% endcall %}
 {% call doc_section('When no tools appear', 'tools-missing') %}
 {% if 'manage-settings' in person.can %}

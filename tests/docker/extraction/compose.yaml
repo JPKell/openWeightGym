@@ -1,0 +1,88 @@
+name: owg-extraction
+x-app: &app
+  image: owg-extraction-dev:local
+  build:
+    context: ../../..
+    dockerfile: tests/docker/extraction/Dockerfile
+  init: true
+  volumes:
+    - ../../..:/app:ro
+    - front:/state/front
+    - alpha:/state/alpha
+services:
+  seed:
+    <<: *app
+    command: [seed]
+  turnstile:
+    <<: *app
+    command: [turnstile]
+    ports: ['127.0.0.1:20442:8442', '127.0.0.1:20443:8443']
+    depends_on:
+      seed: {condition: service_completed_successfully}
+  console:
+    <<: *app
+    command: [console]
+    ports: ['127.0.0.1:20440:8440']
+    depends_on:
+      seed: {condition: service_completed_successfully}
+  toollocker:
+    <<: *app
+    command: [toollocker]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+  alpha:
+    <<: *app
+    hostname: alpha
+    command: [loadcoach, alpha]
+    mem_limit: 16g
+    memswap_limit: 16g
+    cap_add: [SYS_ADMIN]
+    environment:
+      OWG_QUALIFICATION_GPU: '1'
+      LD_LIBRARY_PATH: /runtime/build/bin:/usr/local/nvidia/lib64:/opt/cuda/lib64
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidia1:/dev/nvidia1
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+    volumes:
+      - ../../..:/app:ro
+      - alpha:/state/alpha
+      - front:/state/front:ro
+      - runtime:/runtime
+      - runtime:/opt/owg-runtimes
+      - ${OWG_EXTRACTION_MODEL_STORAGE:-/mnt/hdd/llm}:/state/alpha/storage/llm:ro
+      - ${OWG_EXTRACTION_PROJECTOR_STORAGE:-/mnt/hdd/models/projectors}:/state/alpha/storage/projectors:ro
+      - /usr/lib/libcuda.so.1:/usr/local/nvidia/lib64/libcuda.so.1:ro
+      - /usr/lib/libnvidia-ml.so.1:/usr/local/nvidia/lib64/libnvidia-ml.so.1:ro
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
+      - /opt/cuda:/opt/cuda:ro
+    depends_on:
+      seed: {condition: service_completed_successfully}
+  alpha-files:
+    <<: *app
+    command: [spotter, alpha]
+    network_mode: service:alpha
+    depends_on:
+      alpha: {condition: service_started}
+    volumes:
+      - ../../..:/app:ro
+      - alpha:/state/alpha
+      - ${OWG_EXTRACTION_MODEL_STORAGE:-/mnt/hdd/llm}:/state/alpha/storage/llm:ro
+      - ${OWG_EXTRACTION_PROJECTOR_STORAGE:-/mnt/hdd/models/projectors}:/state/alpha/storage/projectors:ro
+  browser:
+    <<: *app
+    command: [browser]
+    shm_size: 1gb
+    profiles: [browser]
+    volumes:
+      - ../../..:/app:ro
+      - front:/state/front:ro
+      - ../../../build/extraction-live:/evidence
+    depends_on: [console, turnstile, alpha]
+volumes:
+  front:
+  alpha:
+  runtime:
+    external: true
+    name: owg-extraction-runtime

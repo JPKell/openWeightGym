@@ -1,0 +1,32 @@
+/* Live desk retains the proposal components; its optional inbox adds a selection rail. */
+.ex-live .ex-layout { grid-template-columns: minmax(220px, .85fr) minmax(240px, 1fr) minmax(300px, 1.3fr); }
+.ex-live[data-batch="open"] .ex-layout { grid-template-columns: minmax(210px, .7fr) minmax(220px, .8fr) minmax(240px, 1fr) minmax(300px, 1.25fr); }
+.ex-live[data-batch="open"] .ex-inbox { display: block; grid-area: 1 / 1; }
+.ex-live[data-batch="open"] .ex-settings { grid-area: 1 / 2; }
+.ex-live[data-batch="open"] .ex-source { grid-area: 1 / 3; }
+.ex-live[data-batch="open"] .ex-result { grid-area: 1 / 4; }
+.ex-live #history { max-height: 350px; overflow: auto; }
+.ex-live .ex-inbox-list { max-height: 600px; overflow: auto; }
+.ex-live .ex-result-toolbar { gap: .5rem; }
+.ex-live .ex-output { max-width: 100%; }
+.ex-live #raw-editor { width: 100%; min-height: 230px; }
+@media (max-width: 1500px) {
+  .ex-live[data-batch="open"] .ex-layout { grid-template-columns: minmax(220px, .85fr) minmax(240px, 1fr) minmax(300px, 1.3fr); }
+  .ex-live[data-batch="open"] .ex-inbox { grid-area: 1 / 1 / auto / span 3; }
+  .ex-live[data-batch="open"] .ex-inbox-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ex-live[data-batch="open"] .ex-settings { grid-area: 2 / 1; }
+  .ex-live[data-batch="open"] .ex-source { grid-area: 2 / 2; }
+  .ex-live[data-batch="open"] .ex-result { grid-area: 2 / 3; }
+}
+@media (max-width: 1250px) {
+  .ex-live .ex-layout, .ex-live[data-batch="open"] .ex-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ex-live .ex-settings, .ex-live[data-batch="open"] .ex-settings { grid-area: 2 / 1 / auto / span 2; }
+  .ex-live .ex-source, .ex-live[data-batch="open"] .ex-source { grid-area: 3 / 1; }
+  .ex-live .ex-result, .ex-live[data-batch="open"] .ex-result { grid-area: 3 / 2; }
+  .ex-live[data-batch="open"] .ex-inbox { grid-area: 1 / 1 / auto / span 2; }
+  .ex-live[data-batch="open"] .ex-inbox-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .ex-live .ex-layout, .ex-live[data-batch="open"] .ex-layout { display: flex; }
+  .ex-live[data-batch="open"] .ex-inbox-list { grid-template-columns: minmax(0, 1fr); }
+}

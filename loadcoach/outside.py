@@ -42,7 +42,7 @@ def check_service(name: str, settings: dict, taken: set[str]) -> None:
     if ceiling is not None and (type(ceiling) not in (int, float) or ceiling < 0):
         raise ValueError(f"service {name!r}: ceiling is the most it may cost in 24 hours, in dollars. Leave it out for none.")
     price = lambda one: all(type(one.get(way, 0)) in (int, float) and one.get(way, 0) >= 0 for way in ("in", "out"))  # noqa: E731
-    good = lambda ours, one: isinstance(ours, str) and MODEL_NAME.fullmatch(ours) and isinstance(one, dict) and one.keys() <= {"theirs", "in", "out"} and isinstance(one.get("theirs"), str) and one["theirs"] and price(one)  # noqa: E731
+    good = lambda ours, one: isinstance(ours, str) and MODEL_NAME.fullmatch(ours) and isinstance(one, dict) and one.keys() <= {"theirs", "in", "out", "vision", "json_schema"} and isinstance(one.get("theirs"), str) and one["theirs"] and price(one) and all(type(one.get(key, False)) is bool for key in ('vision', 'json_schema'))  # noqa: E731
     if not isinstance(models, dict) or not all(good(ours, one) for ours, one in models.items()):
         raise ValueError(f"service {name!r}: models is a list of OUR NAME = {{theirs, in, out}}. theirs is the service's own name for the model. in and out are prices in dollars for a million tokens, and may be left out.")
     if both := sorted(models.keys() & taken):

@@ -75,7 +75,7 @@ def signed_in(caller, log: Log, handler):
     return checked
 
 
-def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None) -> list[Route]:
+def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None, *, hosted_models=lambda: {}, forget_extractions=None) -> list[Route]:
     """The account addresses. `caller(key)` is who a key belongs to, as turnstile says.
     `ask_compute(user, method, path, body)` asks compute as that user, or gives None if it is not answering.
     `roles_for(models)` are the roles someone who may use those models may ask for.
@@ -189,7 +189,11 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         hosted = [name for name in outside(user) if name not in said["models"]]
         if hosted:  # the models at outside services are front's: compute does not know them
             said["models"] = [*said["models"], *hosted]
-            said.setdefault("chat", {"unlogged": False, "models": {}})["models"].update({name: {"context": 8192, "model_id": None, "name_history": [], "vision": False, "hosted": True} for name in hosted})
+            configured = hosted_models()
+            said.setdefault("chat", {"unlogged": False, "models": {}})["models"].update({name: {
+                "context": 8192, "model_id": None, "name_history": [], "vision": configured.get(name, {}).get('vision', False),
+                "json_schema": configured.get(name, {}).get('json_schema', False),
+                "provider": configured.get(name, {}).get('service', 'Cloud'), "hosted": True} for name in hosted})
         said["hosted_spent"] = round(log.spent(user.name), 4)  # in the last 24 hours, from this machine's log
         if said["models"]:
             said["roles"] = roles_for(said["models"])  # kept here, for the models they may use
@@ -362,6 +366,8 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         if denied := out_of_reach(user, name):
             return denied
         identity = users.identity(name)
+        if forget_extractions:
+            await forget_extractions(identity)
         users.remove(name)
         log.add("user", "removed", user.name, address(request), name=name)
         return JSONResponse({"removed": name, "identity": identity})

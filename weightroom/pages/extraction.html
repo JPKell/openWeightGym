@@ -1,0 +1,22 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, card, alert, more %}
+{% from 'extraction_parts.html' import source_panel, settings_panel, result_panel, batch_panel, receipt_field, inbox_item, data_row, no_items %}
+{% block title %}Image extraction · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/extraction-designs.css?v=1"><link rel="stylesheet" href="/static/extraction.css?v=1"><script src="/static/extraction.js?v=1" defer></script>{% endblock %}
+{% block main %}
+<div id="extraction-workspace" class="ex-live" data-layout="desk" data-batch="closed" data-extraction-root>
+  {% set actions %}<button class="btn btn-outline-secondary" type="button" id="toggle-batch" aria-expanded="false" aria-controls="inbox-panel">Batch inbox</button><button class="btn btn-outline-secondary" type="button" id="refresh-history">Refresh history</button>{% endset %}
+  {{ page_header('Image extraction', actions=actions) }}
+  <p class="text-secondary ex-intro">Turn images into descriptions, readable text and useful data.</p>
+  {% call alert('danger', attrs={'id': 'error-notice', 'hidden': true}) %}<span id="error-message"></span><button type="button" class="btn btn-outline-danger btn-sm ms-2" id="retry">Retry extraction</button>{% endcall %}
+  {% call alert('warning', attrs={'id': 'model-notice', 'hidden': true}) %}No permitted vision model supports JSON Schema output. Configure a projector in Models or confirm Vision + JSON Schema support for a Cloud APIs mapping.{% endcall %}
+  <div id="action-status" class="small mb-3" role="status" aria-live="polite"></div>
+  <div class="ex-layout">{{ settings_panel(live=true) }}{{ source_panel(live=true) }}{{ result_panel(live=true) }}{{ batch_panel(live=true) }}</div>
+  <div class="d-flex flex-wrap gap-2 mt-3"><form id="delete-image-form"><button class="btn btn-outline-secondary btn-sm" id="delete-image" type="submit" disabled data-confirm-two data-confirm-text="Delete this image and its completed extractions?">Delete image & results</button></form><button class="btn btn-outline-secondary btn-sm" id="cancel-batch" type="button" hidden>Cancel active batch</button><button class="btn btn-outline-secondary btn-sm" id="save-review" type="button" hidden>Save corrections</button><button class="btn btn-outline-secondary btn-sm" id="original-export" type="button" hidden>Download original JSON</button></div>
+  {% call more('Extraction presets') %}<div class="row g-2"><div class="col-md-4"><label class="form-label" for="preset">Saved settings</label><select class="form-select" id="preset"><option value="">Choose a preset…</option></select></div><div class="col-md-4"><label class="form-label" for="preset-name">Preset name</label><input class="form-control" id="preset-name" maxlength="80"></div><div class="col-md-4 d-flex flex-wrap align-items-end gap-2"><button class="btn btn-outline-primary" type="button" id="save-preset">Save settings</button><button class="btn btn-outline-danger" type="button" id="delete-preset">Delete preset</button></div></div>{% endcall %}
+  {% call more('Result history') %}<div id="history" class="d-grid gap-2"></div><button class="btn btn-outline-secondary btn-sm mt-2" type="button" id="more-history" hidden>Load older results</button>{% endcall %}
+  {% call more('Use in API or tools') %}<p class="mb-2">Use this private image ID with the extraction API or MCP tools. Each call requires your own account’s credentials.</p><div class="d-flex flex-wrap align-items-center gap-2"><code id="asset-reference" class="text-break">Upload an image first.</code><button class="btn btn-outline-secondary btn-sm" type="button" data-copy-target="asset-reference">Copy image ID</button></div>{% endcall %}
+  <p class="form-hint mt-3">Compare results with the image before using them. Layout text approximates columns and spacing. Unknown fields remain explicit; source highlights appear only when the model provides qualified geometry.</p>
+</div>
+<template id="receipt-field-template">{{ receipt_field() }}</template><template id="inbox-item-template">{{ inbox_item() }}</template><template id="data-row-template">{{ data_row() }}</template><template id="empty-items-template">{{ no_items() }}</template>
+{% endblock %}

@@ -535,7 +535,12 @@ form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
 
 /* The answering model and Send stay visible; advanced controls occupy the next row. */
 .chat-primary-model { min-width: 0; }
-@media (max-width: 767.98px) { .user-menu > summary { max-width: 8rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } }
+@media (max-width: 767.98px) {
+  .user-menu > summary { max-width: 8rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .suite-top .navbar-brand { min-width: 0; flex-shrink: 1; }
+  .suite-top .navbar-brand > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .suite-top .navbar-brand .suite-icon { flex-shrink: 0; }
+}
 
 @media (max-width: 767.98px) {
   .status-controls form { min-width: 0; width: 100%; flex-wrap: wrap; }

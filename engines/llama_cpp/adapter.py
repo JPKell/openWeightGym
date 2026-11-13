@@ -110,6 +110,7 @@ class LlamaCpp:
         return {"version": 1, "chat": not embedding, "streaming": not embedding,
                 "embeddings": embedding, "tokenize": True, "raw_completion": not embedding,
                 "prompt_rendering": not embedding, "images": bool(settings.get("flags", {}).get("mmproj")),
+                "json_schema": not embedding,
                 "adapters": True, "native_probes": True}
 
     async def runtime_metadata(self, client: httpx.AsyncClient, server) -> dict:

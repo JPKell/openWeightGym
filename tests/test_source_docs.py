@@ -174,6 +174,7 @@ def test_api_page_lists_compatibility_gaps_custom_routes_and_scoped_headers(desk
                  '/v1/responses', 'backend-dependent passthrough', 'purpose=batch',
                  '/v1/audio/generations', '/v1/audio/diarizations', '/turnstile/models/install',
                  '/turnstile/artifacts/files/cleanup-nodes', '/loadcoach/services/{name}/key',
+                 '/owg/extractions', '/owg/extraction-assets', 'Stateless non-streaming creation',
                  'X-LoadCoach-Require-Model-ID', 'X-LoadCoach-Task', 'X-ToolLocker-Sets', 'X-Twilio-Signature',
                  'X-Suite-Application', 'X-Suite-Session-Mode', 'Idempotency-Key'):
         assert text in response.text, text
@@ -194,5 +195,5 @@ def test_api_inventory_includes_every_explicit_custom_route():
                     and node.func.id in ('route', 'Route', 'WebSocketRoute') and node.args
                     and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
                 path = node.args[0].value
-                if path.startswith(('/loadcoach/', '/turnstile/', '/mirrorwall/', '/soundroom/', '/spotter/', '/voice/', '/browser/', '/desktop/', '/twilio/', '/mcp', '/adapter/')):
+                if path.startswith(('/loadcoach/', '/turnstile/', '/mirrorwall/', '/soundroom/', '/spotter/', '/voice/', '/browser/', '/desktop/', '/twilio/', '/mcp', '/adapter/', '/owg/')):
                     assert any(row['path'] == path for row in groups.get(relative, [])), (relative, path)

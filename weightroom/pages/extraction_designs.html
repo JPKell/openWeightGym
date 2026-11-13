@@ -1,0 +1,45 @@
+{% from 'parts.html' import page_header, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'extraction_parts.html' import source_panel, settings_panel, result_panel, batch_panel, receipt_field, inbox_item, region_button, data_row, no_items %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Image extraction · Three designs · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option>light</option><option>dark</option></select></form></div>
+<a href="#extraction-workspace" class="visually-hidden-focusable">Skip to extraction workspace</a>
+<div class="ex-review border-bottom"><div class="d-flex flex-wrap align-items-center gap-2"><strong>openWeightGym</strong><span class="text-secondary">/ Chat / Image extraction</span><span class="badge bg-azure-lt">Design preview</span></div><div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button type="button" class="btn btn-outline-secondary btn-sm" id="reset">Reset samples</button></div></div>
+<main class="ex-page">
+  <div class="ex-review-controls">
+    {% call pills('Extraction designs', buttons=true, class_='gap-2 mb-0') %}
+      {{ pill_button('01 / Extraction desk', true, attrs={'data-design': 'desk'}) }}
+      {{ pill_button('02 / Document review', attrs={'data-design': 'review'}) }}
+      {{ pill_button('03 / Batch workbench', attrs={'data-design': 'batch'}) }}
+    {% endcall %}
+    <select class="form-select form-select-sm" id="scenario" aria-label="Preview state"><option value="ready">Prepared samples</option><option value="empty">Empty workspace</option><option value="error">Extraction failed</option><option value="no-model">No vision model</option></select>
+  </div>
+  <p id="design-description" class="text-secondary small mt-2 mb-4">01 · A focused desk for one image. Choose a task, inspect the source and take the result.</p>
+  <div id="extraction-workspace" data-layout="desk">
+    {% set actions %}<span class="badge bg-secondary-lt align-self-center">Browser-local preview</span>{% endset %}
+    {{ page_header('Image extraction', pretitle='SEE IT. READ IT. STRUCTURE IT.', actions=actions) }}
+    <p class="text-secondary ex-intro">Turn images into descriptions, readable text and useful data.</p>
+    <div class="ex-sample-strip"><span class="small text-secondary">Try a sample</span>{% call pills('Choose sample image', buttons=true, class_='gap-1 mb-0') %}{% for key, label in [('receipt', 'Receipt'), ('document', 'Two-column document'), ('scene', 'Scene')] %}{{ pill_button(label, key == 'receipt', attrs={'data-sample': key}) }}{% endfor %}{% endcall %}</div>
+    {% call alert('danger', class_='mb-3', attrs={'id': 'error-notice', 'hidden': true}) %}<div class="d-flex justify-content-between flex-wrap gap-2 w-100"><span>Extraction interrupted. Your source and settings are kept.</span><button class="btn btn-outline-danger btn-sm" id="retry" type="button">Retry sample</button></div>{% endcall %}
+    {% call alert('warning', attrs={'id': 'model-notice', 'hidden': true}) %}No vision model is available. A live page would offer permitted vision models from Models and Cloud APIs. Return to Prepared samples to continue.{% endcall %}
+    <div role="status" aria-live="polite" id="action-status" class="small mb-3"></div>
+    <div class="ex-layout">
+      {{ settings_panel() }}
+      {{ source_panel() }}
+      {{ result_panel() }}
+      {{ batch_panel() }}
+    </div>
+    <p class="small text-secondary mt-3">Sample results are prepared fixtures. Uploads preview locally; real model extraction and API connections are covered in the implementation plan.</p>
+  </div>
+</main>
+<template id="receipt-field-template">{{ receipt_field() }}</template>
+<template id="inbox-item-template">{{ inbox_item() }}</template>
+<template id="region-template">{{ region_button() }}</template>
+<template id="data-row-template">{{ data_row() }}</template>
+<template id="empty-items-template">{{ no_items() }}</template>
+<script type="application/json" id="extraction-samples">{{ samples|tojson }}</script>
+<script>{{ javascript|safe }}</script>
+</body></html>
