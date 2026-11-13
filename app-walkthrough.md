@@ -27,7 +27,7 @@
 ## Benchmark
 
 - [ ] Runs
-- [ ] Run specific page
+- [x] Run specific page
 - [x] Results
 - [ ] Node measurements
 - [ ] Compare

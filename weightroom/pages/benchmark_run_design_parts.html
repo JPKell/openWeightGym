@@ -1,0 +1,20 @@
+{% from 'benchmark_run_parts.html' import check_table %}
+{% from 'parts.html' import empty_row, more %}
+{% from 'benchmark_parts.html' import number, token_count %}
+
+{% macro sample_row() %}
+<tr data-sample-row><th scope="row"><button class="btn btn-link p-0 text-start" data-open-sample><strong data-sample-id></strong><small class="d-block text-secondary fw-normal" data-sample-title></small></button></th><td data-cell="context_tokens"></td><td><span class="badge" data-outcome></span><small class="d-block text-secondary" data-checks></small></td>
+{% for key in ('input_tokens', 'output_tokens', 'prompt_tokens_per_second', 'generation_tokens_per_second', 'ttft_seconds', 'request_seconds', 'load_seconds', 'peak_gpu_mib', 'peak_ram_mib', 'embedding_tokens_per_second', 'embeddings_per_second', 'embedding_dimensions') %}<td data-cell="{{ key }}"></td>{% endfor %}<td data-change></td></tr>
+{% endmacro %}
+
+{% macro group_row() %}
+<tr><th scope="row" data-group-name></th><td data-group-budget></td><td><div class="br-meter"><span data-group-bar></span></div><strong data-group-accuracy></strong></td><td data-group-passed></td><td data-group-executed></td><td data-group-unsupported></td></tr>
+{% endmacro %}
+
+{% macro evidence_panel(key, title, note='') %}
+<section id="evidence-{{ key }}" data-evidence-panel="{{ key }}" aria-label="{{ title }}"{% if key != 'answer' %} hidden{% endif %}>
+{% if note %}<p class="small text-secondary">{{ note }}</p>{% endif %}
+{% if key == 'checks' %}{{ check_table(body_id='check-rows') }}{% endif %}
+<pre class="br-code" data-evidence-text="{{ key }}" tabindex="0"></pre>
+</section>
+{% endmacro %}

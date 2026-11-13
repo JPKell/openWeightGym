@@ -121,8 +121,8 @@ def test_cards_survive_navigation_oob_refresh_accounts_and_sample_anchors(desk, 
         playwright.expect(page.locator('#sample-1')).to_have_attribute('open', '')
         headings = page.locator('#sample-1 .sample-section > summary').all_text_contents()
         assert headings == ['Exact rendered input', 'Graded final answer', 'Checks and answer key', 'Server log', 'Measurements', 'Raw output']
-        assert page.locator('#sample-1 .sample-section[open]').count() == 0
-        page.locator('#sample-1 .sample-section > summary').first.click()
+        assert page.locator('#sample-1 .sample-section[open]').count() == 1
+        page.get_by_role('button', name='Exact rendered input', exact=True).click()
         page.reload()
         playwright.expect(page.locator('#sample-1 .sample-section').first).to_have_attribute('open', '')
         top = page.locator('#sample-1').bounding_box()['y']
@@ -268,7 +268,8 @@ def test_embedder_cards_picker_and_mobile_results_are_separate(desk,tmp_path):
         assert 'Input tokens/s' in page.locator('thead').inner_text()
         assert 'First token' not in page.locator('thead').inner_text()
         page.locator('a[href="#sample-1"]').click()
-        page.locator('#sample-1 .sample-section > summary').first.click()
-        assert 'Embedding receipt' in page.locator('#sample-1').inner_text()
+        page.get_by_role('button', name='Embedding receipt', exact=True).click()
+        playwright.expect(page.get_by_role('button', name='Embedding receipt', exact=True)).to_have_attribute('aria-pressed', 'true')
+        playwright.expect(page.locator('#sample-1')).to_contain_text('"prompt_tokens": 512')
         assert not errors
         browser.close()

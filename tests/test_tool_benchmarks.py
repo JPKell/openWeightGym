@@ -335,7 +335,7 @@ def test_tool_evidence_in_desktop_and_mobile_chromium(desk, tmp_path):
             page.set_viewport_size(viewport)
             page.goto('http://tools.test/benchmarks/run/'+n)
             page.locator('a[href="#sample-1"]').click()
-            page.locator('#sample-1 summary').filter(has_text='Tool conversation and actual responses').click()
+            page.get_by_role('button', name='Tool conversation and actual responses', exact=True).click()
             playwright.expect(page.locator('#sample-1')).to_contain_text('temporarily_unavailable')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.goto('http://tools.test/benchmarks/manage?benchmark=tool_use')

@@ -1,0 +1,20 @@
+{% from "parts.html" import section_title %}
+{% from "benchmark_parts.html" import number %}
+{% if detail.breakdown %}
+{% if detail.subject.get('protocol', {}).get('transport') == 'native chat completions with function calls' %}
+{{ section_title("Tool results by category", level=3) }}
+<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Category</th><th>Selection</th><th>Arguments</th><th>Completed tasks</th><th>Recovery</th><th>Executed / recorded</th><th>Unsupported</th></tr></thead><tbody>{% for group in detail.breakdown %}<tr><td>{{ group.category }}</td><td>{{ number(group.get('selection_accuracy')) }}</td><td>{{ number(group.get('argument_accuracy')) }}</td><td>{{ number(group.get('task_completion')) }}</td><td>{{ number(group.get('recovery_accuracy')) }}</td><td>{{ group.available_cases }} / {{ group.cases }}</td><td>{{ group.unsupported_cases }}</td></tr>{% endfor %}</tbody></table></div>
+<p class="small text-secondary">Accuracy and completion values are percentages. Unsupported configurations receive no score. Input/output tokens and load/request durations sum all turns in a case; they include repeated history. Every turn's input and counts are retained below.</p>
+{% else %}
+{% set retrieval = detail.subject.get('protocol', {}).get('dataset') in ('retrieval-v2', 'retrieval-v3') %}
+{% set unsupported_coverage = detail.get('metrics',{}).get('unsupported_cases',0) > 0 %}
+{{ section_title("Results by input size and category", level=3) }}
+<div class="table-responsive"><table class="table table-sm">
+<thead><tr><th>Input budget</th><th>Category</th><th>Correct checks</th><th>All-correct cases</th><th>Executed / recorded</th>{% if unsupported_coverage %}<th>Unsupported</th>{% endif %}{% if retrieval %}<th>Invented / absent</th><th>Start</th><th>Middle</th><th>End</th>{% endif %}</tr></thead>
+<tbody>{% for group in detail.breakdown %}<tr>
+<td>{{ number(group.input_tokens) if group.input_tokens else 'Unpadded' }}</td><td>{{ group.category }}</td><td>{{ number(group.accuracy) }}{{ '%' if group.get('accuracy') is number else '' }}</td><td>{{ group.get('passed_cases',0) }} / {{ group.cases }}</td><td>{{ group.available_cases }} / {{ group.cases }}</td>{% if unsupported_coverage %}<td>{{ group.get('unsupported_cases',0) }} / {{ group.cases }}</td>{% endif %}
+{% if retrieval %}<td>{{ group.get('invented_fields', 0) }} / {{ group.get('absent_fields', 0) }} ({{ number(group.get('invention')) }}%)</td>{% for region in ('start', 'middle', 'end') %}<td>{{ number(group.get(region ~ '_accuracy')) }}%</td>{% endfor %}{% endif %}
+</tr>{% endfor %}</tbody></table></div>
+{% if retrieval %}<p class="small text-secondary">Start, middle and end show field accuracy by supporting evidence block: the first, three interior and last blocks. Combined fields may count in several positions; absent fields have no position. Exact token offsets are kept with each sample. Invention counts non-null values supplied for absent fields; missing answers receive no null credit. Each native gap reuses the archive prefix and includes only what fits.</p>{% endif %}
+{% endif %}
+{% endif %}

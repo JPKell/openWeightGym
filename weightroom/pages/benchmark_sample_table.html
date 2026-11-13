@@ -1,0 +1,15 @@
+{% from "parts.html" import empty_row %}
+{% from "benchmark_parts.html" import number, token_count %}
+<div class="table-responsive br-sample-scroll" tabindex="0" role="region" aria-label="Sample measurements"><table id="sample-table" class="table table-hover table-sm align-middle mb-0"><caption class="visually-hidden">Saved sample measurements. Select a sample to inspect its evidence.</caption>
+  <thead><tr><th>Sample</th><th>Context tokens</th><th>Probe</th>{% if detail.plan %}<th>Answer</th><th>Correct checks</th>{% endif %}<th>Input tokens</th>{% if embedding %}<th>Input tokens/s</th><th>Embeddings/s</th><th>Dimensions</th>{% else %}<th>Output tokens</th><th>Read tokens/s</th><th>Write tokens/s</th><th>First token (s)</th>{% endif %}<th>Request (s)</th><th>Load (s)</th><th>GPU MiB</th>{% if briefing.cpu %}<th>CPU peak RAM (MiB)</th>{% endif %}</tr></thead>
+  <tbody>{% for sample in detail.samples %}{% set meta = briefing.rows[loop.index0] %}<tr data-sample-row="{{ loop.index }}" data-outcome="{{ meta.state }}" data-budget="{{ meta.budget if meta.budget is not none else '' }}" data-search="{{ (sample.id ~ ' ' ~ meta.category)|lower }}">
+    <td><a href="#sample-{{ loop.index }}">{{ sample.id }}</a>{% if meta.category %}<small class="d-block text-secondary">{{ meta.category }}</small>{% endif %}</td>
+    <td>{{ token_count(sample['values'].context_tokens) }}</td>
+    <td>{{ 'unsupported' if sample['values'].get('unsupported') else ('ok' if sample['values'].success else 'unavailable') }}</td>
+    {% if detail.plan %}{% set no_answer_score = sample['values'].get('unsupported') or not sample['values'].get('success') %}<td>{{ '—' if no_answer_score else ('pass' if meta.state == 'passed' else 'not graded' if meta.state == 'ungraded' else 'fail') }}</td><td>{% if no_answer_score %}—{% else %}{{ sample['values'].get('correct',0) }} / {{ sample['values'].get('checks',0) }}{% endif %}</td>{% endif %}
+    <td>{{ token_count(sample['values'].get('input_tokens')) }}</td>{% if embedding %}<td>{{ number(sample['values'].get('embedding_tokens_per_second')) }}</td><td>{{ number(sample['values'].get('embeddings_per_second')) }}</td><td>{{ token_count(sample['values'].get('embedding_dimensions')) }}</td>{% else %}<td>{{ token_count(sample['values'].get('output_tokens')) }}</td>
+    <td>{{ number(sample['values'].get('prompt_tokens_per_second')) }}</td><td>{{ number(sample['values'].get('generation_tokens_per_second')) }}</td>
+    <td>{{ number(sample['values'].get('ttft_seconds'), 's') }}</td>{% endif %}<td>{{ number(sample['values'].get('request_seconds'), 's') }}</td>
+    <td>{{ number(sample['values'].get('load_seconds'), 's') }}</td><td>{{ number(sample['values'].get('peak_gpu_mib')) }}</td>{% if briefing.cpu %}<td>{{ number(meta.cpu_ram) }}</td>{% endif %}
+  </tr>{% else %}{{ empty_row((10 if embedding else 11) + (2 if detail.plan else 0) + (1 if briefing.cpu else 0), "No samples recorded for this run.") }}{% endfor %}</tbody>
+</table></div>
