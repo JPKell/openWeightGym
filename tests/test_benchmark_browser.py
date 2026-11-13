@@ -273,3 +273,31 @@ def test_embedder_cards_picker_and_mobile_results_are_separate(desk,tmp_path):
         playwright.expect(page.locator('#sample-1')).to_contain_text('"prompt_tokens": 512')
         assert not errors
         browser.close()
+
+
+def test_history_pages_survive_live_polling(desk, tmp_path):
+    server, _, _ = desk
+    models = Models(str(tmp_path / 'loadcoach.db'))
+    models.put('one-1-3b-q4', {'flags': {'model': str(tmp_path / 'one.gguf')}})
+    store = server.app.state.benchmarks.state.store
+    for _ in range(60):
+        run = store.create('jordan', 'one-1-3b-q4', 'extraction', models.identity('one-1-3b-q4'))
+        store.activate(run, {'fingerprint': 'historical', 'subject': {}, 'environment': {}})
+        store.finish(run, 'completed'); store.synced(run)
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(headless=True)
+        context = browser.new_context(viewport={'width': 1440, 'height': 1000})
+        page = context.new_page()
+        context.route('http://benchmark.test/**', lambda route: serve_browser_request(server, 'http://benchmark.test', route))
+        page.goto('http://benchmark.test/benchmarks/runs?benchmark=extraction')
+        summary = page.locator('#benchmark-history p.small').first
+        for label, number in (('Next', 2), ('Next', 3), ('Previous', 2)):
+            page.locator('#benchmark-history nav a', has_text=label).click()
+            playwright.expect(summary).to_contain_text(f'Page {number} / 3')
+            with page.expect_response(lambda response: 'part=live' in response.url, timeout=15000) as poll:
+                pass
+            assert f'page={number}&' in poll.value.url
+            page.wait_for_timeout(100)
+            playwright.expect(summary).to_contain_text(f'Page {number} / 3')
+        browser.close()
