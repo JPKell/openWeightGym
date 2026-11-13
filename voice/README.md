@@ -72,18 +72,31 @@ See [installation](../docs/operations.md#voice-pages-and-home-summaries) for del
 
 ### Browser call settings
 
-Choose a **Conversation model** and **Speech engine** before starting. **CPU voices** offers
-the installed built-in speakers; **Saved voice** offers your SoundRoom voices, a cloning
-**Speech model**, a **Recognition model**, and the **Pause before reply**. Speaking speed,
-reply length and optional conversation instructions apply to this call. Hermes keeps its own
-model and instructions; unsupported choices are hidden. These controls preserve server defaults.
+The browser page uses **Transcript studio**: the live transcript beside a model setup rail,
+with call controls and language choices below. Choose the **Conversation model (LLM)** and
+**Speech engine** before starting. **CPU voices** uses the installed recognition/synthesis
+bundle and its built-in voice list. **Audio models** enables independent **Recognition (STT)**
+and **Speech (TTS)** models. Speech models offer their declared built-in voices; cloning models
+use your saved or shared SoundRoom voices. A model without a declared voice list offers its default.
 
-Choose the **Microphone** before connecting. **Microphone gain** and **Playback volume** can
-change during a call; echo cancellation stays available. Device names appear only when the
-browser permits them. **Record this call** explicitly retains audio in SoundRoom; call settings
-and unrecorded audio stay in memory. A startup failure leaves its reason visible after disconnect.
-Canceling startup also cancels the upstream model wait before response headers; the hold-renewal
-loop renews only models already acquired, so failed starts do not queue duplicate loads.
+Choose **I speak / listen in** for recognition. Enable **Translate replies** to select a different
+response language; otherwise replies match the listening language. Language overrides apply to
+this call, and declared model language limits are checked before loading. CPU speech supports
+English; audio models depend on the selected models. Hermes manages its own reply instructions.
+
+The transcript updates recognition text when the engine supports partial results and groups spoken
+reply segments into one assistant message per turn. Interruption marks the affected reply and
+ignores late segments. Text and JSON exports preserve original words, language labels, timestamps
+and interruption status. **New conversation** clears the tab's transcript after a call ends.
+The transcript stays in page memory until navigation or reload; export it to keep a copy.
+
+**Conversation preferences** contains speaking speed, reply length, instructions, the microphone,
+gain, playback volume, pause before reply and echo cancellation. Gain and playback volume can
+change during a call; other choices stay locked. Device names appear only when the browser permits
+them. **Record this call** explicitly retains audio in SoundRoom for saved-voice calls; unrecorded
+audio stays in memory. Startup errors remain visible, and settings failures offer Retry settings.
+Canceling startup stops microphone capture and the pending reservation request. Server defaults,
+normal request logging and the existing gateway/session authorization remain in effect.
 
 The speech service account needs `hold` and `load`, plus `high` when a speech profile requests
 high priority. On this installation these required permissions were restored on 2026-10-25,

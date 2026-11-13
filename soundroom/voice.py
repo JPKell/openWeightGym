@@ -102,6 +102,8 @@ class AudioSpeech:
         asked = {"model": self.profile["synthesis_model"], "input": text, "response_format": "pcm"}
         if voice:
             asked |= {"voice_audio": voice["audio"], **({"voice_text": voice["text"]} if voice.get("text") else {})}
+        elif self.profile.get('speech_voice'):
+            asked['voice'] = self.profile['speech_voice']
         pcm = await self.request("POST", "/v1/audio/speech", asked)
         if speed != 1:
             from soundroom.runtime import ffmpeg

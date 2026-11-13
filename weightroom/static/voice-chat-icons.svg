@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="voice-chat-microphone" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></symbol>
+<symbol id="voice-chat-volume" viewBox="0 0 24 24"><path d="M11 4 5 9H2v6h3l6 5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></symbol>
+<symbol id="voice-chat-arrows-exchange" viewBox="0 0 24 24"><path d="M3 7h17l-4-4M21 17H4l4 4M20 7l-4 4M4 17l4-4"/></symbol>
+<symbol id="voice-chat-messages" viewBox="0 0 24 24"><path d="M4 3h14v12H9l-5 4ZM18 8h4v14l-5-4h-5v-3"/></symbol>
+<symbol id="voice-chat-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4M12 14v3"/></symbol>
+<symbol id="voice-chat-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></symbol>
+<symbol id="voice-chat-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 16v5h16v-5"/></symbol>
+</defs></svg>
