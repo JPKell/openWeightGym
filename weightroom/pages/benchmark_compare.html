@@ -3,7 +3,6 @@
 {% from "benchmark_parts.html" import number, run_link %}
 <div id="compare-content">{% call card("Choose models", open=true, key="benchmark-choose") %}
 <form method="get" action="/benchmarks/compare" hx-get="/benchmarks/compare" hx-trigger="change, submit" hx-target="#compare-content" hx-select="#compare-content" hx-swap="outerHTML show:none" hx-replace-url="true"><input type="hidden" name="selection" value="1">
-{% if embedding_family %}<input type="hidden" name="family" value="embedding">{% endif %}
 <div class="comparison-models">{% for model in models %}<label class="comparison-model frame"><input type="checkbox" name="model" value="{{ model.id }}" class="form-check-input"{% if model in selected_models %} checked{% endif %}><span><strong>{{ model.id }}</strong><small><code>{{ model.fingerprint[:12] if model.fingerprint else 'pending' }}</code></small></span></label>{% else %}<p class="text-secondary">No local models are available to your account.</p>{% endfor %}</div>
 <details class="mt-2" data-card-key="benchmark-recorded"><summary>Recorded fingerprints</summary>{{ pill_choices('Recorded results filter', 'history_filter', [('all','All'),('fingerprints','Other fingerprints'),('quants','Other quants'),('retired','Removed models')], history_filter) }}
 {% for run in selected_runs if run not in history %}<input type="hidden" name="run" value="{{ run.id }}">{% endfor %}
