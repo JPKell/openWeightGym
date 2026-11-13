@@ -22,6 +22,7 @@
 {% endcall %}
 {% else %}
 <p>{{ workflow.level }} · <strong>{{ workflow.state|replace('_',' ') }}</strong></p>
+{% call card('Research question', class_='mb-3') %}<p class="mb-0 text-break">{{ workflow.question }}</p>{% endcall %}
 {% if workflow.error %}{% call alert('warning', role='status') %}{{ workflow.error }}{% endcall %}{% endif %}
 <div class="d-flex flex-wrap gap-2 mb-3">
 {% if workflow.active %}<form action="/workflows/{{ workflow.id }}" method="post"><button  class="btn btn-outline-warning" name="do" value="cancel" {{ confirm_two() }}>Cancel current step</button></form>{% elif workflow.state in ['ready_research','paused_research','failed_research','ready_draft','paused_draft','failed_draft'] %}<form action="/workflows/{{ workflow.id }}" method="post"><button class="btn btn-primary" name="do" value="start">{{ 'Start' if workflow.state.startswith('ready_') else 'Resume / retry' }} {{ 'draft' if workflow.state.endswith('draft') else 'research' }}</button></form>{% endif %}
