@@ -1,0 +1,88 @@
+/* Three arrangements of the same form and player; all surfaces follow the active palette. */
+body { background:var(--theme-bg); }
+.music-page [hidden] { display:none !important; }
+.music-topbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; padding:1.1rem 3.5vw; border-bottom:1px solid var(--theme-border); background:var(--theme-surface); }
+.music-brand { display:flex; align-items:center; gap:.75rem; color:var(--theme-text); font-weight:700; text-decoration:none; letter-spacing:-.025em; }
+.music-brand > span { color:var(--theme-muted); }
+.music-brand .suite-icon { color:var(--theme-accent); width:24px; height:24px; }
+.music-eyebrow { color:var(--theme-muted); font-size:.64rem; font-weight:650; letter-spacing:.12em; }
+.music-page { max-width:1780px; margin:auto; padding:1.25rem 3.5vw 1rem; }
+.music-review { padding:1rem 1.25rem; border:1px solid var(--theme-border); border-radius:12px; background:var(--theme-surface); margin-bottom:1.5rem; }
+.music-design-nav .nav-link { border:1px solid var(--theme-border); color:var(--theme-text); padding:.75rem 1.2rem; font-size:.85rem; }
+.music-design-nav .nav-link.active { border-color:var(--theme-accent); background:var(--theme-accent-bg); color:var(--theme-accent); }
+.music-page .page-header { margin-bottom:.6rem !important; }
+.music-page .page-title { font-size:2.6rem; font-weight:650; letter-spacing:-.055em; }
+.music-session-state { display:flex; align-items:center; gap:.55rem; font-size:.75rem; color:var(--theme-muted); padding-top:1.3rem; }
+.music-session-state > span { width:6px; height:6px; background:var(--theme-accent); border-radius:50%; }
+.music-lead { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:baseline; gap:.5rem; margin-bottom:1rem; }
+.music-lead p { margin:0; color:var(--theme-muted); font-size:1.05rem; }
+.music-brief { display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center; border-block:1px solid var(--theme-border); padding:.75rem 0; margin-bottom:1rem; }
+.music-brief input { max-width:300px; font-size:1rem; font-weight:550; }
+.music-brief-note { margin-left:auto; display:flex; flex-direction:column; gap:.35rem; text-align:right; }
+.music-demo-note { font-size:.75rem; padding:.75rem 1rem; background:var(--theme-subtle); color:var(--theme-muted); border:1px solid var(--theme-border); }
+.music-footer { padding-top:1.3rem; margin-top:1.5rem; border-top:1px solid var(--theme-border); font-size:.7rem; }
+.music-page button:focus-visible { outline:2px solid var(--theme-accent); outline-offset:3px; }
+#sr-dialog { width:min(560px,calc(100% - 2rem)); max-height:90vh; overflow:auto; padding:1.5rem; border:1px solid var(--theme-border); border-radius:14px; color:var(--theme-text); background:var(--theme-surface); }
+#sr-dialog::backdrop { background:color-mix(in srgb,var(--theme-text) 30%,transparent); backdrop-filter:blur(3px); }
+/* A broad writing sheet with a restrained tool rail and a listening column. */
+[data-layout="writer"] .music-workbench { grid-template-columns:minmax(240px,.7fr) minmax(360px,1.4fr) minmax(320px,1fr); }
+[data-layout="writer"] #sr-form, [data-layout="writer"] #sr-form > .card-body { display:contents; }
+[data-layout="writer"] [data-music-section="model"] { grid-column:1; grid-row:1; }
+[data-layout="writer"] [data-music-section="direction"] { grid-column:1; grid-row:2; }
+[data-layout="writer"] [data-music-section="lyrics"] { grid-column:2; grid-row:1 / span 4; padding:2rem; background:linear-gradient(var(--theme-surface),var(--theme-subtle)); align-self:stretch; display:flex; flex-direction:column; }
+[data-layout="writer"] .music-no-lyrics { grid-column:2; grid-row:1 / span 4; }
+[data-layout="writer"] #sr-lyrics { min-height:640px; flex:1; border:0; background:transparent; padding:.75rem 0; box-shadow:none; font-family:Georgia,serif !important; font-size:1.13rem; line-height:2.15; }
+[data-layout="writer"] #sr-lyrics:focus { outline:1px solid var(--theme-accent); outline-offset:5px; }
+[data-layout="writer"] [data-music-section="musical"] { grid-column:1; grid-row:3; }
+[data-layout="writer"] [data-music-section="settings"] { grid-column:1; grid-row:4; }
+[data-layout="writer"] [data-music-section="generate"] { grid-column:2; grid-row:5; }
+[data-layout="writer"] .sr-player { grid-column:3; grid-row:1 / span 3; }
+[data-layout="writer"] .music-queue { grid-column:1; grid-row:5; }
+[data-layout="writer"] .music-library { grid-column:3; grid-row:4 / span 2; }
+[data-layout="writer"] .music-library #sr-list { max-height:370px; }
+[data-layout="writer"] #sr-lyrics-wrap[hidden] + [data-music-section] { grid-column:1; }
+/* A compact recipe beside a wide player and a dense, scannable take ledger. */
+[data-layout="lab"] .music-workbench { grid-template-columns:minmax(285px,.65fr) minmax(0,2fr); }
+[data-layout="lab"] .music-no-lyrics { display:none; }
+[data-layout="lab"] .sr-player { grid-column:2; grid-row:1; }
+[data-layout="lab"] .music-library { grid-column:2; grid-row:2; }
+[data-layout="lab"] .music-queue { grid-column:2; grid-row:3; }
+[data-layout="lab"] .music-take { grid-template-columns:42px minmax(0,1fr) 160px 44px 20px; }
+[data-layout="lab"] .music-take [data-take-length] { grid-column:4; }
+[data-layout="lab"] .music-take [data-take-star] { grid-column:5; grid-row:1; }
+[data-layout="lab"] .music-mini-wave { display:block; }
+[data-layout="lab"] .music-library #sr-filter { width:220px !important; }
+[data-layout="lab"] .music-library #sr-list { max-height:580px; }
+[data-layout="lab"] .sr-player #sr-selected > .d-flex > .form-text { flex-basis:auto; }
+@media(min-width:1800px) { .music-page { padding-inline:1.5rem; } }
+@media(max-width:1250px) {
+  .music-workbench { grid-template-columns:minmax(270px,.8fr) minmax(0,1.4fr); }
+  .music-workbench .music-library { grid-column:2; grid-row:3; }
+  .music-workbench .music-queue { grid-column:2; grid-row:4; }
+  [data-layout="writer"] .music-workbench { grid-template-columns:minmax(260px,.75fr) minmax(0,1.25fr); }
+  [data-layout="writer"] .sr-player { grid-column:2; grid-row:6; }
+  [data-layout="writer"] .music-library { grid-column:2; grid-row:7; }
+  [data-layout="writer"] .music-queue { grid-column:1; grid-row:5; }
+  [data-layout="lab"] .music-take { grid-template-columns:42px minmax(0,1fr) 44px 20px; }
+  [data-layout="lab"] .music-mini-wave { display:none; }
+  [data-layout="lab"] .music-take [data-take-length] { grid-column:3; }
+  [data-layout="lab"] .music-take [data-take-star] { grid-column:4; }
+}
+@media(max-width:760px) {
+  .music-page { padding:1rem; } .music-topbar { padding:1rem; } .music-review { padding:1rem; margin-bottom:1.5rem; }
+  .music-design-nav { flex-direction:column; } .music-design-nav .nav-link { width:100%; text-align:left; }
+  .music-topbar .music-eyebrow { font-size:.55rem; } .music-session-state { padding-top:.5rem; }
+  .music-brief { gap:.75rem; } .music-brief > input { max-width:100%; } .music-brief-note { margin:0; text-align:left; }
+  [data-layout="writer"] .music-workbench, [data-layout="lab"] .music-workbench { display:flex; flex-direction:column; }
+  .music-workbench > *, .music-workbench .sr-results > *, [data-layout="writer"] [data-music-section] { width:100%; }
+  .music-workbench .sr-results > .music-queue { width:100%; }
+  [data-layout="writer"] #sr-form, [data-layout="writer"] #sr-form > .card-body { display:flex; flex-direction:column; gap:1rem; }
+  .music-workbench [data-music-section], .music-workbench .sr-player > .card-body { padding:1.1rem; }
+  [data-layout="writer"] #sr-lyrics { min-height:390px; font-size:1rem; }
+  .music-workbench .sr-player, .music-workbench .music-library, .music-workbench .music-queue { margin-top:.25rem !important; }
+  .music-workbench [data-music-section="generate"] { position:static; }
+  .music-workbench #sr-title { font-size:1.4rem; }
+  [data-layout="lab"] .music-library #sr-filter { width:100% !important; }
+  .music-workbench #sr-selected > .d-flex > .form-text { flex-basis:100% !important; }
+}
+@media(prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto !important; transition:none !important; } }

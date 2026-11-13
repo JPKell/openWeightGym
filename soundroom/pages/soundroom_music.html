@@ -1,67 +1,19 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, card, section_title, alert %}
+{% from "parts.html" import page_header, section_title, alert %}
+{% from "music_parts.html" import take_template, prompt_guidance %}
+{% set music_studio = true %}
 {% block title %}{{ 'Music' if mode == 'music' else 'Sounds' }} · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/music.js?v=8" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><link rel="stylesheet" href="/static/music.css?v=1"><script src="/soundroom-static/music.js?v=10" defer></script>{% endblock %}
 {% block main %}
-<div id="soundroom" data-mode="{{ mode }}" data-defaults="{{ audio | tojson | forceescape }}">
-  {{ page_header('Music' if mode == 'music' else 'Sounds', lead="Generate and compare music or sound effects with your audio models.") }}
+<div id="soundroom" class="music-session" data-layout="studio" data-mode="{{ mode }}" data-defaults="{{ audio | tojson | forceescape }}">
+  {{ page_header('Music' if mode == 'music' else 'Sounds') }}
   {% call alert('danger', role='alert', attrs={'id': 'sr-message', 'hidden': ''}) %}{% endcall %}
-  <div class="sr-studio studio">
-    {% call card("", tag="form", id="sr-form", class_="sr-settings studio-settings") %}
-      <label class="form-label" for="sr-model">{{ 'Music' if mode == 'music' else 'Sound' }} model</label>
-      <select id="sr-model" name="model" class="form-select mb-1" required></select>
-      <p id="sr-licence" class="form-text mb-3"></p>
-      <p id="sr-model-help" class="form-text mb-3"></p>
-      <div id="sr-mode-wrap" class="mb-3">
-        <label class="form-label" for="sr-mode">Mode</label>
-        <select id="sr-mode" name="mode" class="form-select"></select>
-      </div>
-      <p id="sr-mode-help" class="form-text mb-3"></p>
-      {% if mode == 'music' %}
-      <details id="sr-helper" class="mb-3"><summary>Write with a model</summary><div class="pt-2">
-        <label class="form-label" for="sr-idea">Song idea</label>
-        <textarea id="sr-idea" class="form-control mb-2" rows="2" maxlength="4000" placeholder="A hopeful synth-pop song about leaving a small town at night"></textarea>
-        <div class="d-flex gap-2"><input id="sr-helper-model" class="form-control" value="{{ audio.lyrics or 'chat' }}" aria-label="Chat model or role for writing"><button id="sr-write" type="button" class="btn btn-outline-secondary text-nowrap">Write</button></div>
-        <div class="form-text">Drafts style and lyrics for the chosen duration and instrumental setting, using your account.</div>
-      </div></details>
-      {% endif %}
-      <label class="form-label" for="sr-prompt">{{ 'Style' if mode == 'music' else 'Sound' }}</label>
-      <textarea id="sr-prompt" name="prompt" class="form-control mb-3" rows="3" required maxlength="4000" placeholder="{{ 'upbeat synth pop, female vocal, bright drums, 120 bpm' if mode == 'music' else 'rain on a tin roof, distant thunder, close perspective' }}"></textarea>
-      {% if mode == 'music' %}
-      <div id="sr-lyrics-wrap">
-        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-end"><label class="form-label" for="sr-lyrics">Lyrics</label>
-          <div class="btn-group btn-group-sm mb-1" role="group" aria-label="Insert section tag">{% for tag in ['verse','chorus','bridge','outro'] %}<button type="button" class="btn btn-outline-secondary" data-tag="[{{tag}}]">{{tag}}</button>{% endfor %}</div></div>
-        <textarea id="sr-lyrics" name="lyrics" class="form-control font-monospace mb-2" rows="8" maxlength="20000" placeholder="[verse]&#10;…&#10;[chorus]&#10;…"></textarea>
-        <div class="form-check mb-3"><input id="sr-instrumental" name="instrumental" class="form-check-input" type="checkbox"><label for="sr-instrumental" class="form-check-label">Instrumental</label></div>
-      </div>
-      <fieldset id="sr-musical-wrap" class="mb-3" hidden><legend class="section-title">Musical direction <span class="text-secondary fw-normal">optional</span></legend><div id="sr-musical"></div></fieldset>
-      {% endif %}
-      <div id="sr-source-wrap" class="mb-3" hidden>
-        <label class="form-label" for="sr-source">Source audio</label>
-        <input id="sr-source" type="file" accept="audio/*" class="form-control mb-1">
-        <button id="sr-use-selected" type="button" class="btn btn-outline-secondary btn-sm mt-1" disabled>Use selected take</button>
-        <p id="sr-source-name" class="form-text mb-0"></p>
-        <div id="sr-window" class="row g-2 mt-1" hidden>
-          <div class="col-6"><label for="sr-start" class="form-label">Repaint from (s)</label><input id="sr-start" type="number" min="0" step="0.1" class="form-control"></div>
-          <div class="col-6"><label for="sr-end" class="form-label">to (s)</label><input id="sr-end" type="number" min="0" step="0.1" class="form-control"></div>
-        </div>
-      </div>
-      <div class="row g-2 mb-3">
-        <div class="col-6"><label for="sr-duration" class="form-label">Seconds</label><input id="sr-duration" name="duration" type="number" min="1" max="600" step="1" value="{{ 30 if mode == 'music' else 8 }}" class="form-control"></div>
-        <div class="col-6"><label for="sr-n" class="form-label">{{ 'Takes' if mode == 'music' else 'Variations' }}</label><input id="sr-n" name="n" type="number" min="1" max="16" value="{{ 1 if mode == 'music' else 4 }}" class="form-control"></div>
-      </div>
-      <label for="sr-seed" class="form-label">Seed <span class="text-secondary">−1 for random</span></label>
-      <input id="sr-seed" name="seed" type="number" min="-1" max="4294967295" value="-1" class="form-control mb-3">
-      {% if mode == 'sound' %}
-      <div class="form-check mb-3"><input id="sr-loop" class="form-check-input" type="checkbox"><label for="sr-loop" class="form-check-label">Seamless loop</label><div class="form-text">Adds a crossfaded seam so the sound repeats without a click.</div></div>
-      {% endif %}
-      <details class="mb-3"><summary>Advanced settings</summary><div id="sr-advanced" class="pt-3"></div></details>
-      <div id="sr-temporary-wrap" class="form-check mb-3" hidden><input id="sr-temporary" class="form-check-input" type="checkbox"><label for="sr-temporary" class="form-check-label">Temporary · no retained history</label></div>
-      <button id="sr-generate" class="btn btn-primary w-100" type="submit">Generate</button>
-      <p id="sr-availability" class="form-text mb-0"></p>
-    {% endcall %}
+  <div class="music-workbench">
+    {% include "soundroom_music_form.html" %}
     {% include "soundroom_player.html" %}
+    {% if mode == 'music' %}{{ prompt_guidance() }}{% endif %}
   </div>
+  {{ take_template() }}
   <dialog id="sr-dialog" class="sr-dialog studio-dialog frame"><form method="dialog"><button class="btn-close float-end" aria-label="Close"></button></form>{{ section_title("", id="sr-dialog-title") }}<div id="sr-dialog-content" class="mt-3"></div></dialog>
 </div>
 {% endblock %}

@@ -56,6 +56,129 @@ def capture_audio(payload, submitted, older=None, wav_seconds=.1):
     return capture
 
 
+def test_session_studio_preserves_each_music_models_unsaved_draft(desk):
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    models = [audio_model('ace'), audio_model('lyrics', family='heartmula', modes=['song'], lyrics_required=True)]
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(state(models=models), []))
+        page.goto('http://console.test/chat/music')
+        page.locator('#sr-prompt').fill('Keep my synth draft')
+        page.locator('#sr-lyrics').fill('[chorus]\nKeep these lyrics')
+        page.locator('#sr-option-bpm').fill('92')
+        page.locator('#sr-duration').fill('45')
+        page.locator('#sr-model').select_option('lyrics')
+        page.locator('#sr-prompt').fill('A second model draft')
+        page.locator('#sr-lyrics').fill('[verse]\nA different lyric')
+        page.locator('#sr-model').select_option('ace')
+        playwright.expect(page.locator('#sr-prompt')).to_have_value('Keep my synth draft')
+        playwright.expect(page.locator('#sr-lyrics')).to_have_value('[chorus]\nKeep these lyrics')
+        playwright.expect(page.locator('#sr-option-bpm')).to_have_value('92')
+        playwright.expect(page.locator('#sr-duration')).to_have_value('45')
+        page.evaluate('window.soundroomRefresh()')
+        playwright.expect(page.locator('#sr-prompt')).to_have_value('Keep my synth draft')
+        page.locator('#sr-model').select_option('lyrics')
+        playwright.expect(page.locator('#sr-prompt')).to_have_value('A second model draft')
+        playwright.expect(page.locator('#sr-lyrics')).to_have_value('[verse]\nA different lyric')
+        browser.close()
+
+
+def test_sounds_uses_model_options_loop_and_source_editing_without_music_fields(desk):
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    sound = audio_model('foley', 'sound', family='stable_audio', lyrics=False,
+        limits={'max_seconds': 47, 'max_takes': 6}, options=[{'name':'guidance_scale', 'type':'float', 'default':4.5, 'min':0, 'max':10}])
+    sent = []
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(state(models=[sound], assets=[asset(model='foley')]), sent))
+        page.goto('http://console.test/chat/sounds')
+        assert page.get_by_role('heading', level=1).all_text_contents() == ['Sounds']
+        assert not page.locator('#sr-lyrics, #sr-instrumental, #sr-helper, #sr-musical-wrap').count()
+        playwright.expect(page.locator('#sr-duration')).to_have_attribute('max', '47')
+        playwright.expect(page.locator('#sr-n')).to_have_attribute('max', '6')
+        page.get_by_text('Advanced settings', exact=True).click()
+        page.locator('#sr-option-guidance_scale').fill('5.5')
+        page.locator('#sr-prompt').fill('Rain striking a metal roof, close perspective')
+        page.locator('#sr-loop').check()
+        page.locator('#sr-generate').click()
+        page.wait_for_function('document.querySelector("#sr-generate").disabled === false')
+        assert sent[0]['request']['loop'] is True
+        assert sent[0]['request']['n'] == 4 and sent[0]['request']['duration'] == 8
+        assert sent[0]['request']['options'] == {'guidance_scale': 5.5}
+        assert not {'lyrics', 'instrumental', 'mode'} & sent[0]['request'].keys()
+        page.locator('#sr-list button').click()
+        page.locator('#sr-mode').select_option('repaint')
+        playwright.expect(page.locator('#sr-loop')).to_be_disabled()
+        page.locator('#sr-use-selected').click()
+        page.locator('#sr-start').fill('2')
+        page.locator('#sr-end').fill('4')
+        page.locator('#sr-generate').click()
+        page.wait_for_function('document.querySelector("#sr-generate").disabled === false')
+        assert sent[1]['source'] == asset()['id']
+        assert sent[1]['request']['mode'] == 'repaint'
+        assert sent[1]['request']['repaint_start'] == 2 and sent[1]['request']['repaint_end'] == 4
+        assert 'loop' not in sent[1]['request']
+        browser.close()
+
+
+def test_session_studio_sorts_loaded_takes_and_retains_selection(desk):
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    takes = [asset(1, settings={'prompt':'Zebra'}), asset(2, settings={'prompt':'Apple'})]
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(state(assets=takes), []))
+        page.goto('http://console.test/chat/music')
+        page.locator('#sr-list button').first.click()
+        page.locator('#take-sort').select_option('name')
+        assert page.locator('[data-take-title]').all_text_contents() == ['Apple', 'Zebra']
+        playwright.expect(page.locator('#sr-title')).to_have_text('Zebra')
+        playwright.expect(page.locator('#sr-list button[aria-pressed=true]')).to_contain_text('Zebra')
+        page.evaluate('window.soundroomRefresh()')
+        playwright.expect(page.locator('#sr-title')).to_have_text('Zebra')
+        assert page.locator('[data-take-title]').all_text_contents() == ['Apple', 'Zebra']
+        browser.close()
+
+
+@pytest.mark.parametrize('path,kind', [('/chat/music','music'), ('/chat/sounds','sound')])
+@pytest.mark.parametrize('width', [1600, 1024, 390])
+def test_session_studio_layout_model_states_and_headers(desk, tmp_path, path, kind, width):
+    from test_ui_consistency import MEASURE
+    from test_themes import change_theme
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    payload = state(models=[audio_model('ace', kind, lyrics=kind == 'music')], assets=[asset()])
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(payload, []))
+        page.set_viewport_size({'width':width, 'height':1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test' + path)
+        playwright.expect(page.locator('#sr-model option')).to_have_count(1)
+        page.locator('#sr-list button').click()
+        playwright.expect(page.locator('#sr-selected')).to_be_visible()
+        page.screenshot(path=str(tmp_path / f'{kind}-{width}-selected.png'), full_page=True)
+        assert page.get_by_role('heading', level=1).all_text_contents() == ['Music' if kind == 'music' else 'Sounds']
+        assert not page.locator('.page-header .eyebrow').count()
+        for mode, palette in [('light','sage'), ('dark','slate')]:
+            change_theme(page, palette, mode)
+            for scenario in ('normal', 'no-lyrics', 'empty'):
+                payload['assets'] = [] if scenario == 'empty' else [asset()]
+                payload['models'] = [] if scenario == 'empty' else [audio_model('prompt-only' if scenario == 'no-lyrics' else 'ace', kind, lyrics=scenario != 'no-lyrics', options=[] if scenario == 'no-lyrics' else [{'name':'bpm','type':'int','default':120}])]
+                page.evaluate('window.soundroomRefresh()')
+                if scenario == 'empty':
+                    playwright.expect(page.locator('#sr-generate')).to_be_disabled()
+                    playwright.expect(page.locator('#sr-library-empty')).to_be_visible()
+                else:
+                    playwright.expect(page.locator('#sr-generate')).to_be_enabled()
+                measurements = page.evaluate(MEASURE)
+                assert not measurements['overflow'], (path, width, scenario)
+                assert not measurements['namelessFields'], measurements['namelessFields']
+                assert not measurements['invalidControls'], measurements['invalidControls']
+            page.screenshot(path=str(tmp_path / f'{kind}-{width}-{mode}.png'), full_page=True)
+        assert not errors, errors
+        browser.close()
+
+
 def test_speech_loops_whole_recordings_and_regions_that_reach_the_end(desk):
     """A real media element keeps playing across multiple whole-file and selected-range wraps."""
     server, _, _ = desk

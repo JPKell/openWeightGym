@@ -104,6 +104,7 @@ Through Turnstile with existing keys, model permissions and signed routing:
 
 ### Music page (Chat → Music)
 
+- Session studio (design 01): a plain Music heading, settings rail, style/lyrics workspace, listening room and full-width take library; unsent drafts stay in the tab per model. Layout components are indexed in [AGENTS.md](../AGENTS.md).
 - Mode per family: song, instrumental, continue (`complete`), cover from reference audio, repaint a time range.
 - Fields and limits come from the selected profile (upstream `GET /v1/models?include_params=true` plus Suite limits): style caption, lyrics, duration up to the model maximum, tempo, key, metre, seed, steps, guidance and sampler where supported. Less-used fields go under Advanced.
 - Lyrics editor with section-tag help. **Write with a model** turns a short idea into a style caption and tagged lyrics, using a chat model chosen in settings, through Turnstile with the caller's own key.
@@ -113,7 +114,7 @@ Through Turnstile with existing keys, model permissions and signed routing:
 
 ### Sounds page (Chat → Sounds)
 
-Prompt, duration and seed for the two sound families; N variations per submit; an optional seamless-loop output with a crossfaded seam; a saved library with tags, search and favourites. Same player and downloads as Music.
+The same Session studio layout with a plain Sounds heading, sound prompt, duration, seed, N variations and the selected model's declared options and limits. Supported source-audio modes expose upload/reuse and repaint controls; seamless looping is available only for new sounds. Lyrics, the writing helper and musical direction are omitted. The saved library shares Music's tags, favourites, loaded-audio sorting, player and downloads.
 
 ### Speech page (Chat → Speech)
 
