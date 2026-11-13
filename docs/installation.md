@@ -393,13 +393,19 @@ These engine flags also work with `install.sh` during initial setup and with
 Adding voice to a remote node needs the console's voice-service key: the installer can request
 a new pairing code, or accept `--voice-key-file FILE` (and `--services voice`).
 
+Image, audio and hybrid engines enforce their host RAM caps inside LoadCoach's existing
+service memory budget. Native systemd installations need systemd 254+ and
+`Delegate=memory` with `DelegateSubgroup=supervisor`; these are included in new service units.
+On existing installations, `owg update` followed by `owg restart loadcoach` applies the
+delegation settings while retaining memory ceilings, custom controllers and other service
+policies. The worker must have a finite `MemoryMax` and `MemorySwapMax=0`.
+
 Strata builds the [reviewed source revision](https://github.com/Niko1221/Strata/tree/477ac13cbe8e582c20484871ce459d20d82df09d)
 in `runtimes/strata`, with a private Python environment. It queries GPU compute capabilities through
 `nvidia-smi` (7.5 or newer required) and passes explicit architectures so upstream can select
 the matching FP4 kernels on RTX 50 cards. Selecting it permits hybrid host RAM use
-up to `--strata-host-ram-mib` (22528 MiB by default). Its systemd drop-in delegates memory without
-raising the worker's existing limits; the budget must fit within `MemoryMax`, with
-`MemorySwapMax=0`. The adapter still requires supported text models and prepared tokenizer files.
+up to `--strata-host-ram-mib` (22528 MiB by default), within the worker budget above.
+The adapter still requires supported text models and prepared tokenizer files.
 Use `scripts/install-strata.sh --check` to verify the installed runtime without loading a model.
 
 ## Uninstalling

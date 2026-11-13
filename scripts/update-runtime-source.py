@@ -1,4 +1,4 @@
-"""Put this checkout first in service source overrides without changing other runtime settings."""
+"""Select installed service source and enable bounded engines without changing memory ceilings."""
 
 import argparse
 import json
@@ -81,6 +81,38 @@ def directives(text):
             yield key.strip(), value.strip()
 
 
+def worker_memory(text, *, defaults=False):
+    """Keep worker processes in a delegated supervisor; retain other controllers and policies."""
+    result, section, seen = [], '', set()
+    def missing():
+        if defaults and section == '[Service]':
+            for key, value in (('Delegate', 'memory'), ('DelegateSubgroup', 'supervisor')):
+                if key not in seen:
+                    if result and not result[-1].endswith('\n'):
+                        result.append('\n')
+                    result.append(f'{key}={value}\n')
+                    seen.add(key)
+    for raw, line in logical_lines(text):
+        if line.startswith('['):
+            missing()
+            section = line
+        key, separator, value = line.partition('=')
+        if section == '[Service]' and separator:
+            key, value = key.strip(), value.strip()
+            if key == 'Delegate':
+                seen.add(key)
+                if value.lower() not in ('yes', 'true', 'on', '1') and 'memory' not in words(value):
+                    controllers = [] if value.lower() in ('', 'no', 'false', 'off', '0') else words(value)
+                    raw = 'Delegate=' + ' '.join([*controllers, 'memory']) + '\n'
+            elif key == 'DelegateSubgroup':
+                seen.add(key)
+                if value != 'supervisor':
+                    raw = 'DelegateSubgroup=supervisor\n'
+        result.append(raw)
+    missing()
+    return ''.join(result)
+
+
 def expanded(value):
     return value.replace('%h', str(Path.home())).replace('%%', '%')
 
@@ -120,6 +152,8 @@ def plan(root, unit_dir, programs):
                             if previous != updated:
                                 changes[environment.resolve()] = previous, updated
             updated = rewrite(text, root)
+            if program == 'loadcoach':
+                updated = worker_memory(updated, defaults=path == unit)
             if text != updated:
                 changes[path.resolve()] = text, updated
     return changes
@@ -165,7 +199,7 @@ def apply(changes, backup_root):
                 replace(path, changes[path][0])
         subprocess.run(['systemctl', '--user', 'daemon-reload'], check=False)
         raise
-    print(f'Updated {len(changes)} source override(s). Rollback copies: {backup}')
+    print(f'Updated {len(changes)} service configuration file(s). Rollback copies: {backup}')
 
 
 def renamed_settings(root):

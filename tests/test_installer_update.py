@@ -260,6 +260,52 @@ def test_source_update_preserves_custom_libraries_other_policies_and_rollback(tm
     assert helper.plan(root, units, ['weightroom']) == {}
 
 
+@pytest.mark.parametrize('delegate', ['', 'Delegate=no\n', 'Delegate=cpu pids\n', 'Delegate=yes\n'])
+def test_native_worker_upgrade_enables_engine_caps_and_preserves_existing_policies(tmp_path, monkeypatch, delegate):
+    root = tmp_path / 'installed suite'
+    units, dropins = installed_unit(tmp_path, root, 'loadcoach')
+    unit = units / 'loadcoach.service'
+    original = unit.read_text().rstrip('\n')
+    unit.write_text(original)  # legacy unit without a final newline
+    policy = dropins / 'resources.conf'
+    retained = 'MemoryHigh=11G\nMemoryMax=13G\nMemorySwapMax=0\nCPUQuota=150%\nEnvironment="LD_LIBRARY_PATH=/custom/cuda"\n'
+    policy.write_text('[Service]\n' + delegate + 'DelegateSubgroup=old-supervisor\n' + retained)
+    helper = source_helper()
+    monkeypatch.setattr(helper.subprocess, 'run', lambda *a, **k: None)
+    changes = helper.plan(root, units, ['loadcoach'])
+    helper.apply(changes, tmp_path / 'recovery')
+    assert '\nDelegate=memory\nDelegateSubgroup=supervisor\n' in unit.read_text()
+    after = policy.read_text()
+    assert retained in after and 'DelegateSubgroup=supervisor\n' in after
+    if delegate == 'Delegate=cpu pids\n':
+        assert 'Delegate=cpu pids memory\n' in after
+    if delegate == 'Delegate=yes\n':
+        assert delegate in after
+    assert helper.plan(root, units, ['loadcoach']) == {}
+    manifest = next((tmp_path / 'recovery').glob('*/manifest.json'))
+    saved = manifest.parent / json.loads(manifest.read_text())[str(unit)]
+    assert saved.read_text() == original
+    assert all('MemoryMax=' not in text for text in (unit.read_text(), (ROOT / 'services/loadcoach-strata.conf').read_text()))
+    template = (ROOT / 'services/loadcoach.service').read_text()
+    assert 'Delegate=memory\nDelegateSubgroup=supervisor\n' in template
+
+
+def test_worker_delegation_upgrade_rolls_back_on_failed_reload_and_skips_foreign_units(tmp_path, monkeypatch):
+    root = tmp_path / 'installed'
+    units, _ = installed_unit(tmp_path, root, 'loadcoach')
+    unit = units / 'loadcoach.service'
+    original = unit.read_text()
+    helper = source_helper()
+    def failed(command, **kwargs):
+        if kwargs.get('check'):
+            raise subprocess.CalledProcessError(1, command)
+    monkeypatch.setattr(helper.subprocess, 'run', failed)
+    with pytest.raises(subprocess.CalledProcessError):
+        helper.apply(helper.plan(root, units, ['loadcoach']), tmp_path / 'recovery')
+    assert unit.read_text() == original
+    assert helper.plan(tmp_path / 'another installation', units, ['loadcoach']) == {}
+
+
 def test_environment_file_cannot_restore_an_old_pin(tmp_path):
     root = tmp_path / 'installed'
     units, dropins = installed_unit(tmp_path, root)

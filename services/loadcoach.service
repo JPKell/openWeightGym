@@ -8,6 +8,9 @@ ExecStart=%h/ai/openWeightGym/.venv/bin/loadcoach --config %h/ai/openWeightGym/s
 EnvironmentFile=-%h/ai/openWeightGym/.env
 Restart=on-failure
 RestartSec=3
+# Bounded image, audio and hybrid engines create child memory groups inside this budget.
+Delegate=memory
+DelegateSubgroup=supervisor
 # llama-server runs inside this unit, so these also cap the host memory a model may take.
 # A model that outgrows them is stopped instead of dragging the whole machine into swap.
 MemoryHigh=22G
