@@ -1,0 +1,10 @@
+# Optional real magic-packet receiver for browser overflow qualification.
+services:
+  turnstile:
+    environment:
+      OWG_QUALIFICATION_WAKE: "1"
+  wake-listener:
+    image: owg-qualification:local
+    command: [wake-listener]
+    init: true
+    volumes: ["front:/state/front"]
