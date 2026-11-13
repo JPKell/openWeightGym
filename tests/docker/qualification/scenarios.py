@@ -81,14 +81,15 @@ def install_image(page, origin, name, nodes):
 
 
 def benchmark_nodes(page, origin, name, nodes, benchmark):
-    page.goto(origin + '/benchmarks/node-measurements?benchmark=' + benchmark)
+    page.goto(origin + '/benchmarks/runs?benchmark=' + benchmark)
     page.locator('#benchmark').select_option(benchmark)
     expect(page.locator('input[name=run-target]').first).to_be_attached(timeout=60000)
     selected = []
     for choice in page.locator('input[name=run-target]').all():
         target = json.loads(choice.input_value())
         if target['model'] == name and target['machine'] in nodes:
-            choice.check(force=True)
+            if not choice.is_checked():
+                choice.locator('xpath=..').click()
             selected.append(target['machine'])
     assert sorted(selected) == sorted(nodes), selected
     page.get_by_role('button', name='Review & queue', exact=True).click()
