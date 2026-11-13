@@ -13,8 +13,8 @@ def delegated_parent(proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgr
     root = mount.resolve()
     current = (root/membership.lstrip("/")).resolve()
     if (not membership.startswith("/") or not current.is_relative_to(root) or current.name != "supervisor"
-            or not current.parent.name.endswith(".service")):
-        raise ValueError("Bounded engines require Delegate=memory and DelegateSubgroup=supervisor on this worker.")
+            or not (current.parent.name.endswith(".service") or current.parent == root)):
+        raise ValueError("Bounded engines require a delegated memory cgroup with a supervisor subgroup. Use Delegate=memory and DelegateSubgroup=supervisor for systemd, or a finite delegated container cgroup.")
     parent = current.parent
     if (parent/"cgroup.procs").read_text().strip() or "memory" not in (parent/"cgroup.controllers").read_text().split():
         raise ValueError("Worker memory delegation is unavailable or its root still contains processes.")
