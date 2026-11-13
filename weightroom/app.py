@@ -48,6 +48,7 @@ from markupsafe import Markup
 import uvicorn
 from weightroom.forms import refill, error_message
 from weightroom.model_catalogue import catalogue as model_catalogue
+from weightroom.cloud_views import accounts_view, SECTIONS as CLOUD_SECTIONS
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException
@@ -2536,7 +2537,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     # ---- cloud APIs ---------------------------------------------------------------------------
 
-    async def cloud_apis_page(request: Request, person: Person, said: str = "", failed: bool = False) -> Response:
+    async def cloud_apis_page(request: Request, person: Person, said: str = "", failed: bool = False,
+                              selected_name: str = '', add_values: dict | None = None) -> Response:
         """The cloud APIs, each with its models here. With `?offers=NAME`, also what that service itself says it has, to tick from."""
         found = await fetch(request, person, "/loadcoach/services")
         if isinstance(found, Response):
@@ -2545,8 +2547,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if asked:
             answer = await ask("GET", f"/loadcoach/services/{quote(asked, safe='')}/models", person.key)
             offers, why = (answer.json()["models"], "") if answer.status_code == 200 else ([], answer.json()["error"]["message"])
-        return page(request, "outside.html", person, status=400 if failed else 200, services=found["services"], asked=asked, offers=offers, why=why,
-                    said=said or request.query_params.get("said", ""), failed=failed)  # fmt: skip
+        view = accounts_view(found['services'], selected_name or asked or request.query_params.get('account', ''),
+                             'models' if asked else request.query_params.get('section', 'connection'))
+        return page(request, "outside.html", person, status=400 if failed else 200, asked=asked, offers=offers, why=why,
+                    said=said or request.query_params.get("said", ""), failed=failed,
+                    adding=add_values is not None or request.query_params.get('open') == 'add' or not view['accounts'],
+                    add_values=add_values or {}, **view)
 
     async def cloud_apis_do(request: Request, person: Person) -> Response:
         """Manage a cloud API, its credential and its offered models."""
@@ -2564,7 +2570,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             now = next((service for service in known.json().get("services", []) if service["name"] == name), {})
             models, url, ceiling = dict(now.get("models", {})), now.get("url", ""), now.get("ceiling")
             if do in ("add", "save"):
-                url, ceiling = one("url"), read(one("ceiling")) if one("ceiling") else None
+                if 'url' in form:
+                    url = one('url')
+                if 'ceiling' in form:
+                    ceiling = read(one('ceiling')) if one('ceiling') else None
             if do == "models":  # the table of its models, as it was sent: a row with a name emptied is a model taken away
                 models = {}
                 for ours, theirs, cost_in, cost_out in zip(form.get("ours", []), form.get("theirs", []), form.get("in", []), form.get("out", [])):
@@ -2577,8 +2586,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             answer = await ask("POST", where, person.key, json=body, params={"new": "1"} if do == "add" else None)
             done = f"Added {name}. Install its API key below, then ask it what it has." if do == "add" else "Saved."
         if not answer.is_success:
-            return await cloud_apis_page(request, person, answer.json()["error"]["message"], failed=True)
-        return go("/cloud-apis?said=" + quote(done))
+            return await cloud_apis_page(request, person, answer.json()["error"]["message"], failed=True,
+                selected_name=name, add_values={field: one(field) for field in ('name', 'url', 'ceiling')} if do == 'add' else None)
+        section = 'access' if do == 'add' else request.query_params.get('section', 'access' if do == 'key' else 'connection')
+        if section not in CLOUD_SECTIONS:
+            section = 'connection'
+        return go('/cloud-apis?' + urlencode({'account': '' if do == 'remove' else name, 'section': section, 'said': done}))
 
     async def outside_redirect(request: Request, person: Person) -> Response:
         """Keep old bookmarks working while making Cloud APIs the canonical page."""

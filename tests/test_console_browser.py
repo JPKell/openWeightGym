@@ -76,7 +76,7 @@ def test_cloud_api_key_status_install_and_replace(desk, tmp_path):
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         errors = []; page.on("pageerror", lambda error: errors.append(str(error)))
-        page.goto("http://console.test/cloud-apis")
+        page.goto("http://console.test/cloud-apis?section=access")
         playwright.expect(page.locator('p[role="status"]')).to_contain_text("No API key installed")
         field = page.get_by_label("API key", exact=True)
         playwright.expect(field).to_have_attribute("type", "password")

@@ -1,0 +1,22 @@
+{# Preview rows and cards use the live account identity and model row. #}
+{% from 'parts.html' import card, empty_row %}
+{% from 'outside_parts.html' import cloud_model_row, identity %}
+
+
+
+{% macro templates() %}
+<template id="account-choice"><button type="button" class="ca-account" data-open>{{ identity() }}<span class="ca-state" data-state></span></button></template>
+<template id="provider-group"><section class="ca-provider-group"><div class="ca-eyebrow mb-2" data-group-name></div><div data-group-accounts></div></section></template>
+<template id="account-card">{% call card('',class_='ca-account-card mb-0') %}
+<div class="d-flex justify-content-between align-items-start gap-2 mb-4">{{ identity() }}<span class="badge ca-status" data-status></span></div>
+<p class="ca-url small text-secondary font-monospace mb-4" data-url></p>
+<div class="d-flex justify-content-between align-items-end gap-2 mb-2"><span class="small text-secondary">Last 24 hours</span><strong data-spend></strong></div>
+<progress class="ca-progress" data-progress max="100" aria-label="Daily spending limit used"></progress>
+<div class="d-flex justify-content-between small text-secondary mt-2 mb-4"><span data-limit></span><span data-models></span></div>
+<div class="ca-card-links">{% for key, label in [('connection','Connection'),('access','API key'),('models','Models'),('limits','Spending')] %}<button type="button" class="btn btn-outline-secondary btn-sm" data-open data-section="{{ key }}">{{ label }} <span aria-hidden="true">↗</span></button>{% endfor %}</div>
+{% endcall %}</template>
+<template id="matrix-row"><tr><th scope="row">{{ identity() }}<small class="ca-name text-secondary font-monospace d-block mt-2" data-name></small></th><td><button type="button" class="ca-cell" data-open data-section="connection"><span class="ca-url" data-host></span><small>Connection settings ↗</small></button></td><td><button type="button" class="ca-cell" data-open data-section="access"><span data-status></span><small>Manage API key ↗</small></button></td><td><button type="button" class="ca-cell" data-open data-section="models"><strong data-models></strong><small>Names &amp; pricing ↗</small></button></td><td><button type="button" class="ca-cell" data-open data-section="limits"><strong data-spend></strong><small data-limit></small></button></td></tr></template>
+<template id="empty-matrix">{{ empty_row(5,'No accounts match. Try a different search or add an account.') }}</template>
+<template id="model-row">{{ cloud_model_row() }}</template>
+<template id="offer-row"><label class="form-check mb-3"><input type="checkbox" class="form-check-input" name="offer"><span class="form-check-label"></span></label></template>
+{% endmacro %}

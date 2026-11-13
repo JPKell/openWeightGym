@@ -1,126 +1,31 @@
-{% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, section_title , confirm_check, confirm_loss, alert %}
-{% from "parts.html" import page_header, form_section, more %}
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, card, said_box, section_title, swaps %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'outside_parts.html' import editor, identity, add_form, cloud_model_row %}
+{% from 'icons.html' import icon %}
 {% block title %}Cloud APIs · openWeightGym{% endblock %}
-{% macro cloud_model_row(ours='', model={}) %}
-<tr>
-<td><input name="ours" class="form-control" value="{{ ours }}" placeholder="Name shown here" aria-label="{{ 'our name' if ours else "another model's name here" }}" autocapitalize="none" spellcheck="false"></td>
-<td><input name="theirs" class="form-control" value="{{ model.theirs|default('') }}" placeholder="Model ID at the service" aria-label="{{ "the service's name" if ours else 'its name at the service' }}" autocapitalize="none" spellcheck="false"></td>
-<td><input name="in" class="form-control" value="{{ model['in']|default('') }}" aria-label="{{ 'price in' if ours else 'its price in' }}" inputmode="decimal"></td>
-<td><input name="out" class="form-control" value="{{ model.out|default('') }}" aria-label="{{ 'price out' if ours else 'its price out' }}" inputmode="decimal"></td>
-</tr>
-{% endmacro %}
+{% block scripts %}<link rel="stylesheet" href="/static/cloud-apis.css?v=1"><script src="/static/cloud-apis.js?v=1" defer></script>{% endblock %}
 {% block main %}
-{{ page_header('Cloud APIs', 'Connect external model services and manage their access.') }}
-{{ said_box(said, failed) }}
-
-{% for service in services %}
-{% set left = (service.ceiling - service.spent) if service.ceiling else none %}
-{% set _card_title1 %}{{ service.name }} <small class="text-secondary fw-normal">{{ service.models|length }} model{{ "" if service.models|length == 1 else "s" }} · ${{ "%.2f"|format(service.spent) }} in the last 24 hours{% if service.ceiling %} of ${{ "%.2f"|format(service.ceiling) }}{% endif %}</small>{% endset %}
-{% call card(_card_title1, open=true) %}
-    {% if service.key %}
-    <p class="text-success" role="status">API key installed.</p>
-    {% else %}
-    <p class="text-warning" role="status">No API key installed. Install a key to use this API's models.</p>
-    {% endif %}
-    <form method="post" action="/cloud-apis" class="row g-3 align-items-end mb-4" {{ swaps() }}>
-      <input type="hidden" name="name" value="{{ service.name }}">
-      <input type="hidden" name="do" value="key">
-      <div class="col-md-9">
-        <label class="form-label" for="key-{{ loop.index }}">{{ "Replace API key" if service.key else "API key" }}</label>
-        <input id="key-{{ loop.index }}" name="api_key" type="password" class="form-control" autocomplete="new-password" autocapitalize="none" spellcheck="false" maxlength="8192" required>
-        <div class="form-text">The saved key is never displayed. A replacement applies to new requests immediately.</div>
-      </div>
-      <div class="col-md-3"><button class="btn btn-primary" type="submit">{{ "Update API key" if service.key else "Install API key" }}</button></div>
-    </form>
-    {% if service.ceiling and left <= 0 %}{% call alert('danger') %}It has cost what it may in a day. Its models are refused until that falls again.{% endcall %}{% endif %}
-
-    <form method="post" action="/cloud-apis" class="row g-3 align-items-end mb-4" {{ swaps() }}>
-      <input type="hidden" name="name" value="{{ service.name }}">
-      <div class="col-md-6">
-        <label class="form-label" for="url-{{ loop.index }}">Address <small class="text-secondary">as far as and including /v1</small></label>
-        <input id="url-{{ loop.index }}" name="url" class="form-control" value="{{ service.url }}" autocapitalize="none" spellcheck="false" required>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label" for="ceiling-{{ loop.index }}">Most in a day <small class="text-secondary">dollars; empty for none</small></label>
-        <input id="ceiling-{{ loop.index }}" name="ceiling" class="form-control" value="{{ service.ceiling if service.ceiling is not none and service.ceiling is defined else "" }}" inputmode="decimal">
-      </div>
-      <div class="col-md-3"><button class="btn btn-primary" name="do" value="save">Save</button></div>
-    </form>
-
-    {{ section_title("Its models here") }}
-    <p class="text-secondary">Our name is what people choose and callers send. A price is in dollars for a million tokens, and is used where the service does not say what an answer cost. Empty a name to take a model away.</p>
-    <form method="post" action="/cloud-apis" {{ swaps() }}>
-      <input type="hidden" name="name" value="{{ service.name }}">
-      <div class="table-responsive">
-      <table class="sortable table table-sm align-middle">
-        <thead><tr><th>Our name</th><th>The service's name for it</th><th>Price in</th><th>Price out</th></tr></thead>
-        <tbody>
-        {% for ours, model in service.models.items() %}{{ cloud_model_row(ours, model) }}{% endfor %}
-        {{ cloud_model_row() }}
-        </tbody>
-      </table>
-      </div>
-      <button class="btn btn-primary" name="do" value="models">Save its models</button>
-      <a class="btn btn-outline-primary ms-2" href="/cloud-apis?offers={{ service.name|urlencode }}#offers">Ask the service what it has</a>
-    </form>
-
-    {% if asked == service.name %}
-    <div id="offers" class="mt-4">
-      {% if why %}{% call alert('danger') %}{{ why }}{% endcall %}{% else %}
-      {% set _section_title2 %}What {{ service.name }} says it has{% endset %}
-{{ section_title(_section_title2) }}
-      <p class="text-secondary">Tick the ones to offer here. Each is added under the service's own name for it, which can be changed above afterwards.</p>
-      <input type="search" class="form-control mb-2" data-filter="offers-table" placeholder="Find one of its {{ offers|length }} models" aria-label="Find a model" autocapitalize="none" spellcheck="false">
-      <form method="post" action="/cloud-apis" {{ swaps() }}>
-        <input type="hidden" name="name" value="{{ service.name }}">
-        <div class="table-responsive mb-3" style="max-height: 20rem; overflow: auto">
-        <table id="offers-table" class="sortable table table-sm align-middle mb-0">
-          <tbody>
-          {% set have = service.models.values()|map(attribute="theirs")|list %}
-          {% for theirs in offers %}
-          <tr><td><div class="form-check mb-0">
-            <input id="offer-{{ loop.index }}" name="offer" value="{{ theirs }}" type="checkbox" class="form-check-input" {{ "checked disabled" if theirs in have }}>
-            <label for="offer-{{ loop.index }}" class="form-check-label wrap">{{ theirs }}</label>
-          </div></td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-        </div>
-        <button class="btn btn-primary" name="do" value="offer">Offer the ticked ones here</button>
-      </form>
-      {% endif %}
-    </div>
-    {% endif %}
-
-    <form method="post" action="/cloud-apis" class="row g-3 align-items-center mt-3" {{ swaps() }}>
-      <input type="hidden" name="name" value="{{ service.name }}">
-      <div class="col-md-6">{% set confirmation_label %}Yes, remove {{ service.name }} and its models from here{% endset %}{{ confirm_check(confirmation_label, 'sure-' ~ loop.index) }}</div>
-      <div class="col-md-6"><button  class="btn btn-outline-danger" name="do" value="remove" {{ confirm_loss() }}>Remove the service</button></div>
-    </form>
-  {% endcall %}
-{% else %}
-<p class="text-secondary">No cloud API is configured.</p>
-{% endfor %}
-
-{% call card("Add a cloud API", not services) %}
-  <p class="text-secondary">Choose a name and address. Once the API is added, install its key in the form above.</p>
-  <form method="post" action="/cloud-apis" class="row g-3 align-items-end" {{ swaps() }}>
-{% call form_section('Connection') %}
-    <div class="col-md-6">
-      <label class="form-label" for="new-name">Name <small class="text-secondary">lowercase, such as openrouter</small></label>
-      <input id="new-name" name="name" class="form-control" autocapitalize="none" spellcheck="false" required>
-    </div>
-    <div class="col-md-6">
-      <label class="form-label" for="new-url">Address <small class="text-secondary">as far as and including /v1</small></label>
-      <input id="new-url" name="url" class="form-control" placeholder="https://openrouter.ai/api/v1" autocapitalize="none" spellcheck="false" required>
-    </div>
-    <div class="col-md-6">
-      <label class="form-label" for="new-ceiling">Most in a day</label>
-      <input id="new-ceiling" name="ceiling" class="form-control" placeholder="dollars" inputmode="decimal">
-    </div>
-    <div class="col-md-6"><button class="btn btn-primary" name="do" value="add">Add</button></div>
-  {% endcall %}
-</form>
+<div class="ca-workspace" data-cloud-apis data-cloud-account="{{ selected_account.name if selected_account else '' }}" data-cloud-section="{{ section }}">
+{% call page_header('Cloud APIs') %}<a class="btn btn-primary" href="/cloud-apis?open=add" data-add aria-controls="add-account" aria-expanded="{{ 'true' if adding else 'false' }}">+ Add account</a>{% endcall %}
+{% call kpi_row('Cloud account summary',class_='mb-4') %}
+{{ kpi('Accounts',accounts|length,'Independent keys & settings') }}
+{{ kpi('Endpoints',endpoint_count,'Shared endpoints welcome') }}
+{{ kpi('Offered models',model_count,'Account-specific names') }}
+{{ kpi('Spent / 24h','$%.2f'|format(spent_total),'Rolling window · USD') }}
 {% endcall %}
+{{ said_box(said, failed) }}
+{% set add_attrs = {'data-add-panel':''} %}{% if not adding %}{% set add_attrs = {'data-add-panel':'','hidden':''} %}{% endif %}
+{% call card('Add a cloud account',id='add-account',hint='Use a unique name for every account. Endpoints can be shared.',attrs=add_attrs) %}{{ add_form(preview=false,form=add_values) }}{% endcall %}
+{% if accounts %}
+<div class="ca-toolbar"><div class="ca-search"><label for="search" class="visually-hidden">Find an account or endpoint</label><input type="search" id="search" class="form-control" placeholder="Find an account or endpoint…" autocomplete="off"></div><label class="visually-hidden" for="status-filter">Account state</label><select id="status-filter" class="form-select"><option value="all">All accounts</option><option value="ready">Key installed · within limit</option><option value="key">Needs API key</option><option value="limit">Limit reached</option></select><span class="small text-secondary ms-auto" id="result-count" role="status" aria-live="polite">{{ accounts|length }} accounts</span></div>
+<div class="ca-desk" id="desk-view">
+<aside class="ca-account-rail" aria-label="Cloud accounts"><div class="d-flex align-items-center justify-content-between mb-4"><span class="ca-eyebrow">YOUR ACCOUNTS</span><span class="badge">{{ accounts|length }}</span></div><div id="account-choices">
+{% for provider, group in account_groups.items() %}<section class="ca-provider-group"><div class="ca-eyebrow mb-2">{{ provider }}</div><div>{% for one in group %}<a class="ca-account" href="/cloud-apis?account={{ one.name|urlencode }}&amp;section={{ section }}" data-cloud-choice="{{ one.name }}" data-cloud-search="{{ one.name }} {{ one.url }} {{ one.provider }}" data-cloud-state="{{ one.state }}"{% if one.name == selected_account.name %} aria-current="true"{% endif %} {{ swaps(push=true) }}>{{ identity(one) }}<span class="ca-state" data-attention="{{ 'false' if one.state == 'ready' else 'true' }}" aria-label="{{ one.status }}">{{ '●' if one.state == 'ready' else '!' }}</span><span class="small text-secondary" data-draft-mark hidden>Draft</span></a>{% endfor %}</div></section>{% endfor %}
+</div><p class="small text-secondary mt-3" data-no-accounts hidden>No matching accounts. Clear the search or choose All accounts.</p><div class="ca-rail-footer"><a class="btn btn-outline-secondary w-100" href="/cloud-apis?open=add" data-add>+ Add another account</a><p class="small text-secondary mt-3 mb-0">A separate key, model list and spending limit for every account. Unsaved drafts stay here while you switch.</p></div></aside>
+<div id="desk-editor" class="min-w-0">{{ editor(selected_account,preview=false,section=section,asked=asked,offers=offers,why=why) }}</div>
+</div>
+{% else %}<div class="ca-empty"><span class="ca-empty-symbol">{{ icon('models') }}</span>{{ section_title('Your next connection starts here',wrapper_class='mt-4 mb-2') }}<p class="text-secondary">No cloud API is configured.</p><p class="text-secondary">Add a cloud account, install its key, then choose the models to offer.</p><a class="btn btn-primary" href="/cloud-apis?open=add" data-add>+ Add your first account</a></div>{% endif %}
+<template id="model-row">{{ cloud_model_row() }}</template>
+</div>
 {% endblock %}
