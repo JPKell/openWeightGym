@@ -1,0 +1,23 @@
+{# Canonical personal settings controls, also used by the standalone proposals. #}
+{% from 'parts.html' import card, confirm_loss, section_title %}
+{% macro proposed() %}<span class="badge bg-azure-lt">Proposed</span>{% endmacro %}
+{% macro select_field(id, label, options, hint='', value='', new=false) %}
+<div class="mb-3"><label for="{{ id }}" class="form-label">{{ label }} {% if new %}{{ proposed() }}{% endif %}</label><select id="{{ id }}" name="{{ id }}" class="form-select"{% if hint %} aria-describedby="{{ id }}-hint"{% endif %}>{% for key, text in options %}<option value="{{ key }}"{% if key == value %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>{% if hint %}<p class="form-hint mb-0" id="{{ id }}-hint">{{ hint }}</p>{% endif %}</div>
+{% endmacro %}
+{% macro toggle(id, label, hint='', checked=false, new=false) %}
+<div class="preference-line"><div class="form-check form-switch mb-0"><input id="{{ id }}" name="{{ id }}" type="checkbox" class="form-check-input"{% if checked %} checked{% endif %}{% if hint %} aria-describedby="{{ id }}-hint"{% endif %}><label for="{{ id }}" class="form-check-label">{{ label }} {% if new %}{{ proposed() }}{% endif %}</label></div>{% if hint %}<p class="form-hint mb-0" id="{{ id }}-hint">{{ hint }}</p>{% endif %}</div>
+{% endmacro %}
+{% macro save_actions(label='Save preferences') %}
+<div class="d-flex flex-wrap gap-2 align-items-center border-top pt-3 mt-3"><button type="submit" class="btn btn-primary">{{ label }}</button><button type="button" class="btn btn-outline-secondary" data-discard>Discard changes</button><span class="small text-secondary" data-form-state role="status">No unsaved changes</span></div>
+{% endmacro %}
+{% macro workspace(me, hint='') %}
+<div class="account-desk"><div class="account-editor">{{ caller() }}</div><aside class="account-guidance" aria-label="Account context">
+{% call card('At a glance') %}<dl class="account-context-facts"><dt>Account</dt><dd>{{ me.name }}</dd><dt>Group</dt><dd>{{ me.group }}</dd><dt>Authenticator</dt><dd>{{ 'Enabled' if me.second_step else 'Not set up' }}</dd><dt>Application keys</dt><dd><a href="/account/keys">{{ me['keys']|length }}</a></dd></dl>{% endcall %}
+{% if hint %}<p class="text-secondary small">{{ hint }}</p>{% endif %}<p class="text-secondary small">Your administrator manages permissions and service policies.</p></aside></div>
+{% endmacro %}
+{% macro password_form() %}
+<form method="post" action="/account/password" class="row g-3"><div class="col-12"><label for="current_password" class="form-label">Current password</label><input id="current_password" name="current_password" type="password" class="form-control" autocomplete="current-password" required></div><div class="col-sm-6"><label for="new_password" class="form-label">New password</label><input id="new_password" name="new_password" type="password" class="form-control" autocomplete="new-password" minlength="8" required></div><div class="col-sm-6"><label for="new_again" class="form-label">Confirm new password</label><input id="new_again" name="new_again" type="password" class="form-control" autocomplete="new-password" minlength="8" required></div><div class="col-12"><p class="form-hint">At least 8 characters. Changing your password ends your other sign-ins.</p><button class="btn btn-primary">Change password</button></div></form>
+{% endmacro %}
+{% macro api_key_row(label='', made='', id='', preview=false) %}
+<tr data-key-row><td data-key-label>{{ label or 'none' }}</td><td class="when" data-key-made>{{ made }}</td><td><code data-key-id>{{ id }}</code></td><td class="text-end">{% if preview %}<button type="button" class="btn btn-outline-danger btn-sm" data-remove-key aria-label="Remove {{ label }} key">Remove…</button>{% else %}<form method="post" action="/account/keys/{{ id|urlencode }}/remove" class="m-0"><button class="btn btn-outline-danger btn-sm" {{ confirm_loss() }} aria-label="Remove {{ label }} key">Remove…</button></form>{% endif %}</td></tr>
+{% endmacro %}

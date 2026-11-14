@@ -32,10 +32,10 @@ from db import DatabaseSource, database, local_path, migrate
 from db.schemas import USERS
 
 from loadcoach.groups import EVERYTHING, NAME, NOTHING, Group, Groups, adjusted, check_own, limited
+from loadcoach.preferences import DEFAULTS as CHOICES, validate as validate_choices
 
 # What a person may choose for themselves, and what each is until they choose. These are about
 # how things are shown to them, never about what they may do.
-CHOICES = {"show_telemetry": True}  # the strip of meters at the top of every page of the front machine's app
 
 
 @dataclass(frozen=True)
@@ -187,6 +187,12 @@ class Users:
         ).fetchone()
         if row and (user := self.user(*row)):
             from dataclasses import replace
+            if user.until:
+                last = self.db.execute('SELECT last_seen FROM session_details WHERE key_hash=?', (hash_key(key),)).fetchone()
+                if last and last[0] < time.time() - 60:
+                    with self.db:
+                        self.db.execute('UPDATE session_details SET last_seen=? WHERE key_hash=? AND last_seen<?',
+                                        (time.time(), hash_key(key), time.time() - 60))
             return replace(user, key_identity=key_identity(hash_key(key)))
         return None
 
@@ -271,8 +277,7 @@ class Users:
 
     def choose(self, name: str, chosen: dict) -> None:
         """Keep a user's own choices. Only the ones in CHOICES, each of the kind it is there."""
-        if wrong := [key for key, value in chosen.items() if key not in CHOICES or type(value) is not type(CHOICES[key])]:
-            raise ValueError(f"Not something to choose, or not the right kind of value: {wrong}. Choices: {CHOICES}")
+        validate_choices(chosen)
         with self.db:
             self.db.execute("UPDATE users SET choices = ? WHERE name = ?", (json.dumps({**self.choices(name), **chosen}), name))
 
@@ -341,7 +346,38 @@ class Users:
                 "INSERT INTO keys (hash, user, label, created, expires, via) VALUES (?, ?, ?, ?, ?, ?)",
                 (hash_key(key), name, label, datetime.now().isoformat(timespec="seconds"), hours and time.time() + hours * 3600, via),
             )
+            if hours:
+                self.db.execute('INSERT INTO session_details(key_hash,agent,peer,last_seen) VALUES(?,?,?,?)',
+                                (hash_key(key), '', '', time.time()))
         return key
+
+    def note_session(self, key: str, agent: str, peer: str) -> None:
+        """Retain bounded device metadata separately from the session verifier."""
+        with self.db:
+            self.db.execute('UPDATE session_details SET agent=?,peer=? WHERE key_hash=?',
+                            (agent[:300], peer[:100], hash_key(key)))
+
+    def sessions(self, name: str, current: str) -> list[dict]:
+        """Only this owner's unexpired sign-ins, with opaque revocation identifiers."""
+        rows = self.db.execute('SELECT k.hash,k.created,k.expires,k.via,d.agent,d.peer,d.last_seen '
+                               'FROM keys k LEFT JOIN session_details d ON d.key_hash=k.hash '
+                               'WHERE k.user=? AND k.expires>? ORDER BY k.created DESC', (name, time.time()))
+        return [dict(id=key_identity(verifier), created=created, expires=expires, via=via,
+                     agent=agent or '', peer=peer or '', last_seen=seen,
+                     current=secrets.compare_digest(verifier, hash_key(current)))
+                for verifier, created, expires, via, agent, peer, seen in rows]
+
+    def revoke_session(self, name: str, identifier: str, current: str) -> bool:
+        """Revoke exactly one other owned sign-in, never a permanent API key."""
+        for session in self.sessions(name, current):
+            if session['id'] == identifier and not session['current']:
+                with self.db:
+                    for (verifier,) in self.db.execute('SELECT hash FROM keys WHERE user=? AND expires>?',
+                                                      (name, time.time())).fetchall():
+                        if secrets.compare_digest(key_identity(verifier), identifier):
+                            return self.db.execute('DELETE FROM keys WHERE hash=? AND user=? AND expires IS NOT NULL',
+                                                   (verifier, name)).rowcount > 0
+        return False
 
     async def sign_in(self, name: str, password: str, code: str | None = None, new_password: str | None = None, via: str | None = None) -> str:
         """Check who someone is and return a session key for them. Raises SignInRefused if it does not hold.

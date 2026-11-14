@@ -135,6 +135,8 @@ class Front:
                                 metadata=metadata, temporary=quiet, job=job if job and not quiet else None)
         if job:
             self.progress[job] = {"type": "audio_generation.progress", "stage": "completed", "at": time.time()}
+        if self.log and not quiet:
+            self.log.add('soundroom', 'completed', user.name, model=model, asset=asset['id'])
         return {**event, "asset_id": asset["id"], "asset_url": "/soundroom/assets/" + asset["id"] + "/content"}
 
     async def model_of(self, user, name):

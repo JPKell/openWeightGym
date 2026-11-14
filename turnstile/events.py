@@ -263,7 +263,10 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         if isinstance(paged, Response):
             return paged
         limit, number = paged
-        found = await report(lambda view: view.personal_events(user.name, limit, (number - 1) * limit))
+        query, kind = request.query_params.get('q', ''), request.query_params.get('kind', '')
+        if len(query) > 200 or kind not in ('', 'request', 'user'):
+            return error(400, 'Choose a supported activity type and search of at most 200 characters.')
+        found = await report(lambda view: view.personal_events(user.name, limit, (number - 1) * limit, query, kind))
         if isinstance(found, Response):
             return found
         return JSONResponse({**found, 'events': resolve(found['events'])})

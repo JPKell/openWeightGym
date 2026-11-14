@@ -1,0 +1,4 @@
+/* Account-wide accessibility choices, rendered before the first paint. */
+:root[data-text-size=large] { font-size: 18px; }
+:root[data-motion=reduce] *, :root[data-motion=reduce] *::before, :root[data-motion=reduce] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+@media(prefers-reduced-motion:reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

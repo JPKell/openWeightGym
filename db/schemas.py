@@ -213,6 +213,11 @@ USERS = (
         CREATE INDEX IF NOT EXISTS client_accesses_owner ON client_accesses(owner_id, last_at);
         CREATE INDEX IF NOT EXISTS client_accesses_last ON client_accesses(last_at);
     """),
+    Migration(7, 'owner-visible browser session metadata', '''
+        CREATE TABLE IF NOT EXISTS session_details (
+            key_hash TEXT PRIMARY KEY REFERENCES keys(hash) ON DELETE CASCADE,
+            agent TEXT NOT NULL, peer TEXT NOT NULL, last_seen DOUBLE PRECISION NOT NULL);
+    '''),
 )
 
 

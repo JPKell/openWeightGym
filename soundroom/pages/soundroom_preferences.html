@@ -1,18 +1,14 @@
-{% extends "frame.html" %}
-{% from "parts.html" import page_header, alert %}
-{% block title %}Audio · My account · openWeightGym{% endblock %}
-{% block scripts %}<script src="/soundroom-static/preferences.js?v=2" defer></script>{% endblock %}
-{% block main %}
-<div id="soundroom-preferences" style="max-width:36rem">
-  {{ page_header("Audio", lead="Your own choices for the Music, Sounds, Voice generation and Transcribe pages.") }}
-  {% call alert('', role='status', attrs={'id': 'ap-message', 'hidden': ''}) %}{% endcall %}
-  <form id="ap-form">
-    <label class="form-label" for="ap-format">Download format</label>
-    <select id="ap-format" class="form-select mb-3"><option value="wav">WAV</option><option value="flac">FLAC</option><option value="mp3">MP3</option><option value="opus">Opus</option></select>
-    {% if platform().speech %}<label class="form-label" for="ap-speech">Speech model</label><select id="ap-speech" class="form-select mb-3"></select>
-    <label class="form-label" for="ap-transcription">Transcription model</label><select id="ap-transcription" class="form-select mb-3"></select>
-    <label class="form-label" for="ap-voice">Voice</label><select id="ap-voice" class="form-select mb-3"></select>{% endif %}
-    <button class="btn btn-primary" type="submit">Save</button>
-  </form>
-</div>
-{% endblock %}
+{% extends 'account_base.html' %}
+{% from 'parts.html' import card, alert %}
+{% from 'account_parts.html' import toggle, save_actions %}
+{% set account_title = 'Audio' %}
+{% set account_hint = 'These choices initialize Music, Sounds, Voice generation and Transcribe. Pages can override them for individual work.' %}
+{% block account_scripts %}<script src="/soundroom-static/preferences.js?v=3" defer></script>{% endblock %}
+{% block account_body %}<div id="soundroom-preferences">
+{{ alert('', role='status', attrs={'id':'ap-message','hidden':''}) }}
+{% call card('Audio defaults') %}<form id="ap-form" data-account-form><fieldset id="ap-fields" disabled>
+<label class="form-label" for="ap-format">Download format</label><select id="ap-format" name="format" class="form-select mb-3"><option value="wav">WAV</option><option value="flac">FLAC</option><option value="mp3">MP3</option><option value="opus">Opus</option></select>
+{% if platform().speech %}<label class="form-label" for="ap-speech">Speech model</label><select id="ap-speech" name="speech_model" class="form-select mb-3"></select><label class="form-label" for="ap-transcription">Transcription model</label><select id="ap-transcription" name="transcription_model" class="form-select mb-3"></select><label class="form-label" for="ap-voice">Voice</label><select id="ap-voice" name="voice" class="form-select mb-3"></select>{% endif %}
+{{ toggle('ap-autoplay', 'Play new generated audio automatically', 'Off by default. Your browser may require you to press Play.', false) }}
+{{ save_actions('Save audio preferences') }}</fieldset><noscript><p class="text-secondary">Enable JavaScript to load and save audio preferences.</p></noscript></form>{% endcall %}
+</div>{% endblock %}

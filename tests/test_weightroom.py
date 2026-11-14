@@ -211,7 +211,8 @@ def test_my_account_shows_and_changes_what_is_ones_own(desk):
     browser, _, users = desk
     sign_in(browser, "pat")
     account = browser.get("/account").text
-    assert "plain" in account and "No keys." in account and "1 place" in account
+    assert "plain" in account and "1 place" in account
+    assert "No keys." in browser.get("/account/keys").text
 
     made = browser.post("/account/keys", data={"label": "<b>laptop</b>"})
     key = re.search(r'<pre class="secret">(lc_[\w-]+)</pre>', made.text).group(1)
@@ -1273,7 +1274,7 @@ def test_the_strip_of_meters_is_on_every_page_until_someone_chooses_not_to_see_i
     assert 'name="show_telemetry" type="checkbox" class="form-check-input" checked' in account
     kept = browser.post("/account/display", data={})  # the box unticked
     assert "Kept." in kept.text and 'id="strip"' not in kept.text
-    assert users.choices("pat") == {"show_telemetry": False}
+    assert users.choices("pat")["show_telemetry"] is False
     home = browser.get("/").text
     assert 'id="strip"' not in home
     appearance = browser.get("/account/appearance").text

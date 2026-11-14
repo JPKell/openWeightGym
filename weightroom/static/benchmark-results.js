@@ -37,7 +37,7 @@
     const jump = event.target.closest('#benchmark-measurements [data-scroll-metric]');
     if (jump) {
       const grid = table(), heading = grid?.querySelector(`[data-metric="${jump.dataset.scrollMetric}"]`);
-      if (heading) grid.parentElement.scrollTo({left: Math.max(0, heading.offsetLeft - grid.rows[1].cells[0].offsetWidth), behavior: 'smooth'});
+      if (heading) grid.parentElement.scrollTo({left: Math.max(0, heading.offsetLeft - grid.rows[1].cells[0].offsetWidth), behavior: document.documentElement.dataset.motion === 'reduce' || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
     }
     const column = event.target.closest('#benchmark-score-table thead th[data-bench]');
     const form = document.getElementById('results-filters');

@@ -1,0 +1,10 @@
+{% extends 'account_base.html' %}
+{% from 'parts.html' import card, empty_row, alert %}
+{% from 'account_parts.html' import api_key_row %}
+{% set account_title = 'API keys' %}
+{% set account_hint = 'Use a label for each application. Replace an old key in your client before removing it here.' %}
+{% block account_body %}{% call card('Application keys', hint='For programs using models in your name. A new key is shown once.') %}
+{% if new_key %}{% call alert('info') %}<strong>Copy this key now</strong><pre class="secret">{{ new_key }}</pre><span class="small">It will not be shown again.</span>{% endcall %}{% endif %}
+<div class="table-responsive"><table id="keys" class="table table-sm align-middle sortable"><thead><tr><th data-sort="text">Label</th><th data-sort="value">Made</th><th data-sort="text">Id</th><th><span class="visually-hidden">Actions</span></th></tr></thead><tbody>{% for key in me['keys'] %}{{ api_key_row(key.label, key.created|timestamp, key.id) }}{% else %}{% call empty_row(4) %}No keys.{% endcall %}{% endfor %}</tbody></table></div>
+<form method="post" action="/account/keys" class="row g-3 align-items-end"><div class="col-sm-8"><label for="label" class="form-label">Label for a new key</label><input id="label" name="label" class="form-control" maxlength="60" placeholder="e.g. Research notebook" required></div><div class="col-sm-4"><button class="btn btn-primary">Make a key</button></div></form><p class="form-hint mt-3 mb-0">A key acts with your account’s current permissions. Removing it stops its access immediately.</p>
+{% endcall %}{% endblock %}

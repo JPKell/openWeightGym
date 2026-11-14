@@ -125,5 +125,6 @@
   window.addEventListener("storage", event => { if (key && event.key === key) { saved = read(); current = {...saved}; apply(); } });
   document.addEventListener("DOMContentLoaded", render);
   document.addEventListener("htmx:load", render);
+  window.SuiteTheme = {preference: () => ({...saved})};
   apply();
 })();

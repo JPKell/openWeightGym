@@ -153,14 +153,31 @@
 })();
 
 
-// Recorded instants stay UTC in markup; display and table labels use this browser's zone.
+// Recorded instants stay UTC; presentation follows the account's regional preferences.
 (() => {
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const options = {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false};
-  const format = (instant, withZone = true) => new Intl.DateTimeFormat(undefined,
-    {...options, ...(withZone ? {timeZoneName: 'short'} : {})}).format(new Date(instant));
-  const localInput = date => {
-    const parts = new Intl.DateTimeFormat('en-CA', {year:'numeric',month:'2-digit',day:'2-digit',
+  let preferences = {};
+  try { preferences = JSON.parse(document.documentElement.dataset.personalPreferences || '{}'); } catch { /* Device defaults. */ }
+  const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const resolveZone = value => {
+    try { return value && value !== 'device' ? new Intl.DateTimeFormat(undefined, {timeZone:value}).resolvedOptions().timeZone : deviceZone; }
+    catch { return deviceZone; }
+  };
+  const zone = resolveZone(preferences.timezone);
+  const format = (instant, withZone = true, overrides = {}) => {
+    const choices = {...preferences, ...overrides}, timeZone = resolveZone(choices.timezone);
+    const date = new Date(instant);
+    const options = {timeZone, year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit',
+      ...(choices.clock === '12' ? {hour12:true} : {hourCycle:'h23'}), ...(withZone ? {timeZoneName:'short'} : {})};
+    if (choices.date_format === 'device') options.month = 'numeric';
+    if (choices.date_format !== 'iso') return new Intl.DateTimeFormat(undefined, options).format(date);
+    const parts = new Intl.DateTimeFormat('en-CA', {timeZone, year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);
+    const part = key => parts.find(item => item.type === key).value;
+    const time = new Intl.DateTimeFormat(undefined, {timeZone, hour:'2-digit', minute:'2-digit',
+      ...(choices.clock === '12' ? {hour12:true} : {hourCycle:'h23'})}).format(date);
+    return `${part('year')}-${part('month')}-${part('day')}, ${time}${withZone ? ' · ' + timeZone : ''}`;
+  };
+  const localInput = (date, timeZone = zone) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {timeZone, year:'numeric',month:'2-digit',day:'2-digit',
       hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date);
     const part = name => parts.find(p => p.type === name).value;
     return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`;
@@ -195,7 +212,11 @@
     if (!(form instanceof HTMLFormElement)) return;
     for (const input of form.querySelectorAll('input[data-input-zone]')) {
       if (!input.value) continue;
-      const original = input.value, date = new Date(original);
+      const original = input.value;
+      // Interpret the displayed wall time in the chosen zone, even on another device.
+      const wanted = Date.parse(original + 'Z');
+      let date = new Date(wanted);
+      for (let pass = 0; pass < 3; pass++) date = new Date(date.getTime() + wanted - Date.parse(localInput(date) + 'Z'));
       if (!Number.isFinite(date.getTime())) continue;
       const parts = new Intl.DateTimeFormat('en-CA', {timeZone: input.dataset.inputZone,
         year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date);
