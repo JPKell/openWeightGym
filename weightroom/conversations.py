@@ -87,7 +87,7 @@ def reason(body: bytes) -> dict:
     return {"why": str(why)[:500]}
 
 
-def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: httpx.AsyncClient | None = None, *, plugins=None) -> Starlette:
+def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: httpx.AsyncClient | None = None, *, plugins=None, tools=None, tool_level=None, tool_settings=lambda: {}, toolsets=lambda: []) -> Starlette:
     """Host web-chat APIs in WeightRoom's process using the user's own upstream key."""
     inference = inference or compute
     chats = Conversations(database)
@@ -96,6 +96,9 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
     keep_private(database)
     passing = Conversations(":memory:")
     turns: dict[str, list[Turn]] = {}
+    from weightroom.tool_chat import ToolChat
+    tool_chat = ToolChat(chats, turns, Turn, compute, inference, tools or compute,
+                         level_reader=tool_level, settings=tool_settings, toolsets=toolsets)
 
     def offered(user: Principal) -> list[str]:
         """List concrete models this caller may ask for."""
@@ -153,7 +156,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         if number.isdigit():
             store.bind_models(int(number),user.name,user.info.get('chat',{}).get('models',{}))
         talk = store.get(int(number), user.name) if number.isdigit() else None
-        if talk is None:
+        if talk is None or talk.get('kind') != 'text':
             return error(404, "You have no such conversation.")  # someone else's is answered like one that is not there
         return ref, store, int(number), current_labels(talk,user)
 
@@ -632,6 +635,12 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         knowledge.store.interrupted()
         workflows.store.interrupted()
         for cut in chats.cut_off():
+            talk = chats.get(cut['conversation'], cut['user'])
+            if talk and talk.get('kind') == 'tools':
+                from types import SimpleNamespace
+                tool_chat.close_calls(cut['conversation'], SimpleNamespace(name=cut['user']),
+                                      SimpleNamespace(current_level=lambda: talk['level']), 'WeightRoom stopped; not replayed.')
+                chats.tool_state(cut['conversation'], {}, talk['level'])
             chats.say(cut["conversation"], "assistant", "", model=cut["model"], branch=cut["branch"],
                       error="WeightRoom stopped during this answer. Ask again to retry.")
             chats.answered(cut["conversation"], cut["branch"])
@@ -651,6 +660,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
             passing.db.close()
 
     app = Starlette(lifespan=lifespan, routes=[
+        *tool_chat.routes(route),
         *knowledge.routes(route),
         *workflows.routes(route),
         route("/loadcoach/conversations", conversation_list),
@@ -666,6 +676,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
     app.state.chats, app.state.passing, app.state.turns = chats, passing, turns
     app.state.follow = signed_in(conversation_stream)
     app.state.forget = forget
+    app.state.tool_chat = tool_chat
     app.state.knowledge = knowledge
     workflows.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://chat')
     app.state.workflows = workflows

@@ -1,12 +1,12 @@
 {% from "docs_parts.html" import doc_contents, doc_section, doc_table %}
-{{ doc_contents([('console', 'Finding your way'), ('topics', 'In this section')]) }}
+{{ doc_contents([('console', 'Finding your way'), ('tool-chat', 'Tool chat'), ('topics', 'In this section')]) }}
 {% call doc_section('Finding your way', 'console') %}
 <p>The bar along the top holds the console's categories, and the pages of the one you are in are listed down the left. On a phone, open Menu for all of them.
   What you see depends on your account: a category appears only when it has a page you may use.</p>
 {% call doc_table('Console categories') %}
 <thead><tr><th scope="col">Category</th><th scope="col">What is there</th></tr></thead>
 <tbody>
-  <tr><td>Interact</td><td>Text chat; image generation, music, sounds, Voice generation and Transcribe; and Voice chat when your account may use it.</td></tr>
+  <tr><td>Interact</td><td>Text chat; <a href="/chat/tools">Tool chat</a> when use-tools and visible ToolLocker tools allow it; image generation, music, sounds, Voice generation and Transcribe; and Voice chat when your account may use it.</td></tr>
   <tr><td>Models</td><td>Models, image and audio models, roles, model files and downloads, for accounts that manage models.</td></tr>
   <tr><td>Benchmark</td><td>Benchmark runs, results, node measurements (including embedders) and comparisons, and the collections and workflows used to compare models' grounded answers.</td></tr>
   <tr><td>Logs</td><td>Usage, reliability, model requests, batches, event log, plugin logs and system logs.</td></tr>
@@ -17,4 +17,12 @@
 {% endcall %}
 <p>Your name, at the top right, opens <a href="/account">My account</a>: your password, sign-in security and API keys, the console's appearance, audio, and your own logs.
   A page with a Help button opens its topic here.</p>
+{% endcall %}
+
+{% call doc_section('Tool chat', 'tool-chat') %}
+<p>Open Interact → Chat &amp; analysis → <a href="/chat/tools">Tool chat</a>. The link appears when your account has <code>use-tools</code> and at least one visible ToolLocker tool. Tools remain limited by your group, account and current sensitivity clearance.</p>
+<p>Search the tool names and descriptions, choose a narrowing tool set, then select a tool. Its fields show types, required values and enums. Use Raw JSON for nested arguments or additional properties. Run tool calls it immediately with your own permissions. Each result shows all content parts, <code>isError</code> and an Exact result JSON disclosure.</p>
+<p>To ask a model, choose a permitted tool-capable model and send a message. Every proposed call waits for Run, Edit arguments followed by Run, or Decline with an optional reason. After all proposals have results, the model continues. Only a bounded copy of each result reaches the model; the exact output stays in history.</p>
+<p>Tool chat keeps separate private conversations. Double-click a title or press F2 to rename it; deletion asks twice. Stop cancels the current chat task. Interrupted calls are recorded as errors and never replayed automatically. Lowered clearance hides earlier conversations above it. Tool results can raise a conversation’s level; a sensitive result stops cloud continuation before it is sent.</p>
+<p>The same administrator-configured call/time limits as <a href="/docs/api/openai">Responses tools</a> apply, including approval waits. Settings → Tools → Try a tool remains an administrator connection checker.</p>
 {% endcall %}

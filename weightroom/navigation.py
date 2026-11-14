@@ -6,7 +6,7 @@ from loadcoach.platform_services import PlatformServices
 
 NAV_SECTIONS = {
     'Interact': (
-        ('Chat & analysis', ('/chat', '/voice', '/chat/classifier')),
+        ('Chat & analysis', ('/chat', '/chat/tools', '/voice', '/chat/classifier')),
         ('Images', ('/chat/images', '/chat/extraction')),
         ('Audio', ('/chat/speech', '/chat/transcribe', '/chat/music', '/chat/sounds')),
         ('Desktop apps', ('/voice/desktop',)),
@@ -71,7 +71,7 @@ def grouped_links(links, section):
     return ordered, headings
 
 
-def navigation(path: str, can: list[str], machine: bool, services: PlatformServices | None = None) -> dict:
+def navigation(path: str, can: list[str], machine: bool, services: PlatformServices | None = None, *, tool_chat: bool = False) -> dict:
     """Choose the category and page for the current route.
 
     Detail pages keep their parent highlighted. Voice chat, its desktop app download and administration are local pages.
@@ -87,6 +87,8 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
         {"name": "System", "links": [("Status", "/status")]},
         {"name": "Settings", "links": []},
     ]
+    if tool_chat and 'use-tools' in can:
+        groups[0]['links'].append(('Tool chat', '/chat/tools'))
     if "front-voice" in can or "superuser" in can:
         groups[0]["links"].append(("Voice chat", '/voice'))
         groups[0]["links"].append(("Voice desktop app", '/voice/desktop'))
@@ -134,7 +136,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
             active = '/benchmarks/runs'
     if path.startswith("/models/images"):
         active = "/models/images"
-    elif path.startswith(("/chat/classifier", "/chat/images", "/chat/extraction", "/chat/music", "/chat/sounds", "/chat/speech", "/chat/transcribe", "/models/audio")):
+    elif path.startswith(("/chat/tools", "/chat/classifier", "/chat/images", "/chat/extraction", "/chat/music", "/chat/sounds", "/chat/speech", "/chat/transcribe", "/models/audio")):
         active = "/" + "/".join(path.strip("/").split("/")[:2])
     selected = next((group for group in groups if any(url == active for _, url in group["links"])), None)
     if root == "/plugins" and active != "/plugins/activity":

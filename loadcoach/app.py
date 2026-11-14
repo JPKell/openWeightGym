@@ -1049,6 +1049,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                     name: {"context": request_context((library.get(name) or {}).get("flags", {})) or 8192,
                            "model_id": library.identity(name), "name_history": library.name_history(name),
                            "vision": bool((library.get(name) or {}).get("flags", {}).get("mmproj")),
+                           "tools": supports_model_tools(name, library.get(name)),
                            "json_schema": engine_for(library.get(name)).capabilities(library.get(name)).get('json_schema', False),
                            "image_generation": engine_for(library.get(name)).capabilities(library.get(name)).get("image_generation", False),
                            "audio": bool(engine_for(library.get(name)).capabilities(library.get(name)).get("audio")),

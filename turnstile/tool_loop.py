@@ -97,6 +97,8 @@ class ToolClient:
             if not answer.is_success:
                 raise Problem('ToolLocker is unavailable (HTTP '+str(answer.status_code)+').', answer.status_code, 'toollocker_unavailable')
             body = answer.json()
+        except Problem:
+            raise
         except httpx.HTTPError:
             raise Problem('ToolLocker is not answering.', 503, 'toollocker_unavailable') from None
         except ValueError:
@@ -212,13 +214,20 @@ class ToolTurn:
         """Yield model/proposal/result steps; pending approvals and client functions end this run."""
         while True:
             result = await self.model(model, messages, definitions)
-            yield {'type': 'model', 'result': result}
             try:
                 choice = result['choices'][0]
                 message = choice['message']
                 calls = message.get('tool_calls') or []
             except (KeyError, TypeError, IndexError, AttributeError):
                 raise Problem('Model returned invalid tool-loop output.', 502, 'invalid_upstream_response') from None
+            if (not isinstance(message, dict) or not isinstance(calls, list) or len(calls) > 128
+                    or any(not isinstance(call, dict) or not isinstance(call.get('id'), str) or not call['id']
+                           or not isinstance(call.get('function'), dict) or not isinstance(call['function'].get('name'), str)
+                           or not isinstance(call['function'].get('arguments'), str) for call in calls)
+                    or len({call['id'] for call in calls}) != len(calls)):
+                raise Problem('Model returned invalid tool-loop output.', 502, 'invalid_upstream_response')
+            message.setdefault('role', 'assistant')
+            yield {'type': 'model', 'result': result}
             if not calls or choice.get('finish_reason') not in ('stop', 'tool_calls', 'function_call'):
                 return
             messages.append(message)

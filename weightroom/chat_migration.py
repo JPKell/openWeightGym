@@ -39,7 +39,7 @@ def records(db: sqlite3.Connection, translate: bool = False) -> dict:
         columns = [row[1] for row in db.execute(f"PRAGMA table_info({table})")]
         rows = [list(row) for row in db.execute(f"SELECT * FROM {table}")]
         if table == "conversations":
-            for column, default in (("session_mode", "fresh"), ("sessions", "{}")):
+            for column, default in (("session_mode", "fresh"), ("sessions", "{}"), ("kind", "text"), ("level", "normal"), ("tool_state", "{}")):
                 if column not in columns:
                     columns.append(column)
                     for row in rows:

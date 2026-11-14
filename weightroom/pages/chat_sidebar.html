@@ -1,20 +1,21 @@
+{% set chat_base = chat_base|default('/chat') %}
 {% from "parts.html" import confirm_two %}
 {% from "chat_parts.html" import rename_form %}
 {% from "icons.html" import icon %}
 <section class="chat-sidebar" aria-label="Your conversations">
-  <a class="btn btn-primary btn-sm w-100 mb-2" href="/chat" title="New conversation"><span class="text-truncate">New conversation</span></a>
+  <a class="btn btn-primary btn-sm w-100 mb-2" href="{{ chat_base }}" title="New conversation"><span class="text-truncate">New conversation</span></a>
   <input type="search" class="form-control form-control-sm mb-2" data-filter="conversations" placeholder="Find a conversation" aria-label="Find a conversation" autocapitalize="none">
   <div class="chat-conversations-scroll">
     <table id="conversations" class="w-100"><tbody>
     {% for one in conversations %}
     <tr data-conversation="{{ one.id }}" data-filter-text="{{ one.title }}"><td>
       <div class="chat-sidebar-row">
-        <a class="chat-link{{ ' active' if talk and one.id == talk.id }}" href="/chat/{{ one.id }}" data-chat-title title="{{ one.title }} · Double-click to rename · {{ one.updated|clock }}">{{ one.title }}</a>
-        <form method="post" action="/chat/{{ one.id }}" data-chat-delete class="m-0">
+        <a class="chat-link{{ ' active' if talk and one.id == talk.id }}" href="{{ chat_base }}/{{ one.id }}" data-chat-title title="{{ one.title }} · Double-click to rename · {{ one.updated|clock }}">{{ one.title }}</a>
+        <form method="post" action="{{ chat_base }}/{{ one.id }}" data-chat-base="{{ chat_base }}" data-chat-delete class="m-0">
           <button  type="submit" class="btn btn-link btn-sm text-secondary p-1" name="do" value="delete" aria-label="Delete {{ one.title }}" title="Delete conversation" {{ confirm_two('Del?') }}>{{ icon('trash') }}</button>
         </form>
       </div>
-      {{ rename_form(one, 'flex-wrap') }}
+      {{ rename_form(one, 'flex-wrap', chat_base) }}
     </td></tr>
     {% else %}<tr><td class="small text-secondary">No conversations yet.</td></tr>{% endfor %}
     </tbody></table>

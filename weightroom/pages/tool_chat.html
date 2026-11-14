@@ -1,0 +1,31 @@
+{% extends 'chat.html' %}
+{% from 'parts.html' import page_header, card, alert, section_title %}
+{% from 'chat_parts.html' import rename_form, model_choice, prompt_input %}
+{% from 'tool_parts.html' import argument_editor, tool_result, tool_templates %}
+{% block title %}{{ talk.title if talk else 'Tool chat' }} · openWeightGym{% endblock %}
+{% block scripts %}<script src="/static/tool-controls.js" defer></script><script src="/static/tool-chat.js" defer></script>{% endblock %}
+{% block conversation_main %}
+{% if talk %}{% set heading %}<span data-conversation-heading tabindex="0" aria-keyshortcuts="F2" title="Double-click or press F2 to rename">{{ talk.title }}</span>{% endset %}{{ page_header(heading, 'Tools run only after your approval.') }}{{ rename_form(talk, 'mb-3', '/chat/tools') }}<p data-chat-rename-error class="text-danger" role="status"></p>
+{% else %}{{ page_header('Tool chat', 'Call a tool directly, or review each call proposed by a model.') }}{% endif %}
+<div id="tool-chat" data-ref="{{ talk.id if talk else '' }}" data-toolset="{{ talk.tool_state.toolset|default('') if talk else '' }}">
+<p id="tool-chat-status" role="status" aria-live="polite" class="text-secondary">Loading your tools…</p>
+{% call card('Tools', true) %}
+<div class="row g-2 mb-3"><div class="col-sm-6"><label for="tool-chat-set" class="form-label">Tool set</label><select id="tool-chat-set" class="form-select"><option value="">All allowed tools</option></select></div><div class="col-sm-6"><label for="tool-chat-search" class="form-label">Search tools</label><input id="tool-chat-search" type="search" class="form-control" placeholder="Name or description"></div></div>
+<div id="tool-chat-list" class="mb-3"></div>
+<label for="tool-chat-tool" class="form-label">Tool</label><select id="tool-chat-tool" class="form-select mb-2"></select><p id="tool-chat-description" class="text-secondary"></p>
+<form id="tool-chat-direct" data-hold-refresh><div id="tool-chat-parameters">{{ argument_editor('tool-chat') }}</div><button class="btn btn-primary" type="submit">Run tool</button></form>
+{% endcall %}
+<div id="tool-chat-history" aria-live="polite" aria-label="Conversation history"></div>
+<div id="tool-chat-proposals" data-hold-refresh aria-live="polite"></div>
+{% if not models %}{% call alert('info', role='status') %}No tool-capable model is available to your account. You can still call tools directly.{% endcall %}{% endif %}
+<form id="tool-chat-composer" class="composer-box frame mt-3" data-hold-refresh>{{ prompt_input('', 3, 'Ask with tools') }}<div class="composer-actions mt-2">{{ model_choice(models) }}<button type="submit" class="btn btn-primary"{{ ' disabled' if not models }}>Send</button></div></form>
+<button id="tool-chat-stop" type="button" class="btn btn-outline-danger mt-2" hidden>Stop</button>
+</div>
+{{ tool_templates() }}
+<template id="tool-chat-message"><article class="turn"><strong data-role></strong><div data-content class="wrap"></div><p data-error class="text-danger" role="status"></p><div data-exact>{{ tool_result('message-result') }}</div><details data-call><summary>Tool call and decision</summary><pre class="kept frame p-2"></pre></details></article></template>
+<template id="tool-chat-proposal">{% call card('', class_='mb-3') %}<form data-hold-refresh>{{ section_title('', attrs={'data-name':''}) }}<p data-description></p><label class="form-label">Arguments<textarea name="arguments" class="form-control font-monospace" rows="5" required></textarea></label><label class="form-label">Decline reason (optional)<input name="reason" class="form-control" maxlength="4000"></label><div class="d-flex flex-wrap gap-2 mt-2"><button class="btn btn-primary" name="decision" value="run">Run</button><button class="btn btn-outline-primary" name="decision" value="edit">Edit arguments</button><button class="btn btn-outline-secondary" name="decision" value="decline" formnovalidate>Decline</button></div><p class="small text-secondary mt-2 mb-0" data-status role="status"></p></form>{% endcall %}</template>
+<template id="tool-chat-server-heading">{{ section_title('', level=3, attrs={'data-server-heading':''}) }}</template>
+<template id="tool-chat-property"><dt class="col-sm-4 wrap"></dt><dd class="col-sm-8 wrap"></dd></template>
+<template id="tool-chat-tool-row"><details class="mb-2"><summary></summary><p class="text-secondary mb-1" data-description></p><dl class="row mb-0" data-properties></dl><details><summary>Parameter schema JSON</summary><pre class="kept frame p-2"></pre></details></details></template>
+
+{% endblock %}

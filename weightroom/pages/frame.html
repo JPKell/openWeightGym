@@ -32,7 +32,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 <script src="/static/console.js?v=12" defer></script>
 {% if person %}<script src="/static/personal-notices.js?v=1" defer></script>{% endif %}
 <script src="/static/user-picker.js?v=1" defer></script>
-{% if person and nav.active == '/chat' %}<script src="/static/chat_sidebar.js?v=3" defer></script>{% endif %}
+{% if person and nav.active in ('/chat', '/chat/tools') %}<script src="/static/chat_sidebar.js?v=3" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
 
 {# The navigation and the telemetry row beneath it stay in view while the page scrolls. #}
@@ -111,14 +111,14 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {% if person %}
 <dialog id="mobile-navigation" class="mobile-navigation" aria-labelledby="mobile-navigation-title">
   <div class="d-flex align-items-center justify-content-between gap-2 mb-3"><strong id="mobile-navigation-title">Navigation</strong><button type="button" class="btn btn-outline-secondary btn-sm" data-close-navigation>Close menu</button></div>
-  {% if nav.active == '/chat' %}<button type="button" class="btn btn-outline-secondary btn-sm w-100 mb-3" data-switch-navigation aria-controls="mobile-site-navigation mobile-chat-navigation">Main menu</button>{% endif %}
+  {% if nav.active in ('/chat', '/chat/tools') %}<button type="button" class="btn btn-outline-secondary btn-sm w-100 mb-3" data-switch-navigation aria-controls="mobile-site-navigation mobile-chat-navigation">Main menu</button>{% endif %}
   <nav id="mobile-site-navigation" aria-label="All pages">
   {% for category in nav.groups %}
     {{ mobile_category(category.name, category.links, category.headings|default({})) }}
   {% endfor %}
   {% if nav.section == 'My account' %}{{ mobile_category('My account', nav.links, nav.headings) }}{% else %}<a class="section-link" href="/account">My account</a>{% endif %}
   </nav>
-  {% if nav.active == '/chat' %}<div id="mobile-chat-navigation" data-mobile-conversations hidden></div>{% endif %}
+  {% if nav.active in ('/chat', '/chat/tools') %}<div id="mobile-chat-navigation" data-mobile-conversations hidden></div>{% endif %}
 </dialog>
 {% endif %}
 <template id="empty-row-template">{{ empty_row(1) }}</template>

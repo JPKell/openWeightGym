@@ -1,0 +1,11 @@
+{# Caller-scoped tool forms and lossless MCP result display shared by both tool consoles. #}
+{% macro argument_editor(prefix) %}
+<div id="{{ prefix }}-arguments" class="row g-2 mb-3"></div>
+<details class="mb-3"><summary>Raw JSON arguments</summary><p class="form-hint">Enable this for nested schemas or additional properties.</p><label class="form-check"><input type="checkbox" class="form-check-input" id="{{ prefix }}-raw-enabled"><span class="form-check-label">Use raw JSON</span></label><label for="{{ prefix }}-raw" class="form-label">Arguments</label><textarea id="{{ prefix }}-raw" class="form-control font-monospace" rows="5">{}</textarea></details>
+{% endmacro %}
+{% macro tool_result(prefix) %}
+<div id="{{ prefix }}-result" aria-live="polite"><p id="{{ prefix }}-error-flag" class="small"></p><pre id="{{ prefix }}-answer" class="kept frame p-2"></pre><details><summary>Exact result JSON</summary><pre id="{{ prefix }}-result-json" class="kept frame p-2"></pre></details></div>
+{% endmacro %}
+{% macro tool_templates() %}
+<template id="tool-argument-field"><div class="col-md-6"><label class="form-label"></label><input class="form-control"><p class="form-hint mb-0"></p></div></template>
+{% endmacro %}

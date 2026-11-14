@@ -675,6 +675,17 @@ CHAT = (
         ALTER TABLE documents ADD COLUMN diagnostics TEXT NOT NULL DEFAULT '{}';
         ALTER TABLE collections ADD COLUMN content_sha256 TEXT NOT NULL DEFAULT '';
     """),
+    Migration(6, "separate private tool conversations and retain turn approval state", """
+        ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';
+        ALTER TABLE conversations ADD COLUMN level TEXT NOT NULL DEFAULT 'normal';
+        ALTER TABLE conversations ADD COLUMN tool_state TEXT NOT NULL DEFAULT '{}';
+        CREATE INDEX conversations_kind_owner ON conversations(kind, user, updated);
+    """, """
+        ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';
+        ALTER TABLE conversations ADD COLUMN level TEXT NOT NULL DEFAULT 'normal';
+        ALTER TABLE conversations ADD COLUMN tool_state TEXT NOT NULL DEFAULT '{}';
+        CREATE INDEX conversations_kind_owner ON conversations(kind, "user", updated);
+    """),
 )
 
 
