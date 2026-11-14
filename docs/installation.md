@@ -557,3 +557,16 @@ handles this). Keep `settings/*.toml`, `keys/` and `data/` private.
 
 Moving existing deployments between machines, remote tool hosts, multi-machine telemetry, the
 same-host second LoadCoach and identity portability are covered in the [operations log](operations.md).
+
+## Classifier runtime
+
+Classifiers use the configured llama.cpp engine and native `/v1/systemone` support
+(`server-decision.cpp`, available in builds from b11361; the readiness probe requires
+`/v1/models` to report `decisions`). A decision GGUF must contain its architecture’s
+`decision.type` and `tokenizer.chat_template.systemone`. Files are recognized wherever
+they are stored; new downloads use `classifier/`. Laya and Clef evaluate the whole prompt
+in one batch; LoadCoach sizes batch and ubatch to the configured context budget.
+
+Enable or disable Classifiers in General settings → Platform services. The page and APIs
+use existing user/group model permissions; no new ability is needed. See
+[Classifier usage and delivery](decision-model-plan.md#using-classifier).

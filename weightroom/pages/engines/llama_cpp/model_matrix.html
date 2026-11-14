@@ -6,10 +6,12 @@
 {% set preset_flags = ('temp', 'top-p', 'top-k', 'min-p', 'repeat-penalty', 'presence-penalty', 'frequency-penalty', 'repeat-last-n', 'seed', 'predict', 'reasoning', 'reasoning-effort', 'reasoning-budget') %}
 {% set labels = {'temp':'Temperature', 'top-p':'Top-p', 'top-k':'Top-k', 'min-p':'Min-p', 'reasoning':'Reasoning', 'reasoning-effort':'Reasoning effort'} %}
 {% set owned = ("model", "ctx-size", "mmproj", "embedding", "parallel", "kv-unified", "kv-unified-per-slot", "no-kv-unified") %}
+{% set classifier = model.get('capabilities', {}).get('classifier') %}
 {% set width = columns|length %}
 {% set lead = columns|selectattr("selected")|first %}
 {% set ns = namespace(flags=[]) %}
 {% for column in columns %}{% for flag in column.showing.flags if flag not in owned and flag not in preset_flags and flag not in global_flags and flag not in unusable_flags and flag not in ns.flags %}{% set ns.flags = ns.flags + [flag] %}{% endfor %}{% endfor %}
+{% if classifier %}{% call card('Classifier') %}<p class="mb-1">Decision type: {{ classifier }} · up to {{ model.capabilities.limits.choices|default(255) }} choices per question.</p><p class="small text-secondary mb-0">{% if classifier in ('laya','clef') %}The whole prompt must fit in ubatch; LoadCoach sizes batch and ubatch to the context budget. {% endif %}Probabilities use the model’s stored temperatures and are not calibrated for your data.</p>{% endcall %}{% endif %}
 <div class="model-config-grid">
   {% call group('context', 'Context and requests', columns) %}
   <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row">Context{% if told and told.facts.trained_context %}<small class="matrix-hint">trained for {{ "{:,}".format(told.facts.trained_context) }}</small>{% endif %}</th>
@@ -36,6 +38,7 @@
     {% for column in columns %}{% call cell(column) %}<p class="form-hint mb-0" data-context-summary data-prefix="{{ column.prefix }}" aria-live="polite"></p>{% endcall %}{% endfor %}</tr>
   {% endcall %}
 
+  {% if not classifier %}
   {% call group('generation', 'Generation defaults', columns, shared=true) %}
   {% call shared_row(width) %}<div class="matrix-shared">
     {% for flag in preset_flags %}{% set value = showing.flags.get(flag, '') %}
@@ -61,6 +64,7 @@
   </div>{% endcall %}
   {% endcall %}
 
+  {% endif %}
   {% call group('hardware', 'Hardware', columns) %}
   <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row">Placement<small class="matrix-hint">GPUs, splitting and sharing</small></th>
     {% for column in columns %}{% call cell(column) %}{{ hardware(column.idp ~ 'model', column.showing.gpus, column.cards, column.showing.alone, column.showing.allow_split, field=column.prefix, ids=column.idp) }}{% endcall %}{% endfor %}</tr>
@@ -72,13 +76,15 @@
     {% call shared_item('Projector', 'projector') %}{{ part_choice("projector", "projector", showing.flags.mmproj or "", "projector", "projector") }}{{ suppress_flag('mmproj', checked=('mmproj' in showing.flags and showing.flags.mmproj is none)) }}{% endcall %}
     {% call shared_item('List position', 'order') %}<input id="order" name="order" type="number" step="1" class="form-control" value="{{ '' if showing.order is undefined or showing.order is none else showing.order }}" aria-describedby="order-help"><div id="order-help" class="form-hint">Lower numbers appear first; matching positions sort by name.</div>{% endcall %}
     {# llama.cpp's --embedding flag: LoadCoach marks the model an embedder from it (engines/llama_cpp/form.py). #}
-    {% call shared_item('Embedding model', 'embedding', '--embedding') %}{% set embedding = showing.flags.get('embedding', 'absent') %}<input type="hidden" name="embedding_controls" value="{{ 'none' if embedding is none else 'false' if embedding is false else 'yes' }}"><div class="form-check mb-0"><input id="embedding" name="embedding" value="yes" type="checkbox" class="form-check-input" aria-describedby="embedding-help"{{ ' checked' if embedding and embedding != 'absent' }}><label for="embedding" class="form-check-label">Serve embeddings instead of chat</label></div><div id="embedding-help" class="form-hint">Offered as a Collections embedder and for /v1/embeddings.</div>{% endcall %}
+    {% if not classifier %}{% call shared_item('Embedding model', 'embedding', '--embedding') %}{% set embedding = showing.flags.get('embedding', 'absent') %}<input type="hidden" name="embedding_controls" value="{{ 'none' if embedding is none else 'false' if embedding is false else 'yes' }}"><div class="form-check mb-0"><input id="embedding" name="embedding" value="yes" type="checkbox" class="form-check-input" aria-describedby="embedding-help"{{ ' checked' if embedding and embedding != 'absent' }}><label for="embedding" class="form-check-label">Serve embeddings instead of chat</label></div><div id="embedding-help" class="form-hint">Offered as a Collections embedder and for /v1/embeddings.</div>{% endcall %}
+    {% endif %}
     {% call shared_item('Engine') %}<span class="badge bg-secondary-lt">{{ engine_schema.label }}</span>{% endcall %}
   </div>{% endcall %}
   <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}file">File</label><small class="matrix-hint">each node's own copy</small></th>
     {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}file" name="{{ column.prefix }}file" class="form-control form-control-sm font-monospace" value="{{ column.showing.flags.model }}" autocapitalize="none" spellcheck="false" required aria-label="file{{ column.on }}">{% endcall %}{% endfor %}</tr>
   {% endcall %}
 
+  {% if not classifier %}
   {% call group('adapters', 'Adapters', columns, shared=true) %}
   {% call shared_row(width) %}
     <div class="table-responsive"><table class="table table-sm sortable mb-2" aria-label="Adapters" data-empty-message="No adapters. Select Add adapter to configure one."><thead><tr><th>Name</th><th>File</th><th>Strength</th></tr></thead><tbody data-adapter-rows>
@@ -89,6 +95,7 @@
   {% endcall %}
   {% endcall %}
 
+  {% endif %}
   {% call group('advanced', 'Advanced loading flags', columns, rows='flag') %}
   {% for flag in ns.flags %}
   <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><code>--{{ flag }}</code></th>
@@ -114,7 +121,7 @@
   {% endfor %}
 </datalist>
 {% call more('Inherited node defaults') %}
-  {% for column in columns %}<div class="mb-2" data-model-defaults-list><strong>{{ column.machine }}</strong>: {% for flag, value in column.defaults.items() %}<code>{{ flag }} = {{ value|shown }}</code>{{ ', ' if not loop.last }}{% else %}No node defaults.{% endfor %}</div>{% endfor %}
+  {% for column in columns %}<div class="mb-2" data-model-defaults-list><strong>{{ column.machine }}</strong>: {% for flag, value in (column.defaults|default({})).items() %}<code>{{ flag }} = {{ value|shown }}</code>{{ ', ' if not loop.last }}{% else %}No node defaults.{% endfor %}</div>{% endfor %}
   <p class="mb-0">Blank values inherit node or runtime defaults. Numbers, true, false and lists are accepted. Ignore inherited default omits that flag for this model.</p>
 {% endcall %}
 <div class="mt-3">

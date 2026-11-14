@@ -72,6 +72,9 @@ class FrontFiles:
 
     def describe(self, path):
         """Read the shared model, image or audio metadata without loading the model."""
+        if 'classifier' in path.parts and path.suffix.lower() != '.gguf':
+            from loadcoach.classifier_sources import source_facts
+            return source_facts(path), {}
         if audio_asset(path):
             return audio_facts(path), {}
         if image_asset(path):

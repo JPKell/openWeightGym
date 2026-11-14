@@ -34,8 +34,8 @@ from db.schemas import LOG
 
 # What llama-server reports at the end of an answer, and what the OpenAI format calls the same.
 COUNTS = {
-    "prompt_tokens": re.compile(rb'"(?:prompt_n|prompt_tokens)":\s*(\d+)'),
-    "answer_tokens": re.compile(rb'"(?:predicted_n|completion_tokens)":\s*(\d+)'),
+    "prompt_tokens": re.compile(rb'"(?:prompt_n|prompt_tokens|input_tokens)":\s*(\d+)'),
+    "answer_tokens": re.compile(rb'"(?:predicted_n|completion_tokens|output_tokens)":\s*(\d+)'),
     "tokens_per_second": re.compile(rb'"predicted_per_second":\s*([\d.]+)'),
     "cost": re.compile(rb'"cost":\s*([\d.eE+-]+)'),  # a hosted service's price for the answer, in dollars
 }

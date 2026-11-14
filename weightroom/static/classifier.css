@@ -1,0 +1,7 @@
+.classifier-layout { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 1rem; }
+.classifier-layout > *, .classifier-results > * { min-width: 0; }
+.classifier-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; }
+[data-classifier] pre { max-height: 28rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+[data-classifier] [data-criterion] > input { min-width: 0; }
+[data-classifier] [data-disagreement] { border-color: var(--bs-warning); }
+@media (max-width: 767px) { .classifier-layout { grid-template-columns: minmax(0, 1fr); } }

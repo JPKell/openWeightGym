@@ -39,6 +39,7 @@ def descriptions():
 class ExtractionTools:
     """Delegate extraction using a signed proof of the actual tool caller."""
     name, level = 'extraction', 'normal'
+    path_prefix = '/owg/extraction-tools/'
 
     def __init__(self, url, key_file):
         """Prepare a front gateway connection without a shared user key."""
@@ -70,7 +71,7 @@ class ExtractionTools:
             if not descriptor:
                 raise ValueError('Unknown extraction tool.')
             validate(arguments, descriptor['inputSchema'])
-            path = '/owg/extraction-tools/' + tool
+            path = self.path_prefix + tool
             body = json.dumps({'arguments': arguments, 'sensitivity': level}).encode()
             header, nonce = statement.make(statement.read_key(self.key_file), 'POST', path, body,
                                            caller=statement.caller_of(user), purpose='extraction-tool')

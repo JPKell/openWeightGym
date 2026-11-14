@@ -141,6 +141,10 @@ def facts(metadata: dict) -> dict:
     kind = metadata.get("general.type")
     # What the file is for LoadCoach: a model, or a part that goes onto one. A projector, which lets a model see, is called several things by those who make them.
     what = "adapter" if kind == "adapter" else "projector" if kind in ("mmproj", "clip-vision", "projector") or build == "clip" else "model"
+    decision_type = metadata.get(f"{build}.decision.type")
+    systemone = bool(metadata.get('tokenizer.chat_template.systemone'))
+    if decision_type and systemone and what == 'model':
+        what = 'classifier'
     # The model a part says it was made for. An adapter names the model it was trained on, sometimes with a path before the name. A projector carries its model's own name.
     made_for = str(metadata.get("general.base_model.0.name") or "").rsplit("/", 1)[-1] if what == "adapter" else metadata.get("general.name") if what == "projector" else None
     picked = {
@@ -158,5 +162,10 @@ def facts(metadata: dict) -> dict:
         "takes_tools": "tools" in template,
         "takes_images": "image" in template,
         "thinking_switch": "enable_thinking" in template,
+        "decision_type": decision_type,
+        "systemone": systemone if decision_type else None,
+        "decision_temperatures": {key.removeprefix(f'{build}.decision.temperature.'): value
+                                  for key, value in metadata.items() if key.startswith(f'{build}.decision.temperature.')} if decision_type else None,
+        "decision_max_head_tokens": metadata.get(f'{build}.decision.max_head_tokens'),
     }
     return {name: value for name, value in picked.items() if value is not None}

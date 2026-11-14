@@ -128,6 +128,7 @@ class Settings:
     allow_speech: bool = True
     allow_audio_generation: bool = True
     allow_model_downloads: bool = True
+    allow_classifiers: bool = True
     files_every: float = 10  # minutes between looks through front's own model folders for the Files page. 0: only when asked
     component_versions_every: float = 60  # minutes between installed component version checks
     compute_offset: int = 0  # with the old top-level `compute`: how far its ports sit from `ports`. 0 unless both run on one machine
@@ -880,6 +881,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         names = machines.active_names
         own = monitoring_user()
         fresh = {name: told for name in names if (told := retained_facts(user, name, own)) is not None}
+        if not fresh or not settings.auth_key_file:
+            # First calls after a restart must establish inventory before admission.
+            # The same bounded, signed read is cached for subsequent fleet requests.
+            answers = await asyncio.gather(*(ask_live(user, 'GET', '/loadcoach/facts', machine=name, prime=True) for name in names))
+            fresh.update({name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.is_success})
         if not fresh:
             return error(503, "Compute model inventory is not ready. Retry shortly.", {"retry-after": "5"})
         catalogue = logical_catalogue({machine_name: {"data": [
@@ -1054,6 +1060,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     def platform():
         return PlatformServices.from_settings(settings, console_settings.changes.of('weightroom'))
+
+    routing.platform = platform
 
     configured_versions_every = settings.component_versions_every
     configured_file_roots = {name: getattr(settings, name) for name in ('models_folder', 'models_storage_folder')}
@@ -1569,7 +1577,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                      list(request.headers.items()), machine=machine_name)
             return upstream if isinstance(upstream, Response) else relay(upstream)
         if port == settings.ports[0] and user is not None and request.method == "GET" and path.startswith("/v1/models/") and path.removeprefix("/v1/models/") in hosted.offered(user):
-            return JSONResponse({"id": path.removeprefix("/v1/models/"), "object": "model", "created": 0, "owned_by": "hosted"})
+            return JSONResponse(hosted.described(path.removeprefix("/v1/models/")))
         if port == settings.ports[0] and user is not None and request.method == "GET" and path in ("/loadcoach/models", "/loadcoach/settings", "/loadcoach/engines"):
             if not node(named):
                 fallthrough.note(request.method, path, port)
@@ -1641,7 +1649,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         found = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
         if not found and path == "/v1/models" and not names:
             return JSONResponse(routing.with_roles({"object": "list", "data": [
-                {"id": name, "object": "model", "created": 0, "owned_by": "hosted"} for name in hosted.offered(user)],
+                hosted.described(name) for name in hosted.offered(user)],
                 "unavailable_machines": [], "available_machines": []}))
         only = node("")
         if not found and path == "/v1/models" and only:  # one node: wake it, as the old default node was
@@ -1665,7 +1673,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             listed = [model for model in listed if
                       (any(one.get("enabled", True) for one in model["locations"]) if model.get("locations") else
                        model_locations.enabled(only, model.get("model_id")))]
-            listed.extend({"id": name, "object": "model", "created": 0, "owned_by": "hosted"} for name in hosted.offered(user))
+            listed.extend(hosted.described(name) for name in hosted.offered(user))
             listed = [model for model in listed if platform().model_enabled(model)]
             missing = sorted(name for name, answer in zip(names, answers)
                              if answer is None or answer.status_code != 200 or answer.headers.get("x-suite-retained"))
@@ -1726,7 +1734,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         await upstream.aclose()
         if request.url.path == "/v1/models":
             if user is not None:  # the outside models are front's own: compute does not list them
-                said["data"] = [*said["data"], *({"id": name, "object": "model", "created": 0, "owned_by": "hosted"} for name in hosted.offered(user))]
+                said["data"] = [*said["data"], *(hosted.described(name) for name in hosted.offered(user))]
             return JSONResponse(routing.with_roles(said))
         if request.url.path == "/loadcoach/status":
             if user is not None:
@@ -2883,11 +2891,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if any(part in (".", "..") for part in suffix.split("/")) or "?" in suffix or "#" in suffix:
             return error(400, "Invalid node model path.")
         allowed = {"models": {"GET"}, "flags": {"GET"}, "file": {"GET"}, "files": {"GET"},
+                   "hub": {"GET"}, "downloads": {"GET", "POST"},
                    "model-setup": {"GET", "POST"}, "model-rename": {"POST"}, "model-forget-measure": {"POST"},
                    "model-measure-all": {"POST"}, "images/check": {"POST"}, "audio/packages": {"GET", "POST"}, "audio/families": {"GET"}}
         methods = {"POST", "DELETE"} if suffix.startswith("models/") else allowed.get(suffix, set())
         if request.method not in methods:
             return error(405, "Unsupported node model operation.")
+        if suffix == "downloads" and request.method == "POST" and not platform().downloads:
+            return error(403, "Model downloads are disabled in Platform services.")
         path = "/loadcoach/" + suffix
         if request.url.query:
             path += "?" + request.url.query
@@ -3312,7 +3323,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return diagnostic_page(Path(loadcoach.__file__).with_name('test.html'))
 
     from turnstile.responses import routes as response_routes
-    app = Starlette(lifespan=lifespan, routes=[Route('/', diagnostic), *extractions.routes(caller, extraction_delegate), *response_routes(caller, extractions), *image_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
+    from turnstile.classifier import routes as classifier_routes
+    app = Starlette(lifespan=lifespan, routes=[Route('/', diagnostic), *classifier_routes(extraction_delegate, routing), *extractions.routes(caller, extraction_delegate), *response_routes(caller, extractions), *image_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
                             Route("/turnstile/power", power_notice, methods=["POST"]),
                             Route("/turnstile/accounts", accounts_list),
                             Route("/turnstile/machines", machines_list),

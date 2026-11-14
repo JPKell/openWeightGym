@@ -12,6 +12,7 @@
   <dt class="col-5 col-md-2">Layers</dt><dd class="col-7 col-md-4">{{ told.facts.layers or "not said" }}</dd>
   <dt class="col-5 col-md-2">Trained context</dt><dd class="col-7 col-md-4">{{ "{:,}".format(told.facts.trained_context) if told.facts.trained_context else "not said" }}</dd>
   <dt class="col-5 col-md-2">Licence</dt><dd class="col-7 col-md-4">{{ told.facts.license or "not said" }}</dd>
+  {% if told.facts.decision_type %}<dt class="col-5 col-md-2">Classifier</dt><dd class="col-7 col-md-4">{{ told.facts.decision_type }} · systemone {{ 'available' if told.facts.systemone else 'missing' }}</dd><dt class="col-5 col-md-2">Head token budget</dt><dd class="col-7 col-md-4">{{ told.facts.decision_max_head_tokens|default('Runtime default', true) }}</dd>{% endif %}
   <dt class="col-5 col-md-2">Chat template</dt><dd class="col-7 col-md-4">{{ "yes" if told.facts.chat_template else "none" }}</dd>
   <dt class="col-5 col-md-2">Tool calls</dt><dd class="col-7 col-md-4">{{ "its template handles them" if told.facts.takes_tools else "its template does not mention them" }}</dd>
   <dt class="col-5 col-md-2">Thinking</dt><dd class="col-7 col-md-4">{{ "has a switch (enable_thinking)" if told.facts.thinking_switch else "no switch in its template" }}</dd>

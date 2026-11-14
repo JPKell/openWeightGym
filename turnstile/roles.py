@@ -158,6 +158,8 @@ class Routing:
         self.destination_allowed = lambda: True
         self.resolve_node = lambda name: name
         self.prepare_candidates = None
+        from loadcoach.platform_services import PlatformServices
+        self.platform = PlatformServices
         self.hosted = None  # the outside services, once turnstile has made them: see turnstile/hosted.py
 
     async def facts_at(self, request, user):
@@ -200,7 +202,8 @@ class Routing:
                 "it would not load a moment ago" if name in without
                 else "you may not use it, or it is not there any more" if fact is None
                 else fact["why_not"]
-                or ("the request may not leave this machine" if fact["hosted"] and needs["stays"]
+                or ("classifiers cannot answer text roles" if fact.get('capabilities', {}).get('classifier')
+                    else "the request may not leave this machine" if fact["hosted"] and needs["stays"]
                     else "it cannot see pictures" if needs["pictures"] and not fact["sees"]
                     else "it does not support JSON Schema output" if needs.get('json_schema') and not fact.get('capabilities', {}).get('json_schema')
                     else "it does not take tools" if needs["tools"] and not fact["tools"]
@@ -321,6 +324,14 @@ class Routing:
     @observation.traced("routing")
     async def answer(self, request: Request, user: User, where: str, body: bytes) -> Response:
         """A request to a model, sent on to compute. For a role, the model is picked here first. The answer is judged as it passes."""
+        from loadcoach.classifier import NATIVE_PATHS, MAX_BODY, Invalid, validate
+        if request.url.path in NATIVE_PATHS:
+            try:
+                if len(body) > MAX_BODY:
+                    raise Invalid('Classifier request exceeds the 64 KiB body limit.')
+                body = json.dumps(validate(json.loads(body))).encode()
+            except (Invalid, ValueError) as problem:
+                return error(400, str(problem))
         headers = [(name, value) for name, value in request.headers.items() if name not in (*PICKED, 'x-suite-node')]
         try:
             asked = json.loads(body)
@@ -342,6 +353,8 @@ class Routing:
         body = json.dumps(asked).encode()
         hosted = self.hosted
         if hosted and isinstance(name, str) and name in hosted.offered(user):  # a model at an outside service: asked for from here
+            if not self.platform().model_enabled(hosted.models()[name]):
+                return error(403, 'Classifiers are disabled in Platform services.')
             if target:
                 return error(404, f'Node {target} does not offer model {name}.')
             return await hosted.answer(request, user, asked, name)
@@ -373,6 +386,8 @@ class Routing:
             facts = await self.facts_at(request, user) if self.placed else None
             if isinstance(facts, Response):
                 return facts
+            if facts and name in facts.get('models', {}) and not self.platform().model_enabled(facts['models'][name]):
+                return error(403, 'This model type is disabled in Platform services.')
             if target and (name not in facts.get('models', {}) or facts['models'][name].get('why_not')):
                 return error(404, f'Node {target} does not offer an enabled, permitted copy of model {name}.')
             if facts and name in facts.get("unavailable_models", []):

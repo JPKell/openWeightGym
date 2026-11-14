@@ -91,7 +91,8 @@ class LlamaCpp:
             devices = tuple(f'CUDA{index}' for index in range(len(cards)))
         else:
             devices = tuple(details.get(card, {}).get('llama_device', card) for card in cards)
-        return Launch(command_line(installed.executable, port, settings['flags'], devices, settings.get('adapters')), around)
+        return Launch(command_line(installed.executable, port, settings['flags'], devices, settings.get('adapters')), around,
+                      health_path='/v1/models' if self.capabilities(settings).get('classifier') else '/health')
 
     def failure_reason(self, output: str) -> str:
         """Classify engine failure output for the operator."""
@@ -102,10 +103,23 @@ class LlamaCpp:
 
     def healthy(self, response) -> bool:
         """Check whether the engine HTTP service is ready to accept requests."""
+        if response.request.url.path == '/v1/models':
+            try:
+                return response.status_code == 200 and any('decisions' in item.get('architecture', {}).get('output_modalities', [])
+                    for item in response.json().get('data', []))
+            except (ValueError, AttributeError, TypeError):
+                return False
         return response.status_code == 200
 
     def capabilities(self, settings: dict) -> dict:
         """Describe the request features this engine supports."""
+        from loadcoach.classifier import model_facts, limits
+        decision = model_facts(settings)
+        if decision:
+            return {'version': 1, 'classifier': decision['decision_type'], 'chat': False, 'streaming': False,
+                    'embeddings': False, 'raw_completion': False, 'prompt_rendering': False, 'tools': False,
+                    'tokenize': True, 'images': bool(settings.get('flags', {}).get('mmproj')),
+                    'json_schema': True, 'adapters': False, 'native_probes': False, 'limits': limits(decision)}
         embedding = bool(settings.get("flags", {}).get("embedding"))
         return {"version": 1, "chat": not embedding, "streaming": not embedding,
                 "embeddings": embedding, "tokenize": True, "raw_completion": not embedding,

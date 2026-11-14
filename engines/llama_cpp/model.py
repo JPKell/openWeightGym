@@ -37,7 +37,19 @@ def base(settings: dict) -> dict:
 
 def effective(settings: dict, defaults: dict) -> dict:
     """Legacy llama.cpp defaults; null removes an inherited flag."""
-    return {**settings, "flags": {key: value for key, value in {**defaults, **settings["flags"]}.items() if value is not None}}
+    flags = {key: value for key, value in {**defaults, **settings["flags"]}.items() if value is not None}
+    from loadcoach.classifier import model_facts
+    decision = model_facts(settings)
+    if decision:
+        for key in ('jinja', 'chat-template', 'chat-template-file', 'chat-template-kwargs', 'reasoning-format',
+                    'reasoning-budget', 'embedding', 'temp', 'top-k', 'top-p', 'min-p'):
+            flags.pop(key, None)
+        flags.setdefault('parallel', 1)
+        if decision['decision_type'] in ('laya', 'clef'):
+            budget = flags.get('ctx-size', decision.get('trained_context') or 8192)
+            flags['batch-size'] = max(flags.get('batch-size', 0), budget)
+            flags['ubatch-size'] = max(flags.get('ubatch-size', 0), flags['batch-size'])
+    return {**settings, 'flags': flags}
 
 
 def fingerprint_settings(settings: dict, hashes: dict) -> dict:

@@ -8,6 +8,8 @@ def supported(path):
     """Recognize model data formats, never partial downloads or arbitrary scripts."""
     if Path(path).name.startswith('.suite-package-'):
         return False
+    if 'classifier' in Path(path).parts:
+        return Path(path).suffix.lower() in ('.gguf', '.safetensors', '.json', '.model', '.txt', '.jinja') or Path(path).name == 'Modelfile'
     audio_data = ('.json', '.bin', '.onnx', '.npz', '.npy', '.model', '.txt', '.tiktoken', '.pt', '.vocab', '.merges')
     tokenizer_files = {'vocab.json', 'merges.txt', 'token_type.json', 'chat_template.jinja'}
     return Path(path).name in tokenizer_files or str(path).lower().endswith(EXTENSIONS + (audio_data if set(Path(path).parts) & {'audio', 'encoders'} else ()))
@@ -16,6 +18,8 @@ def supported(path):
 def image_asset(path):
     """Identify image-library assets while preserving ordinary GGUF inspection."""
     file = Path(path)
+    if 'classifier' in file.parts:
+        return False
     return file.suffix.lower() in ('.safetensors', '.pth') or 'image' in file.parts or ('encoders' in file.parts and _image_encoder(file))
 
 

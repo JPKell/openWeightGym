@@ -1,0 +1,44 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, card, alert, more, empty_row %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'filter_parts.html' import node_filter %}
+{% from 'navigation_parts.html' import pills, pill_button, model_type_choices %}
+{% from 'classifier_parts.html' import question, criterion, result, probability, history_row %}
+{% block title %}Classifier · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/classifier.css?v=1"><script src="/static/classifier.js?v=1" defer></script>{% endblock %}
+{% block main %}
+<div data-classifier>
+{{ page_header('Classifier') }}
+{% call alert('danger', attrs={'data-classifier-error':'','hidden':true}) %}<span data-error-text></span><button type="button" class="btn btn-outline-danger btn-sm ms-2" data-retry>Retry</button>{% endcall %}
+{% call alert('info', attrs={'data-classifier-empty':'','hidden':true}) %}<strong>No permitted classifier is installed.</strong><p>Download the starter set to one GPU compute node, then install the downloaded models. You can also add a decision GGUF from Files.</p><div class="row g-2 align-items-end"><div class="col-sm-5">{{ node_filter('starter', [], allow_all=false) }}</div><div class="col-sm-auto"><button type="button" class="btn btn-primary" data-starter>Download starter set · 13 GB</button></div><div class="col-sm-auto"><button type="button" class="btn btn-outline-primary" data-install-starters>Install downloaded classifiers</button></div></div><a href="/files?type=classifier" class="d-inline-block mt-2">Classifier files</a>{% endcall %}
+<div role="status" aria-live="polite" class="mb-3 small" data-classifier-status>Loading model catalogue…</div>
+<form data-classifier-form>
+<div class="classifier-layout">
+<aside>
+{% call card('Settings') %}
+<label class="form-label" for="classifier-model">Model</label><select id="classifier-model" class="form-select mb-3" required></select>
+{{ node_filter('classifier', [], allow_all=true) }}
+<p class="small text-secondary mt-3 mb-0" data-model-facts></p>
+<label class="form-label mt-3" for="classifier-compare">Compare with (up to 2)</label><select id="classifier-compare" class="form-select" multiple size="3" aria-describedby="compare-help"></select><small id="compare-help" class="form-hint">Run the same questions on up to three models. Node applies to all selected models.</small>
+<label class="form-label mt-3" for="classifier-image" data-image-label hidden>Image attachment<input type="file" id="classifier-image" class="form-control mt-1" accept="image/png,image/jpeg,image/webp"></label>
+{% endcall %}
+{% call card('Starters') %}<label class="form-label" for="classifier-starter">Question set</label><select id="classifier-starter" class="form-select mb-2"><option value="support">Support routing</option><option value="sentiment">Sentiment</option><option value="spam">Spam</option><option value="urgency">Urgency 1–5</option><option value="pii">PII present</option><option value="grounded">Groundedness</option><option value="injection">Prompt injection</option></select><button type="button" class="btn btn-outline-secondary" data-load-starter>Use starter</button>{% endcall %}
+</aside>
+<section>
+{% call card('State') %}
+{% call pills('State format', buttons=true) %}{% for value,label in [('text','Text'),('chat','Chat'),('json','JSON')] %}{{ pill_button(label, value == 'text', attrs={'data-state-mode':value}) }}{% endfor %}{% endcall %}
+<label class="visually-hidden" for="classifier-state">State to classify</label><textarea id="classifier-state" class="form-control" rows="7" required>I was charged twice for my order and nobody has replied.</textarea><small class="form-hint" data-token-estimate></small>
+{% endcall %}
+{% call card('Questions') %}<div data-questions></div><button type="button" class="btn btn-outline-primary" data-add-question>Add question</button>{% endcall %}
+<button type="submit" class="btn btn-primary mb-3" data-run>Classify</button>
+</section>
+</div>
+</form>
+{% call kpi_row('Classifier run') %}{{ kpi('Latency', '—', value_attrs={'data-latency':''}) }}{{ kpi('Input tokens', '—', value_attrs={'data-input-tokens':''}) }}{{ kpi('Model', '—', value_attrs={'data-run-model':''}) }}{% endcall %}
+<p class="small text-secondary">{{ uncalibrated }}</p>
+<div class="classifier-results" data-results aria-live="polite"></div>
+{% call more('Developer drawer') %}<label class="form-label" for="classifier-code">Format</label><select id="classifier-code" class="form-select mb-2"><option value="request">Request JSON</option><option value="response">Response JSON</option><option value="curl">curl</option><option value="python">Python requests</option><option value="openai">OpenAI SDK</option></select><pre class="border rounded p-3 overflow-auto"><code id="classifier-developer"></code></pre><button type="button" class="btn btn-outline-secondary btn-sm" data-copy-target="classifier-developer">Copy</button>{% endcall %}
+{% call more('History in this tab') %}<div class="d-flex gap-2 mb-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-export="json">Export JSON</button><button type="button" class="btn btn-outline-secondary btn-sm" data-export="csv">Export CSV</button></div><div class="table-responsive"><table class="table"><thead><tr><th>Model</th><th>Latency</th><th>Answers</th><th></th></tr></thead><tbody data-history>{% call empty_row(4, attrs={'data-history-empty':''}) %}No runs in this tab yet.{% endcall %}</tbody></table></div>{% endcall %}
+<template id="classifier-question-template">{{ question() }}</template><template id="classifier-criterion-template">{{ criterion() }}</template><template id="classifier-result-template">{{ result() }}</template><template id="classifier-probability-template">{{ probability() }}</template><template id="classifier-history-template">{{ history_row() }}</template>
+</div>
+{% endblock %}

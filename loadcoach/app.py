@@ -330,6 +330,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         marks = {"model_id": library.identity(name), "fingerprint": library.fingerprint(library.get(name), name), "build": runner.known_version(library.get(name))}
         marks['engine_id'] = engine_for(library.get(name)).id
         marks['capabilities'] = engine_for(library.get(name)).capabilities(library.get(name))
+        if marks['capabilities'].get('classifier'):
+            marks.update(type='classifier', architecture={'output_modalities': ['decisions']},
+                         limits=marks['capabilities']['limits'])
         marks.update(runner.model_metadata(name))
         if marks['capabilities'].get('image_generation'):
             from mirrorwall.model import defaults as image_defaults,limits as image_limits
@@ -447,7 +450,38 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     async def asked_of(request: Request, user: User) -> Response:
         """Answer a request, saying with it what turnstile keeps reliability with: which request it was, which model answered, and how it ended if that is known already."""
+        from loadcoach.classifier import NATIVE_PATHS, MAX_BODY, Invalid, validate, shim_request, adapt_response
+        native, shim = request.url.path in NATIVE_PATHS, None
+        if native or request.url.path == '/v1/chat/completions':
+            raw = await request.body()
+            try:
+                body = json.loads(raw)
+                name = body.get('model') if isinstance(body, dict) else None
+                settings = library.get(name) if isinstance(name, str) and name in offered(user) else None
+                capabilities = engine_for(settings).capabilities(settings) if settings else {}
+                classifier = capabilities.get('classifier')
+                if native or classifier:
+                    if len(raw) > MAX_BODY:
+                        raise Invalid('Classifier request exceeds the 64 KiB body limit.')
+                    if native:
+                        sent = validate(body, capabilities.get('limits', {}).get('choices', 255))
+                        if settings and not classifier:
+                            raise Invalid('This model is not a Classifier. Choose a decision GGUF with a systemone template.', 501)
+                    else:
+                        sent, mappings = shim_request(body)
+                        validate(sent, capabilities['limits']['choices'])
+                        shim = (sent, mappings, body.get('stream', False))
+                    scope = {**request.scope, 'path': '/v1/systemone', 'raw_path': b'/v1/systemone'}
+                    request = Request(scope, request.receive)
+                    request._body = json.dumps(sent).encode()
+            except Invalid as problem:
+                return error(problem.status, str(problem))
+            except (ValueError, TypeError):
+                if native:
+                    return error(400, 'Classifier requests must be JSON objects.')
         answer = await forward(request, user)
+        if shim:
+            answer = await adapt_response(answer, *shim)
         if entry := getattr(request.state, "entry", 0):
             answer.headers.setdefault("x-loadcoach-request-id", str(entry))
         if answered := getattr(request.state, "answered", None):
@@ -972,6 +1006,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                            "json_schema": engine_for(library.get(name)).capabilities(library.get(name)).get('json_schema', False),
                            "image_generation": engine_for(library.get(name)).capabilities(library.get(name)).get("image_generation", False),
                            "audio": bool(engine_for(library.get(name)).capabilities(library.get(name)).get("audio")),
+                           "classifier": engine_for(library.get(name)).capabilities(library.get(name)).get('classifier', False),
                            "hosted": False, **runner.model_metadata(name)}
                     for name in offered(user)}},
                 "group": user.group_name,
@@ -1356,7 +1391,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                              last_used=max((last_used[name] for name in models if name in last_used), default=None))
                 found.append(entry)
         # A part, which is an adapter or a projector, is listed with the model files here that it says it was made for, and the models that use each of those.
-        whole = [file for file in found if file.get("facts", {}).get("what") == "model"]
+        whole = [file for file in found if file.get("facts", {}).get("what") in ("model", "classifier")]
         for part in found:
             if part.get("facts", {}).get("what") in ("adapter", "projector"):
                 part["goes_with"] = [{"path": file["path"], "models": file["used_by"]} for file in whole if goes_with(part["facts"], file["facts"])]

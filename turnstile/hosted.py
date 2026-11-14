@@ -62,6 +62,17 @@ class Hosted:
         """The hosted models this user may name: their group may use hosted models, and this one."""
         return [name for name in self.models() if user.can("hosted") and user.group.may_use(name)] if user else []
 
+    def described(self, name):
+        """Publish the mapped model's inference kind without exposing its credential."""
+        there = self.models()[name]
+        result = {'id': name, 'object': 'model', 'created': 0, 'owned_by': 'hosted'}
+        if there.get('systemone'):
+            from loadcoach.classifier import limits
+            result.update(type='classifier', capabilities={'classifier': 'systemone', 'chat': False, 'raw_completion': False,
+                          'embeddings': False, 'images': there.get('vision', False), 'limits': limits({})},
+                          architecture={'output_modalities': ['decisions']}, limits=limits({}))
+        return result
+
     def identity(self, name: str) -> tuple[str, str]:
         """What reliability is kept under for a hosted model: where it is asked, not any file."""
         there = self.models()[name]
@@ -86,7 +97,7 @@ class Hosted:
         for name in self.offered(user):
             model_id, fingerprint = self.identity(name)
             found[name] = {"hosted": True, "why_not": self.why_not(name, user), "sees": self.models()[name].get('vision', False),
-                           "capabilities": {'json_schema': self.models()[name].get('json_schema', False)}, "tools": True, "room": None, "warm": True, "resident": False,
+                           "capabilities": {**self.described(name).get('capabilities', {}), 'json_schema': self.models()[name].get('json_schema', False)}, "tools": not self.models()[name].get('systemone'), "room": None, "warm": True, "resident": False,
                            "speed": None, "load": None, "placed": False, "context": None, "fit": "hosted", "cards": [], "evictions": [],
                            "model_id": model_id, "fingerprint": fingerprint, "prompt_speed": None,
                            "wait": {"seconds": 0.0, "basis": "no local queue; outside scheduling is unobserved"}}
@@ -124,6 +135,22 @@ class Hosted:
     async def answer(self, request: Request, user: User, asked: dict, name: str, chose: dict | None = None, instead_of: str = "", role: str = "") -> Response:
         """Ask the hosted model `name` for what `asked` says, after every check, and hand back its answer as it arrives."""
         there, chose = self.models()[name], chose or {}
+        from loadcoach.classifier import NATIVE_PATHS, Invalid, validate, shim_request, adapt_response
+        try:
+            if request.url.path in NATIVE_PATHS:
+                if not there.get('systemone'):
+                    raise Invalid('Choose a Classifier mapping for /v1/systemone.', 501)
+                asked = validate(asked)
+                request = Request({**request.scope, 'path': '/v1/systemone', 'raw_path': b'/v1/systemone'}, request.receive)
+            elif there.get('systemone'):
+                if request.url.path != '/v1/chat/completions':
+                    raise Invalid('Classifiers support /v1/systemone and the JSON Schema chat shim only.')
+                sent, mappings = shim_request(asked)
+                native = Request({**request.scope, 'path': '/v1/systemone', 'raw_path': b'/v1/systemone'}, request.receive)
+                response = await self.answer(native, user, sent, name, chose, instead_of, role)
+                return await adapt_response(response, sent, mappings, asked.get('stream', False))
+        except Invalid as problem:
+            return refuse(problem.status, str(problem))
         if guarded(request):
             return error(409, "The required local model identity, fingerprint or build does not match; no inference was sent.")
         if "x-loadcoach-log" in request.headers:  # what a hosted answer cost is counted from the log, so it cannot go unrecorded

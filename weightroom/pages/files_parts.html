@@ -101,6 +101,7 @@
 {% macro cache_tables(found, file_type='', poll=false) %}
 {% for what, title, id, hint in [
   ('model', 'Models', 'files-models', ''),
+  ('classifier', 'Classifier', 'files-classifiers', 'Native decision GGUFs and inert conversion sources.'),
   ('image', 'Image components', 'files-images', ''),
   ('audio', 'Audio', 'files-audio', ''),
   ('adapter', 'Adapters', 'files-adapters', 'Small files that change how one model behaves.'),
@@ -108,7 +109,7 @@
 ] if (not file_type or file_type == what) and (platform is not defined or platform().kind_enabled(what)) %}
 {% set content %}
   {% if what == 'image' %}{% from "mirrorwall_files.html" import image_files with context %}{{ image_files(found) }}
-  {% elif what in ('model', 'audio') %}{{ models_table(found, what) }}
+  {% elif what in ('model', 'audio', 'classifier') %}{{ models_table(found, what) }}
   {% else %}{{ parts_table(found, what, title|lower) }}{% endif %}
 {% endset %}
 {% if poll %}<div class="card-body" id="{{ id }}" hx-swap-oob="true">{{ content }}</div>
@@ -118,7 +119,7 @@
 
 {% macro models_table(found, what='model') %}
 <div class="table-responsive">
-<table id="{{ 'files-audio-table' if what == 'audio' else 'files-table' }}" class="table table-hover align-middle sortable">
+<table id="{{ 'files-audio-table' if what == 'audio' else 'files-classifier-table' if what == 'classifier' else 'files-table' }}" class="table table-hover align-middle sortable">
   <thead><tr><th data-sort="text">File</th><th data-sort="value">Size</th><th data-sort="text">It says it is</th><th data-sort="text">Used by</th><th data-sort="text">Used on nodes</th><th></th></tr></thead>
   <tbody>
   {% for file in found.files if file.tier != "storage" and (file.facts or {}).get("what", "model") == what %}
@@ -128,7 +129,7 @@
     <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ file.facts.name or "" }} <small class="text-secondary">{{ file.facts.size_label or "" }} {{ file.facts.kind if file.facts.kind and file.facts.kind != "model" else "" }}</small>{% endif %}</td>
     <td>{% for name in file.used_by_all %}<a href="{{ address(name) }}">{{ name }}</a>{{ ", " if not loop.last }}{% else %}<span class="text-secondary">no model</span>{% endfor %}</td>
     <td>{% for node in file.used_nodes %}{{ node }}{{ ", " if not loop.last }}{% else %}<span class="text-secondary">none</span>{% endfor %}</td>
-    <td class="text-end">{% if what == 'audio' %}<a class="btn btn-outline-secondary btn-sm" href="/models/audio">Configure</a>{% elif not file.used_by and not file.unreadable %}<a class="btn btn-outline-primary btn-sm" href="/models?file={{ file.path|urlencode }}&trained={{ file.facts.trained_context or '' }}">Add</a>{% endif %}</td>
+    <td class="text-end">{% if what == 'audio' %}<a class="btn btn-outline-secondary btn-sm" href="/models/audio">Configure</a>{% elif not file.used_by and not file.unreadable and (what != 'classifier' or file.path.lower().endswith('.gguf')) %}<a class="btn btn-outline-primary btn-sm" href="/models?file={{ file.path|urlencode }}&trained={{ file.facts.trained_context or '' }}">Add</a>{% endif %}</td>
   </tr>
   {% else %}{% call empty_row(6) %}No cached {{ 'audio' if what == 'audio' else 'model' }} files found.{% endcall %}{% endfor %}
   </tbody>
