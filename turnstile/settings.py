@@ -2,7 +2,7 @@
 
 from starlette.responses import JSONResponse
 
-from loadcoach.settings import CHANGEABLE, Changes, FRONT_PROGRAMS as PROGRAMS, program_name
+from loadcoach.settings import CHANGEABLE, Changes, FRONT_PROGRAMS as PROGRAMS, live, program_name
 from loadcoach.setting_catalog import validate_patch
 from loadcoach.tasks import error
 
@@ -11,11 +11,16 @@ class ConsoleSettings:
 
     Console settings remain available independently of compute-node availability.
     """
-    def __init__(self, source, log, ask, enabled=True, *, programs=PROGRAMS, voice_nodes=lambda: ()):
+    def __init__(self, source, log, ask, enabled=True, *, programs=PROGRAMS, voice_nodes=lambda: (), defaults=None):
         """Bind the console's program settings and their authenticated management API."""
         self.changes, self.log, self.ask, self.enabled = Changes(source), log, ask, enabled
         self.programs = programs
         self.voice_nodes = voice_nodes
+        self.defaults = defaults or {}
+
+    def live(self, program, name, fallback):
+        """A validated read bound to this control node's settings authority."""
+        return live(program, name, self.defaults.get(program, {}).get(name, fallback), changes=self.changes)
 
     async def handle(self, request, user):
         """Read or change the console's program settings through the shared settings contract."""

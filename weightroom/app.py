@@ -102,8 +102,8 @@ from plugins._controller import Controller as PluginController
 from loadcoach.groups import NAME
 from loadcoach.roles import STRENGTHS, benchmark_shares, check_loaded_bonuses, check_weights, loaded_factors, pick
 from loadcoach.waiting import completion
-from loadcoach.setting_catalog import validate_values
-from loadcoach.settings import copy_of, laid_over, read_value, said, written
+from loadcoach.setting_catalog import entries as catalog_entries, validate_values
+from loadcoach.settings import copy_of, laid_over, read_value, said, written, apply_live
 from benchmarks.app import Settings as BenchmarkSettings, build_app as build_benchmarks
 from benchmarks.store import Benchmarks
 from loadcoach.batches import ENDPOINTS, Batches
@@ -785,34 +785,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             copied[program] = changed.json()
         if copied != kept("settings.json", {}):
             keep("settings.json", copied)
-        effective = laid_over(settings.file, copied.get("weightroom", {}), "weightroom")
-        service_values = {name: effective.get(name, service_defaults[name]) for name in SERVICE_SETTINGS}
-        if all(type(value) is bool for value in service_values.values()):
-            settings = replace(settings, **service_values)
-        selected = effective.get("third_party_services", ("ollama", "docker"))
-        if (isinstance(selected, list) and len(selected) == len(set(selected)) and not set(selected) - THIRD_PARTY_NAMES
-                and tuple(selected) != settings.third_party_services):
-            settings = replace(settings, third_party_services=tuple(selected))
-        retention = effective.get("backup_retention", settings.backup_retention)
-        if type(retention) is int and 0 <= retention <= 100 and retention != settings.backup_retention:
-            settings = replace(settings, backup_retention=retention)
-        heat = effective.get("alert_gpu_temperature", settings.alert_gpu_temperature)
-        if type(heat) in (int, float) and 50 <= heat <= 110:
-            settings = replace(settings, alert_gpu_temperature=heat)
-        for name in observation.ALERT_LIMITS:
-            value = effective.get(name, getattr(settings, name))
-            try:
-                settings = replace(settings, **{name:observation.alert_value(name, value)})
-            except ValueError:
-                pass  # Invalid persisted settings never become effective runtime thresholds.
-        named = ("host", "port", "compute", "spotter", "timezone", "mock_input_rate", "mock_output_rate",
-                 "third_party_services", "backup_retention", "alert_gpu_temperature", "wake_mac", "wake_address", "secure", "chat_model_url", "plugins_dir")
-        running = {**settings.file, **{name: getattr(settings, name) for name in (*named, *observation.ALERT_LIMITS, *SERVICE_SETTINGS)}}
+        settings, refused = apply_live('weightroom', settings, copied.get('weightroom', {}))
+        running = {**settings.file, **{entry.name: getattr(settings, entry.name)
+                    for entry in catalog_entries('weightroom') if hasattr(settings, entry.name)}}
         # turnstile writes what it runs with into the folder the two share, each time it starts.
         for program, told in (("weightroom", said(running, settings.file, settings.says)), ("turnstile", kept("settings-seen-turnstile.json", None))):
-            if told and said_last.get(program) != told:
-                if (await ask("POST", f"/loadcoach/settings/{program}/seen", settings.key, json={"told": told})).status_code == 200:
-                    said_last[program] = told
+            report = {'told': told, 'refused': refused if program == 'weightroom' else {}}
+            if told and said_last.get(program) != report:
+                if (await ask("POST", f"/loadcoach/settings/{program}/seen", settings.key, json=report)).status_code == 200:
+                    said_last[program] = report
 
     async def watch() -> None:
         """Look at compute every so often, for as long as weightroom runs.

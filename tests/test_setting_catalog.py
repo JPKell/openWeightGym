@@ -111,3 +111,35 @@ def test_secret_kind_never_reaches_settings_seen_even_from_a_follower(monkeypatc
         assert secret not in raw and 'credential' not in json.loads(raw)
     finally:
         changes.db.close()
+
+
+def test_generic_live_application_restores_file_and_unsaid_defaults():
+    from loadcoach.settings import apply_live
+    from weightroom.app import Settings
+    before = Settings(key='private', file={'alert_gpu_temperature': 90})
+    changed, refused = apply_live('weightroom', before, {'alert_gpu_temperature': 95, 'backup_retention': 4})
+    assert not refused and changed.alert_gpu_temperature == 95 and changed.backup_retention == 4
+    reset, refused = apply_live('weightroom', changed, {})
+    assert not refused and reset.alert_gpu_temperature == 90 and reset.backup_retention == 10
+    invalid, refused = apply_live('weightroom', reset, {'alert_gpu_temperature': 999})
+    assert invalid.alert_gpu_temperature == 90 and 'alert_gpu_temperature' in refused
+
+
+def test_live_reader_uses_current_store_and_original_file_after_reset(tmp_path):
+    from types import SimpleNamespace
+    from turnstile.settings import ConsoleSettings
+    api = ConsoleSettings(tmp_path / 'settings.db', SimpleNamespace(), None,
+                          defaults={'turnstile': {'response_keep_days': 30}})
+    try:
+        api.changes.put('turnstile', 'response_keep_days', 7, 'operator')
+        assert api.live('turnstile', 'response_keep_days', 7) == 7
+        api.changes.put('turnstile', 'response_keep_days', 14, 'operator')
+        assert api.live('turnstile', 'response_keep_days', 7) == 14
+        api.changes.take_away('turnstile', 'response_keep_days')
+        assert api.live('turnstile', 'response_keep_days', 7) == 30
+        api.changes.put('turnstile', 'response_keep_days', -1, 'operator')
+        assert api.live('turnstile', 'response_keep_days', 7) == 30
+        api.changes.put('turnstile', 'artifact_machine', 'other', 'operator')
+        assert api.live('turnstile', 'artifact_machine', 'original') == 'original'
+    finally:
+        api.changes.db.close()
