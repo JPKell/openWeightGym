@@ -1,0 +1,6 @@
+{% from 'benchmark_results_parts.html' import overview %}
+{{ overview(results) }}
+<div class="results-workspace" data-layout="briefing">
+{% if score_benchmarks %}{% include 'benchmark_scores.html' %}{% endif %}
+{% include 'benchmark_measurements.html' %}
+</div>

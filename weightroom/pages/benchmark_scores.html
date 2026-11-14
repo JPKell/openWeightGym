@@ -1,10 +1,8 @@
-{% from "parts.html" import card, empty_row %}
-{% from "benchmark_parts.html" import number, flags %}
-{% call card("Scores", open=true, key="benchmark-scores") %}
+{% from "parts.html" import card %}
+{% from "benchmark_score_parts.html" import score_grid %}
+{% call card('Model × benchmark', id='heatmap-panel', key='benchmark-scores', hint='Select a column to sort; select a score to inspect its saved run.', class_='results-heatmap', body=false) %}
+<div class="heatmap-guide px-3 py-2 d-flex flex-wrap justify-content-between align-items-center gap-2 small text-secondary"><span>{{ score_models|length }} models · {{ score_benchmarks|length }} benchmarks</span><button class="btn btn-sm btn-outline-secondary" type="button" data-score-table-toggle aria-expanded="false" aria-controls="benchmark-score-table">Accessible score table</button></div>
 <div id="benchmark-heatmap-scroll" class="benchmark-heatmap-scroll" hidden><div id="benchmark-heatmap" class="benchmark-heatmap" role="img" aria-label="Benchmark scores by model. Keyboard links are available in the score grid."></div></div>
-<div id="benchmark-score-table" class="table-responsive"><table class="table score-map align-middle mb-0"><thead><tr><th scope="col">Model</th>{% for bench in score_benchmarks %}<th scope="col" data-green="{{ bench.green }}" data-label="{{ bench.name }}" data-unit="{{ bench.score_unit }}"><a href="/benchmarks/results?benchmark={{ bench.id }}#measurements">{{ bench.name }}</a><small>{{ bench.score_unit }}</small></th>{% endfor %}</tr></thead><tbody>
-{% for model in score_models %}<tr><th scope="row">{{ model.id }}</th>{% for bench in score_benchmarks %}{% set result = latest.get(model.id, {}).get(bench.id) %}<td><a data-score="{{ result.score if result and result.score is not none else '' }}" class="score-cell{{ ' score-missing' if not result or result.score is none }}" {% if result and result.score is not none %}style="background: {{ colours[(model.id, bench.id)] }}; color: #101a13"{% endif %} href="{{ '/benchmarks/run/' + result.id if result else '/benchmarks/runs?benchmark=' + bench.id }}" aria-label="{{ model.id }}, {{ bench.name }}: {{ number(result.score if result else none) }}">{{ number(result.score if result else none) }}{{ flags(result) }}</a></td>{% endfor %}</tr>
-{% else %}{% call empty_row((score_benchmarks|length + 1), class_='empty-state') %}No local models are available to your account.{% endcall %}{% endfor %}
-</tbody></table></div>
-<div class="heat-legend"><span>Bad</span><span class="heat-gradient" aria-hidden="true"></span><span>Good</span><span class="ms-auto">Scaled per benchmark · — not measured · <span class="flag-settings">† settings changed</span> · <span class="flag-version">* benchmark changed</span> · <span class="flag-environment">* environment changed</span></span></div>
+{{ score_grid(score_models, score_benchmarks, latest, colours) }}
+<div class="heat-legend px-3 py-2"><span>Bad</span><span class="heat-gradient" aria-hidden="true"></span><span>Good</span><span class="ms-auto">Scaled per benchmark · — not measured · <span class="flag-settings">† settings changed</span> · <span class="flag-version">* benchmark changed</span> · <span class="flag-environment">* environment changed</span></span></div>
 {% endcall %}

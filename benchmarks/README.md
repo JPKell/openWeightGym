@@ -571,15 +571,20 @@ model type and compute-only targets, with batch review before submission. Live m
 preserves unsent selections; submissions and queue controls return to this workspace and model type.
 Results shows LLM quality benchmarks only, using one row per authorized model and the preferred
 completed result across nodes (current settings first, otherwise latest saved evidence). Context,
-Speed and Load time remain on Node measurements. The Measurements selector sits at the right of
-its shared card header and updates that card in place. Results has no model-type pills or
-Benchmark pretitle. Saved image/audio load-time evidence remains accessible through Node measurements
+Speed and Load time remain on Node measurements. The Results briefing keeps the complete compact
+heatmap above a compact measurement filter row (model search, benchmark, baseline and evidence).
+Filters update only the measurement workspace; the chart always retains every authorized model
+and quality benchmark. JSON & schema opens by default with all 25 configured metric fields;
+grouped headings, section jumps and pinned model names keep wide tables usable. The overview,
+findings and leaders use saved scores; baseline deltas and ranks require the current benchmark
+protocol, while older settings remain flagged and rankable. Results has no model-type pills,
+Benchmark pretitle or page-heading action buttons. Saved image/audio load-time evidence remains accessible through Node measurements
 and run details; load-capable models remain available in the Load time run picker. Embedders retain their separate
 resource controls. Future image/audio evaluation is a [deferred candidate](../docs/agent-status.md#conditional-maintenance-candidates).
 The orange-to-green quality heatmap scales each benchmark independently. Click a column header to sort
 models from best (green) to worst, with unmeasured models last. The chart and score table
-reorder together without leaving the page. An expandable **Scores as
-a table** view provides keyboard links and remains visible when JavaScript is unavailable.
+reorder together without leaving the page. The **Accessible score table** button provides
+keyboard links; the table remains visible when JavaScript is unavailable.
 
 Each local model has a permanent `model_id`, separate from its public name and configuration
 fingerprint. Runs link to that ID, so renaming a model preserves its results under the new

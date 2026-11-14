@@ -1,0 +1,46 @@
+{% from 'parts.html' import card %}
+{% from 'kpi_parts.html' import kpi, kpi_row %}
+{% from 'benchmark_parts.html' import number, flags %}
+
+{% macro overview(view) %}
+{% call kpi_row('Quality result coverage', class_='results-overview mb-3') %}
+{{ kpi('LLM models', view.model_count, 'One result per model across nodes', value_attrs={'id': 'kpi-models'}) }}
+{{ kpi('Quality benchmarks', view.benchmark_count, 'Structured data, reasoning, context & tools', value_attrs={'id': 'kpi-benchmarks'}) }}
+{{ kpi('Scored coverage', (view.coverage ~ '%') if view.coverage is not none else '—', view.scored ~ ' of ' ~ view.total ~ ' model / benchmark pairs', value_attrs={'id': 'kpi-coverage'}, note_attrs={'id': 'coverage-note'}) }}
+{{ kpi('Evidence to review', view.review, 'Changed settings or older protocols', value_attrs={'id': 'kpi-review'}) }}
+{% endcall %}
+{% endmacro %}
+
+{% macro filters(benchmarks, models, selected, search='', baseline='', evidence='all', preview=false) %}
+<form id="results-filters" class="results-filters" aria-label="Filter measurements" method="get" action="/benchmarks/results#measurements"{% if preview %} data-preview-results-filters{% else %} hx-get="/benchmarks/results" hx-target="#benchmark-measurements" hx-select="#benchmark-measurements" hx-swap="outerHTML show:none" hx-replace-url="true" hx-sync="this:replace"{% endif %}>
+<div class="filter-field"><label class="form-label" for="search-models">Find a model</label><input id="search-models" name="q" class="form-control form-control-sm" type="search" value="{{ search }}" placeholder="Search model or family…"></div>
+<div class="filter-field"><label class="form-label" for="benchmark">Focus benchmark</label><select id="benchmark" name="benchmark" class="form-select form-select-sm"{% if not preview %} data-benchmark-select{% endif %}>{% for b in benchmarks %}<option value="{{ b.id }}"{{ ' selected' if b.id == selected.id }}>{{ b.name }} · {{ b.kpis|length }} metrics</option>{% endfor %}</select></div>
+<div class="filter-field"><label class="form-label" for="baseline">Compare against</label><select id="baseline" name="baseline" class="form-select form-select-sm"{% if not preview %} data-benchmark-select{% endif %}><option value="">No baseline</option>{% for model in models %}<option value="{{ model.id }}"{{ ' selected' if model.id == baseline }}>{{ model.id }}</option>{% endfor %}</select></div>
+<div class="filter-field"><label class="form-label" for="evidence-filter">Evidence</label><select id="evidence-filter" name="evidence" class="form-select form-select-sm"{% if not preview %} data-benchmark-select{% endif %}>{% for value,label in [('all','All saved evidence'),('current','Current results only'),('review','Needs review'),('gaps','Missing final scores')] %}<option value="{{ value }}"{{ ' selected' if value == evidence }}>{{ label }}</option>{% endfor %}</select></div>
+{% if preview %}<button id="reset" type="button" class="btn btn-sm btn-outline-secondary align-self-end">Reset</button>{% else %}<a id="reset" class="btn btn-sm btn-outline-secondary align-self-end" href="/benchmarks/results?benchmark={{ selected.id }}#measurements" hx-get="/benchmarks/results?benchmark={{ selected.id }}" hx-target="#benchmark-measurements" hx-select="#benchmark-measurements" hx-swap="outerHTML show:none" hx-replace-url="true">Reset</a><noscript><button class="btn btn-sm btn-primary align-self-end" type="submit">Apply</button></noscript>{% endif %}
+</form>
+{% endmacro %}
+
+{% macro insight(label, value, note, key, ordinal) %}
+{% call card(class_='mb-0 insight-card', body_class='p-4') %}<div class="insight-eyebrow"><span>{{ label }}</span><span class="text-secondary">{{ ordinal }}</span></div><strong class="insight-value" id="insight-{{ key }}-value">{{ value }}</strong><p class="small text-secondary mb-0" id="insight-{{ key }}-note">{{ note }}</p>{% endcall %}
+{% endmacro %}
+
+{% macro insights(view) %}
+<section class="results-insights" aria-label="Benchmark findings">
+{{ insight('LEADING THIS BENCHMARK', (number(view.leader.run.score) ~ ' ' ~ view.benchmark.score_unit) if view.leader else 'No final scores', (view.leader.model ~ ' · ' ~ view.benchmark.name) if view.leader else 'No completed current-protocol scores match this view.', 'focus', '01') }}
+{{ insight('REASONING SPECIALIST', (number(view.specialist.run.score) ~ ' ' ~ view.reasoning.score_unit) if view.specialist else 'Not measured', (view.specialist.model ~ ' · ' ~ view.reasoning.name) if view.specialist else 'No comparable reasoning results in this view.', 'specialist', '02') }}
+{{ insight('COMPLETE THE PICTURE', view.gaps ~ ' unscored pairs', 'Missing final scores remain unmeasured.', 'coverage', '03') }}
+</section>
+{% endmacro %}
+
+{% macro metric_jumps(benchmark) %}
+<nav id="metric-sections" class="d-flex flex-wrap gap-2 px-3 py-2 border-bottom" aria-label="Jump to metric section">{% for section in benchmark.metric_sections %}<button type="button" class="btn btn-sm btn-outline-secondary" data-scroll-metric="{{ section.metrics[0][0] }}">{{ section.name }} · {{ section.metrics|length }}</button>{% endfor %}</nav>
+{% endmacro %}
+
+{% macro leaders(view) %}
+{% call card('Benchmark leaders', hint='Ranked on the focused task, with full precision.', body_class='p-3') %}
+<h3 class="mb-1">{{ view.benchmark.name }}</h3><p class="small text-secondary mb-3">{{ view.benchmark.score_unit }} · {{ 'Lower' if view.benchmark.green == 'low' else 'Higher' }} is better · protocol v{{ view.benchmark.version }}</p>
+<ol class="results-leaderboard">{% for row in view.leaders %}<li><a class="leader-row text-decoration-none{{ ' baseline-row' if row.model == view.baseline }}" href="/benchmarks/run/{{ row.run.id }}"><span class="leader-rank">{{ '%02d'|format(row.rank) }}</span><span class="leader-model"><strong>{{ row.model }}{{ flags(row.run) }}</strong>{% if row.bar is not none %}<span class="leader-track" aria-hidden="true"><span style="width: {{ row.bar }}%"></span></span>{% endif %}</span><span class="leader-value">{{ number(row.run.score) }}</span><span class="leader-delta">{% if row.delta is not none %}{{ '+' if row.delta > 0 }}{{ number(row.delta) }} {{ 'pp' if view.benchmark.score_unit == '%' else view.benchmark.score_unit }}{% else %}—{% endif %}</span></a></li>{% else %}<li class="small text-secondary">No comparable final scores in this view.</li>{% endfor %}</ol>
+<p class="small text-secondary border-top pt-3 mt-3 mb-0">{% if view.baseline %}Baseline: {{ view.baseline }}. {{ 'Deltas use saved scores on the same protocol.' if view.baseline_scored else 'No current-protocol baseline score; deltas unavailable.' }} {% endif %}Older protocols are excluded from ranks. † retains earlier model settings.</p>
+{% endcall %}
+{% endmacro %}

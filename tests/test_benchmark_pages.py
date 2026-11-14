@@ -500,7 +500,7 @@ def test_results_show_one_quality_result_per_model_across_nodes(fleet):
     for requested in ('extraction', 'context', 'speed', 'load', 'embedding_load'):
         html = browser.get('/benchmarks/results', params={'benchmark': requested, 'kind': 'llm'}).text
         table = html.split('id="benchmark-results"', 1)[1].split('</table>', 1)[0]
-        assert table.count('local-model') == 1 and table.count('private-model') == 1
+        assert table.count('data-model="local-model"') == 1 and table.count('data-model="private-model"') == 1
         if requested == 'extraction':
             assert saved[1] in table and saved[0] not in table
         options = html.split('<select id="benchmark"', 1)[1].split('</select>', 1)[0]
