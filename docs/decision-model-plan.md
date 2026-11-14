@@ -109,8 +109,8 @@ Downloads use the existing Hugging Face discovery and download path. The tasks a
 ### WP2 — Optional conversion job ("Convert to classifier GGUF")
 1. A LoadCoach task on one chosen node runs llama.cpp's own `convert_hf_to_gguf.py` (with its
    `conversion/` decision converters) in a **tools venv** (numpy, safetensors, PyTorch CPU).
-   The venv is installed on demand through OWG Components, and its node and llama.cpp source
-   are pinned to the installed build.
+   The venv is installed on demand through `owg install --classifier-tools install`; its
+   llama.cpp source matches the installed build.
 2. Routes:
    - native converter for kev LoRA checkpoints, lev, laya, Julia, clef and pplx‑decider sources;
    - **TinyJev pointer adapter** (our code, next to the job): Qwen3 + `head.safetensors` → kev
@@ -289,8 +289,10 @@ Saved results on `jpk-main` (suite-defined microbenchmark; probabilities remain 
 | `lev-q4_k_m` | 15.12 | 80.40 | 74.78 | 0.3179 | 0.0965 |
 | `kev-9b-q4_k_m` | 18.27 | 86.03 | 74.14 | 0.2119 | 0.0303 |
 
-Optional conversion: install **Classifier conversion tools** on the owning compute node in
-**System → Components**. Download source data with the Hugging Face Classifier filter, copy
+Optional conversion: install **Classifier conversion tools** on the owning compute node with
+`owg install --classifier-tools install` (also offered in the installer's component choices).
+**System → Components** reports readiness. Download source data with the Hugging Face
+Classifier filter, copy
 the complete bundle to that node through Files, open a source file, and choose **Convert to
 classifier GGUF**. Tools use the configured llama-server’s exact source commit in a separate
 CPU venv. Files shows durable progress and parity; the sibling output includes source/output
