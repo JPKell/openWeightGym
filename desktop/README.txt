@@ -1,59 +1,29 @@
-openWeightGym Voice desktop client
+# Voice desktop app
 
-Extract this entire folder before running a launcher. The first launch downloads the
-small client dependencies into .venv beside it. No recognition or speech models are
-downloaded: those remain on the server.
+Use the desktop client as your microphone and speakers while models run on the server.
 
-Windows 10/11:
-  Install Python 3.13 from python.org with Tcl/Tk and the Python launcher included.
-  Double-click Voice.cmd.
+## Before you start
 
-macOS 12 Monterey or newer, Intel or Apple Silicon:
-  Install Python 3.13 using the universal2 installer from python.org.
-  Run Voice.command. If needed, open Terminal in this folder and run:
-    sh Voice.command
-  Allow microphone access for the application/Terminal when macOS asks.
+Download **Voice desktop app** from the console and extract the entire ZIP. Install the platform requirements below. You need an application key and Voice/model access; use the desktop server address supplied by your administrator. A trusted LAN or configured HTTPS endpoint is required; HTTP sends the key and audio without transport encryption.
 
-Linux:
-  Install Python 3.13 or newer, Tk, venv and PortAudio using your distribution's packages.
-  On Ubuntu with its default Python 3.13 or newer:
-    sudo apt install python3-tk python3-venv libportaudio2
-  Run:
-    sh Voice.command
+## Do it
 
-Connection:
-  Server: http://192.168.1.10:8447
-  API key: paste your existing LoadCoach key, or choose its existing file.
-  Choose direct or hermes, your microphone and speakers, then Start.
-  Echo cancellation is on by default. Speak naturally to interrupt an answer;
-  the microphone stays live while the speakers play. Playback keeps a short buffer
-  to smooth network timing. With headphones you can
-  optionally turn Echo cancellation off. Mute and Interrupt remain available.
-  If installing over an older copy, run the launcher again: it installs the new
-  WebRTC AEC dependency automatically. Restart an already open app to load the update.
+1. Open the launcher for your platform. The first launch installs client dependencies into `.venv` beside it; model weights stay on the server.
+2. In **Settings**, set the server and API key, or choose **Import key file…**. Select **Mode**, microphone and speakers, then **Save settings**.
+3. Open **Conversation** and select **Start**. Use **Mute**, **Interrupt**, **Finish speaking** or **Hang up** as needed.
 
-The API key needs front-voice and access to the voice profile's model, including load
-if loading is needed. Hermes mode additionally needs front-voice-hermes. Turnstile
-checks keys against the accounts on the control node; calls can wake compute when waking is configured.
-The server must have its desktop listener enabled. Neither Tailscale nor a tunnel is
-needed on the home LAN. HTTP sends the API key and sound unencrypted over that LAN;
-use a trusted LAN or a configured HTTPS endpoint for other networks.
+## Platform requirements
 
-The dark and gold window has Conversation and Settings tabs. Set your server, API
-key, conversation mode and audio devices in Settings, then press Save settings.
-The masked API key saves automatically after typing, when leaving its field, or on
-closing the window. It reloads on startup. Import key file copies an existing key
-into the app's own file. Clear the key field to remove the saved copy.
+| Platform | Requirements and launcher |
+|---|---|
+| Windows | Python 3.13 with Tcl/Tk and the Python launcher; open `Voice.cmd`. |
+| macOS | Python 3.13 universal installer; open `Voice.command` or run `sh Voice.command`. Allow microphone access when asked. |
+| Linux | Python 3.13 or newer, Tk, venv and PortAudio; run `sh Voice.command`. |
 
-The key is stored in voice-desktop.key beside voice-desktop.json:
-  Linux:   $XDG_CONFIG_HOME/loadcoach (normally ~/.config/loadcoach)
-  Windows: %APPDATA%/loadcoach
-  macOS:   ~/Library/Application Support/loadcoach
-The key file is plain text, separate from preferences, with owner-only permissions
-on Linux/macOS. Windows uses the permissions of your user profile folder.
-Disconnect does not revoke your reusable key. Model requests use the suite's
-normal logging rules. The desktop does not save audio or the visible transcript.
+## Options and privacy
 
-Linux was tested with generated audio and the actual Tk window. Windows and macOS
-dependency wheels were checked where recorded in the suite guide; native device and
-installer execution on those operating systems still require testing there.
+**Echo cancellation** supports speaking while replies play. **Refresh devices** reloads the audio-device choices. Direct mode talks to the configured model; Hermes mode transcribes speech, sends text to Hermes and synthesizes its reply, subject to its additional account access.
+
+The masked key saves after editing or leaving its field, and reloads on startup. Importing copies the key into the app's private credential file. Clearing the key field removes that saved copy. Hanging up does not revoke a reusable key. The key remains plain text in a separate credential file: Linux/macOS use owner-only permissions, while Windows uses the user profile's permissions.
+
+The desktop does not save audio or the visible transcript. Server requests follow normal account logging policy. Native audio-device behavior needs checking on the actual client machine.

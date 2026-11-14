@@ -274,3 +274,5 @@ and row-level evidence stay in machine-readable artifacts.
 M1 facts: existing prose is converted; M2 verifies and edits it against current controls. No unverified defaults or live settings are added to generated pages. No open owner decisions; the work is local on `docs-library`, with no push or deployment. The pre-existing missing-docstring failure is repaired with description-only edits; executable AST comparisons passed. Detailed local check output is in `/var/tmp/owg-docs-*.log`.
 
 M2 batch 1: Getting started, Chat, API keys and Tools refreshed against current controls; 22/80 navigation routes covered, allowlist 58. Public reading/search and legacy connection examples are retained; no unverified facts or owner questions.
+
+M2 batch 2: Voice chat, image generation, speech, transcription, music/sounds, desktop setup and My account covered; canonical desktop README included, obsolete image qualification figures removed; 34/80 pages, allowlist 46. Legacy links pass; no unverified facts or owner questions.

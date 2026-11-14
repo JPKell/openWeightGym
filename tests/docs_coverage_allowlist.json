@@ -1,21 +1,10 @@
 [
-  "page:/account",
-  "page:/account/appearance",
-  "page:/account/audio",
-  "page:/account/logs",
-  "page:/account/privacy",
-  "page:/account/workspace",
   "page:/alerts",
   "page:/allowances",
   "page:/batches",
   "page:/benchmarks/compare",
   "page:/benchmarks/manage",
   "page:/benchmarks/node-measurements",
-  "page:/chat/images",
-  "page:/chat/music",
-  "page:/chat/sounds",
-  "page:/chat/speech",
-  "page:/chat/transcribe",
   "page:/civitai",
   "page:/cloud-apis",
   "page:/compute-nodes",
@@ -55,6 +44,5 @@
   "page:/telemetry",
   "page:/tools",
   "page:/usage",
-  "page:/users",
-  "page:/voice/desktop"
+  "page:/users"
 ]

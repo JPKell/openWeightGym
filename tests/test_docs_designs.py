@@ -97,7 +97,7 @@ def test_reader_contents_history_keyboard_and_code_alias(preview):
     expect(page.locator('#article .page-title')).to_have_text('API keys')
     page.locator('#outline-links a[href*=api-connect]').click()
     expect(page).to_have_url(re.compile('anchor=api-connect'))
-    expect(page.locator('#next')).to_be_hidden()
+    expect(page.locator('#next')).to_contain_text('Voice generation')
     page.go_back()
     expect(page).not_to_have_url(re.compile('anchor='))
     open_article(page, '/docs/api/source')

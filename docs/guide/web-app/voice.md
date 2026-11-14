@@ -1,15 +1,19 @@
 <!--docs
 title = "Voice and media"
-summary = "Talk with a model by voice, and make images, music, sounds and speech."
+summary = "Choose between live conversation, speech generation, transcription and creative media."
 order = 60
-covers = ["/voice"]
+covers = []
 -->
 # Voice and media
 
-## Voice calls {#voice}
+Choose the workspace for the kind of input and result you need.
 
-If Voice is available to your account, open [Voice](/voice), allow microphone access and start a conversation. Browser calls need HTTPS or localhost. Speak to interrupt a reply, use Mute to pause your microphone, and Hang up when finished. The [desktop app](/voice/desktop) is another way to call.
+## Choose a workspace
 
-## Images, music, sounds and speech {#media}
-
-Image generation, Music, Sounds and Speech are under Chat. Choose an appropriate permitted model, enter your prompt and generate. Saved media stays in your library. Recording a voice call is optional; the call page tells you when audio will be retained.
+- [Voice chat](/docs/web-app/voice-chat): live spoken conversation.
+- [Voice desktop app](/docs/web-app/voice-desktop): a native microphone and speaker client.
+- [Voice generation](/docs/web-app/speech): turn a script into audio.
+- [Transcribe](/docs/web-app/transcribe): turn recorded speech into text.
+- [Music and sounds](/docs/web-app/music-sounds): create or edit audio takes.
+- [Image generation](/docs/web-app/image-generation): create and edit pictures.
+- [Image extraction](/docs/web-app/image-extraction): read text or structured fields from an image.
