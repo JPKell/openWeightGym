@@ -20,10 +20,10 @@
 {% if answering %}<p class="small text-secondary mb-3">Files last checked: {% for node in answering %}{{ 'Front' if node.name == 'front' else node.name }} {{ node.checked|timestamp }}{{ ' · ' if not loop.last }}{% endfor %}.</p>{% endif %}
 {% endmacro %}
 
-{# A file offered in a list to choose from: where it is first, then its name, without its folders. #}
+{# File choices include a conversion's parent folder to distinguish retained attempts. #}
 {% set conversion_labels = {'verified':'Verified conversion', 'unverified':'Unverified conversion', 'failed':'Failed conversion', 'refused':'Refused (remote code)'} %}
 {% macro conversion_state(facts={}) %}{% if facts and facts.get('conversion') in conversion_labels %}<span class="badge bg-{{ 'success' if facts.conversion == 'verified' else 'danger' if facts.conversion in ('refused', 'failed') else 'warning' }}-lt"{% if facts.get('why') %} title="{{ facts.why }}"{% endif %}>{{ conversion_labels[facts.conversion] }}</span>{% endif %}{% endmacro %}
-{% macro file_choice_label(file) %}{{ file.machine }} · {{ file.tier }} · {{ file.path.rsplit('/', 1)[-1] }} · {{ file.size|size }}{% set state = file.get('facts', {}).get('conversion') %}{% if state in conversion_labels %} · {{ conversion_labels[state] }}{% endif %}{% endmacro %}
+{% macro file_choice_label(file) %}{{ file.machine }} · {{ file.tier }} · {{ file.path.rsplit('/', 2)[-2:]|join('/') if file.get('facts', {}).get('conversion') in conversion_labels else file.path.rsplit('/', 1)[-1] }} · {{ file.size|size }}{% set state = file.get('facts', {}).get('conversion') %}{% if state in conversion_labels %} · {{ conversion_labels[state] }}{% endif %}{% endmacro %}
 
 {# A drive's size: as |size, but in TB from 1000 GB up, so a big drive fits a narrow card. #}
 {% macro drive_size(count) %}{{ '%.1f TB'|format(count / 2**40) if count >= 1000 * 2**30 else count|size }}{% endmacro %}

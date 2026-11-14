@@ -1,8 +1,8 @@
 # Classifier (decision) models — work plan
 
-Status: **implementation in progress** (2026-11-13). Native routing, recognition, the chat shim,
-Classifier workspace, cloud mappings, MCP tool and service policy are implemented; delivery
-verification is tracked below. Deployment and all live tests are authorized by the owner.
+Status: **implemented; hosted acceptance pending** (2026-11-13). Native routing, recognition,
+the chat shim, Classifier workspace, cloud mappings, MCP tool and service policy are deployed.
+Delivery verification is tracked below. Deployment and all live tests are authorized by the owner.
 
 ## 1. What a classifier model is
 
@@ -118,9 +118,10 @@ Downloads use the existing Hugging Face discovery and download path. The tasks a
    - **metadata patch**: an existing GGUF gets decision metadata and a systemone template
      (TinyJev‑4B v2).
 3. Output goes to `classifier/<repo>-decision/` with a manifest: source hashes, converter
-   commit, decision type and parity result. Sources stay untouched, and the job never runs
-   repository code.
-4. **Parity gate:** a fixed question set (choice/score/noul, 30 items) is run through the
+   commit, decision type and parity result. Retries use a unique sibling suffix, preserving
+   earlier outputs. Sources stay untouched, and the job never runs repository code.
+4. **Parity gate:** a fixed question set (choice/score/noul, 30 items, including text, JSON,
+   chat, Unicode and HTML inputs) is run through the
    reference (the `tinyjev` package on CPU, or Ollama for TinyJev‑4B) and through llama‑server.
    The job marks the result *verified* when argmax agreement is ≥ 97% and the mean |Δp| is
    ≤ 0.03. Otherwise the result is kept but labelled *unverified*.
@@ -224,18 +225,17 @@ Fingerprints facts.
 | 6 | WP2 conversion | TinyJev‑0.6B and ‑4B v2 converted and *verified* by the parity gate |
 | 7 | WP3.3 Cloud APIs | A TypeSafe/Featherless account answers through the same page and endpoint |
 
-Deployment happens only when you ask, using `owg update; owg restart`, followed by a check of
-the live service source and behaviour on each node that serves classifiers.
+The owner authorized deployment for this delivery. Use `owg update; owg restart`, followed by
+a check of the live service source and behaviour on each node that serves classifiers.
 
 ## 6. Remaining risks and checks
 - **llama.cpp version.** Every classifier node needs a build with `server-decision.cpp`. The
   configured local build is b12008; reports put the merge at about b11361. Components reports nodes that
   are too old.
-- **TinyJev‑0.6B on Qwen3.** llama.cpp's kev path was written for Qwen3.5 backbones. If the
-  pointer head does not run on a Qwen3 GGUF, the parity gate fails and the model stays
-  *unverified*; Kev‑0.8B covers the same niche.
-- **Cloud provider contracts.** The TypeSafe and Featherless request shapes and auth need
-  checking against their live docs before WP3.3.
+- **TinyJev‑0.6B on Qwen3.** The adapter passes the expanded native/reference parity gate.
+  Future conversions must pass their own gate; failed outputs remain *unverified*.
+- **Cloud provider access.** Provider contracts were checked against their documentation;
+  live hosted acceptance still requires a configured TypeSafe or Featherless provider key.
 - **kev-suites licence.** No dataset licence is declared; fetch the pinned held-out split at runtime and retain upstream terms. Do not vendor the data.
 
 ## Using Classifier
@@ -271,11 +271,23 @@ against [TypeSafe](https://api.typesafe.ai/redoc) and
 - Actual OpenAI SDK: normal response and one streamed chunk, zero completion tokens; MCP classification succeeds on port 8443.
 - Restricted test account: empty model catalogue, native/alias 404 and MCP refusal; account/group removed afterwards.
 - Platform switch: page/native/alias/shim 403, catalogue hides classifiers and MCP refuses; original enabled setting restored.
-- TinyJev-0.6B: 30/30 argmax agreement, mean absolute probability difference 0.000405; verified manifest and source hashes retained on the GPU node.
-- TinyJev-4B: 30/30 argmax agreement, mean absolute probability difference 0.027018; verified manifest retained; tensor-byte preservation checked separately.
-- Focused checks: 77 pass, including native routing, cloud stand-in/local-first/access/accounting, conversion receipts and benchmark paths. Full UI consistency audit: 39 pass.
-- All six initial throughput runs completed (27 samples each); expanded option lists exposed a Kev logical-batch bug. Accuracy testing also found PostgreSQL’s ambiguous retry-counter update. Both fixed; final benchmark runs in progress.
+- TinyJev-0.6B: expanded parity 30/30 argmax agreement, mean absolute probability difference 0.000494; verified manifest and source hashes retained on the GPU node.
+- TinyJev-4B: expanded parity 30/30 argmax agreement, mean absolute probability difference 0.011336; all 426 tensor byte hashes match the source. Both installed model configurations select these verified outputs; native JSON/chat and direct app JSON requests return 200.
+- Parity case SHA-256: `f54aca92149a5c02efbfc60ea704dafd4d58fb0e393d998cef9a5f5ac1ebd2f9` (retained in both manifests). Earlier conversion attempts remain labelled with their own outcomes.
+- Focused regression suite: 166 pass, including the 39-check UI audit and three browser cases; native routing, cloud stand-in/local-first/access/accounting, conversion receipts, benchmark paths and shared UI surfaces are covered.
+- All twelve final benchmark runs completed with current fingerprints: throughput has 27 samples per model; accuracy has 588 cases / 852 questions and ten saved calibration bins per model. Expanded option lists exposed a Kev batch/microbatch clamp; accuracy retries exposed an ambiguous PostgreSQL counter update. Both are fixed and verified live.
 - Live TypeSafe/Featherless provider request: pending a configured provider key. Existing Cloud APIs account has no key or mapped models.
+
+Saved results on `jpk-main` (suite-defined microbenchmark; probabilities remain uncalibrated):
+
+| Model | Decisions/s | Accuracy % | Macro-F1 % | Brier | ECE |
+|---|---:|---:|---:|---:|---:|
+| `julia-1-q8_0` | 104.58 | 46.60 | 26.37 | 0.8512 | 0.3589 |
+| `laya-q8_0` | 68.72 | 67.37 | 39.51 | 0.4892 | 0.1483 |
+| `kev-0.8b-q8_0` | 30.22 | 81.57 | 69.68 | 0.2707 | 0.0261 |
+| `kev-4b-q4_k_m` | 21.29 | 84.39 | 76.13 | 0.2354 | 0.0407 |
+| `lev-q4_k_m` | 15.12 | 80.40 | 74.78 | 0.3179 | 0.0965 |
+| `kev-9b-q4_k_m` | 18.27 | 86.03 | 74.14 | 0.2119 | 0.0303 |
 
 Optional conversion: install **Classifier conversion tools** on the owning compute node in
 **System → Components**. Download source data with the Hugging Face Classifier filter, copy
