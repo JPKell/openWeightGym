@@ -77,12 +77,19 @@ function initializeModelFiles() {
     const facts = nodes.find(node => node.name === file.machine)?.files.find(row => row.path === file.path)?.facts || {};
     const trained = facts.trained_context ?? facts.context;
     const valid = Number.isSafeInteger(trained) && trained > 0;
+    const classifier = Boolean(facts.decision_type);
     const maximum = document.querySelector('#ctx[data-context-default]');
     const minimum = document.querySelector('#min-context[data-context-default]');
     const note = document.querySelector('[data-trained-note]');
     if (note) note.textContent = valid ? 'Trained context: ' + trained.toLocaleString() + ' tokens.' : '';
-    if (maximum) maximum.value = valid ? trained : '';
-    if (minimum) minimum.value = valid ? Math.max(1, Math.floor(trained / 2)) : '';
+    const context = valid ? (classifier ? Math.min(trained, 8192) : trained) : '';
+    if (maximum) maximum.value = context;
+    if (minimum) minimum.value = valid ? (classifier ? context : Math.max(1, Math.floor(trained / 2))) : '';
+    const embedding = document.querySelector('#model-embedding');
+    if (embedding) { embedding.disabled=classifier; if(classifier) embedding.checked=false; }
+    const choice = document.querySelector('[data-embedding-choice]');
+    if (choice) choice.hidden=classifier;
+    if (classifier && note) note.textContent += ` Classifier: ${facts.decision_type}; up to ${facts.decision_max_choices || (facts.decision_type === 'openjev' ? 52 : 255)} choices. Context defaults to a bounded prompt budget.`;
   }
   /** Name the model after its file, unless a name of the person's own has been typed. */
   function nameFromFile() {

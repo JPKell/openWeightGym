@@ -159,3 +159,56 @@ def test_front_native_alias_shim_permissions_and_service_disable(fake_llama_serv
         client.front.state.routing.platform = lambda: PlatformServices(classifiers=False)
         assert client.post('/v1/systemone', headers=owner, json=native()).status_code == 403
         assert client.post('/v1/chat/completions', headers=owner, json=body).status_code == 403
+
+
+def test_cloud_classifier_native_shim_local_first_access_and_accounting(fake_llama_server, tmp_path, monkeypatch):
+    """A hosted mapping keeps caller restrictions and only receives explicit cold-local overflow."""
+    import httpx
+    from loadcoach.groups import Group
+    from test_app import GROUPS, events
+    path = decision_file('classifier/repo/local.gguf', 'kev')
+    groups = {**GROUPS, 'restricted-models': Group(models=('different',), can=frozenset({'hosted', 'load'}))}
+    with gateway(fake_llama_server, {'test': model(path, 0)}, groups=groups, keys=str(tmp_path / 'keys')) as client:
+        owner = add_user(client, 'owner', 'admin')
+        denied = add_user(client, 'limited', 'restricted-models', by=owner)
+        result = client.post('/loadcoach/services/decisions', headers=owner,
+            json={'url': 'https://provider.invalid/v1', 'models': {'cloud': {'theirs': 'vendor/model', 'systemone': True, 'in': 2}}})
+        assert result.status_code == 201, result.text
+        key_file = tmp_path / 'keys/decisions.key'
+        key_file.parent.mkdir(exist_ok=True)
+        key_file.write_text('provider-test-key')
+        calls = []
+
+        async def send(request, **kwargs):
+            calls.append(request)
+            payload = {'answers': {
+                'route': {'type': 'choice', 'choice': 'billing', 'probabilities': {'billing': .9, 'support': .1}},
+                'urgent': {'type': 'noul', 'noul': .8},
+                'rating': {'type': 'score', 'score': 1, 'probabilities': {'0': .1, '1': .8, '2': .1}}},
+                'usage': {'input_tokens': 100, 'output_tokens': 0}}
+            class Body(httpx.AsyncByteStream):
+                async def __aiter__(self):
+                    yield json.dumps(payload).encode()
+            return httpx.Response(200, request=request, headers={'content-type': 'application/json'}, stream=Body())
+        monkeypatch.setattr(client.front.state.routing.hosted.client, 'send', send)
+        body = {**native(), 'model': 'cloud'}
+        assert client.post('/v1/classifier', headers=owner, json=body).status_code == 200
+        assert calls[-1].url.path == '/v1/systemone'
+        assert json.loads(calls[-1].content)['model'] == 'vendor/model'
+        assert calls[-1].headers['authorization'] == 'Bearer provider-test-key'
+        assert client.post('/v1/systemone', headers=denied, json=body).status_code in (403, 404)
+        assert client.post('/v1/systemone', headers={**owner, 'x-loadcoach-sensitivity': 'sensitive'}, json=body).status_code == 403
+        shim = {'model': 'cloud', 'messages': [{'role': 'user', 'content': 'Example'}], 'response_format': {
+            'type': 'json_schema', 'json_schema': {'name': 'route', 'schema': {'type': 'object', 'properties': {
+                'route': {'type': 'string', 'enum': ['billing', 'support']}, 'urgent': {'type': 'boolean'},
+                'rating': {'type': 'integer', 'minimum': 1, 'maximum': 3}}}}}}
+        result = client.post('/v1/chat/completions', headers=owner, json=shim)
+        assert result.status_code == 200 and result.json()['usage']['completion_tokens'] == 0
+        assert client.post('/v1/systemone', headers={**owner, 'x-loadcoach-offload': 'cloud'}, json=native()).headers.get('x-loadcoach-hosted') == 'cloud'
+        # Once loaded, the local model answers even when overflow is explicitly permitted.
+        assert client.post('/v1/systemone', headers=owner, json=native()).status_code == 200
+        count = len(calls)
+        assert client.post('/v1/systemone', headers={**owner, 'x-loadcoach-offload': 'cloud'}, json=native()).status_code == 200
+        assert len(calls) == count
+        hosted = [entry for entry in events(client, owner, kind='request') if entry.get('service') == 'decisions' and 'prompt_tokens' in entry]
+        assert hosted and hosted[-1]['prompt_tokens'] == 100 and hosted[-1]['answer_tokens'] == 0
