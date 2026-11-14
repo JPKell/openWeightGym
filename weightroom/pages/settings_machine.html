@@ -1,0 +1,18 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, card, alert %}
+{% from 'filter_parts.html' import node_filter %}
+{% block title %}Machine configuration · openWeightGym{% endblock %}
+{% block main %}
+<div class="settings-page">
+{{ page_header('Machine configuration') }}
+{% call card('Machine') %}
+<form method="get" action="/settings/machine" class="d-flex flex-wrap align-items-end gap-2">
+<div>{{ node_filter('machine-settings', machine_choices, selected_machine, name='machine', allow_all=false) }}</div>
+<button class="btn btn-primary btn-sm">Inspect</button>
+</form>
+<p class="form-hint mb-0 mt-2">File values are read-only. Site overrides appear beside their file values. After editing a machine file, use the service’s restart command on that machine.</p>
+{% endcall %}
+{% if machine_problem %}{% call alert('warning', role='status') %}{{ machine_problem }}{% endcall %}{% endif %}
+{% include 'settings_machine_values.html' %}
+</div>
+{% endblock %}

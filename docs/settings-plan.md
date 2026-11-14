@@ -442,7 +442,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 2.1 Shared design, grouped routes and navigation (native saves and drafts verified; 39 UI cases cover all eight new routes).
 - [x] 2.2 Search, Changed only and section navigation across settings (39 feature/browser and all 39 UI consistency cases pass).
 - [x] 2.3 Pending restart status and authorized restart action (475 settings checks; 24 restart/Components checks including narrow layouts and failure states).
-- [ ] 2.4 Machine configuration page.
+- [x] 2.4 Machine configuration page (470 catalogue/service/page checks; source/default evidence, retired values, scoped read-only inspection and narrow filters).
 - [ ] 2.5 History, revert and validated export/import.
 - [ ] 2.6 UI checks and documentation; Phase 2 deployed and verified.
 - [ ] 3.1 Security and sign-in.

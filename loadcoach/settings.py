@@ -169,7 +169,13 @@ def redacted(value, name=''):
     return [redacted(inner) for inner in value] if isinstance(value, list | tuple) else value
 
 
-def said(running: dict, file: dict, says: dict, program='') -> dict:
+def dataclass_defaults(settings):
+    """Read a service's declared defaults without constructing or starting it."""
+    return {field.name: field.default_factory() if field.default_factory is not MISSING else field.default
+            for field in fields(settings) if field.default_factory is not MISSING or field.default is not MISSING}
+
+
+def said(running: dict, file: dict, says: dict, program='', *, path=None, defaults=None) -> dict:
     """What a program hands LoadCoach about itself: for each setting, the value it runs with, its file's if the file names it, and the file's comment.
 
     Anything that cannot be written as JSON is left out, and so is the value of anything
@@ -178,6 +184,19 @@ def said(running: dict, file: dict, says: dict, program='') -> dict:
 
     from loadcoach.setting_catalog import entries
     running, file = dict(running), dict(file)
+    source, shipped, machine, default_file = None, dict(defaults or {}), {}, {}
+    if path:
+        source = Path(path).resolve()
+        try:
+            machine = tomllib.loads(source.read_text())
+            defaults_path = source.parent / 'defaults' / source.name
+            default_file = tomllib.loads(defaults_path.read_text()) if defaults_path.is_file() else {}
+            shipped.update(default_file)
+            if program == 'turnstile':
+                machine, shipped = machine.get('turnstile', {}), {**(defaults or {}), **shipped.get('turnstile', {})}
+                default_file = default_file.get('turnstile', {})
+        except (OSError, ValueError):
+            source = None  # Older/stale reports remain useful without inventing a source.
     for definition in entries(program):
         if '.' in definition.name:
             value = nested_value(running, definition.name, definition.default)
@@ -194,6 +213,17 @@ def said(running: dict, file: dict, says: dict, program='') -> dict:
             continue
         if name in file:
             entry["file"] = json.loads(json.dumps(redacted(file[name], name)))
+        if source:
+            marker = object()
+            baseline = nested_value(shipped, name, marker)
+            configured = nested_value(machine, name, marker) is not marker
+            entry['source'] = str(source) if configured else str(defaults_path) if nested_value(default_file, name, marker) is not marker else 'Built-in service value'
+            if baseline is not marker:
+                try:
+                    entry['default'] = json.loads(json.dumps(redacted(baseline, name)))
+                    entry['differs'] = file.get(name, value) != baseline
+                except TypeError:
+                    pass
         told[name] = entry
     return told
 
@@ -300,7 +330,7 @@ class Changes:
             if entry and entry.kind == 'secret':
                 continue
             if isinstance(report, dict):
-                safe[name] = {key: redacted(value, name) if key in ('value', 'file') else redacted(value)
+                safe[name] = {key: redacted(value, name) if key in ('value', 'file', 'default') else redacted(value)
                               for key, value in report.items()}
         safe_refused = {name: reason for name, reason in (refused or {}).items()
                         if not ((entry := catalog_entry(program, name)) and entry.kind == 'secret')}
@@ -449,7 +479,7 @@ def with_changes(program: str, path: Path):
         for entry in entries(program):
             if '.' in entry.name and entry.name.split('.')[0] in settings and nested_value(settings, entry.name) is None and entry.default is not None:
                 set_nested(settings, entry.name, deepcopy(entry.default))
-        return said(settings, told, says, program), refused
+        return said(settings, told, says, program, path=path), refused
 
     # A node-owned follower must name its node at the control node, just as site edits do.
     node = ''

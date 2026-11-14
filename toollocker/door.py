@@ -374,7 +374,8 @@ def build_app(config: Config) -> Starlette:
             if changed != last:
                 config, refused = taken("toollocker", config, changed, config_from)
                 running = {**config.file, **{name: getattr(config, name) for name in ("host", "port", "call_timeout", "servers", "toolsets", "tool_levels")}}
-                changes.seen("toollocker", said(running, config.file, config.says), refused)
+                from loadcoach.settings import dataclass_defaults
+                changes.seen("toollocker", said(running, config.file, config.says, 'toollocker', path=config.path, defaults=dataclass_defaults(config)), refused)
                 last = changed
             await asyncio.sleep(10)
 

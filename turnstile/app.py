@@ -224,7 +224,8 @@ def say_what_runs(path: Path, settings: Settings) -> None:
     running = {**file, **{entry.name: getattr(settings, entry.name)
                            for entry in catalog_entries('turnstile') if hasattr(settings, entry.name)},
                'ports': list(settings.ports), 'artifact_machine': artifact_machine}
-    report = said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))
+    from loadcoach.settings import dataclass_defaults
+    report = said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]), 'turnstile', path=path, defaults=dataclass_defaults(settings))
     report['_started_at'] = time.time()
     (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(report))
 
@@ -2830,6 +2831,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             except (ValueError, TypeError) as problem:
                 return error(400, str(problem))
         path = "/loadcoach/settings" + ("/" + program if program else "")
+        if request.method == 'GET' and request.query_params.get('include_retired') == '1':
+            path += '?include_retired=1'
         if request.method == 'GET' and pending_file_settings(name):
             await publish_file_settings()
         raw = await request.body() if request.method == 'POST' else b''

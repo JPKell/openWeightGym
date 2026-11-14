@@ -24,9 +24,9 @@ class ConsoleSettings:
             fallback = self.defaults.get(program, {}).get(name, fallback)
         return live(program, name, fallback, changes=self.changes)
 
-    def reported(self):
+    def reported(self, *, include_retired=False):
         """Turnstile's direct live readers are its effective running values."""
-        programs = [one for one in self.changes.everything() if one['program'] in self.programs]
+        programs = [one for one in self.changes.everything(include_retired=include_retired) if one['program'] in self.programs]
         for program in programs:
             if program['program'] == 'turnstile':
                 for setting in program['settings']:
@@ -50,7 +50,7 @@ class ConsoleSettings:
         if path == '/loadcoach/settings' and request.method == 'GET':
             if not user or not user.can('manage-settings'):
                 return error(403, 'Settings require manage-settings.')
-            programs = self.reported()
+            programs = self.reported(include_retired=request.query_params.get('include_retired') == '1')
             for program in programs:
                 for setting in program['settings']:
                     if program['program'] == 'turnstile' and setting['name'] == 'preferred_voice_node':

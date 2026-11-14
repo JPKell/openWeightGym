@@ -806,7 +806,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         running = {**settings.file, **{entry.name: getattr(settings, entry.name)
                     for entry in catalog_entries('weightroom') if hasattr(settings, entry.name)}}
         # turnstile writes what it runs with into the folder the two share, each time it starts.
-        for program, told in (("weightroom", said(running, settings.file, settings.says)), ("turnstile", kept("settings-seen-turnstile.json", None))):
+        from loadcoach.settings import dataclass_defaults
+        for program, told in (("weightroom", said(running, settings.file, settings.says, 'weightroom', path=settings.path, defaults=dataclass_defaults(settings))), ("turnstile", kept("settings-seen-turnstile.json", None))):
             start = started_at if program == 'weightroom' else (told or {}).get('_started_at', 0)
             told = {name: row for name, row in (told or {}).items() if name != '_started_at'}
             report = {'told': told, 'refused': refused if program == 'weightroom' else {}, 'started': start}
@@ -3303,6 +3304,25 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await voice_admin_page(request, person, message, failed=True)
         return Response(message, status_code=result.status_code)
 
+    async def machine_configuration_page(request: Request, person: Person) -> Response:
+        """Inspect one node's redacted file values, including retired compatibility keys."""
+        nodes = await ask('GET', '/turnstile/machines', person.key)
+        choices = ['front', *(one['name'] for one in nodes.json().get('machines', []))] if nodes.is_success else ['front']
+        selected = request.query_params.get('machine', 'front')
+        if selected not in choices:
+            return page(request, 'refused.html', person, status=404, why='That machine is not configured.')
+        path = '/loadcoach/settings' if selected == 'front' else '/turnstile/machines/' + quote(selected, safe='') + '/settings'
+        response = await ask('GET', path, person.key, params={'include_retired':'1'})
+        problem = ''
+        programs = response.json().get('programs', []) if response.is_success else []
+        if not response.is_success:
+            problem = 'Machine settings are unavailable. Refresh after the service reports its configuration.'
+        elif response.json().get('unavailable'):
+            problem = 'This node is not answering. Retained configuration may be out of date.'
+        return page(request, 'settings_machine.html', person, programs=programs, machine_inspection=True,
+                    machine_choices=choices, selected_machine=selected, machine_problem=problem,
+                    settings_return_to='/settings/machine', typed_in={}, opened='')
+
     async def settings_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None, opened: str = "", settings_section: str = "", **unused) -> Response:
         """Render program settings with secret fields removed."""
         if 'manage-settings' not in person.can:
@@ -3310,12 +3330,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         section = settings_section or request.path_params.get('section', 'general')
         if section not in settings_views.PAGES:
             return page(request, 'refused.html', person, status=404, why='That settings page does not exist.')
+        if section == 'machine':
+            return await machine_configuration_page(request, person)
         try:
             found = await fetch(request, person, "/loadcoach/settings")
         except ServiceUnavailable:
             found = {'programs': []}
         if isinstance(found, Response):
             return found
+        security_programs = [{**program, 'settings':[row for row in program['settings'] if row['name'] in ('secure', 'origins')]}
+                             for program in found['programs'] if any(row['name'] in ('secure', 'origins') for row in program['settings'])] if section == 'security' else []
         found["programs"] = [program for program in found["programs"] if program["program"] not in ("loadcoach", "spotter")]
         found['programs'] = [program for program in found['programs'] if program['program'] not in ('voice', 'voice-gateway')]
         for program in found['programs']:
@@ -3340,6 +3364,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         settings_title=settings_views.PAGES[section][0], settings_section=section,
                         settings_return_to=settings_views.PAGES[section][1], programs=found['programs'],
                         node_settings=summaries, unavailable_nodes=unavailable,
+                        security_programs=security_programs,
                         said=said or request.query_params.get('said', ''), failed=failed,
                         typed_in=typed_in or {}, opened=opened or request.query_params.get('open', ''))
         asked = request.query_params

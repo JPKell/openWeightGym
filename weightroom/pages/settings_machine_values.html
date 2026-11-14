@@ -1,11 +1,28 @@
-{% from "parts.html" import empty_row, more %}
-{% call card('Read-only machine values', false, 'machine-values') %}
-<p class="form-hint">These values come from each service's TOML file.</p>
-<div class="table-responsive"><table class="table table-sm sortable" aria-label="Read-only machine values" data-empty-message="No read-only values reported by this node."><thead><tr><th>Service</th><th>Setting</th><th>Value</th></tr></thead><tbody>
-{% set reported = namespace(count=0) %}
-{% for program in programs|sort(attribute='program') %}{% for setting in program.settings|sort(attribute='name') if setting.when == 'file' and not setting.retired|default(false) and not setting.derived|default(false) %}
-{% set reported.count = reported.count + 1 %}<tr><td>{{ program.program }}</td><th class="fw-normal"><code>{{ setting.name }}</code>{% if setting.deprecated|default(false) %}<span class="badge bg-orange-lt ms-2">Deprecated</span>{% if setting.name in ('wake_mac', 'wake_address') %}<small class="d-block text-secondary">Move this value to the node’s Wake settings in Compute nodes.</small>{% endif %}{% endif %}</th><td class="wrap">{% set text = setting.value|written %}{% if text|length > 90 %}{% call more((text|truncate(90, true)) ~ ' · show') %}<pre class="setting-value mb-0">{{ text }}</pre>{% endcall %}{% else %}<code>{{ text }}</code>{% endif %}</td></tr>
-{% endfor %}{% endfor %}
-{% if not reported.count %}{{ empty_row(3, "No read-only values reported by this node.") }}{% endif %}
+{% from 'parts.html' import card, empty_row, more %}
+{% if machine_inspection|default(false) %}
+{% for program in programs|sort(attribute='program') %}
+{% call card(program.program ~ ' configuration', attrs={'aria-label':program.program ~ ' machine configuration'}) %}
+<p class="small text-secondary">Restart on {{ 'the control node' if selected_machine == 'front' else selected_machine }}: <code>owg restart {{ program.program }}</code>{% if program.seen %} · Last report {{ program.seen|timestamp }}{% endif %}</p>
+<div class="table-responsive"><table class="table table-sm" aria-label="{{ program.program }} file values">
+<thead><tr><th>Setting</th><th>File value and source</th><th>Default and status</th></tr></thead><tbody>
+{% for setting in program.settings|sort(attribute='name') %}
+<tr data-setting-changed="{{ 'true' if setting.differs|default(false) or setting.changed else 'false' }}" data-setting-search="{{ program.program }} {{ setting.name }} {{ setting_label(setting, program.program).label }} {{ setting.source|default('') }}">
+<th scope="row" class="fw-normal wrap"><strong>{{ setting_label(setting, program.program).label }}</strong><code class="d-block">{{ setting.name }}</code><span class="badge bg-secondary-lt">{{ {'now':'Live','restart':'Needs restart','file':'File only'}.get(setting.when, 'File only') }}</span></th>
+<td class="wrap">{% set text = setting.file|default(setting.value)|written %}{% if text|length > 120 %}{% call more('Show file value') %}<pre class="setting-value mb-0">{{ text }}</pre>{% endcall %}{% else %}<code>{{ text }}</code>{% endif %}
+<small class="text-secondary d-block wrap">{{ setting.source|default('Source not reported by this service') }}</small>
+{% if setting.changed %}<small class="d-block">Site override: <code>{{ setting.changed.value|written }}</code></small>{% endif %}</td>
+<td class="wrap">{% if setting.default is defined %}<code>{{ setting.default|written }}</code><small class="d-block text-{{ 'warning' if setting.differs else 'secondary' }}">{{ 'Differs from default' if setting.differs else 'Matches default' }}</small>{% else %}<span class="small text-secondary">No default reported</span>{% endif %}
+{% if setting.retired|default(false) %}<span class="badge bg-secondary-lt">Retired · ignored</span>{% endif %}
+{% if setting.derived|default(false) %}<span class="badge bg-secondary-lt">Derived</span>{% endif %}
+{% if setting.deprecated|default(false) %}<span class="badge bg-orange-lt">Deprecated</span>{% endif %}
+{% if setting.pending_since %}<small class="d-block text-warning">Waiting for restart since {{ setting.pending_since|timestamp }}.</small>{% endif %}
+</td></tr>
+{% else %}{{ empty_row(3, 'No file values reported by this service.') }}{% endfor %}
 </tbody></table></div>
 {% endcall %}
+{% else %}{% call card('Machine configuration') %}<p class="text-secondary mb-0">No settings reported by this machine yet.</p>{% endcall %}{% endfor %}
+{% else %}
+{% call card('Machine configuration', false, 'machine-values') %}
+<p class="mb-0">Listeners, paths and other machine-file values are read-only. <a href="/settings/machine{% if selected_machine|default('') %}?machine={{ selected_machine|urlencode }}{% endif %}">Inspect machine configuration{% if selected_machine|default('') %} for {{ selected_machine }}{% endif %}</a>.</p>
+{% endcall %}
+{% endif %}

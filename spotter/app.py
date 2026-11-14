@@ -315,7 +315,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
         in_force["changed"] = changed
         named = ("host", "port", "sample_every", "keep_days", "sleep_after", "busy_gpu", "busy_processor", "files_every", "component_versions_every", "services", "system_services")
         running = {**settings.file, **{name: getattr(settings, name) for name in named}, "disks": list(settings.disks)}
-        changes.seen("spotter", said(running, settings.file, settings.says), refused)
+        from loadcoach.settings import dataclass_defaults
+        changes.seen("spotter", said(running, settings.file, settings.says, 'spotter', path=settings.path, defaults=dataclass_defaults(settings)), refused)
     reading_now = asyncio.Lock()  # so that two askers at once share one reading
 
     def error(status: int, message: str) -> JSONResponse:

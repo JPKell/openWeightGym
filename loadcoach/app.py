@@ -2640,7 +2640,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """Keep what LoadCoach itself runs with, so that the page can show it: by the names its file uses."""
         simple = ("host", "port", "engines", "llama_server", "load_timeout", "max_wait", "card_margin", "model_idle_minutes", "host_ram_headroom_mib", "host_ram_limit_mib", "cpu_idle_minutes", "disable_ram_offload", "models_folder", "models_storage_folder", "keep_days", "keep_text", "unlogged", "database", "places", "model_defaults", "disabled_gpus", "engine_gpus")
         running = {**config.file, **{name: getattr(config, name) for name in simple}, "gpus": list(config.gpus)}
-        reported = said(running, config.file, config.says, 'loadcoach')
+        from loadcoach.settings import dataclass_defaults
+        reported = said(running, config.file, config.says, 'loadcoach', path=config.path, defaults=dataclass_defaults(config))
         for name, row in reported.items():
             if retired_for('loadcoach', name, vars(config)):
                 row['retired'] = True
@@ -2666,13 +2667,13 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return config.file.get("engines", {}).get("llama_cpp", {}).get("executable", config.file.get(name, unsaid))
         return config.file.get(name, unsaid)
 
-    def local_settings():
+    def local_settings(*, include_retired=False):
         """List only settings whose authority remains on this compute node."""
-        return [one for one in changes.everything() if one['program'] not in front_programs(config, retired)]
+        return [one for one in changes.everything(include_retired=include_retired) if one['program'] not in front_programs(config, retired)]
 
     async def settings_all(request: Request, user: User) -> Response:
         """Every program that has said what it runs with, and each of its settings: its value, the file's, what was changed, and when a change holds."""
-        return lacks(user, "manage-settings") or JSONResponse({"programs": local_settings()})
+        return lacks(user, "manage-settings") or JSONResponse({"programs": local_settings(include_retired=request.query_params.get('include_retired') == '1')})
 
     async def tools_info(request: Request, user: User) -> Response:
         """ToolLocker's published configuration and last observed tool descriptions."""

@@ -74,7 +74,8 @@ def test_the_tool_door_and_turnstile_start_with_what_was_changed(tmp_path):
     assert (settings.wait, settings.host) == (60, "127.0.0.1")  # where it listens is not changed from the site
     turnstile.say_what_runs(front, settings)
     left = json.loads((tmp_path / "data" / "settings-seen-turnstile.json").read_text())
-    assert left["wait"] == {"value": 60, "says": "Seconds to wait for compute to wake.", "file": 180} and left["ports"]["value"] == [8442, 8443, 8444]
+    assert {key:left['wait'][key] for key in ('value','says','file')} == {"value": 60, "says": "Seconds to wait for compute to wake.", "file": 180} and left["ports"]["value"] == [8442, 8443, 8444]
+    assert left['wait']['source'] == str(front) and left['wait']['default'] == 180
     (tmp_path / "data" / "settings.json").write_text(json.dumps({"turnstile": {"wait": 0}}))
     assert turnstile.load_settings(front).wait == 180  # a change it cannot use: the file's value holds
 
@@ -115,7 +116,8 @@ def test_a_program_that_reaches_loadcoach_over_the_network_keeps_in_step_and_kee
     # It reads its settings where it uses them, so a change is simply there. One of the wrong kind is refused, one that may not be changed passed over.
     assert settings["idle_seconds"] == 30 and settings["profiles"] == {"default": {"model": "small"}} and "port" not in settings
     told = next(body for method, path, body, _ in asked if method == "POST")
-    assert told["refused"] == {"profiles": "profiles must be a table."} and told["told"]["idle_seconds"] == {"value": 30, "says": "Seconds a silent call is kept.", "file": 120}
+    assert told["refused"] == {"profiles": "profiles must be a table."} and {key:told['told']['idle_seconds'][key] for key in ('value','says','file')} == {"value": 30, "says": "Seconds a silent call is kept.", "file": 120}
+    assert told['told']['idle_seconds']['source'] == str(file)
     assert told["told"]["model_parallel"]["value"] == 1  # this one holds from its next start, and it says what is in force now
     assert [(path, key) for method, path, _, key in asked if method == "POST"] == [("/loadcoach/settings/voice/seen", "Bearer its-own-key")]
 
