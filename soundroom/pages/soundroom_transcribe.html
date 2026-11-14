@@ -10,6 +10,7 @@
     <div class="row g-3">
       <div class="col-lg-5">{% call card("") %}
         <label class="form-label" for="tr-model">Transcription model</label><select id="tr-model" class="form-select mb-3"></select>
+        <div id="tr-task-control" hidden><label class="form-label" for="tr-task">Task</label><select id="tr-task" class="form-select mb-3"><option value="transcribe">Transcribe</option><option value="translate">Translate to English</option></select></div>
         <label class="form-label" for="tr-diarize">Who spoke when <span class="text-secondary">optional</span></label><select id="tr-diarize" class="form-select mb-3"></select>
         <label class="form-label" for="tr-language">Language <span class="text-secondary">optional, such as en</span></label><input id="tr-language" class="form-control mb-3" maxlength="16">
         <label class="form-label" for="tr-file">Audio</label><input id="tr-file" type="file" accept="audio/*" class="form-control mb-2">

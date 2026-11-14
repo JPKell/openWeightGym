@@ -17,6 +17,7 @@
     const of = kind => state.models.filter(row => row.capabilities?.audio === kind);
     fill($('tr-model'), of('transcription'), undefined, state.preferences?.transcription_model || defaults.transcription);
     fill($('tr-diarize'), of('diarization'), 'Not needed');
+    taskOptions();
     $('tr-go').disabled = !current || !of('transcription').length;
     renderRecordings();
   }
@@ -52,10 +53,12 @@
   function show() {
     const box = $('tr-result');
     box.classList.toggle('text-secondary', !transcript);
+    root.querySelectorAll('[data-save="srt"],[data-save="vtt"]').forEach(button => { button.disabled=!transcript?.segments?.length; });
     if (!transcript) { box.textContent = current ? 'Not transcribed yet.' : 'Choose a recording and a model.'; return; }
     box.replaceChildren(...(transcript.segments?.length ? transcript.segments : [{text: transcript.text, start: 0}]).map(part => {
       const line = element('p', undefined, 'mb-1');
-      line.append(element('span', stamp(part.start || 0) + (part.speaker != null ? ' · ' + part.speaker : '') + '  ', 'text-secondary small font-monospace'), document.createTextNode(part.text));
+      if (typeof part.start === 'number' && transcript.segments?.length) line.append(element('span', stamp(part.start) + (part.speaker != null ? ' · ' + part.speaker : '') + '  ', 'text-secondary small font-monospace'));
+      line.append(document.createTextNode(part.text));
       return line;
     }));
   }
@@ -92,8 +95,9 @@
     $('tr-go').disabled = true;
     $('tr-result').textContent = 'Transcribing…';
     try {
+      const translate=$('tr-task').value === 'translate';
       transcript = await api('transcribe', {asset: current.id, model: $('tr-model').value, diarization_model: $('tr-diarize').value || undefined,
-        language: $('tr-language').value.trim() || undefined});
+        translate, language: translate ? undefined : $('tr-language').value.trim() || undefined});
       current.metadata ||= {};
       current.metadata.transcripts = [transcript, ...(current.metadata.transcripts || [])].slice(0, 5);
       show();
@@ -103,6 +107,16 @@
       throw error;
     } finally { $('tr-go').disabled = !current || !$('tr-model').value; }
   }));
-  $('tr-model').addEventListener('change', () => { $('tr-go').disabled = !current || !$('tr-model').value; });
+  function taskOptions() {
+    const model=state.models.find(one=>one.id === $('tr-model').value);
+    const translates=Boolean(model?.translates || model?.capabilities?.translates);
+    $('tr-task-control').hidden=!translates;
+    if (!translates) $('tr-task').value='transcribe';
+    $('tr-language').disabled=$('tr-task').value === 'translate';
+    $('tr-go').textContent=$('tr-task').value === 'translate' ? 'Translate to English' : 'Transcribe';
+  }
+  $('tr-task').addEventListener('change', taskOptions);
+  $('tr-model').addEventListener('change', () => { taskOptions(); $('tr-go').disabled = !current || !$('tr-model').value; });
+  show();
   safe(refresh)();
 })();

@@ -1447,7 +1447,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             headers['content-length']=str(len(body))
             request._headers=Headers(scope=request.scope)
             request._body=body
-        elif request.method == 'POST' and request.url.path in ('/v1/audio/transcriptions', '/v1/audio/diarizations'):
+        elif request.method == 'POST' and request.url.path in ('/v1/audio/transcriptions', '/v1/audio/translations', '/v1/audio/diarizations'):
             from soundroom.requests import request_body as audio_body, MAX_REQUEST_BYTES as AUDIO_BYTES
             from starlette.datastructures import MutableHeaders, Headers
             content = bytearray()

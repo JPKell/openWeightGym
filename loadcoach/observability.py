@@ -482,6 +482,7 @@ def event_context() -> dict:
 POLLS = ("/loadcoach/status", "/v1/models", "/loadcoach/facts", "/loadcoach/me", "/loadcoach/send-log",
          "/loadcoach/plugins/mirror", "/loadcoach/observation-metrics", "/loadcoach/alert-evidence",
          "/loadcoach/downloads", "/spotter/now", "/spotter/alert-evidence", "/voice/ready", "/turnstile/ready")
+AUDIO_TRANSCRIPTS = ('/v1/audio/transcriptions', '/v1/audio/translations')
 
 
 def route_of(scope) -> str:
@@ -489,7 +490,9 @@ def route_of(scope) -> str:
     route = scope.get("route")
     path = scope.get("path", "")
     if route and getattr(route, "path", None):
-        return path if "{path" in route.path and path in POLLS else route.path[:128]
+        return path if "{path" in route.path and path in (*POLLS, *AUDIO_TRANSCRIPTS) else route.path[:128]
+    if path in AUDIO_TRANSCRIPTS:
+        return path
     if path in (
         "/",
         "/v1/chat/completions",
@@ -552,7 +555,7 @@ class Observe:
         context.ingress = parent is None
         root.requested_quiet |= headers.get(b"x-loadcoach-log") == b"off" and scope.get(
             "path"
-        ) in ("/v1/chat/completions", "/v1/completions", "/v1/embeddings")
+        ) in ("/v1/chat/completions", "/v1/completions", "/v1/embeddings", *AUDIO_TRANSCRIPTS)
         if parent is None:
             value = headers.get(b"traceparent", b"")
             if match := trace_parent(value):

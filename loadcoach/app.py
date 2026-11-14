@@ -608,6 +608,11 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return error(400, 'This model does not support tool calls.', code='unsupported_tools')
         try:
             selected_engine = engine_for(settings)
+            if request.url.path == '/v1/audio/translations':
+                if not selected_engine.capabilities(settings).get('translates'):
+                    raise ValueError('This model cannot translate speech.')
+                if 'language' in asked:
+                    raise ValueError('Translation always returns English; omit language.')
             if request.url.path.startswith('/v1/audio/') and not selected_engine.capabilities(settings).get('audio'):
                 raise ValueError('Choose an audio model for audio requests.')
             if request.url.path.startswith('/v1/images/') and not selected_engine.capabilities(settings).get('image_generation'):
