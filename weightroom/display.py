@@ -14,6 +14,18 @@ def value(item):
     return '—' if item is None or isinstance(item, float) and not math.isfinite(item) else item
 
 
+def node_label(name):
+    """Present the control node's stable machine ID without changing stored identities."""
+    return 'Control node' if name == 'front' else name
+
+
+def configured_timezone(name=''):
+    """Resolve the configured display zone consistently with the host fallback."""
+    selected = name or server_zone()
+    ZoneInfo(selected)
+    return selected
+
+
 def count(item):
     """Display a count as a whole number with separators, or a dash when unavailable."""
     if value(item) == '—':

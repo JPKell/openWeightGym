@@ -616,7 +616,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return PlatformServices.from_settings(settings)
     pages.env.globals['platform'] = platform
     pages.env.globals.update(setting_label=setting_labels.describe, settings_sections=setting_labels.sections,
-                             server_timezone=settings.timezone or display.server_zone(),
+                             server_timezone=display.configured_timezone(settings.timezone),
                              log_timezone=settings.timezone or "UTC", input_utc=display.input_utc)
     pages.env.filters["clock"] = clock
     pages.env.filters.update(display=display.value, node_label=display.node_label, count=display.count, timestamp=display.timestamp, log_line=display.log_line)
@@ -2221,9 +2221,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, "model_benchmark.html", person, model=model, address=lambda label: node_model_address(request, label), **scores)
         if multimedia:
             profile = model[model['engine']]
+            model_profile = ({'family': 'whisper.cpp', 'kind': 'transcription', 'host_ram_mib': 8192, **profile}
+                             if model['engine'] == 'whispercpp' else profile)
             global_keys = PROFILE_GLOBALS[model['engine']]
             return page(request, 'multimedia_model.html', person, model=model, selected_node=selected_node,
-                        node_choices=node_choices, installation=None, global_options={key: profile[key] for key in global_keys if key in profile},
+                        node_choices=node_choices, installation=None, model_profile=model_profile, global_options={key: profile[key] for key in global_keys if key in profile},
                         node_options={key: value for key, value in profile.items() if key not in global_keys},
                         said=said or request.query_params.get('said',''), failed=failed, status=400 if failed else 200,
                         address=lambda label: node_model_address(request,label), file_address=file_address, **scores)

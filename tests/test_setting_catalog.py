@@ -2,6 +2,8 @@
 
 import math
 import json
+import asyncio
+from copy import deepcopy
 import tomllib
 from pathlib import Path
 
@@ -125,6 +127,15 @@ def test_generic_live_application_restores_file_and_unsaid_defaults():
     assert invalid.alert_gpu_temperature == 90 and 'alert_gpu_temperature' in refused
 
 
+def test_settings_display_uses_the_configured_zone_and_control_node_label(monkeypatch):
+    from weightroom import display
+    monkeypatch.setattr(display, 'server_zone', lambda: 'UTC')
+    assert display.configured_timezone() == 'UTC'
+    assert display.configured_timezone('America/Vancouver') == 'America/Vancouver'
+    assert display.node_label('front') == 'Control node'
+    assert display.node_label('worker') == 'worker'
+
+
 def test_live_reader_uses_current_store_and_original_file_after_reset(tmp_path):
     from types import SimpleNamespace
     from turnstile.settings import ConsoleSettings
@@ -143,3 +154,96 @@ def test_live_reader_uses_current_store_and_original_file_after_reset(tmp_path):
         assert api.live('turnstile', 'artifact_machine', 'original') == 'original'
     finally:
         api.changes.db.close()
+
+
+def live_examples(entry):
+    """Two valid, different values, preserving domain-specific table contracts."""
+    values = {(program, name): value for path in FILES for program, name, value in configured(path)}
+    base = deepcopy(values.get((entry.program, entry.name)))
+    special = {
+        'engine_gpus': ({}, {'llama_cpp': []}),
+        'model_defaults': ({}, {'ctx-size': 1024}),
+        'toolsets': ({}, {'catalogue': {'tools': []}}),
+        'tool_levels': ({}, {'catalogue': 'normal'}),
+        'third_party_services': (['ollama'], ['docker']),
+        'disabled_gpus': ([], ['unavailable-test-card']),
+        'models_folder': ('/tmp/catalogue-original', '/tmp/catalogue-changed'),
+        'models_storage_folder': ('/tmp/catalogue-original', '/tmp/catalogue-changed'),
+        'telephone': ({'enabled': False, 'account_sid': '', 'public_url': '', 'numbers': []},
+                      {'enabled': False, 'account_sid': 'AC' + '0' * 32,
+                       'public_url': 'https://example.com', 'numbers': []}),
+    }
+    if entry.name in special:
+        return special[entry.name]
+    if entry.kind == 'bool':
+        return False, True
+    if entry.kind in ('int', 'float'):
+        base = base if base is not None else max(1, entry.min or 0)
+        return base, base - 1 if entry.max is not None and base >= entry.max else base + 1
+    if entry.kind in ('text', 'choice'):
+        return (entry.choices[0], entry.choices[-1]) if entry.choices else ('original', 'changed')
+    if entry.kind == 'list':
+        return ['direct'], ['direct', 'hermes']
+    if entry.name == 'greetings':
+        changed = deepcopy(base)
+        changed[next(iter(changed))] += ' Testing.'
+        return base, changed
+    return {'default': {'model': 'original'}}, {'default': {'model': 'changed'}}
+
+
+LIVE = [entry for entry in CATALOG.values() if entry.tier == 'now']
+
+
+@pytest.mark.parametrize('entry', LIVE, ids=lambda entry: f'{entry.program}.{entry.name}')
+def test_every_live_setting_changes_through_its_service_getter_without_restart(entry, tmp_path):
+    import httpx
+    from types import SimpleNamespace
+    from loadcoach.settings import taken, with_changes, written, apply_live
+    from turnstile.settings import ConsoleSettings
+
+    base, changed = live_examples(entry)
+    validate(entry.program, entry.name, base)
+    validate(entry.program, entry.name, changed)
+    assert base != changed
+    (tmp_path / 'loadcoach.toml').write_text('')
+    path = tmp_path / (entry.program + '.toml')
+    path.write_text(written({entry.name: base}))
+    if entry.program in ('voice', 'voice-gateway'):
+        settings, following = with_changes(entry.program, path)
+
+        def authority(request):
+            return httpx.Response(200, json={entry.name: changed} if request.method == 'GET' else {})
+
+        async def once():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(authority)) as client:
+                try:
+                    await asyncio.wait_for(following(client, 'http://authority', 'test-key'), 0.02)
+                except TimeoutError:
+                    pass
+
+        asyncio.run(once())
+        assert settings[entry.name] == changed
+    elif entry.program == 'turnstile':
+        api = ConsoleSettings(tmp_path / 'settings.db', SimpleNamespace(), None)
+        try:
+            assert api.live(entry.program, entry.name, base) == base
+            api.changes.put(entry.program, entry.name, changed, 'operator')
+            assert api.live(entry.program, entry.name, base) == changed
+        finally:
+            api.changes.db.close()
+    elif entry.program == 'weightroom':
+        from weightroom.app import Settings
+        settings = Settings(key='test-key', file={entry.name: base})
+        settings, refused = apply_live(entry.program, settings, {entry.name: changed})
+        actual = getattr(settings, entry.name)
+        assert not refused and (list(actual) if entry.kind == 'list' else actual) == changed
+    else:
+        from loadcoach.config import load_config, config_from
+        from spotter.app import load_settings, settings_from
+        from toollocker.door import load_config as tools_config, config_from as tools_from
+        readers = {'loadcoach': (load_config, lambda path, values: config_from(path, values, {entry.name: base})),
+                   'spotter': (load_settings, settings_from), 'toollocker': (tools_config, tools_from)}
+        read, make = readers[entry.program]
+        settings = read(path)
+        updated, refused = taken(entry.program, settings, {entry.name: changed}, make)
+        assert not refused and getattr(updated, entry.name) == changed
