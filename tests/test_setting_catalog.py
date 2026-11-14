@@ -169,6 +169,7 @@ def live_examples(entry):
         'timezone': ('UTC', 'America/Vancouver'),
         'observation_quiet_routes': (['/one'], ['/two']),
         'disabled_gpus': ([], ['unavailable-test-card']),
+        'disks': (['/'], ['/tmp']),
         'models_folder': ('/tmp/catalogue-original', '/tmp/catalogue-changed'),
         'models_storage_folder': ('/tmp/catalogue-original', '/tmp/catalogue-changed'),
         'telephone': ({'enabled': False, 'account_sid': '', 'public_url': '', 'numbers': []},
@@ -248,4 +249,5 @@ def test_every_live_setting_changes_through_its_service_getter_without_restart(e
         read, make = readers[entry.program]
         settings = read(path)
         updated, refused = taken(entry.program, settings, {entry.name: changed}, make)
-        assert not refused and getattr(updated, entry.name) == changed
+        actual = getattr(updated, entry.name)
+        assert not refused and (list(actual) if isinstance(actual, tuple) else actual) == changed

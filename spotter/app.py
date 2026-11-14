@@ -308,7 +308,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
         changed = changes.of("spotter")
         if in_force.get("changed") == changed:
             return
+        previous_disks = settings.disks
         settings, refused = taken("spotter", settings, changed, settings_from)
+        if settings.disks != previous_disks:
+            last.clear()  # a cached reading still describes the old disk selection
         in_force["changed"] = changed
         named = ("host", "port", "sample_every", "keep_days", "sleep_after", "busy_gpu", "busy_processor", "files_every", "component_versions_every", "services", "system_services")
         running = {**settings.file, **{name: getattr(settings, name) for name in named}, "disks": list(settings.disks)}
@@ -539,6 +542,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
 
     async def now(request: Request, user: User) -> Response:
         """The machine as it is: its telemetry, its services, and what is known about its power. For anyone signed in."""
+        in_step()
         reading = await read()
         shown = units
         if "system_services" in request.query_params:
