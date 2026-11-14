@@ -5,7 +5,7 @@
 {% call request_fact('Security level') %}{{ security_badge(asked.level) }}{% endcall %}
 {{ request_fact('User', asked.user) }}{{ request_fact('From / IP', asked.caller) }}
 {% call request_fact('Model') %}{% if 'manage-models' in person.can and not asked.hosted %}<a href="{{ address(asked.model) }}">{{ asked.model }}</a>{% else %}{{ asked.model or '—' }}{% endif %}{% if asked.hosted %}<small class="d-block text-secondary">answered off this machine as {{ asked.hosted }}{% if asked.instead_of %}, in place of {{ asked.instead_of }}{% endif %}</small>{% endif %}{% endcall %}
-{{ request_fact('Node', asked.machine or 'front') }}
+{{ request_fact('Node', (asked.machine or 'front')|node_label) }}
 {% call request_fact('Asked at') %}<span class="when">{{ asked.at|timestamp }}</span>{% endcall %}
 {% if ended %}{% call request_fact('Ended at') %}<span class="when">{{ ended.at|timestamp }}</span>{% endcall %}{{ request_fact('HTTP status', ended.status) }}{% if ended.by %}{{ request_fact('Ended by', ended.by) }}{% endif %}{% endif %}
 {{ request_fact('Path', asked.path) }}

@@ -316,7 +316,7 @@ def test_request_pages_and_group_time_log_filters(desk, tmp_path, monkeypatch):
     second = event('2026-10-01T11:00:00', 'asked', 'jordan')
     event('2026-10-01T11:00:02', 'stopped', 'jordan', of=second)
     third = event('2026-10-01T12:00:00', 'asked', 'pat')
-    api = loadcoach_through(tmp_path / 'data', users, database=str(tmp_path / 'loadcoach.db')).__enter__()  # front's folder is the page's: one log there
+    api = loadcoach_through(tmp_path / 'data', users, database=str(tmp_path / 'loadcoach.db')).__enter__()  # the control node's folder is the page's: one log there
     pat = {'authorization': 'Bearer ' + users.new_key('pat')}
     admin = {'authorization': 'Bearer ' + users.new_key('jordan')}
     own = api.get('/loadcoach/requests?limit=1', headers=pat).json()

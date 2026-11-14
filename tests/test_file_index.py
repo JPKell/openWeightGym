@@ -137,7 +137,7 @@ def test_the_files_page_refresh_button_looks_again_on_front_and_every_node(desk,
     (storage / "llm" / "first.gguf").write_bytes(b"first")
     page = browser.get("/files?tier=storage&complete=1").text
     assert "first.gguf" in page and 'value="refresh-files"' in page and 'name="back" value="/files?tier=storage"' in page
-    assert "Files last checked: Front <time" in page
+    assert "Files last checked: Control node <time" in page
     (storage / "llm" / "dropped-in.gguf").write_bytes(b"dropped in")
     assert "dropped-in.gguf" not in browser.get("/files?tier=storage&complete=1").text  # the kept list, until refreshed
     refreshed = browser.post("/files", data={"do": "refresh-files", "back": "/files?tier=storage"}, follow_redirects=False)

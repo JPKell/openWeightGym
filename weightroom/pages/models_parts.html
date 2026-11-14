@@ -3,7 +3,7 @@
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% macro node_target(node={}, selected=false) %}
 {% set accepting = node.accepting_work|default(true) %}
-<label class="form-selectgroup-item"><input type="checkbox" name="node" value="{{ node.name|default('') }}" class="form-selectgroup-input" data-model-node{{ ' checked' if selected and accepting }}{{ ' disabled' if not accepting }}><span class="form-selectgroup-label"><span data-node-name>{{ node.name|default('') }}</span><small class="text-secondary" data-node-state>{% if not accepting %} {{ node.lifecycle|default('disabled') }}{% elif node.state|default('ready') != 'ready' %} {{ node_state(node.state) }}{% endif %}</small></span></label>
+<label class="form-selectgroup-item"><input type="checkbox" name="node" value="{{ node.name|default('') }}" class="form-selectgroup-input" data-model-node{{ ' checked' if selected and accepting }}{{ ' disabled' if not accepting }}><span class="form-selectgroup-label"><span data-node-name>{{ (node.name|default(''))|node_label }}</span><small class="text-secondary" data-node-state>{% if not accepting %} {{ node.lifecycle|default('disabled') }}{% elif node.state|default('ready') != 'ready' %} {{ node_state(node.state) }}{% endif %}</small></span></label>
 {% endmacro %}
 {% macro node_targets(nodes=(), selected=(), id='model-nodes', fallback=true) %}
 <fieldset id="{{ id }}" class="m-0 p-0 border-0" aria-label="Compute nodes"><div class="form-selectgroup justify-content-end" data-target-choices>
@@ -17,7 +17,7 @@
 </{{ 'a' if href else 'button' }}>
 {% endmacro %}
 {% macro placement(node='', state='', label='', href='', attrs={}) %}
-<{{ 'a' if href else 'button' }}{% if href %} href="{{ href }}"{% else %} type="button"{% endif %} class="inventory-placement"{% if state %} data-state="{{ state }}"{% endif %}{% if label %} title="{{ node }} · {{ label }}" aria-label="{{ node }}: {{ label }}. Open model settings"{% endif %}{{ attrs|xmlattr }}><span class="inventory-dot" aria-hidden="true"></span><span data-node-name>{{ node }}</span><span class="visually-hidden" data-status>{{ ' · ' ~ label if label }}</span></{{ 'a' if href else 'button' }}>
+<{{ 'a' if href else 'button' }}{% if href %} href="{{ href }}"{% else %} type="button"{% endif %} class="inventory-placement"{% if state %} data-state="{{ state }}"{% endif %}{% if label %} title="{{ node }} · {{ label }}" aria-label="{{ node }}: {{ label }}. Open model settings"{% endif %}{{ attrs|xmlattr }}><span class="inventory-dot" aria-hidden="true"></span><span data-node-name>{{ (node)|node_label }}</span><span class="visually-hidden" data-status>{{ ' · ' ~ label if label }}</span></{{ 'a' if href else 'button' }}>
 {% endmacro %}
 {% macro overview(catalogue, pending=false, oob=false) %}
 <div id="models-overview"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>

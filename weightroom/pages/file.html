@@ -46,7 +46,7 @@
     {% call card('Convert to classifier GGUF') %}
     {% if facts.conversion == 'refused' %}{% call alert('danger') %}{{ facts.why }}{% endcall %}
     {% else %}<p class="small text-secondary">Convert the complete bundle on its owning compute node. Install CPU conversion tools in Components first. Sources stay untouched; a 30-question parity gate labels the output.</p>
-    <form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><label class="form-label" for="conversion-node">Owning compute node</label><select class="form-select form-select-sm mb-2" name="machine" id="conversion-node">{% for node in nodes if node.name != 'front' and node.answering %}<option value="{{ node.name }}">{{ node.name }}</option>{% endfor %}</select><button class="btn btn-outline-primary btn-sm" name="do" value="convert-classifier">Convert to classifier GGUF</button></form>{% endif %}
+    <form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><label class="form-label" for="conversion-node">Owning compute node</label><select class="form-select form-select-sm mb-2" name="machine" id="conversion-node">{% for node in nodes if node.name != 'front' and node.answering %}<option value="{{ node.name }}">{{ (node.name)|node_label }}</option>{% endfor %}</select><button class="btn btn-outline-primary btn-sm" name="do" value="convert-classifier">Convert to classifier GGUF</button></form>{% endif %}
     {% endcall %}
     {% endif %}
     {% call card('Distribute to nodes', id='distribution-card') %}
@@ -55,7 +55,7 @@
         <div class="table-responsive"><table class="table table-sm align-middle mb-2" aria-label="File destinations">
           <thead><tr><th>Node</th><th>Copy</th><th class="text-end">Free</th><th><span class="visually-hidden">Select</span></th></tr></thead>
           <tbody>{% for node in destinations %}<tr>
-            <td><label class="fw-semibold text-break" for="node-{{ loop.index }}">{{ node.name }}</label><small class="d-block text-secondary">{{ node.place if node.available else 'Offline' if not node.answering else 'No model storage' }}</small></td>
+            <td><label class="fw-semibold text-break" for="node-{{ loop.index }}">{{ (node.name)|node_label }}</label><small class="d-block text-secondary">{{ node.place if node.available else 'Offline' if not node.answering else 'No model storage' }}</small></td>
             <td><span class="badge bg-{{ 'green' if node.present else 'secondary' }}-lt">{{ 'Found' if node.present else 'Missing' if node.available else 'Unknown' }}</span></td>
             <td class="text-end text-nowrap">{{ node.free|size if node.free is not none else 'Unknown' }}</td>
             <td class="text-end"><input id="node-{{ loop.index }}" class="form-check-input" type="checkbox" name="machine" value="{{ node.name }}" aria-label="Distribute to {{ node.name }}"{% if node.available and not node.present %} checked{% endif %}{% if not node.available %} disabled{% endif %}></td>

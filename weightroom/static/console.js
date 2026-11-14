@@ -1,3 +1,4 @@
+window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
 // Delegated handlers continue working when htmx replaces a table or form.
 (() => {
   const armed = new Map();

@@ -50,14 +50,14 @@
       $('export-all').disabled = !snapshot.databases.length;
       root.querySelector('[data-all-export]').disabled = $('export-all').disabled;
       const nodeFilter = $('node-filter');
-      nodeFilter.replaceChildren(new Option('All nodes', 'all'), ...snapshot.nodes.map(node => new Option(node.name, node.name)));
+      nodeFilter.replaceChildren(new Option('All nodes', 'all'), ...snapshot.nodes.map(node => new Option(window.suiteNodeLabel(node.name), node.name)));
       if (![...nodeFilter.options].some(option => option.value === state.node)) state.node = 'all';
       nodeFilter.value = state.node;
       $('node-strip').replaceChildren(...snapshot.nodes.map(node => {
         const button = document.createElement('button'); button.type = 'button';
         button.className = `btn btn-sm ${state.node === node.name ? 'btn-primary' : 'btn-outline-secondary'}`;
         const count = snapshot.databases.filter(db => db.consumers.some(route => route.machine === node.name)).length;
-        button.textContent = `${node.name} · ${node.lifecycle === 'retired' ? 'retired' : node.answering ? `${count} DB` : 'unreachable'}`;
+        button.textContent = `${window.suiteNodeLabel(node.name)} · ${node.lifecycle === 'retired' ? 'retired' : node.answering ? `${count} DB` : 'unreachable'}`;
         button.setAttribute('aria-pressed', state.node === node.name);
         button.onclick = () => { state.node = state.node === node.name ? 'all' : node.name; render(); };
         return button;
@@ -66,7 +66,7 @@
       for (const db of filtered) {
         const row = clone('database-row'); row.dataset.database = db.key;
         text(row, '[data-name]', db.name); text(row, '[data-owner]', db.owner);
-        text(row, '[data-node]', db.consumers.map(route => route.machine).filter((name, i, all) => all.indexOf(name) === i).join(', '));
+        text(row, '[data-node]', db.consumers.map(route => route.machine).filter((name, i, all) => all.indexOf(name) === i).map(window.suiteNodeLabel).join(', '));
         text(row, '[data-engine]', db.engine); text(row, '[data-tables]', number(db.table_count));
         text(row, '[data-records]', (db.records_estimated && db.records != null ? '≈ ' : '') + number(db.records));
         text(row, '[data-size]', size(db.size));
@@ -76,12 +76,12 @@
         text(row, '[data-backup]', backup?.age_seconds != null ? `${(backup.age_seconds / 3600).toFixed(1)}h · ${backup.state} backup` : `${backup?.state || 'unknown'} backup`);
         const check = row.querySelector('[data-select]');
         check.checked = state.selected.has(db.key); check.disabled = !!db.error;
-        check.setAttribute('aria-label', `Select ${db.name} on ${db.machine}`);
+        check.setAttribute('aria-label', `Select ${db.name} on ${window.suiteNodeLabel(db.machine)}`);
         check.onchange = () => { check.checked ? state.selected.add(db.key) : state.selected.delete(db.key); render();
           body.querySelector(`[data-database="${db.key}"] [data-select]`)?.focus(); };
         const expand = row.querySelector('[data-expand]'); expand.title = db.owner;
         expand.setAttribute('aria-expanded', state.expanded.has(db.key));
-        expand.setAttribute('aria-label', `Show tables for ${db.name} on ${db.machine}`);
+        expand.setAttribute('aria-label', `Show tables for ${db.name} on ${window.suiteNodeLabel(db.machine)}`);
         expand.setAttribute('aria-controls', `detail-${db.key}`);
         text(row, '[data-chevron]', state.expanded.has(db.key) ? '▾' : '▸');
         expand.onclick = () => { state.expanded.has(db.key) ? state.expanded.delete(db.key) : state.expanded.add(db.key); render();
@@ -103,7 +103,7 @@
       $('select-all').indeterminate = selectable.some(db => state.selected.has(db.key)) && !$('select-all').checked;
       $('select-all').disabled = !selectable.length;
       $('discovered').replaceChildren(...snapshot.discovered.map(db => {
-        const row = clone('discovered-row'); text(row, '[data-name]', `${db.machine} / ${db.name}`); text(row, '[data-path]', db.path); text(row, '[data-size]', size(db.size));
+        const row = clone('discovered-row'); text(row, '[data-name]', `${window.suiteNodeLabel(db.machine)} / ${db.name}`); text(row, '[data-path]', db.path); text(row, '[data-size]', size(db.size));
         row.querySelector('[data-dump]').disabled = !!db.error;
         row.querySelector('[data-dump]').onclick = () => { location.href = db.dump_url; }; return row;
       }));
@@ -112,11 +112,11 @@
     }
     function detailRow(db) {
       const row = clone('database-detail'); row.id = `detail-${db.key}`;
-      text(row, '[data-detail-name]', `${db.name} / ${db.machine}`);
+      text(row, '[data-detail-name]', `${db.name} / ${window.suiteNodeLabel(db.machine)}`);
       text(row, '[data-detail-owner]', db.owner); text(row, '[data-path]', db.path);
       text(row, '[data-bindings]', `Bindings: ${db.bindings.join(', ')}`);
       const detail = details.get(db.key), table = row.querySelector('[data-table-list]');
-      table.setAttribute('aria-label', `Tables in ${db.name} on ${db.machine}`);
+      table.setAttribute('aria-label', `Tables in ${db.name} on ${window.suiteNodeLabel(db.machine)}`);
       const note = row.querySelector('.detail-content > p');
       if (!detail) {
         note.textContent = 'Loading exact table counts…'; table.hidden = true;
@@ -159,7 +159,7 @@
       exportScope = scope;
       const stores = scope === 'all' ? snapshot.databases : selected();
       $('export-summary').textContent = `${stores.length} database${stores.length === 1 ? '' : 's'} · ZIP with SQL dumps and manifest`;
-      $('export-list').replaceChildren(...stores.map(db => { const li = document.createElement('li'); li.textContent = `${db.machine} / ${db.name} · ${db.engine}${db.error ? ' · unavailable' : ''}`; return li; }));
+      $('export-list').replaceChildren(...stores.map(db => { const li = document.createElement('li'); li.textContent = `${window.suiteNodeLabel(db.machine)} / ${db.name} · ${db.engine}${db.error ? ' · unavailable' : ''}`; return li; }));
       $('partial-option').hidden = scope !== 'all' || snapshot.complete; $('allow-partial').checked = false;
       $('download-export').disabled = scope === 'all' && !snapshot.complete;
       $('export-dialog').showModal();
@@ -167,7 +167,7 @@
     function invalidateReview() { review = null; $('maintenance-preview').hidden = true; $('confirm-maintenance').checked = false; $('apply-maintenance').disabled = true; }
     function openCleanup(keys) {
       cleanupKeys = keys; invalidateReview(); $('cleanup-result').textContent = '';
-      $('cleanup-scope').textContent = snapshot.databases.filter(db => keys.includes(db.key)).map(db => `${db.machine} / ${db.name}`).join(' · ');
+      $('cleanup-scope').textContent = snapshot.databases.filter(db => keys.includes(db.key)).map(db => `${window.suiteNodeLabel(db.machine)} / ${db.name}`).join(' · ');
       $('cleanup-dialog').showModal();
     }
     async function preview(action) {
@@ -176,7 +176,7 @@
       review = result;
       $('maintenance-rows').replaceChildren(...result.stores.map(store => {
         const tr = document.createElement('tr');
-        for (const value of [`${store.machine} / ${store.id}`, action === 'purge' ? number(store.count) : store.method,
+        for (const value of [`${window.suiteNodeLabel(store.machine)} / ${store.id}`, action === 'purge' ? number(store.count) : store.method,
           action === 'purge' ? store.reason : store.headroom ? `${size(store.headroom.free_bytes)} free / ${size(store.headroom.required_bytes)} required` : 'Routine reuse; disk shrink is not promised']) {
           const td = document.createElement('td'); td.textContent = value; tr.append(td);
         }
@@ -191,19 +191,19 @@
       try {
         const result = await request(api + 'jobs');
         for (const job of result.jobs) {
-          const key = `${job.machine}/${job.type}/${job.id}`;
+          const key = `${window.suiteNodeLabel(job.machine)}/${job.type}/${job.id}`;
           if (['running', 'queued'].includes(jobStates.get(key)) && !['running', 'queued', 'cancelling'].includes(job.state)) needsRefresh = true;
           jobStates.set(key, job.state);
         }
         if (needsRefresh && !root.querySelector('dialog[open]') && !window.getSelection()?.toString()) { needsRefresh = false; await refresh(); }
         if ($('jobs').contains(document.activeElement)) return;
         $('jobs').replaceChildren(...result.jobs.map(job => {
-          const row = clone('database-job'); text(row, '[data-job-title]', `${job.kind} · ${job.machine}`);
+          const row = clone('database-job'); text(row, '[data-job-title]', `${job.kind} · ${window.suiteNodeLabel(job.machine)}`);
           text(row, '[data-job-state]', `${job.state} · ${when(job.created_at)}${job.error ? ' · ' + job.error : ''}`);
           const outcomes = row.querySelector('[data-job-outcomes]');
           for (const outcome of job.outcomes || []) {
             const line = document.createElement('div');
-            line.textContent = `${outcome.machine || outcome.id || outcome.database}: ${outcome.state}${outcome.records_deleted != null ? ` · ${number(outcome.records_deleted)} deleted` : ''}${outcome.reclaimed_bytes != null ? ` · ${size(outcome.reclaimed_bytes)} returned to disk` : ''}${outcome.error ? ' · ' + outcome.error : ''}`;
+            line.textContent = `${window.suiteNodeLabel(outcome.machine) || outcome.id || outcome.database}: ${outcome.state}${outcome.records_deleted != null ? ` · ${number(outcome.records_deleted)} deleted` : ''}${outcome.reclaimed_bytes != null ? ` · ${size(outcome.reclaimed_bytes)} returned to disk` : ''}${outcome.error ? ' · ' + outcome.error : ''}`;
             outcomes.append(line);
           }
           const actions = row.querySelector('[data-job-actions]');

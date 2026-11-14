@@ -39,8 +39,8 @@ def test_each_location_is_a_row_with_free_room_and_folder_details():
     assert "/<wbr>srv/<wbr>cache" in html  # long paths break after a slash, never inside a folder's name
     html = html.replace("<wbr>", "")
     cards = re.findall(r'<tr aria-label="([^"]+)">(.*?)(?=<tr aria-label=|\Z)', html, re.S)
-    # Front cache and storage, the node's cache (its storage is not shown), and a note for the node that is not answering.
-    assert [title for title, _ in cards] == ["Front cache", "Storage", "gpu-box"]
+    # Control node cache and storage, the node's cache (its storage is not shown), and a note for the node that is not answering.
+    assert [title for title, _ in cards] == ["Control node cache", "Storage", "gpu-box"]
     front, storage, node = (body for _, body in cards)
 
     # Folders on one drive count it once: 2 TB, of which 1 TB is free; models take 302 GB of it.
@@ -65,5 +65,5 @@ def test_problems_and_an_empty_listing_are_said_plainly():
         {"name": "front", "state": "ready", "answering": True, "problems": ["/mnt/models is not available."], "place_groups": []}]}
     html = render(problem)
     assert "No model-file locations are available yet." in html and "/mnt/models is not available." in html
-    assert "Front model storage is optional." in html
+    assert "Control node model storage is optional." in html
     assert "No model-file locations are available." in render({"nodes": []})

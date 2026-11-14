@@ -39,7 +39,7 @@
 {%- endmacro %}
 
 {% macro node_badge(node) -%}
-<span class="badge bg-{{ 'green' if node.state == 'ready' else 'orange' if node.state == 'unknown' else 'secondary' }}-lt">{{ {'ready':'Ready', 'unknown':'Status unknown', 'unavailable':'Unreachable', 'disabled':'Disabled', 'front':'Front host'}[node.state] }}</span>
+<span class="badge bg-{{ 'green' if node.state == 'ready' else 'orange' if node.state == 'unknown' else 'secondary' }}-lt">{{ {'ready':'Ready', 'unknown':'Status unknown', 'unavailable':'Unreachable', 'disabled':'Disabled', 'front':'Control node'}[node.state] }}</span>
 {%- endmacro %}
 
 {% macro run_return(section, kind, benchmark) -%}
@@ -55,7 +55,7 @@
 {% macro node_summary(node) %}
 {% from 'parts.html' import card %}
 {% call card(class_='mb-0', body_class='p-3', attrs={'data-benchmark-node': node.name}) %}
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2"><strong>{{ node.name }}</strong>{{ node_badge(node) }}</div>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2"><strong>{{ (node.name)|node_label }}</strong>{{ node_badge(node) }}</div>
 <div class="small text-secondary mt-2">{% if node.hostname and node.hostname != node.name %}{{ node.hostname }} · {% endif %}{{ node.choices|length }} compatible model{{ '' if node.choices|length == 1 else 's' }}</div>
 <div class="small mt-1">{{ node.running }} running · {{ node.queued }} queued</div>
 {% endcall %}
@@ -64,7 +64,7 @@
 {% macro target_choice(choice, node, selected_target) %}
 <label class="benchmark-target d-inline-flex align-items-center gap-1 rounded" data-target-choice data-search="{{ choice.id|lower }}" title="{{ node.name }} · {{ choice.reason or ('Settings or environment changed' if choice.result and choice.missing else 'Missing evidence' if choice.missing else 'Current evidence') }}{% if choice.context %} · {{ choice.context }} context{% endif %}">
 <input type="checkbox" class="form-check-input m-0" name="run-target" form="start-benchmark" value="{{ choice.target|tojson|forceescape }}" data-node="{{ node.name }}" data-missing="{{ 'true' if choice.missing else 'false' }}" aria-label="Select {{ choice.id }} at {{ node.name }}"{% if choice.reason %} disabled{% elif selected_target == (choice.id, node.name) %} checked{% endif %}>
-<span class="small wrap">{{ node.name }}</span>
+<span class="small wrap">{{ (node.name)|node_label }}</span>
 {% if choice.result %}<a class="small" href="/benchmarks/run/{{ choice.result.id }}" aria-label="{{ choice.id }} at {{ node.name }}: saved score {{ number(choice.result.score) }}">{{ number(choice.result.score) }}</a>{{ flags(choice.result) }}<span class="visually-hidden">Saved {{ choice.result.ended|timestamp }}</span>{% elif not choice.reason %}<small class="text-secondary">· Not run</small>{% endif %}
 {% if choice.reason %}<small class="text-secondary">· {{ 'Active' if choice.active else 'Disabled' if 'disabled' in choice.reason|lower else 'View only' if choice.reason == 'Benchmark ability required' else 'Unavailable' }}</small><span class="visually-hidden">{{ choice.reason }}</span>{% elif choice.missing and choice.result %}<span class="visually-hidden">Settings or environment changed</span>{% endif %}
 </label>
@@ -72,7 +72,7 @@
 
 {% macro node_bulk_choice(node) %}
 <label class="benchmark-node-choice d-flex align-items-center gap-2 rounded small" data-machine-lane="{{ node.name }}" title="{{ node.state|title }} · {{ node.selectable }} eligible models">
-<input type="checkbox" class="form-check-input m-0" data-select-node="{{ node.name }}" aria-label="Select all models on {{ node.name }}"{% if not node.selectable %} disabled{% endif %}><span class="wrap">{{ node.name }}</span><small class="text-secondary" data-node-count>{{ node.selectable }}</small></label>
+<input type="checkbox" class="form-check-input m-0" data-select-node="{{ node.name }}" aria-label="Select all models on {{ node.name }}"{% if not node.selectable %} disabled{% endif %}><span class="wrap">{{ (node.name)|node_label }}</span><small class="text-secondary" data-node-count>{{ node.selectable }}</small></label>
 {% endmacro %}
 
 {% macro model_row(model, selected_target) %}

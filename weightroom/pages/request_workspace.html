@@ -7,7 +7,7 @@
 <div id="request" data-request-id="{{ facts.id }}"{% if facts.state %} hx-get="/requests/{{ facts.id }}?part=live" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
 {% set title %}Request #{{ facts.id }}{% endset %}
 {% call page_header(title, pretitle='OBSERVE / INDIVIDUAL REQUEST') %}<button type="button" class="btn btn-sm btn-outline-secondary" data-request-copy="link">Copy link</button><a class="btn btn-sm btn-outline-secondary" href="/requests/{{ facts.id }}?export=metadata">Export metadata ↓</a>{% endcall %}
-<div class="rq-detail-meta mb-4">{{ status_badge(ended.what, facts.state if request_view.active else 'No ending recorded', request_view.error) }}{{ security_badge(asked.level) }}<strong>{{ asked.model or '—' }}</strong><span class="text-secondary">{{ asked.machine or 'front' }}</span>{% if asked.path %}<code class="ms-auto">{{ asked.path }}</code>{% endif %}</div>
+<div class="rq-detail-meta mb-4">{{ status_badge(ended.what, facts.state if request_view.active else 'No ending recorded', request_view.error) }}{{ security_badge(asked.level) }}<strong>{{ asked.model or '—' }}</strong><span class="text-secondary">{{ (asked.machine or 'front')|node_label }}</span>{% if asked.path %}<code class="ms-auto">{{ asked.path }}</code>{% endif %}</div>
 <div class="rq-detail-grid">
 <aside class="rq-passport">{% include 'request_passport.html' %}</aside>
 <section class="rq-verdict" data-error="{{ 'true' if request_view.error else 'false' }}" aria-label="Request outcome"><span class="eyebrow">{{ 'IN PROGRESS' if request_view.active else 'RECORDED OUTCOME' }}</span>{{ section_title(request_view.title, class_='h3 mt-2') }}<p class="mb-0 text-secondary">{{ request_view.note }}</p></section>

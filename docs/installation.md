@@ -72,16 +72,16 @@ Ports, for a firewall:
 |---|---|---|
 | Web console | 8440 | |
 | API (OpenAI-compatible) | 8442 | 8442, reached by the console only |
-| Tools (MCP) | 8443, through the front gateway | |
+| Tools (MCP) | 8443, through the control node gateway | |
 | Monitor | 8444, through the gateway | 8444, reached by the console only |
 | Voice | 8445 to 8447, when installed | 8445, when installed |
 
 On one machine the gateway keeps 8442 to 8445 and the programs behind it listen on loopback only,
 1000 above (9442 to 9445); `compute = "http://127.0.0.1:9442"` in `settings/weightroom.toml` tells the
 gateway so. Other devices reach the console on 8440 and the API on 8442.
-ToolLocker always listens privately on `127.0.0.1:9443` on front, including a console-only
+ToolLocker always listens privately on `127.0.0.1:9443` on the control node, including a console-only
 installation. Turnstile authenticates public MCP requests on 8443 and routes them locally;
-the gateway shares front's accounts/event store and remains available without compute.
+the gateway shares the control node's accounts/event store and remains available without compute.
 
 Fedora, RHEL and openSUSE turn their firewall (firewalld) on as they install, and ufw may be on
 elsewhere. The installer does not open ports itself: it checks them, and when the firewall keeps
@@ -132,12 +132,12 @@ Installed services continue to use `owg update; owg restart`.
 
 ## Docker qualification with real models
 
-`tests/docker/qualification/compose.yaml` runs a disposable front and three peer nodes
+`tests/docker/qualification/compose.yaml` runs a disposable control node and three peer nodes
 (alpha, beta and gamma), each with a separate Docker volume and generated credentials.
 The console is published on `127.0.0.1:19440`; API and MCP diagnostic pages use loopback
 ports 19442 and 19443. It never reads an installed suite's
 settings, accounts, model folders or databases. Downloads consume real storage; choose
-small models and account for the front's storage/cache copies and each destination copy.
+small models and account for the control node's storage/cache copies and each destination copy.
 
 ```bash
 docker compose -f tests/docker/qualification/compose.yaml build seed
@@ -178,7 +178,7 @@ docker compose -f tests/docker/qualification/compose.yaml exec beta python scrip
 
 The optional `postgres` profile runs an unexposed PostgreSQL 16 container. After restoring an
 accounts store into it and writing the owner-only `/state/front/qualification-postgres.dsn`,
-`postgres.compose.yaml` temporarily binds front's accounts to that store. The normal Compose
+`postgres.compose.yaml` temporarily binds the control node's accounts to that store. The normal Compose
 file restores SQLite bindings; its original files remain intact. The image includes matching
 PostgreSQL 16 recovery tools as well as the distribution's client tools.
 
@@ -200,12 +200,12 @@ docker compose -f tests/docker/qualification/compose.yaml -f tests/docker/qualif
 
 New **Console only** and **Everything on this machine** installations include ToolLocker with
 the bundled file and code tools. **GPU node** installs omit the gateway; remote tool servers
-can still run there and connect to front. Both installers use this ownership in their presets.
+can still run there and connect to the control node. Both installers use this ownership in their presets.
 Voice remains optional in `install.sh`; the lower-level `scripts/install-suite.sh` presets also
 select the corresponding voice services before its editable checklist.
 
 Existing settings and the service list saved for Repair are preserved. Older console-only
-installs need the [front ToolLocker setup](../toollocker/README.md#install-toollocker-on-front)
+installs need the [control node ToolLocker setup](../toollocker/README.md#install-toollocker-on-the-control-node)
 to add it; existing compute gateways are not automatically moved or removed. The same guide,
 available at **Docs → Modules → ToolLocker**, covers verification, adding tools and remote tool hosts.
 
@@ -308,11 +308,11 @@ with private backups before those changes. Replaced service units are backed up 
 originals as `NAME.service.before-suite-install-TIME`, including local edits to generated units.
 Service control commands return a nonzero status if any requested service fails.
 Components versions are recorded after installs, code updates and successful starts/restarts.
-Spotter on each compute node and Turnstile on Front recheck them independently of page visits.
+Spotter on each compute node and Turnstile on Control node recheck them independently of page visits.
 The **Component version check interval** setting is in minutes (60 by default, above zero);
-changes apply within a minute. Configure it per node under **Compute nodes**, and for Front
+changes apply within a minute. Configure it per node under **Compute nodes**, and for Control node
 under **Settings**. In files it is `component_versions_every` in `settings/spotter.toml` on
-compute, or `[turnstile]` in `settings/weightroom.toml` on Front. The Components page refreshes
+compute, or `[turnstile]` in `settings/weightroom.toml` on Control node. The Components page refreshes
 its display every 30 seconds, reading saved versions without waking sleeping nodes or running
 model workers. Engine version probes use bounded `--version` calls; Strata uses its source revision.
 
@@ -476,7 +476,7 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 | `--llama auto\|cuda-13.4\|cuda-12.8\|rocm\|vulkan\|cpu\|source\|skip\|PATH` | the engine |
 | `--database sqlite\|postgresql` | PostgreSQL is installed and set up locally (installs for you only) |
 | `--voice` | also speech recognition and voices |
-| `--voice-key-file FILE` | voice service key the front keeps for a GPU node joined by hand |
+| `--voice-key-file FILE` | voice service key the control node keeps for a GPU node joined by hand |
 | `--power-control` | let the console sleep, restart or switch off this machine (a polkit rule) |
 | `--no-linger`, `--no-browser` | skip linger, or opening the console |
 | `--ref BRANCH` | which branch to install |

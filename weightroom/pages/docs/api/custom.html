@@ -1,7 +1,7 @@
 {% from "docs_parts.html" import doc_section, api_endpoints %}
 {% call doc_section("Custom endpoints", "api-custom") %}
   <p><a href="/docs/web-app/image-extraction">Image extraction</a> uses caller-private <code>/owg/extraction-assets</code>,
-    <code>/owg/extractions</code> and <code>/owg/extraction-presets</code> on front. Upload one raster image, then submit its asset ID
+    <code>/owg/extractions</code> and <code>/owg/extraction-presets</code> on the control node. Upload one raster image, then submit its asset ID
     with a permitted vision/schema model and task; poll the returned status URL. Submit <code>Idempotency-Key</code> to prevent duplicate jobs.
     Review requires the current revision; exports support <code>revision=original</code>. Inference uses normal admission and accounting.
     <code>/owg/extraction-tools/{tool}</code> is reserved for signed caller-bound ToolLocker dispatch.</p>
@@ -23,12 +23,12 @@
   <p>The tables below come from explicit source route declarations, including fixed route comprehensions. Conditional features may be unavailable.
     The broad inference proxy is described under <a href="/docs/api/openai#api-unsupported">OpenAI compatibility</a>; it is not enumerated as implemented endpoints. <code>/loadcoach/task</code>
     is a durable batch line marker, not a separately registered HTTP route.</p>
-  <p><strong>Listeners:</strong> Turnstile/model operations normally use front port 8442; MCP uses the configured ToolLocker listener (normally 8443).
+  <p><strong>Listeners:</strong> Turnstile/model operations normally use control node port 8442; MCP uses the configured ToolLocker listener (normally 8443).
     Spotter routes use the configured telemetry/control listener. Voice gateway browser/admin routes are private (normally 8446), desktop streaming uses 8447,
     and its public listener exposes only the telephone allowlist. Compute voice normally uses 8445: HTTP uses signed callers, while its audio socket and deletion use the per-session bearer token.
     Direct <code>/adapter/v1/</code> routes belong to the configured plugin adapter listener and use its pairing key; these are internal management APIs, not general account-key endpoints.
-    Front-internal <code>/turnstile/accounts</code>, <code>/turnstile/pick</code>, <code>/turnstile/log</code>, <code>/turnstile/log-facts</code> and
-    <code>/turnstile/power</code> require machine signatures. <code>/loadcoach/front-probes</code> and its interrupt route are internal dispatch only and are refused on the public front path.
+    Control-node-internal <code>/turnstile/accounts</code>, <code>/turnstile/pick</code>, <code>/turnstile/log</code>, <code>/turnstile/log-facts</code> and
+    <code>/turnstile/power</code> require machine signatures. <code>/loadcoach/front-probes</code> and its interrupt route are internal dispatch only and are refused on the public control node path.
     Schedule dispatch uses its scoped grant. Worker file PUT uses the short-lived preparation token in the path.</p>
   {% for group in api %}
     <details class="docs-disclosure">

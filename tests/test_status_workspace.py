@@ -75,7 +75,7 @@ def test_live_dispatch_layout_filter_refresh_and_narrow_screens(desk,monkeypatch
         assert '41' in page.locator('table[aria-label="Processing now"]').inner_text()
         assert '42' in page.locator('table[aria-label="Waiting to start"]').inner_text()
         assert 'Past requests' not in page.locator('main').inner_text()
-        assert 'Arrival counts use records received on front.' not in page.locator('main').inner_text()
+        assert 'Arrival counts use records received on the control node.' not in page.locator('main').inner_text()
         assert 'Sign-in service troubleshooting' not in page.locator('main').inner_text()
         assert page.locator('.status-kpis + #status-search-control + #current-requests').count() == 1
         assert page.locator('#status-capacity-heading #status-controls').count() == 1

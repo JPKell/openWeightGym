@@ -43,6 +43,8 @@ def sample_data():
 
 def render():
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
+    from weightroom.display import node_label
+    pages.filters['node_label'] = node_label
     static = ROOT / 'weightroom/static'
     return pages.get_template('audio_designs.html').render(
         css='\n'.join((static / name).read_text() for name in

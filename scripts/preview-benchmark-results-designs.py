@@ -138,6 +138,8 @@ def render():
     data = sample_data()
     static = ROOT / 'weightroom/static'
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
+    from weightroom.display import node_label
+    pages.filters['node_label'] = node_label
     pages.filters['timestamp'] = lambda value: datetime.datetime.fromtimestamp(
         value, datetime.timezone(datetime.timedelta(hours=-8))).strftime('%d %b · %H:%M PST')
     colours = {(m['id'], b['id']): heat_colour(result['score'])

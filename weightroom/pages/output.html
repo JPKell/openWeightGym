@@ -11,7 +11,7 @@
 {{ page_header('System logs', actions=actions) }}
 {{ said_box(said, true) }}
 {% if offline %}{% call alert('warning', role='status', class_='py-2', attrs={'id': 'journal-offline'}) %}
-Node {{ selected_node }} is unavailable.{% if fetched %} Showing logs last fetched {{ fetched|timestamp }}. These lines may be out of date.{% else %} No logs have been fetched for these filters yet.{% endif %}
+Node {{ (selected_node)|node_label }} is unavailable.{% if fetched %} Showing logs last fetched {{ fetched|timestamp }}. These lines may be out of date.{% else %} No logs have been fetched for these filters yet.{% endif %}
 {% endcall %}{% endif %}
 <form id="journal-filters" method="get" action="/output" class="sl-filter-fields mb-3" {{ swaps('page-content', true) }} data-auto-submit>
 <div>{{ node_filter('output', nodes, selected_node, allow_all=false) }}</div>
