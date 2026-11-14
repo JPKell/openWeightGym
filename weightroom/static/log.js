@@ -2,8 +2,11 @@
 (() => {
   'use strict';
   let saved = null;
+  let holdTableUntil = 0;
   const root = () => document.querySelector('[data-log-workspace]');
   function ready() {
+    const choice = document.getElementById('log-view-choice');
+    if (choice && root()) choice.value = root().dataset.layout;
     const panel = document.querySelector('[data-log-page] [data-start-collapsed]');
     if (!panel) return;
     panel.hidden = true; delete panel.dataset.startCollapsed;
@@ -14,6 +17,17 @@
     try { await navigator.clipboard.writeText(text); tell('Copied.'); }
     catch { tell('Clipboard unavailable. Select and copy the JSON or browser address.'); }
   }
+  function openRow(event) {
+    if (event.target.closest('a,button,input,select,textarea,summary')) return;
+    const row = event.target.closest('[data-log-table-row]');
+    if (!row) return;
+    event.preventDefault(); row.querySelector('[data-log-table-open]')?.click();
+  }
+  document.addEventListener('dblclick', openRow);
+  document.addEventListener('keydown', event => { if (event.key === 'Enter') openRow(event); });
+  document.addEventListener('pointerdown', event => {
+    if (event.target.closest('[data-log-table-row]')) holdTableUntil = performance.now() + 600;
+  });
   document.addEventListener('click', event => {
     const toggle = event.target.closest('[data-log-more]');
     if (toggle) {
@@ -32,18 +46,26 @@
   document.addEventListener('htmx:beforeRequest', event => {
     const current = root();
     if (!current || event.detail.target?.id !== 'log') return;
+    if (event.detail.elt === current && performance.now() < holdTableUntil) { event.preventDefault(); return; }
     saved = {selected:current.dataset.selected,
+      tableTop:document.getElementById('log-table-scroll')?.scrollTop || 0,
+      tableLeft:document.getElementById('log-table-scroll')?.scrollLeft || 0,
       list:document.getElementById('trace-choices')?.scrollTop || 0,
       inspector:document.querySelector('.al-inspector-slot')?.scrollTop || 0,
       raw:document.getElementById('log-raw')?.open || false,
       focus:event.detail.elt?.matches('[data-log-select]') ?
         event.detail.elt.closest('#trace-choices') ? 'trace-timeline' : 'inspector' : null};
   });
+  document.addEventListener('htmx:beforeSwap', event => {
+    if (event.detail.requestConfig?.elt === root() && performance.now() < holdTableUntil) event.detail.shouldSwap = false;
+  });
   document.addEventListener('htmx:afterSwap', event => {
     ready();
     const current = root();
     if (!current || event.detail.target?.id !== 'log' || !saved) return;
     const choices = document.getElementById('trace-choices'), inspector = document.querySelector('.al-inspector-slot');
+    const table = document.getElementById('log-table-scroll');
+    if (table) { table.scrollTop = saved.tableTop; table.scrollLeft = saved.tableLeft; }
     if (choices) choices.scrollTop = saved.list;
     if (inspector && saved.selected === current.dataset.selected) inspector.scrollTop = saved.inspector;
     if (document.getElementById('log-raw')) document.getElementById('log-raw').open = saved.raw;

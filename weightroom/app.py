@@ -3955,7 +3955,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         wanted = {key: asked[key].strip() for key in log_views.FILTERS if asked.get(key, '').strip()}
         limit, _ = controls(asked, 100)
         going_back = {'before': asked['before']} if asked.get('before') else {}
-        params = {**wanted, **going_back, 'timezone': settings.timezone or 'UTC', 'limit': limit}
+        params = {**wanted, **going_back, 'timezone': settings.timezone or 'UTC', 'limit': limit, 'order': 'time'}
+        layout = 'table' if asked.get('view') == 'table' else 'traces'
         period = asked.get('period', '') if asked.get('period') in ('15', '60', '1440') else ''
         if period and not wanted.get('start') and not wanted.get('end'):
             params['start'] = datetime.fromtimestamp(time.time() - int(period) * 60).astimezone().isoformat()
@@ -3966,6 +3967,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return found
         events = found['events'][::-1]
         query = {**wanted, 'limit': limit, **going_back}
+        if layout == 'table':
+            query['view'] = layout
         if period:
             query['period'] = period
         selected = next((event for event in events if str(event['id']) == asked.get('selected')), None)
@@ -3988,7 +3991,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response(content, media_type=media,
                             headers={'Content-Disposition': f'attachment; filename="{filename}"', 'Cache-Control': 'no-store'})
         context, context_error = None, False
-        if selected and selected.get('trace'):
+        if layout == 'traces' and selected and selected.get('trace'):
             trace = await fetch(request, person, '/loadcoach/events',
                                 params={'trace': selected['trace'], 'limit': 1000})
             if isinstance(trace, Response):
@@ -4008,6 +4011,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         elif asked.get('part') == 'page' and asked.get('complete') != '1':
             template = 'log_content.html'
         response = page(request, template, person, events=events, log_view=view, wanted=wanted,
+                        log_layout=layout, log_search_fields=log_views.SEARCH_FIELDS,
+                        log_reset='/log?view=table' if layout == 'table' else '/log',
+                        log_view_links={value: '/log?' + urlencode({**selection_query, 'view': value}) for value in ('table', 'traces')},
                         log_period=period, log_advanced=any(wanted.get(key) for key in ('kind', 'what', 'user', 'group', 'trace', 'start', 'end')),
                         said=asked.get('said', ''), failed=asked.get('failed') == '1',
                         narrowed=urlencode({**wanted, 'limit': limit}), going_back=bool(going_back),

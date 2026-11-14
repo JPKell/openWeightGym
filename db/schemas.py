@@ -284,6 +284,10 @@ LOG = (
     Migration(12, "former node names", """
         CREATE TABLE node_aliases (old TEXT PRIMARY KEY, new TEXT NOT NULL, at DOUBLE PRECISION NOT NULL);
     """),
+    Migration(13, "chronological event browsing", """
+        CREATE INDEX IF NOT EXISTS events_at_id ON events(at, id);
+        CREATE INDEX IF NOT EXISTS events_user_at_id ON events("user", at, id);
+    """),
 )
 
 

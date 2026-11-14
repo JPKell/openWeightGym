@@ -217,6 +217,8 @@ class Log:
         members: list[str] | None = None,
         node: str | None = None,
         q: str | None = None,
+        q_field: str = '',
+        order_by: str = 'id',
     ) -> list[dict]:
         """Entries in the order they happened.
 
@@ -240,7 +242,7 @@ class Log:
             where.append(f"user IN ({','.join('?' for _ in members)})" if members else "0")
             values.extend(members)
         if before:
-            where.append("id < ?")
+            where.append('(at, id) < (SELECT at, id FROM events WHERE id = ?)' if order_by == 'time' else 'id < ?')
             values.append(before)
         for column, wanted in (("user", user), ("kind", kind), ("trace", trace), ("what", what), ("model", model)):
             if wanted is not None:
@@ -248,14 +250,17 @@ class Log:
                 values.append(wanted)
         order = "ASC" if after else "DESC"
         if q:
+            from loadcoach.event_filters import expressions
+
             query = '%' + q.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
-            fields = ('CAST(id AS TEXT)', 'CAST(source AS TEXT)', 'kind', 'what', 'user', 'caller', 'model', 'trace', 'detail')
+            fields = expressions(q_field, self.json_value, self.db.engine)
             where.append('(' + ' OR '.join(f"LOWER({field}) LIKE LOWER(?) ESCAPE '!'" for field in fields) + ')')
             values.extend([query] * len(fields))
+        ordering = f'at {order}, id {order}' if order_by == 'time' else f'id {order}'
         rows = self.db.execute(
-            f"SELECT {COLUMNS}, source, machine FROM events WHERE {' AND '.join(where)} ORDER BY id {order} LIMIT ?", (*values, limit)
+            f"SELECT {COLUMNS}, source, machine FROM events WHERE {' AND '.join(where)} ORDER BY {ordering} LIMIT ?", (*values, limit)
         ).fetchall()
-        return [self.entry(row, with_text) for row in sorted(rows)]
+        return [self.entry(row, with_text) for row in sorted(rows, key=lambda row: (row[1], row[0]) if order_by == 'time' else (row[0],))]
 
     def choices(self, owner: str | None = None) -> dict:
         """Filter choices expose only facts in the caller's event scope."""
