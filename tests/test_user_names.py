@@ -1,6 +1,7 @@
 """Account names: login spelling, preserved ownership and atomic renames."""
 
 import asyncio
+import json
 
 import pytest
 
@@ -19,12 +20,12 @@ def test_login_case_shares_lockout_and_authenticator_replay_state(monkeypatch):
     for name in ("PAT", "pat", "Pat", "pAt", "paT"):
         with pytest.raises(SignInRefused) as refused:
             asyncio.run(users.sign_in(name, "wrong"))
-        assert refused.value.status == 401
+        assert refused.value.status == (429 if name == "paT" else 401)
     with pytest.raises(SignInRefused) as refused:
         asyncio.run(users.sign_in("pAT", "correct horse"))
     assert refused.value.status == 429
 
-    users.wrong.clear()
+    users.failures.unlock("pat", "unknown")
     users.groups.put("plain", {"second_step": True})
     monkeypatch.setattr("loadcoach.users.time.time", lambda: 1800000000)
     with pytest.raises(SignInRefused) as setup:
@@ -52,7 +53,9 @@ def test_rename_preserves_credentials_preferences_and_owned_work(tmp_path):
     chats.answering(talk, 0, identity, "small")
     file = batches.put_file("pat", "input.jsonl", "batch", b"payload")
     batch = batches.start("pat", "/v1/chat/completions", file["id"], [])
-    users.wrong["pat"], users.used["pat"] = (3, 0), 42
+    for _ in range(3):
+        users.failures.failed("pat", "rename-test")
+    users.used["pat"] = 42
 
     users.rename("pat", "alex")
     users.rename("app", "client")
@@ -62,7 +65,8 @@ def test_rename_preserves_credentials_preferences_and_owned_work(tmp_path):
     assert users.password_hash("alex") == password
     assert users.own("alex") == {"priority": "low"}
     assert users.choices("alex")["show_telemetry"] is False
-    assert users.wrong["alex"] == (3, 0) and users.used["alex"] == 42
+    kept = users.db.execute("SELECT failures FROM sign_in_failures WHERE account=? AND address=?", ("alex", "rename-test")).fetchone()
+    assert len(json.loads(kept[0])) == 3 and users.used["alex"] == 42
     assert users.identity("alex") == identity
     assert chats.get(talk, identity)["title"] == "Keep this conversation"
     assert chats.get(talk, "pat") is None

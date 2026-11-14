@@ -6,7 +6,7 @@
 {% set account_hint = 'Review your sign-ins here. Application credentials have their own API keys page.' %}
 {% block account_body %}
 {% call card('Your account') %}<dl class="account-identity-facts mb-0"><div><dt>Name</dt><dd>{{ me.name }}</dd></div><div><dt>Group</dt><dd>{{ me.group }}</dd></div><div><dt>This sign-in ends</dt><dd>{{ me.session_ends|timestamp if me.session_ends else 'it does not' }}</dd></div><div><dt>Signed in now</dt><dd>{{ me.sessions }} place{{ '' if me.sessions == 1 else 's' }}</dd></div></dl>{% endcall %}
-{% call card('Password') %}{{ password_form() }}{% endcall %}
+{% call card('Password') %}{{ password_form(me.password_min_length|default(8)) }}{% endcall %}
 {% call card('Sign-in security') %}<div class="d-flex justify-content-between gap-2 align-items-center"><div><strong>Authenticator code</strong><p class="form-hint mb-0">{{ 'Use your authenticator app when signing in.' if me.second_step else 'Your group controls whether an authenticator code is required.' }}</p></div><span class="badge bg-{{ 'green' if me.second_step else 'secondary' }}-lt">{{ 'Enabled' if me.second_step else 'Not set up' }}</span></div><p class="form-hint mt-2 mb-0">Contact your administrator if you lose access to your authenticator.</p>{% endcall %}
 {% set session_actions %}{% if sessions|rejectattr('current')|list %}<form method="post" action="/account/sessions/end-others"><button class="btn btn-outline-danger btn-sm" {{ confirm_two('End every other sign-in?') }}>Sign out other devices…</button></form>{% endif %}{% endset %}
 {% call card('Your sign-ins', actions=session_actions) %}

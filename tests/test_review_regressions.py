@@ -77,7 +77,7 @@ def test_overlapping_bad_password_checks_preserve_lockout(monkeypatch):
 
         monkeypatch.setattr('loadcoach.users.asyncio.to_thread', delayed_hash)
         results = await asyncio.gather(*(users.sign_in('pat', 'wrong') for _ in range(8)), return_exceptions=True)
-        assert [result.status for result in results].count(429) == 3
+        assert [result.status for result in results].count(429) == 4
         with pytest.raises(SignInRefused) as refused:
             await users.sign_in('pat', 'correct horse')
         assert refused.value.status == 429

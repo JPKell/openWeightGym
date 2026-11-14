@@ -215,6 +215,17 @@ def _disks(value):
         raise ValueError('disks must contain at most 32 absolute paths.')
 
 
+def _proxy_networks(value):
+    from ipaddress import ip_network
+    if len(value) > 128 or any(not isinstance(item, str) for item in value):
+        raise ValueError('trusted_proxies accepts at most 128 IP addresses or CIDR networks.')
+    try:
+        for item in value:
+            ip_network(item, strict=False)
+    except ValueError:
+        raise ValueError('trusted_proxies must contain IP addresses or CIDR networks.') from None
+
+
 # Each service's entries are explicit: adding a setting here is the only way to
 # grant site editability. No file supplied by an operator changes this catalogue.
 CATALOG: dict[tuple[str, str], Setting] = {}
@@ -234,6 +245,12 @@ def get(program, name):
 
 def entries(program=None):
     return tuple(value for value in CATALOG.values() if program is None or value.program == program)
+
+
+def default_for(program, name):
+    """A fresh catalogue default for service constructors and point-of-use readers."""
+    from copy import deepcopy
+    return deepcopy(get(program, name).default)
 
 
 def validate(program, name, value, *, context=None):
@@ -518,3 +535,17 @@ _add('voice', 'synthesis.workers', 'int', tier=RESTART, page='voice', section='S
 
 _add('voice-gateway', 'hermes.toolsets', 'list', tier=NOW, scope='front', page='voice', section='Hermes', label='Hermes toolsets', rule=_hermes_tools, default=['search'], help='Applies to new calls; active calls keep their tool choices.')
 _add('voice-gateway', 'hermes.search_url', 'text', tier=NOW, scope='front', page='voice', section='Hermes', label='Hermes search URL', control='plain-text', rule=_http_url, default='', help='HTTP or HTTPS search service. Applies to new calls.')
+
+for name, kind, value, minimum, maximum, label, unit, help_text in (
+    ('sign_in_max_failures','int',5,1,100,'Sign-in failures before lockout','', 'Failures per account and client address. The shared address limit is four times this value. Applies immediately.'),
+    ('sign_in_window_minutes','int',15,1,1440,'Sign-in failure window','min', 'Only failures within this rolling window count toward a lock. Applies immediately.'),
+    ('sign_in_lockout_minutes','int',30,1,10080,'Sign-in lockout duration','min', 'Locked attempts are refused before password hashing. Applies to new lockouts immediately.'),
+    ('password_min_length','int',8,8,128,'Minimum password length','characters', 'Applies to new or changed passwords; existing passwords keep working.'),
+    ('api_key_max_days','int',0,0,36500,'Maximum API key lifetime','days', 'Zero permits keys that never expire. A positive maximum applies only to newly created keys.'),
+    ('session_idle_hours','float',0,0,8760,'Idle session expiry','h', 'Zero disables idle expiry. API keys are unaffected. Active sign-ins record their last request.'),
+):
+    _add('turnstile',name,kind,tier=NOW,scope='front',page='security',section='Security and sign-in',
+         default=value,min=minimum,max=maximum,label=label,unit=unit,control='number',help=help_text)
+_add('weightroom','trusted_proxies','list',tier=FILE,scope='front',page='security',section='Connection security',
+     label='Trusted proxies',default=[],rule=_proxy_networks,
+     help='Set trusted proxy IP addresses or CIDR networks in settings/weightroom.toml. Forwarded client addresses are ignored unless the socket peer is trusted; only the last untrusted hop is used.')

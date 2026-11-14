@@ -5,7 +5,7 @@ is in groups.py. Users live in the configured accounts store: a user is a name, 
 switch, one or more API keys, and optionally a password. Only hashes of keys and passwords are
 stored. Groups share that store; the common database layer supports SQLite and PostgreSQL.
 
-The users are kept on the front machine, where turnstile checks every key (turnstile/accounts.py).
+The users are kept on the control node, where turnstile checks every key (turnstile/accounts.py).
 A person signs in with a name and a password, and gets a session key: an ordinary API key that
 ends after some hours. weightroom shows the form and passes on what was typed, to turnstile, which
 checks it. Compute keeps no users: it is told who is asking in a signed statement (statement.py).
@@ -21,6 +21,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import secrets
 import struct
 import time
@@ -48,6 +49,7 @@ class User:
     via: str | None = None  # the app this session was made through, if it was. It can do no more than that app
     identity: str | None = None  # the account's id, which stays the same when it is renamed
     key_identity: str | None = None  # opaque attribution id; never the key or its stored verifier
+    session: bool = False  # an expiring API key is distinct from a browser/app sign-in
 
     def can(self, ability: str) -> bool:
         """Return whether the account's effective group grants this ability."""
@@ -78,7 +80,7 @@ def hash_password(password: str) -> str:
 
 
 def check_password(stored: str, password: str) -> bool:
-    """True if `password` matches a hash made by hash_password. For the front machine to use."""
+    """True if `password` matches a hash made by hash_password. For the control node to use."""
     try:
         scheme, log_n, r, p, salt, digest = stored.split("$")
         again = hashlib.scrypt(
@@ -92,7 +94,9 @@ def check_password(stored: str, password: str) -> bool:
 # What a wrong name is checked against, so that it takes as long to refuse as a wrong password does.
 NOBODY = hash_password(secrets.token_urlsafe(16))
 
-TRIES, LOCKED_FOR = 5, 300  # after this many wrong tries in a row, a name is locked for this many seconds
+from loadcoach.setting_catalog import default_for
+TRIES = default_for('turnstile', 'sign_in_max_failures')
+LOCKED_FOR = default_for('turnstile', 'sign_in_lockout_minutes') * 60
 
 
 def code_at(secret: str, step: int) -> str:
@@ -120,10 +124,11 @@ def step_of(secret: str, code: str, now: float) -> int | None:
 class SignInRefused(Exception):
     """A sign-in that did not succeed. `code` is a short name for why, for a program to act on."""
 
-    def __init__(self, status: int, code: str, message: str, secret: str | None = None) -> None:
+    def __init__(self, status: int, code: str, message: str, secret: str | None = None, retry_after: int = 0) -> None:
         """Initialize the failure message and its status metadata."""
         super().__init__(message)
         self.status, self.code, self.secret = status, code, secret
+        self.retry_after = retry_after
 
 
 def keep_private(source: DatabaseSource) -> None:
@@ -151,8 +156,20 @@ class Users:
             self.db.execute("UPDATE users SET identity = ? WHERE name = ?", (secrets.token_hex(16), name))
         self.db.commit()
         self.groups = Groups(self.db, groups)
-        self.wrong: dict[str, tuple[int, float]] = {}  # name -> (wrong tries in a row, locked until)
         self.used: dict[str, int] = {}  # name -> the step of the last code accepted, so none works twice
+        self.policy_getter = None
+        from loadcoach.sign_in import FailureCounter
+        self.failures = FailureCounter(self.db, self.security_setting)
+
+    def security_setting(self, name):
+        """Read the current policy at use; standalone account stores use catalogue defaults."""
+        from loadcoach.setting_catalog import default_for
+        return self.policy_getter(name) if self.policy_getter else default_for('turnstile', name)
+
+    def check_password_length(self, password):
+        minimum = self.security_setting('password_min_length')
+        if not isinstance(password, str) or len(password) < minimum:
+            raise ValueError(f'New passwords must contain at least {minimum} characters.')
 
     def any(self) -> bool:
         """Return whether the accounts store contains at least one user."""
@@ -181,20 +198,39 @@ class Users:
     def by_key(self, key: str) -> User | None:
         """The enabled user this API key belongs to, if any. A session key that has ended belongs to nobody."""
         row = self.db.execute(
-            "SELECT name, grp, own, expires, via FROM users JOIN keys ON user = name"
+            "SELECT name, grp, own, expires, via, kind FROM users JOIN keys ON user = name"
             " WHERE hash = ? AND enabled <> 0 AND (expires IS NULL OR expires > ?)",
             (hash_key(key), time.time()),
         ).fetchone()
-        if row and (user := self.user(*row)):
+        if row and (user := self.user(*row[:5])):
             from dataclasses import replace
-            if user.until:
-                last = self.db.execute('SELECT last_seen FROM session_details WHERE key_hash=?', (hash_key(key),)).fetchone()
-                if last and last[0] < time.time() - 60:
-                    with self.db:
-                        self.db.execute('UPDATE session_details SET last_seen=? WHERE key_hash=? AND last_seen<?',
-                                        (time.time(), hash_key(key), time.time() - 60))
-            return replace(user, key_identity=key_identity(hash_key(key)))
+            if not self.session_active(hash_key(key), row[5]):
+                return None
+            return replace(user, key_identity=key_identity(hash_key(key)), session=row[5] == 'session')
         return None
+
+    def session_active(self, verifier, kind):
+        """Enforce idle expiry for direct authentication and signed tool delegations alike."""
+        if kind != 'session':
+            return True
+        last = self.db.execute('SELECT last_seen FROM session_details WHERE key_hash=?', (verifier,)).fetchone()
+        now, hours = time.time(), self.security_setting('session_idle_hours')
+        if not last:
+            # Legacy sign-ins have no activity record. Begin tracking at first use.
+            with self.db:
+                self.db.execute('INSERT INTO session_details(key_hash,agent,peer,last_seen) VALUES(?,?,?,?) '
+                                'ON CONFLICT(key_hash) DO NOTHING', (verifier,'','',now))
+            return True
+        if hours and last and last[0] <= now-hours*3600:
+            with self.db:
+                self.db.execute("UPDATE keys SET expires=? WHERE hash=? AND kind='session'", (now,verifier))
+            return False
+        interval = min(60,hours*1800) if hours else 60
+        if last and last[0] < now-interval:
+            with self.db:
+                self.db.execute('UPDATE session_details SET last_seen=? WHERE key_hash=? AND last_seen<?',
+                                (now, verifier, now-interval))
+        return True
 
     def by_identity(self, identity: str) -> User | None:
         """The enabled user whose account has this id, if any. The id stays the same when the account is renamed."""
@@ -326,27 +362,42 @@ class Users:
             self.db.execute("UPDATE users SET name = ? WHERE name = ?", (new, name))
             self.db.execute("UPDATE keys SET user = ? WHERE user = ?", (new, name))
             self.db.execute("UPDATE keys SET via = ? WHERE via = ?", (new, name))
+            self.failures.renamed(name, new)
             tables = set(self.db.database.tables(self.db))
             for table in ("conversations", "answering", "files", "batches"):
                 if table in tables:
                     self.db.execute(f"UPDATE {table} SET user = ? WHERE user = ?", (new, name))
-        for remembered in (self.wrong, self.used):
-            if name in remembered:
-                remembered[new] = remembered.pop(name)
+        if name in self.used:
+            self.used[new] = self.used.pop(name)
 
-    def new_key(self, name: str, label: str = "", hours: float | None = None, via: str | None = None) -> str:
+    def new_key(self, name: str, label: str = "", hours: float | None = None, via: str | None = None, *, days: int | None = None) -> str:
         """Make a key for a user and return it. This is the only time it can be seen.
 
         With `hours` it is a session key, and stops working that long from now. `via` names the
         app it was made through, which it can then do no more than.
         """
+        kind = 'session' if hours is not None else 'api'
+        expires = None
+        if kind == 'session':
+            if isinstance(hours, bool) or not isinstance(hours, int | float) or not math.isfinite(hours):
+                raise ValueError('Session hours must be finite.')
+            expires = time.time()+hours*3600
+        else:
+            maximum = self.security_setting('api_key_max_days')
+            days = maximum if days is None else days
+            if isinstance(days, bool) or not isinstance(days, int) or not 0 <= days <= 36500:
+                raise ValueError('Key lifetime must be whole days from 0 to 36500; 0 means never.')
+            if maximum and (not days or days > maximum):
+                raise ValueError(f'New API keys must expire within {maximum} days.')
+            if days:
+                expires = time.time()+days*86400
         key = "lc_" + secrets.token_urlsafe(32)
         with self.db:
             self.db.execute(
-                "INSERT INTO keys (hash, user, label, created, expires, via) VALUES (?, ?, ?, ?, ?, ?)",
-                (hash_key(key), name, label, datetime.now().isoformat(timespec="seconds"), hours and time.time() + hours * 3600, via),
+                "INSERT INTO keys (hash, user, label, created, expires, via, kind) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (hash_key(key), name, label, datetime.now().isoformat(timespec="seconds"), expires, via, kind),
             )
-            if hours:
+            if kind == 'session':
                 self.db.execute('INSERT INTO session_details(key_hash,agent,peer,last_seen) VALUES(?,?,?,?)',
                                 (hash_key(key), '', '', time.time()))
         return key
@@ -361,7 +412,7 @@ class Users:
         """Only this owner's unexpired sign-ins, with opaque revocation identifiers."""
         rows = self.db.execute('SELECT k.hash,k.created,k.expires,k.via,d.agent,d.peer,d.last_seen '
                                'FROM keys k LEFT JOIN session_details d ON d.key_hash=k.hash '
-                               'WHERE k.user=? AND k.expires>? ORDER BY k.created DESC', (name, time.time()))
+                               "WHERE k.user=? AND k.kind='session' AND k.expires>? ORDER BY k.created DESC", (name, time.time()))
         return [dict(id=key_identity(verifier), created=created, expires=expires, via=via,
                      agent=agent or '', peer=peer or '', last_seen=seen,
                      current=secrets.compare_digest(verifier, hash_key(current)))
@@ -372,14 +423,14 @@ class Users:
         for session in self.sessions(name, current):
             if session['id'] == identifier and not session['current']:
                 with self.db:
-                    for (verifier,) in self.db.execute('SELECT hash FROM keys WHERE user=? AND expires>?',
+                    for (verifier,) in self.db.execute("SELECT hash FROM keys WHERE user=? AND kind='session' AND expires>?",
                                                       (name, time.time())).fetchall():
                         if secrets.compare_digest(key_identity(verifier), identifier):
-                            return self.db.execute('DELETE FROM keys WHERE hash=? AND user=? AND expires IS NOT NULL',
+                            return self.db.execute("DELETE FROM keys WHERE hash=? AND user=? AND kind='session'",
                                                    (verifier, name)).rowcount > 0
         return False
 
-    async def sign_in(self, name: str, password: str, code: str | None = None, new_password: str | None = None, via: str | None = None) -> str:
+    async def sign_in(self, name: str, password: str, code: str | None = None, new_password: str | None = None, via: str | None = None, *, address: str = 'unknown') -> str:
         """Check who someone is and return a session key for them. Raises SignInRefused if it does not hold.
 
         `via` names the app that is signing them in, when one is. The session is then limited to
@@ -390,21 +441,20 @@ class Users:
         """
         name = name.lower()  # one identity for lookup, failed attempts and authenticator replay checks
         now = time.time()
-        if now < self.wrong.get(name, (0, 0))[1]:
-            left = int(self.wrong[name][1] - now) // 60 + 1
-            raise SignInRefused(429, "locked", f"Too many wrong tries. Try again in {left} minutes.")
+        def throttled(seconds):
+            return SignInRefused(429, 'throttled', 'Too many sign-in failures from this address. Try again later.', retry_after=seconds)
+        if remaining := self.failures.remaining(name,address,now):
+            raise throttled(remaining)
 
         def wrong(status: int, code: str, message: str) -> SignInRefused:
             """Count one wrong try against this name, and lock it for a while after too many."""
-            failed_at = time.time()
-            if failed_at < self.wrong.get(name, (0, 0))[1]:
-                return SignInRefused(429, "locked", "Too many wrong tries. Try again in a few minutes.")
-            tries = self.wrong.get(name, (0, 0))[0] + 1
-            self.wrong[name] = (0, failed_at + LOCKED_FOR) if tries >= TRIES else (tries, 0)
+            if remaining := self.failures.failed(name,address):
+                return throttled(remaining)
             return SignInRefused(status, code, message)
 
         account_query = "SELECT grp, password, must_change, totp, identity FROM users WHERE name = ? AND enabled <> 0"
-        row = self.db.execute(account_query, (name,)).fetchone()
+        with self.db:
+            row = self.db.execute(account_query, (name,)).fetchone()
         stored = row[1] if row and row[1] else None
         # The slow hash runs on another thread, so that everyone else's requests are not held up by it.
         if not await asyncio.to_thread(check_password, stored or NOBODY, password) or not stored:
@@ -412,10 +462,12 @@ class Users:
         # Hashing yields to account edits: a disabled, replaced or changed account must
         # authenticate again using its current credentials and second-step settings.
         now = time.time()
-        if self.db.execute(account_query, (name,)).fetchone() != row:
+        with self.db:
+            current_row = self.db.execute(account_query, (name,)).fetchone()
+        if current_row != row:
             raise wrong(401, "wrong", "Wrong name or password.")
-        if now < self.wrong.get(name, (0, 0))[1]:
-            raise SignInRefused(429, "locked", "Too many wrong tries. Try again in a few minutes.")
+        if remaining := self.failures.remaining(name,address,now):
+            raise throttled(remaining)
         group_name, _, must_change, secret, _ = row
         group = self.groups.get(group_name, NOTHING)
 
@@ -438,31 +490,33 @@ class Users:
                 raise wrong(403, "code_wrong", "That code is not right. Wait for the next one and try again.")
 
         if must_change:  # the password is one somebody else chose, so it only serves to choose their own
-            if not isinstance(new_password, str) or len(new_password) < 8 or new_password == password:
-                raise SignInRefused(403, "password_change", "Choose a password of your own, at least 8 characters.")
+            minimum = self.security_setting('password_min_length')
+            if not isinstance(new_password, str) or len(new_password) < minimum or new_password == password:
+                raise SignInRefused(403, "password_change", f"Choose a password of your own, at least {minimum} characters.")
             self.change(name, password=new_password)
 
         if group.second_step:
             # Only now is the code used up, so that being asked to choose a password does not cost a code.
             self.used[name] = step
-        self.wrong.pop(name, None)
+        self.failures.succeeded(name,address)
         return self.new_key(name, f"session via {via}" if via else "session", group.session_hours, via)
 
     def end_sessions(self, name: str, but: str | None = None) -> None:
         """End every sign-in of this user, except the session key `but` if one is given."""
         with self.db:
             self.db.execute(
-                "DELETE FROM keys WHERE user = ? AND expires IS NOT NULL AND hash != ?", (name, hash_key(but) if but else "")
+                "DELETE FROM keys WHERE user = ? AND kind='session' AND hash != ?", (name, hash_key(but) if but else "")
             )
 
     def sign_out(self, key: str) -> bool:
         """End the sign-in this session key belongs to. False if it is not a session key."""
         with self.db:
-            return self.db.execute("DELETE FROM keys WHERE hash = ? AND expires IS NOT NULL", (hash_key(key),)).rowcount > 0
+            return self.db.execute("DELETE FROM keys WHERE hash = ? AND kind='session'", (hash_key(key),)).rowcount > 0
 
     def temporary_password(self, name: str) -> str:
         """Give a user a password that only serves to choose their own, and return it. Their sign-ins end."""
-        password = secrets.token_urlsafe(9)
+        import math
+        password = secrets.token_urlsafe(max(9,math.ceil(self.security_setting('password_min_length')*3/4)))
         self.change(name, password=password, must_change=True)
         self.end_sessions(name)
         return password
@@ -470,7 +524,7 @@ class Users:
     def forget_sessions(self) -> None:
         """Remove session keys that have ended. They no longer work either way; this only tidies."""
         with self.db:
-            self.db.execute("DELETE FROM keys WHERE expires IS NOT NULL AND expires <= ?", (time.time(),))
+            self.db.execute("DELETE FROM keys WHERE kind='session' AND expires <= ?", (time.time(),))
 
     def remove_key(self, name: str, key_id: str) -> bool:
         """Remove the key whose hash starts with `key_id`. False if the user has no such key."""
@@ -497,6 +551,8 @@ class Users:
             raise ValueError(f"No group named {group!r}. Groups: {', '.join(self.groups) or 'none defined'}")
         if own is not None:
             check_own(own)
+        if password is not None:
+            self.check_password_length(password)
         with self.db:
             if own is not None:
                 self.db.execute("UPDATE users SET own = ? WHERE name = ?", (json.dumps(own) if own else None, name))
@@ -529,13 +585,14 @@ class Users:
         """Every user with their keys, or just the one named `only`. No hashes, no keys."""
         keys: dict[str, list[dict]] = {}
         sessions: dict[str, int] = {}
-        for user, key_hash, label, created, expires in self.db.execute(
-            "SELECT user, hash, label, created, expires FROM keys WHERE expires IS NULL OR expires > ?", (time.time(),)
+        for user, key_hash, label, created, expires, kind in self.db.execute(
+            "SELECT user, hash, label, created, expires, kind FROM keys WHERE expires IS NULL OR expires > ?", (time.time(),)
         ):
-            if expires:
+            if kind == 'session':
                 sessions[user] = sessions.get(user, 0) + 1  # sign-ins are counted, not listed one by one
             else:
-                keys.setdefault(user, []).append({"id": key_hash[:8], "label": label, "created": created})
+                keys.setdefault(user, []).append({"id": key_hash[:8], "label": label, "created": created,
+                                                 **({'expires':expires} if expires else {})})
         return [
             {
                 "name": name,

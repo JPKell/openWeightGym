@@ -224,6 +224,15 @@ USERS = (
             key_hash TEXT PRIMARY KEY REFERENCES keys(hash) ON DELETE CASCADE,
             agent TEXT NOT NULL, peer TEXT NOT NULL, last_seen DOUBLE PRECISION NOT NULL);
     '''),
+    Migration(8, 'persistent sign-in locks and expiring API key identities', '''
+        ALTER TABLE keys ADD COLUMN kind TEXT NOT NULL DEFAULT 'api';
+        UPDATE keys SET kind='session' WHERE expires IS NOT NULL;
+        CREATE TABLE sign_in_failures (
+            account TEXT NOT NULL, address TEXT NOT NULL, failures TEXT NOT NULL,
+            locked_until DOUBLE PRECISION NOT NULL, updated DOUBLE PRECISION NOT NULL,
+            PRIMARY KEY(account,address));
+        CREATE INDEX sign_in_failures_updated ON sign_in_failures(updated);
+    '''),
 )
 
 

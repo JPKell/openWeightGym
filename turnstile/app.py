@@ -58,7 +58,7 @@ from loadcoach.config import CLI, read_settings, model_places
 from loadcoach.groups import read_group
 from loadcoach.log import FRONT, Log, machine_slot, public_number, origin_number
 from loadcoach.files import PIECE, SPARE, sha256_of
-from loadcoach.setting_catalog import entries as catalog_entries, validate_values
+from loadcoach.setting_catalog import entries as catalog_entries, validate_values, default_for
 from loadcoach.settings import FRONT_PROGRAMS, comments, copy_of, laid_over, said
 from loadcoach.setting_names import current_names
 from loadcoach.users import ANONYMOUS, User, Users
@@ -114,6 +114,12 @@ class Settings:
     response_max_tool_seconds: float = 900  # elapsed seconds allowed per tool-enabled model turn
     response_keep_days: float = 30  # days stored Responses are retained; adjustable in General settings
     keep_days: float = 90  # days the event log is kept here. 0 keeps everything
+    sign_in_max_failures: int = default_for('turnstile','sign_in_max_failures')
+    sign_in_window_minutes: int = default_for('turnstile','sign_in_window_minutes')
+    sign_in_lockout_minutes: int = default_for('turnstile','sign_in_lockout_minutes')
+    password_min_length: int = default_for('turnstile','password_min_length')
+    api_key_max_days: int = default_for('turnstile','api_key_max_days')
+    session_idle_hours: float = default_for('turnstile','session_idle_hours')
     voice_port: int = 8445
     machine_key_file: str = ""  # the key control node shares with compute, which statements are signed with
     plugins_dir: str = ""  # plugin folders on the control node; empty leaves the plugin path out
@@ -354,10 +360,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         current = users.by_identity(claimed.identity) if claimed.identity else None
         if not current:
             return None
-        for verifier, expires, via in users.db.execute('SELECT hash,expires,via FROM keys WHERE user=?', (current.name,)).fetchall():
-            if key_identity(verifier) == claimed.key_identity and (expires is None or expires > time.time()):
+        for verifier, expires, via, kind in users.db.execute('SELECT hash,expires,via,kind FROM keys WHERE user=?', (current.name,)).fetchall():
+            if key_identity(verifier) == claimed.key_identity and (expires is None or expires > time.time()) and users.session_active(verifier,kind):
                 fresh = users.user(current.name, current.group_name, json.dumps(users.own(current.name)), expires, via)
-                return replace(fresh, key_identity=claimed.key_identity) if fresh else None
+                return replace(fresh, key_identity=claimed.key_identity, session=kind == 'session') if fresh else None
         return None
 
     def extraction_delegate(request, body):
@@ -1046,6 +1052,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                    programs=FRONT_PROGRAMS | {'toollocker'},
                                    voice_nodes=lambda: voice_order(), defaults={'turnstile': configured_defaults})
     live = console_settings.live
+    users.policy_getter = lambda name: live('turnstile',name,getattr(settings,name))
 
     def node_policy(name):
         return nodes.wake_policy(name, settings.machines.get(name, {}), console_settings.changes)

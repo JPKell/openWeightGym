@@ -34,6 +34,19 @@ class ConsoleSettings:
                         setting['value'] = self.live('turnstile', setting['name'], setting['value'])
         return programs
 
+    def security_status(self):
+        """Summarize recent sign-in transport evidence without disclosing peer addresses."""
+        from ipaddress import ip_address
+        records = self.log.read(limit=100,kind='user',what='signed-in') if hasattr(self.log,'read') else []
+        def obscured(entry):
+            if entry.get('proxy_seen'):
+                return True
+            try:
+                return ip_address(entry.get('at_front_from') or entry.get('caller') or '').is_loopback
+            except ValueError:
+                return False
+        return {'proxy_warning':bool(records) and all(obscured(entry) for entry in records)}
+
     async def handle(self, request, user):
         """Read or change the console's program settings through the shared settings contract."""
         path = request.url.path
@@ -55,7 +68,8 @@ class ConsoleSettings:
                 for setting in program['settings']:
                     if program['program'] == 'turnstile' and setting['name'] == 'preferred_voice_node':
                         setting.update(select=True, editor='text', choices=[('', 'Automatic'), *((name, name) for name in self.voice_nodes())])
-            return JSONResponse({'programs': sorted(programs, key=lambda one: one['program']), 'compute_unavailable': False})
+            return JSONResponse({'programs': sorted(programs, key=lambda one: one['program']), 'compute_unavailable': False,
+                                 'security_status':self.security_status()})
         parts = path.split('/')
         if len(parts) not in (4, 5) or parts[1:3] != ['loadcoach', 'settings']:
             return None

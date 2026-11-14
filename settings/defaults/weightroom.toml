@@ -138,6 +138,10 @@ observation_quiet_routes = ["/loadcoach/status", "/v1/models", "/loadcoach/facts
 #                 mirror-users, which are for a program's own key. It also lifts max_sensitivity
 #                 to the highest, unless the group sets one.
 
+# Trusted reverse proxy socket peers, as IP addresses or CIDR networks. File only.
+# Empty ignores X-Forwarded-For. Trust only your proxies; the last untrusted hop is the client.
+trusted_proxies = []
+
 # Whoever owns the machine. The first account should be in this group:
 #   weightroom user add NAME superuser
 [groups.superuser]
@@ -240,3 +244,19 @@ component_versions_every = 60
 # Days the control node retains the suite event log, including forwarded entries and local
 # account/role changes. Changes apply immediately to pruning; 0 keeps everything.
 keep_days = 90
+
+# Failures per account and client address before lockout; the address-wide threshold is four times
+# this value. Counts survive restarts. Changes apply immediately to new failures.
+sign_in_max_failures = 5
+# Minutes in the rolling sign-in failure window. Changes apply immediately.
+sign_in_window_minutes = 15
+# Minutes a new sign-in lock lasts. Locked attempts are refused before hashing passwords.
+# Changes apply immediately to new lockouts; existing locks retain their end time.
+sign_in_lockout_minutes = 30
+# Minimum characters for new or changed passwords. Existing passwords remain valid. Live.
+password_min_length = 8
+# Maximum lifetime in days for newly created API keys; 0 permits keys that never expire.
+# Existing API keys retain their expiry. Changes apply immediately.
+api_key_max_days = 0
+# Sign-in idle expiry in hours; 0 disables it. API keys are unaffected. Changes apply live.
+session_idle_hours = 0

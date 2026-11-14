@@ -28,7 +28,7 @@ class Allowances:
             choices.append(dict(scope='user', subject=identity, name=name, owner=identity, group=group))
         for name in self.users.groups:
             choices.append(dict(scope='group', subject=name, name=name, owner='', group=name))
-        for verifier, name, label in self.users.db.execute('SELECT hash,user,label FROM keys WHERE expires IS NULL'):
+        for verifier, name, label in self.users.db.execute("SELECT hash,user,label FROM keys WHERE kind='api'"):
             if name in accounts:
                 identity, group = accounts[name]
                 choices.append(dict(scope='key', subject=key_identity(verifier),

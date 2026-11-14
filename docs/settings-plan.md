@@ -77,6 +77,8 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Security counts failures in rolling windows. A successful sign-in clears its account/address pair, while the shared address counter remains. CLI `unlock NAME` clears pairs; `--address` also clears that address’s shared counter. Legacy sessions start idle tracking at first use; API key lifetime policy affects new keys only.
+
 - Phase 2 final `09fa66b`: clean full suite 3,902 passed, 314 failed, 11 known fixture errors and 61 skipped; all 537 settings/component checks and 39 UI cases pass. The PostgreSQL route regression passes separately (21 component checks). Two additional Chat/benchmark timing assertions pass independently. Normal update/restart and source verification passed on all five checkouts. Live evidence `/home/owgadmin/ai/owg-settings-phase2-live-final.json`: 21 pages, 23 moved controls, five source/default reports, pending/reset and preview/apply/revert/export, with restored values and unchanged service PIDs. Full evidence: `owg-settings-phase2-route-full.xml`, `owg-settings-phase2-route-comparison.json` and `owg-settings-phase2-source-verified.json` in the same directory.
 - OWG update’s version recording must only read saved overrides. Constructing `Changes` there tried to migrate settings before old PostgreSQL services released their read transactions. Read the override table without migration during version recording; service startup remains responsible for settings schema changes. The real updater module command passes against an old schema held by a reader in a disposable PostgreSQL database.
 - Imports are additive: unlisted overrides remain intact, retired rows are ignored, and secrets never enter transfers. Every authority validates all groups before confirmation writes; services revalidate on write. A service failure during a multi-node application stops remaining writes and reports how many settings landed, because there is no distributed transaction across node databases.
@@ -448,7 +450,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 2.4 Machine configuration page (470 catalogue/service/page checks; source/default evidence, retired values, scoped read-only inspection and narrow filters).
 - [x] 2.5 History, revert and validated export/import (511 focused checks; 29 transfer/filter/browser checks, including polling drafts and rejected secret input).
 - [x] 2.6 UI checks, docs and Phase 2 deployed/verified (09fa66b; all 39 UI cases, five checkouts, 21 live pages, 23 controls, restored changes and stable PIDs).
-- [ ] 3.1 Security and sign-in.
+- [x] 3.1 Security and sign-in; 587 focused checks, 87 browser/UI checks and the separate PostgreSQL counter contract pass.
 - [ ] 3.2 Requests, admission, placement, routing and batches.
 - [ ] 3.3 Notifications, personal channels and thresholds.
 - [ ] 3.4 Global limits and per-group overrides.

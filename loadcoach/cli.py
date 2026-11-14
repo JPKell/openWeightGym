@@ -139,10 +139,9 @@ def user_command(users: Users, action: str, arguments: list[str], log: Log | Non
     elif action == "password":
         if password is None:
             password = getpass.getpass(f"New password for {name}: ")
-            if len(password) < 8 or password != getpass.getpass("Again: "):
-                raise ValueError("Not changed: the password must be at least 8 characters, typed the same twice.")
-        elif len(password) < 8:  # given by a script, which has checked it was typed the same twice
-            raise ValueError("Not changed: the password must be at least 8 characters.")
+            users.check_password_length(password)
+            if password != getpass.getpass("Again: "):
+                raise ValueError("Not changed: type the same password twice.")
         users.change(name, password=password)
         users.end_sessions(name)
         note("changed", name=name, password=True)
@@ -661,6 +660,31 @@ def user_list(ctx: typer.Context) -> None:
 def user_add(ctx: typer.Context, name: Name, group: Group) -> None:
     """Add a user, and print their first API key. It is shown only this once."""
     for_user(ctx, "add", name, group)
+
+
+@users_cli.command("locks")
+def user_locks(ctx: typer.Context, name: Annotated[str, typer.Argument(metavar="NAME")] = '') -> None:
+    """List active account/address locks, including shared address locks."""
+    _, users, _ = opened(ctx)
+    if users is None:
+        raise ValueError('Run weightroom user locks on the control node.')
+    rows = [['ACCOUNT', 'ADDRESS', 'LOCKED UNTIL']]
+    for row in users.failures.listing(name):
+        rows.append([row['account'] or '(all accounts)', row['address'], datetime.fromtimestamp(row['until']).astimezone().isoformat(timespec='seconds')])
+    table(rows)
+
+
+@users_cli.command("unlock")
+def user_unlock(ctx: typer.Context, name: Name,
+                address: Annotated[str, typer.Option(help="Also clear the shared spraying counter for this address.")] = '') -> None:
+    """Clear one account's locks; --address also clears that address's shared lock."""
+    _, users, log = opened(ctx)
+    if users is None:
+        raise ValueError('Run weightroom user unlock on the control node.')
+    count = users.failures.unlock(name,address)
+    if log:
+        log.add('sign-in','unlocked','command-line',name=name,client_address=address,count=count)
+    print(f'Cleared {count} sign-in counters for {name}.')
 
 
 @users_cli.command("group")

@@ -6,6 +6,10 @@
 # settings/defaults/weightroom.toml. A value from there may be set here too: it is then this
 # machine's own starting value.
 
+# Trusted reverse proxies for real sign-in client addresses. Keep empty for direct access.
+# Set only your proxy IP addresses/CIDR networks; changes require restarting WeightRoom.
+trusted_proxies = []
+
 # Default mock rates, in USD per million tokens, for usage without a recorded or model rate.
 # They begin at 2 for input and 10 for output and can be changed under System > Settings.
 # mock_input_rate = 2.0

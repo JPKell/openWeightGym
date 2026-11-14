@@ -11,12 +11,13 @@ def notices(users, log, user):
     items = []
     if choices['alert_security']:
         target = log.json_value('detail', 'name')
-        rows = log.db.execute("SELECT id,at,what FROM events WHERE kind='user' AND at>=? "
-                              f"AND COALESCE({target},\"user\")=? AND what IN "
-                              "('signed-in','changed','key-added','key-removed','session-ended','sessions-ended') "
+        rows = log.db.execute("SELECT id,at,what FROM events WHERE at>=? "
+                              f"AND COALESCE({target},\"user\")=? AND ((kind='user' AND what IN "
+                              "('signed-in','changed','key-added','key-removed','session-ended','sessions-ended')) OR (kind='sign-in' AND what='throttled')) "
                               "ORDER BY at DESC,id DESC LIMIT 25", (since, user.name))
         labels = {'signed-in':'New sign-in', 'changed':'Account settings changed', 'key-added':'API key created',
-                  'key-removed':'API key removed', 'session-ended':'Sign-in ended', 'sessions-ended':'Other sign-ins ended'}
+                  'key-removed':'API key removed', 'session-ended':'Sign-in ended', 'sessions-ended':'Other sign-ins ended',
+                  'throttled':'Sign-in attempts throttled'}
         items += [dict(id='security-' + str(number), at=at, title=labels[what], category='Security',
                        href='/account/logs', unread=at > seen) for number, at, what in rows]
     if choices['alert_jobs']:
@@ -28,7 +29,7 @@ def notices(users, log, user):
     # Avoid a full accounting report when this account has no applicable advisory policy.
     from loadcoach.users import key_identity
     owned_keys = {key_identity(verifier) for (verifier,) in users.db.execute(
-        'SELECT hash FROM keys WHERE user=? AND expires IS NULL', (user.name,))}
+        "SELECT hash FROM keys WHERE user=? AND kind='api'", (user.name,))}
     def own_policy(scope, subject):
         return ((scope == 'user' and subject == user.identity) or
                 (scope == 'group' and subject == user.group_name) or (scope == 'key' and subject in owned_keys))

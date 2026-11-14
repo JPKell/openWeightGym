@@ -1,4 +1,4 @@
-"""The accounts, kept on the front machine: users, their keys and passwords, and the groups.
+"""The accounts, kept on the control node: users, their keys and passwords, and the groups.
 
 These are the addresses that look after them. They were LoadCoach's until milestone 76 and keep
 the same paths, so the site and any harness ask exactly as before. Turnstile answers them itself,
@@ -79,7 +79,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
     """The account addresses. `caller(key)` is who a key belongs to, as turnstile says.
     `ask_compute(user, method, path, body)` asks compute as that user, or gives None if it is not answering.
     `roles_for(models)` are the roles someone who may use those models may ask for.
-    `outside(user)` are the names of the hosted models that user may ask for, which are front's own."""
+    `outside(user)` are the names of the hosted models that user may ask for, which are the control node's own."""
 
     signed_in_here = partial(signed_in, caller, log)
 
@@ -94,8 +94,8 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
     #    be a way to become it.
     #
     # The `weightroom user` and `weightroom group` commands are not held to these. Whoever can run them owns the file.
-    ONES_OWN = "Nobody changes their own group, their own abilities or whether they are enabled from here. That is done on the front machine, with the weightroom command."
-    ONES_GROUP = "Nobody changes the group they are in from here. That is done on the front machine, with the weightroom command."
+    ONES_OWN = "Nobody changes their own group, their own abilities or whether they are enabled from here. That is done on the control node, with the weightroom command."
+    ONES_GROUP = "Nobody changes the group they are in from here. That is done on the control node, with the weightroom command."
 
     def own_closed(user: User) -> set[str]:
         """What of their own account this user may not change: rule 1."""
@@ -135,7 +135,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         trusted = asking is not None and asking.can("sign-in")
         app = asking.name if asking is not None and not trusted and asking.can("app-sign-in") else None
         if not trusted and not app and address(request) not in LOOPBACK:
-            return error(403, "Sign in at the front machine's site, through an app that may sign people in, or on this machine itself.")
+            return error(403, "Sign in at the control node's site, through an app that may sign people in, or on this machine itself.")
         asked = await read_json(request, {"name", "password", "code", "new_password"})
         if isinstance(asked, Response):
             return asked
@@ -145,15 +145,24 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         name = name.lower()  # logs, authenticator labels and the reply use the stored spelling too
         # Where the person really is, as weightroom reports it. Believed only from its key.
         seen = {"at_front_from": request.headers["x-loadcoach-from"]} if trusted and "x-loadcoach-from" in request.headers else {}
+        if trusted:
+            seen['proxy_seen'] = request.headers.get('x-loadcoach-proxy-seen') == '1'
         try:
-            key = await users.sign_in(name, password, asked.get("code"), asked.get("new_password"), via=app)
+            key = await users.sign_in(name, password, asked.get("code"), asked.get("new_password"), via=app,
+                                      address=seen.get('at_front_from', address(request)))
         except SignInRefused as refused:
-            log.add("refused", "sign-in", name, address(request), why=refused.code, **seen)
+            if refused.status == 429:
+                log.add('sign-in','throttled',name,address(request), retry_after=refused.retry_after, **seen)
+            else:
+                log.add("refused", "sign-in", name, address(request), why=refused.code, **seen)
             body = {"message": str(refused), "type": "loadcoach_error", "code": refused.code}
             if refused.secret:  # setting up the second step: what their authenticator app needs
                 body["secret"] = refused.secret
                 body["uri"] = f"otpauth://totp/LoadCoach:{name}?secret={refused.secret}&issuer=LoadCoach"
-            return JSONResponse({"error": body}, status_code=refused.status)
+            if refused.code == 'password_change':
+                body['password_min_length'] = users.security_setting('password_min_length')
+            return JSONResponse({"error": body}, status_code=refused.status,
+                                headers={'Retry-After':str(refused.retry_after)} if refused.status == 429 else None)
         user = users.by_key(key)
         users.note_session(key, request.headers.get('x-loadcoach-agent', '') if trusted else request.headers.get('user-agent', ''),
                            seen.get('at_front_from', address(request)))
@@ -182,7 +191,9 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
             "max_sensitivity": group.max_sensitivity, "max_hosted_spend": group.max_hosted_spend,
             "tools": "*" if group.tools is None else list(group.tools), "hidden_tools": list(group.hidden_tools),
             # When this sign-in ends. None for an API key, which does not end.
-            "session_ends": user.until and datetime.fromtimestamp(user.until).isoformat(timespec="seconds"),
+            "session_ends": datetime.fromtimestamp(user.until).isoformat(timespec="seconds") if user.session and user.until else None,
+            'api_key_max_days': users.security_setting('api_key_max_days'),
+            'password_min_length': users.security_setting('password_min_length'),
             "via": user.via, "choices": users.choices(user.name), "compute": False, **mine,
         }
         answer = await ask_compute(user, "GET", "/loadcoach/me")
@@ -190,7 +201,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
             told = answer.json()  # models, chat, usage: the nodes' to say
             said.update(told, compute=bool(set(told.get("machines", [])) - set(told.get("unavailable_machines", []))))
         hosted = [name for name in outside(user) if name not in said["models"]]
-        if hosted:  # the models at outside services are front's: compute does not know them
+        if hosted:  # the models at outside services are the control node's: compute does not know them
             said["models"] = [*said["models"], *hosted]
             configured = hosted_models()
             said.setdefault("chat", {"unlogged": False, "models": {}})["models"].update({name: {
@@ -319,11 +330,11 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         if (
             (group is not None and not isinstance(group, str))
             or (enabled is not None and not isinstance(enabled, bool))
-            or (password is not None and (not isinstance(password, str) or len(password) < 8))
+            or (password is not None and not isinstance(password, str))
             or asked.get("second_step", False) is not False
             or asked.get("temporary_password", True) is not True
         ):
-            return error(400, "group is a name, enabled is true or false, password is at least 8 characters, "
+            return error(400, "group is a name, enabled is true or false, password is text, "
                               "second_step can only be set to false, temporary_password only to true.")  # fmt: skip
         own = user.name == name
         if password and own and (stored := users.password_hash(name)):
@@ -389,7 +400,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         if not users.exists(name):
             return error(404, f"No user named {name!r}.")
         if user.name == name:
-            return error(403, "Nobody removes their own account from here. That is done on the front machine, with the weightroom command.")  # rule 1
+            return error(403, "Nobody removes their own account from here. That is done on the control node, with the weightroom command.")  # rule 1
         if denied := out_of_reach(user, name):
             return denied
         identity = users.identity(name)
@@ -510,14 +521,18 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         name = request.path_params["name"]
         if denied := may_manage(user, name):
             return denied
-        asked = await read_json(request, {"label"})
+        asked = await read_json(request, {"label",'days'})
         if isinstance(asked, Response):
             return asked
         if not users.exists(name):
             return error(404, f"No user named {name!r}.")
         label = str(asked.get("label", ""))
+        try:
+            key = users.new_key(name, label, days=asked.get('days'))
+        except ValueError as problem:
+            return error(400,str(problem))
         log.add("user", "key-added", user.name, address(request), name=name, label=label)
-        return JSONResponse({"key": users.new_key(name, label)}, status_code=201)
+        return JSONResponse({"key":key}, status_code=201)
 
     async def key_remove(request: Request, user: User) -> Response:
         """Revoke the selected account key after ownership and permission checks."""

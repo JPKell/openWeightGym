@@ -1,5 +1,5 @@
 {% extends 'frame.html' %}
-{% from 'parts.html' import page_header, said_box, card, settings_node_summary %}
+{% from 'parts.html' import page_header, said_box, card, alert, settings_node_summary %}
 {% block title %}{{ settings_title }} · openWeightGym{% endblock %}
 {% block main %}
 <div class="settings-page">
@@ -7,6 +7,6 @@
 {{ said_box(said, failed) }}
 {% with settings_readonly=false %}{% include 'settings_sections.html' %}{% endwith %}
 {% if node_settings or unavailable_nodes %}{{ settings_node_summary(node_settings, unavailable_nodes) }}{% endif %}
-{% if settings_section == 'security' %}{% call card('Connection security', open=false, key='settings:connection-security') %}<p class="mb-0">Cookie security and browser origins are controlled by the machine files. <a href="/settings/machine">Inspect machine configuration</a> before changing listeners or proxy settings.</p>{% endcall %}{% with programs=security_programs, machine_inspection=true, selected_machine='front' %}{% include 'settings_machine_values.html' %}{% endwith %}{% endif %}
+{% if settings_section == 'security' %}{% if proxy_warning %}{% call alert('warning') %}Sign-ins are arriving through loopback or a proxy while trusted proxies is empty. Per-address locks may affect everyone behind that address. Set <code>trusted_proxies</code> in the control node’s <code>settings/weightroom.toml</code> to the actual proxy addresses, then restart WeightRoom. Trust only proxies you operate.{% endcall %}{% endif %}{% call card('Connection security', open=false, key='settings:connection-security') %}<p class="mb-0">Cookie security and browser origins are controlled by the machine files. <a href="/settings/machine">Inspect machine configuration</a> before changing listeners or proxy settings.</p>{% endcall %}{% with programs=security_programs, machine_inspection=true, selected_machine='front' %}{% include 'settings_machine_values.html' %}{% endwith %}{% endif %}
 </div>
 {% endblock %}

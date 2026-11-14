@@ -102,7 +102,7 @@ from plugins._controller import Controller as PluginController
 from loadcoach.groups import NAME
 from loadcoach.roles import STRENGTHS, benchmark_shares, check_loaded_bonuses, check_weights, loaded_factors, pick
 from loadcoach.waiting import completion
-from loadcoach.setting_catalog import entries as catalog_entries, validate_values
+from loadcoach.setting_catalog import entries as catalog_entries, validate_values, default_for
 from loadcoach.settings import copy_of, laid_over, read_value, said, written, apply_live
 from benchmarks.app import Settings as BenchmarkSettings, build_app as build_benchmarks
 from benchmarks.store import Benchmarks
@@ -158,6 +158,7 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8440
     secure: bool = False  # set true once it is served over HTTPS: the cookie then travels only that way
+    trusted_proxies: tuple[str, ...] = field(default_factory=lambda: tuple(default_for("weightroom","trusted_proxies")))  # file-only trust boundary for forwarded sign-in addresses
     spotter: str = ""  # retired: each node's Spotter is [machines.NAME].spotter, asked through turnstile
     chat_model_url: str = ""  # model door for web chat; turnstile on this machine unless said
     toollocker: str = ""  # MCP service base URL; empty uses turnstile on this machine, port 8443
@@ -1154,15 +1155,17 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response("This form was not sent from weightroom's own page.", status_code=403)
         form = await typed(request)
         name, password = form.get("name", "").strip(), form.get("password", "")
-        again = lambda why, **more: page(request, "sign_in.html", name=name, password=password, why=why, next=sign_in_next(form['next']) if form.get('next') else '', status=401, **more)  # noqa: E731
+        again = lambda why, status=401, **more: page(request, "sign_in.html", name=name, password=password, why=why, next=sign_in_next(form['next']) if form.get('next') else '', status=status, **more)  # noqa: E731
         if form.get("new_password", "") != form.get("new_again", ""):
             return again("The two new passwords are not the same.", wants="password")
         asked = {"name": name, "password": password}
         asked |= {field: form[field].strip() for field in ("code", "new_password") if form.get(field)}
         try:
             # Turnstile checks it, from the accounts on this machine. weightroom only says where the person is, for the log.
-            from_where = {"x-loadcoach-from": request.client.host if request.client else "?",
-                          'x-loadcoach-agent': request.headers.get('user-agent', '')[:300]}
+            from loadcoach.client_address import client_address
+            from_where = {"x-loadcoach-from": client_address(request.client.host if request.client else '', request.headers.get('x-forwarded-for',''),settings.trusted_proxies),
+                          'x-loadcoach-agent': request.headers.get('user-agent', '')[:300],
+                          'x-loadcoach-proxy-seen':'1' if request.headers.get('x-forwarded-for') else '0'}
             answer = await ask("POST", "/loadcoach/sign-in", settings.key, json=asked, headers=from_where)
         except ServiceUnavailable:
             print('weightroom: sign-in unavailable; administrator: systemctl --user start turnstile', file=sys.stderr)
@@ -1176,8 +1179,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     destination = wanted
             return welcome(told["key"], datetime.fromisoformat(told["ends"]).timestamp() - time.time(), destination)
         why = told.get("error", {})
+        if answer.status_code == 429:
+            response = again(why.get('message','Too many sign-in failures. Try again later.'),status=429)
+            response.headers['Retry-After'] = answer.headers.get('retry-after','60')
+            return response
         if why.get("code") == "password_change":
-            return again(why["message"], wants="password")
+            return again(why["message"], wants="password", minimum=why.get('password_min_length',8))
         if why.get("code") in ("second_step_setup", "code_required", "code_wrong"):
             return again(why["message"], wants="code", secret=why.get("secret"), uri=why.get("uri"))
         return again(why.get("message", f"The sign-in service returned status {answer.status_code}."))
@@ -1520,8 +1527,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def make_key(request: Request, person: Person) -> Response:
         """Create a caller-owned API key and display its value once."""
-        label = (await typed(request)).get("label", "").strip()[:60]
-        answer = await ask("POST", f"/loadcoach/users/{person.name}/keys", person.key, json={"label": label})
+        form = await typed(request)
+        label = form.get("label", "").strip()[:60]
+        try:
+            days = int(form['days']) if form.get('days') else None
+        except ValueError:
+            return await account(request,person,'Choose a valid key lifetime.',failed=True,opened='keys')
+        answer = await ask("POST", f"/loadcoach/users/{person.name}/keys", person.key, json={"label": label, 'days':days})
         if answer.status_code != 201:
             return await account(request, person, answer.json()["error"]["message"], failed=True, opened="keys")
         return await account(request, person, "Copy this key now. It is not shown again.", new_key=answer.json()["key"], opened="keys")
@@ -3431,8 +3443,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             found = {'programs': []}
         if isinstance(found, Response):
             return found
-        security_programs = [{**program, 'settings':[row for row in program['settings'] if row['name'] in ('secure', 'origins')]}
-                             for program in found['programs'] if any(row['name'] in ('secure', 'origins') for row in program['settings'])] if section == 'security' else []
+        security_programs = [{**program, 'settings':[row for row in program['settings'] if row['name'] in ('secure', 'origins', 'trusted_proxies')]}
+                             for program in found['programs'] if any(row['name'] in ('secure', 'origins', 'trusted_proxies') for row in program['settings'])] if section == 'security' else []
         found["programs"] = [program for program in found["programs"] if program["program"] not in ("loadcoach", "spotter")]
         found['programs'] = [program for program in found['programs'] if program['program'] not in ('voice', 'voice-gateway')]
         for program in found['programs']:
@@ -3458,6 +3470,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         settings_return_to=settings_views.PAGES[section][1], programs=found['programs'],
                         node_settings=summaries, unavailable_nodes=unavailable,
                         security_programs=security_programs,
+                        proxy_warning=not settings.trusted_proxies and found.get('security_status',{}).get('proxy_warning',False),
                         said=said or request.query_params.get('said', ''), failed=failed,
                         typed_in=typed_in or {}, opened=opened or request.query_params.get('open', ''))
         asked = request.query_params
@@ -3482,9 +3495,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 file_pending = location_answer.json().get('pending', False)
                 file_delivery_error = location_answer.json().get('pending_error', '')
                 file_offline = location_answer.json().get('unavailable', False)
-                settings = next((row["settings"] for row in location_answer.json()["programs"] if row["program"] == "loadcoach"), [])
+                file_settings = next((row["settings"] for row in location_answer.json()["programs"] if row["program"] == "loadcoach"), [])
                 for name in ("models_folder", "models_storage_folder"):
-                    setting = next((row for row in settings if row["name"] == name), {})
+                    setting = next((row for row in file_settings if row["name"] == name), {})
                     file_locations[name] = setting.get("changed", {}).get("value") if setting.get("changed") else setting.get("value", "")
             else:
                 location_error = f"LoadCoach {selected_machine} is not answering; its file paths cannot be changed now."
@@ -5929,7 +5942,12 @@ def root(ctx: typer.Context, config: Annotated[Path, typer.Option(metavar="FILE"
         told = read_settings(config)
         store = front_stores(told.get("databases", {}), config.parent, config.parent / told.get("data", ".")).database("weightroom.accounts")
         groups = {name: read_group(name, section) for name, section in told.get("groups", {}).items()}
-        return None, Users(store, groups), Log(store, keep_days=0)
+        from loadcoach.setting_catalog import default_for
+        from loadcoach.settings import Changes, live
+        changes = Changes(store)
+        users = Users(store,groups)
+        users.policy_getter = lambda name: live('turnstile',name,told.get('turnstile',{}).get(name,default_for('turnstile',name)),changes=changes)
+        return None, users, Log(store, keep_days=0)
 
     ctx.obj = accounts
     told = read_settings(config) if config.is_file() else {}

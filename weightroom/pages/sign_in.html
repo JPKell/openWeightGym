@@ -29,12 +29,12 @@
 
       {% if wants == "password" %}
       <div class="col-md-6">
-        <label for="new_password" class="form-label">A password of your own <small class="text-secondary">at least 8 characters</small></label>
-        <input id="new_password" name="new_password" type="password" class="form-control" autocomplete="new-password" minlength="8" required autofocus>
+        <label for="new_password" class="form-label">A password of your own <small class="text-secondary">at least {{ minimum|default(8) }} characters</small></label>
+        <input id="new_password" name="new_password" type="password" class="form-control" autocomplete="new-password" minlength="{{ minimum|default(8) }}" required autofocus>
       </div>
       <div class="col-md-6">
         <label for="new_again" class="form-label">The same again</label>
-        <input id="new_again" name="new_again" type="password" class="form-control" autocomplete="new-password" minlength="8" required>
+        <input id="new_again" name="new_again" type="password" class="form-control" autocomplete="new-password" minlength="{{ minimum|default(8) }}" required>
       </div>
       {% endif %}
 
