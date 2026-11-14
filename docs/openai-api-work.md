@@ -241,6 +241,8 @@ whichever you choose.
 
 ## R4. Responses in batches
 
+**Implemented 2026-11-14:** stateless Responses lines run through the existing front adapter and admission path. Mixed chat/Responses files retain each line’s endpoint across restart and verified SQLite/PostgreSQL transfer. Stream parameters, storage and chains fail per line.
+
 **Build:**
 - Add `/v1/responses` to `ENDPOINTS` in [loadcoach/batches.py](../loadcoach/batches.py). Batches
   run on compute LoadCoach, but Responses lives in Turnstile. Trace how batch lines are executed

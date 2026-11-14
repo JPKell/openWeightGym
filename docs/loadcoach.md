@@ -7550,8 +7550,10 @@ A line of the file is a request with a name of its own:
 {"custom_id": "q1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "NAME", "messages": [...]}}
 ```
 
-`endpoint` is `/v1/chat/completions`, `/v1/completions` or `/v1/embeddings`, and every line
-names the same one. A file has up to 10,000 requests and 50 MB. `lines_of()` in `batches.py`
+Responses batch lines default to `store:false` and must omit `stream` and `previous_response_id`; `store:true` fails only that line. They use the normal Responses adapter and chat admission.
+
+`endpoint` supports `/v1/chat/completions`, `/v1/responses`, `/v1/completions`, `/v1/embeddings`, image generation/edits and audio generations. Chat and Responses lines may share a file; other lines
+name the batch endpoint. A file has up to 10,000 requests and 50 MB. `lines_of()` in `batches.py`
 reads a file and says which line is wrong, before anything is started.
 
 When a batch has ended it has an `output_file_id`, for requests that were answered well, and

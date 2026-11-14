@@ -25,8 +25,9 @@
     ('POST', '/v1/batches/{number}/cancel', 'Cancel remaining work in your batch; retain completed results.', 'None')
   ]) }}
   <p>Stored Responses are available under Logs → Model activity → Responses. Records are scoped by stable account identity and current sensitivity clearance; account deletion removes them. Each account can keep at most 10,000 responses or 256 MiB. The console provides filters, pagination, chain navigation, ordinary request links and JSON export.</p>
-  <p>openWeightGym batch endpoints are <code>/v1/chat/completions</code>, <code>/v1/completions</code>, <code>/v1/embeddings</code>,
+  <p>openWeightGym batch endpoints are <code>/v1/chat/completions</code>, <code>/v1/responses</code>, <code>/v1/completions</code>, <code>/v1/embeddings</code>,
     <code>/v1/images/generations</code>, <code>/v1/images/edits</code> and the custom <code>/v1/audio/generations</code>.
+    Responses batch lines default to store:false and must omit stream and previous_response_id; store:true is a per-line error. Chat and Responses lines may share a file, with each line retaining its endpoint.
     Other OpenAI batch endpoint choices are not implemented. See the
     <a href="https://developers.openai.com/api/reference/resources/batches/methods/create" target="_blank" rel="noopener noreferrer">official Batch API</a>
     for the upstream contract; openWeightGym's narrower list above is authoritative here.</p>

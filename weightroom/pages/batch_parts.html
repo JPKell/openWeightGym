@@ -71,6 +71,7 @@
 
 {% macro guide() %}
 <p>Submit a JSONL file to the front’s OpenAI-compatible Batch API using your own API key. Each line contains one request.</p>
+<p>Responses lines use <code>/v1/responses</code> with <code>input</code> instead of messages. They are stateless: omit <code>stream</code> and <code>previous_response_id</code>; <code>store</code> defaults to false. These lines may share a file with chat completions.</p>
 {% call doc_code('batch-example-input', 'requests.jsonl') %}{"custom_id":"ticket-001","method":"POST","url":"/v1/chat/completions","body":{"model":"YOUR_MODEL","messages":[{"role":"user","content":"Classify this support ticket."}]}}{% endcall %}
 {{ section_title('1. Upload your requests', level=3) }}
 {% call doc_code('batch-example-upload', 'Shell') %}curl FRONT/v1/files \
