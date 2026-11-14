@@ -468,7 +468,7 @@ def test_postgresql_backup_is_listed_restored_and_exported_without_credentials(p
 
     inventory = inspect_store(store)
     assert inventory["status"] == "included"
-    assert inventory["schema_versions"]["loadcoach.settings"] == 1
+    assert inventory["schema_versions"]["loadcoach.settings"] == 2
     backup_id = new_id(1_700_000_000, b"\x0a\x0b\x0c")
     made = create_backup(
         tmp_path / "backups",
@@ -596,6 +596,8 @@ def test_retired_compute_transfers_across_engines_without_recreating_front_table
     with source.transaction() as connection:
         connection.execute('DROP TABLE spending_allowances')
         connection.execute('DROP TABLE client_accesses')
+        connection.execute('DROP TABLE session_details')
+        connection.execute('DROP TABLE sign_in_failures')
         connection.execute("DELETE FROM suite_schema_migrations WHERE stream='loadcoach.users' AND version>3")
     assert copy_store(source, postgres)['state'] == 'verified'
     with postgres.connection() as connection:

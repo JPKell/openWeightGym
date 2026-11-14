@@ -16,6 +16,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.testclient import TestClient
 
 from test_setup_recovery import ROOT, one_function, script_functions, shell
+from test_postgresql import postgres  # noqa: F401
 
 
 def git(*args):
@@ -360,7 +361,8 @@ control restart weightroom turnstile
     assert answer.returncode == 0, answer.stderr
     lines = calls.read_text().splitlines()
     assert lines == [f'source:{tmp_path}/installed weightroom turnstile',
-                     'service:restart weightroom.service','service:restart turnstile.service',
+                     'service:stop turnstile.service','service:stop weightroom.service',
+                     'service:start weightroom.service','service:start turnstile.service',
                      f'versions:{tmp_path}/installed']
 
 
@@ -445,3 +447,59 @@ control "$TEST_ACTION" loadcoach
                        "TEST_ACTION": action, "SERVICE_STATUS": str(status)})
         assert answer.returncode == status
         assert ("recorded" in answer.stdout) == (status == 0 and action != "stop")
+
+
+
+def test_multi_service_restart_releases_old_postgresql_readers_before_migration(postgres,tmp_path):
+    """The real restart coordinator must release old keys readers before account DDL starts."""
+    from db import migrate
+    from db.schemas import USERS
+    with postgres.connection() as connection:
+        migrate(postgres,connection,'loadcoach.users',USERS[:7])
+    reader=postgres.connect()
+    reader.execute('SELECT * FROM keys').fetchall()
+    backend=reader.execute('SELECT pg_backend_pid()').fetchone()[0]
+    controller='''import os,sys
+from db import Database,Store
+from loadcoach.users import Users
+action,unit=sys.argv[1:]
+source=Database(Store(name="restart-fixture",engine="postgresql",dsn_file=os.environ["SUITE_TEST_POSTGRES_DSN_FILE"],options={"options":"-c lock_timeout=800ms"}))
+if unit=="turnstile.service" and action in ("stop","restart"):
+    with source.transaction() as connection:connection.execute("SELECT pg_terminate_backend(?)",(int(os.environ["OLD_READER"]),))
+if unit=="weightroom.service" and action in ("start","restart"):
+    users=Users(source,{})
+    users.db.close()
+'''
+    source='source "$TEST_REPO/scripts/lib/ui.sh"\nui_init\n'+one_function('scripts/owg','control')+'''
+cd "$TEST_REPO"
+ROOT=$TEST_REPO
+refresh_runtime_sources() { :; }
+refresh_component_versions() { :; }
+owg_systemctl() { "$TEST_PYTHON" -c "$TEST_CONTROLLER" "$@"; }
+control restart weightroom turnstile
+'''
+    try:
+        answer=shell(tmp_path,source,env={'TEST_PYTHON':sys.executable,'TEST_CONTROLLER':controller,
+            'OLD_READER':str(backend),'SUITE_TEST_POSTGRES_DSN_FILE':postgres.store.dsn_file})
+        assert answer.returncode==0,answer.stdout+answer.stderr
+        with postgres.connection() as connection:
+            assert 'kind' in {row[0] for row in connection.execute("SELECT column_name FROM information_schema.columns WHERE table_name='keys'")}
+    finally:reader.close()
+
+
+
+def test_multi_service_restart_does_not_start_or_record_versions_after_a_stop_failure(tmp_path):
+    source='source "$TEST_REPO/scripts/lib/ui.sh"\nui_init\n'+one_function('scripts/owg','control')+'''
+ROOT="$INSTALL"
+refresh_runtime_sources() { :; }
+refresh_component_versions() { echo UNEXPECTED_VERSIONS; }
+owg_systemctl() {
+  printf 'service:%s\\n' "$*" >> "$STOP_CALLS"
+  [[ $1 != stop || $2 != turnstile.service ]]
+}
+control restart weightroom turnstile
+'''
+    answer=shell(tmp_path,source,env={'INSTALL':str(tmp_path/'installed'),'STOP_CALLS':str(tmp_path/'stops')})
+    assert answer.returncode==1
+    assert (tmp_path/'stops').read_text().splitlines()==['service:stop turnstile.service','service:stop weightroom.service']
+    assert 'start weightroom.service' not in answer.stdout and 'UNEXPECTED_VERSIONS' not in answer.stdout

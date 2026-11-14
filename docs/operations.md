@@ -605,7 +605,9 @@ over newer work. Superseded files are removed only after every affected consumer
 ## Runtime source overrides
 
 `owg update` selects the installed checkout ahead of older `PYTHONPATH` source overrides;
-`owg start` and `owg restart` enforce the same rule. Custom library paths remain after the checkout,
+`owg start` and `owg restart` enforce the same rule. A restart of multiple selected services
+stops them all, in reverse order, before starting them in the requested order, so old shared-database
+readers cannot block schema upgrades. Single-service restart behavior is unchanged. Custom library paths remain after the checkout,
 and other unit settings remain unchanged. See [update and rollback copies](installation.md#looking-after-it-owg)
 for the normal workflow. Source selection reloads systemd's configuration without restarting services.
 An override that launches an executable outside this installation stops the command for correction.

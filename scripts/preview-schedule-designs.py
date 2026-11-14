@@ -1,4 +1,4 @@
-"""Render three Schedules proposals with portable assets and browser-local sample data."""
+"""Render shared Schedules proposals with portable assets and canonical control node labels."""
 
 import argparse
 import re
@@ -32,6 +32,8 @@ def sample_data():
 
 def render():
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
+    from weightroom.display import node_label
+    pages.filters['node_label'] = node_label
     static = ROOT / 'weightroom/static'
     return pages.get_template('schedule_designs.html').render(
         css='\n'.join((static / name).read_text() for name in

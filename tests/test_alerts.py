@@ -3,6 +3,7 @@ import json
 import sqlite3
 import time
 
+import httpx
 import pytest
 from starlette.testclient import TestClient
 
@@ -311,11 +312,13 @@ def test_heat_threshold_is_validated_and_taken_on_live(desk):
     sign_in(browser, 'jordan')
     # The Settings follower publishes WeightRoom's current fields at startup.
     key = browser.cookies['weightroom']
-    compute = TestClient(switch.front, base_url='http://front:8442')  # LoadCoach, through turnstile
-    headers = {'authorization': 'Bearer ' + key}
+    async def change(value):
+        # Use the running fixture's event loop and account connection, as the real caller does.
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=switch.front),base_url='http://front:8442') as compute:
+            return await compute.post('/loadcoach/settings/weightroom', headers={'authorization':'Bearer '+key}, json={'alert_gpu_temperature':value})
     for value in (False, 49, 111, 'hot'):
-        assert compute.post('/loadcoach/settings/weightroom', headers=headers, json={'alert_gpu_temperature': value}).status_code == 400
-    assert compute.post('/loadcoach/settings/weightroom', headers=headers, json={'alert_gpu_temperature': 90}).status_code == 200
+        assert browser.portal.call(change,value).status_code == 400
+    assert browser.portal.call(change,90).status_code == 200
     for _ in range(100):
         if 'GPU threshold: 90°C' in browser.get('/alerts').text:
             break

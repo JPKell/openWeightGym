@@ -49,10 +49,9 @@ def worker(tmp_path):
     return users, log, store
 
 
-def test_worker_records_deduplicated_waits_and_each_saved_outcome(worker, monkeypatch):
+def test_worker_records_deduplicated_waits_and_each_saved_outcome(worker):
     users, log, store = worker
     batch = make_batch(store)
-    monkeypatch.setattr('turnstile.batches.rules.AGAIN_AFTER', .001)
     attempts = 0
     async def dispatch(request):
         nonlocal attempts
@@ -67,6 +66,8 @@ def test_worker_records_deduplicated_waits_and_each_saved_outcome(worker, monkey
     async def run():
         async with httpx.AsyncClient(transport=httpx.MockTransport(dispatch), base_url='http://front') as client:
             front = FrontBatches(store, log, None, client, lambda name: name)
+            normal_setting = front.setting
+            front.setting = lambda name: .001 if name == 'batch_retry_seconds' else normal_setting(name)
             front.work(batch['id'], users.by_name)
             await asyncio.gather(*front.carrying)
     asyncio.run(run())

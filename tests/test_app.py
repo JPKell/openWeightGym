@@ -2130,9 +2130,9 @@ def test_this_machine_may_sign_in_with_no_key_and_too_many_wrong_tries_lock_a_na
         here = lambda name, password="correct horse": caller.post("/loadcoach/sign-in", json={"name": name, "password": password})  # noqa: E731
         assert here("pat").status_code == 201
 
-        assert [here("pat", "guess").status_code for _ in range(5)] == [401] * 5
+        assert [here("pat", "guess").status_code for _ in range(5)] == [401] * 4 + [429]
         locked = here("pat")  # even the right password now waits
-        assert locked.status_code == 429 and locked.json()["error"]["code"] == "locked" and "5 minutes" in locked.json()["error"]["message"]
+        assert locked.status_code == 429 and locked.json()["error"]["code"] == "throttled" and int(locked.headers["retry-after"]) >= 1795
         assert here("cam").status_code == 201  # nobody else is affected
 
 

@@ -195,6 +195,17 @@ control() {
     # Also covers the first restart after an older updater fetched this repair.
     refresh_runtime_sources "$ROOT" "${chosen[@]}" || return 1
   fi
+  if [[ $action == restart ]] && ((${#chosen[@]} > 1)); then
+    # Shared database upgrades need every selected old reader to release its locks
+    # before any new process starts migrating that store. Keep targeted single-service
+    # restarts and the installed checkout/source selection contract unchanged.
+    for ((i = ${#chosen[@]} - 1; i >= 0; i--)); do
+      program=${chosen[i]}
+      ui_step "Stop $program for restart" -- owg_systemctl stop "$program.service" || failed=1
+    done
+    ((failed == 0)) || return 1
+    action=start
+  fi
   for program in "${chosen[@]}"; do
     ui_step "${action^} $program" -- owg_systemctl "$action" "$program.service" || failed=1
   done

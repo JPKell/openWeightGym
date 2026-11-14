@@ -77,6 +77,10 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Phase 3’s first clean full suite (`85d5731`) reported 4,361 passed, 315 failed, 14 errors and 68 skipped. It exposed the shared schedule preview’s pending `node_label` registration, plus old sign-in and batch-constant assertions. Carry the touched preview dependency and update those tests. A pre-existing CPU embedding cancellation assertion reproduces on Phase 2; request/copy/chart timing cases are checked separately. Comparison evidence: `/home/owgadmin/ai/owg-settings-phase3-comparison.json`.
+
+- A disposable PostgreSQL test reproduced the normal multi-service restart leaving an old account reader alive while a new process attempted account DDL. Fix the existing OWG coordinator to stop all selected services in reverse order before starting them; retain targeted single-service behavior and source selection. The same real migration test passes after the fix. PostgreSQL legacy fixtures now match settings schema 2 and remove all post-v3 account tables when simulating the deployed old ledger; production retirement and data are unchanged.
+
 - Remote MCP policy permits up to 32 URL servers with bounded descriptions, strict URLs without credentials/query/fragment, private write-only bearer keys or public HTTPS. File servers and configured built-in extraction/classifier tools win on name clashes. Removing a site entry retains its key for explicit recovery or removal. Credentials live beside the control node machine key, with hashed names and atomic mode 600 writes. Replaced clients drain active calls; reflected credentials and upstream protocol errors are sanitized before tool results or logs.
 
 - Site announcements use a single validated table (`text`, `level`, optional `ends_at` with an explicit UTC offset), rendered as escaped plain text and expired on open pages. Site theme defaults follow the existing account-scoped browser theme policy; Use default removes the explicit saved theme and resumes inheritance. Unknown or unauthorized default chat names fall back to the account’s permitted choices.

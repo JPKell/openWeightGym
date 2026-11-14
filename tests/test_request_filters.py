@@ -159,10 +159,13 @@ def test_requests_ui_uses_suite_catalogs_and_access_registry(desk, tmp_path, mon
     assert 'Each minimum' in invalid.text and 'name="duration_min"' in invalid.text
     sign_in(browser, 'pat')
     assert '<option value="cleo"' not in browser.get('/requests?complete=1').text
-    with TestClient(switch.front) as api:
-        key = browser.cookies['weightroom']
-        assert api.get('/loadcoach/requests?duration_min=nan', headers={'authorization': 'Bearer '+key}).status_code == 400
-        assert api.get('/loadcoach/requests?user=jordan', headers={'authorization': 'Bearer '+key}).json()['total'] == 0
+    key = browser.cookies['weightroom']
+    async def api_get(path):
+        # Do not start a second lifespan/loop over the fixture's already-running account store.
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=switch.front),base_url='http://front:8442') as api:
+            return await api.get(path,headers={'authorization':'Bearer '+key})
+    assert browser.portal.call(api_get,'/loadcoach/requests?duration_min=nan').status_code == 400
+    assert browser.portal.call(api_get,'/loadcoach/requests?user=jordan').json()['total'] == 0
 
 
 def test_internal_dispatch_is_not_misidentified_as_an_external_key_failure(tmp_path):
