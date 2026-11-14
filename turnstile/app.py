@@ -425,6 +425,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             user = ANONYMOUS
         else:
             user = users.by_key(key) if key else None
+        if user:
+            user = telephone_admin.store.scope_session(user, key)
         observation.identify(user)
         return user
 
@@ -3430,7 +3432,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             *events.routes(log, users, caller, ask_all, lambda: hosted.models(), request_model_choices),
                             *observations.routes(log, caller),
                             *accounts.routes(users, log, caller, ask_all, routing.roles_for, hosted.offered, batch_work,
-                                             hosted_models=hosted.models, forget_extractions=extractions.forget, forget_responses=forget_responses),
+                                             hosted_models=hosted.models, forget_extractions=extractions.forget, forget_responses=forget_responses,
+                                             phone_numbers=lambda owner: telephone_admin.store.own(owner, mask=True)),
                             *allowances.routes(users, log, caller, ask_all),
                             *routing.routes(),
                             Route("/{path:path}", pass_on, methods=methods)])

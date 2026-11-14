@@ -75,7 +75,7 @@ def signed_in(caller, log: Log, handler):
     return checked
 
 
-def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None, *, hosted_models=lambda: {}, forget_extractions=None, forget_responses=None) -> list[Route]:
+def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None, *, hosted_models=lambda: {}, forget_extractions=None, forget_responses=None, phone_numbers=lambda owner: []) -> list[Route]:
     """The account addresses. `caller(key)` is who a key belongs to, as turnstile says.
     `ask_compute(user, method, path, body)` asks compute as that user, or gives None if it is not answering.
     `roles_for(models)` are the roles someone who may use those models may ask for.
@@ -237,7 +237,8 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         await ask_compute(user, "POST", "/loadcoach/send-log")  # what compute has not sent yet, so the count is up to date; compute is not woken
         usage = {"usage": [{"days": span, **log.usage(name, span * 86400)} for span in (1, 7, days)], "keep_days": log.keep_days}
         why_not = ONES_OWN if user.name == name and "own" in own_closed(user) else too_far(user, name)
-        return JSONResponse({**found[0], **usage, "why_not": why_not})
+        return JSONResponse({**found[0], **usage, "why_not": why_not,
+            **({'phone_numbers': phone_numbers(users.identity(name))} if user.can('manage-settings') else {})})
 
     async def user_add(request: Request, user: User) -> Response:
         """Add an account. It gets a first key unless `key` is false, and with `temporary_password` true a password that only serves to choose one's own. Each is shown this once."""

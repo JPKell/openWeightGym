@@ -1434,8 +1434,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Identity, password and API keys on the account's main page."""
         asked = request.query_params
         me = (await ask("GET", "/loadcoach/me", person.key)).json()
+        phone_numbers = None
+        if 'front-phone' in person.can:
+            phone_reply = await ask('GET', '/loadcoach/phone-numbers', person.key, timeout=15)
+            phone_numbers = phone_reply.json() if phone_reply.is_success else {'numbers': [], 'pending': [], 'available': False,
+                'reason': 'Phone numbers are unavailable. Try again later.'}
         return page(request, "account.html", person, status=400 if failed else 200, me=me,
-                    said=said or asked.get("said", ""), new_key=new_key, failed=failed)
+                    said=said or asked.get("said", ""), new_key=new_key, failed=failed, phone_numbers=phone_numbers)
+
+    async def account_phone_number(request: Request, person: Person) -> Response:
+        if 'front-phone' not in person.can:
+            return Response('Registering phone numbers requires front-phone.', status_code=403)
+        action = request.path_params['action']
+        if action not in ('send', 'verify', 'remove'):
+            return Response(status_code=404)
+        form = await typed(request)
+        payload = {name: form[name] for name in ('number', 'code', 'id') if name in form}
+        result = await ask('POST', '/loadcoach/phone-numbers', person.key, json={'action': action, **payload}, timeout=20)
+        if not result.is_success:
+            return await account(request, person, result.json().get('error', {}).get('message', 'Phone verification could not be completed.'), failed=True)
+        message = {'send': 'SMS code sent. Enter it within 10 minutes.', 'verify': 'Phone number verified. Calls can now use your account.', 'remove': 'Phone number removed.'}[action]
+        return go('/account?said=' + quote(message) + '#phone-numbers')
 
     async def account_appearance(request: Request, person: Person, said: str = '', failed: bool = False) -> Response:
         """Render the caller's personal display preferences."""
@@ -3111,12 +3130,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         action = request.path_params['action']
         if action not in ('save_credentials', 'remove_credential', 'create_account', 'rotate_account',
                            'save_setup', 'add_number', 'save_number', 'remove_number', 'check_credentials', 'find_numbers', 'connect_number', 'simulate',
-                           'save_access', 'add_caller', 'remove_caller', 'set_pin', 'remove_pin'):
+                           'save_access', 'add_caller', 'remove_caller', 'set_pin', 'remove_pin', 'revoke_user_number'):
             return Response(status_code=404)
         form = await typed(request)
         payload = {name: form[name] for name in ('token', 'api_sid', 'api_secret', 'kind', 'label', 'account_sid', 'public_url',
             'public_port', 'number', 'account', 'mode', 'profile', 'voice', 'greeting', 'max_calls_per_hour', 'sid', 'caller',
-            'access_mode', 'caller_number', 'caller_note', 'caller_account', 'pin', 'refusal_greeting') if name in form}
+            'access_mode', 'caller_number', 'caller_note', 'caller_account', 'pin', 'refusal_greeting', 'owner', 'id') if name in form}
         if action in ('save_setup', 'save_number'):
             payload['enabled'] = form.get('enabled') == 'yes'
         if action == 'save_access':
@@ -5472,6 +5491,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route('/requests/unlogged/stop', stop_unlogged_request, 'POST'),
             route('/requests/{number:int}/feedback', feedback_do, 'POST'),
             route("/account", account),
+            route('/account/phone-numbers/{action}', account_phone_number, 'POST'),
             route("/account/appearance", account_appearance),
             route("/account/logs", account_logs),
             route('/voice', voice_chat),
