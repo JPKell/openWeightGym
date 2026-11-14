@@ -381,6 +381,18 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if time.monotonic() - pace["at"] > 60:
             pace.update(at=time.monotonic(), of=await users.log_facts() or {**log.paces(), "last_used": log.last_used()})
 
+    def supports_model_tools(name, settings):
+        """Share catalogue and admission checks for GGUF templates and native tool capabilities."""
+        flags = (settings or {}).get('flags', {})
+        try:
+            tools = settings is None or facts(said_by(flags['model'])).get('takes_tools', False)
+        except (OSError, ValueError):
+            tools = True  # The native runtime resolves unreadable metadata.
+        template = runner.model_metadata(name).get('chat_template_caps', {})
+        if 'supports_tools' in template and 'supports_tool_calls' in template:
+            tools = template['supports_tools'] and template['supports_tool_calls']
+        return tools and engine_for(settings).capabilities(settings).get('tools', True)
+
     async def model_facts(request: Request, user: User) -> Response:
         """Each model this user may use, with what is known of it now. Turnstile keeps it a few seconds.
 
@@ -397,15 +409,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             flags = (settings or {}).get("flags", {})
             server = None if settings is None else runner.serving(name, settings)
             actual_flags = server.settings["flags"] if server and server.ready and runner.answers(server, settings) else flags
-            try:
-                tools = settings is None or facts(said_by(flags["model"])).get("takes_tools", False)
-            except (OSError, ValueError):
-                tools = True  # the file cannot be read for it: the model server will say
             capabilities = engine_for(settings).capabilities(settings)
-            template_caps = runner.model_metadata(name).get("chat_template_caps", {})
-            if "supports_tools" in template_caps and "supports_tool_calls" in template_caps:
-                tools = template_caps["supports_tools"] and template_caps["supports_tool_calls"]
-            tools = tools and capabilities.get("tools", True)
+            tools = supports_model_tools(name, settings)
             why_not = "its file is missing" if not Path(flags["model"]).is_file() else None
             if settings and not why_not:
                 need = runner.needs(settings)
@@ -595,6 +600,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         # The model's settings as they are at this moment. They are read again when its turn
         # comes, so a change made while it waits is the one that counts.
         settings = library.get(name)
+        from loadcoach.request_tools import wants_tools
+        if wants_tools(asked) and not supports_model_tools(name, settings):
+            return error(400, 'This model does not support tool calls.', code='unsupported_tools')
         try:
             selected_engine = engine_for(settings)
             if request.url.path.startswith('/v1/audio/') and not selected_engine.capabilities(settings).get('audio'):

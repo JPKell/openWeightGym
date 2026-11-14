@@ -28,10 +28,25 @@ def stored(tmp_path):
     calls = []
 
     async def model(request):
+        if request.method == 'GET' and request.url.path.startswith('/v1/models/'):
+            return httpx.Response(200, json={'id': request.url.path.rsplit('/', 1)[-1], 'object': 'model'})
         if request.headers.get('x-loadcoach-log') == 'off':
             assert 'x-loadcoach-sensitivity' not in request.headers
         body = json.loads(request.content)
         calls.append((body, dict(request.headers)))
+        if body['model'] == 'functions':
+            if body['messages'][-1]['role'] == 'tool':
+                message, reason = {'content': 'Weather: sunny'}, 'stop'
+            else:
+                message, reason = {'content': None, 'tool_calls': [{'id': 'call_lookup', 'type': 'function',
+                    'function': {'name': 'lookup', 'arguments': '{"city":"Victoria"}'}}]}, 'tool_calls'
+            if body['stream']:
+                return httpx.Response(200, stream=Source([
+                    frame({'tool_calls': [{'index': 0, 'id': 'call_lookup', 'type': 'function', 'function': {'name': 'lookup', 'arguments': '{"city":'}}]}),
+                    frame({'tool_calls': [{'index': 0, 'function': {'arguments': '"Victoria"}'}}]}),
+                    frame(finish='tool_calls', usage={'prompt_tokens': 4, 'completion_tokens': 2, 'total_tokens': 6})]),
+                    headers={'x-loadcoach-request-id': '123'})
+            return httpx.Response(200, json={'choices': [{'message': message, 'finish_reason': reason}]}, headers={'x-loadcoach-request-id': '123'})
         if body['model'] == 'bad':
             return httpx.Response(500, json={'error': {'message': 'bad', 'code': 'model_failed'}})
         if body['stream']:

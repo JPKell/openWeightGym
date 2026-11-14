@@ -69,7 +69,7 @@ PROMPTS = {
 }
 
 
-def schema_checked(schema):
+def schema_checked(schema, *, require_all=True):
     """Accept a bounded closed JSON Schema subset, with no remote references."""
     if not isinstance(schema, dict) or len(json.dumps(schema).encode()) > 16384:
         raise Problem('Schema must be a JSON object of at most 16 KiB.')
@@ -91,8 +91,13 @@ def schema_checked(schema):
             props = value.get('properties', {})
             if not isinstance(props, dict) or len(props) > 50 or any(not isinstance(key, str) or len(key) > 120 for key in props):
                 raise Problem('An object may contain at most fifty named fields.')
-            if value.get('additionalProperties') is not False or set(value.get('required', [])) != set(props):
+            required = value.get('required', [])
+            if not isinstance(required, list) or any(not isinstance(key, str) for key in required):
+                raise Problem('Schema required fields must be a list of names.')
+            if require_all and (value.get('additionalProperties') is not False or set(required) != set(props)):
                 raise Problem('Objects must require every field and set additionalProperties to false. Use nullable types for missing values.')
+            if isinstance(value.get('additionalProperties'), dict):
+                visit(value['additionalProperties'], depth + 1)
             for child in props.values():
                 visit(child, depth + 1)
         if 'array' in kinds:

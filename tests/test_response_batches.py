@@ -22,7 +22,7 @@ from weightroom.response_store import Responses
 def test_mixed_batch_uses_responses_adapter_and_per_line_errors(tmp_path):
     async def run():
         source = str(tmp_path/'accounts.db')
-        users = Users(source, {'members': Group()})
+        users = Users(source, {'members': Group(can=frozenset({'use-tools'}))})
         users.add('alice', 'members')
         key = users.new_key('alice')
         store, log, responses = Batches(source), Log(source), Responses(source)
@@ -42,6 +42,8 @@ def test_mixed_batch_uses_responses_adapter_and_per_line_errors(tmp_path):
             front = FrontBatches(store, log, None, door, lambda name: key)
             raw = [{'custom_id': 'chat', 'url': '/v1/chat/completions', 'body': {'model': 'test', 'messages': [{'role': 'user', 'content': 'chat'}]}},
                    {'custom_id': 'response', 'url': '/v1/responses', 'body': {'model': 'test', 'input': 'response'}},
+                   {'custom_id': 'function', 'url': '/v1/responses', 'body': {'model': 'test', 'input': 'function',
+                    'tools': [{'type': 'function', 'name': 'lookup', 'parameters': {'type': 'object', 'properties': {}}}]}},
                    *[{'custom_id': 'bad'+str(index), 'url': '/v1/responses', 'body': {'model': 'test', 'input': 'bad', **extra}}
                      for index, extra in enumerate([{'store': True}, {'stream': True}, {'stream': False}, {'previous_response_id': 'resp_foreign'}])]]
             content = '\n'.join(json.dumps(line) for line in raw).encode()
@@ -50,7 +52,7 @@ def test_mixed_batch_uses_responses_adapter_and_per_line_errors(tmp_path):
             batch = store.start('alice', '/v1/chat/completions', file['id'], lines)
             await front.work_through(batch['id'], users.by_name)
             result = store.get(batch['id'])
-            assert result['status'] == 'completed' and result['request_counts'] == {'total': 6, 'completed': 2, 'failed': 4}
+            assert result['status'] == 'completed' and result['request_counts'] == {'total': 7, 'completed': 3, 'failed': 4}
             good = [json.loads(row) for row in store.content(result['output_file_id']).decode().splitlines()]
             bad = [json.loads(row) for row in store.content(result['error_file_id']).decode().splitlines()]
             assert good[0]['response']['body']['choices'][0]['message']['content'] == 'Hello'
@@ -58,7 +60,8 @@ def test_mixed_batch_uses_responses_adapter_and_per_line_errors(tmp_path):
             assert response['object'] == 'response' and response['output'][0]['content'][0]['text'] == 'Hello'
             assert response['store'] is False and good[1]['response']['request_id'] == '42'
             assert all(line['response']['status_code'] == 400 and line['error']['code'] == 'unsupported_parameter' for line in bad)
-            assert [body['messages'][0]['content'] for body, _ in calls] == ['chat', 'response']
+            assert [body['messages'][0]['content'] for body, _ in calls] == ['chat', 'response', 'function']
+            assert calls[-1][0]['tools'][0]['function']['name'] == 'lookup'
             assert all(headers['x-loadcoach-trace'] == batch['id'] and headers['x-loadcoach-priority'] == 'low' for _, headers in calls)
             assert responses.db.execute('SELECT COUNT(*) FROM responses').fetchone()[0] == 0
         for kept in (users, store, log, responses):

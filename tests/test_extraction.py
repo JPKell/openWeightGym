@@ -243,7 +243,7 @@ def test_responses_subset_translates_content_schema_and_usage():
         with pytest.raises(Problem) as invalid:
             response_body(malformed, body)
         assert invalid.value.status == 502
-    for extra in ({'stream': 'true'}, {'store': 'true'}, {'previous_response_id': 123}, {'tools': []}):
+    for extra in ({'stream': 'true'}, {'store': 'true'}, {'previous_response_id': 123}, {'tools': [{'type': 'unknown'}]}):
         with pytest.raises(Problem):
             chat_request({**body, **extra})
 

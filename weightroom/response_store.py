@@ -113,15 +113,17 @@ class Responses:
             identifier = record['previous']
         items = []
         level = 'normal'
+        from turnstile.responses import append_input
         for record in reversed(records):
             level = max(level, record['level'], key=LEVELS.index)
-            from turnstile.responses import chat_request
-            own = [{key: value for key, value in item.items() if key != 'id'} for item in record['request']['input']]
-            items += chat_request({'model': record['model'], 'input': own, 'store': False})['messages']
+            for item in record['request']['input']:
+                append_input(items, item)
             for item in record['response']['output']:
                 if item['type'] == 'message':
                     content = ''.join(part.get('text', part.get('refusal', '')) for part in item['content'])
-                    items.append({'role': 'assistant', 'content': content})
+                    append_input(items, {'type': 'message', 'role': 'assistant', 'content': content})
+                elif item['type'] == 'function_call':
+                    append_input(items, item)
         return items, level
 
     def listing(self, user, filters, *, limit=25, offset=0):
