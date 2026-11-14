@@ -267,8 +267,23 @@ def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
             route.fulfill(status=response.status_code, content_type=response.headers.get('content-type', 'text/html'), body=response.content)
         context.route('http://chat.test/**', serve)
         page.goto(f'http://chat.test/chat/{ref}')
-        rail = page.locator('#site-sidebar')
+        rail = page.locator('[data-desktop-conversations]')
         scroll = rail.locator('.chat-conversations-scroll')
+        expect(page.locator('#site-sidebar .chat-sidebar')).to_have_count(0)
+        for width in (1200, 1440, 1920):
+            page.set_viewport_size({'width': width, 'height': 1000})
+            for _ in range(2):
+                bounds = page.evaluate('''() => {
+                  const page = document.querySelector('#page-content').getBoundingClientRect();
+                  const chat = document.querySelector('#chat-main').getBoundingClientRect();
+                  const rail = document.querySelector('[data-desktop-conversations]').getBoundingClientRect();
+                  return {pageCenter: (page.left + page.right) / 2, chatCenter: (chat.left + chat.right) / 2,
+                          railRight: rail.right, chatLeft: chat.left};
+                }''')
+                assert abs(bounds['pageCenter'] - bounds['chatCenter']) < 1, bounds
+                assert bounds['railRight'] < bounds['chatLeft'], bounds
+                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                page.locator('#sidebar-toggle').click()
         assert scroll.evaluate('el => el.scrollHeight > el.clientHeight')
         for height in (1000, 720):
             page.set_viewport_size({'width': 1440, 'height': height})
@@ -401,7 +416,28 @@ def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.get_by_role('button', name='Menu', exact=True).click()
         expect(page.locator('#mobile-navigation .chat-conversations-scroll')).to_be_visible()
+        expect(page.locator('#mobile-site-navigation')).not_to_be_visible()
+        search.fill('Conversation 01')
+        page.get_by_role('button', name='Show main menu', exact=True).click()
+        expect(page.locator('#mobile-site-navigation')).to_be_visible()
+        expect(search).not_to_be_visible()
+        page.get_by_role('button', name='Show chat options', exact=True).click()
+        expect(search).to_have_value('Conversation 01')
+        expect(page.locator('[data-conversation]:visible')).to_have_count(1)
+        page.keyboard.press('Escape')
+        expect(page.get_by_role('button', name='Menu', exact=True)).to_be_focused()
+        page.set_viewport_size({'width': 1024, 'height': 844})
+        chat_toggle = page.get_by_role('button', name='Chat options', exact=True)
+        chat_toggle.click()
+        expect(search).to_be_visible()
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        expect(page.locator('#mobile-navigation')).not_to_be_visible()
+        expect(rail.locator('.chat-sidebar')).to_be_visible()
+        expect(search).to_have_value('Conversation 01')
+        page.set_viewport_size({'width': 390, 'height': 844})
+        page.get_by_role('button', name='Menu', exact=True).click()
         page.screenshot(path=str(images / 'mobile-rail.png'))
+        page.get_by_role('button', name='Show main menu', exact=True).click()
         page.get_by_role('link', name='Voice chat', exact=True).click()
         expect(page.get_by_role('button', name='Start conversation', exact=True)).to_be_visible()
         page.get_by_role('button', name='Menu', exact=True).click()

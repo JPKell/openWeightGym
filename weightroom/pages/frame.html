@@ -18,7 +18,7 @@ try { document.documentElement.dataset.sidebar = matchMedia("(max-width: 767.98p
 catch { document.documentElement.dataset.sidebar = "closed"; }
 </script>
 <link rel="stylesheet" href="/static/tabler.min.css">
-<link rel="stylesheet" href="/static/style.css?v=51">
+<link rel="stylesheet" href="/static/style.css?v=52">
 <link rel="stylesheet" href="/static/themes.css?v=7">
 {# htmx keeps no copy of a page for the Back button: going back loads the page again, so nothing that was shown is kept in the browser. #}
 <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
@@ -27,7 +27,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 <script src="/static/deferred.js?v=1" defer></script>
 <script src="/static/telemetry.js?v=4" defer></script>
 <script src="/static/sort.js?v=6" defer></script>
-<script src="/static/navigation.js?v=4" defer></script>
+<script src="/static/navigation.js?v=5" defer></script>
 <script src="/static/console.js?v=11" defer></script>
 <script src="/static/user-picker.js?v=1" defer></script>
 {% if person and nav.active == '/chat' %}<script src="/static/chat_sidebar.js?v=3" defer></script>{% endif %}
@@ -86,7 +86,6 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
     <form method="post" action="/sign-out" class="m-0"><button type="submit" class="section-link btn w-100 text-start">Logout</button></form>
     {% endif %}
   </nav>
-  {% if nav.active == '/chat' %}<div data-desktop-conversations>{% include 'chat_sidebar.html' %}</div>{% endif %}
 </aside>
 <button type="button" class="sidebar-shade" tabindex="-1" aria-label="Close section pages" hidden></button>
 {% endif %}
@@ -109,13 +108,14 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {% if person %}
 <dialog id="mobile-navigation" class="mobile-navigation" aria-labelledby="mobile-navigation-title">
   <div class="d-flex align-items-center justify-content-between gap-2 mb-3"><strong id="mobile-navigation-title">Navigation</strong><button type="button" class="btn btn-outline-secondary btn-sm" data-close-navigation>Close menu</button></div>
-  <nav aria-label="All pages">
+  {% if nav.active == '/chat' %}<button type="button" class="btn btn-outline-secondary btn-sm w-100 mb-3" data-switch-navigation aria-controls="mobile-site-navigation mobile-chat-navigation">Main menu</button>{% endif %}
+  <nav id="mobile-site-navigation" aria-label="All pages">
   {% for category in nav.groups %}
     {{ mobile_category(category.name, category.links, category.headings|default({})) }}
   {% endfor %}
   {% if nav.section == 'My account' %}{{ mobile_category('My account', nav.links, nav.headings) }}{% else %}<a class="section-link" href="/account">My account</a>{% endif %}
   </nav>
-  <div data-mobile-conversations></div>
+  {% if nav.active == '/chat' %}<div id="mobile-chat-navigation" data-mobile-conversations hidden></div>{% endif %}
 </dialog>
 {% endif %}
 <template id="empty-row-template">{{ empty_row(1) }}</template>

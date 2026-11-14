@@ -2,7 +2,11 @@
 {% block title %}{{ talk.title if talk else "Chat" }} · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/chat.js?v=13" defer></script>{% endblock %}
 {% block main %}
+<button type="button" class="btn btn-outline-secondary btn-sm d-none d-md-inline-flex d-xl-none mb-3" data-open-chat-navigation aria-controls="mobile-navigation" aria-haspopup="dialog" aria-expanded="false">Chat options</button>
+<div class="chat-workspace{{ ' compare' if talk and talk.compare }}">
+<aside class="chat-conversation-rail" data-desktop-conversations aria-label="Conversation controls">{% include "chat_sidebar.html" %}</aside>
 <section id="chat-main" class="chat-main{{ ' compare' if talk and talk.compare }}" data-chat-ref="{{ talk.id if talk else '' }}">
 {% include "chat_main.html" %}
 </section>
+</div>
 {% endblock %}

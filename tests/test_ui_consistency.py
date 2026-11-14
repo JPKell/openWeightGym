@@ -831,8 +831,11 @@ def test_mobile_menu_has_both_levels_keyboard_return_and_desktop_rail(desk):
         playwright.expect(menu).to_be_visible()
         playwright.expect(page.locator('#sidebar-toggle')).not_to_be_visible()
         menu.click()
-        dialog = page.get_by_role('dialog', name='Navigation', exact=True)
+        dialog = page.get_by_role('dialog', name='Chat options', exact=True)
         playwright.expect(dialog).to_be_visible()
+        playwright.expect(dialog.get_by_role('searchbox', name='Find a conversation')).to_be_visible()
+        dialog.get_by_role('button', name='Show main menu', exact=True).click()
+        dialog = page.get_by_role('dialog', name='Navigation', exact=True)
         assert dialog.locator('summary').all_text_contents() == ['Interact','Models','Benchmark','Logs','System','Settings','Docs']
         dialog.locator('summary').filter(has_text='Settings').click()
         playwright.expect(dialog.get_by_role('link', name='General', exact=True)).to_be_visible()
@@ -849,7 +852,7 @@ def test_mobile_menu_has_both_levels_keyboard_return_and_desktop_rail(desk):
         playwright.expect(category.locator('use')).to_have_attribute('href', '/static/icons.svg?v=3#chat')
         links = page.locator('#site-sidebar nav').bounding_box()
         history = page.locator('.chat-sidebar').bounding_box()
-        assert links['y'] + links['height'] <= history['y']
+        assert links['x'] + links['width'] < history['x']
         control = page.locator('#sidebar-toggle')
         assert control.bounding_box()['y'] > 800
         control.click()
