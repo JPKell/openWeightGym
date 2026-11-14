@@ -1,9 +1,9 @@
 <!--docs
 title = "Files and operation"
-summary = "Ports, endpoints, files and the day-to-day running of the benchmark worker."
-order = 40
+summary = "Private files, queue ownership and adding code-defined benchmark suites."
+order = 70
 covers = []
 include = "../../../benchmarks/README.md"
-parts = ["Key ports and endpoints", "Files and operation"]
+parts = ["Files and operation"]
 -->
 

@@ -237,7 +237,7 @@ class FrontBatches:
         return one if allowed else error(404, "There is no such file or batch of yours.")
 
     async def file_upload(self, request: Request, user: User) -> Response:
-        """Validate and retain one batch input file."""
+        """Validate and retain one purpose=batch input file."""
         maximum = int(self.setting("batch_max_mib")*2**20)
         body = bytearray()
         async for chunk in request.stream():

@@ -1269,7 +1269,7 @@ Machine inspection identifies each reported source and default. Wake is a live T
 from `[machines.NAME]` in the control node’s `settings/weightroom.toml`, rather than a separate
 service. Change, report and pending timestamps carry explicit UTC offsets before browser localization.
 History export/import excludes credentials, file-only and retired settings; see the
-[settings workspace guide](README.md#settings-data-and-privacy) for validated preview and recovery.
+[settings workspace guide](guide/administration/settings.md) for validated preview and recovery.
 
 ### Sign-in policy
 

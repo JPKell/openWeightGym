@@ -286,3 +286,5 @@ M2 batch 4: Usage, reliability, requests, batches, stored Responses, event/plugi
 M2 batch 5: Shared settings, nodes, accounts/groups, allowances, tool/plugin/media administration, Telephone, schedules and Components covered; 80/83 pages, allowlist 3. A7: 37 passed plus the known index failure; all guide links resolve. No unverifiable facts or owner questions.
 
 M2 batch 6: Authentication, compatibility, errors, MCP and executable API examples added; generated defaults/endpoint facts replace duplicated tables. Published chat/Responses/search payloads pass against isolated normal gateway/console routes with a fake model (2 tests); 80/83 pages, allowlist 3. All guide links resolve; no unverifiable facts or owner questions.
+
+M2 batch 7: Benchmark task guides, current protocol/operation README, topology/settings, troubleshooting and short Docs index complete; 83/83 navigation pages, 49 declared public endpoints, 35 abilities, 194 defaults; zero coverage gaps and allowlist deleted. Frozen histories remain untouched. Legacy anchors and shared includes retained; editorial checks continue.

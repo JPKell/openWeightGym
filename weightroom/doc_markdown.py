@@ -126,7 +126,7 @@ def render(text: str, prefix: str = "doc", links=None) -> Markup:
         inline = tokens[number + 1]
         explicit = ANCHOR.search(inline.content)
         if explicit:
-            inline.content = ANCHOR.sub('', inline.content)
+            inline.content = ANCHOR.sub('', inline.content).strip()
             inline.children = RENDERER.parseInline(inline.content)[0].children
         if token.tag in ("h1", "h2"):
             token.tag = tokens[number + 2].tag = "h3"  # a section's own headings sit below its card's title
@@ -161,7 +161,7 @@ def document(text: str, links=None, *, admin: bool = False) -> dict:
         end = starts[place + 1][0] if place + 1 < len(starts) else len(lines)
         explicit = ANCHOR.search(heading)
         ident = explicit[1] if explicit else slug(heading) or f"section-{place + 1}"
-        heading = ANCHOR.sub('', heading)
+        heading = ANCHOR.sub('', heading).strip()
         if ident in {section['id'] for section in sections}:
             raise ValueError(f'Duplicate documentation anchor: {ident}')
         sections.append({"id": ident, "title": heading, "body": render("\n".join(lines[after:end]), ident, links)})

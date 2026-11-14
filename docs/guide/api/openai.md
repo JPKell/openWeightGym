@@ -32,7 +32,7 @@ Responses accepts text, supported inline image data, sampling controls and text/
 
 ## Not implemented by openWeightGym {#api-unsupported}
 
-The broad worker inference proxy can forward additional model requests that its backend understands. This does not promise implementations of OpenAI Conversations, Realtime, Assistants, fine-tuning or other resource families. Hosted forwarding is likewise provider-dependent.
+The broad worker inference proxy offers backend-dependent passthrough for additional model requests. This does not promise implementations of OpenAI Conversations, Realtime, Assistants, fine-tuning or other resource families. Hosted forwarding is likewise provider-dependent.
 
 openWeightGym conversations, collections, request logs and account administration use their own application contracts. Match clients to the generated inventory and check a small request with the selected backend before a larger job.
 

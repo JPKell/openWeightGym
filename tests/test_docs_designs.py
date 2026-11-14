@@ -78,7 +78,7 @@ def test_full_text_search_scoping_empty_and_escaping(preview):
     expect(page.locator('#search-empty')).to_be_visible()
     page.locator('#reset-search').click()
     page.locator('#query').fill('shift+enter')
-    page.locator('#results-list a').first.click()
+    page.locator('#results-list a[href="#page=%2Fdocs%2Fweb-app%2Fchat"]').click()
     expect(page.locator('#article')).to_contain_text('Shift+Enter adds a line')
     page.locator('#query').fill('<img src=x onerror=alert(1)>')
     expect(page.locator('#search-empty')).to_be_visible()
