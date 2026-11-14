@@ -8,6 +8,7 @@ A `links` function, when given, decides where each link goes: a new address, or 
 """
 
 import re
+import tomllib
 from html import escape
 
 from markdown_it import MarkdownIt
@@ -16,6 +17,49 @@ from markupsafe import Markup
 STEP = re.compile(r"^(\d+)\.\s+")
 LANGUAGES = {"bash": "Shell", "sh": "Shell", "shell": "Shell", "console": "Shell", "toml": "TOML", "python": "Python",
              "py": "Python", "json": "JSON", "ini": "INI", "yaml": "YAML", "text": "Text", "": "Text"}
+FRONT = re.compile(r'\A\ufeff?\s*<!--docs\s*\n(.*?)\n-->[ \t]*\n?', re.S)
+ANCHOR = re.compile(r'\s+\{#([a-zA-Z][a-zA-Z0-9_.:-]*)\}\s*$')
+
+
+def front_matter(text: str) -> tuple[dict, str]:
+    """Read invisible TOML metadata without interpreting the Markdown body as a template."""
+    match = FRONT.match(text)
+    if not match:
+        if text.lstrip('\ufeff \n\r\t').startswith('<!--docs'):
+            raise ValueError('Unclosed documentation front matter.')
+        return {}, text
+    return tomllib.loads(match[1]), text[match.end():]
+
+
+def audience_text(text: str, admin: bool = False) -> str:
+    """Filter administrator blocks before rendering or indexing; malformed blocks fail closed.
+
+    Markers in fenced examples are literal. Unbalanced markers are rejected for both
+    audiences so a spelling mistake can never publish a private paragraph.
+    """
+    _, text = front_matter(text)
+    kept, private, fence = [], False, ''
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith(('```', '~~~')):
+            marker = stripped[:3]
+            if not fence:
+                fence = marker
+            elif fence == marker:
+                fence = ''
+        if not fence and stripped == '<!-- audience: admin -->':
+            if private:
+                raise ValueError('Nested documentation audience block.')
+            private = True
+        elif not fence and stripped == '<!-- /audience -->':
+            if not private:
+                raise ValueError('Unmatched documentation audience block.')
+            private = False
+        elif admin or not private:
+            kept.append(line)
+    if private:
+        raise ValueError('Unclosed documentation audience block.')
+    return ''.join(kept)
 
 
 def slug(title: str) -> str:
@@ -94,8 +138,9 @@ def render(text: str, prefix: str = "doc", links=None) -> Markup:
     return Markup(RENDERER.renderer.render(tokens, RENDERER.options, env))
 
 
-def document(text: str, links=None) -> dict:
+def document(text: str, links=None, *, admin: bool = False) -> dict:
     """A whole Markdown document: its title, its overview and its sections, each rendered, with the links to them."""
+    text = audience_text(text, admin)
     lines = text.splitlines()
     title, title_lines, starts = "", range(0), []
     for number, token in enumerate(tokens := RENDERER.parse(text)):
@@ -110,7 +155,11 @@ def document(text: str, links=None) -> dict:
                 if token.type == "inline" and tokens[number - 1].type == "heading_open" and tokens[number - 1].tag == "h2"]
     for place, ((start, after), heading) in enumerate(zip(starts, headings)):
         end = starts[place + 1][0] if place + 1 < len(starts) else len(lines)
-        ident = slug(heading) or f"section-{place + 1}"
+        explicit = ANCHOR.search(heading)
+        ident = explicit[1] if explicit else slug(heading) or f"section-{place + 1}"
+        heading = ANCHOR.sub('', heading)
+        if ident in {section['id'] for section in sections}:
+            raise ValueError(f'Duplicate documentation anchor: {ident}')
         sections.append({"id": ident, "title": heading, "body": render("\n".join(lines[after:end]), ident, links)})
     return {"title": title, "overview": render(overview, "overview", links) if overview.strip() else Markup(""),
             "sections": sections, "contents": [(section["id"], section["title"]) for section in sections]}

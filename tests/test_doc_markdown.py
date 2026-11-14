@@ -106,3 +106,32 @@ def test_doc_pages_put_each_section_in_a_card_with_links_to_them(desk):
     toollocker = browser.get("/docs/modules/toollocker").text
     assert toollocker.count('class="docs-step"') >= 4 and toollocker.count("data-copy-target=") >= 8
     assert '<nav class="docs-crumbs" aria-label="Documentation breadcrumb"><a href="/docs/modules">Modules</a>' in toollocker
+
+
+def test_front_matter_and_private_blocks_are_filtered_before_rendering():
+    import pytest
+    text = '<!--docs\ntitle = "Guide"\ncovers = ["/chat"]\n-->\n# Guide\n\n## Public\nVisible.\n<!-- audience: admin -->\nPrivate needle.\n<!-- /audience -->\n'
+    metadata, body = doc_markdown.front_matter(text)
+    assert metadata == {'title': 'Guide', 'covers': ['/chat']}
+    assert body.startswith('# Guide')
+    assert 'Private needle' not in str(doc_markdown.document(text))
+    assert 'Private needle' in str(doc_markdown.document(text, admin=True))
+    assert '<!--docs' not in str(doc_markdown.document(text, admin=True))
+    for bad in ('<!--docs\ntitle="bad"', '<!-- audience: admin -->\nsecret', '<!-- /audience -->'):
+        with pytest.raises(ValueError):
+            doc_markdown.document(bad)
+    with pytest.raises(ValueError):
+        doc_markdown.document('<!--docs\ntitle=not TOML\n-->')
+
+
+def test_explicit_legacy_anchors_and_duplicate_anchor_rejection():
+    import pytest
+    found = doc_markdown.document('# Guide\n\n## Start a conversation {#chat}\n\nDo it.\n')
+    assert found['contents'] == [('chat', 'Start a conversation')]
+    with pytest.raises(ValueError):
+        doc_markdown.document('## One {#same}\n\nFirst\n\n## Two {#same}\n\nSecond')
+
+
+def test_audience_markers_in_fenced_examples_stay_literal():
+    text = '## Example\n\n```text\n<!-- audience: admin -->\n```\n'
+    assert '&lt;!-- audience: admin --&gt;' in str(doc_markdown.document(text))
