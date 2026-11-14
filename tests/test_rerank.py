@@ -44,6 +44,9 @@ def test_rerank_uses_normal_forward_and_canonical_route(fake_llama_server, path)
         assert result.status_code==200,result.text
         assert result.json()['path']=='/v1/rerank' and json.loads(result.json()['body'])==body
         assert result.headers.get('x-loadcoach-request-id')
+        bad=client.post(path,json={**body,'unsupported':'x'},headers=who)
+        assert bad.status_code==400 and bad.json()['error']['code']=='unsupported_parameter'
+        assert bad.headers['cache-control']=='private, no-store' and bad.headers['x-content-type-options']=='nosniff'
         assert client.post(path,json={**body,'model':'chat'},headers=who).json()['error']['message']=='Choose a reranker model for rerank requests.'
         for other,fields in [('/v1/chat/completions',{'messages':[]}),('/v1/embeddings',{'input':'hi'})]:
             refused=client.post(other,json={'model':'rank',**fields},headers=who)

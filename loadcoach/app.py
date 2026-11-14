@@ -630,6 +630,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             if hasattr(selected_engine, "check_request"):
                 selected_engine.check_request(request.url.path, asked)
         except ValueError as problem:
+            if request.url.path in ('/v1/rerank', '/v1/audio/translations') or settings.get('engine') == 'whispercpp':
+                return error(400, str(problem), code='unsupported_parameter',
+                             headers={'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff'})
             return error(400, str(problem), code="unsupported_engine_operation")
         required_model = {field: request.headers.get('x-loadcoach-require-'+header) for field,header in
                           (('model_id','model-id'),('fingerprint','fingerprint'),('build','build'))}

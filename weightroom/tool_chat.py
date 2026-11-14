@@ -9,6 +9,7 @@ import httpx
 from starlette.responses import JSONResponse
 
 from loadcoach.groups import LEVELS
+from turnstile.extractions import PRIVATE
 from turnstile.tool_loop import ToolClient, ToolTurn, ToolLimit, model_result, exact_result, TOOL_PATH
 from weightroom.chat_store import trace_of
 from weightroom.extraction import Problem
@@ -17,7 +18,7 @@ from weightroom.extraction import Problem
 def failure(status, message, code='tool_chat_error'):
     """Use the normal private error envelope for console API operations."""
     return JSONResponse({'error': {'message': message, 'type': 'tool_chat_error', 'code': code}}, status,
-                        headers={'cache-control': 'no-store'})
+                        headers=PRIVATE)
 
 
 class ToolChat:
@@ -90,7 +91,7 @@ class ToolChat:
             body=json.loads(raw)
             if not isinstance(body,dict) or body.keys()-set(fields):raise ValueError()
         except (ValueError,TypeError):
-            raise Problem('Expected a JSON object with fields: '+', '.join(fields)) from None
+            raise Problem('Expected a JSON object with fields: '+', '.join(fields), 400, 'unsupported_parameter') from None
         return body
 
     async def start(self, request, user):
@@ -285,7 +286,9 @@ class ToolChat:
                 try:
                     if request.method == 'POST' and request.headers.get('x-loadcoach-log','').lower() == 'off':
                         raise Problem('Tool chat requires logging; omit X-LoadCoach-Log: off.')
-                    return await handler(request,user)
+                    response = await handler(request,user)
+                    response.headers.update(PRIVATE)
+                    return response
                 except Problem as error:return failure(error.status,str(error),error.code)
             return checked
         return [route('/loadcoach/tool-conversations/tools',guard(self.catalogue)),

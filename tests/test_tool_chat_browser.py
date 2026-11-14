@@ -90,7 +90,10 @@ def test_tool_chat_empty_models_and_unavailable_states(tool_console,width):
 
 def test_tool_chat_sidebar_rename_and_delete_use_shared_handlers(tool_console):
     console,rig=tool_console
-    number=console.post('/chat/tools/api/',json={}).json()['id']
+    started=console.post('/chat/tools/api/',json={})
+    assert started.headers['cache-control']=='private, no-store'
+    assert started.headers['x-content-type-options']=='nosniff'
+    number=started.json()['id']
     with playwright.sync_playwright() as engine:
         browser,page=browser_context(engine,console)
         page.goto('http://console.test/chat/tools/'+number)

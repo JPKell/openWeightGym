@@ -84,6 +84,12 @@ def test_private_adapter_preserves_supported_native_formats_and_request_fields(p
         answer = client.post(runtime.TRANSLATE if translate else runtime.TRANSCRIBE, headers={'authorization': 'Bearer private'},
                              json={'file': base64.b64encode(wav).decode(), 'response_format': form, 'prompt': 'terms', 'temperature': .2})
         assert answer.status_code == 200, answer.text
+        assert answer.headers['cache-control'] == 'private, no-store'
+        if form == 'json' and not translate:
+            bad = client.post(runtime.TRANSCRIBE, headers={'authorization': 'Bearer private'}, json={'file': '%%%invalid'})
+            assert bad.status_code == 400 and bad.json()['error']['code'] == 'invalid_audio'
+            assert bad.json()['error']['type'] == 'whisper_error'
+            assert bad.headers['cache-control'] == 'private, no-store'
         assert answer.content == (b'{"text":"exact"}' if form == 'json' else b'exact output\n')
         assert b'name="prompt"\r\n\r\nterms' in seen[0] and b'name="temperature"\r\n\r\n0.2' in seen[0]
         assert ('\r\n\r\ntrue' if translate else '\r\n\r\nfalse').encode() in seen[0]

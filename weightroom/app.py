@@ -3780,22 +3780,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def tool_chat_api(request: Request, person: Person) -> Response:
         """Proxy browser operations with its private session key and existing CSRF checks."""
+        from turnstile.extractions import PRIVATE
         if request.method == 'POST' and request.headers.get('x-loadcoach-log', '').lower() == 'off':
-            return JSONResponse({'error': {'message': 'Tool chat requires logging; omit X-LoadCoach-Log: off.'}}, 400)
+            return JSONResponse({'error': {'message': 'Tool chat requires logging; omit X-LoadCoach-Log: off.', 'type': 'tool_chat_error', 'code': 'unsupported_parameter'}}, 400, headers=PRIVATE)
         operation=request.path_params.get('operation','').strip('/')
         if operation and not re.fullmatch(r'(tools|[0-9]+(?:/actions)?)', operation):
-            return JSONResponse({'error':{'message':'No such tool chat operation.'}},404)
+            return JSONResponse({'error':{'message':'No such tool chat operation.', 'type':'tool_chat_error', 'code':'not_found'}},404,headers=PRIVATE)
         target='/loadcoach/tool-conversations'+('/'+operation if operation else '')
         answer=await ask(request.method,target,person.key,content=await request.body(),params=request.query_params,
                          headers={'content-type':'application/json'})
-        return JSONResponse(answer.json(),answer.status_code)
+        return JSONResponse(answer.json(),answer.status_code,headers=PRIVATE)
 
     async def tool_chat_change(request: Request, person: Person) -> Response:
         """Keep the shared sidebar's rename and delete form contract for Tool chat."""
+        from turnstile.extractions import PRIVATE
         form = await typed(request)
         body = {'delete': True} if form.get('do') == 'delete' else {'title': form.get('title', '')}
         answer = await ask('POST', '/loadcoach/tool-conversations/'+quote(request.path_params['ref'],safe=''), person.key, json=body)
-        return JSONResponse(answer.json(), answer.status_code)
+        return JSONResponse(answer.json(), answer.status_code,headers=PRIVATE)
 
     async def chat_page(request: Request, person: Person, said: str = "", typed_in: dict | None = None) -> Response:
         """The list of one's conversations beside one of them, or beside the box that starts a new one."""
