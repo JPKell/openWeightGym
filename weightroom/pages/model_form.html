@@ -1,6 +1,10 @@
 {% macro number(id, label, unit='', min='', max='', value='', source='', key='', step='1', required=false, name='') %}
 <div class="col-md-6"><label for="{{ id }}" class="form-label">{{ label }}</label><div class="input-group input-group-flat"><input id="{{ id }}"{% if name %} name="{{ name }}"{% endif %} type="number" step="{{ step }}" class="form-control"{% if min != '' %} min="{{ min }}"{% endif %}{% if max != '' %} max="{{ max }}"{% endif %} value="{{ value }}"{% if source %} data-json-source="{{ source }}" data-json-field="{{ key }}"{% endif %}{{ ' required' if required }}>{% if unit %}<span class="input-group-text">{{ unit }}</span>{% endif %}</div></div>
 {% endmacro %}
+{% macro model_mode_choice(id, name, label, help, checked=false, marker=none, flag='') %}
+{% if marker is not none %}<input type="hidden" name="{{ name }}_controls" value="{{ marker }}">{% endif %}
+<div class="form-check mb-0"><input id="{{ id }}" name="{{ name }}" value="yes" type="checkbox" class="form-check-input" aria-describedby="{{ id }}-help"{{ ' checked' if checked }}><label for="{{ id }}" class="form-check-label">{{ label }}{% if flag %} <code>--{{ flag }}</code>{% endif %}</label></div><div id="{{ id }}-help" class="form-hint">{{ help }}</div>
+{% endmacro %}
 {% macro choice(id, label, choices, source='', key='') %}
 <div class="col-md-6"><label for="{{ id }}" class="form-label">{{ label }}</label><select id="{{ id }}" class="form-select"{% if source %} data-json-source="{{ source }}" data-json-field="{{ key }}"{% endif %}><option value="">Runtime default</option>{% for value in choices %}<option value="{{ value }}">{{ value }}</option>{% endfor %}</select></div>
 {% endmacro %}

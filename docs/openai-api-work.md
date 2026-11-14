@@ -352,6 +352,8 @@ covers:
 
 ## K1. Reranker models and `/v1/rerank`
 
+**Implemented 2026-11-14:** explicit reranker mode, mutually exclusive embedding flag, catalogue/UI filtering, canonical alias, admission/usage and batch support. Installed Q8_0 models on jpk-main through download/install jobs `SX_thIyeZrg` (BGE) and `twqUyHscGfo` (Qwen). The installed llama-server advertises `--reranking`. One unchanged probe asked “What is the capital of France?” against Paris, Pacific Ocean, bananas and Python documents: BGE request `1810895650947796` scored Paris **7.796584**, then **−10.944597, −11.025346, −11.033389**; Qwen request `1810895650947798` scored Paris **0.806314**, then **0.000133136, 0.000084937, 0.000054180**. Both rank the relevant document first. Native responses omit documents despite `return_documents:true`; the gateway preserves native output. Sources: [BGE Q8_0](https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF), [Qwen conversion explicitly supporting llama.cpp reranking](https://huggingface.co/gorse-io/Qwen3-Reranker-4B-GGUF), [native endpoint contract](https://github.com/ggml-org/llama.cpp/tree/master/tools/server#post-reranking-rerank-v1rerank).
+
 **Build:**
 - **Model setting:** add a llama.cpp flag `reranking` (llama-server `--reranking`), handled the
   same way `embedding` is ([engines/llama_cpp/form.py](../engines/llama_cpp/form.py),

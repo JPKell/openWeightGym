@@ -215,7 +215,7 @@ class Knowledge:
     def local(self, catalog, label, embedding):
         """Require a permitted local model of the requested embedding or generation kind."""
         found = next((m for m in catalog if m['id'] == label), None)
-        if (not found or found.get('owned_by') != 'loadcoach' or bool(found.get('embedding')) != embedding
+        if (not found or found.get('owned_by') != 'loadcoach' or bool(found.get('embedding')) != embedding or found.get('rerank') or found.get('capabilities', {}).get('rerank')
             or not all(found.get(k) for k in ('model_id', 'fingerprint', 'build'))):
             raise Problem('Choose a permitted local '+('embedder' if embedding else 'text model')+' with a ready fingerprint and server build.')
         if found.get('local_model_guard') is not True:

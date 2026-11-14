@@ -245,6 +245,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             seen.add(key)
             # Embedding and generation measurements have different native transports and scores.
             embedding = (place or logical).get('embedding', logical.get('embedding', False))
+            rerank = (place or logical).get('rerank', logical.get('rerank', False)) or (place or logical).get('capabilities', {}).get('rerank')
+            if rerank and definition['id'] != 'load':
+                skipped.append(logical['id'])
+                continue
             if definition['id'] != 'load' and bool(definition.get('embedding')) != bool(embedding):
                 skipped.append(logical['id'] + (f' at {machine}' if target.get('machine') else ''))
                 continue
@@ -350,10 +354,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
         plans = []
         for definition in definitions:
             if definition.get('quality'):
-                place = next((one for one in locations if not one.get('embedding', logical.get('embedding', False))), None)
+                place = next((one for one in locations if not one.get('embedding', logical.get('embedding', False)) and not one.get('rerank', logical.get('rerank', False))), None)
                 if place is None and logical.get('locations'):
                     continue
-                if place is None and logical.get('embedding'):
+                if place is None and (logical.get('embedding') or logical.get('rerank')):
                     continue
                 plans.append((definition, {'model': logical['id'], 'local_name': (place or {}).get('id', logical['id']),
                                            'model_id': place.get('model_id') if place is not None else logical.get('model_id'),
@@ -361,6 +365,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             else:
                 places = locations if logical.get('locations') else [None]
                 for place in places:
+                    if definition['id'] != 'load' and (place or logical).get('rerank', logical.get('rerank')):
+                        continue
                     if (definition['id'] != 'load' and bool(definition.get('embedding')) !=
                             bool((place or logical).get('embedding', logical.get('embedding', False)))):
                         continue

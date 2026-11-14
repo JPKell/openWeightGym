@@ -24,7 +24,7 @@ import time
 from db import DatabaseSource, database, migrate
 from db.schemas import BATCHES
 
-ENDPOINTS = ("/v1/chat/completions", "/v1/responses", "/v1/completions", "/v1/embeddings", "/v1/images/generations", "/v1/images/edits", "/v1/audio/generations")
+ENDPOINTS = ("/v1/chat/completions", "/v1/responses", "/v1/completions", "/v1/embeddings", "/v1/rerank", "/v1/images/generations", "/v1/images/edits", "/v1/audio/generations")
 MOST_LINES = 10_000  # requests in one batch
 MOST_BYTES = 50 * 2**20  # the size of one uploaded file
 TRIES = 3  # how often one request is begun. Each time it is cut off by LoadCoach going down counts, so that one which brings it down is not begun for ever

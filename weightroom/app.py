@@ -447,7 +447,7 @@ def read(text: str):
 
 SHOWN_SETTINGS = ("engine", "flags", "strata", "gpus", "alone", "allow_split", "adapters", "min_context", "order")
 # Fields of a model's form that every node's copy shares. They appear once, unprefixed.
-SHARED_FIELDS = ("engine", "projector", "embedding", "embedding_controls", "adapter", "adapter_file", "adapter_scale", "order")
+SHARED_FIELDS = ("engine", "projector", "embedding", "embedding_controls", "reranking", "reranking_controls", "adapter", "adapter_file", "adapter_scale", "order")
 
 
 def node_form(form: dict[str, list[str]], machine: str) -> dict[str, list[str]]:
@@ -1657,7 +1657,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         said=request.query_params.get('said', ''), failed='failed' in request.query_params)
         wanted = next((bench for bench in definitions if bench['id'] == request.query_params.get('benchmark')), {})
         kind = request.query_params.get('kind', 'classifier' if request.query_params.get('family') == 'classifier' else 'llm') if section in ('node-measurements', 'results') else 'llm'
-        if kind not in ('llm', 'embedding', 'image', 'audio', 'classifier'):
+        if kind not in ('llm', 'embedding', 'rerank', 'image', 'audio', 'classifier'):
             kind = 'llm'
         resource_ids = {'context', 'speed', 'load', 'embedding_context', 'embedding_speed', 'embedding_load', 'classifier_speed'}
         embedding_ids = {bench['id'] for bench in definitions if bench.get('embedding')}
@@ -1668,7 +1668,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 kind = 'embedding'
             embedding_family = kind == 'embedding'
             models = [model for model in models if benchmark_model_kind(model) == ('llm' if kind == 'embedding' else kind)]
-            if kind in ('image', 'audio'):
+            if kind in ('image', 'audio', 'rerank'):
                 embedding_family = False
                 definitions = [bench for bench in definitions if bench['id'] == 'load']
         elif section in ('results', 'compare'):  # text language models only
@@ -1693,7 +1693,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         resource_selected = next((bench for bench in resource_benchmarks if bench['id'] == selected['id']),
                                  resource_benchmarks[0] if resource_benchmarks else {})
         measurement = resource_selected.get('id', 'context').removeprefix('embedding_')
-        type_benchmarks = {'llm': measurement, 'embedding': 'embedding_' + measurement, 'image': 'load', 'audio': 'load', 'classifier': 'classifier_speed'}
+        type_benchmarks = {'llm': measurement, 'embedding': 'embedding_' + measurement, 'image': 'load', 'audio': 'load', 'rerank': 'load', 'classifier': 'classifier_speed'}
         latest = latest_results(runs)
         location_latest = {}
         for run in runs:  # performance evidence is never collapsed across compute locations
@@ -1844,7 +1844,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         def run_back(said, flag=''):
             query = {'benchmark': one('benchmark'), **({flag: '1'} if flag else {}), 'said': said}
             if measurement_setup:
-                query['kind'] = one('kind') if one('kind') in ('llm', 'embedding', 'image', 'audio', 'classifier') else 'llm'
+                query['kind'] = one('kind') if one('kind') in ('llm', 'embedding', 'rerank', 'image', 'audio', 'classifier') else 'llm'
             return go('/benchmarks/' + ('node-measurements' if measurement_setup else 'runs') + '?' + urlencode(query)
                       + ('#measurement-runs' if measurement_setup else ''))
 
@@ -1927,7 +1927,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, 'refused.html', person, status=403, why='Your account may not add, change and remove models.')
         asked = request.query_params
         kind = asked.get('kind', 'llm')
-        if kind not in ('all', 'llm', 'image', 'audio', 'classifier'):
+        if kind not in ('all', 'llm', 'rerank', 'image', 'audio', 'classifier'):
             kind = 'llm'
         part = asked.get('part') if asked.get('complete') != '1' else None
         shown_node = asked.get('node', '')
@@ -1956,7 +1956,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return fragment_error(request, person, 'models', 'list', known) if part == 'list' else known
         kinds = {"sdcpp": "image", "audiocpp": "audio", "whispercpp": "audio"}
         known['models'] = [one for one in known['models'] if kind == 'all' or benchmark_model_kind(one) == kind]
-        measuring = measure_button([one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == 'llm'],
+        measuring = measure_button([one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == 'llm' and benchmark_model_kind(one) != 'rerank'],
                                    node_measuring(known, shown_node), shown_node)
         wanted_jobs = asked.getlist("install")
         try:
@@ -2001,7 +2001,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             chosen_engine, engine_schema = enabled_engines[0]["id"], enabled_engines[0]["schema"]
         chosen = next((row for row in engine_choices if row['id'] == chosen_engine), {})
         known['cards'] = chosen.get('cards') or [card['card'] for node in node_choices if node['name'] in (add_nodes or names) for card in node.get('cards', [])]
-        available = await ask("GET", "/turnstile/models/files", person.key) if kind in ('all', 'llm', 'classifier') else None
+        available = await ask("GET", "/turnstile/models/files", person.key) if kind in ('all', 'llm', 'rerank', 'classifier') else None
         file_nodes = available.json().get("nodes", []) if available and available.is_success else []
         # The chosen nodes' own files come first; a file anywhere else is copied to them.
         ordered = sorted(file_nodes, key=lambda row: row['name'] not in add_nodes)
@@ -2219,7 +2219,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         classifier = bool(model.get('capabilities', {}).get('classifier'))
         benchmarks = [bench for bench in benchmarks if bench['id'] == 'load' or bool(bench.get('classifier')) == classifier]
         multimedia = model.get("engine") in ("sdcpp", "audiocpp", "whispercpp")
-        if multimedia:
+        if multimedia or model.get('flags', {}).get('reranking'):
             benchmarks = [bench for bench in benchmarks if bench['id'] == 'load']
         benchmarks = [bench for bench in benchmarks if bool(bench.get('embedding')) == bool(model['flags'].get('embedding'))]
         local_runs = [{**run, 'model':name} for run in scored.json().get('runs', [])
@@ -3785,7 +3785,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if not ref and not request.query_params.get('model') and preferred in chat_models(person):
             draft.setdefault('model', preferred)
         return page(request, template, person, status=400 if said else 200, conversations=listed["conversations"], talk=talk,
-                    models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier")], *asked_as(person)], said=said, typed_in=draft,
+                    models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("rerank")], *asked_as(person)], said=said, typed_in=draft,
                     adaptor_names={row["id"] for row in plugins.models(person.me)})  # fmt: skip
 
     async def collections_page(request: Request, person: Person, said='', result=None, form=None, failed=False, diagnostics=None) -> Response:
@@ -3823,7 +3823,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         levels=levels[:levels.index(maximum)+1] if maximum in levels else []
         response=page(request,'collections.html',person,status=400 if failed else 200,collections=listing['collections'],
             collection=selected,embedders=[m for m in models if m.get('embedding')],
-            answer_models=[m for m in models if not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier')],levels=levels,
+            answer_models=[m for m in models if not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier') and not m.get('rerank') and not m.get('capabilities', {}).get('rerank')],levels=levels,
             said=said,failed=failed,unavailable=unavailable,result=result,form=form or {},diagnostics=diagnostics or {},
             inventory=inventory,query=query,status_filter=status_filter,
             new_open=bool(request.query_params.get('new') or (form or {}).get('do') == 'create' or not collection_rows),
@@ -3934,7 +3934,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         try:
             catalog=await ask('GET','/v1/models',person.key)
             if catalog.is_success:
-                models=[m for m in catalog.json()['data'] if m.get('owned_by')=='loadcoach' and not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier') and m.get('local_model_guard')]
+                models=[m for m in catalog.json()['data'] if m.get('owned_by')=='loadcoach' and not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier') and not m.get('rerank') and not m.get('capabilities', {}).get('rerank') and m.get('local_model_guard')]
             else:
                 unavailable='The model catalogue is unavailable. Saved prompts and outputs remain on front.'
         except ServiceUnavailable:

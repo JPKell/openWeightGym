@@ -18,6 +18,8 @@ A projector is a file that lets a model see pictures, named by the flag `mmproj`
 with one is a model of its own too, and is kin of the same model without: a server that has
 the projector answers for both. `kin_base()` is what kin have in common.
 
+A reranker uses `flags.reranking` (`--reranking`) and is marked `"rerank": true` in `/v1/models`. It serves /v1/rerank rather than chat or embedding vectors. Embedding and reranking modes are mutually exclusive.
+
 An embedding model is one with the flag `embedding` set, llama.cpp's own `--embedding`: the
 Embedding model box on the add form and the model page sets it. Its server answers
 `/v1/embeddings` rather than chat, `/v1/models` marks it `"embedding": true`, and only models so

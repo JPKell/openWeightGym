@@ -23,7 +23,7 @@
 </div>
 {% call pills('Model type', class_='gap-2 mb-3') %}
 {% from 'navigation_parts.html' import model_type_choices %}
-{% call(value, label) model_type_choices([('all','All models'),('llm','LLM'),('image','Image'),('audio','Audio'),('classifier','Classifier')]) %}{{ pill_link(label, '/models?kind=' ~ value ~ ('&node=' ~ shown_node|urlencode if shown_node), kind == value) }}{% endcall %}
+{% call(value, label) model_type_choices([('all','All models'),('llm','LLM'),('rerank','Reranker'),('image','Image'),('audio','Audio'),('classifier','Classifier')]) %}{{ pill_link(label, '/models?kind=' ~ value ~ ('&node=' ~ shown_node|urlencode if shown_node), kind == value) }}{% endcall %}
 {% endcall %}
 {% if deferred %}{% from 'deferred.html' import loading %}{{ loading('models', list_url, 'Loading models…') }}{% else %}{% include 'models_list.html' %}{% endif %}
 {% if kind in ('all', 'llm', 'classifier') %}

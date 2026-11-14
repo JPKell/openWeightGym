@@ -177,6 +177,8 @@ def run_briefing(detail, definition):
 def model_kind(model: dict) -> str:
     """Classify model metadata without confusing language-model vision with image generation."""
     capabilities = model.get('capabilities', {})
+    if model.get('rerank') or capabilities.get('rerank') or model.get('flags', {}).get('reranking'):
+        return 'rerank'
     if capabilities.get('classifier') or model.get('type') == 'classifier':
         return 'classifier'
     engine = model.get('engine_id') or model.get('engine')

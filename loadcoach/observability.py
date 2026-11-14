@@ -490,7 +490,7 @@ def route_of(scope) -> str:
     route = scope.get("route")
     path = scope.get("path", "")
     if route and getattr(route, "path", None):
-        return path if "{path" in route.path and path in (*POLLS, *AUDIO_TRANSCRIPTS) else route.path[:128]
+        return path if "{path" in route.path and path in (*POLLS, *AUDIO_TRANSCRIPTS, '/v1/rerank') else route.path[:128]
     if path in AUDIO_TRANSCRIPTS:
         return path
     if path in (
@@ -498,6 +498,7 @@ def route_of(scope) -> str:
         "/v1/chat/completions",
         "/v1/completions",
         "/v1/embeddings",
+        "/v1/rerank",
         "/mcp",
     ):
         return path
@@ -555,7 +556,7 @@ class Observe:
         context.ingress = parent is None
         root.requested_quiet |= headers.get(b"x-loadcoach-log") == b"off" and scope.get(
             "path"
-        ) in ("/v1/chat/completions", "/v1/completions", "/v1/embeddings", *AUDIO_TRANSCRIPTS)
+        ) in ("/v1/chat/completions", "/v1/completions", "/v1/embeddings", "/v1/rerank", *AUDIO_TRANSCRIPTS)
         if parent is None:
             value = headers.get(b"traceparent", b"")
             if match := trace_parent(value):
