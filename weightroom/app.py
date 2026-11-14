@@ -624,7 +624,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     pages = Jinja2Templates(directory=[HERE / "pages", HERE.parent / "mirrorwall" / "pages", HERE.parent / "soundroom" / "pages"],
                             context_processors=[lambda request: {
                                 'server_timezone': display.configured_timezone(settings.timezone),
-                                'log_timezone': settings.timezone or 'UTC'}])  # values put into a page are escaped, always
+                                'log_timezone': settings.timezone or 'UTC',
+                                'third_party_services': THIRD_PARTY_SERVICES}])  # values put into a page are escaped, always
     pages.env.globals['model_catalogue'] = model_catalogue
     service_defaults = {name: settings.file.get(name, getattr(settings, name)) for name in SERVICE_SETTINGS}
     def platform():

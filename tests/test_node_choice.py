@@ -51,7 +51,7 @@ def test_naming_the_node_is_refused_with_a_clear_message_only_while_the_setting_
         assert accepted.status_code == 201, accepted.text
 
 
-def test_the_setting_is_on_by_default_and_listed_under_general(desk):
+def test_the_setting_is_on_by_default_and_listed_under_requests(desk):
     import tomllib
     from loadcoach.settings import CHANGEABLE, NOW, said
     from weightroom.setting_labels import LABELS
@@ -66,10 +66,11 @@ def test_the_setting_is_on_by_default_and_listed_under_general(desk):
     assert browser.post('/settings/turnstile', data={'value-allow_caller_to_specify_destination': 'false'}).status_code == 403
     assert 'allow_caller_to_specify_destination' not in store.of('turnstile')
     sign_in(browser, 'jordan')
-    page = browser.get('/settings').text
-    assert 'General settings' in page and 'Allow callers to choose the node' in page
+    assert 'name="value-allow_caller_to_specify_destination"' not in browser.get('/settings').text
+    page = browser.get('/settings/requests').text
+    assert 'Requests and queue' in page and 'Allow callers to choose the node' in page
     assert 'name="value-allow_caller_to_specify_destination"' in page
-    saved = browser.post('/settings/turnstile', data={'value-allow_caller_to_specify_destination': 'false'})
+    saved = browser.post('/settings/turnstile', data={'return_to':'/settings/requests', 'value-allow_caller_to_specify_destination': 'false'})
     assert saved.status_code == 200, saved.text
     assert store.of('turnstile')['allow_caller_to_specify_destination'] is False
     assert switch.front.state.task_records.destination_allowed() is False

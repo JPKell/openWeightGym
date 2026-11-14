@@ -14,14 +14,15 @@ def test_legacy_settings_migrate_without_losing_values_authors_or_timestamps(tmp
     with changes.db:
         changes.db.execute("INSERT INTO settings_changed VALUES ('frontdesk','timezone','\"America/Vancouver\"','owner',123)")
         changes.db.execute("INSERT INTO settings_changed VALUES ('tooldoor','call_timeout','45','owner',124)")
-        changes.db.execute("INSERT INTO settings_seen VALUES ('frontdesk',125,'{}','{}')")
-        changes.db.execute("INSERT INTO settings_seen VALUES ('tooldoor',126,'{}','{}')")
+        changes.db.execute("INSERT INTO settings_seen (program,at,told,refused) VALUES ('frontdesk',125,'{}','{}')")
+        changes.db.execute("INSERT INTO settings_seen (program,at,told,refused) VALUES ('tooldoor',126,'{}','{}')")
     changes.db.close()
     renamed = Changes(path)
     assert renamed.of('weightroom') == renamed.of('frontdesk') == {'timezone': 'America/Vancouver'}
     assert renamed.of('toollocker') == renamed.of('tooldoor') == {'call_timeout': 45}
     assert renamed.db.execute('SELECT program,by,at FROM settings_changed ORDER BY program').fetchall() == [('toollocker', 'owner', 124), ('weightroom', 'owner', 123)]
     assert {p['program'] for p in renamed.everything()} == {'weightroom', 'toollocker'}
+    assert all(program['started'] == 0 for program in renamed.everything())
     renamed.put('frontdesk', 'timezone', 'UTC', 'owner')
     assert renamed.of('weightroom') == {'timezone': 'UTC'}
     renamed.db.close()

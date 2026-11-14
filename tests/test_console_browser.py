@@ -140,18 +140,15 @@ def test_file_settings_stay_independent_across_polling_and_reload(desk, tmp_path
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
-        page.goto('http://console.test/settings')
-        files = page.locator('[data-card-key="machine-values"]')
-        files.locator(':scope > summary').click()
-        playwright.expect(files).to_have_attribute('open', '')
+        page.goto('http://console.test/settings/machine')
+        tables = page.get_by_role('table', name='file values', exact=False)
+        assert tables.locator('tbody tr').filter(has_text='fixture_path').count() == 2
         for _ in range(2):
             page.evaluate("async () => { await htmx.ajax('GET', '/strip', {target: '#strip', swap: 'innerHTML'}); }")
-            playwright.expect(files).to_have_attribute('open', '')
+            assert tables.locator('tbody tr').filter(has_text='fixture_path').count() == 2
         page.reload()
-        playwright.expect(files).to_have_attribute('open', '')
-        table = page.get_by_role('table', name='Read-only machine values', exact=True)
-        assert 'fixture_path' in table.inner_text()
-        assert table.locator('tbody tr').filter(has_text='fixture_path').count() == 2
+        assert tables.locator('tbody tr').filter(has_text='fixture_path').count() == 2
+        assert tables.locator('input[name^="value-"]').count() == 0
         assert not errors
         browser.close()
 

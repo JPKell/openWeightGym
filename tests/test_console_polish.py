@@ -98,7 +98,7 @@ def test_purpose_settings_save_through_existing_program_and_hide_duplicates(desk
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
-        page.goto('http://console.test/settings?open=toollocker')
+        page.goto('http://console.test/tools')
         assert page.locator('[name^="value-profiles."], [name^="value-audio_"]').count() == 0
         page.get_by_label('Tool call timeout', exact=True).fill('45')
         page.get_by_role('button', name='Save tools', exact=True).click()
@@ -106,7 +106,7 @@ def test_purpose_settings_save_through_existing_program_and_hide_duplicates(desk
         assert wire.front.state.console_settings.changes.of('toollocker')['call_timeout'] == 45
         for width in [1440, 390, 320]:
             page.set_viewport_size({'width': width, 'height': 1000})
-            page.goto('http://console.test/settings?open=toollocker')
+            page.goto('http://console.test/tools')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             folder = Path('data/qualification/console-polish/after'); folder.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(folder / f'settings-{width}.png'), full_page=True)

@@ -80,7 +80,8 @@ def test_general_switches_apply_immediately_to_links_fragments_and_api_requests(
     assert api.post('/turnstile/artifacts/downloads', json={'repository': 'civitai/123/456'}, headers=headers).status_code == 403
     assert api.post('/turnstile/models/install', json={'name': 'disabled-image', 'machines': ['compute'],
         'settings': {'engine': 'sdcpp'}}, headers=headers).status_code == 403
-    assert api.post('/loadcoach/settings/weightroom', json={'allow_speech': 1}, headers=headers).status_code == 400
+    invalid = api.post('/loadcoach/settings/weightroom', json={'allow_speech': 1}, headers=headers)
+    assert invalid.status_code == 400, (invalid.json(), bool(wire.front.state.users.by_key(server.cookies['weightroom'])))
     # Reset uses the initial file/default value immediately, rather than retaining the previous false.
     reset = server.post('/settings/weightroom', data={'reset': 'allow_image_generation'})
     assert reset.status_code == 200 and 'href="/civitai"' in reset.text

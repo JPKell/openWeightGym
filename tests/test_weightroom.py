@@ -1121,15 +1121,18 @@ def test_the_settings_page_shows_every_program_and_changes_what_may_be_changed(l
     assert 'name="value-keep_text" class="form-control font-monospace" value="50"' in compute_page
     assert 'name="value-disabled_gpus"' not in compute_page and 'name="value-gpus"' not in compute_page
     assert 'name="value-disable_ram_offload"' in compute_page and 'name="value-host_ram_headroom_mib"' in compute_page and 'name="value-host_ram_limit_mib"' in compute_page
-    assert 'name="value-llama_server"' not in compute_page and "Read-only machine values" in compute_page
-    assert 'aria-label="Read-only machine values"' in compute_page and "port" in compute_page
+    assert 'name="value-llama_server"' not in compute_page and "Inspect machine configuration" in compute_page
+    assert 'href="/settings/machine?machine=compute"' in compute_page
+    inspected = browser.get('/settings/machine?machine=compute').text
+    assert 'aria-label="loadcoach file values"' in inspected and "port" in inspected
     assert 'name="value-mock_input_rate" class="form-control font-monospace" value="2.0"' in page
     assert 'name="value-mock_output_rate" class="form-control font-monospace" value="10.0"' in page
-    assert "Third-party services to track" in page
+    monitoring = browser.get('/settings/alerts').text
+    assert "Third-party services to track" in monitoring
     for name in ("ollama", "docker"):
-        assert "checked" in page.split(f'id="third-party-{name}"', 1)[1].split(">", 1)[0]
+        assert "checked" in monitoring.split(f'id="third-party-{name}"', 1)[1].split(">", 1)[0]
     for name in ("apache", "nginx"):
-        assert "checked" not in page.split(f'id="third-party-{name}"', 1)[1].split(">", 1)[0]
+        assert "checked" not in monitoring.split(f'id="third-party-{name}"', 1)[1].split(">", 1)[0]
 
     saved = browser.post("/settings/loadcoach", data={"machine": "compute", "value-keep_text": "7", "value-unlogged": "true", "value-gpus": '["A"]', "value-max_wait": "600"})
     assert "Saved." in saved.text and saved.text.count("Changed here by jordan") == 2 and "It is in force." not in saved.text  # what did not differ was not sent, nor the cards, which are the machine's

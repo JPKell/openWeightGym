@@ -77,6 +77,7 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Phase 2 initial clean `0dc9d19`: 3,894 passed, 321 failed, 11 known fixture errors and 60 skipped; 517 focused settings and all 39 UI checks pass. Comparison found five older page/schema assertions, aligned with the planned destinations and migration. The affected monitoring test also exposed missing checkbox choices on the moved Alerts page, fixed in shared render context. Two additional artifact/authentication timing failures pass isolated clean reruns. Final verification follows the repair.
 - Imports are additive: unlisted overrides remain intact, retired rows are ignored, and secrets never enter transfers. Every authority validates all groups before confirmation writes; services revalidate on write. A service failure during a multi-node application stops remaining writes and reports how many settings landed, because there is no distributed transaction across node databases.
 - Components had no restart controls. Its new shared action delegates compute restarts to Spotter’s existing service allowlist and schedules control node restarts through the installed `owg restart PROGRAM`; pending notices reuse that action. Explicit process-start timestamps prevent a report refresh or authority restart from clearing another service’s pending changes.
 - Catalogue entries describe top-level settings; tables retain their existing whole-table POST contract. Nested tuning entries will validate the editable subset without exposing model paths.
