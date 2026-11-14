@@ -595,7 +595,7 @@ if ((USES_POSTGRESQL && !NON_INTERACTIVE && !INSTALL_PGVECTOR)); then
   ask_yes_no 'Install pgvector for possible future use?' n && { INSTALL_PGVECTOR=1; INSTALL_POSTGRESQL=1; }
 fi
 
-# New gateways inherit front's accounts. Existing compute-owned settings remain supported.
+# New gateways inherit the control node's accounts. Existing compute-owned settings remain supported.
 TOOLLOCKER_FRONT=0
 if has_service toollocker; then
   TOOLLOCKER_FRONT=1
@@ -1036,7 +1036,7 @@ if [[ ! -f $ROOT/keys/machine.key ]] && (has_service turnstile || has_service lo
     ui_ok 'Made keys/machine.key, the key the console and the GPU node sign with'
   else
     ui_ok 'Made keys/machine.key'
-    ui_note "Front and compute must hold the same one: copy this file to the other machine's keys/ (replacing the one its installer made), readable by its owner only."
+    ui_note "Control node and compute must hold the same one: copy this file to the other machine's keys/ (replacing the one its installer made), readable by its owner only."
   fi
 fi
 if [[ ! -f $ROOT/keys/weightroom.key ]] && (has_service weightroom || has_service turnstile); then

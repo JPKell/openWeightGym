@@ -709,7 +709,7 @@ reinstall() {
   ui_attention_box
 }
 
-# A legacy or interrupted front may have only the weightroom service identity, with no sign-in.
+# A legacy or interrupted control node may have only the weightroom service identity, with no sign-in.
 console_account_ready() {
   local listing name
   listing=$(as_owner "$DIR/.venv/bin/weightroom" --config "$DIR/settings/weightroom.toml" user list) || return 1
