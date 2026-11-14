@@ -4774,7 +4774,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await hub_page(request, person, answer.json()["error"]["message"], failed=True, repository=repository)
         started = answer.json()
         said = f"{len(started['downloading'])} file{'s' * (len(started['downloading']) != 1)}, {size(started['size'])}, coming down to {started['to']}. How far each has got is shown here and on Files."
-        return go(f"/hub?repository={quote(repository, safe='')}&said={quote(said)}")
+        return go(f"/hub?repository={quote(repository, safe='')}&kind={quote(form.get('kind', [''])[-1])}&said={quote(said)}")
 
     async def downloads_part(request: Request, person: Person, told: str = "") -> Response:
         """The list of downloads alone, for the page that shows it to ask for again."""

@@ -53,12 +53,11 @@ def effective(settings: dict, defaults: dict) -> dict:
             override = override if isinstance(override, list) else [override]
             if not any(value.startswith('tokenizer.ggml.metaspace.prepend_scheme=') for value in override):
                 flags['override-kv'] = [*override, 'tokenizer.ggml.metaspace.prepend_scheme=str:never']
-        # Pointer questions and every option must fit in one logical batch. Encoder
-        # families additionally require that logical batch in one microbatch.
+        # Decision embeddings must fit one microbatch: llama.cpp otherwise clamps
+        # the logical batch back down to the microbatch size at startup.
         budget = flags.get('ctx-size', decision.get('trained_context') or 8192)
         flags['batch-size'] = max(flags.get('batch-size', 0), budget)
-        if decision['decision_type'] in ('laya', 'clef'):
-            flags['ubatch-size'] = max(flags.get('ubatch-size', 0), flags['batch-size'])
+        flags['ubatch-size'] = max(flags.get('ubatch-size', 0), flags['batch-size'])
     return {**settings, 'flags': flags}
 
 

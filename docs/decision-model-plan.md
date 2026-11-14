@@ -266,11 +266,16 @@ against [TypeSafe](https://api.typesafe.ai/redoc) and
 
 ## Delivery verification
 
-- Native endpoint/alias, chat shim, recognition, bounds, inert sources, accounting and service policy: 15 tests pass.
-- Classifier browser checks: 3 pass (1440/390 px, comparison, drafts, exports, 501, empty/offline/disabled).
-- Related reasoning metadata and hosted routing checks: 28 pass; cold-start inventory and missing-default rendering bugs fixed.
-- Starter files: all six filenames and Apache-2.0 repository metadata rechecked on Hugging Face.
-- Deployed inference, downloads, conversion parity, benchmarks, cloud live request and full surface audit: pending.
+- Deployed through `owg update; owg restart` on front and the GPU node; eight classifiers installed on `jpk-main` (six starters plus two verified conversions).
+- All six starters: native endpoint, alias, normal/streamed shim and direct app classification return 200; mobile layout has no overflow or browser errors.
+- Actual OpenAI SDK: normal response and one streamed chunk, zero completion tokens; MCP classification succeeds on port 8443.
+- Restricted test account: empty model catalogue, native/alias 404 and MCP refusal; account/group removed afterwards.
+- Platform switch: page/native/alias/shim 403, catalogue hides classifiers and MCP refuses; original enabled setting restored.
+- TinyJev-0.6B: 30/30 argmax agreement, mean absolute probability difference 0.000405; verified manifest and source hashes retained on the GPU node.
+- TinyJev-4B: 30/30 argmax agreement, mean absolute probability difference 0.027018; verified manifest retained; tensor-byte preservation checked separately.
+- Focused checks: 77 pass, including native routing, cloud stand-in/local-first/access/accounting, conversion receipts and benchmark paths. Full UI consistency audit: 39 pass.
+- All six initial throughput runs completed (27 samples each); expanded option lists exposed a Kev logical-batch bug. Accuracy testing also found PostgreSQL’s ambiguous retry-counter update. Both fixed; final benchmark runs in progress.
+- Live TypeSafe/Featherless provider request: pending a configured provider key. Existing Cloud APIs account has no key or mapped models.
 
 Optional conversion: install **Classifier conversion tools** on the owning compute node in
 **System → Components**. Download source data with the Hugging Face Classifier filter, copy

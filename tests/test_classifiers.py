@@ -112,6 +112,13 @@ def test_modernbert_uses_its_native_fragment_prefix_without_rejected_metadata(mo
     assert settings['flags'] == {'model': 'julia.gguf', 'ctx-size': 8192}
 
 
+def test_pointer_batches_survive_llama_embedding_startup_clamping(monkeypatch):
+    """Pointer heads exceeding 512 tokens need matching logical and physical batches."""
+    monkeypatch.setattr('loadcoach.classifier.model_facts', lambda _: {'decision_type': 'kev'})
+    flags = effective({'flags': {'model': 'kev.gguf', 'ctx-size': 8192}}, {})['flags']
+    assert flags['batch-size'] == flags['ubatch-size'] == 8192
+
+
 def test_shim_preserves_bounds_distributions_zero_tokens_and_streaming():
     source = {'model': 'test', 'messages': [{'role': 'user', 'content': 'hello'}], 'response_format': {
         'type': 'json_schema', 'json_schema': {'name': 'test', 'schema': {'type': 'object', 'properties': {
@@ -136,6 +143,32 @@ def test_classifier_service_policy_covers_native_page_files_and_shim_models():
     assert not policy.kind_enabled('classifier')
     assert not policy.model_enabled({'capabilities': {'classifier': 'kev'}})
     assert policy.model_enabled({'capabilities': {'chat': True}})
+
+
+def test_classifier_discovery_merges_tags_and_pipeline_with_stable_private_paging():
+    """OR discovery keeps ordering, deduplicates matches and binds cursors to credentials."""
+    import httpx
+    from loadcoach.hub import search_page, Refused
+    seen = []
+    def respond(request):
+        seen.append(dict(request.url.params))
+        offset = int(request.url.params.get('cursor', '0'))
+        rows = [{'id': f'example/model-{i:02}', 'downloads': 100 - i, 'likes': i, 'createdAt': '2026-01-01'}
+                for i in range(offset, min(35, offset + 20))]
+        headers = {'link': '<https://huggingface.co/api/models?cursor=20>; rel="next"'} if offset == 0 else {}
+        return httpx.Response(200, json=rows, headers=headers)
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+            first = await search_page(http, 'example', 'owner-token', kind='classifier')
+            second = await search_page(http, 'example', 'owner-token', first['next_cursor'], kind='classifier')
+            again = await search_page(http, 'example', 'owner-token', first['next_cursor'], kind='classifier')
+            assert len(first['found']) == 20 and len(second['found']) == 15 and again['found'] == second['found']
+            assert not {row['repository'] for row in first['found']} & {row['repository'] for row in second['found']}
+            with pytest.raises(Refused):
+                await search_page(http, 'example', 'different-token', first['next_cursor'], kind='classifier')
+    asyncio.run(check())
+    assert {query.get('filter') for query in seen} >= {'decision-model', 'system-one', 'typed-decisions', 'jev'}
+    assert any(query.get('pipeline_tag') == 'text-classification' for query in seen)
 
 
 def test_front_native_alias_shim_permissions_and_service_disable(fake_llama_server):
