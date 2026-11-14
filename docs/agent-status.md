@@ -278,3 +278,5 @@ M2 batch 1: Getting started, Chat, API keys and Tools refreshed against current 
 M2 batch 2: Voice chat, image generation, speech, transcription, music/sounds, desktop setup and My account covered; canonical desktop README included, obsolete image qualification figures removed; 34/80 pages, allowlist 46. Legacy links pass; no unverified facts or owner questions.
 
 M2 batch 3: Model catalogue/configuration, image/audio models, cloud accounts, roles, Dry fit, files, fingerprints and downloads covered; 45/81 pages, allowlist 36. A7: 37 passed plus the known index failure; all guide links resolve. Compatibility detail: folder `models` uses `/docs/model-guides`, preserving the pre-existing `/docs/models` alias. No unverified facts or owner questions.
+
+M3: Eight caller-bound `docs__*` tools and seven shared-library JSON operations implemented; signed proof/replay checks, use-tools/admin visibility, bounded reads, path refusal, citation resolution and all eight Settings → Tools test calls pass in isolated integration. No live deployment; no unverifiable facts or owner questions.

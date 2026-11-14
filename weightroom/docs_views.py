@@ -18,18 +18,24 @@ class ArticleText(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.text, self.contents = [], []
         self.section_id, self.heading, self.heading_id = '', None, ''
+        self.blocks, self.section_stack = {}, []
 
     def handle_starttag(self, tag, attrs):
         """Capture each shared docs-section heading and its stable anchor."""
         attrs = dict(attrs)
+        if tag == 'section':
+            self.section_stack.append(self.section_id)
         if 'docs-section' in attrs.get('class', '').split():
             self.section_id = attrs.get('id', '')
+            self.blocks.setdefault(self.section_id, [])
         if tag == 'h2' and 'card-heading' in attrs.get('class', '').split():
             self.heading, self.heading_id = [], self.section_id
 
     def handle_data(self, value):
         """Keep code and prose searchable, with heading labels collected separately."""
         self.text.append(value)
+        if self.section_id:
+            self.blocks[self.section_id].append(value)
         if self.heading is not None:
             self.heading.append(value)
 
@@ -39,6 +45,8 @@ class ArticleText(HTMLParser):
             if self.heading_id:
                 self.contents.append((self.heading_id, ''.join(self.heading).strip()))
             self.heading = None
+        if tag == 'section' and self.section_stack:
+            self.section_id = self.section_stack.pop()
 
 
 def article(environment, section, topic, person, api_base, source_reader, api_reader, selected=''):
@@ -85,10 +93,13 @@ def search(environment, sections, person, api_base, query, scope, source_reader,
             for topic in (None, *section['topics']):
                 item = topic or section
                 try:
-                    _, text, _ = article(environment, section, topic, person, api_base, source_reader, api_reader)
+                    html, text, contents = article(environment, section, topic, person, api_base, source_reader, api_reader)
                 except (OSError, SyntaxError, UnicodeError):
                     raise OSError('Documentation search is temporarily unavailable.') from None
+                parsed = ArticleText()
+                parsed.feed(str(html))
                 records.append({'url': item['url'], 'title': item['title'], 'summary': item['summary'],
+                                'blocks': [(ident, dict(contents).get(ident, item['title']), ' '.join(' '.join(values).split())) for ident, values in parsed.blocks.items()],
                                 'section': section['slug'], 'category': section['title'], 'text': text})
         cache[key] = records
         while len(cache) > 4:
@@ -102,7 +113,9 @@ def search(environment, sections, person, api_base, query, scope, source_reader,
         score = sum(8 * (term in record['title'].casefold()) + 3 * (term in record['summary'].casefold()) for term in terms)
         start = max(0, record['text'].casefold().find(terms[0]) - 65) if terms else 0
         excerpt = ('…' if start else '') + record['text'][start:start + 225] + ('…' if len(record['text']) > start + 225 else '')
-        results.append(record | {'score': score, 'excerpt': excerpt})
+        block = next((block for block in record['blocks'] if all(term in block[2].casefold() for term in terms)), None)
+        results.append(record | {'score': score, 'excerpt': excerpt, 'anchor': block[0] if block else '',
+                                 'heading': block[1] if block else record['title']})
     return sorted(results, key=lambda item: (-item['score'], item['title'].casefold()))
 
 
@@ -170,3 +183,200 @@ async def documentation_page(request, person, page, environment, source_reader, 
         context['search_error'] = 'Documentation search is temporarily unavailable. Try again, or browse the sections below.'
     template = 'docs_search_results.html' if request.query_params.get('part') == 'search' else 'docs_page.html'
     return page(request, template, person, status=503 if context['search_error'] else 200, **context)
+
+
+class DocsAPI:
+    """Read the same authorized library through account keys or caller-bound machine proof."""
+
+    def __init__(self, environment, ask, source_reader, api_reader, cache, key_file=''):
+        """Bind shared renderers and a replay cache; never create an independent identity store."""
+        from loadcoach.statement import Nonces
+        self.environment, self.ask = environment, ask
+        self.source_reader, self.api_reader, self.cache = source_reader, api_reader, cache
+        self.key_file, self.nonces = key_file, Nonces()
+
+    async def identity(self, request):
+        """Authenticate a signed tool caller or recheck the supplied account key at Turnstile."""
+        import time
+        from types import SimpleNamespace
+        from loadcoach import statement
+        proof = {}
+        signed = request.headers.get(statement.HEADER)
+        if signed:
+            try:
+                accepted = None
+                for key in statement.keys(self.key_file):
+                    try:
+                        accepted = statement.check(key, signed, request.method,
+                            statement.address((request.scope.get('raw_path') or request.url.path.encode()).decode(), request.scope['query_string']),
+                            await request.body(), self.nonces)
+                        break
+                    except (ValueError, KeyError, TypeError):
+                        continue
+                if not accepted or accepted.get('purpose') != 'docs-tool' or not accepted.get('caller'):
+                    raise ValueError('Missing documentation caller proof.')
+                user = statement.user_of(accepted['caller'])
+                if user.until is not None and user.until <= time.time():
+                    raise ValueError('The caller session has expired.')
+                proof[statement.PROOF] = statement.proof(key, accepted['nonce'])
+                person = SimpleNamespace(name=user.name, can=user.group.can, key=None, me={'identity': user.identity})
+            except (OSError, ValueError, KeyError, TypeError):
+                raise PermissionError('Missing or invalid documentation caller proof.') from None
+        else:
+            authorization = request.headers.get('authorization', '')
+            key = authorization[7:] if authorization.startswith('Bearer ') else request.cookies.get('weightroom', '')
+            if not key:
+                raise PermissionError('Use an account key or signed documentation caller proof.')
+            answer = await self.ask('GET', '/loadcoach/me', key)
+            if not answer.is_success:
+                raise PermissionError('Missing or invalid account key.')
+            current = answer.json()
+            person = SimpleNamespace(name=current['name'], can=current['can'], key=key, me=current)
+        return person, proof
+
+    def article_text(self, person, url, anchor='', offset=0):
+        """Read only catalogue URLs and page plain text without converting input to a file path."""
+        import re
+        from urllib.parse import urlsplit
+        from toollocker.docs import READ_CHARS
+        parsed = urlsplit(url)
+        if (parsed.scheme or parsed.netloc or parsed.query or not re.fullmatch(r'/docs/[a-z0-9-]+(?:/[a-z0-9-]+)?', parsed.path)
+                or anchor and parsed.fragment and anchor != parsed.fragment):
+            raise ValueError('Use a canonical local documentation URL without a query.')
+        path = system_docs.ALIASES.get(parsed.path, parsed.path)
+        parts = path.strip('/').split('/')
+        section = next((one for one in system_docs.visible(person.can) if one['slug'] == parts[1]), None)
+        topic = section['by_slug'].get(parts[2]) if section and len(parts) == 3 else None
+        if section is None or len(parts) == 3 and topic is None:
+            raise LookupError('Documentation page not found or not visible to this account.')
+        html, text, _ = article(self.environment, section, topic, person, 'http://CONTROL_NODE:8442/v1', self.source_reader, self.api_reader)
+        anchor = anchor or parsed.fragment
+        if anchor:
+            if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_.:-]{0,199}', anchor):
+                raise ValueError('Invalid documentation anchor.')
+            reader = SectionText(anchor)
+            reader.feed(str(html))
+            if not reader.found:
+                raise LookupError('Documentation heading not found.')
+            text = ' '.join(' '.join(reader.text).split())
+        if offset > len(text):
+            raise ValueError('Offset is beyond this article.')
+        return {'title': (topic or section)['title'], 'url': path + ('#' + anchor if anchor else ''),
+                'text': text[offset:offset + READ_CHARS], 'offset': offset,
+                'next_offset': offset + READ_CHARS if len(text) > offset + READ_CHARS else None}
+
+    def read_source(self, module, symbol='', offset=0):
+        """Read documented source only through SOURCES, using the existing source-reference reader."""
+        from toollocker.docs import READ_CHARS
+        from urllib.parse import quote
+        source = next((source for source in system_docs.SOURCES if module in system_docs.source_files(source)), None)
+        if not source:
+            raise LookupError('Documentation source not found.')
+        found = self.source_reader(source, module)['module']
+        definitions = found['definitions']
+        selected = next((item for item in definitions if item['name'] == symbol), None) if symbol else None
+        if symbol and selected is None:
+            raise LookupError('Documented symbol not found.')
+        url = '/docs/code/' + source + '?module=' + quote(module, safe='')
+        if selected:
+            text = selected['name'] + selected['signature'] + '\n' + selected['doc']
+            url += '#symbol-' + str(selected['line'])
+        else:
+            text = found['doc'] + '\n' + '\n'.join(item['name'] + item['signature'] + ' — ' + item['doc'].split('\n')[0] for item in definitions)
+        if offset > len(text):
+            raise ValueError('Offset is beyond this source reference.')
+        return {'module': module, 'symbol': symbol, 'url': url, 'text': text[offset:offset + READ_CHARS],
+                'offset': offset, 'next_offset': offset + READ_CHARS if len(text) > offset + READ_CHARS else None}
+
+    async def endpoint(self, request):
+        """Return caller-scoped documentation records; admin references remain private and bounded."""
+        from starlette.responses import JSONResponse
+        from weightroom import docs_reference
+        from toollocker.docs import SEARCH_LIMIT
+        headers = {'cache-control': 'no-store', 'x-content-type-options': 'nosniff'}
+        try:
+            person, proof = await self.identity(request)
+            headers.update(proof)
+            if 'use-tools' not in person.can:
+                return JSONResponse({'error': {'message': 'Documentation tools require use-tools.'}}, 403, headers=headers)
+            operation = request.path_params.get('operation', request.url.path.rsplit('/', 1)[-1])
+            allowed = {'catalogue': set(), 'search': {'q','scope','limit'}, 'article': {'url','anchor','offset'},
+                       'endpoints': {'q'}, 'settings': {'q'}, 'abilities': {'q'}, 'source': {'module','symbol','offset'}}
+            if operation not in allowed:
+                raise LookupError('Unknown documentation operation.')
+            params = request.query_params
+            if params.keys() - allowed[operation] or any(len(params.getlist(key)) != 1 for key in params):
+                raise ValueError('Unknown or repeated documentation arguments.')
+            if any(len(value) > 500 for value in params.values()):
+                raise ValueError('Documentation arguments are too long.')
+            if operation in ('endpoints','settings','abilities','source') and 'manage-settings' not in person.can:
+                return JSONResponse({'error': {'message': 'An administrator can help with this reference.'}}, 403, headers=headers)
+            offset = int(params.get('offset', 0))
+            if not 0 <= offset <= 2000000:
+                raise ValueError('Invalid documentation offset.')
+            sections = system_docs.visible(person.can)
+            query = params.get('q', '').strip()[:300]
+            if operation == 'catalogue':
+                result = {'sections': [{'title': section['title'], 'summary': section['summary'], 'url': section['url'],
+                    'topics': [{key: topic.get(key, []) for key in ('title','summary','url','covers')} for topic in section['topics']]}
+                    for section in sections]}
+            elif operation == 'search':
+                scope = params.get('scope','')
+                if scope and scope not in {one['slug'] for one in sections}:
+                    return JSONResponse({'error': {'message': 'Documentation scope is not visible.'}}, 403, headers=headers)
+                limit = int(params.get('limit', SEARCH_LIMIT))
+                if not 1 <= limit <= SEARCH_LIMIT:
+                    raise ValueError('Search limit must be from 1 to 10.')
+                results = await asyncio.to_thread(search, self.environment, sections, person, 'http://CONTROL_NODE:8442/v1', query, scope, self.source_reader, self.api_reader, self.cache)
+                result = {'hits': [{'title': hit['title'], 'url': hit['url'] + ('#' + hit['anchor'] if hit['anchor'] else ''),
+                                   'heading': hit['heading'], 'snippet': hit['excerpt']} for hit in results[:limit]]}
+            elif operation == 'article':
+                result = await asyncio.to_thread(self.article_text, person, params.get('url',''), params.get('anchor',''), offset)
+            elif operation == 'source':
+                result = await asyncio.to_thread(self.read_source, params.get('module',''), params.get('symbol',''), offset)
+            else:
+                entries = (docs_reference.settings() if operation == 'settings' else docs_reference.abilities() if operation == 'abilities'
+                           else [dict(row, source=group['path']) for group in self.api_reader(system_docs.source_files('api')) for row in group['rows']])
+                terms = query.casefold().split()
+                result = {'entries': [entry for entry in entries if all(term in str(entry).casefold() for term in terms)][:SEARCH_LIMIT]}
+            return JSONResponse(result, headers=headers)
+        except PermissionError as error:
+            return JSONResponse({'error': {'message': str(error)}}, 401, headers=headers)
+        except LookupError as error:
+            return JSONResponse({'error': {'message': str(error)}}, 404, headers=headers)
+        except (ValueError, TypeError):
+            return JSONResponse({'error': {'message': 'Invalid documentation arguments.'}}, 400, headers=headers)
+        except (OSError, SyntaxError, UnicodeError):
+            return JSONResponse({'error': {'message': 'Documentation is temporarily unavailable.'}}, 503, headers=headers)
+
+    def routes(self):
+        """Register the public docs API under its explicit read-only operations."""
+        from starlette.routing import Route
+        return [Route(path, self.endpoint) for path in (
+            '/owg/docs/catalogue', '/owg/docs/search', '/owg/docs/article', '/owg/docs/endpoints',
+            '/owg/docs/settings', '/owg/docs/abilities', '/owg/docs/source')]
+
+
+class SectionText(HTMLParser):
+    """Extract one existing heading/row subtree as plain text for a bounded citation read."""
+    def __init__(self, anchor):
+        """Start a subtree reader for one exact rendered anchor."""
+        super().__init__(convert_charrefs=True)
+        self.anchor, self.found, self.depth, self.text = anchor, False, 0, []
+
+    def handle_starttag(self, tag, attrs):
+        """Begin at the matching ID and count only non-void elements in its subtree."""
+        if dict(attrs).get('id') == self.anchor and not self.found:
+            self.found, self.depth = True, 1
+        elif self.depth and tag not in ('br','hr','img','input','meta','link'):
+            self.depth += 1
+
+    def handle_endtag(self, tag):
+        """Stop collecting when the selected subtree closes."""
+        if self.depth:
+            self.depth -= 1
+
+    def handle_data(self, value):
+        """Keep only readable text inside the selected rendered subtree."""
+        if self.depth:
+            self.text.append(value)

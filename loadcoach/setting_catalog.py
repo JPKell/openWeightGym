@@ -403,6 +403,8 @@ _add('toollocker', 'toolsets', 'table', tier='now', scope='front', page='tools',
 _add('toollocker', 'machine_key_file', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Machine key file')
 _add('toollocker', 'databases', 'table', tier='file', scope='front', page='machine', section='Additional settings', label='Databases')
 _add('toollocker', 'extraction_url', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Extraction url')
+_add('toollocker', 'docs_url', 'text', tier=FILE, scope='front', page='machine', label='Documentation console URL', rule=_http_url,
+     help='Private WeightRoom base URL for signed caller-bound docs tools. Derived from the front configuration when omitted; empty disables automatic docs tools.')
 _add('toollocker', 'loadcoach', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Loadcoach')
 
 # voice-gateway

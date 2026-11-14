@@ -3911,7 +3911,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             program['settings'] = [row for row in program['settings'] if row['name'] not in ('toolsets', 'tool_levels', 'remote_servers')]
         from weightroom.remote_views import context as remote_context
         remotes = await remote_context(tool_http,person)
-        return page(request, 'tools.html', person, status=unused.get('status',400 if failed else 200), **remotes, tool_info=found, tool_config=config, tool_server_source=next((row.get('source','settings/toollocker.toml') for row in (found['program'] or {}).get('settings',[]) if row['name']=='servers'),'settings/toollocker.toml'), tool_changed={row['name']: bool(row.get('changed')) for row in (found['program'] or {}).get('settings', [])}, programs=programs, settings_return_to='/tools', typed_in=unused.get('typed_in', {}), opened=unused.get('opened', ''),
+        return page(request, 'tools.html', person, status=unused.get('status',400 if failed else 200), **remotes, tool_info=found, tool_config=config, tool_try_sets={**({'docs': {}} if config.get('docs_url') else {}), **config.get('toolsets', {})}, tool_server_source=next((row.get('source','settings/toollocker.toml') for row in (found['program'] or {}).get('settings',[]) if row['name']=='servers'),'settings/toollocker.toml'), tool_changed={row['name']: bool(row.get('changed')) for row in (found['program'] or {}).get('settings', [])}, programs=programs, settings_return_to='/tools', typed_in=unused.get('typed_in', {}), opened=unused.get('opened', ''),
                     said=said or request.query_params.get("said", ""), failed=failed)  # fmt: skip
 
     async def change_tools(request: Request, person: Person) -> Response:
@@ -5883,10 +5883,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     from weightroom.classifier_views import routes as classifier_routes
 
     from weightroom.remote_views import routes as remote_routes
+    from weightroom.docs_views import DocsAPI
+    docs_key_file = str(notification_folder / 'machine.key')
+    if settings.path:
+        docs_key_file = str((Path(settings.path).parent / read_settings(Path(settings.path)).get('turnstile', {}).get('machine_key_file', '../keys/machine.key')).resolve())
+    docs_api = DocsAPI(pages.env, ask, source_reference, api_reference, docs_search_cache, docs_key_file)
     app = Starlette(
         lifespan=lifespan,
         exception_handlers={HTTPException: http_error, 500: server_error},
         routes=[
+            *docs_api.routes(),
             *image_routes(for_people, page, ask, model_api),
             *audio_routes(for_people, page, ask, model_api, lambda: settings, platform, refresh_settings=in_step, content_limits=content_limits),
             *extraction_routes(for_people, page, ask, content_limits),
@@ -6075,6 +6081,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     app.add_middleware(Barrier, gate=gate)
     from loadcoach.log import Log
     app.state.responses = response_store
+    app.state.docs_api = docs_api
+    app.state.tool_http = tool_http
     observation_log = Log(database_registry.database("weightroom.accounts"))
     database_operations.audit = lambda event, owner, **detail: observation_log.add('database', event, owner, machine='front', **detail)
     applied_observation_policy = apply_observation_policy(observation_log.db, settings)

@@ -73,6 +73,7 @@ class Config:
     port: int = 8443
     call_timeout: float = 120  # seconds one tool call may take
     extraction_url: str = ''  # the control node's model API for caller-bound built-in extraction tools; empty disables them
+    docs_url: str = ''  # console URL for caller-bound read-only documentation tools
     path: str = ""  # the settings file itself
     file: dict = field(default_factory=dict)  # what that file says, before anything changed on the site is laid over it
     says: dict = field(default_factory=dict)  # the comment above each setting in the file, shown beside it on the site
@@ -127,6 +128,9 @@ def config_from(path: Path, data: dict, file: dict | None = None) -> Config:
     if data.get('front') and 'extraction_url' not in data:
         shared = read_settings(path.parent / data['front'])
         data['extraction_url'] = 'http://127.0.0.1:' + str(shared.get('turnstile', {}).get('ports', [8442])[0])
+    if data.get('front') and 'docs_url' not in data:
+        shared = read_settings(path.parent / data['front'])
+        data['docs_url'] = 'http://127.0.0.1:' + str(shared.get('port', 8440))
     data.pop("loadcoach", None)
     data.pop("front", None)
     try:
@@ -139,6 +143,11 @@ def config_from(path: Path, data: dict, file: dict | None = None) -> Config:
             target = urlsplit(config.extraction_url)
             if not target.hostname or target.username or target.password or target.path not in ('', '/') or target.query or target.fragment:
                 raise ValueError('extraction_url must be a service base URL without credentials, path or query')
+        if config.docs_url:
+            from urllib.parse import urlsplit
+            target = urlsplit(config.docs_url)
+            if target.scheme not in ('http', 'https') or not target.hostname or target.username or target.password or target.path not in ('', '/') or target.query or target.fragment:
+                raise ValueError('docs_url must be an HTTP service base URL without credentials, path or query')
     except (TypeError, ValueError) as problem:  # an unknown key, or a group that makes no sense
         raise SystemExit(f"{path}: {problem}") from None
     for name, server in config.servers.items():
@@ -211,6 +220,10 @@ def build_app(config: Config) -> Starlette:
     if config.extraction_url and 'classifier' not in config.servers:
         from toollocker.classifier import ClassifierTools
         servers.append(ClassifierTools(config.extraction_url, config.machine_key_file))
+    builtin_docs = bool(config.docs_url and 'docs' not in config.servers and 'docs' not in config.remote_servers)
+    if builtin_docs:
+        from toollocker.docs import DocsTools
+        servers.append(DocsTools(config.docs_url, config.machine_key_file))
     # Every tool on offer, by the name a harness sees: the server's name, two underscores, then
     # the tool's own name. Filled in when the servers have started.
     tools: dict[str, tuple[Server | Remote, dict]] = {}
@@ -222,7 +235,7 @@ def build_app(config: Config) -> Starlette:
     key_folder = Path(config.machine_key_file).resolve().parent if config.machine_key_file else folder.parent/'keys'
     def file_names():
         """Reserve configured and automatic built-in server names from remote replacements."""
-        return {*config.servers, *({'extraction','classifier'} if config.extraction_url else set())}
+        return {*config.servers, *({'extraction','classifier'} if config.extraction_url else set()), *({'docs'} if builtin_docs else set())}
     remote_settings = RemoteSettings(identity, RemoteKeys(key_folder),
         config.file.get('remote_servers', config.remote_servers), file_names, log, changed_signal)
     remote_servers, remote_signatures = {}, {}
@@ -345,10 +358,11 @@ def build_app(config: Config) -> Starlette:
             log.add("refused", "401", "", request.client.host if request.client else "?", path=request.url.path, why="Not sent through turnstile.")
             return JSONResponse({"error": "Ask through turnstile, on the control node. It checks your key and says here who you are."}, status_code=401)
         user = user_of(said["caller"])
+        toolsets = {**({'docs': {'tools': ['docs__*']}} if config.docs_url else {}), **config.toolsets}
         toolset = request.path_params.get("toolset")
         # A harness may also choose tool sets by header, on any address: "code,email" offers the tools of either.
         chosen = [one.strip() for one in request.headers.get("x-toollocker-sets", "").split(",") if one.strip()]
-        if unknown := [one for one in [toolset, *chosen] if one is not None and one not in config.toolsets]:
+        if unknown := [one for one in [toolset, *chosen] if one is not None and one not in toolsets]:
             return JSONResponse({"error": f"There is no tool set named {unknown[0]!r}."}, status_code=404)
         try:
             message = json.loads(await request.body())
@@ -374,7 +388,7 @@ def build_app(config: Config) -> Starlette:
 
         def in_set(name: str, toolset: str) -> bool:
             """Check whether a tool belongs to the permitted requested tool sets."""
-            return any(fnmatchcase(name, pattern) for pattern in config.toolsets[toolset]["tools"])
+            return any(fnmatchcase(name, pattern) for pattern in toolsets[toolset]["tools"])
 
         # What this caller may use here: tools at or below their group's level, that their group and
         # account are shown, in this address's tool set and in one of the sets the header chose.
@@ -383,6 +397,7 @@ def build_app(config: Config) -> Starlette:
             for name, tool in tools.items()
             if LEVELS.index(level_of(name, tool[0])) <= LEVELS.index(user.group.max_sensitivity)
             and user.group.may_see_tool(name)
+            and (not name.startswith('docs__') or user.can('use-tools'))
             and (toolset is None or in_set(name, toolset))
             and (not chosen or any(in_set(name, one) for one in chosen))
         }

@@ -36,7 +36,7 @@ def door(tmp_path, servers=None, **settings):
     """A ToolLocker with one server of ordinary tools, unless told otherwise, with turnstile in front of it as on the two machines."""
     servers = servers or {"fake": {"command": FAKE}}
     config = Config(servers=servers, database=str(tmp_path / "users.db"), machine_key_file=str(tmp_path / "machine.key"), **settings)
-    return front_of(lambda front: build_app(config), accounts(tmp_path), tmp_path, port=8443)
+    return front_of(lambda front: build_app(config), accounts(tmp_path), tmp_path, port=8443, toollocker_url='http://front-tools:9443', keep_console_settings_on_front=True)
 
 
 def accounts(tmp_path):
@@ -102,7 +102,7 @@ def test_a_key_is_needed_and_may_come_in_the_address(tmp_path):
         assert caller.post("/mcp?key=wrong", json={"jsonrpc": "2.0", "id": 1, "method": "ping"}).status_code == 401
         assert ask(caller, "ping", path=f"/mcp?key={key}") == {}
         assert caller.post("/mcp", content="not json", headers={"authorization": f"Bearer {key}"}).status_code == 400
-        assert "tools/list" in caller.get("/").text  # the test page loads without one; it holds no secrets
+        assert "tools/list" in TestClient(caller.compute).get("/").text  # the test page loads without one; it holds no secrets
         # A sign-in's session key opens the ToolLocker like any key, until it ends.
         users = accounts(tmp_path)
         live, ended = users.new_key("hermes", "session", hours=1), users.new_key("hermes", "session", hours=-1)

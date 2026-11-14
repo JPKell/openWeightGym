@@ -60,7 +60,7 @@
 {% call card("Try a tool", true) %}
 <div id="tools-console">
 <div class="row g-2 align-items-end mb-3">
-<div class="col-md-4"><label for="tools-set" class="form-label">Tool set</label><select id="tools-set" class="form-select"><option value="">All allowed tools</option>{% for name in tool_config.get('toolsets', {}) %}<option>{{ name }}</option>{% endfor %}</select></div>
+<div class="col-md-4"><label for="tools-set" class="form-label">Tool set</label><select id="tools-set" class="form-select"><option value="">All allowed tools</option>{% for name in tool_try_sets %}<option>{{ name }}</option>{% endfor %}</select></div>
 <div class="col-md-3"><label for="tools-level" class="form-label">Sensitivity</label><select id="tools-level" class="form-select"><option>normal</option><option>sensitive</option><option>restricted</option></select></div>
 <div class="col-md-3"><label for="tools-trace" class="form-label">Trace</label><input id="tools-trace" class="form-control" maxlength="100"></div>
 <div class="col-md-2"><button id="tools-connect" type="button" class="btn btn-primary">Connect</button></div>
