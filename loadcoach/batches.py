@@ -24,7 +24,7 @@ import time
 from db import DatabaseSource, database, migrate
 from db.schemas import BATCHES
 
-ENDPOINTS = ("/v1/chat/completions", "/v1/completions", "/v1/embeddings", "/v1/images/generations", "/v1/images/edits", "/v1/audio/generations")
+ENDPOINTS = ("/v1/chat/completions", "/v1/responses", "/v1/completions", "/v1/embeddings", "/v1/images/generations", "/v1/images/edits", "/v1/audio/generations")
 MOST_LINES = 10_000  # requests in one batch
 MOST_BYTES = 50 * 2**20  # the size of one uploaded file
 TRIES = 3  # how often one request is begun. Each time it is cut off by LoadCoach going down counts, so that one which brings it down is not begun for ever
@@ -79,15 +79,19 @@ def lines_of(content: bytes, endpoint: str) -> list[dict]:
     for number, text in enumerate(content.decode("utf-8", "replace").splitlines(), 1):
         if not text.strip():
             continue
+        one = {}
         try:
             one = json.loads(text)
             good = isinstance(one["custom_id"], str) and one["custom_id"] not in seen and isinstance(one["body"], dict) and isinstance(one["body"].get("model"), str)
         except (ValueError, KeyError, TypeError):
             good = False
-        if not good or one.get("method", "POST") != "POST" or one.get("url") != endpoint:
+        line_endpoint = one.get('url') if isinstance(one, dict) else None
+        compatible = line_endpoint == endpoint or endpoint in ('/v1/chat/completions', '/v1/responses') and line_endpoint in ('/v1/chat/completions', '/v1/responses')
+        if not good or one.get("method", "POST") != "POST" or not compatible:
             raise ValueError(f'Line {number} is not a request for this batch. Each line is JSON with a "custom_id" of its own, "method": "POST", "url": "{endpoint}" and a "body" that names a model.')
         seen.add(one["custom_id"])
-        found.append({"custom_id": one["custom_id"], "body": one["body"]})
+        found.append({"custom_id": one["custom_id"], "body": one["body"],
+                      **({'endpoint': line_endpoint} if line_endpoint != endpoint else {})})
     if not found or len(found) > MOST_LINES:
         raise ValueError(f"A batch has from 1 to {MOST_LINES} requests. This file has {len(found)}.")
     return found
@@ -147,8 +151,8 @@ class Batches:
         with self.db:
             self.db.execute("INSERT INTO batches (id, user, endpoint, input_file, status, created, metadata) VALUES (?, ?, ?, ?, 'in_progress', ?, ?)",
                             (number, user, endpoint, input_file, time.time(), json.dumps(metadata or {})))  # fmt: skip
-            self.db.executemany("INSERT INTO batch_lines (batch, line, custom_id, body, model_id) VALUES (?, ?, ?, ?, ?)",
-                                [(number, count, line["custom_id"], json.dumps(line["body"]), self.models.identity(line['body']['model']) if self.models else None) for count, line in enumerate(lines)])  # fmt: skip
+            self.db.executemany("INSERT INTO batch_lines (batch, line, custom_id, body, model_id, endpoint) VALUES (?, ?, ?, ?, ?, ?)",
+                                [(number, count, line["custom_id"], json.dumps(line["body"]), self.models.identity(line['body']['model']) if self.models else None, line.get('endpoint')) for count, line in enumerate(lines)])  # fmt: skip
         return self.get(number)  # type: ignore[return-value]
 
     def get(self, number: str) -> dict | None:
@@ -189,19 +193,19 @@ class Batches:
         ``on_failure`` receives that saved failure for the worker's metadata history.
         """
         while True:
-            row = self.db.execute("SELECT line, custom_id, body, tries, model_id FROM batch_lines WHERE batch = ? AND result IS NULL ORDER BY line LIMIT 1", (number,)).fetchone()
+            row = self.db.execute("SELECT line, custom_id, body, tries, model_id, endpoint FROM batch_lines WHERE batch = ? AND result IS NULL ORDER BY line LIMIT 1", (number,)).fetchone()
             if row is None:
                 return None
-            line, custom_id, body, tries, identity = row
+            line, custom_id, body, tries, identity, endpoint = row
             if tries >= TRIES:
                 result = {"error": {"message": f"This request was begun {tries} times and cut off each time, by LoadCoach stopping. It was not begun again.", "code": "cut_off"}}
                 self.keep(number, line, 500, "", result)
                 if on_failure:
-                    on_failure({'line': line, 'custom_id': custom_id, 'body': json.loads(body)}, 500, '', result)
+                    on_failure({'line': line, 'custom_id': custom_id, 'body': json.loads(body), **({'endpoint': endpoint} if endpoint else {})}, 500, '', result)
                 continue
             with self.db:
                 self.db.execute("UPDATE batch_lines SET tries = tries + 1 WHERE batch = ? AND line = ?", (number, line))
-            return {"line": line, "custom_id": custom_id, "body": json.loads(body), **({'model_id':identity} if identity else {})}
+            return {"line": line, "custom_id": custom_id, "body": json.loads(body), **({'model_id':identity} if identity else {}), **({'endpoint': endpoint} if endpoint else {})}
 
     def not_begun(self, number: str, line: int) -> None:
         """Take back that a request was begun: it was turned away for now, and is to be tried again later."""

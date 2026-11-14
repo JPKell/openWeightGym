@@ -463,6 +463,9 @@ BATCHES = (
             PRIMARY KEY(batch, line));
     """),
     Migration(2, "stable batch model identities", _batch_model_id),
+    Migration(3, 'retain endpoints of mixed chat and Responses batch lines', '''
+        ALTER TABLE batch_lines ADD COLUMN endpoint TEXT;
+    '''),
 )
 
 

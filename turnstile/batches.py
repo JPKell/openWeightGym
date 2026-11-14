@@ -71,7 +71,7 @@ class FrontBatches:
     def line_outcome(self, batch, line, status, request_id, result, *, duration=None):
         """Record request metadata and failures, without prompts or generated output."""
         details = dict(batch=batch['id'], line=line['line'] + 1, custom_id=line['custom_id'],
-                       endpoint=batch['endpoint'], status=status, inference_request_id=request_id)
+                       endpoint=line.get('endpoint') or batch['endpoint'], status=status, inference_request_id=request_id)
         if duration is not None:
             details['duration'] = duration
         failure = result.get('error') if isinstance(result, dict) else None
@@ -115,7 +115,15 @@ class FrontBatches:
             while store.get(number)["status"] == "in_progress":
                 if not (line := store.next_line(number, on_failure=lambda *args: self.line_outcome(batch, *args))):
                     break
-                body = {**line["body"], "stream": False}
+                endpoint = line.get('endpoint') or batch['endpoint']
+                body = {**line['body'], 'stream': False}
+                if endpoint == '/v1/responses':
+                    original = line['body']
+                    if 'stream' in original or original.get('store') is True or 'previous_response_id' in original:
+                        keep(line, 400, '', {'error': {'message': 'Responses batch lines must be stateless: no stream, store:true or previous_response_id.',
+                            'type': 'invalid_request_error', 'code': 'unsupported_parameter'}})
+                        continue
+                    body.setdefault('store', False)
                 current_user=user_for(batch["user"])
                 if current_user is None or self.task_owner and not self.task_owner(current_user,batch):
                     keep(line, 401, "", {"error": {"message": "The account this was handed in by is gone or disabled."}})
@@ -138,12 +146,12 @@ class FrontBatches:
                 try:
                     with observation.job("batch_line", number+":"+str(line["line"]), user_for(batch["user"]), getattr(self.log, "observations", None)):
                         observation.annotate(benchmark=bool(batch.get('metadata', {}).get('benchmark')))
-                        if self.image_work and batch["endpoint"].startswith('/v1/images/'):
+                        if self.image_work and endpoint.startswith('/v1/images/'):
                             answer=await self.image_work.execute_line(number,line,body,current_user,headers)
-                        elif self.audio_work and batch["endpoint"].startswith('/v1/audio/'):
+                        elif self.audio_work and endpoint.startswith('/v1/audio/'):
                             answer = await self.audio_work.execute_line(number, line, body, current_user, headers)
                         else:
-                            answer = await self.door.post(batch["endpoint"], json=body, headers=headers, timeout=None)
+                            answer = await self.door.post(endpoint, json=body, headers=headers, timeout=None)
                 except httpx.HTTPError as problem:
                     deferred(line, 'Inference connection unavailable; waiting to retry.', error_type=type(problem).__name__)
                     store.not_begun(number, line["line"])

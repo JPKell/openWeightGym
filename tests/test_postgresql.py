@@ -68,6 +68,23 @@ def test_postgresql_responses_clearance_retention_backup_and_transfer(postgres, 
     copied.db.close()
 
 
+def test_postgresql_mixed_response_batch_lines_and_transfer(postgres, tmp_path):
+    from loadcoach.batches import lines_of
+    from db.transfer import copy_store
+
+    kept = Batches(postgres)
+    content = b'{"custom_id":"response","url":"/v1/responses","body":{"model":"test","input":"Hi"}}'
+    file = kept.put_file('owner', 'mixed.jsonl', 'batch', content)
+    batch = kept.start('owner', '/v1/chat/completions', file['id'], lines_of(content, '/v1/chat/completions'))
+    assert kept.next_line(batch['id'])['endpoint'] == '/v1/responses'
+    kept.db.close()
+    target = Database.sqlite(tmp_path/'copied.db')
+    assert copy_store(postgres, target)['state'] == 'verified'
+    copied = Batches(target)
+    assert copied.next_line(batch['id'])['endpoint'] == '/v1/responses'
+    copied.db.close()
+
+
 def test_postgresql_db1_history_import_is_idempotent_and_refuses_conflicts(postgres, tmp_path):
     import sqlite3
     from db.consolidation import readonly
