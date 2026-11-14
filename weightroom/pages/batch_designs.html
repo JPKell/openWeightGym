@@ -1,0 +1,45 @@
+{% from 'parts.html' import page_header, card, section_title, more, confirm_two %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'batch_parts.html' import overview %}
+{% from 'icons.html' import icon %}
+{% from 'batch_design_parts.html' import templates %}
+{% from 'batch_parts.html' import inspector, guide %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Batches · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a class="visually-hidden-focusable" href="#workspace">Skip to batches</a>
+<header class="bt-review"><div class="d-flex flex-wrap align-items-center gap-3"><strong class="bt-brand">{{ icon('barbell') }} weightRoom</strong><span class="small text-secondary">Design review / Batches</span></div><div class="d-flex gap-2 flex-wrap"><span class="badge bg-secondary-lt">Interactive sample</span><button type="button" class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button type="button" class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div></header>
+<main class="bt-page">
+<section class="bt-proposals" aria-label="Design proposals">
+{% call pills('Design options', buttons=true, class_='gap-2 mb-0') %}{{ pill_button('01 / Batch ledger', true, attrs={'data-design':'ledger'}) }}{{ pill_button('02 / Progress board', attrs={'data-design':'board'}) }}{{ pill_button('03 / Batch inspector', attrs={'data-design':'inspector'}) }}{% endcall %}
+<div class="d-flex justify-content-between gap-3 flex-wrap align-items-center mt-3"><p id="design-description" class="small text-secondary mb-0">Compare status, progress and results in one readable ledger. Recommended for everyday use.</p><label class="d-flex align-items-center gap-2 small text-secondary">Preview state<select id="scenario" class="form-select form-select-sm w-auto"><option value="normal">Mixed activity</option><option value="attention">Errors to review</option><option value="empty">No batches yet</option></select></label></div>
+</section>
+<div id="workspace" data-layout="ledger">
+{% call page_header('Batches') %}<button type="button" class="btn btn-outline-secondary" id="advance">Advance demo progress</button><button type="button" class="btn btn-primary" data-guide>Submit via API {{ icon('arrow-right') }}</button>{% endcall %}
+{{ overview() }}
+<div class="bt-scope-bar"><div class="d-flex flex-wrap align-items-center gap-2"><span class="bt-live-dot" aria-hidden="true"></span><span class="small text-secondary">Sample data · Jordan / administrator</span></div><div class="small text-secondary" id="feedback" role="status" aria-live="polite">Actions change this preview only.</div></div>
+<form class="bt-toolbar" id="filters" role="search"><div><label class="form-label" for="search">Find a batch</label><input id="search" type="search" class="form-control" placeholder="Search name, batch ID or endpoint…"></div><div><label class="form-label" for="status-filter">Status</label><select id="status-filter" class="form-select"><option value="all">All statuses</option><option value="in_progress">Running</option><option value="completed">Completed</option><option value="cancelling">Cancelling</option><option value="cancelled">Cancelled</option><option value="paused">Paused</option><option value="errors">With errors</option></select></div><div><label class="form-label" for="owner-filter">Owner</label><select id="owner-filter" class="form-select"><option value="all">Everyone</option><option value="jordan">My batches</option><option value="pat">Pat</option><option value="cam">Cam</option></select></div><div><label class="form-label" for="sort">Sort by</label><select id="sort" class="form-select"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="errors">Most errors</option><option value="progress">Most processed</option></select></div><button type="button" class="btn btn-outline-secondary" id="clear">Clear filters</button></form>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3"><div><strong id="visible-count">12 batches</strong><span class="small text-secondary ms-2" id="scope-note">All owners</span></div><div class="d-flex align-items-center gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" id="export">Export list ↓</button><form class="m-0" id="stop-all-form"><button class="btn btn-outline-danger btn-sm" name="do" value="cancel-all" {{ confirm_two() }}>Stop all running</button></form></div></div>
+<div class="bt-body">
+{% call card('', id='ledger', body_class='p-0') %}<div class="table-responsive" tabindex="0" role="region" aria-label="Batch ledger"><table class="table table-hover align-middle bt-table mb-0"><caption class="visually-hidden">Batches with status, processed requests, ownership, submission time, endpoint and results</caption><thead><tr><th scope="col">Batch</th><th scope="col">Status</th><th scope="col">Request progress</th><th scope="col">Owner / submitted</th><th scope="col">Endpoint</th><th scope="col">Results & actions</th></tr></thead><tbody id="ledger-rows"></tbody></table></div>{% endcall %}
+<section id="board" class="bt-board" aria-label="Batches by status" hidden>
+{% for key, title, hint in [('active','In motion','Running, paused and cancelling'),('completed','Completed','Finished processing'),('cancelled','Cancelled','Partial results are kept')] %}
+<section class="bt-lane" aria-label="{{ title }}"><div class="bt-lane-heading">{{ section_title(title, level=2) }}<span class="badge bg-secondary-lt" data-lane-count="{{ key }}">0</span></div><p class="small text-secondary px-1 mb-3">{{ hint }}</p><div data-lane="{{ key }}" class="bt-lane-items"></div><p class="bt-lane-empty text-secondary small" data-lane-empty="{{ key }}" hidden>No batches here.</p></section>
+{% endfor %}
+</section>
+{% call card('Batch directory', id='directory', body_class='p-0', hint='Select a batch to inspect its full record.') %}<div id="batch-list"></div>{% endcall %}
+<aside id="inspector-slot" aria-label="Selected batch" hidden>{{ inspector() }}</aside>
+</div>
+<section id="empty" class="bt-empty" hidden>{{ icon('barbell') }}{{ section_title('No batches yet', id='empty-title') }}<p class="text-secondary" id="empty-message">Submit a JSONL file through the API. Your batches and results will appear here.</p><button type="button" class="btn btn-primary" data-guide>How to submit a batch</button><button type="button" class="btn btn-outline-secondary" id="empty-clear" hidden>Clear filters</button></section>
+<nav class="bt-pagination" id="pagination" aria-label="Batch pages"><label class="small text-secondary d-flex align-items-center gap-2">Per page<select class="form-select form-select-sm w-auto" id="page-size"><option value="6">6</option><option value="12" selected>12</option><option value="24">24</option></select></label><div class="d-flex flex-wrap align-items-center gap-2"><span id="page-summary" class="small text-secondary me-2"></span><button type="button" class="btn btn-outline-secondary btn-sm" id="previous">Previous</button><button type="button" class="btn btn-outline-secondary btn-sm" id="next">Next</button></div></nav>
+{% call more('How background batches work') %}<p class="mb-0 text-secondary small">Live requests go first. Each batch request is routed to an eligible compute node, and progress survives restarts. Cancelling keeps completed answers and stops the requests that have not started. Submit and retrieve files through the Batch API.</p>{% endcall %}
+</div>
+</main>
+<dialog class="bt-dialog" id="detail-dialog" aria-labelledby="inspector-heading"><div id="dialog-slot"></div></dialog>
+<dialog class="bt-guide-dialog" id="guide-dialog" aria-labelledby="guide-title">{% set close_guide %}<button type="button" class="btn btn-outline-secondary btn-sm" id="close-guide">Close</button>{% endset %}{% call card('Submit a batch', actions=close_guide, class_='mb-0', header_id='guide-title') %}{{ guide() }}{% endcall %}</dialog>
+{{ templates() }}
+<script type="application/json" id="batch-data">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>

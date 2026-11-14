@@ -1,0 +1,8 @@
+{% from 'parts.html' import empty_row %}
+{% from 'batch_parts.html' import state, identity, progress, actions, inspector, guide, table_row %}
+
+{% macro templates() %}
+<template id="batch-table-template">{{ table_row() }}</template>
+<template id="batch-card-template"><article class="bt-entry"><div class="d-flex justify-content-between align-items-start gap-2 mb-3">{{ state() }}<span class="small text-secondary" data-owner></span></div>{{ identity() }}<code class="bt-endpoint small my-3" data-endpoint></code>{{ progress() }}<div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3"><time class="small text-secondary" data-created></time>{{ actions() }}</div></article></template>
+<template id="batch-empty-row">{{ empty_row(6, 'No batches match these filters. Clear the filters to see all batches.') }}</template>
+{% endmacro %}

@@ -1,22 +1,15 @@
-{% extends "frame.html" %}
-{% from "parts.html" import said_box, page_header, card , confirm_two %}
-{% from 'docs_parts.html' import doc_code %}
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, said_box, more %}
+{% from 'batch_parts.html' import guide %}
 {% block title %}Batches · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/batches.css?v=1"><script src="/static/batches.js?v=1" defer></script>{% endblock %}
 {% block main %}
-{{ page_header("Batches") }}
+<div id="batch-workspace">
+{% call page_header('Batches') %}<a class="btn btn-primary btn-sm" href="#batch-submission" data-batch-guide>Submit via API →</a>{% endcall %}
 {{ said_box(said, failed) }}
-<p class="text-secondary">A batch is a saved set of requests that runs in the background. The front keeps its progress across restarts and sends each request to an eligible compute node. Live requests go first. Input and result files remain available until the batch retention period ends.</p>
-{% set _card_actions1 %}<form method="post" action="/batches" class="ms-auto m-0">
-      <button  class="btn btn-outline-danger btn-sm" name="do" value="cancel-all" {{ confirm_two() }}>Stop all</button>
-    </form>{% endset %}
-{% call card("Batches", open=true, key="batches-card", actions=_card_actions1) %}{% include "batches_list.html" %}{% endcall %}
-{% call card("Handing one in", open=false) %}
-    <p class="text-secondary">Use the front's API address and your own key, following OpenAI's Batch API format. Put one request on each line of a JSONL file:</p>
-    {% call doc_code('batch-input', 'JSONL') %}{"custom_id": "q1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "NAME", "messages": [{"role": "user", "content": "..."}]}}{% endcall %}
-    {% call doc_code('batch-commands') %}curl FRONT/v1/files -H "Authorization: Bearer KEY" -F purpose=batch -F file=@requests.jsonl
-curl FRONT/v1/batches -H "Authorization: Bearer KEY" -H "content-type: application/json" \
-     -d '{"input_file_id": "FILE", "endpoint": "/v1/chat/completions", "completion_window": "24h"}'
-curl FRONT/v1/batches/BATCH -H "Authorization: Bearer KEY"
-curl FRONT/v1/files/OUTPUT_FILE/content -H "Authorization: Bearer KEY"{% endcall %}
-  {% endcall %}
+{% include 'batches_list.html' %}
+{% call more('Submit a batch / API guide', attrs={'id':'batch-submission'}) %}{{ guide() }}{% endcall %}
+{% call more('How background batches work') %}<p class="small text-secondary mb-0">Live requests go first. Requests are routed to eligible compute nodes, and progress survives restarts. Cancelling keeps completed answers and stops requests that have not started. Input and result files remain available until the configured retention period ends.</p>{% endcall %}
+<dialog id="batch-detail-dialog" class="bt-dialog" aria-labelledby="inspector-heading"></dialog>
+</div>
 {% endblock %}
