@@ -1,6 +1,6 @@
 # OpenAI-compatible API completion plan
 
-Implementation status: see [R1](openai-api-work.md#r1-responses-streaming), [R3](openai-api-work.md#r3-stored-responses-api-and-console-page), and [R4](openai-api-work.md#r4-responses-in-batches) in the brief. TA is implemented by the [shared permission check](../loadcoach/request_tools.py); TB function tools use the [Responses adapter](../turnstile/responses.py).
+Implementation status: see [R1](openai-api-work.md#r1-responses-streaming), [R3](openai-api-work.md#r3-stored-responses-api-and-console-page), and [R4](openai-api-work.md#r4-responses-in-batches) in the brief. TA is implemented by the [shared permission check](../loadcoach/request_tools.py); TB function tools use the [Responses adapter](../turnstile/responses.py). TC uses the [shared caller-key tool loop](../turnstile/tool_loop.py) and [MCP Responses adapter](../turnstile/response_tools.py), including approvals, exact results, sensitivity and editable limits.
 
 Drafted **2026-11-13**. Covers the endpoints judged worth adding or easy to add. Moderations is
 held for an owner decision (see [Open decision](#open-decision-moderations)). Out of scope:

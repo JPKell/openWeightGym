@@ -119,8 +119,9 @@ class FrontBatches:
                 body = {**line['body'], 'stream': False}
                 if endpoint == '/v1/responses':
                     original = line['body']
-                    if 'stream' in original or original.get('store') is True or 'previous_response_id' in original:
-                        keep(line, 400, '', {'error': {'message': 'Responses batch lines must be stateless: no stream, store:true or previous_response_id.',
+                    mcp = isinstance(original.get('tools'), list) and any(isinstance(tool, dict) and tool.get('type') == 'mcp' for tool in original['tools'])
+                    if 'stream' in original or original.get('store') is True or 'previous_response_id' in original or mcp:
+                        keep(line, 400, '', {'error': {'message': 'Responses batch lines must be stateless: no stream, store:true, previous_response_id or MCP tools.',
                             'type': 'invalid_request_error', 'code': 'unsupported_parameter'}})
                         continue
                     body.setdefault('store', False)

@@ -92,6 +92,10 @@ class ConsoleSettings:
                     raise ValueError(f'{name} must be true or false.')
                 if value is not None and name in current and (why := wrong_kind(value, current[name])):
                     raise ValueError(f'{name}: {why}')
+                if program == 'turnstile' and name == 'response_max_tool_calls' and value is not None and (type(value) is not int or not 1 <= value <= 10000):
+                    raise ValueError('response_max_tool_calls must be from 1 to 10000.')
+                if program == 'turnstile' and name == 'response_max_tool_seconds' and value is not None and (type(value) not in (int, float) or not 0 < value <= 86400):
+                    raise ValueError('response_max_tool_seconds must be above zero and at most 86400.')
                 if program == 'turnstile' and name == 'response_keep_days' and value is not None and (type(value) not in (int, float) or not 0 < value <= 3650):
                     raise ValueError('response_keep_days must be above zero and at most 3650 days.')
                 if name == 'component_versions_every' and value is not None:

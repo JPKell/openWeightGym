@@ -17,6 +17,8 @@ LABELS = {
     'max_wait': ('Queue wait limit', 'Requests and queue', 's', 'number'),
     'max_estimated_wait': ('Estimated wait limit', 'Requests and queue', 's', 'number'),
     'load_timeout': ('Model load timeout', 'Requests and queue', 's', 'number'),
+    'response_max_tool_calls': ('Tool calls per turn', 'Tools', '', 'number'),
+    'response_max_tool_seconds': ('Tool turn time limit', 'Tools', 's', 'number'),
     'response_keep_days': ('Stored Responses retention', 'Logs and retention', 'days', 'number'),
     'keep_days': ('Event retention', 'Logs and retention', 'days', 'number'),
     'keep_text': ('Request text retention', 'Logs and retention', '', 'number'),

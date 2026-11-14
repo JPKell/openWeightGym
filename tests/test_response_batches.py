@@ -45,14 +45,15 @@ def test_mixed_batch_uses_responses_adapter_and_per_line_errors(tmp_path):
                    {'custom_id': 'function', 'url': '/v1/responses', 'body': {'model': 'test', 'input': 'function',
                     'tools': [{'type': 'function', 'name': 'lookup', 'parameters': {'type': 'object', 'properties': {}}}]}},
                    *[{'custom_id': 'bad'+str(index), 'url': '/v1/responses', 'body': {'model': 'test', 'input': 'bad', **extra}}
-                     for index, extra in enumerate([{'store': True}, {'stream': True}, {'stream': False}, {'previous_response_id': 'resp_foreign'}])]]
+                     for index, extra in enumerate([{'store': True}, {'stream': True}, {'stream': False}, {'previous_response_id': 'resp_foreign'},
+                         {'tools': [{'type': 'mcp', 'server_label': 'toollocker'}]}])]]
             content = '\n'.join(json.dumps(line) for line in raw).encode()
             file = store.put_file('alice', 'mixed.jsonl', 'batch', content)
             lines = lines_of(content, '/v1/chat/completions')
             batch = store.start('alice', '/v1/chat/completions', file['id'], lines)
             await front.work_through(batch['id'], users.by_name)
             result = store.get(batch['id'])
-            assert result['status'] == 'completed' and result['request_counts'] == {'total': 7, 'completed': 3, 'failed': 4}
+            assert result['status'] == 'completed' and result['request_counts'] == {'total': 8, 'completed': 3, 'failed': 5}
             good = [json.loads(row) for row in store.content(result['output_file_id']).decode().splitlines()]
             bad = [json.loads(row) for row in store.content(result['error_file_id']).decode().splitlines()]
             assert good[0]['response']['body']['choices'][0]['message']['content'] == 'Hello'

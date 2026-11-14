@@ -198,6 +198,9 @@ can = ["use-tools", "follow-settings"]
 
 # turnstile's own part. Seconds it waits for compute to wake before it gives up on a request.
 [turnstile]
+# Limits shared by server-run Responses tools and each Tool chat model turn. Changes apply immediately.
+response_max_tool_calls = 25
+response_max_tool_seconds = 900
 # Days stored Responses are kept. Changes apply immediately; above 0, at most 3650.
 response_keep_days = 30
 wait = 180
