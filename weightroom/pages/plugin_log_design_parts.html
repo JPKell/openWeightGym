@@ -1,0 +1,11 @@
+{% from 'parts.html' import section_title, more, empty_row %}
+{% from 'plugin_activity_parts.html' import activity_row, outcome, inspector %}
+
+{% macro templates() %}
+<template id="log-row-template">{{ activity_row(preview=true) }}</template>
+<template id="log-empty-row">{{ empty_row(6, 'No requests match your filters. Clear filters to see all retained requests.') }}</template>
+<template id="session-choice-template"><button type="button" class="pl-choice" data-session-choice><span class="d-flex align-items-center justify-content-between gap-2"><strong data-session-name></strong><span class="badge bg-secondary-lt" data-session-count></span></span><span class="small text-secondary" data-session-meta></span><span class="small" data-session-outcomes></span></button></template>
+<template id="trail-record-template"><li class="pl-trail-record"><span class="pl-trail-dot" aria-hidden="true"></span><div class="d-flex justify-content-between align-items-start flex-wrap gap-2"><button type="button" class="pl-record-link" data-open><strong data-model></strong><span class="d-block small text-secondary" data-trail-meta></span></button>{{ outcome() }}</div><div class="small text-secondary mt-2" data-request></div></li></template>
+<template id="instance-choice-template"><button type="button" class="pl-choice" data-instance-choice><span class="d-flex justify-content-between gap-2"><strong data-instance-name></strong><span class="badge bg-secondary-lt" data-instance-count></span></span><span class="small text-secondary" data-instance-meta></span><span class="pl-distribution" aria-hidden="true"><i data-completed-bar></i><i data-failed-bar></i><i data-interrupted-bar></i></span><span class="small" data-instance-outcomes></span></button></template>
+<template id="log-empty-template"><div class="text-center text-secondary p-5"><div class="pl-empty-mark" aria-hidden="true">≡</div>{{ section_title('No retained requests', wrapper_class='justify-content-center') }}<p class="small mb-0" data-empty-message>Plugin activity will appear here after a request is recorded.</p></div></template>
+{% endmacro %}

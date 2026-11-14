@@ -1,15 +1,39 @@
-{% extends "frame.html" %}
+{% extends 'frame.html' %}
 {% block title %}Plugin logs · openWeightGym{% endblock %}
-{% from "parts.html" import card, swaps, page_header, empty_row %}
+{% block page_class %}plugin-activity-page{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/plugin-logs.css?v=1"><script src="/static/plugin-logs.js?v=1" defer></script>{% endblock %}
+{% from 'parts.html' import card, swaps, page_header, empty_row %}
+{% from 'plugin_activity_parts.html' import activity_row, activity_head, activity_overview, inspector %}
 {% block main %}
-{% call page_header("Plugin logs", lead="Inspect retained plugin requests and activity.") %}{% if "front-manage-plugins" in person.can %}<a href="/plugins">Manage plugins</a>{% endif %}{% endcall %}
-{% call card("Plugin logs", true, 'plugin-logs') %}
-<div id="plugin-logs">
-<form method="get" action="/plugins/activity" class="d-flex gap-2 align-items-center mb-2" {{ swaps('plugin-logs', true) }} data-auto-submit><label for="plugin-limit">Results per page</label><select id="plugin-limit" name="limit" class="form-select form-select-sm w-auto">{% for n in paging.sizes %}<option value="{{ n }}" {{ 'selected' if n == paging.limit }}>{{ n }}</option>{% endfor %}</select><noscript><button class="btn btn-primary btn-sm">Show</button></noscript></form>
-<div class="table-responsive"><table class="table table-sm table-hover"><thead><tr><th>When</th><th>User</th><th>Model</th><th>Plugin</th><th>Instance / profile</th><th>Outcome</th></tr></thead><tbody>
-{% for use in uses %}<tr><td>{{ use.at|timestamp }}</td><td>{{ use.user }}</td><td><code>{{ use.model }}</code></td><td>{{ use.plugin }}</td><td>{{ use.instance }} / {{ use.profile }}</td><td>{{ use.outcome }}</td></tr>{% else %}{% call empty_row(6) %}No plugin uses yet.{% endcall %}{% endfor %}
+<div id="plugin-logs" data-plugin-logs>
+{% call page_header('Plugin logs') %}{% if 'front-manage-plugins' in person.can %}<a class="btn btn-outline-secondary btn-sm" href="/plugins">Manage plugins</a>{% endif %}<a class="btn btn-primary btn-sm{{ ' disabled' if not summary.total }}" href="{{ export_url }}"{% if not summary.total %} aria-disabled="true" tabindex="-1"{% endif %} data-plugin-export>Export filtered CSV</a>{% endcall %}
+{{ activity_overview(summary, compact=true) }}
+<form id="plugin-filters" method="get" action="/plugins/activity" class="pl-filters" role="search" hx-get="/plugins/activity" hx-trigger="submit, input delay:350ms" hx-target="#plugin-logs" hx-select="#plugin-logs" hx-swap="outerHTML show:none" hx-push-url="true" hx-sync="#plugin-logs:replace">
+<input type="hidden" name="limit" value="{{ paging.limit }}"><input type="hidden" name="sort" value="{{ filters.sort }}"><input type="hidden" name="direction" value="{{ filters.direction }}">
+{% if filters.session %}<input type="hidden" name="session" value="{{ filters.session }}">{% endif %}
+<div class="pl-search"><label class="form-label" for="plugin-search">Search</label><input type="search" id="plugin-search" name="q" value="{{ filters.q }}" class="form-control form-control-sm" placeholder="User, model, request or session…"></div>
+<div><label class="form-label" for="plugin-period">Recorded</label><select id="plugin-period" name="period" class="form-select form-select-sm">{% for value,label in [('all','All retained'),('24','Last 24 hours'),('168','Last 7 days')] %}<option value="{{ value }}"{{ ' selected' if filters.period == value }}>{{ label }}</option>{% endfor %}</select></div>
+<div><label class="form-label" for="plugin-user">User</label><select id="plugin-user" name="user" class="form-select form-select-sm"><option value="">All users</option>{% for name in choices.user %}<option value="{{ name }}"{{ ' selected' if filters.user == name }}>{{ name }}</option>{% endfor %}{% if filters.user and filters.user not in choices.user %}<option selected>{{ filters.user }}</option>{% endif %}</select></div>
+{% set outcomes = ['completed','failed','interrupted','started','refused','unavailable'] %}
+<div><label class="form-label" for="plugin-outcome">Outcome</label><select id="plugin-outcome" name="outcome" class="form-select form-select-sm"><option value="">All outcomes</option>{% for value in (outcomes + choices.outcome)|unique %}<option value="{{ value }}"{{ ' selected' if filters.outcome == value }}>{{ value|capitalize }}</option>{% endfor %}{% if filters.outcome and filters.outcome not in outcomes and filters.outcome not in choices.outcome %}<option selected>{{ filters.outcome }}</option>{% endif %}</select></div>
+<div><label class="form-label" for="plugin-instance">Instance</label><select id="plugin-instance" name="instance" class="form-select form-select-sm"><option value="">All instances</option>{% for name in choices.instance %}<option value="{{ name }}"{{ ' selected' if filters.instance == name }}>{{ name }}</option>{% endfor %}{% if filters.instance and filters.instance not in choices.instance %}<option selected>{{ filters.instance }}</option>{% endif %}</select></div>
+<div class="d-flex gap-2"><button type="submit" class="btn btn-primary btn-sm">Apply</button><a class="btn btn-outline-secondary btn-sm" href="/plugins/activity" {{ swaps('plugin-logs', true) }}>Clear</a></div>
+</form>
+{% if filters.session %}<div class="small d-flex align-items-center flex-wrap gap-2 mb-2"><span class="text-secondary">Session</span><code class="text-break">{{ filters.session }}</code><a href="{{ clear_session_url }}" {{ swaps('plugin-logs', true) }}>Remove filter</a></div>{% endif %}
+<div class="pl-body" data-has-detail="{{ 'true' if selected else 'false' }}">
+{% call card('', class_='pl-log-table', body=false) %}
+<div class="pl-table-scroll" tabindex="0" role="region" aria-label="Plugin requests"><table class="table table-hover align-middle mb-0 pl-table"><caption class="visually-hidden">Plugin requests. Select a time to inspect the retained record.</caption>{{ activity_head(filters.sort, filters.direction, sort_urls) }}<tbody id="plugin-log-rows">
+{% for use in uses %}{{ activity_row(use, href=record_url(use), selected=selected and selected.id == use.id) }}{% else %}{% call empty_row(6) %}<div class="text-center py-4">{{ 'No requests match these filters.' if retained else 'No plugin requests recorded yet.' }}{% if retained %} <a href="/plugins/activity" {{ swaps('plugin-logs', true) }}>Clear filters</a>{% endif %}</div>{% endcall %}{% endfor %}
 </tbody></table></div>
+<div class="pl-table-footer">
+<form method="get" action="/plugins/activity" class="d-flex align-items-center gap-2" {{ swaps('plugin-logs', true) }} data-auto-submit>{% for key,value in filters.items() if value %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<label for="plugin-limit" class="small text-secondary">Rows</label><select id="plugin-limit" name="limit" class="form-select form-select-sm w-auto">{% for size in paging.sizes %}<option value="{{ size }}"{{ ' selected' if size == paging.limit }}>{{ size }}</option>{% endfor %}</select><noscript><button class="btn btn-primary btn-sm">Show</button></noscript></form>
 {% with target='plugin-logs' %}{% include 'pagination.html' %}{% endwith %}
 </div>
 {% endcall %}
+<aside class="pl-inspector" id="plugin-detail" aria-label="Request inspector"{% if not selected %} hidden{% endif %}>
+{% if selected %}{{ inspector(selected, live=true, session_url=session_url, json_url=json_url) }}<script type="application/json" data-selected-json>{{ selected_record|tojson }}</script>{% endif %}
+</aside>
+</div>
+<dialog id="plugin-detail-dialog" class="pl-dialog" aria-labelledby="record-title"><div id="plugin-dialog-slot"></div></dialog>
+</div>
 {% endblock %}

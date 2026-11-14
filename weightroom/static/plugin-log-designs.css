@@ -1,0 +1,24 @@
+/* Review shell and the two alternative Plugin logs layouts. */
+.pl-review { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; padding:1rem 2rem; background:var(--tblr-bg-surface); border-bottom:1px solid var(--bs-border-color); }
+.pl-page { max-width:1680px; padding:1.5rem 2rem 3rem; margin:auto; }
+.pl-proposals { padding-bottom:1.25rem; margin-bottom:2rem; border-bottom:1px solid var(--bs-border-color); }
+[data-layout='desk'] .pl-body:has(#detail-slot[hidden]) { grid-template-columns:minmax(0,1fr); }
+.pl-choices { max-height:700px; overflow:auto; }
+.pl-choice { display:flex; flex-direction:column; gap:.5rem; width:100%; padding:1.1rem; text-align:left; border:0; border-bottom:1px solid var(--bs-border-color); background:var(--tblr-bg-surface); color:var(--bs-body-color); overflow-wrap:anywhere; }
+.pl-choice:last-child { border-bottom:0; }
+.pl-choice:hover { background:var(--tblr-bg-surface-secondary); }
+.pl-choice[aria-pressed='true'] { background:var(--suite-accent-bg); box-shadow:inset 3px 0 var(--theme-accent); }
+.pl-distribution { display:flex; gap:2px; height:5px; border-radius:2px; overflow:hidden; }
+.pl-distribution i { min-width:0; }
+.pl-distribution [data-completed-bar] { background:var(--tblr-green); }
+.pl-distribution [data-failed-bar] { background:var(--tblr-red); }
+.pl-distribution [data-interrupted-bar] { background:var(--tblr-yellow); }
+.pl-trail { list-style:none; padding:0 0 0 1rem; margin:0; }
+.pl-trail-record { position:relative; padding:0 0 2rem 1.7rem; border-left:1px solid var(--bs-border-color); }
+.pl-trail-record:last-child { padding-bottom:.5rem; border-color:transparent; }
+.pl-trail-record [data-request] { overflow-wrap:anywhere; font-family:var(--bs-font-monospace); font-size:.75rem; }
+.pl-trail-dot { position:absolute; left:-5px; top:5px; width:9px; height:9px; border-radius:50%; background:var(--theme-accent); box-shadow:0 0 0 4px var(--tblr-bg-surface); }
+.pl-trail-record[data-selected='true'] .pl-record-link { text-decoration:underline; text-underline-offset:4px; }
+.pl-empty-mark { font-size:2.5rem; margin-bottom:1rem; }
+[data-layout='trail'] .pl-body, [data-layout='ledger'] .pl-body { grid-template-columns:280px minmax(0,1fr); }
+@media (max-width:760px) { .pl-review { padding:1rem; } .pl-page { padding:1.25rem 1rem 2rem; } [data-layout='trail'] .pl-body, [data-layout='ledger'] .pl-body { grid-template-columns:minmax(0,1fr); } .pl-choices { max-height:260px; } .pl-proposals .nav-link { padding:.6rem .65rem; } }
