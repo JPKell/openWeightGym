@@ -4,6 +4,7 @@ from loadcoach import observability as observation
 
 import asyncio
 import base64
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
 import json
 from pathlib import Path
@@ -29,6 +30,7 @@ from voice import protocol, prompt_recordings, latency
 from voice.hermes import Bridge, configuration
 from voice.telephone import Conversion, valid, valid_stream
 from voice.telephone_settings import configuration as telephone_configuration, validate as validate_telephone
+from voice.phone_access import RateLimits, digest as phone_digest, masked as masked_phone
 from voice.options import FIELDS as CALL_FIELDS, MAX_CALL_BYTES
 
 START_FAILURES = {'busy', 'unauthorized', 'unavailable', 'invalid_options', 'invalid_voice',
@@ -62,7 +64,10 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
     turnstile = settings["turnstile"].rstrip("/")
     voice = settings["voice"].rstrip("/")
     voice_door = settings.get("voice_turnstile", turnstile.rsplit(":", 1)[0] + ":8445")
-    browser_sessions, phone_calls = {}, {}
+    browser_sessions, phone_calls, pending_pins = {}, {}, {}
+    phone_rates = RateLimits()
+    admitting = set()
+    phone_attempts = defaultdict(lambda: deque(maxlen=50))
     sockets = set()
     desktop_sessions = set()
     assets = Path(__file__).with_name("static")
@@ -180,41 +185,127 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                             secure=request.headers.get("origin", "").startswith("https://"))
         return response
 
+    def phone_attempt(number, caller, outcome, reason='', account=None):
+        """Only masked numbers and keyed caller correlations enter retained activity or events."""
+        label = number.get('label', 'Unknown number') if number else 'Unknown number'
+        row = dict(at=time.time(), caller=masked_phone(caller), account=account, outcome=outcome, reason=reason,
+                   caller_hash=phone_digest(Path(settings['key_file']).parent, caller), duration=None)
+        phone_attempts[label].append(row)
+        if outcome == 'rejected':
+            print(json.dumps({'event': 'voice.phone.rejected', 'reason': reason, 'caller_hash': row['caller_hash']}), flush=True)
+        return row
+
+    def refuse(number, caller, reason):
+        phone_attempt(number, caller, 'rejected', reason)
+        greeting = number.get('refusal_greeting') if number else None
+        return Response('<Response><Say>' + escape(greeting or 'This call cannot be accepted.') + '</Say><Hangup/></Response>', media_type='application/xml')
+
+    def connected_xml(phone, item):
+        number = item['number']
+        greeting = '<Say>' + escape(number['greeting']) + '</Say>' if number.get('greeting') else ''
+        return ('<?xml version="1.0" encoding="UTF-8"?><Response>' + greeting + '<Connect><Stream url="' + escape(phone['stream_url'], {'"': '&quot;'}) + '">'
+                '<Parameter name="session" value="' + item['id'] + '"/><Parameter name="nonce" value="' + item['nonce'] + '"/>'
+                '</Stream></Connect></Response>')
+
     async def inbound(request):
-        """Check every webhook parameter before reserving a telephone session."""
+        """Validate signatures and caller policy before a call or compute session is reserved."""
         phone = telephone_configuration(settings)
-        if not phone.get('enabled') or not phone.get("token_file"):
+        if not phone.get('enabled') or not phone.get('token_file'):
             return Response(status_code=404)
         body = await request.body()
         if len(body) > 16384:
             return Response(status_code=413)
-        params = parse_qs(body.decode(), keep_blank_values=True)
         try:
-            token = Path(phone["token_file"]).read_text().strip()
-        except OSError:
+            params = parse_qs(body.decode(), keep_blank_values=True)
+            token = Path(phone['token_file']).read_text().strip()
+        except (OSError, UnicodeError):
             return Response(status_code=404)
-        if not valid(token, phone["webhook_url"], params, request.headers.get("x-twilio-signature", "")):
-            print(json.dumps({"event": "voice.phone.rejected", "stage": "webhook", "reason": "invalid_signature"}), flush=True)
+        call, caller, destination = (params.get(name, [''])[0] for name in ('CallSid', 'From', 'To'))
+        for old, item in list(pending_pins.items()):
+            if item['created'] < time.monotonic()-600:
+                pending_pins.pop(old, None)
+        pending = pending_pins.get(call)
+        existing = phone_calls.get(call)
+        signed_url = phone['webhook_url']
+        challenge = request.query_params.get('challenge')
+        if request.url.query:
+            claim = pending or existing or {}
+            if (set(request.query_params) != {'challenge'} or len(request.query_params.getlist('challenge')) != 1
+                    or challenge not in claim.get('challenges', [])):
+                phone_attempt(None, caller, 'rejected', 'invalid_signature')
+                return Response(status_code=403)
+            signed_url += '?challenge=' + challenge
+        if not valid(token, signed_url, params, request.headers.get('x-twilio-signature', '')):
+            phone_attempt(None, caller, 'rejected', 'invalid_signature')
             return Response(status_code=403)
-        call = params.get("CallSid", [""])[0]
-        if not protocol.ID.fullmatch(call) or params.get("AccountSid", [""])[0] != phone["account_sid"]:
+        if not protocol.ID.fullmatch(call) or params.get('AccountSid', [''])[0] != phone['account_sid']:
+            phone_attempt(None, caller, 'rejected', 'invalid_signature')
             return Response(status_code=403)
-        number = next((number for number in phone.get('numbers', [])
-                       if number.get('legacy') or number.get('number') == params.get('To', [''])[0]), None)
+        number = next((one for one in phone.get('numbers', []) if one.get('legacy') or one.get('number') == destination), None)
         if not number or not number.get('enabled', True):
-            print(json.dumps({'event': 'voice.phone.rejected', 'reason': 'unknown_number'}), flush=True)
-            return Response('<Response><Say>This number is not in service.</Say><Hangup/></Response>', media_type='application/xml')
-        if call not in phone_calls:
-            if sum(not p.get("closed") for p in phone_calls.values()) >= 16 or len(phone_calls) >= 1024:
-                return Response(status_code=429)
-            phone_calls[call] = dict(id=secrets.token_hex(16), nonce=secrets.token_urlsafe(32),
-                                    created=time.monotonic(), connected=False, number=number)
-        item = phone_calls[call]
-        greeting = '<Say>' + escape(number['greeting']) + '</Say>' if number.get('greeting') else ''
-        xml = ('<?xml version="1.0" encoding="UTF-8"?><Response>' + greeting + '<Connect><Stream url="' + escape(phone["stream_url"], {'"': '&quot;'}) + '">'
-               '<Parameter name="session" value="' + item["id"] + '"/><Parameter name="nonce" value="' + item["nonce"] + '"/>'
-               '</Stream></Connect></Response>')
-        return Response(xml, media_type="application/xml")
+            return refuse(number, caller, 'unknown_number')
+        if existing:
+            if existing['number'].get('number') != number.get('number'):
+                return refuse(number, caller, 'unknown_number')
+            return Response(connected_xml(phone, existing), media_type='application/xml')
+        caller_key = phone_digest(Path(settings['key_file']).parent, caller)
+        number_key = number.get('number', 'legacy')
+        if sum(not item.get('closed') for item in phone_calls.values()) >= 16 or len(phone_calls) >= 1024:
+            return refuse(number, caller, 'rate_limited')
+        if pending and challenge in pending.get('responses', {}):
+            return Response(pending['responses'][challenge], media_type='application/xml')
+        if not phone_rates.allowed(number_key, caller_key, number.get('max_calls_per_hour', 60), continuation=bool(pending)):
+            return refuse(number, caller, 'rate_limited')
+        if not pending:
+            phone_rates.charge(number_key, caller_key)
+        if pending and pending['attempts'] >= 3:
+            return refuse(number, caller, 'bad_pin')
+        decision = {'accepted': True, 'account': number.get('account', 'voice-phone')}
+        if not number.get('legacy'):
+            if call in admitting:
+                return Response(status_code=503, headers={'retry-after': '1'})
+            if len(admitting) + sum(not item.get('closed') for item in phone_calls.values()) >= 16:
+                return refuse(number, caller, 'rate_limited')
+            admitting.add(call)
+            try:
+                response = await ask('POST', turnstile + '/loadcoach/telephone/admit', app_key, no_wake=True, timeout=5,
+                    json={'number': destination, 'caller': caller, 'attestation': params.get('StirVerstat', [''])[0],
+                          'digits': params.get('Digits', [''])[0]})
+                decision = response.json() if response.is_success else {'accepted': False, 'reason': 'account_unavailable'}
+            except (httpx.HTTPError, ValueError):
+                decision = {'accepted': False, 'reason': 'account_unavailable'}
+            finally:
+                admitting.discard(call)
+        if not decision.get('accepted'):
+            if decision.get('pin_needed'):
+                if not pending:
+                    if len(pending_pins) >= 1024:
+                        return refuse(number, caller, 'rate_limited')
+                    pending = pending_pins[call] = dict(created=time.monotonic(), attempts=0, challenges=[], responses={})
+                if params.get('Digits', [''])[0]:
+                    pending['attempts'] += 1
+                    phone_rates.charge(number_key, caller_key)
+                    phone_attempt(number, caller, 'rejected', 'bad_pin')
+                if pending['attempts'] >= 3:
+                    return Response('<Response><Say>Too many incorrect PIN attempts.</Say><Hangup/></Response>', media_type='application/xml')
+                nonce = pending['challenges'][-1] if not params.get('Digits', [''])[0] and pending['challenges'] else secrets.token_urlsafe(24)
+                if nonce not in pending['challenges']:
+                    pending['challenges'].append(nonce)
+                action = escape(phone['webhook_url'] + '?challenge=' + nonce, {'"': '&quot;'})
+                xml = ('<Response><Gather input="dtmf" action="' + action + '" method="POST" timeout="10" finishOnKey="#">'
+                       '<Say>Enter your telephone PIN, followed by pound.</Say></Gather><Hangup/></Response>')
+                if challenge:
+                    pending['responses'][challenge] = xml
+                return Response(xml, media_type='application/xml')
+            return refuse(number, caller, decision.get('reason', 'not_listed'))
+        if sum(not item.get('closed') for item in phone_calls.values()) >= 16 or len(phone_calls) >= 1024:
+            return refuse(number, caller, 'rate_limited')
+        item = phone_calls[call] = dict(id=secrets.token_hex(16), nonce=secrets.token_urlsafe(32), created=time.monotonic(),
+            connected=False, number={**number, 'account': decision['account']}, session_key=decision.get('session_key'),
+            challenges=pending.get('challenges', []) if pending else [])
+        pending_pins.pop(call, None)
+        item['attempt'] = phone_attempt(number, caller, 'accepted', account=decision['account'])
+        return Response(connected_xml(phone, item), media_type='application/xml')
 
     async def controller(socket, sid, key, mode, source, stream_sid=None, voice_id=None, record=False, chosen_profile=None, options=None):
         """Run one call with bounded source queues, startup, prompts and cleanup.
@@ -740,7 +831,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             number = item['number']
             phone_voice = number.get("voice") if number.get("mode", "direct") == "direct" else None
             key_file = number.get('key_file') or str(Path(settings['key_file']).parent / (number['account'] + '.key'))
-            await controller(socket, item["id"], Path(key_file).read_text().strip(), number.get("mode", "direct"), "twilio", stream_sid,
+            await controller(socket, item["id"], item.get("session_key") or Path(key_file).read_text().strip(), number.get("mode", "direct"), "twilio", stream_sid,
                              voice_id=phone_voice, chosen_profile=number.get('profile'))
         except (ValueError, KeyError, TypeError, OSError, TimeoutError, WebSocketDisconnect):
             if not claimed:
@@ -750,6 +841,10 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         finally:
             if claimed and call in phone_calls:
                 phone_calls[call]["closed"] = True  # a replayed webhook cannot repeat a finished call
+                phone_calls[call]['attempt']['duration'] = round(time.monotonic()-phone_calls[call]['created'], 1)
+                if item.get('session_key'):
+                    with suppress(httpx.HTTPError):
+                        await ask('POST', turnstile + '/loadcoach/sign-out', item['session_key'], no_wake=True, timeout=2)
 
     async def browser_config(request):
         """Return permitted public browser voice configuration without credentials: modes, and SoundRoom voices if offered.
@@ -959,6 +1054,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
 
     app.state.browser_sessions = browser_sessions
     app.state.phone_calls = phone_calls
+    app.state.phone_attempts = phone_attempts
     return app
 
 

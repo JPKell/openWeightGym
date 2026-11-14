@@ -5,6 +5,11 @@ from __future__ import annotations
 from .migrations import Migration, add_column
 
 
+TELEPHONE = (Migration(1, 'private telephone PIN verifiers', '''
+    CREATE TABLE telephone_pins (number_key TEXT PRIMARY KEY, verifier TEXT NOT NULL);
+'''),)
+
+
 RESPONSES = (Migration(1, 'front-owned Responses lifecycle and input items', '''
     CREATE TABLE responses (
         id TEXT PRIMARY KEY, owner TEXT NOT NULL, owner_name TEXT NOT NULL,

@@ -14,9 +14,9 @@ from voice.telephone_settings import configuration, validate, urls
 def phone():
     return dict(enabled=True, account_sid='AC' + 'a' * 32, public_url='https://phone.example.com',
                 numbers=[dict(label='Office', number='+15555550123', enabled=True, account='voice-phone',
-                              profile='default', mode='direct', voice='', greeting='Welcome.', max_calls_per_hour=60),
+                              profile='default', mode='direct', voice='', greeting='Welcome.', max_calls_per_hour=60, callers={'mode': 'anyone'}),
                          dict(label='Support', number='+15555550124', enabled=True, account='voice-phone-support',
-                              profile='support', mode='hermes')])
+                              profile='support', mode='hermes', callers={'mode': 'anyone'})])
 
 
 def test_site_settings_round_trip_and_legacy_precedence(tmp_path):
@@ -85,6 +85,10 @@ def test_signed_to_routing_disabled_and_dynamic_changes(tmp_path):
     settings = dict(key_file=str(key), turnstile='http://turnstile', voice='http://compute',
                     telephone_token_file=str(token), telephone=phone(), public_port=8081)
     def never(request):
+        if request.url.path == '/loadcoach/telephone/admit':
+            import json
+            account = 'voice-phone' if json.loads(request.content)['number'] == '+15555550123' else 'voice-phone-support'
+            return httpx.Response(200, json={'accepted': True, 'account': account})
         raise AssertionError('Admission must not wake or contact compute')
     app = build_app(settings, httpx.AsyncClient(transport=httpx.MockTransport(never)))
     with TestClient(app, base_url='http://public:8081') as client:

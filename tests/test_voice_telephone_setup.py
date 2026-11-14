@@ -37,6 +37,8 @@ def test_real_signed_simulation_for_two_numbers_uses_each_phone_account_and_prof
         (tmp_path / (account + '.key')).write_text(account + '-key')
     sessions = []
     async def upstream(request):
+        if request.url.path == '/loadcoach/telephone/admit':
+            return httpx.Response(200, json={'accepted': True, 'account': 'voice-phone' if json.loads(request.content)['number'] == '+15555550123' else 'voice-phone-support'})
         if request.url.path == '/loadcoach/me':
             return httpx.Response(200, json={'name': 'phone', 'can': ['front-voice']})
         if request.url.path == '/turnstile/ready':

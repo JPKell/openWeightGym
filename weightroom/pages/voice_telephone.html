@@ -36,7 +36,7 @@
 {% endcall %}
 {% if telephone.numbers %}
 <nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Telephone numbers">{% for number in telephone.numbers %}<a class="btn btn-outline-secondary btn-sm" data-voice-choice="{{ number.number }}" href="?number={{ number.number|urlencode }}">{{ number.label }}</a>{% endfor %}</nav>
-{% for number in telephone.numbers %}{{ number_editor(number, loop.index, telephone_data.accounts|default([]), (telephone_data.choices_by_account|default({})).get(number.account, {}), typed_in if number.number == selected_number else {}) }}{% endfor %}
+{% for number in telephone.numbers %}{{ number_editor(number, loop.index, telephone_data.accounts|default([]), (telephone_data.choices_by_account|default({})).get(number.account, {}), typed_in if number.number == selected_number else {}, telephone_data.caller_accounts|default([])) }}{% endfor %}
 {% call card('Test a number') %}<p>Simulation sends a signed call through your public route and waits for spoken audio and playback marks. It uses compute; it never dials a telephone.</p>
 <form method="post" action="/system/voice/telephone/simulate" data-hold-refresh><label class="form-label" for="simulate-number">Destination</label><select class="form-select mb-2" id="simulate-number" name="number">{% for number in telephone.numbers %}<option value="{{ number.number }}">{{ number.label }}</option>{% endfor %}</select><label class="form-label" for="simulate-caller">Simulated caller (must pass caller access)</label><input class="form-control mb-2" id="simulate-caller" name="caller" value="+15555550123" pattern="\+[1-9][0-9]{7,14}" required><button class="btn btn-outline-primary">Simulate a call</button></form>{% endcall %}
 {% endif %}
