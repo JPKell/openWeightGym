@@ -35,13 +35,20 @@
     {% call card('Models using this file') %}
       <div class="d-flex flex-wrap gap-2">{% for model in file.used_by %}<a class="btn btn-outline-primary btn-sm text-break" href="{{ address(model) }}">{{ model }}</a>{% endfor %}</div>
       {% if file.used_by %}<p class="small text-secondary mt-2 mb-0">Each model keeps its own settings.</p>
-      {% else %}<p class="small text-secondary mb-2">No model references this file.</p><a class="btn btn-outline-primary btn-sm" href="/models?file={{ file.path|urlencode }}&trained={{ facts.trained_context or '' }}">Add a model</a>{% endif %}
+      {% else %}<p class="small text-secondary mb-2">No model references this file.</p>{% if facts.kind != 'conversion source' %}<a class="btn btn-outline-primary btn-sm" href="/models?file={{ file.path|urlencode }}&trained={{ facts.trained_context or '' }}">Add a model</a>{% endif %}{% endif %}
     {% endcall %}
   </div>
   <div class="file-metadata">
     {% call card('Inside the file') %}{% include 'file_says.html' %}{% endcall %}
   </div>
   <div class="file-operations">
+    {% if facts.kind == 'conversion source' %}
+    {% call card('Convert to classifier GGUF') %}
+    {% if facts.conversion == 'refused' %}{% call alert('danger') %}{{ facts.why }}{% endcall %}
+    {% else %}<p class="small text-secondary">Convert the complete bundle on its owning compute node. Install CPU conversion tools in Components first. Sources stay untouched; a 30-question parity gate labels the output.</p>
+    <form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><label class="form-label" for="conversion-node">Owning compute node</label><select class="form-select form-select-sm mb-2" name="machine" id="conversion-node">{% for node in nodes if node.name != 'front' and node.answering %}<option value="{{ node.name }}">{{ node.name }}</option>{% endfor %}</select><button class="btn btn-outline-primary btn-sm" name="do" value="convert-classifier">Convert to classifier GGUF</button></form>{% endif %}
+    {% endcall %}
+    {% endif %}
     {% call card('Distribute to nodes', id='distribution-card') %}
       <form method="post" action="/file" data-hold-refresh data-file-distribute>
         <input type="hidden" name="path" value="{{ file.path }}">

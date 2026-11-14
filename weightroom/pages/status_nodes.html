@@ -65,6 +65,7 @@
         </table>
       </div>
       {% for node in nodes if node.state == 'ready' and node.status_live and node.lock %}<div class="list-group-item small">{{ node.name }} GPUs are held by <b>{{ node.lock.user }}</b> from {{ node.lock.caller }}, {{ node.lock.seconds_left|round|int }} s left{{ ", turning others away" if node.lock.refuse }}.</div>{% endfor %}
+      {% if not nodes|selectattr('lock')|list %}<div class="list-group-item small text-secondary">No GPUs are reserved exclusively.</div>{% endif %}
       {% if seen %}{% set others = (seen.others_running or 0) + (seen.others_waiting or 0) + (seen.others_hosted or 0) %}{% if others %}<div class="list-group-item">{{ others }} request{{ "" if others == 1 else "s" }} by other people across the nodes; their details are private.</div>{% endif %}{% endif %}
     </div>
   {% endcall %}

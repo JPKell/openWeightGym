@@ -6,6 +6,7 @@
 {% endif %}
 <dl class="row facts">
   {% if told %}
+  {% if told.facts.conversion %}<dt class="col-5 col-md-2">Conversion</dt><dd class="col-7 col-md-4">{{ told.facts.conversion }}{% if (told.facts.parity|default({})).get('reason') %} · {{ (told.facts.parity|default({})).get('reason') }}{% endif %}</dd>{% endif %}
   <dt class="col-5 col-md-2">Name</dt><dd class="col-7 col-md-4">{{ told.facts.name or "not said" }}</dd>
   <dt class="col-5 col-md-2">Size</dt><dd class="col-7 col-md-4">{{ told.facts.size_label or "not said" }}</dd>
   <dt class="col-5 col-md-2">Built as</dt><dd class="col-7 col-md-4">{{ told.facts.architecture or "not said" }}</dd>

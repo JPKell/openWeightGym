@@ -33,7 +33,7 @@
 {% call card(node.label, class_='h-100') %}
 {% if node.error %}{{ alert('warning', node.error) }}{% elif not node.protection.ready %}{% call alert('warning') %}<div><p class="mb-1">{{ node.protection.reason }}</p><a href="/docs/data/backups#setup">Set up recovery encryption</a></div>{% endcall %}{% endif %}
 {% set verified = node.backups|selectattr('verification.state', 'equalto', 'verified')|sort(attribute='created_at', reverse=true)|first %}
-<p class="small"><span class="text-secondary">Last verified backup:</span> {{ verified.created_at|timestamp if verified else 'None yet' }}{% if verified %} · <a href="/backups/{{ verified.id }}?node={{ node.name|urlencode }}">Restore preview</a>{% endif %}</p>
+<p class="small"><span class="text-secondary">Last verified backup:</span> {{ verified.created_at|timestamp if verified else 'No verified backup yet' }}{% if verified %} · <a href="/backups/{{ verified.id }}?node={{ node.name|urlencode }}">Restore preview</a>{% endif %}</p>
 {% if node.protection.ready %}<form method="post" action="/backups/create" class="mb-3"><input type="hidden" name="node" value="{{ node.name }}"><button class="btn btn-outline-primary btn-sm">Back up {{ node.label }}</button></form>{% endif %}
 {{ inventory(node.inventory, node.archive_root) }}
 {% endcall %}</div>{% endfor %}

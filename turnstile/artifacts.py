@@ -205,10 +205,10 @@ class FrontFiles:
                     return response({'found': await hub.search(self.web, query['search']) if query.get('search') else []})
                 if not hub.REPOSITORY.fullmatch(repository):
                     raise ValueError('A repository is written OWNER/NAME.')
-                rows = hub.rows(await hub.files(self.web, repository))
+                rows = hub.rows(await hub.files(self.web, repository, classifier=query.get('kind') == 'classifier'))
                 if query.get('kind') == 'classifier':
                     for row in rows:
-                        row['decision_ready'] = await hub.decision_header(self.web, repository, row['file'])
+                        row['decision_ready'] = row['file'].lower().endswith('.gguf') and await hub.decision_header(self.web, repository, row['file'])
                 spots = self.places()
                 for row in rows:
                     names = [Path(part['path']).name for part in row['parts']]
@@ -410,7 +410,7 @@ class FrontFiles:
             Path(folder).mkdir(exist_ok=True)
         if folder is None or not Path(folder).is_dir():
             raise ValueError('Downloads go into storage, never the cache. Choose a front storage folder that exists.')
-        entries = hub.chosen(await hub.files(self.web, repository), names)
+        entries = hub.chosen(await hub.files(self.web, repository, classifier=Path(folder).name == 'classifier'), names)
         targets = [self.path(str(Path(folder) / hub.folder_of(repository) / Path(entry['path']).name)) for entry in entries]
         if any(target.with_name(target.name + '.part').is_symlink() for target in targets):
             raise ValueError('A partial download cannot be a symbolic link.')

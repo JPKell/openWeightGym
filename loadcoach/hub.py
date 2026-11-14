@@ -123,7 +123,7 @@ async def decision_header(http, repository, filename, token=''):
         return False
 
 
-async def files(http: httpx.AsyncClient, repository: str, token: str = "") -> list[dict]:
+async def files(http: httpx.AsyncClient, repository: str, token: str = "", *, classifier=False) -> list[dict]:
     """Every .gguf file of a repository: its path there, its size, and its SHA-256 where Hugging Face gives one."""
     if repository.startswith('civitai/'):
         from mirrorwall.civitai import files as image_files
@@ -133,7 +133,9 @@ async def files(http: httpx.AsyncClient, repository: str, token: str = "") -> li
     return [
         {"path": one["path"], "size": one["size"], "sha256": one.get("lfs", {}).get("oid")}
         for one in listed
-        if one.get("type") == "file" and one["path"].lower().endswith((".gguf", ".safetensors", ".pth"))
+        if one.get("type") == "file" and (one["path"].lower().endswith((".gguf", ".safetensors", ".pth"))
+            or classifier and (one['path'].lower().endswith(('.json', '.model', '.txt', '.jinja')) or one['path'] == 'Modelfile'))
+        and not one['path'].lower().endswith('.py')
     ]
 
 

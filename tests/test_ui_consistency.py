@@ -463,7 +463,13 @@ def test_dynamic_image_cards_use_shared_templates(ui_console):
 
     def capture(route, path):
         value = None
-        if path == '/mirrorwall-api/workflows':
+        if path.startswith('/mirrorwall-models'):
+            value = {'models': [{'name': 'picture', 'engine': 'sdcpp', 'node': 'compute',
+                                'flags': {'model': '/models/picture.safetensors'},
+                                'sdcpp': {'family': 'sdxl', 'defaults': {'width': 512, 'height': 512}}}],
+                     'cards': [], 'nodes': [{'name': 'compute', 'state': 'ready'}],
+                     'engines': [], 'default_node': 'compute'}
+        elif path == '/mirrorwall-api/workflows':
             value = {'models': [{'id': 'picture', 'image_workflow': {'family': 'sdxl','defaults':{'width':512,'height':512}}}],
                      'assets': [], 'references': [], 'presets': [], 'jobs': [], 'can_manage': True}
         elif path.startswith('/mirrorwall-discovery?'):

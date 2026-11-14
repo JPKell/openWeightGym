@@ -2211,13 +2211,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             nodes.append({"name": name, "state": 'ready' if name == 'front' else reports.get(name, {}).get("state", "unknown"),
                           "answering": answering, "checked": found.get("checked"),
                           "places": found.get("places", []), "files": found.get("files", []),
-                          "problems": found.get('problems', []), "cleanup": found.get("cleanup", {})})
+                          "problems": found.get('problems', []), "cleanup": found.get("cleanup", {}),
+                          'conversions': found.get('conversions', [])})
         source = next(node for node in nodes if node['name'] == file_store())
         return {"artifact_machine": file_store(), "places": source["places"], "files": source["files"],
                 "front_enabled": any(front_file_roots().values()),
                 "store_available": bool(source['places']),
                 "cleanup": source.get("cleanup", {}),
-                "nodes": nodes, "distributions": shown_jobs()}
+                "nodes": nodes, "distributions": [*shown_jobs(),
+                    *[{**job, 'machine': node['name'], 'source': node['name'], 'file': job['scope'],
+                       'kind': 'classifier-conversion', 'targets': {}} for node in nodes for job in node['conversions']]]}
 
     async def artifact_files(request: Request) -> Response:
         """The front's files plus available storage at every configured compute node. `refresh=1` looks again first."""
@@ -2883,7 +2886,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
-        if not user.can("manage-models"):
+        if not user.can('manage-settings' if request.path_params['operation'] == 'classifier-tools' else 'manage-models'):
             return error(403, "Model configuration requires manage-models.")
         name, suffix = node(request.path_params["name"]), request.path_params["operation"]
         if name not in machines.names:
@@ -2892,6 +2895,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(400, "Invalid node model path.")
         allowed = {"models": {"GET"}, "flags": {"GET"}, "file": {"GET"}, "files": {"GET"},
                    "hub": {"GET"}, "downloads": {"GET", "POST"},
+                   "classifier-tools": {"GET", "POST"}, "classifier-conversions": {"GET", "POST"},
                    "model-setup": {"GET", "POST"}, "model-rename": {"POST"}, "model-forget-measure": {"POST"},
                    "model-measure-all": {"POST"}, "images/check": {"POST"}, "audio/packages": {"GET", "POST"}, "audio/families": {"GET"}}
         methods = {"POST", "DELETE"} if suffix.startswith("models/") else allowed.get(suffix, set())
@@ -2899,6 +2903,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(405, "Unsupported node model operation.")
         if suffix == "downloads" and request.method == "POST" and not platform().downloads:
             return error(403, "Model downloads are disabled in Platform services.")
+        if suffix in ('classifier-tools', 'classifier-conversions') and not platform().classifiers:
+            return error(403, 'Classifiers are disabled in Platform services.')
         path = "/loadcoach/" + suffix
         if request.url.query:
             path += "?" + request.url.query

@@ -49,7 +49,7 @@
 .sl-empty { text-align:center; padding:4rem 1.5rem; }
 .sl-empty strong { display:block; margin-bottom:.5rem; }
 .sl-inspector { min-width:0; position:sticky; top:1rem; }
-.sl-detail-title { font-size:1.05rem; font-weight:600; line-height:1.55; overflow-wrap:anywhere; margin:0 0 1rem; }
+.sl-detail-title { font-size:.9rem; font-weight:600; line-height:1.55; overflow-wrap:anywhere; margin:0 0 1rem; }
 .sl-facts { display:grid; grid-template-columns:80px minmax(0,1fr); gap:.5rem .8rem; font-size:.75rem; margin:0; }
 .sl-facts dt { color:var(--bs-secondary-color); font-weight:400; }
 .sl-facts dd { margin:0; overflow-wrap:anywhere; }
@@ -105,7 +105,7 @@
 .sl-table { display:block; width:100%; border-collapse:collapse; }
 .sl-table tbody,.sl-table tr,.sl-table td { display:block; width:100%; padding:0; border:0; }
 .sl-table > tbody > tr > td > .sl-entry { width:100%; }
-.system-logs-page .sl-summary .kpi { padding:.5rem .8rem; }
+.system-logs-page .sl-summary .kpi { padding:.65rem .9rem; }
 .system-logs-page .sl-volume { padding:.4rem .8rem; }
 .system-logs-page .sl-searchbar { padding:.65rem .8rem .25rem; }
 .system-logs-page .sl-results-bar { padding:.2rem .8rem .4rem; }

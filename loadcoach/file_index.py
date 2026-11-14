@@ -45,7 +45,15 @@ def describe(path: Path) -> dict:
         return audio_facts(path)
     if image_asset(path):
         return image_facts(path)
-    return facts(read_metadata(str(path)))
+    result = facts(read_metadata(str(path)))
+    manifest = path.parent / 'manifest.json'
+    if result.get('what') == 'classifier' and manifest.is_file():
+        try:
+            receipt = json.loads(manifest.read_text())
+            result.update(conversion=receipt.get('state', 'unverified'), parity=receipt.get('parity', {}))
+        except (OSError, ValueError):
+            result['conversion'] = 'unverified'
+    return result
 
 
 def listed_in(folder: Path, path: Path) -> bool:
@@ -55,7 +63,8 @@ def listed_in(folder: Path, path: Path) -> bool:
         depth = len(path.resolve().relative_to(folder.resolve()).parts)
     except ValueError:
         return False
-    return supported(path) and depth <= (6 if folder.name in ("image", "audio", "encoders", "classifier") else 2)
+    maximum = 2 if folder.name == 'classifier' and path.suffix.lower() == '.gguf' else 6 if folder.name in ('image', 'audio', 'encoders', 'classifier') else 2
+    return supported(path) and depth <= maximum
 
 
 def tier_of(place: str) -> str:

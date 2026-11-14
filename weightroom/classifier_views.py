@@ -91,8 +91,15 @@ def routes(for_people, page, ask, platform):
                 if not inventory.is_success:
                     return Response(inventory.content, inventory.status_code, media_type='application/json', headers=PRIVATE)
                 files = [{**f, 'source_node': n['name']} for n in inventory.json().get('nodes', []) for f in n.get('files', [])]
+                existing = await ask('GET', f'/turnstile/machines/{quote(str(node), safe="")}/model-api/models', person.key)
+                if not existing.is_success:
+                    raise Invalid('Choose an available compute node.')
+                names = {model['name'] for model in existing.json().get('models', [])}
                 installed, pending = [], []
                 for repository, filename in STARTER_MODELS:
+                    name = filename.removesuffix('.gguf').lower()
+                    if name in names:
+                        continue
                     file = next((f for f in files if f['path'].endswith('/' + repository.replace('/', '--') + '/' + filename)
                                  and f.get('facts', {}).get('what') == 'classifier'), None)
                     if not file:
@@ -100,7 +107,7 @@ def routes(for_people, page, ask, platform):
                         continue
                     budget = min(file['facts'].get('trained_context') or 8192, 8192)
                     answer = await ask('POST', '/turnstile/models/install', person.key, json={
-                        'name': filename.removesuffix('.gguf').lower(), 'machines': [node], 'source_machine': file['source_node'],
+                        'name': name, 'machines': [node], 'source_machine': file['source_node'],
                         'settings': {'engine': 'llama_cpp', 'gpus': 'any', 'flags': {'model': file['path'],
                                      'ctx-size': budget}}, 'prepare_files': True}, timeout=60)
                     installed.append({'file': filename, 'status': answer.status_code, 'result': answer.json()})
