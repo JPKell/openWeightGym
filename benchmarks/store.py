@@ -202,7 +202,7 @@ class Benchmarks:
         """Count failed native attempts durably; pausing or restarting cannot reset the limit."""
         with self.db:
             self.db.execute('INSERT INTO benchmark_probe_failures VALUES(?,?,1,?) '
-                            'ON CONFLICT(run,sample) DO UPDATE SET attempts=attempts+1, reason=excluded.reason',
+                            'ON CONFLICT(run,sample) DO UPDATE SET attempts=benchmark_probe_failures.attempts+1, reason=excluded.reason',
                             (number,sample,reason))
         return self.probe_attempts(number, sample)[0]
 

@@ -1972,7 +1972,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         def files_that_are(what):
             """The usable files of one kind ("model" or "projector"), each with the node it is on."""
             return [{**file, "machine": node["name"]} for node in ordered for file in node.get("files", [])
-                    if (file.get("facts", {}).get("what") == what or what == "model" and file.get("facts", {}).get("what") == "classifier" and file["path"].lower().endswith(".gguf")) and not file.get("moving")]
+                    if (file.get("facts", {}).get("what") == what or what == "model" and file.get("facts", {}).get("what") == "classifier" and file["path"].lower().endswith(".gguf"))
+                    and file.get('facts', {}).get('kind') != 'conversion source' and not file.get("moving")]
         return page(request, 'models_editor.html' if part == 'editor' else "models.html", person, status=400 if failed else 200, known=known,
                     kind=kind, installations=installations, file_choices=files_that_are("model"), projector_choices=files_that_are("projector"),
                     file_nodes=file_nodes, node_choices=node_choices, shown_node=shown_node, add_nodes=add_nodes,
