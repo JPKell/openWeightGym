@@ -1290,7 +1290,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response(answer.content, status_code=answer.status_code, headers={
                 'content-type':answer.headers.get('content-type', 'application/json'), 'cache-control':'no-store',
                 'x-content-type-options':'nosniff'})
-        if initial_page(request):
+        if initial_page(request) and request.query_params.get('export') != 'csv':
             return page(request, 'requests.html', person, deferred=True, fragment_url=fragment_url(request, 'page'))
         limit, current = controls(request.query_params)
         completed = request.query_params.get('completed') == '1'
@@ -1317,6 +1317,19 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         choices['model'] = sorted(set(choices.get('model', [])) | set(person.me.get('models', [])))
         if filter_error:
             found.update(requests=[], total=0, page=1)
+        from weightroom.request_views import listing
+        if request.query_params.get('export') == 'csv':
+            import csv
+            import io
+            output = io.StringIO()
+            columns = ('id', 'at', 'model', 'user', 'caller', 'node', 'level', 'outcome', 'duration',
+                       'compute_total', 'queue_seconds', 'first_output_seconds', 'prompt_tokens', 'answer_tokens', 'cost')
+            writer = csv.writer(output)
+            writer.writerow(columns)
+            for row in found['requests']:
+                writer.writerow([("'" + str(row[key]) if isinstance(row.get(key), str) and row[key].startswith(('=', '+', '-', '@')) else row.get(key)) for key in columns])
+            return Response(output.getvalue(), status_code=400 if filter_error else 200, media_type='text/csv',
+                            headers={'Content-Disposition': 'attachment; filename="requests.csv"', 'Cache-Control': 'no-store'})
         for row in found['requests']:
             if 'timestamp' in row:
                 row['at'] = datetime.fromtimestamp(row['timestamp'], zone).isoformat(timespec='seconds')
@@ -1324,6 +1337,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             for key in ('first_at', 'last_at'):
                 access[key + '_display'] = datetime.fromtimestamp(access[key], zone).strftime('%Y-%m-%d %H:%M:%S')
         filters_context = dict(request_filters=filters, request_choices=choices,
+                               request_ledger=True, request_stats=listing(found['requests']),
                                request_timezone=request_timezone, request_filter_error=filter_error,
                                request_poll_url='/requests?' + urlencode({**request.query_params, 'part': 'list', 'page': 1}))
         observation_report, operation_report = None, None
@@ -1359,9 +1373,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     so_far = look.json()["said"]
                 elif look.status_code == 403:
                     unreadable = "Reading what someone else's request is being answered needs the ability to read kept text."
+                else:
+                    unreadable = "Compute is unavailable. Retained records remain readable; live progress is unknown."
             except ServiceUnavailable:
                 unreadable = "Compute is unavailable. Retained records remain readable; live progress is unknown."
         template = "request_live.html" if request.query_params.get("part") == "live" else "request.html"  # the page asking for itself again
+        from weightroom.request_views import detail, metadata
+        if request.query_params.get('export') == 'metadata':
+            return JSONResponse(metadata(facts), headers={'Content-Disposition': 'attachment; filename="request-metadata.json"',
+                                                         'Cache-Control': 'no-store'})
         feedback = {}
         if template == 'request.html' or not facts['state']:
             try:
@@ -1370,7 +1390,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             except ServiceUnavailable:
                 feedback = {'unavailable': True}
         return page(request, template, person, facts=facts, so_far=so_far, unreadable=unreadable,
-                    feedback=feedback,
+                    feedback=feedback, request_view=detail(facts),
                     said=request.query_params.get("said", ""), address=model_address)  # fmt: skip
 
     async def stop_request(request: Request, person: Person) -> Response:

@@ -28,6 +28,7 @@ from loadcoach.usage import ENDINGS
 from loadcoach.usage import report as usage_report, summary_owner
 from loadcoach.users import User, Users
 from loadcoach.request_filters import parse as request_filters, STATUSES
+from loadcoach.groups import LEVELS
 from turnstile.accounts import address, error, lacks, signed_in
 from turnstile.reporting import ReportTimeout, run as run_report
 
@@ -160,7 +161,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
             row['can_open'] = row['user'] == user.name or user.can('see-log')
         access = users.client_accesses(None if user.can('see-log') else user.identity or user.name)
         choices = {'model': sorted(model_choices(user)), 'user': sorted(memberships),
-                   'ip': access['ips'], 'status': list(STATUSES), 'node': ['front', *log.machine_names]}
+                   'ip': access['ips'], 'status': list(STATUSES), 'node': ['front', *log.machine_names], 'level': list(LEVELS)}
         return JSONResponse({**found, 'limit': limit, 'choices': choices, 'accesses': access['rows']})
 
     async def request_facts(request: Request, user: User) -> Response:
@@ -217,6 +218,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
             "looked_at": [entry for entry in entries[1:] if entry["what"] == "peeked"],
             "tools": [entry for entry in entries[1:] if entry["kind"] == "tool"],
             "state": state,  # None: it is over
+            "live_available": live is not None and live.status_code == 200,
             "may_stop": not ended and (asked["user"] == user.name or user.can("stop")),
             "diagnostics": presentation(asked, ended, observed),
             "related": details[0],

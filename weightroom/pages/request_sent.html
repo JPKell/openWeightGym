@@ -1,0 +1,19 @@
+{% from "parts.html" import card, section_title %}
+{% if facts.text %}
+{% set sent = facts.text.asked %}
+{% call card("Request", false) %}
+  {% if sent.too_big %}
+  <p class="text-secondary mb-0">It was {{ sent.too_big|size }}, too large to keep in full.</p>
+  {% else %}
+  {# Everything but the conversation and the tools: the settings the caller chose for this one request. #}
+  <p class="text-secondary">{% for name, value in sent.items() if name not in ("messages", "tools") %}{{ name }} <code>{{ value|shown }}</code>{{ " · " if not loop.last }}{% endfor %}
+    {%- if sent.tools %} · {{ sent.tools|length }} tool{{ "" if sent.tools|length == 1 else "s" }} offered: {% for tool in sent.tools %}<code>{{ (tool.function or tool).name }}</code>{{ ", " if not loop.last }}{% endfor %}{% endif %}</p>
+  {% for message in sent.messages or [] %}
+  {% set _section_title1 %}{{ message.role }}{% if message.name %} {{ message.name }}{% endif %}{% endset %}
+{{ section_title(_section_title1, class_="text-secondary") }}
+  <div class="kept frame"><pre>{{ message.content|spoken }}{% for call in message.tool_calls or [] %}
+[asks for the tool {{ (call.function or call).name }}: {{ (call.function or call).arguments }}]{% endfor %}</pre></div>
+  {% endfor %}
+  {% endif %}
+{% endcall %}
+{% endif %}

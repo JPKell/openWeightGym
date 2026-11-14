@@ -46,7 +46,7 @@ def test_request_page_explains_image_failure_and_preserves_metadata_offline(desk
     compute.off = True
     offline = server.get(f'/requests/{entry}')
     assert offline.status_code == 200 and 'Waiting for model readiness' in offline.text
-    assert 'Node unavailable: compute' in offline.text
+    assert 'compute is not answering' in offline.text
     sign_in(server, 'pat')
     own = server.get(f'/requests/{entry}')
     assert own.status_code == 200 and 'Your requests only' in own.text
@@ -81,10 +81,13 @@ def test_request_diagnostics_desktop_mobile_links_and_refresh_selection(desk_wit
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto(f'http://console.test/requests/{entry}')
-        assert [text.strip() for text in page.locator('main details.card > summary').all_text_contents()[:2]] == ['Request', 'Response']
         playwright.expect(page.locator('#request-diagnostics')).to_be_visible()
         playwright.expect(page.locator('#request-measurements')).to_contain_text('Unavailable')
+        page.locator('[data-request-tab="content"]').click()
+        assert [text.strip() for text in page.locator('#request-content-panel details.card > summary').all_text_contents()[:2]] == ['Request', 'Response']
+        page.locator('[data-request-tab="activity"]').click()
         playwright.expect(page.locator('#request-activity')).to_contain_text('files_read')
+        page.locator('[data-request-tab="diagnostics"]').click()
         page.get_by_role('link', name='Trace image-check', exact=True).click()
         page.wait_for_url('**/log?trace=image-check')
         page.goto(f'http://console.test/requests/{entry}')

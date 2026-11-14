@@ -1,0 +1,26 @@
+{% from 'parts.html' import card %}
+{% from 'request_parts.html' import request_fact, security_badge, status_badge %}
+{% call card('Request facts', class_='mb-0') %}
+<dl class="rq-facts">
+{% call request_fact('Security level') %}{{ security_badge(asked.level) }}{% endcall %}
+{{ request_fact('User', asked.user) }}{{ request_fact('From / IP', asked.caller) }}
+{% call request_fact('Model') %}{% if 'manage-models' in person.can and not asked.hosted %}<a href="{{ address(asked.model) }}">{{ asked.model }}</a>{% else %}{{ asked.model or '—' }}{% endif %}{% if asked.hosted %}<small class="d-block text-secondary">answered off this machine as {{ asked.hosted }}{% if asked.instead_of %}, in place of {{ asked.instead_of }}{% endif %}</small>{% endif %}{% endcall %}
+{{ request_fact('Node', asked.machine or 'front') }}
+{% call request_fact('Asked at') %}<span class="when">{{ asked.at|timestamp }}</span>{% endcall %}
+{% if ended %}{% call request_fact('Ended at') %}<span class="when">{{ ended.at|timestamp }}</span>{% endcall %}{{ request_fact('HTTP status', ended.status) }}{% if ended.by %}{{ request_fact('Ended by', ended.by) }}{% endif %}{% endif %}
+{{ request_fact('Path', asked.path) }}
+{% if asked.trace %}{{ request_fact('Piece of work', asked.trace) }}{% endif %}
+{% if ended %}
+{% if ended.waited is defined %}{{ request_fact('Admission incl. loading', ended.waited|string ~ ' s') }}{% endif %}
+{% if ended.ran is defined %}{{ request_fact('Upstream request', ended.ran|string ~ ' s') }}{% endif %}
+{% if ended.prompt_tokens is defined %}{{ request_fact('Tokens in', '{:,}'.format(ended.prompt_tokens)) }}{% endif %}
+{% if ended.answer_tokens is defined %}{{ request_fact('Tokens out', '{:,}'.format(ended.answer_tokens)) }}{% endif %}
+{% if ended.cost is defined %}{{ request_fact('Recorded cost', '$%.6f'|format(ended.cost)) }}{% endif %}
+{% if ended.fingerprint %}{% call request_fact('Fingerprint') %}{% if 'manage-models' in person.can %}<a href="/fingerprints?start={{ ended.fingerprint|query }}"><code>{{ ended.fingerprint[:12] }}</code></a>{% else %}<code>{{ ended.fingerprint[:12] }}</code>{% endif %}{% endcall %}{% endif %}
+{% if ended.build %}{{ request_fact('llama-server', ended.build) }}{% endif %}
+{% endif %}
+{% for look in facts.looked_at %}{% call request_fact('Looked at') %}by {{ look.user }} at <span class="when">{{ look.at|timestamp }}</span>{% endcall %}{% endfor %}
+</dl>
+{% if asked.request_id %}<div class="rq-identifiers"><span class="form-label small">Ingress ID</span><a href="/requests?request_id={{ asked.request_id|query }}&amp;since=0&amp;observe=1"><code>{{ asked.request_id }}</code></a></div>{% endif %}
+<nav class="rq-outline" aria-label="Request sections"><a href="#request-diagnostics">01 <span>Timing & diagnostics</span></a><a href="#request-content-panel" data-open-request-tab="content">02 <span>Request & response</span></a><a href="#request-related" data-open-request-tab="activity">03 <span>Related activity</span></a></nav>
+{% endcall %}

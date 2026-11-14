@@ -1,5 +1,6 @@
 {% from "parts.html" import card, page_header, empty_row %}
 <div id="requests-report">
+{% include 'requests_list.html' %}
 {% call card("Trace search", observation_report is not none, 'trace-search') %}
 <form method="get" action="/requests" class="row g-2 mb-3">
 {% for key,label in [('request_id','Ingress ID'),('trace_id','Distributed trace ID'),('service','Service'),('machine','Node'),('application','Application label'),('outcome','Outcome'),('error_code','Error code'),('since','From (Unix seconds)'),('until','To (Unix seconds)')] %}
@@ -16,7 +17,6 @@
 {% if operation_report.local %}<p class="small mb-1">Local active spans: {{ operation_report.local.active }} · queue: {{ operation_report.local.pending }} · dropped/sampled: {{ operation_report.local.dropped }}</p>{% endif %}
 {% for source in operation_report.sources|default([]) %}<p class="small mb-1">{{ source.machine }}: {{ 'Fresh' if source.fresh else 'Stale / unknown' }} · forwarding backlog {{ source.backlog_count|default('Unavailable') }} · dropped/sampled {{ source.dropped|default({}) }}</p>{% endfor %}
 {% endcall %}{% endif %}
-{% call card("Recent requests", true, 'recent-requests-card') %}{% include "requests_list.html" %}{% endcall %}
 {% call card("Client access", false, 'client-access') %}
 <div class="table-responsive"><table class="table table-sm align-middle mb-0">
 <thead><tr><th>IP</th><th>User</th><th>First seen</th><th>Last seen</th><th>Accepted attempts</th><th>Rejected attempts</th></tr></thead>

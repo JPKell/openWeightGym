@@ -6,9 +6,10 @@ from ipaddress import ip_address
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from loadcoach.usage import ENDINGS
+from loadcoach.groups import LEVELS
 
 FIELDS = ('request_min', 'request_max', 'date_min', 'date_max', 'duration_min', 'duration_max',
-          'model', 'user', 'ip', 'status', 'node')
+          'model', 'user', 'ip', 'status', 'node', 'level', 'q')
 STATUSES = (*ENDINGS, 'unfinished')
 
 
@@ -40,12 +41,16 @@ def parse(params) -> dict:
                 if value not in STATUSES:
                     raise ValueError('Choose a valid request status.')
                 result[name] = value
+            elif name == 'level':
+                if value not in (*LEVELS, 'unrecorded'):
+                    raise ValueError('Choose a valid request security level.')
+                result[name] = value
             else:
                 if len(value) > 256:
                     raise ValueError('Filter selections must be at most 256 characters.')
                 result[name] = value
     except (ValueError, OverflowError, ZoneInfoNotFoundError) as problem:
-        raise ValueError('Choose valid request, date, duration, IP and status filters.') from problem
+        raise ValueError('Choose valid request, date, duration, IP, status and security level filters.') from problem
     for prefix in ('request', 'date', 'duration'):
         low, high = result.get(prefix + '_min'), result.get(prefix + '_max')
         if low is not None and high is not None and low > high:

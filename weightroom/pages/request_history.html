@@ -1,0 +1,23 @@
+{% from "parts.html" import card, empty_row %}
+{% if facts.distribution %}
+{% call card("Recent latency and errors", true, "request-distributions") %}
+<p class="small text-secondary">{{ facts.distribution.scope }} · latest {{ facts.distribution.examined }} retained request endings, capped at {{ facts.distribution.limit }}. Benchmarks are excluded. Percentiles use only measured compute totals; errors are server failures, timeouts and restarts. Refusals and cancellations remain in the request count.</p>
+<div class="table-responsive"><table class="table table-sm diagnostic-distribution" id="request-distribution-table">
+<thead><tr><th>Group</th><th>Value</th><th>Requests</th><th>Errors</th><th>Measured</th><th>p50</th><th>p95</th></tr></thead>
+<tbody>{% for group in facts.distribution.groups %}<tr><td>{{ group.dimension }}</td><td class="wrap">{{ group.value }}</td><td>{{ group.requests }}</td><td>{{ group.errors }} ({{ group.error_percent }}%)</td><td>{{ group.measured }}</td><td>{% if group.p50 is not none %}{{ '%.3f'|format(group.p50) }} s{% else %}Unavailable{% endif %}</td><td>{% if group.p95 is not none %}{{ '%.3f'|format(group.p95) }} s{% else %}Unavailable{% endif %}</td></tr>
+{% else %}{% call empty_row(7) %}No matching completed requests in this recent window.{% endcall %}{% endfor %}</tbody>
+</table></div>
+<p class="small text-secondary mb-0">This summary is a snapshot from when the page opened. Reload to update it.</p>
+{% endcall %}
+{% endif %}
+
+{% if facts.tools %}
+{% call card("Tool calls", false) %}
+  <div class="table-responsive">
+  <table id="tools" class="table table-sm sortable mb-0">
+    <thead><tr><th data-sort="value">When</th><th data-sort="text">What</th><th data-sort="text">Tool</th></tr></thead>
+    <tbody>{% for tool in facts.tools %}<tr><td class="when">{{ tool.at|timestamp }}</td><td>{{ tool.what }}</td><td>{{ tool.tool or "" }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+{% endcall %}
+{% endif %}

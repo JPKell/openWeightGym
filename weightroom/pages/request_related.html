@@ -1,0 +1,14 @@
+{% from "parts.html" import card, empty_row %}
+{% set related = facts.related or {} %}
+{% call card("Related activity", true, "request-related", id="request-related") %}
+<p class="small text-secondary">Trace entries share a correlation ID; they are not necessarily child operations of this request. Model events match the selected model and request time window. Tool durations are shown only when ToolLocker recorded them.</p>
+<div class="table-responsive"><table class="table table-sm diagnostic-activity" id="request-activity">
+<thead><tr><th>When</th><th>Source</th><th>Activity</th><th>Duration</th><th>Detail</th></tr></thead>
+<tbody>{% for event in related.events or [] %}
+<tr><td class="text-nowrap">{{ event.at|timestamp }}</td><td>{{ event.kind }}</td>
+<td><a href="{% if event.kind == 'request' %}/requests/{{ event.of or event.source or event.id }}{% else %}/log/{{ event.id }}{% endif %}">{{ event.what }}</a></td>
+<td class="text-nowrap">{% if event.took is defined %}{{ event.took }} s{% else %}Unavailable{% endif %}</td><td class="wrap">{{ event.tool or event.model or '' }}{% if event.why %} · {{ event.why }}{% endif %}</td></tr>
+{% else %}{% call empty_row(5) %}No correlated activity is available in your log scope.{% endcall %}{% endfor %}</tbody>
+</table></div>
+{% if related.truncated %}<p class="small text-secondary">Recent activity is capped at 200 trace entries and 50 model events. Open the trace log for more.</p>{% endif %}
+{% endcall %}

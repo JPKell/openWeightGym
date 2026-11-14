@@ -1,0 +1,25 @@
+{# One live workspace is also the polling fragment, so facts, status and measurements stay in sync. #}
+{% from 'parts.html' import card, section_title, page_header, confirm_two %}
+{% from 'request_parts.html' import security_badge, status_badge, seconds %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% set asked, ended = facts.asked, facts.ended %}
+<div id="request" data-request-id="{{ facts.id }}"{% if facts.state %} hx-get="/requests/{{ facts.id }}?part=live" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+{% set title %}Request #{{ facts.id }}{% endset %}
+{% call page_header(title, pretitle='OBSERVE / INDIVIDUAL REQUEST') %}<button type="button" class="btn btn-sm btn-outline-secondary" data-request-copy="link">Copy link</button><a class="btn btn-sm btn-outline-secondary" href="/requests/{{ facts.id }}?export=metadata">Export metadata ↓</a>{% endcall %}
+<div class="rq-detail-meta mb-4">{{ status_badge(ended.what, facts.state if request_view.active else 'No ending recorded', request_view.error) }}{{ security_badge(asked.level) }}<strong>{{ asked.model or '—' }}</strong><span class="text-secondary">{{ asked.machine or 'front' }}</span>{% if asked.path %}<code class="ms-auto">{{ asked.path }}</code>{% endif %}</div>
+<div class="rq-detail-grid">
+<aside class="rq-passport">{% include 'request_passport.html' %}</aside>
+<section class="rq-verdict" data-error="{{ 'true' if request_view.error else 'false' }}" aria-label="Request outcome"><span class="eyebrow">{{ 'IN PROGRESS' if request_view.active else 'RECORDED OUTCOME' }}</span>{{ section_title(request_view.title, class_='h3 mt-2') }}<p class="mb-0 text-secondary">{{ request_view.note }}</p></section>
+<section class="rq-detail-kpis" aria-label="Request measurements">{% call kpi_row('Request measurements', class_='mb-0') %}{{ kpi('Elapsed on compute' if request_view.active else 'Request total', seconds(request_view.total), note=request_view.total_basis) }}{{ kpi('Queue wait', seconds(request_view.queue), note='measured separately from loading') }}{{ kpi('First output', seconds(request_view.first_output), note='from compute admission') }}{{ kpi('Output rate', ('%.1f tok/s'|format(request_view.rate)) if request_view.rate is not none else '—', note='reported by the model server') }}{% endcall %}</section>
+<section class="rq-evidence" aria-label="Request evidence">
+<div class="rq-evidence-nav">{% call pills('Request evidence views', buttons=true, class_='mb-3') %}{% for key,label in [('diagnostics','Diagnostics'),('content','Request & response'),('activity','Related activity'),('raw','Raw metadata')] %}{{ pill_button(label, key=='diagnostics', attrs={'data-request-tab':key,'aria-controls':'request-' ~ key ~ '-panel'}) }}{% endfor %}{% endcall %}</div>
+<section id="request-diagnostics-panel" data-request-panel="diagnostics">{% include 'request_diagnostics.html' %}</section>
+<section id="request-content-panel" data-request-panel="content">{% include 'request_sent.html' %}{% include 'request_response.html' %}</section>
+<section id="request-activity-panel" data-request-panel="activity">{% include 'request_related.html' %}{% if asked.request_id %}{% call card('Distributed timeline', true, 'request-observation') %}<p class="small">Ingress ID: <a href="/requests?request_id={{ asked.request_id|query }}&amp;since=0&amp;observe=1"><code>{{ asked.request_id }}</code></a></p>{% with observation_report=facts.observation %}{% include 'observation_trace.html' %}{% endwith %}{% endcall %}{% endif %}</section>
+<section id="request-raw-panel" data-request-panel="raw">{% call card('Raw metadata', hint='Authorized metadata only; retained prompts, replies and tool arguments are excluded.') %}<button type="button" class="btn btn-sm btn-outline-secondary mb-3" data-request-copy="metadata">Copy JSON</button><pre id="request-raw-metadata" class="rq-code">{{ request_view.metadata|tojson(indent=2) }}</pre>{% endcall %}</section>
+</section>
+{% if facts.state and facts.may_stop and request_view.active %}<section class="rq-stop">{% call card('Stop this request', false, 'request-stop') %}<p class="text-secondary">Ends this request. Other requests carry on.</p><form method="post" action="/requests/{{ facts.id }}/stop"><button class="btn btn-danger" {{ confirm_two() }}>Stop this request</button></form>{% endcall %}</section>{% endif %}
+</div>
+<p class="small text-secondary" data-request-feedback role="status" aria-live="polite"></p>
+</div>
