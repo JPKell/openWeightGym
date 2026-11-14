@@ -49,3 +49,17 @@ def test_file_values_never_become_changeable_by_inference():
     assert 'host' not in editable['weightroom']
     with pytest.raises(ValueError, match='Unknown setting'):
         validate('weightroom', 'invented', 'ignored')
+
+
+def test_compatibility_metadata_is_derived_from_the_catalogue():
+    from loadcoach.settings import CHANGEABLE
+    from weightroom.setting_labels import LABELS, sections
+    assert CHANGEABLE == changeable()
+    for entry in CATALOG.values():
+        if entry.name in LABELS:
+            assert len(LABELS[entry.name]) == 4
+    grouped = sections([{'program': 'voice', 'settings': [
+        {'name': 'max_active_sessions', 'when': 'now'},
+        {'name': 'unrecognised_extension', 'when': 'now'},
+    ]}])
+    assert [group['title'] for group in grouped] == ['Sessions and limits', 'Additional settings']
