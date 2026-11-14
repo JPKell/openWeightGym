@@ -10534,53 +10534,19 @@ qualifies text inference at that context, not image input, maximum context or an
 
 ## Reusable benchmark cases and regressions (C04, milestone 94)
 
-Implemented locally **2026-10-15**. Benchmark Manage imports/exports bounded `suite-cases/v1`
-JSON with stable case/assertion IDs, exact-final-text, strict-JSON equality and structural
-JSON Schema checks. Case data cannot import code, use tools, retrieve schema references or
-execute a response. Existing pinned full IFEval remains the standard-task integration; an
-imported subset or modified prompt must not be labeled as the full standard task.
+The case-set import (`benchmarks/custom.py`, `/benchmarks/datasets` and Benchmark → Manage →
+Reusable case sets) was removed on **2026-11-13**; the owner adds new benchmarks as
+code-defined suites. `weightroom.benchmarks` migration 4 still creates the now-unused
+`benchmark_datasets` table, so existing stores, backups and transfers are unchanged. At startup,
+unfinished runs of an imported set are cancelled; finished ones are omitted from listings.
 
-`benchmarks/custom.py` validates data and implements the ordinary quality-suite interface.
-`Benchmarks.module` resolves either a built-in or an immutable version from the existing front
-store, with a bounded instance-local cache. Names/definitions are read separately from large
-case payloads. Submission persists the selected dataset hash/version before contacting compute;
-activation preserves it. `BenchmarkWorker` resolves this frozen version and uses the existing
-unpadded native evaluation, task credentials, queue, completion records, pause/resume, retry and
-preemption path. Neither expected values nor schema assertions are passed to the native server.
-Protocol and grader identity are retained with the run. Stored datasets are checked against
-their SHA-256 when loaded. Built-in registration and grading remain compatible.
-
-`weightroom.benchmarks` migration 4 adds `benchmark_datasets` (suite/version composite key,
-canonical JSON, checksum, name, import timestamp and author) to `weightroom.benchmarks`.
-Versions increase monotonically; same-version identical retries are idempotent. Old versions
-are retained for frozen runs; changing a formula still uses the existing definition table and
-does not rewrite measurements. Existing backup, restore, SQL export and verified transfer
-include the table through discovery. No new store, service, dependency or listener is added.
-
-`POST /benchmarks/datasets` imports raw dataset JSON and requires `manage-settings`.
-`GET /benchmarks/datasets/{suite}/{version}` exports it under the same ability.
-`DELETE /benchmarks/datasets/{suite}` (Benchmark → Manage → **Delete case set**, behind a
-confirmation checkbox) removes every version and its definition row under the same ability,
-but answers 409 while any run names the set: runs are scored again from their dataset. The ordinary
-run API selects it as `custom_ID` and requires the existing benchmark/model permissions.
+Case regressions remain for built-in quality suites.
 `GET /benchmarks/regressions?run=ID&baseline=ID` authorizes both runs against the caller's current
 model catalogue or proven retired identities before comparing. Hidden or nonexistent runs
 return the same 404. `benchmarks/regressions.py` requires matching frozen protocol/grader data,
 then compares completed matching cases and individual checks. Partial, unavailable, unsupported
 or changed cases remain non-comparable; they are never counted as new model failures.
 The UI exposes this on existing run details and preserves existing origin/CSRF checks.
-
-The complete format, limits, structural schema subset and operator workflow are documented
-in [the benchmark brief](../benchmarks/README.md). Front deployment and operator-selected
-real-model qualification remain pending in [Agent backlog](agent-status.md#proposals); local fixture
-results do not establish real-model quality or new GPU performance.
-
-Local verification passed all **829 full-suite tests with zero skips** in 452.19 seconds,
-including 30 C04 checks and disposable PostgreSQL native recovery. A focused 79-check run
-covered immutable imports, strict grading, permissions, portable transfer, paused version-1
-work resuming after a version-2 import, and desktop/mobile Chromium at 1440, 390 and 320 pixels.
-One existing Starlette/httpx deprecation warning remains. Reports and page captures are retained
-under ignored `data/c04-verification/`; no production service or model was changed.
 
 ## Estimated-wait admission (milestone 96)
 

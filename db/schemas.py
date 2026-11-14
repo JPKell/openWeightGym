@@ -614,6 +614,10 @@ CHAT = (
             started DOUBLE PRECISION NOT NULL, ended DOUBLE PRECISION);
         CREATE INDEX IF NOT EXISTS attempts_workflow ON workflow_attempts(workflow);
     """),
+    Migration(5, "collection indexing diagnostics", """
+        ALTER TABLE documents ADD COLUMN diagnostics TEXT NOT NULL DEFAULT '{}';
+        ALTER TABLE collections ADD COLUMN content_sha256 TEXT NOT NULL DEFAULT '';
+    """),
 )
 
 
@@ -654,6 +658,7 @@ BENCHMARKS = (
     Migration(3, "benchmark model identity index", """
         CREATE INDEX IF NOT EXISTS benchmark_runs_model_id ON benchmark_runs(model_id);
     """),
+    # Imported case sets were removed on 2026-11-13; the table stays so existing stores migrate unchanged.
     Migration(4, "versioned reusable benchmark datasets", """
         CREATE TABLE IF NOT EXISTS benchmark_datasets (
             suite TEXT NOT NULL, version INTEGER NOT NULL, dataset TEXT NOT NULL,

@@ -19,7 +19,7 @@ first: Python comes with it.
   generation, music, sound and speech, with accounts, groups and per-model permissions.
 - **One OpenAI-compatible API** in front of every model on every machine. Models load when asked for
   and share graphics cards by measured memory; roles such as `chat:fast` pick a model for you.
-- **Benchmarks** with saved evidence, comparisons across machines and models, and your own case sets.
+- **Benchmarks** with saved evidence and comparisons across machines and models.
 - **Tools over MCP** for files and code, on this machine or others, with levels and audit.
 - **Voice** in the browser, on the desktop or by phone.
 - **Logs** of usage, costs, requests and traces, and **telemetry** for every machine's cards and memory.

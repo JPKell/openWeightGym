@@ -2,7 +2,7 @@
 {% from "navigation_parts.html" import pills, pill_link %}
 {% call card("Benchmarks &amp; scoring", open=true, id="benchmark-definitions", key="benchmark-definitions") %}
 {% call pills('Benchmark settings', class_='mb-3') %}{% for bench in benchmarks %}{{ pill_link(bench.name, '/benchmarks/manage?benchmark=' ~ bench.id ~ '#benchmark-definitions', benchmark.id == bench.id, class_='py-1', attrs={'hx-get': '/benchmarks/manage?benchmark=' ~ bench.id, 'hx-target': '#benchmark-definitions', 'hx-select': '#benchmark-definitions', 'hx-swap': 'outerHTML show:none', 'hx-replace-url': 'true'}) }}{% endfor %}{% endcall %}
-{% set bench = benchmark %}<p><span class="badge text-bg-secondary">{{ 'Imported' if bench.custom else 'Built in' }}</span> <span class="badge text-bg-secondary">Version {{ bench.version }}</span> {{ bench.summary }}</p>
+{% set bench = benchmark %}<p><span class="badge text-bg-secondary">Version {{ bench.version }}</span> {{ bench.summary }}</p>
 <form method="post" action="/benchmarks/manage"><input type="hidden" name="benchmark" value="{{ bench.id }}"><div class="d-flex align-items-center gap-2 mb-3"><input id="enabled" type="checkbox" class="form-check-input mt-0" name="enabled"{% if bench.enabled %} checked{% endif %}><label for="enabled">Include in available benchmarks</label></div>
 <p class="small text-secondary">{{ bench.method }}</p><label for="formula" class="form-label">Score calculation</label><p class="small text-secondary mb-2">Formula changes rescore saved measurements without rerunning models. Missing operands produce no score.</p>
 <input id="formula" class="form-control font-monospace" name="formula" value="{{ bench.formula }}" required maxlength="500">

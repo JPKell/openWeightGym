@@ -131,7 +131,7 @@ Tests: [setup](../tests/test_model_setup_browser.py), [installation](../tests/te
 | [Workflow](../app-walkthrough.md#benchmark-workflow) | State transitions, research acceptance, draft/review, attempt records, cancellation/retry, reopening and exact citations. | L/R; W for real steps; acceptance here tests state, not owner approval of prose. |
 | [Manage](../app-walkthrough.md#benchmark-manage) | Versioned case import/export, invalid JSON/checks, retained input, formula validation and immutable dataset identity. | L/R; mutations use isolated definitions, not shared production formulas/enablement. |
 
-Tests: [benchmark pages](../tests/test_benchmark_pages.py), [browser](../tests/test_benchmark_browser.py), [custom cases](../tests/test_custom_benchmarks_browser.py), [collections](../tests/test_collections.py), [collection pages](../tests/test_collection_pages.py), [indexing status](../tests/test_collection_status_browser.py), [workflows](../tests/test_workflows.py) and [workflow pages](../tests/test_workflow_pages.py). A checker fixture pass is not model quality qualification.
+Tests: [benchmark pages](../tests/test_benchmark_pages.py), [browser](../tests/test_benchmark_browser.py), [collections](../tests/test_collections.py), [collection pages](../tests/test_collection_pages.py), [indexing status](../tests/test_collection_status_browser.py), [workflows](../tests/test_workflows.py) and [workflow pages](../tests/test_workflow_pages.py). A checker fixture pass is not model quality qualification.
 
 ## Logs
 
