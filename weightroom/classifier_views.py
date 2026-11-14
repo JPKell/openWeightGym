@@ -67,10 +67,12 @@ def routes(for_people, page, ask, platform):
                 node = body.get('node')
                 if not isinstance(node, str) or not node:
                     raise Invalid('Choose one GPU compute node for the starter set.')
-                root = '/turnstile/machines/' + quote(node, safe='') + '/model-api/'
+                nodes = await ask('GET', '/turnstile/machines', person.key)
+                if not nodes.is_success or not any(n['name'] == node and n.get('accepting_work', True) for n in nodes.json().get('machines', [])):
+                    raise Invalid('Choose an available compute node.')
                 queued, errors = [], []
                 for repository, file in STARTER_MODELS:
-                    answer = await ask('POST', root + 'downloads', person.key,
+                    answer = await ask('POST', '/turnstile/artifacts/downloads', person.key,
                                        json={'repository': repository, 'files': [file], 'place': 'storage_classifier'}, timeout=60)
                     if answer.status_code == 202:
                         queued.append({'repository': repository, 'file': file, **answer.json()})
@@ -85,7 +87,7 @@ def routes(for_people, page, ask, platform):
                 inventory = await ask('GET', '/turnstile/models/files', person.key)
                 if not inventory.is_success:
                     return Response(inventory.content, inventory.status_code, media_type='application/json', headers=PRIVATE)
-                files = [f for n in inventory.json().get('nodes', []) if n['name'] == node for f in n.get('files', [])]
+                files = [{**f, 'source_node': n['name']} for n in inventory.json().get('nodes', []) for f in n.get('files', [])]
                 installed, pending = [], []
                 for repository, filename in STARTER_MODELS:
                     file = next((f for f in files if f['path'].endswith('/' + repository.replace('/', '--') + '/' + filename)
@@ -95,7 +97,7 @@ def routes(for_people, page, ask, platform):
                         continue
                     budget = min(file['facts'].get('trained_context') or 8192, 8192)
                     answer = await ask('POST', '/turnstile/models/install', person.key, json={
-                        'name': filename.removesuffix('.gguf').lower(), 'machines': [node], 'source_machine': node,
+                        'name': filename.removesuffix('.gguf').lower(), 'machines': [node], 'source_machine': file['source_node'],
                         'settings': {'engine': 'llama_cpp', 'gpus': 'any', 'flags': {'model': file['path'],
                                      'ctx-size': budget}}, 'prepare_files': True}, timeout=60)
                     installed.append({'file': filename, 'status': answer.status_code, 'result': answer.json()})

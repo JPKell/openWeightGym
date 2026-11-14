@@ -245,9 +245,10 @@ are ordered lowest first; native scores are expected zero-based indices and can 
 Compare adds up to two other models. Drafts and run history stay in page memory; export JSON
 or CSV before closing the tab. Probabilities are not calibrated for your data.
 
-The empty state queues the six starter downloads into the chosen node’s Classifier storage.
+The empty state queues the six starter downloads into the existing front Classifier storage.
 Use **Install downloaded classifiers** after the files finish; normal installation verifies and
-promotes them into that node’s active cache. Models and Files also expose a Classifier filter.
+copies them into the chosen GPU node’s active cache. This uses the established central storage
+and transfer route without changing node storage settings. Models and Files also expose a Classifier filter.
 
 Use authenticated `POST /v1/systemone` or `/v1/classifier` on the normal model API port.
 The JSON Schema chat shim accepts string enums, booleans and integers with 2–10 bounded
