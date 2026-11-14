@@ -18,6 +18,10 @@ class Recognition:
     """Keep recent voiced intervals on the recognizer's sample clock, not its delayed return time."""
 
     native: object
+    trailing_silence_ms: int = 800
+    max_utterance_seconds: float = 30
+    segment_start: int = 0
+    last_voice: int = 0
     samples: int = 0
     voiced: deque = field(default_factory=lambda: deque(maxlen=6000))
 
@@ -71,9 +75,7 @@ class Speech:
             tokens=r["tokens"], encoder=r["encoder"], decoder=r["decoder"], joiner=r["joiner"],
             num_threads=r.get("threads", 2), sample_rate=16000, feature_dim=80,
             decoding_method=r.get("decoding_method", "modified_beam_search"),
-            max_active_paths=r.get("max_active_paths", 8), provider="cpu", enable_endpoint_detection=True,
-            rule1_min_trailing_silence=2.4, rule2_min_trailing_silence=r.get("trailing_silence_ms", 800) / 1000,
-            rule3_min_utterance_length=r.get("max_utterance_seconds", 30),
+            max_active_paths=r.get("max_active_paths", 8), provider="cpu", enable_endpoint_detection=False,  # per-session endpoint limits below share these loaded weights
         )
         synths = []
         for _ in range(s.get("workers", 2)):
@@ -102,7 +104,10 @@ class Speech:
 
     def stream(self):
         """Create a streaming recognizer for the selected speech profile."""
-        return Recognition(self.recognizer.create_stream())
+        tuning = self.settings.get('recognition', {})
+        return Recognition(self.recognizer.create_stream(),
+                           trailing_silence_ms=tuning.get('trailing_silence_ms', 800),
+                           max_utterance_seconds=tuning.get('max_utterance_seconds', 30))
 
     def feed(self, stream, pcm: bytes, finish: bool):
         """Feed continuous sound; return a partial and at most one final utterance."""
@@ -110,6 +115,7 @@ class Speech:
         for offset in range(0, len(samples), 320):
             frame = samples[offset:offset + 320]
             if np.sqrt(np.mean(frame * frame)) > self.settings.get("speech_threshold", 600):
+                stream.last_voice = stream.samples + offset + len(frame)
                 stream.voiced.append(((stream.samples + offset) / 16000,
                                       (stream.samples + offset + len(frame)) / 16000))
         stream.samples += len(samples)
@@ -122,9 +128,13 @@ class Speech:
             self.recognizer.decode_stream(native)
         result = self.recognizer.get_result_all(native)
         text = result.text.strip() if stream.heard(result) else ""
-        endpoint = finish or self.recognizer.is_endpoint(native)
+        silence = (stream.samples - max(stream.segment_start, stream.last_voice)) / 16000
+        duration = (stream.samples - stream.segment_start) / 16000
+        endpoint = (finish or duration >= stream.max_utterance_seconds or
+                    silence >= (stream.trailing_silence_ms / 1000 if text else 2.4))
         if endpoint:
             self.recognizer.reset(native)
+            stream.segment_start = stream.samples
         return text, text if endpoint else None
 
     async def hear(self, stream, pcm: bytes, finish=False):

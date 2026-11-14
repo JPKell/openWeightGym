@@ -6,6 +6,7 @@ from zoneinfo import available_timezones
 TIMEZONES = [(json.dumps(name), name) for name in sorted(available_timezones())]
 
 from loadcoach.setting_catalog import SECTION_ORDER, entries
+from loadcoach.settings import written
 
 # Retain the public metadata shape for older callers and nested voice editors.
 LABELS = {entry.name: (entry.label, entry.section, entry.unit, entry.control)
@@ -21,7 +22,8 @@ def describe(setting):
     label, section, unit, control = LABELS.get(name, fallback)
     editor = 'text' if control == 'text' or name in ('models_folder', 'models_storage_folder') else setting.get('editor', '')
     return {'label': label, 'section': section, 'unit': unit, 'control': control, 'editor': editor,
-            **({'choices': TIMEZONES} if name == 'timezone' else {})}
+            **({'choices': TIMEZONES} if name == 'timezone' else {}),
+            **({'choices': [(written(value), value) for entry in entries() if entry.name == name for value in entry.choices]} if any(entry.name == name and entry.choices for entry in entries()) else {})}
 
 
 def sections(programs, *, compute_node=False):
