@@ -80,6 +80,7 @@ use them as written.
 - Catalogue entries describe top-level settings; tables retain their existing whole-table POST contract. Nested tuning entries will validate the editable subset without exposing model paths.
 - Node-owned Voice followers name the adjacent LoadCoach file’s existing `machine_name` on settings requests. Live checks exposed the old ambiguous control-node URL, which otherwise left new settings unseen on multi-node installations.
 - Unconfigured Hermes choices remain visible and may be saved for later; choices alone never enable a runtime. Execution still requires a machine-file Python/API endpoint and model.
+- Phase 1 final `a853683`: 3,840 passed, 320 failed, 11 known fixture errors and 60 skipped; all 519 settings and 39 UI cases pass. Two additional browser confirmation timing failures pass isolated rerun. Live evidence: `/home/owgadmin/ai/owg-settings-phase1-live-final.json` (47 tiers, 33 restored changes; sound default has no alternate installed model; Voice is absent on box2/box3), with unchanged service PIDs and installed source on all five checkouts.
 - Phase 1 clean `5ebbe30`: 3,840 passed, 317 failed, 11 known fixture errors and 60 skipped; all 516 settings and 39 UI checks pass. One additional SQLite fixture race passes isolated rerun. Normal update/restart and source verification passed on all five installed checkouts; live checks exposed missing optional Hermes fields, fixed before closing the phase. Evidence: `/home/owgadmin/ai/owg-settings-phase1-final.xml`, `owg-settings-phase1-final-comparison.json` and `owg-settings-phase1-source-*.json`.
 - Phase 0 verification: the clean `717890d` full suite reports 3,708 passed, 322 failed, 11 errors and 60 skipped; all 437 settings-focused cases pass. Baseline `b040cbc` reproduces eight console and 109 legacy-service failures. Final shared `28e06ec` passes 482 focused settings/API checks. Machine-readable evidence: `/home/owgadmin/ai/owg-settings-phase0-full.xml`, `owg-settings-phase0-focused-results.json` and `owg-settings-phase0-live.json`; broader failures include legacy routing and control-node wording expectations.
 - Live verification uses an expiring session for the existing owner account, revoked afterward. No accounts or provider/channel credentials are created.
@@ -436,8 +437,8 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 1g Voice recognition and synthesis tuning (498 checks pass; nested overrides preserve paths and freeze restart fields).
 - [x] 1h Hermes tools for new calls (472 focused checks pass; active-call snapshots and execution paths preserved).
 - [x] 1i Retired, derived and deprecated machine values (529 feature checks; all 39 UI consistency/browser cases pass).
-- [ ] 1j Responses limits dependencies; Phase 1 deployed and verified.
-- [ ] 2.1 Shared design, grouped routes and navigation.
+- [x] 1j Responses limits shipped with Phase 0; Phase 1 deployed and verified (a853683; 47 tiers, 33 restored live changes, unchanged PIDs on all five checkouts).
+- [x] 2.1 Shared design, grouped routes and navigation (native saves and drafts verified; 39 UI cases cover all eight new routes).
 - [ ] 2.2 Search and Changed only on every settings surface.
 - [ ] 2.3 Pending restart status and authorized restart action.
 - [ ] 2.4 Machine configuration page.

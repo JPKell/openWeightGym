@@ -1,11 +1,12 @@
 {% extends "frame.html" %}
 {% from "parts.html" import card, said_box, swaps, page_header, form_section, more, node_state, alert %}
 {% block title %}Settings · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/settings.js?v=2" defer></script>{% endblock %}
+
 {% block main %}
 <div class="settings-page">
 {{ page_header('General settings', 'Manage request handling, retention, monitoring and display preferences.') }}
 {{ said_box(said, failed) }}
+<nav class="d-flex flex-wrap gap-3 mb-3" aria-label="Settings groups">{% for label, url in [('Requests and queue', '/settings/requests'), ('Retention and privacy', '/settings/retention'), ('Alerts and notifications', '/settings/alerts')] %}<a href="{{ url }}">{{ label }}</a>{% endfor %}</nav>
 
 {% call card("Model file locations", id="model-files") %}
   <form method="get" action="/settings" class="d-flex flex-wrap align-items-end gap-2 mb-3">
@@ -25,6 +26,6 @@
   </form>{% endif %}
 {% endcall %}
 
-{% include 'settings_sections.html' %}
+{% with settings_readonly=false %}{% include 'settings_sections.html' %}{% endwith %}
 </div>
 {% endblock %}

@@ -122,7 +122,7 @@ from loadcoach.schedule_time import validate as validate_schedule
 from weightroom.pagination import controls, pagination
 from engines import engine_for
 from engines.llama_cpp.model import FIRST_PLACE
-from weightroom import setting_labels
+from weightroom import setting_labels, settings_views
 from loadcoach.platform_services import PlatformServices, SERVICE_SETTINGS
 from weightroom.model_settings import PARALLEL_FLAGS, UNUSABLE_MODEL_FLAGS, parallel_fields, usable_model_flags
 from loadcoach.cli import groups_cli, log_cli, users_cli
@@ -928,12 +928,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """One of the pages in pages/, filled in. Every page is told who is signed in and how compute is."""
         # The strip of meters is shown to someone signed in at compute, unless they chose not to see it.
         strip = bool(person and person.key and person.me.get("choices", {}).get("show_telemetry", True))
-        nav = navigation(request.url.path, person.can, bool(spotter), platform(), tool_chat=person.me.get('tool_chat', False)) if person else None
+        nav_path = more.get('settings_return_to') or settings_views.SURFACES.get(template, request.url.path)
+        nav = navigation(nav_path, person.can, bool(spotter), platform(), tool_chat=person.me.get('tool_chat', False)) if person else None
         error_request_id = ''
         if template == 'refused.html' and status >= 500:
             context = getattr(request.state, 'observation', None)
             error_request_id = context.root.request_id if context else uuid.uuid4().hex
-        response = pages.TemplateResponse(request, template, {"person": person, "front_state": front_state, "strip": strip, "spotter_available": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, **more}, status_code=status)
+        response = pages.TemplateResponse(request, template, {"person": person, "front_state": front_state, "strip": strip, "spotter_available": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, "settings_surface": bool(person and "manage-settings" in person.can and settings_views.surface(nav_path)), **more}, status_code=status)
         if error_request_id:
             response.headers['x-request-id'] = error_request_id
         response.headers['cache-control'] = 'no-store'
@@ -3299,10 +3300,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await voice_admin_page(request, person, message, failed=True)
         return Response(message, status_code=result.status_code)
 
-    async def settings_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None, opened: str = "", **unused) -> Response:
+    async def settings_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None, opened: str = "", settings_section: str = "", **unused) -> Response:
         """Render program settings with secret fields removed."""
         if 'manage-settings' not in person.can:
             return page(request, 'refused.html', person, status=403, why='Your account may not manage settings.')
+        section = settings_section or request.path_params.get('section', 'general')
+        if section not in settings_views.PAGES:
+            return page(request, 'refused.html', person, status=404, why='That settings page does not exist.')
         try:
             found = await fetch(request, person, "/loadcoach/settings")
         except ServiceUnavailable:
@@ -3315,6 +3319,26 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             program['settings'] = [row for row in program['settings'] if row['name'] != 'image_adult_previews'
                                    and not (program['program'] == 'turnstile' and row['name'] in ('models_folder', 'models_storage_folder'))
                                    and not (program['program'] == 'weightroom' and row['name'].startswith('audio_') and row['name'].endswith('_model'))]
+        found['programs'] = settings_views.filtered(found['programs'], section)
+        if section != 'general':
+            nodes = await ask('GET', '/turnstile/machines', person.key)
+            summaries = []
+            unavailable = []
+            choices = nodes.json().get('machines', []) if nodes.is_success else []
+            responses = await asyncio.gather(*(ask('GET', '/turnstile/machines/' + quote(machine['name'], safe='') + '/settings', person.key) for machine in choices))
+            for machine, response in zip(choices, responses):
+                if response.is_success:
+                    body = response.json()
+                    summaries.extend(settings_views.node_rows(machine['name'], body.get('programs', []), section))
+                    if body.get('unavailable'): unavailable.append(machine['name'])
+                else:
+                    unavailable.append(machine['name'])
+            return page(request, 'settings_group.html', person, status=400 if failed else 200,
+                        settings_title=settings_views.PAGES[section][0], settings_section=section,
+                        settings_return_to=settings_views.PAGES[section][1], programs=found['programs'],
+                        node_settings=summaries, unavailable_nodes=unavailable,
+                        said=said or request.query_params.get('said', ''), failed=failed,
+                        typed_in=typed_in or {}, opened=opened or request.query_params.get('open', ''))
         asked = request.query_params
         machines_answer = await ask("GET", "/turnstile/machines", person.key)
         machine_report = machines_answer.json() if machines_answer.status_code == 200 else {}
@@ -3606,7 +3630,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         message = "Scheduled key rotation disabled." if days == 0 else f"Machine key will rotate every {days} days."
         return go("/compute-nodes?machine=" + quote(machine, safe="") + "&said=" + quote(message))
 
-    async def tools_page(request: Request, person: Person, said: str = "", failed: bool = False) -> Response:
+    async def tools_page(request: Request, person: Person, said: str = "", failed: bool = False, **unused) -> Response:
         """Render the authorized tool catalogue and gateway configuration."""
         if 'manage-settings' not in person.can:
             return page(request, 'refused.html', person, status=403, why='Your account may not manage tools.')
@@ -3617,7 +3641,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if isinstance(found, Response):
             return found
         config = {entry['name']: entry['value'] for entry in (found['program'] or {}).get('settings', [])}
-        return page(request, 'tools.html', person, status=400 if failed else 200, tool_info=found, tool_config=config,
+        reported = await ask('GET', '/loadcoach/settings', person.key)
+        programs = settings_views.filtered(reported.json().get('programs', []), 'tools') if reported.is_success else []
+        for program in programs:
+            program['settings'] = [row for row in program['settings'] if row['name'] not in ('toolsets', 'tool_levels')]
+        return page(request, 'tools.html', person, status=400 if failed else 200, tool_info=found, tool_config=config, programs=programs, settings_return_to='/tools', typed_in=unused.get('typed_in', {}), opened=unused.get('opened', ''),
                     said=said or request.query_params.get("said", ""), failed=failed)  # fmt: skip
 
     async def change_tools(request: Request, person: Person) -> Response:
@@ -3711,6 +3739,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response("Only LoadCoach and Spotter use a host selection.", status_code=400)
         settings_path = ("/turnstile/machines/" + quote(selected_machine, safe="") + "/settings"
                          if selected_machine else "/loadcoach/settings")
+        settings_return = form.get('return_to', '')
+        if not node_return and not voice_return and settings_return in settings_views.RETURNS:
+            destination = settings_return
+            if settings_return == '/tools':
+                render_settings = tools_page
+            elif settings_return.startswith('/settings/'):
+                async def render_settings(request, person, *args, **kwargs):
+                    return await settings_page(request, person, *args, settings_section=settings_return.rsplit('/', 1)[-1], **kwargs)
         destination_query = "machine=" + quote(selected_machine or first_node(person), safe="") + "&" if node_return else ""
         found = await fetch(request, person, settings_path)
         if isinstance(found, Response):
@@ -3748,7 +3784,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 continue
             holds = setting["changed"]["value"] if setting["changed"] else setting["value"]
             typed_value = form.get("value-" + setting["name"])
-            plain_text = setting_labels.describe(setting)["editor"] == "text"
+            plain_text = setting_labels.describe(setting, program)["editor"] == "text"
             unchanged = typed_value == holds if plain_text else typed_value is not None and typed_value.strip() == written(holds).strip()
             if setting["when"] == "file" or typed_value is None or unchanged:
                 continue
@@ -5581,6 +5617,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route("/settings", settings_page),
             route('/settings/image', image_settings_page),
             route('/settings/image', image_settings_page, 'POST'),
+            route('/settings/{section}', settings_page),
             Route("/guide", guide_moved),
             route("/docs", docs_page),
             route("/system/components", components_page),

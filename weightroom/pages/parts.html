@@ -122,3 +122,24 @@
 {%- endmacro %}
 
 {% macro node_state(state) %}{{ {'ready':'available', 'unknown':'status not reported', 'offline':'not reachable', 'unavailable':'not reachable', 'sleeping':'asleep'}.get(state, state|replace('_', ' ')) }}{% endmacro %}
+
+{# One settings workspace surrounds every settings surface without owning its forms. #}
+{% macro settings_workspace() %}
+<div class="settings-workspace" data-settings-workspace>
+  <aside class="settings-rail" aria-label="Settings workspace">
+    <nav aria-label="Settings sections" data-settings-section-links><a class="settings-section-link active" href="#settings-content">All sections</a></nav>
+    <div class="settings-reference-links"><a href="/settings/machine">Machine configuration</a><a href="/settings/history">Settings history</a></div>
+  </aside>
+  <div id="settings-content" class="settings-content">{{ caller() }}</div>
+</div>
+{% endmacro %}
+
+{% macro settings_node_summary(rows, unavailable=()) %}
+{% call card('Per-node settings', open=false, key='settings:per-node') %}
+<p class="form-hint">Each node keeps its own values. Open Compute nodes to change them.</p>
+{% if unavailable %}<p class="text-warning" role="status">Not answering: {{ unavailable|join(', ') }}. Their last reported values may be shown.</p>{% endif %}
+<div class="table-responsive"><table class="table table-sm" aria-label="Per-node settings"><thead><tr><th>Node</th><th>Setting</th><th>Value</th><th>Applies</th></tr></thead><tbody>
+{% for row in rows %}<tr><th scope="row"><a href="/compute-nodes?machine={{ row.node|urlencode }}">{{ row.node }}</a></th><td>{{ row.label }}</td><td class="wrap"><code>{{ row.value_text }}</code></td><td>{{ 'After restart' if row.setting.when == 'restart' else 'Live' }}</td></tr>{% else %}{{ empty_row(4, 'No node values reported for this section.') }}{% endfor %}
+</tbody></table></div>
+{% endcall %}
+{% endmacro %}

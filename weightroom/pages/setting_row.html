@@ -1,10 +1,10 @@
-{% set meta = setting_label(setting) %}
+{% set meta = setting_label(setting, program.program) %}
 {% set holds = setting.changed.value if setting.changed else setting.value %}
 {% set typed = typed_in['value-' ~ setting.name] if opened == program.program and typed_in['value-' ~ setting.name] is defined else (holds if meta.editor == 'text' else holds|written) %}
 {% set choices = setting.choices|default(meta.choices|default([])) %}
 {% set id = 'setting-' ~ program.program ~ '-' ~ setting.name %}
-<div class="col-md-6 settings-row">
-  <label class="form-label" for="{{ id }}">{{ meta.label }} <small class="text-secondary"><code>{{ setting.name }}</code></small>{% if setting.when == 'restart' %} <span class="badge bg-orange-lt">Needs restart · {{ program.program }}</span>{% endif %}</label>
+<div class="col-md-6 settings-row" data-setting-changed="{{ 'true' if setting.changed else 'false' }}" data-setting-refused="{{ 'true' if setting.refused else 'false' }}">
+  <label class="form-label" for="{{ id }}">{{ meta.label }} <small class="text-secondary"><code>{{ setting.name }}</code></small>{% if setting.when == 'now' %} <span class="badge bg-green-lt">Live</span>{% endif %}{% if setting.when == 'restart' %} <span class="badge bg-orange-lt">Needs restart · {{ program.program }}</span>{% endif %}</label>
   {% if meta.control == 'services' %}
   <input type="hidden" name="third-party-services-present" value="1"><div class="d-flex flex-wrap gap-3">
   {% for name, label in third_party_services %}<label class="form-check form-switch"><input id="third-party-{{ name }}" name="third-party-{{ name }}" type="checkbox" class="form-check-input"{{ ' checked' if name in holds }}><span class="form-check-label">{{ label }}</span></label>{% endfor %}</div>
@@ -21,9 +21,9 @@
   {% elif setting.multiline|default(false) %}
   <textarea id="{{ id }}" name="value-{{ setting.name }}" class="form-control" rows="3" aria-label="{{ setting.label|default(meta.label) }}">{{ typed }}</textarea>
   {% else %}
-  <div class="input-group input-group-flat"><input id="{{ id }}" name="value-{{ setting.name }}" class="form-control font-monospace" value="{{ typed }}" type="{{ 'number' if meta.control == 'number' else 'text' }}"{% if meta.control == 'number' %} min="0" step="{{ '1' if holds is integer else 'any' }}"{% endif %} aria-label="{{ setting.label|default(meta.label) }}" autocapitalize="none" spellcheck="false">{% if meta.unit %}<span class="input-group-text">{{ meta.unit }}</span>{% endif %}</div>
+  <div class="input-group input-group-flat"><input id="{{ id }}" name="value-{{ setting.name }}" class="form-control font-monospace" value="{{ typed }}" type="{{ 'number' if meta.control == 'number' else 'text' }}"{% if meta.control == 'number' %} min="{{ meta.min if meta.min is not none else 0 }}"{% if meta.max is not none %} max="{{ meta.max }}"{% endif %} step="{{ '1' if holds is integer else 'any' }}"{% endif %} aria-label="{{ setting.label|default(meta.label) }}" autocapitalize="none" spellcheck="false">{% if meta.unit %}<span class="input-group-text">{{ meta.unit }}</span>{% endif %}</div>
   {% endif %}
-  {% if setting.says and show_setting_help|default(true) %}{% call more() %}{{ setting.says }}{% endcall %}{% endif %}
+  {% if meta.help and show_setting_help|default(true) %}{% call more() %}{{ meta.help }}{% endcall %}{% endif %}
   {% if setting.changed %}<small class="text-secondary d-block mt-1">Changed here by {{ setting.changed.by or 'someone at the node' }}, {{ setting.changed.at|timestamp }}.</small><button class="btn btn-link p-0" name="reset" value="{{ setting.name }}">Revert to file</button>{% endif %}
   {% if setting.refused %}<small class="text-danger d-block">{{ setting.refused }}</small>{% endif %}
 </div>

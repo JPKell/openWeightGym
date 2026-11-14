@@ -88,14 +88,14 @@ def test_drafts_follow_nodes_and_section_saves_do_not_erase_other_edits(nodes):
         assert secondary['loadcoach']['model_defaults'] == {'cache-type-k': 'f16'}
         logs = page.locator('[data-card-key="settings:Logs and retention"]')
         logs.locator('[name="value-files_every"]').fill('15')
-        logs.get_by_role('button', name='Save spotter', exact=True).click()
-        expect(page.locator('.said-box')).to_contain_text('Saved.')
+        logs.get_by_role('button', name='Save logs and retention', exact=True).click()
+        expect(logs.locator('[name="value-files_every"]')).to_have_attribute('value', '15')
         assert primary['spotter']['files_every'] == 15 and secondary['spotter']['files_every'] == 20
         telemetry = page.locator('[data-card-key="settings:Telemetry, power and idle"]')
         telemetry.locator(':scope > summary').click()
         telemetry.locator('[name="value-sample_every"]').fill('20')
-        telemetry.get_by_role('button', name='Save spotter', exact=True).click()
-        expect(page.locator('.said-box')).to_contain_text('Saved.')
+        telemetry.get_by_role('button', name='Save telemetry, power and idle', exact=True).click()
+        expect(telemetry.locator('[name="value-sample_every"]')).to_have_attribute('value', '20')
         assert primary['spotter']['sample_every'] == 20
         assert primary['spotter']['sleep_after'] == 0
         assert primary['spotter']['alert_gpu_temperature'] == 90
@@ -180,8 +180,8 @@ def test_rejected_save_keeps_drafts_when_switching_nodes(nodes):
         page.goto('http://console.test/compute-nodes')
         cache = page.locator('[name="value-models_folder"]')
         cache.fill('/draft/cache')
-        cache.locator('xpath=ancestor::form').get_by_role('button', name='Save loadcoach', exact=True).click()
-        expect(page.locator('.said-box.alert-danger')).to_be_visible()
+        page.get_by_role('button', name='Save model files', exact=True).click()
+        expect(page.locator('[data-card-key="settings:Model files"] [data-settings-status]')).to_contain_text('keep_text')
         page.locator('[data-node-choice="remote"]').click()
         page.locator('[data-node-choice="compute"]').click()
         expect(cache).to_have_value('/draft/cache')
@@ -197,7 +197,7 @@ def test_pairing_panel_generates_real_code_without_losing_node_drafts(desk):
         page.goto('http://console.test/compute-nodes')
         expect(page.locator('#add-node')).to_be_hidden()
         page.locator('[name="rotation_days"]').fill('45')
-        page.get_by_role('button', name='+ Add GPU node', exact=True).click()
+        page.get_by_role('button', name='+ Add compute node', exact=True).click()
         expect(page.locator('#add-node')).to_be_visible()
         page.get_by_role('button', name='Make a pairing code', exact=True).click()
         expect(page.locator('#pairing-command')).to_contain_text('--join http://testserver:8440 --code ')
@@ -270,7 +270,7 @@ def test_pairing_keeps_the_selected_node_and_supports_plain_html_navigation(node
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         page.goto('http://console.test/compute-nodes?machine=remote')
-        page.get_by_role('button', name='+ Add GPU node', exact=True).click()
+        page.get_by_role('button', name='+ Add compute node', exact=True).click()
         page.get_by_role('button', name='Make a pairing code', exact=True).click()
         expect(page.locator('#pairing-command')).to_contain_text('--code ')
         expect(page.locator('#selected-node-name')).to_have_text('remote')

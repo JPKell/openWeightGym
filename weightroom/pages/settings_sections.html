@@ -1,3 +1,4 @@
+{% from 'parts.html' import card %}
 {% for group in settings_groups|default(settings_sections(programs)) %}
 {% call card(group.title, group.open|default(none if settings_fixed|default(false) else loop.first or opened in group.programs|map(attribute='program')|list), 'settings:' ~ group.key|default(group.title)) %}
 <div data-settings-section>

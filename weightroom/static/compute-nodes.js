@@ -114,6 +114,32 @@
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && root() && !document.querySelector('dialog[open]') && pairingOpen) showPairing(root(), false, true);
   });
+  document.addEventListener('weightroom:settings-saving', event => {
+    for (const form of event.detail.forms) {
+      if (form.closest('[data-compute-nodes]')) submitted.set(form, values(form));
+    }
+  });
+  document.addEventListener('weightroom:settings-saved', event => {
+    const savedForms = event.detail.forms, page = savedForms[0]?.closest('[data-compute-nodes]');
+    if (!page) return;
+    event.preventDefault();
+    forms(page).forEach(remember);
+    for (const form of savedForms) {
+      const sent = submitted.get(form) || [], latest = values(form);
+      const late = latest.filter((value, index) => JSON.stringify(value) !== JSON.stringify(sent[index]));
+      if (late.length) drafts.get(page.dataset.machine)?.set(key(form), late);
+      else drafts.get(page.dataset.machine)?.delete(key(form));
+    }
+    if (root() !== page) return; // Saving another node must not interrupt the current selection.
+    const markup = event.detail.responses?.at(-1);
+    const content = markup && new DOMParser().parseFromString(markup, 'text/html').querySelector('#page-content');
+    if (!content) return;
+    const updated = new URL(location.href);
+    updated.searchParams.set('machine', page.dataset.machine);
+    updated.searchParams.set('said', 'Saved.');
+    history.replaceState(null, '', updated);
+    htmx.swap(document.querySelector('#page-content'), content.outerHTML, {swapStyle: 'outerHTML'});
+  });
   document.addEventListener('htmx:beforeRequest', event => {
     const form = event.detail.elt?.closest('form[data-node-draft]');
     if (form) submitted.set(form, values(form));

@@ -35,8 +35,8 @@ NAV_SECTIONS = {
         ('Data & recovery', ('/databases', '/backups')),
     ),
     'Settings': (
-        ('Platform', ('/settings', '/compute-nodes')),
-        ('Access & spending', ('/users', '/groups', '/allowances')),
+        ('Platform', ('/settings', '/settings/requests', '/settings/retention', '/settings/alerts', '/settings/limits', '/settings/downloads', '/settings/machine', '/settings/history', '/compute-nodes')),
+        ('Access & spending', ('/settings/security', '/users', '/groups', '/allowances')),
         ('Tools & plugins', ('/tools', '/plugins')),
         ('Media', ('/settings/image', '/system/audio', '/system/voice')),
     ),
@@ -115,6 +115,8 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
         groups[4]["links"].append(("Alerts", "/alerts"))
         groups[4]["links"].append(("Schedules", "/schedules"))
         groups[5]["links"].insert(0, ("Compute nodes", "/compute-nodes"))
+        from weightroom.settings_views import PAGES
+        groups[5]['links'].extend((title, url) for key, (title, url) in PAGES.items() if key != 'general')
     for ability, label, url in [("manage-users", "Users", "/users"), ("manage-groups", "Groups", "/groups"), ("manage-settings", "Tools", "/tools"), ("front-manage-plugins", "Plugins", "/plugins"), ("manage-settings", "Backups", "/backups"), ("manage-settings", "Databases", "/databases"), ("manage-settings", "General", "/settings")]:
         if ability in can:
             groups[4 if url in ('/backups', '/databases') else 5]["links"].append((label, url))
@@ -145,6 +147,8 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
         selected, active = groups[5], '/' + '/'.join(path.strip('/').split('/')[:2])
     if path == '/system/voice/status':
         selected, active = groups[4], path
+    if root == '/settings' and any(url == path.rstrip('/') for _, url in groups[5]['links']):
+        selected, active = groups[5], path.rstrip('/')
     if path.startswith('/settings/image'):
         selected, active = groups[5], '/settings/image'
     children = {}

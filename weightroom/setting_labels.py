@@ -5,7 +5,7 @@ from zoneinfo import available_timezones
 
 TIMEZONES = [(json.dumps(name), name) for name in sorted(available_timezones())]
 
-from loadcoach.setting_catalog import SECTION_ORDER, entries
+from loadcoach.setting_catalog import SECTION_ORDER, entries, get as catalog_entry
 from loadcoach.settings import written
 
 # Retain the public metadata shape for older callers and nested voice editors.
@@ -13,15 +13,19 @@ LABELS = {entry.name: (entry.label, entry.section, entry.unit, entry.control)
           for entry in entries()}
 
 
-def describe(setting):
+def describe(setting, program=None):
     """Friendly metadata and editor choice without altering setting values."""
     name = setting['name']
     fallback = (setting.get('label', name.replace('_', ' ').capitalize()), 'Additional settings', '', '')
     if name.startswith('greetings.'):
         fallback = (setting.get('label', name), 'Speech', '', 'text')
-    label, section, unit, control = LABELS.get(name, fallback)
+    definition = catalog_entry(program, name) if program else None
+    label, section, unit, control = ((definition.label, definition.section, definition.unit, definition.control) if definition else LABELS.get(name, fallback))
     editor = 'text' if control == 'plain-text' or name in ('models_folder', 'models_storage_folder') else setting.get('editor', '')
-    return {'label': label, 'section': section, 'unit': unit, 'control': control, 'editor': editor,
+    return {'label': setting.get('label', label), 'section': section, 'unit': unit, 'control': control, 'editor': editor,
+            'min': definition.min if definition else None, 'max': definition.max if definition else None,
+            'ceiling': definition.ceiling if definition else None,
+            'help': setting.get('says') or (definition.help if definition else ''),
             **({'choices': TIMEZONES} if name == 'timezone' else {}),
             **({'choices': [(written(value), value) for entry in entries() if entry.name == name for value in entry.choices]} if any(entry.name == name and entry.choices for entry in entries()) else {})}
 
@@ -33,7 +37,7 @@ def sections(programs, *, compute_node=False):
         for setting in program['settings']:
             if setting['when'] == 'file':
                 continue
-            title = describe(setting)['section']
+            title = describe(setting, program['program'])['section']
             if compute_node:
                 if title == 'Power and idle' or setting['name'] in ('sample_every', 'component_versions_every'):
                     title = 'Telemetry, power and idle'

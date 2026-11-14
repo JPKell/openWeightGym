@@ -19,6 +19,7 @@
 <p class="text-secondary small mb-0">Servers and their descriptions are set in <code>settings/toollocker.toml</code> on the gateway host (the control node, when ToolLocker runs there), and change when the tool service restarts.</p>
 <a class="btn btn-outline-secondary btn-sm mt-3" href="/settings?open=toollocker">Tool service settings</a>
 {% endcall %}
+{% with settings_readonly=false, settings_empty=false %}{% include 'settings_sections.html' %}{% endwith %}
 {% set servers = tool_config.get('servers', {}) %}
 {% set levels = tool_config.get('tool_levels', {}) %}
 {% call card("Tool levels", true) %}

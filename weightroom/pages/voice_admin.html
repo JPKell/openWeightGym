@@ -2,7 +2,7 @@
 {% from "parts.html" import card, said_box, swaps, page_header, form_section, more , empty_row, alert %}
 {% from 'voice_admin_parts.html' import voice_header, voice_choice %}
 {% block title %}Voice settings · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/voice-admin.css?v=1"><script src="/static/voice-admin.js?v=2" defer></script><script src="/static/settings.js?v=2" defer></script><script src="/static/voice_admin.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/voice-admin.css?v=1"><script src="/static/voice-admin.js?v=2" defer></script><script src="/static/voice_admin.js?v=1" defer></script>{% endblock %}
 {% block main %}
 <div class="voice-admin" data-voice-admin data-voice-query="profile">
 {{ voice_header('settings', voice_status) }}

@@ -1,6 +1,8 @@
 // Each purpose section saves through the existing per-service handlers, in order.
 (() => {
   'use strict';
+  if (window.owgSettingsReady) return;
+  window.owgSettingsReady = true;
   function setup() {
     document.querySelectorAll('[data-settings-section]').forEach(section => {
       section.querySelector('[data-save-settings]').hidden = false;
@@ -15,6 +17,8 @@
     const status = section.querySelector('[data-settings-status]');
     button.disabled = true; status.className = 'small text-secondary'; status.textContent = 'Saving…';
     let saved = 0;
+    const responses = [];
+    document.dispatchEvent(new CustomEvent('weightroom:settings-saving', {detail: {forms}}));
     try {
       for (const form of forms) {
         const response = await fetch(form.action, {method: 'POST', body: new URLSearchParams(new FormData(form)), credentials: 'same-origin'});
@@ -23,9 +27,10 @@
           const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
           throw new Error(doc.querySelector('.said-box')?.textContent.trim() || 'A service refused its settings.');
         }
+        responses.push(await response.text());
         saved++;
       }
-      const savedEvent = new CustomEvent('weightroom:settings-saved', {cancelable: true, detail: {forms}});
+      const savedEvent = new CustomEvent('weightroom:settings-saved', {cancelable: true, detail: {forms, responses}});
       if (!document.dispatchEvent(savedEvent)) return;
       location.assign(location.pathname + '?said=Saved.' + (location.search.includes('open=') ? '&open=' + encodeURIComponent(new URLSearchParams(location.search).get('open')) : ''));
     } catch (error) {
