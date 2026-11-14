@@ -157,6 +157,7 @@ class Routing:
         self.placed = placed
         self.node_names = lambda: []  # the active nodes, in order, once turnstile knows them
         self.destination_allowed = lambda: True
+        self.busy_retry_seconds = lambda: 5
         self.resolve_node = lambda name: name
         self.prepare_candidates = None
         from loadcoach.platform_services import PlatformServices
@@ -398,7 +399,7 @@ class Routing:
             required_name = request.headers.get('x-loadcoach-require-model-name')
             if facts and name in facts.get("unavailable_models", []) and not required_name:
                 refusal = error(503, f"The worker for model {name} is not answering. Try again shortly.")
-                refusal.headers["retry-after"] = "5"
+                refusal.headers["retry-after"] = f"{self.busy_retry_seconds():g}"
                 return refusal
             candidates = (facts.get("placements", {}).get(name) or
                           [facts["models"][name]["machine"]] if facts and name in facts["models"] and not facts["models"][name].get("hosted") else None)

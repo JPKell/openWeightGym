@@ -221,14 +221,9 @@ def say_what_runs(path: Path, settings: Settings) -> None:
     text = (defaults.read_text() if defaults.is_file() else "") + path.read_text()  # its settings are explained in either file
     file = current_names(read_settings(path).get("turnstile", {}), str(path), say=lambda text: None)
     artifact_machine = settings.artifact_machine or ("front_cpu" if "front_cpu" in settings.machines else next(iter(settings.machines), "front"))
-    running = {**file, "host": settings.host, "ports": list(settings.ports), "wait": settings.wait,
-               "voice_port": settings.voice_port, "artifact_machine": artifact_machine,
-               "models_folder": settings.models_folder, "models_storage_folder": settings.models_storage_folder,
-               "image_adult_previews": settings.image_adult_previews, "files_every": settings.files_every,
-               "component_versions_every": settings.component_versions_every, "keep_days": settings.keep_days, "response_keep_days": settings.response_keep_days,
-               "response_max_tool_calls": settings.response_max_tool_calls, "response_max_tool_seconds": settings.response_max_tool_seconds,
-               "allow_caller_to_specify_destination": settings.allow_caller_to_specify_destination,
-               "preferred_voice_node": settings.preferred_voice_node}
+    running = {**file, **{entry.name: getattr(settings, entry.name)
+                           for entry in catalog_entries('turnstile') if hasattr(settings, entry.name)},
+               'ports': list(settings.ports), 'artifact_machine': artifact_machine}
     (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))))
 
 
@@ -472,7 +467,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                             timeout=httpx.Timeout(timeout, connect=2))
         except httpx.PoolTimeout:  # every connection is in use: busy, not off
             return httpx.Response(503, json={"error": {"message": f"Turnstile is already carrying {settings.max_in_flight} requests to compute. Try again shortly."}},
-                                  headers={"x-turnstile": "busy", "retry-after": f"{settings.busy_retry_seconds:g}"})
+                                  headers={"x-turnstile": "busy", "retry-after": f"{runtime_setting("busy_retry_seconds"):g}"})
         except httpx.HTTPError:
             return None
         return answer if proven(answer, nonce, key_file) else None
@@ -503,7 +498,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             available = machines.available(name)
             if row is None or available is None or not settings.auth_key_file:
                 return await ask_live(user, method, where, machine=name, prime=True, passive=bool(settings.auth_key_file))
-            if available is not False and time.time() - row[0] >= settings.machines_poll_seconds and key not in discovery_refreshes:
+            if available is not False and time.time() - row[0] >= runtime_setting("machines_poll_seconds") and key not in discovery_refreshes:
                 async def refresh():
                     """Renew the retained discovery answer in the background; a failure keeps the old one."""
                     try:
@@ -646,27 +641,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if (not policy.get("wake_mac") or user is None or NO_WAKE in request.headers or
                 request.url.path.rstrip('/') in NO_WAKE_PATHS or
                 (machine and not request.url.path.startswith("/v1/"))):
-                return (error(503, f"Machine {name} is not answering.", {"retry-after": f"{settings.busy_retry_seconds:g}", "x-turnstile-node": name})
+                return (error(503, f"Machine {name} is not answering.", {"retry-after": f"{runtime_setting("busy_retry_seconds"):g}", "x-turnstile-node": name})
                         if machine else off(name))
             print(f"turnstile: waking {name} for a request to {request.url.path}", flush=True)
-            give_up = time.monotonic() + settings.wait
+            give_up = time.monotonic() + runtime_setting("wait")
             while got is None:
                 if not machines.enabled(name):
                     return error(409, f"Compute node {name} is no longer active; wake was cancelled.")
                 if time.monotonic() > give_up:
-                    return error(504, f"Node {name} was asked to wake and has not answered in {settings.wait:g} seconds.")
+                    return error(504, f"Node {name} was asked to wake and has not answered in {runtime_setting("wait"):g} seconds.")
                 try:
                     waker(policy["wake_mac"], policy.get("wake_address", "255.255.255.255"))
                 except (OSError, ValueError):
                     return error(503, "Could not send the wake packet. Check the node wake configuration.")
                 remaining = give_up - time.monotonic()
                 if remaining <= 0:
-                    return error(504, f"Node {name} was asked to wake and has not answered in {settings.wait:g} seconds.")
+                    return error(504, f"Node {name} was asked to wake and has not answered in {runtime_setting("wait"):g} seconds.")
                 await asyncio.sleep(min(TRY_EVERY, remaining))
                 try:
                     got = await asyncio.wait_for(attempt(), max(0.001, give_up - time.monotonic()))
                 except TimeoutError:
-                    return error(504, f"Node {name} was asked to wake and has not answered in {settings.wait:g} seconds.")
+                    return error(504, f"Node {name} was asked to wake and has not answered in {runtime_setting("wait"):g} seconds.")
         return got
 
     @observation.traced("transport_headers")
@@ -722,14 +717,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             reached = await reach() if front_tools or not wake_allowed else await woken(request, user, reach, machine)
         except httpx.PoolTimeout:  # max_in_flight are already under way: say so at once, so that the caller retries
             return error(503, f"Turnstile is already carrying {settings.max_in_flight} requests to compute. Try again shortly.",
-                         {"x-turnstile": "busy", "retry-after": f"{settings.busy_retry_seconds:g}"})
+                         {"x-turnstile": "busy", "retry-after": f"{runtime_setting("busy_retry_seconds"):g}"})
         except httpx.HTTPError as problem:
             return error(503 if machine else 502, f"Compute stopped answering before a response: {type(problem).__name__}.",
-                         {"retry-after": f"{settings.busy_retry_seconds:g}"} if machine else None)
+                         {"retry-after": f"{runtime_setting("busy_retry_seconds"):g}"} if machine else None)
         if reached is None:
             if front_tools:
-                return error(503, "Control node ToolLocker is not answering.", {"retry-after": f"{settings.busy_retry_seconds:g}"})
-            return error(503, f"Machine {name} is not answering.", {"retry-after": f"{settings.busy_retry_seconds:g}", "x-turnstile-node": name})
+                return error(503, "Control node ToolLocker is not answering.", {"retry-after": f"{runtime_setting("busy_retry_seconds"):g}"})
+            return error(503, f"Machine {name} is not answering.", {"retry-after": f"{runtime_setting("busy_retry_seconds"):g}", "x-turnstile-node": name})
         if isinstance(reached, Response):
             return reached
         upstream, nonce = reached
@@ -759,7 +754,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 await upstream.aclose()
                 status = 503 if machine else 502
                 return error(status, f"Compute stopped before it sent a complete answer: {type(problem).__name__}.",
-                             {"retry-after": f"{settings.busy_retry_seconds:g}"} if machine else None)
+                             {"retry-after": f"{runtime_setting("busy_retry_seconds"):g}"} if machine else None)
             await upstream.aclose()
             return httpx.Response(upstream.status_code, headers=upstream.headers, content=complete,
                                   request=upstream.request, extensions={"suite_machine": name, "suite_complete": complete})
@@ -772,7 +767,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 await upstream.aclose()
                 status = 503 if machine else 502
                 return error(status, f"Compute stopped before it sent an answer: {type(problem).__name__}.",
-                             {"retry-after": f"{settings.busy_retry_seconds:g}"} if machine else None)
+                             {"retry-after": f"{runtime_setting("busy_retry_seconds"):g}"} if machine else None)
         return upstream
 
     def relay(upstream: httpx.Response, judge=None) -> StreamingResponse:
@@ -871,7 +866,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             answers = await asyncio.gather(*(ask_live(user, 'GET', '/loadcoach/facts', machine=name, prime=True) for name in names))
             fresh.update({name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.is_success})
         if not fresh:
-            return error(503, "Compute model inventory is not ready. Retry shortly.", {"retry-after": "5"})
+            return error(503, "Compute model inventory is not ready. Retry shortly.", {"retry-after": f'{runtime_setting("busy_retry_seconds"):g}'})
         catalogue = logical_catalogue({machine_name: {"data": [
             {"id": name, "owned_by": "loadcoach",
              "content_sha256": next((one["content"] for one in reports.get(machine_name, {}).get("models", []) if one["name"] == name), None),
@@ -929,7 +924,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             except (OSError, ValueError):
                 continue
             log.add('wake', 'overflow', user.name, machine=name, model=model)
-        deadline = time.monotonic() + settings.wait
+        deadline = time.monotonic() + runtime_setting("wait")
         while time.monotonic() < deadline:
             await asyncio.sleep(min(TRY_EVERY, max(0, deadline - time.monotonic())))
             current = await facts_for(request, user)
@@ -1048,6 +1043,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                    programs=FRONT_PROGRAMS | {'toollocker'},
                                    voice_nodes=lambda: voice_order(), defaults={'turnstile': configured_defaults})
     live = console_settings.live
+
+    def runtime_setting(name):
+        """Read a current control-node setting through the common validated getter."""
+        return live('turnstile', name, getattr(settings, name))
     from turnstile.telephone import TelephoneAdmin
     telephone_admin = TelephoneAdmin(users, log, console_settings.changes,
         (Path(settings.path).parent / '../keys').resolve() if settings.path else
@@ -1057,6 +1056,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return PlatformServices.from_settings(settings, console_settings.changes.of('weightroom'))
 
     routing.platform = platform
+    routing.busy_retry_seconds = lambda: runtime_setting("busy_retry_seconds")
 
     from weightroom.response_store import Responses
     response_store = Responses(stores.database('weightroom.accounts'),
@@ -1396,7 +1396,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if upstream.status_code == 200 and isinstance(said, dict):
                 said.update(node=name, voice_url=node_base(name, settings.voice_port))
             return JSONResponse(said, status_code=upstream.status_code)
-        return last or error(503, "No node running voice can take a session now.", {"retry-after": f"{settings.busy_retry_seconds:g}"})
+        return last or error(503, "No node running voice can take a session now.", {"retry-after": f"{runtime_setting("busy_retry_seconds"):g}"})
 
     async def pass_on(request: Request) -> Response:
         """Check the caller, then send their request on to compute, to the port it came in on, and hand the answer back as it arrives."""
@@ -1638,7 +1638,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if owners:
                 named = owners[0]
             elif any(reply is None for reply in proofs):
-                return error(503, 'The legacy record owner cannot be checked while a node is unavailable.', {'retry-after': '5'})
+                return error(503, 'The legacy record owner cannot be checked while a node is unavailable.', {'retry-after': f'{runtime_setting("busy_retry_seconds"):g}'})
             else:
                 return error(404, 'No node has this legacy record.')
         if not named and not (port == 8443 and settings.toollocker_url):
@@ -1827,7 +1827,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         answer = await ask_live(user, "GET", path, machine=name, port=settings.ports[2])
         return answer.json() if answer is not None and answer.status_code == 200 else None
 
-    machines = Machines(list(settings.machines), machine_says, settings.machines_poll_seconds,
+    machines = Machines(list(settings.machines), machine_says, lambda: runtime_setting("machines_poll_seconds"),
                         ask_telemetry=telemetry_says, store=log.db)
     artifact_machine = node(settings.artifact_machine) or ("front_cpu" if "front_cpu" in settings.machines else next(iter(settings.machines), "front"))
     from turnstile.installation_store import Installations
@@ -2607,7 +2607,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             waker(policy["wake_mac"], policy.get("wake_address", "255.255.255.255"))
         except (OSError, ValueError):
             return error(503, "Could not send the wake packet. Check the node wake configuration.")
-        return JSONResponse({"requested": True, "machine": name, "timeout_seconds": settings.wait}, status_code=202)
+        return JSONResponse({"requested": True, "machine": name, "timeout_seconds": runtime_setting("wait")}, status_code=202)
 
     async def machines_list(request: Request) -> Response:
         """The compute machines, what each last said of itself and how long ago. For anyone with a key."""
@@ -2621,7 +2621,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if include_retired and not caller(key_of(request)).can("manage-settings"):
             return error(403, "Node lifecycle settings require manage-settings.")
         return JSONResponse({"machines": machines.report(include_retired), "hosts": hosts,
-                             "models": machines.models(), "poll_seconds": settings.machines_poll_seconds,
+                             "models": machines.models(), "poll_seconds": runtime_setting("machines_poll_seconds"),
                              "artifact_machine": file_store(), "aliases": log.former},
                             headers={"cache-control": "no-store"})
 
@@ -2836,7 +2836,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if request.method == 'GET':
                 return JSONResponse({**settings_with_pending(name, {}), 'machine': name, 'unavailable': True},
                                     headers={'cache-control': 'no-store'})
-            return JSONResponse({"error": {"message": f"LoadCoach {name} is not answering; verify its settings before retrying."}}, status_code=503, headers={"Retry-After": "5"})
+            return JSONResponse({"error": {"message": f"LoadCoach {name} is not answering; verify its settings before retrying."}}, status_code=503, headers={"Retry-After": f'{runtime_setting("busy_retry_seconds"):g}'})
         if answer.status_code != 200:
             return JSONResponse(answer.json(), status_code=answer.status_code)
         result = answer.json()
