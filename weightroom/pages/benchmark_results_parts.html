@@ -5,7 +5,7 @@
 {% macro overview(view) %}
 {% call kpi_row('Quality result coverage', class_='results-overview mb-3') %}
 {{ kpi('Classifier models' if view.benchmark.get('classifier') else 'LLM models', view.model_count, 'One result per model across nodes', value_attrs={'id': 'kpi-models'}) }}
-{{ kpi('Quality benchmarks', view.benchmark_count, 'Structured data, reasoning, context & tools', value_attrs={'id': 'kpi-benchmarks'}) }}
+{{ kpi('Quality benchmarks', view.benchmark_count, 'Typed decisions and probability calibration' if view.benchmark.get('classifier') else 'Structured data, reasoning, context & tools', value_attrs={'id': 'kpi-benchmarks'}) }}
 {{ kpi('Scored coverage', (view.coverage ~ '%') if view.coverage is not none else '—', view.scored ~ ' of ' ~ view.total ~ ' model / benchmark pairs', value_attrs={'id': 'kpi-coverage'}, note_attrs={'id': 'coverage-note'}) }}
 {{ kpi('Evidence to review', view.review, 'Changed settings or older protocols', value_attrs={'id': 'kpi-review'}) }}
 {% endcall %}
@@ -29,7 +29,7 @@
 {% macro insights(view) %}
 <section class="results-insights" aria-label="Benchmark findings">
 {{ insight('LEADING THIS BENCHMARK', (number(view.leader.run.score) ~ ' ' ~ view.benchmark.score_unit) if view.leader else 'No final scores', (view.leader.model ~ ' · ' ~ view.benchmark.name) if view.leader else 'No completed current-protocol scores match this view.', 'focus', '01') }}
-{{ insight('REASONING SPECIALIST', (number(view.specialist.run.score) ~ ' ' ~ view.reasoning.score_unit) if view.specialist else 'Not measured', (view.specialist.model ~ ' · ' ~ view.reasoning.name) if view.specialist else 'No comparable reasoning results in this view.', 'specialist', '02') }}
+{% if view.benchmark.get('classifier') %}{{ insight('CALIBRATION ERROR', ('%.4f'|format(view.leader.run.metrics.ece)) if view.leader and view.leader.run.metrics.get('ece') is number else 'Not measured', 'Leading model · held-out labels only', 'specialist', '02') }}{% else %}{{ insight('REASONING SPECIALIST', (number(view.specialist.run.score) ~ ' ' ~ view.reasoning.score_unit) if view.specialist else 'Not measured', (view.specialist.model ~ ' · ' ~ view.reasoning.name) if view.specialist else 'No comparable reasoning results in this view.', 'specialist', '02') }}{% endif %}
 {{ insight('COMPLETE THE PICTURE', view.gaps ~ ' unscored pairs', 'Missing final scores remain unmeasured.', 'coverage', '03') }}
 </section>
 {% endmacro %}

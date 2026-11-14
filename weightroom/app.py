@@ -2180,6 +2180,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         # Prefer current measurements, retaining saved results when settings have changed.
         scored = await ask("GET", "/benchmarks", person.key)
         benchmarks = scored.json().get("definitions", [])
+        classifier = bool(model.get('capabilities', {}).get('classifier'))
+        benchmarks = [bench for bench in benchmarks if bench['id'] == 'load' or bool(bench.get('classifier')) == classifier]
         multimedia = model.get("engine") in ("sdcpp", "audiocpp")
         if multimedia:
             benchmarks = [bench for bench in benchmarks if bench['id'] == 'load']

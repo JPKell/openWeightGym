@@ -1,6 +1,8 @@
 {% macro number(value, unit='') -%}
 {%- if value is number -%}
-  {%- if unit == 's' and 0 < value < 1 -%}
+  {%- if unit == 'fraction' -%}
+    {{- '%.4f'|format(value) -}}
+  {%- elif unit == 's' and 0 < value < 1 -%}
     {{- '<0.001' if value < 0.001 else '%.3f'|format(value) -}}
   {%- else -%}
   {%- set compact = namespace(value=value, suffix='') -%}

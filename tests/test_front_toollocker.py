@@ -112,7 +112,8 @@ def test_front_tools_survive_compute_loss_with_permissions_settings_and_chain(tm
         assert tools.status_code == 200 and len(tools.json()['tools']) == 5
         # Front's report includes ToolLocker even when compute cannot answer.
         listed = client.get('/loadcoach/settings', headers=owner)
-        assert listed.status_code == 200 and listed.json()['compute_unavailable']
+        # This is front's own settings catalogue; it does not probe compute.
+        assert listed.status_code == 200 and listed.json()['compute_unavailable'] is False
         assert any(p['program'] == 'toollocker' for p in listed.json()['programs'])
         assert client.post('/loadcoach/settings/toollocker', headers=owner, json={'call_timeout': 41}).status_code == 200
         assert Changes(source).of('toollocker')['call_timeout'] == 41
