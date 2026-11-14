@@ -1,4 +1,14 @@
-"""Dedicated model form controls and the llama-server flags they represent."""
+"""Dedicated model form controls and the llama-server flags they represent.
+
+The Embedding model box owns llama.cpp's own `--embedding` flag (saved as `flags.embedding`).
+LoadCoach advertises a model with it as an embedder in `/v1/models` (`"embedding": true`), and
+Collections, embedder benchmarks and `/v1/embeddings` rely on that mark. It is a llama.cpp flag:
+another engine that serves embeddings needs its own control and must set the same mark, or its
+models will be missing from every embedder list.
+"""
+
+# llama-server's flag for serving embeddings instead of completions. See the module docstring.
+EMBEDDING_FLAG = "embedding"
 
 PARALLEL_FLAGS = ("parallel", "kv-unified", "kv-unified-per-slot", "no-kv-unified")
 
@@ -73,6 +83,15 @@ def settings_from(form: dict[str, list[str]], read) -> dict:
         flags.setdefault(flag, read(value))
     if one("projector"):  # chosen from the list of projectors. "none" is the empty choice, and leaves the flag out
         flags["mmproj"] = one("projector")
+    # The model page's box owns the flag, even if a raw row was typed. Its marker says how the flag
+    # was saved, so an unticked box keeps an explicit false or an ignored inherited default as it was.
+    kept = one("embedding_controls")
+    if kept:
+        flags.pop(EMBEDDING_FLAG, None)
+        if kept in ("false", "none") and not one("embedding"):
+            flags[EMBEDDING_FLAG] = False if kept == "false" else None
+    if one("embedding"):  # the add form and the model page: an embedder, not a chat model
+        flags[EMBEDDING_FLAG] = True
     if one("parallel_controls"):
         for flag in PARALLEL_FLAGS:
             flags.pop(flag, None)  # these fields own their flags, even if a raw row was typed

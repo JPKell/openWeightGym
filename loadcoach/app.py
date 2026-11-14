@@ -347,6 +347,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         marks['local_model_guard'] = True
         # What a model is, across machines: the SHA-256 of its weights file, absent until the file has been read through.
         marks['content_sha256'] = library.file_hash((library.get(name) or {}).get('flags', {}).get('model', ''))
+        # The embedder mark that Collections, embedder benchmarks and /v1/embeddings rely on. It is
+        # read from llama.cpp's `--embedding` flag (engines/llama_cpp/form.py); a future engine that
+        # serves embeddings must set this mark from its own settings too.
         if (library.get(name) or {}).get('flags', {}).get('embedding'):
             marks['embedding'] = True
             configured = library.get(name)

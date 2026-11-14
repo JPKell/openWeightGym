@@ -441,7 +441,7 @@ def read(text: str):
 
 SHOWN_SETTINGS = ("engine", "flags", "strata", "gpus", "alone", "allow_split", "adapters", "min_context", "order")
 # Fields of a model's form that every node's copy shares. They appear once, unprefixed.
-SHARED_FIELDS = ("engine", "projector", "adapter", "adapter_file", "adapter_scale", "order")
+SHARED_FIELDS = ("engine", "projector", "embedding", "embedding_controls", "adapter", "adapter_file", "adapter_scale", "order")
 
 
 def node_form(form: dict[str, list[str]], machine: str) -> dict[str, list[str]]:

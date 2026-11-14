@@ -18,6 +18,13 @@ A projector is a file that lets a model see pictures, named by the flag `mmproj`
 with one is a model of its own too, and is kin of the same model without: a server that has
 the projector answers for both. `kin_base()` is what kin have in common.
 
+An embedding model is one with the flag `embedding` set, llama.cpp's own `--embedding`: the
+Embedding model box on the add form and the model page sets it. Its server answers
+`/v1/embeddings` rather than chat, `/v1/models` marks it `"embedding": true`, and only models so
+marked are offered as Collections' local embedders and to the embedder benchmarks. The mark
+comes from the llama.cpp flag alone; an engine other than llama.cpp must provide its own way to
+set it.
+
 Beside its settings a model has what it measured: the memory its server was seen to use on each
 of its cards. LoadCoach writes that itself, after a load. See runner.py.
 

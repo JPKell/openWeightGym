@@ -37,6 +37,32 @@ def test_every_saved_setting_survives_an_unchanged_overview_save(matrix):
     assert fleet.models == before
 
 
+def test_embedding_box_owns_llama_cpps_embedding_flag():
+    """The Embedding model box is llama.cpp's --embedding flag, which LoadCoach marks embedders from."""
+    flags = lambda **fields: settings_from({'file': ['m.gguf'], 'ctx': ['512'], **{k: [v] for k, v in fields.items()}}, read)['flags']  # noqa: E731
+    assert flags(embedding='yes')['embedding'] is True  # the add form
+    assert 'embedding' not in flags()
+    # The model page's box wins over a typed row, and an unticked box keeps how the flag was saved.
+    assert 'embedding' not in settings_from({'file': ['m.gguf'], 'ctx': ['512'], 'embedding_controls': ['yes'], 'flag': ['embedding'], 'value': ['true']}, read)['flags']
+    assert flags(embedding_controls='false')['embedding'] is False
+    assert flags(embedding_controls='none')['embedding'] is None
+    assert flags(embedding_controls='false', embedding='yes')['embedding'] is True
+
+
+def test_embedding_box_sets_every_copy_from_the_model_page(matrix):
+    browser, fleet = matrix
+    response = browser.get('/models/qwen?node=compute')
+    form = Form(response.text, 'data-model-settings')
+    assert ['embedding_controls', 'yes'] in form.fields and not any(name == 'embedding' for name, _ in form.fields)
+    assert 'name="embedding"' in response.text and '<code class="matrix-flag">--embedding</code>' in response.text
+    browser.post('/models/qwen?node=compute', data=form.data(do='save-settings', embedding='yes'))
+    assert all(models['qwen']['flags'].get('embedding') is True for models in fleet.models.values())
+    response = browser.get('/models/qwen?node=compute')
+    assert ['embedding', 'yes'] in Form(response.text, 'data-model-settings').fields
+    browser.post('/models/qwen?node=compute', data=Form(response.text, 'data-model-settings').set('embedding', '').data(do='save-settings'))
+    assert all('embedding' not in models['qwen']['flags'] for models in fleet.models.values())
+
+
 def test_every_shared_generation_setting_has_a_control_or_picker_option(matrix):
     browser, _ = matrix
     response = browser.get('/models/qwen?node=compute')

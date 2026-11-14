@@ -221,3 +221,6 @@ def test_add_a_model_needs_a_compute_node_and_asks_for_every_ticked_one_together
     both = browser.post('/models', data={**chosen, 'node':['compute', 'compute'], 'shown_node':'compute'})
     assert both.status_code == 400 and 'compute: llama.cpp is not available on compute. Nothing was started.' in both.text
     assert 'data-model-node checked' in both.text and 'value="tiny"' in both.text
+    # The Embedding model box (llama.cpp's --embedding) stays ticked when the add is refused.
+    embedder = browser.post('/models', data={**chosen, 'embedding':'yes', 'node':'compute', 'shown_node':'compute'})
+    assert re.search(r'<input id="model-embedding" name="embedding" value="yes" type="checkbox"[^>]* checked>', embedder.text)
