@@ -81,9 +81,21 @@ async def search_page(http: httpx.AsyncClient, words: str, token: str = "", curs
                       sort: str = 'downloads', direction: str = '-1', kind: str = '') -> dict:
     """Read one bounded result page; only forward the provider's opaque cursor."""
     sort, direction = search_order({'sort': sort, 'direction': direction})
-    params = {'search': words, 'filter': 'gguf', 'sort': sort, 'direction': direction, 'limit': '20'}
     if kind == 'classifier':
-        params['pipeline_tag'] = 'text-classification'
+        # Hub tag filters are conjunctive. Search each alternative separately so a model
+        # tagged only as a decision model is not lost behind the pipeline filter.
+        alternatives = [{'pipeline_tag': 'text-classification'}, *[
+            {'filter': tag} for tag in ('decision-model', 'system-one', 'typed-decisions', 'jev')]]
+        async def one(extra):
+            """Read one bounded branch of the classifier discovery union."""
+            return await asked(http, '/api/models', token, search=words, sort=sort, direction=direction,
+                               limit='20', **extra)
+        merged = {row['id']: row for group in await asyncio.gather(*(one(extra) for extra in alternatives)) for row in group}
+        ordered = sorted(merged.values(), key=lambda row: row.get(sort, '' if sort == 'createdAt' else 0), reverse=direction == '-1')
+        return {'found': [{'repository': row['id'], 'downloads': row.get('downloads', 0), 'likes': row.get('likes', 0),
+                           'made': row.get('createdAt', '')[:10]} for row in ordered],
+                'next_cursor': '', 'paging': {'limit': 100, 'sort': sort, 'direction': direction}}
+    params = {'search': words, 'filter': 'gguf', 'sort': sort, 'direction': direction, 'limit': '20'}
     if cursor:
         params['cursor'] = cursor[:4096]
     try:

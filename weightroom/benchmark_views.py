@@ -99,6 +99,7 @@ def run_briefing(detail, definition):
     protocol = detail.get('subject', {}).get('protocol', {})
     quality = bool(plan or definition.get('quality'))
     embedding = bool(protocol.get('embedding') or definition.get('embedding'))
+    classifier = bool(definition.get('classifier') or detail['benchmark'].startswith('classifier_'))
     kind = detail['benchmark'].removeprefix('embedding_')
     samples, rows = detail.get('samples', []), []
     counts = dict(passed=0, failed=0, unsupported=0, unavailable=0, ungraded=0, executed=0)
@@ -116,17 +117,18 @@ def run_briefing(detail, definition):
             cpu_ram = resource.get('peak_ram_mib')
         budget = values.get('context_tokens') if kind == 'load' else values.get('target_input_tokens')
         if budget is None:
-            budget = values.get('input_tokens') if quality or kind == 'speed' else values.get('context_tokens')
+            budget = values.get('input_tokens') if quality or kind == 'speed' or classifier else values.get('context_tokens')
         rows.append(dict(index=index, id=sample['id'], state=state, category=values.get('category', ''),
                          budget=budget, cpu_ram=cpu_ram,
                          cpu=values.get('device') == 'cpu' or 'peak_ram_mib' in values or resource.get('device') == 'cpu'))
     has_cpu = any(row['cpu'] for row in rows)
-    metric = ('checks' if quality else 'load_seconds' if kind == 'load' else
+    metric = ('checks' if quality else 'decisions_per_second' if classifier else 'load_seconds' if kind == 'load' else
               'embedding_tokens_per_second' if embedding and kind == 'speed' else
               'generation_tokens_per_second' if kind == 'speed' else 'request_seconds')
     metric_label, metric_unit = {'checks': ('Correct checks', '%'), 'load_seconds': ('Median load time', 's'),
         'embedding_tokens_per_second': ('Median input throughput', 'tokens/s'),
         'generation_tokens_per_second': ('Median write speed', 'tokens/s'),
+        'decisions_per_second': ('Median decisions throughput', 'decisions/s'),
         'request_seconds': ('Median request time', 's')}[metric]
     groups = {}
     for sample, row in zip(samples, rows):
@@ -149,9 +151,9 @@ def run_briefing(detail, definition):
                "Saved results, with the evidence behind them.")
     metrics = detail.get('metrics', {})
     # Prefer the suite's saved summary; label a sample-median fallback explicitly.
-    timing = ('load_seconds' if kind == 'load' else 'request_seconds' if embedding else 'ttft_seconds')
+    timing = ('load_seconds' if kind == 'load' else 'request_seconds' if embedding or classifier else 'ttft_seconds')
     timing_value = metrics.get(timing)
-    timing_label = 'Load time' if timing == 'load_seconds' else 'Request time' if embedding else 'First token'
+    timing_label = 'Load time' if timing == 'load_seconds' else 'Request time' if embedding or classifier else 'First token'
     timing_note = 'seconds · saved benchmark summary'
     if not numeric(timing_value):
         measured = [sample['values'][timing] for sample in samples
@@ -163,7 +165,7 @@ def run_briefing(detail, definition):
     chart_title = ('Measurements by context capacity' if kind == 'load' else 'Request time by tested context' if kind == 'context' else 'Performance across input sizes')
     chart_budget_label = 'Context capacity (tokens)' if kind in ('load', 'context') else 'Input budget (tokens)'
     return dict(name=definition.get('name', detail['benchmark']), unit=definition.get('score_unit', ''),
-                method=definition.get('method', ''), quality=quality, embedding=embedding,
+                method=definition.get('method', ''), quality=quality, embedding=embedding, classifier=classifier,
                 rows=rows, counts=counts, cpu=has_cpu, planned=len(plan.get('cases', [])),
                 chart=chart, chart_label=metric_label, chart_unit=metric_unit,
                 chart_title=chart_title, chart_budget_label=chart_budget_label,

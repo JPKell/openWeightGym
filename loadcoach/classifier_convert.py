@@ -121,26 +121,91 @@ def reference_answers(source, route, model_file, folder):
         reference = tinyjev.load(str(source), backend='torch', device='cpu')
         return [reference.systemone(body) for body in cases()]
     if route == 'tinyjev-ollama':
-        import shutil
-        executable = shutil.which('ollama')
-        if not executable:
-            raise ValueError('Ollama >=0.35.1 is required for TinyJev-4B reference parity.')
-        version = subprocess.check_output([executable, '--version'], text=True, stderr=subprocess.STDOUT)
-        import re
-        matched = re.search(r'(\d+)\.(\d+)\.(\d+)', version)
-        if not matched or tuple(map(int, matched.groups())) < (0, 35, 1):
-            raise ValueError('Ollama >=0.35.1 is required for TinyJev-4B reference parity.')
-        # Use an existing local reference server; temporary model names cannot collide with user models.
+        tools = Path(sys.executable).resolve().parents[2]
+        # sys.executable may be a venv symlink to the system interpreter.
+        tools = Path(sys.prefix).parent
+        executable = install_ollama(tools)
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1', 0))
+            port = reservation.getsockname()[1]
+        base = f'http://127.0.0.1:{port}'
+        environment = {**os.environ, 'OLLAMA_HOST': base, 'OLLAMA_MODELS': str(tools / 'ollama-models'),
+                       'OLLAMA_NO_CLOUD': '1', 'CUDA_VISIBLE_DEVICES': '-1', 'ROCR_VISIBLE_DEVICES': '-1',
+                       'OLLAMA_VULKAN': '0'}
         name = 'owg-classifier-parity-' + folder.name
         recipe = folder / 'reference.Modelfile'
         original = (source / 'Modelfile').read_text()
         recipe.write_text('\n'.join('FROM ' + str(model_file) if line.startswith('FROM ') else line for line in original.splitlines()))
-        subprocess.run([executable, 'create', name, '-f', str(recipe)], check=True, timeout=300)
-        try:
-            return [post('http://127.0.0.1:11434/v1/systemone', {**body, 'model': name}) for body in cases()]
-        finally:
-            subprocess.run([executable, 'rm', name], check=False, timeout=30)
+        with (folder / 'parity-reference.log').open('w') as log:
+            process = subprocess.Popen([str(executable), 'serve'], env=environment, stdout=log, stderr=log)
+            try:
+                deadline = time.monotonic() + 60
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        raise ValueError('The isolated Ollama reference did not start; see parity-reference.log.')
+                    try:
+                        with urllib.request.urlopen(base + '/api/version', timeout=2):
+                            break
+                    except OSError:
+                        time.sleep(.5)
+                else:
+                    raise ValueError('Ollama reference readiness timed out.')
+                subprocess.run([str(executable), 'create', name, '-f', str(recipe)], env=environment,
+                               check=True, timeout=300, stdout=log, stderr=log)
+                return [post(base + '/v1/systemone', {**body, 'model': name}) for body in cases()]
+            finally:
+                subprocess.run([str(executable), 'rm', name], env=environment, check=False, timeout=30,
+                               stdout=log, stderr=log)
+                process.terminate()
+                try:
+                    process.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
     raise ValueError('No independent reference is configured for this source family.')
+
+
+def install_ollama(tools):
+    """Fetch a digest-verified official CPU reference only when TinyJev-4B parity needs it."""
+    import platform
+    import tarfile
+    import zstandard
+    if platform.machine() != 'x86_64' or sys.platform != 'linux':
+        raise ValueError('Automatic Ollama parity tools currently require Linux x86_64.')
+    root = tools / 'ollama-0.35.1'
+    executable = root / 'bin/ollama'
+    if executable.is_file() and (root / 'installed.json').is_file():
+        return executable
+    with urllib.request.urlopen('https://api.github.com/repos/ollama/ollama/releases/tags/v0.35.1', timeout=30) as response:
+        release = json.load(response)
+    asset = next(item for item in release['assets'] if item['name'] == 'ollama-linux-amd64.tar.zst')
+    expected = asset.get('digest', '').removeprefix('sha256:')
+    import re
+    if not re.fullmatch('[a-f0-9]{64}', expected):
+        raise ValueError('The official Ollama release has no SHA-256 digest; reference installation refused.')
+    archive = tools / 'ollama-reference.tar.zst.part'
+    print('Downloading the verified Ollama 0.35.1 parity reference', flush=True)
+    with urllib.request.urlopen(asset['browser_download_url'], timeout=60) as response, archive.open('wb') as output:
+        size = 0
+        while chunk := response.read(2**20):
+            size += len(chunk)
+            if size > asset['size']:
+                raise ValueError('Ollama reference archive exceeded its advertised size.')
+            output.write(chunk)
+    if archive.stat().st_size != asset['size'] or digest(archive) != expected:
+        raise ValueError('Ollama reference archive checksum mismatch.')
+    root.mkdir(exist_ok=True)
+    with archive.open('rb') as compressed, zstandard.ZstdDecompressor().stream_reader(compressed) as stream:
+        with tarfile.open(fileobj=stream, mode='r|') as package:
+            for member in package:
+                # Keep only the executable and CPU libraries. Never publish a service or alter PATH.
+                name = member.name.removeprefix('./')
+                if name == 'bin/ollama' or name.startswith('lib/ollama/') and not any(
+                        part.startswith(('cuda', 'rocm', 'vulkan')) for part in Path(name).parts):
+                    package.extract(member, path=root, filter='data')
+    archive.unlink()
+    (root / 'installed.json').write_text(json.dumps({'version': '0.35.1', 'sha256': expected}))
+    return executable
 
 
 def convert(source, output, converter, server, commit):
