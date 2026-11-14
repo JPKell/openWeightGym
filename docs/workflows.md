@@ -24,8 +24,14 @@ review is [owner-accepted with model-specific limits recorded](loadcoach.md#h3-i
 
 ## Using Workflows
 
-The workflow list carries the introductory guidance. A selected workflow opens directly with
-its sensitivity, status and controls, without a return link or repeated question helper.
+Three coordinated, offline Collections and Workflows proposals are available in the
+[design previews](collections.md#design-previews), including sample review gates and retry states.
+
+The live page uses **01 Evaluation desk**: saved runs sit beside the selected run's question,
+progress, pinned models/prompts, research and draft. The latest matching run opens by default.
+Search and stage filters also work as native GET forms. **New workflow** and **Prompt library**
+open native disclosures; unsent form values stay in page memory while switching runs.
+Attempts, usage and full frozen configuration remain expandable below the run workspace.
 
 1. Index sources in an owner-private [collection](collections.md).
 2. Optionally save writing instructions in **Prompt library**. The same name and kind creates

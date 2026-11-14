@@ -1,0 +1,77 @@
+{# Shared preview components: one DOM template for every repeated dynamic record. #}
+{% from 'parts.html' import card, section_title, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'evaluation_parts.html' import stepper as evaluation_stepper, state_badge as evaluation_badge %}
+
+{% macro state_badge() %}{{ evaluation_badge(attrs={'data-state': ''}) }}{% endmacro %}
+{% macro collection_item() %}
+<article class="collection-item">
+  <div class="collection-identity"><span class="case-icon" aria-hidden="true" data-initial></span><div><span class="small text-secondary" data-domain></span>{% set identity_link %}<a data-open-collection></a>{% endset %}{{ section_title(identity_link|safe, level=3, wrapper_class='collection-title') }}<p class="text-secondary small mb-0" data-description></p></div></div>
+  <div class="collection-facts"><span><small class="text-secondary">Sources</small><strong data-doc-count></strong></span><span><small class="text-secondary">Chunks</small><strong data-chunk-count></strong></span><span><small class="text-secondary">Reference checks</small><strong data-check-count></strong></span></div>
+  <div class="collection-foot">{{ state_badge() }}<span class="small text-secondary" data-sensitivity></span><a class="small ms-auto" data-open-collection aria-label="Open collection">Open →</a></div>
+</article>
+{% endmacro %}
+
+{% macro document_row() %}
+<tr><th scope="row" class="fw-normal"><button class="btn-link text-start p-0" type="button" data-inspect-document></button><span class="d-block small text-secondary" data-doc-type></span></th><td>{{ state_badge() }}</td><td class="text-end" data-chunks></td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" type="button" data-index-document>Reindex</button></td></tr>
+{% endmacro %}
+
+{% macro evidence_item() %}
+<article class="evidence-item"><div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2"><button type="button" class="btn-link p-0 text-start" data-open-source></button><span class="badge bg-secondary-lt" data-similarity></span></div><p class="small mb-1" data-excerpt></p><span class="small text-secondary" data-location></span></article>
+{% endmacro %}
+
+{% macro workflow_item() %}
+<article class="workflow-item"><button class="workflow-choice" type="button"><strong data-title></strong><span class="small text-secondary" data-collection></span></button><span class="small text-secondary workflow-model" data-model></span>{{ state_badge() }}<span class="small text-secondary" data-next></span></article>
+{% endmacro %}
+
+{% macro comparison_row() %}
+<tr><th scope="row" data-model></th><td data-answer></td><td data-citation></td><td><span class="badge bg-secondary-lt" data-review></span></td></tr>
+{% endmacro %}
+
+{% macro history_row() %}
+<tr><th scope="row" class="fw-normal" data-question></th><td data-model></td><td data-review></td></tr>
+{% endmacro %}
+
+{% macro stepper(label, steps, id) %}
+{{ evaluation_stepper(label, steps, id) }}
+{% endmacro %}
+
+{% macro source_panel() %}
+{% call card('Source documents', id='source-panel', hint='Originals and their indexing status.', body_class='p-0') %}
+<div class="table-responsive"><table class="table table-sm table-vcenter mb-0" aria-label="Source documents"><thead><tr><th>Document</th><th>Status</th><th class="text-end">Chunks</th><th class="text-end">Action</th></tr></thead><tbody id="document-rows"></tbody></table></div>
+<div class="p-3 border-top"><label class="form-label" for="collection-file">Add a source</label><input class="form-control form-control-sm" type="file" id="collection-file" accept=".txt,.md,.csv,.json,.pdf"><p class="small text-secondary mt-2 mb-0">Text ≤ 200 KiB · selectable PDF ≤ 1 MiB / 40 pages. Upload first, then index explicitly. No OCR.</p></div>
+{% endcall %}
+{% endmacro %}
+
+{% macro query_panel(models) %}
+{% call card('Test a question', id='query-panel') %}
+<form id="query-form"><label class="form-label" for="reference-question">Reference question <span class="badge bg-secondary-lt ms-1">Proposed</span></label><select class="form-select mb-3" id="reference-question"></select>
+<label class="form-label" for="collection-question">Question</label><textarea class="form-control mb-3" id="collection-question" name="question" rows="3" maxlength="500" required></textarea>
+<div class="row g-3"><div class="col-sm-8"><label class="form-label" for="collection-answer-model">Answer model</label><select class="form-select" id="collection-answer-model" name="model"><option value="">Retrieve excerpts only</option>{% for model in models %}<option>{{ model }}</option>{% endfor %}</select></div><div class="col-sm-4"><label class="form-label" for="collection-minimum">Min. similarity</label><input class="form-control" type="number" id="collection-minimum" name="minimum" min="0" max="1" step=".01" value=".65" required></div></div>
+<div class="d-flex flex-wrap gap-2 mt-3"><button class="btn btn-primary" type="submit">Preview retrieval</button><button class="btn btn-outline-secondary" type="button" id="compare-models">Compare sample answers</button></div>
+<p class="small text-secondary mt-3 mb-0">Up to 3 excerpts. Similarity measures retrieval relevance, not answer confidence. No relevant hits means no answer-model request.</p></form>
+{% endcall %}
+{% endmacro %}
+
+{% macro result_panel() %}
+{% call card('Answer & evidence', id='result-panel') %}
+<div id="result-placeholder"><span class="badge bg-secondary-lt mb-3">Ready to inspect</span>{{ section_title('Can the answer be traced to the source?', level=3) }}<p class="text-secondary mb-0">Choose a reference question, retrieve evidence, then compare the response with the expected facts.</p></div>
+<div id="retrieval-result" hidden><div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><span class="badge bg-azure-lt" id="result-mode">Retrieved evidence</span><span class="small text-secondary" id="retrieval-count"></span></div><p id="model-answer" class="answer-text" hidden></p><div id="evidence-items"></div><p class="small text-secondary mt-3 mb-0">Prepared sample excerpts · originals, pages and lines remain inspectable.</p></div>
+<div id="no-evidence" hidden>{{ section_title('No sources meet this threshold', level=3) }}<p class="text-secondary">No answer would be generated. Check indexing or try a lower threshold after reviewing source relevance.</p></div>
+<section id="reference-panel" class="reference-box mt-3"><span class="small text-secondary">Expected facts · authored sample reference</span><p class="mb-0 mt-2" id="expected-answer"></p></section>
+<div id="review-controls" class="mt-3" hidden><p class="form-label">Your assessment <span class="small text-secondary fw-normal">· proposed manual review</span></p><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-success btn-sm" data-assessment="Matches reference" aria-pressed="false">Matches reference</button><button type="button" class="btn btn-outline-warning btn-sm" data-assessment="Needs review" aria-pressed="false">Needs review</button></div><label class="form-label mt-3" for="review-note">Review note</label><textarea class="form-control" id="review-note" rows="2" placeholder="Record a missing fact or an unsupported claim."></textarea></div>
+{% endcall %}
+{% endmacro %}
+
+{% macro workflow_detail() %}
+{% call card('Run workspace', id='workflow-detail') %}
+<div class="d-flex justify-content-between flex-wrap gap-2 mb-2">{{ section_title('', level=3, id='run-title', wrapper_class='mb-0') }}<span id="run-status" class="badge bg-secondary-lt"></span></div><p class="text-secondary" id="run-question"></p>
+{{ stepper('Research-to-draft progress', ['Research', 'Review research', 'Draft', 'Review draft'], 'run-steps') }}
+<div class="run-config small"><span>Collection <a id="run-collection"></a></span><span>Research <strong id="run-model"></strong></span><span>Draft <strong id="run-draft-model"></strong></span><span>Research prompt <strong id="run-prompt"></strong></span><span>Draft prompt <strong>Business brief · v1</strong></span><span>Collection revision <strong id="run-revision"></strong></span></div>
+{{ alert('warning', 'Draft failed in this sample. Accepted research is retained; retry resumes the draft.', class_='my-3', attrs={'id': 'run-error', 'hidden': true}, role='status') }}
+<section class="run-output mt-4" id="research-output"><div class="d-flex gap-2 align-items-center mb-2">{{ section_title('Research', level=4, wrapper_class='mb-0') }}<span class="badge bg-secondary-lt" id="research-state"></span></div><p id="research-answer"></p><button type="button" class="btn-link p-0 text-start small" id="run-source"></button></section>
+<section class="run-output border-top pt-3 mt-3" id="draft-output" hidden>{{ section_title('Draft', level=4) }}<p id="draft-answer"></p><p class="small text-secondary mb-0">Uses the accepted research and its source reference.</p></section>
+<div class="d-flex flex-wrap gap-2 mt-4"><button class="btn btn-primary" id="run-action" type="button"></button><button class="btn btn-outline-secondary" id="run-open-collection" type="button">Inspect collection</button></div>
+<details class="mt-4"><summary>Frozen configuration & attempts</summary><p class="small text-secondary mt-3">Question, source references, models and prompt versions stay fixed for this run. A new configuration needs a new run. Accepted research survives draft retries.</p><dl class="run-config small"><div><dt>Minimum similarity</dt><dd>0.65 · up to 3 excerpts</dd></div><div><dt>Temperature</dt><dd>0</dd></div><div><dt>Output limits</dt><dd>Research 1,024 · Draft 2,048 tokens</dd></div><div><dt>Cost / tokens</dt><dd>Unavailable in sample data</dd></div></dl><p id="run-attempts" class="small text-secondary mb-0"></p></details>
+{% endcall %}
+{% endmacro %}

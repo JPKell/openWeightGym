@@ -45,7 +45,7 @@ def test_collection_forms_source_links_identity_and_offline_front_reads(desk):
     assert browser.post(path,data={'do':'rebuild','model':'embed'}).status_code==400
     switch.off=True
     offline=browser.get(path)
-    assert offline.status_code==200 and 'notes.txt' in offline.text and 'Node unavailable: compute' in offline.text
+    assert offline.status_code==200 and 'notes.txt' in offline.text and 'compute is not answering' in offline.text
     switch.off=False
     sign_in(browser,'pat')
     assert browser.get(path).status_code==404 and browser.get(path+'/sources/'+chunk).status_code==404

@@ -40,7 +40,7 @@ def test_workflow_forms_history_and_offline_owner_access(desk):
     for label in ('Cedar draft','Accepted','Resume / retry draft','Attempts and usage','Unavailable','22','Frozen configuration'):
         assert label in page.text
     helper='Research from your private collections, review and accept the research'
-    assert '>All workflows</a>' not in page.text and 'What is the budget?' not in page.text
+    assert '>All workflows</a>' not in page.text and 'What is the budget?' in page.text
     assert 'Refresh request usage' not in page.text
     assert helper in browser.get('/workflows').text
     assert '<script>research as data</script>' not in page.text
@@ -50,7 +50,7 @@ def test_workflow_forms_history_and_offline_owner_access(desk):
     response=browser.post('/workflows',data={'do':'prompt','name':'Brief','kind':'research','body':'A later immutable version.'})
     assert response.status_code==200 and 'v2' in response.text
     switch.off=True
-    page=browser.get(path);assert page.status_code==200 and 'research as data' in page.text and 'Node unavailable: compute' in page.text
+    page=browser.get(path);assert page.status_code==200 and 'research as data' in page.text and 'compute is not answering' in page.text
     switch.off=False;sign_in(browser,'sam')
     assert browser.get(path).status_code==404
     sign_in(browser,'jordan')
@@ -87,12 +87,12 @@ def test_workflow_pages_and_prompt_versions_in_chromium(desk):
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             page.screenshot(path=str(folder/f'workflow-{width}.png'),full_page=True)
         page.goto('http://workflow.test/workflows')
-        library=page.get_by_text('Prompt library',exact=True)
+        library=page.locator('#prompt-library > summary')
         if not library.evaluate('(element)=>element.closest("details").open'):library.click()
         page.locator('#prompt-name').fill('Browser prompt')
         page.locator('#prompt-body').fill('Write a brief source-based note.')
         page.get_by_role('button',name='Save new prompt version').click()
-        library=page.get_by_text('Prompt library',exact=True)
+        library=page.locator('#prompt-library > summary')
         if not library.evaluate('(element)=>element.closest("details").open'):library.click()
         expect(page.get_by_text('Browser prompt · research · v1',exact=True)).to_be_visible()
         assert not errors

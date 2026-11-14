@@ -50,6 +50,7 @@ from weightroom.forms import refill, error_message
 from weightroom.model_catalogue import catalogue as model_catalogue
 from weightroom.cloud_views import accounts_view, SECTIONS as CLOUD_SECTIONS
 from weightroom import batch_views
+from weightroom import evaluation_views
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException
@@ -3656,6 +3657,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         selected=await fetch(request,person,'/loadcoach/collections/'+quote(number,safe='')) if number else None
         if isinstance(selected,Response):
             return selected
+        collection_rows = []
+        if not number:
+            for item in listing['collections']:
+                detail = await fetch(request, person, '/loadcoach/collections/' + quote(item['id'], safe=''))
+                if isinstance(detail, Response):
+                    return detail
+                collection_rows.append(detail)
+        query = request.query_params.get('q', '')
+        status_filter = request.query_params.get('state', '')
+        inventory = evaluation_views.collection_workspace(collection_rows, query, status_filter)
         listed=await fetch(request,person,'/loadcoach/conversations')
         models=[]
         unavailable=''
@@ -3673,7 +3684,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         response=page(request,'collections.html',person,status=400 if failed else 200,collections=listing['collections'],
             collection=selected,embedders=[m for m in models if m.get('embedding')],
             answer_models=[m for m in models if not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier')],levels=levels,
-            said=said,unavailable=unavailable,result=result,form=form or {},diagnostics=diagnostics or {},
+            said=said,failed=failed,unavailable=unavailable,result=result,form=form or {},diagnostics=diagnostics or {},
+            inventory=inventory,query=query,status_filter=status_filter,
+            new_open=bool(request.query_params.get('new') or (form or {}).get('do') == 'create' or not collection_rows),
             conversations=listed.get('conversations',[]) if isinstance(listed,dict) else [])
         response.headers['cache-control']='no-store'
         return response
@@ -3760,6 +3773,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         collections=await fetch(request,person,'/loadcoach/collections')
         if isinstance(collections,Response):
             return collections
+        query = request.query_params.get('q', '')
+        status_filter = request.query_params.get('state', '')
+        workspace = evaluation_views.workflow_workspace(listed['workflows'], collections['collections'], query, status_filter)
+        new_open = bool(request.query_params.get('new') or (form or {}).get('do') == 'create' or not listed['workflows'])
+        if run is None and not new_open:
+            first = next((item for item in workspace['rows'] if item['matches']), None)
+            if first:
+                run = await fetch(request, person, '/loadcoach/workflows/' + quote(first['id'], safe=''))
+                if isinstance(run, Response):
+                    return run
+        if run:
+            run = evaluation_views.workflow_summary(run, collections['collections'])
+        workflow_form = dict(form or {})
+        if not form and request.query_params.get('collection') in {item['id'] for item in collections['collections']}:
+            workflow_form['collection'] = request.query_params['collection']
         chats=await fetch(request,person,'/loadcoach/conversations')
         models=[]
         unavailable=''
@@ -3773,7 +3801,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             unavailable='Compute is unavailable. Saved prompts and outputs remain on front; generation needs compute.'
         response=page(request,'workflows.html',person,status=400 if failed else 200,workflows=listed['workflows'],
             workflow=run,prompts=listed['prompts'],builtins=listed['builtins'],collections=collections['collections'],
-            workflow_models=models,unavailable=unavailable,said=said,form=form or {},
+            workflow_models=models,unavailable=unavailable,said=said,failed=failed,form=workflow_form,
+            workspace=workspace,query=query,status_filter=status_filter,selected_path=bool(number),new_open=new_open,
+            filter_query={key: value for key, value in {'q': query, 'state': status_filter}.items() if value},
             conversations=chats.get('conversations',[]) if isinstance(chats,dict) else [])
         response.headers['cache-control']='no-store'
         return response
