@@ -6,7 +6,7 @@
 {% block title %}Models · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><script src="/static/model-files.js?v=4" defer></script><script src="/static/models.js?v=2" defer></script>{% endblock %}
 {% block main %}
-{% call page_header('Models', 'Choose a model type to manage its files, settings and availability.') %}{% if kind == 'llm' %}{% include 'models_measure.html' %}{% endif %}<a class="btn btn-primary" href="{{ '#add-model' if kind in ('all', 'llm') else '/models/images?new=1' if kind == 'image' else '/models/audio?new=1' }}">Add a model</a>{% endcall %}
+{% call page_header('Models', 'Choose a model type to manage its files, settings and availability.') %}{% if kind == 'llm' %}{% include 'models_measure.html' %}{% endif %}<a class="btn btn-primary" href="{{ '#add-model' if kind in ('all', 'llm', 'classifier') else '/models/images?new=1' if kind == 'image' else '/models/audio?new=1' }}">Add a model</a>{% endcall %}
 {{ said_box(said, failed) }}
 {{ overview(model_catalogue(known, shown_node), pending=deferred|default(false)) }}
 
@@ -23,10 +23,10 @@
 </div>
 {% call pills('Model type', class_='gap-2 mb-3') %}
 {% from 'navigation_parts.html' import model_type_choices %}
-{% call(value, label) model_type_choices([('all','All models'),('llm','LLM'),('image','Image'),('audio','Audio')]) %}{{ pill_link(label, '/models?kind=' ~ value ~ ('&node=' ~ shown_node|urlencode if shown_node), kind == value) }}{% endcall %}
+{% call(value, label) model_type_choices([('all','All models'),('llm','LLM'),('image','Image'),('audio','Audio'),('classifier','Classifier')]) %}{{ pill_link(label, '/models?kind=' ~ value ~ ('&node=' ~ shown_node|urlencode if shown_node), kind == value) }}{% endcall %}
 {% endcall %}
 {% if deferred %}{% from 'deferred.html' import loading %}{{ loading('models', list_url, 'Loading models…') }}{% else %}{% include 'models_list.html' %}{% endif %}
-{% if kind in ('all', 'llm') %}
+{% if kind in ('all', 'llm', 'classifier') %}
 
 {% if add_nodes is not defined %}
 {% set node_names = node_choices|map(attribute='name')|list %}

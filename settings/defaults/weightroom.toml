@@ -22,6 +22,7 @@ allow_audio_generation = true
 
 # Allow model discovery and downloads. Civitai also requires image generation. Changes apply immediately.
 allow_model_downloads = true
+allow_classifiers = true
 
 # USD per million input tokens used to estimate cost when a request has no recorded cost and
 # its model has no known rate. This is the starting value in the Usage and Home pages.

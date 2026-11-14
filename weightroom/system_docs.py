@@ -48,6 +48,7 @@ SECTIONS = (
         _topic("source", "Code reference", "The modules that declare the API's routes, with each handler's documentation.", source="api"),
     )),
     _section("web-app", "Web app", "Using the web console: chat, collections, workflows, voice and media, tools, and your API keys.", (
+        _topic("classifier", "Classifier", "Ask typed questions and compare uncalibrated decision probabilities.", doc="docs/decision-model-plan.md", parts=("Using Classifier",)),
         _topic("chat", "Chat", "Start a conversation, choose its model and change its options."),
         _topic("image-extraction", "Image extraction", "Describe images, extract text and receipts, review corrections and run independent image batches.", doc="docs/image-extraction-plan.md", parts=("Using Image extraction", "Tasks and output", "Storage and recovery")),
         _topic("collections", "Collections", "Keep private sources and ask questions answered from them."),

@@ -1,5 +1,7 @@
 ## Interact
 
+- [x] Classifier workspace: typed questions, model comparison, probability results, developer examples and tab history; [usage](docs/decision-model-plan.md#using-classifier).
+
 - [x] Text chat
 - [x] Conversation
 - [ ] Image generation

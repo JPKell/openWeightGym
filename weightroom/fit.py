@@ -42,7 +42,7 @@ def workspace(known, status, fit_line, fit_cpu_mib):
         flags = {**(known.get('defaults') or {}), **model.get('flags', {})} if model.get('engine', 'llama_cpp') == 'llama_cpp' else model.get('flags', {})
         line = fit_line(model, cards)
         fixed = model.get('engine') in ('sdcpp', 'audiocpp')
-        kind = 'image' if model.get('engine') == 'sdcpp' else 'audio' if model.get('engine') == 'audiocpp' else 'llm'
+        kind = 'classifier' if model.get('capabilities', {}).get('classifier') else 'image' if model.get('engine') == 'sdcpp' else 'audio' if model.get('engine') == 'audiocpp' else 'llm'
         maximum = model.get('flags', {}).get('ctx-size')
         maximum = maximum if type(maximum) is int and maximum > 0 else 0
         minimum = min(maximum, max(1, model.get('min_context') or 1024)) if maximum else 0

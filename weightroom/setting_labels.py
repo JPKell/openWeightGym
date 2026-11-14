@@ -11,6 +11,7 @@ LABELS = {
     'allow_speech': ('Speech · TTS, STT and Voice', 'Platform services', '', 'switch'),
     'allow_audio_generation': ('Music and audio generation', 'Platform services', '', 'switch'),
     'allow_model_downloads': ('Model downloads', 'Platform services', '', 'switch'),
+    'allow_classifiers': ('Classifiers', 'Platform services', '', 'switch'),
     'wait': ('Wait for a node', 'Requests and queue', 's', 'number'),
     'allow_caller_to_specify_destination': ('Allow callers to choose the node', 'Requests and queue', '', 'switch'),
     'max_wait': ('Queue wait limit', 'Requests and queue', 's', 'number'),

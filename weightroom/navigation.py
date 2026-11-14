@@ -12,7 +12,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
     """
     services = services or PlatformServices()
     groups = [
-        {"name": "Interact", "links": [("Text chat", "/chat"), ("Image generation", "/chat/images"), ("Image extraction", "/chat/extraction"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Voice generation", "/chat/speech"), ("Transcribe", "/chat/transcribe")]},
+        {"name": "Interact", "links": [("Text chat", "/chat"), ("Classifier", "/chat/classifier"), ("Image generation", "/chat/images"), ("Image extraction", "/chat/extraction"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Voice generation", "/chat/speech"), ("Transcribe", "/chat/transcribe")]},
         {"name": "Models", "links": []},
         # Collections and workflows keep their own addresses; they are here because they are used to compare models.
         {"name": "Benchmark", "links": [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements"), ("Compare", "/benchmarks/compare"), ("Collections", "/collections"), ("Workflows", "/workflows")]},
@@ -71,7 +71,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
             active = '/benchmarks/runs'
     if path.startswith("/models/images"):
         active = "/models/images"
-    elif path.startswith(("/chat/images", "/chat/extraction", "/chat/music", "/chat/sounds", "/chat/speech", "/chat/transcribe", "/models/audio")):
+    elif path.startswith(("/chat/classifier", "/chat/images", "/chat/extraction", "/chat/music", "/chat/sounds", "/chat/speech", "/chat/transcribe", "/models/audio")):
         active = "/" + "/".join(path.strip("/").split("/")[:2])
     selected = next((group for group in groups if any(url == active for _, url in group["links"])), None)
     if root == "/plugins" and active != "/plugins/activity":

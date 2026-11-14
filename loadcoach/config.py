@@ -229,12 +229,12 @@ def model_places(models_folder, places, models_storage_folder="") -> dict[str, s
         if not isinstance(models_folder, str) or not models_folder.startswith("/"):
             raise ValueError("models_folder must be a full path")
         root = Path(models_folder)
-        made = {name: str(root / name) for name in ("llm", "adapters", "projectors", "image", "audio", "encoders")}
+        made = {name: str(root / name) for name in ("llm", "adapters", "projectors", "image", "audio", "encoders", "classifier")}
     else:
         made = dict(places)
     if models_storage_folder:
         root = Path(models_storage_folder)
-        made.update({f"storage_{name}": str(root / name) for name in ("llm", "adapters", "projectors", "image", "audio", "encoders")})
+        made.update({f"storage_{name}": str(root / name) for name in ("llm", "adapters", "projectors", "image", "audio", "encoders", "classifier")})
     return made
 
 

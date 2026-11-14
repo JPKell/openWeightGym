@@ -9,6 +9,7 @@ SERVICE_SETTINGS = {
     'allow_speech': 'speech',
     'allow_audio_generation': 'audio',
     'allow_model_downloads': 'downloads',
+    'allow_classifiers': 'classifiers',
 }
 SPEECH_TASKS = frozenset({'speech', 'clone', 'design', 'transcription', 'alignment', 'diarization'})
 
@@ -19,6 +20,7 @@ class PlatformServices:
     speech: bool = True
     audio: bool = True
     downloads: bool = True
+    classifiers: bool = True
 
     @classmethod
     def from_settings(cls, settings, overrides=None):
@@ -32,13 +34,15 @@ class PlatformServices:
         return self.speech or self.audio
 
     def kind_enabled(self, kind):
-        return self.images if kind == 'image' else self.audio_models if kind == 'audio' else True
+        return self.classifiers if kind == 'classifier' else self.images if kind == 'image' else self.audio_models if kind == 'audio' else True
 
     def audio_task_enabled(self, task):
         return self.speech if task in SPEECH_TASKS else self.audio if task in ('music', 'sound') else self.audio_models
 
     def model_enabled(self, model):
         capabilities = model.get('capabilities', {})
+        if capabilities.get('classifier') or model.get('type') == 'classifier' or model.get('systemone'):
+            return self.classifiers
         if model.get('engine_id', model.get('engine')) == 'sdcpp' or capabilities.get('image_generation'):
             return self.images
         if model.get('engine_id', model.get('engine')) == 'audiocpp' or capabilities.get('audio'):
@@ -61,6 +65,8 @@ class PlatformServices:
         """Apply the same policy to visible links, bookmarked pages and service requests."""
         path = path.rstrip('/') or '/'
         query = query or {}
+        if path.startswith(('/chat/classifier', '/owg/classifier')) or path in ('/v1/systemone', '/v1/classifier'):
+            return self.classifiers
         if path.startswith(('/civitai', '/mirrorwall-discovery')):
             return self.images and self.downloads
         if path.startswith(('/hub', '/downloads')):

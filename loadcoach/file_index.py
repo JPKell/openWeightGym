@@ -38,6 +38,9 @@ def describe(path: Path) -> dict:
     from loadcoach.gguf import facts, read_metadata
     from mirrorwall.assets import facts as image_facts, image_asset
     from soundroom.model import audio_asset, facts as audio_facts
+    if 'classifier' in path.parts and path.suffix.lower() != '.gguf':
+        from loadcoach.classifier_sources import source_facts
+        return source_facts(path)
     if audio_asset(path):
         return audio_facts(path)
     if image_asset(path):
@@ -52,7 +55,7 @@ def listed_in(folder: Path, path: Path) -> bool:
         depth = len(path.resolve().relative_to(folder.resolve()).parts)
     except ValueError:
         return False
-    return supported(path) and depth <= (6 if folder.name in ("image", "audio", "encoders") else 2)
+    return supported(path) and depth <= (6 if folder.name in ("image", "audio", "encoders", "classifier") else 2)
 
 
 def tier_of(place: str) -> str:

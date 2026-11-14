@@ -193,6 +193,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
             said.setdefault("chat", {"unlogged": False, "models": {}})["models"].update({name: {
                 "context": 8192, "model_id": None, "name_history": [], "vision": configured.get(name, {}).get('vision', False),
                 "json_schema": configured.get(name, {}).get('json_schema', False),
+                "classifier": 'systemone' if configured.get(name, {}).get('systemone') else False,
                 "provider": configured.get(name, {}).get('service', 'Cloud'), "hosted": True} for name in hosted})
         said["hosted_spent"] = round(log.spent(user.name), 4)  # in the last 24 hours, from this machine's log
         if said["models"]:

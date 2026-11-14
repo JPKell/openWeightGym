@@ -153,10 +153,29 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # /health
         self.send_response(200)
         self.end_headers()
+        if self.path == '/v1/models':
+            self.wfile.write(json.dumps({'data': [{'architecture': {'output_modalities': ['decisions']}}]}).encode())
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers["content-length"]))
         request = json.loads(body)
+        if self.path == '/v1/systemone':
+            answers = {}
+            for key, q in request['questions'].items():
+                if q['type'] == 'noul':
+                    answers[key] = {'type': 'noul', 'noul': .8}
+                else:
+                    choices = list(q['criteria']) if q['type'] == 'choice' else [str(i) for i in range(len(q['criteria']))]
+                    p = {choice: (.8 if i == 0 else .2 / (len(choices) - 1)) for i, choice in enumerate(choices)}
+                    answers[key] = {'type': q['type'], 'probabilities': p, 'confidence': .7}
+                    answers[key].update({'choice': choices[0]} if q['type'] == 'choice' else
+                                        {'score': sum(int(i) * v for i, v in p.items()), 'legend': dict(zip(choices, q['criteria']))})
+            self.send_response(200)
+            self.send_header('content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'model': request['model'], 'answers': answers,
+                                        'usage': {'input_tokens': 99, 'output_tokens': 0}}).encode())
+            return
         if ('--benchmark-dialogue' in arguments and self.path in ('/apply-template','/v1/chat/completions')
                 and (self.path=='/apply-template' or request.get('temperature') in (0,1) and request.get('seed')==42
                      and request.get('cache_prompt') is False and request.get('stream') is False)):

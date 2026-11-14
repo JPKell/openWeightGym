@@ -167,6 +167,7 @@ class Settings:
     allow_speech: bool = True
     allow_audio_generation: bool = True
     allow_model_downloads: bool = True
+    allow_classifiers: bool = True
     backup_retention: int = 10  # verified recovery sets kept on each machine; zero keeps all
     databases: dict = field(default_factory=dict)  # named local/server stores and service bindings
     alert_gpu_temperature: float = 85  # degrees Celsius; live threshold for operational alerts
@@ -1889,7 +1890,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, 'refused.html', person, status=403, why='Your account may not add, change and remove models.')
         asked = request.query_params
         kind = asked.get('kind', 'llm')
-        if kind not in ('all', 'llm', 'image', 'audio'):
+        if kind not in ('all', 'llm', 'image', 'audio', 'classifier'):
             kind = 'llm'
         part = asked.get('part') if asked.get('complete') != '1' else None
         shown_node = asked.get('node', '')
@@ -1917,7 +1918,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if isinstance(known, Response):
             return fragment_error(request, person, 'models', 'list', known) if part == 'list' else known
         kinds = {"sdcpp": "image", "audiocpp": "audio"}
-        known['models'] = [one for one in known['models'] if kind == 'all' or kinds.get(one.get('engine'), 'llm') == kind]
+        known['models'] = [one for one in known['models'] if kind == 'all' or benchmark_model_kind(one) == kind]
         measuring = measure_button([one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == 'llm'],
                                    node_measuring(known, shown_node), shown_node)
         wanted_jobs = asked.getlist("install")
@@ -1963,14 +1964,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             chosen_engine, engine_schema = enabled_engines[0]["id"], enabled_engines[0]["schema"]
         chosen = next((row for row in engine_choices if row['id'] == chosen_engine), {})
         known['cards'] = chosen.get('cards') or [card['card'] for node in node_choices if node['name'] in (add_nodes or names) for card in node.get('cards', [])]
-        available = await ask("GET", "/turnstile/models/files", person.key) if kind in ('all', 'llm') else None
+        available = await ask("GET", "/turnstile/models/files", person.key) if kind in ('all', 'llm', 'classifier') else None
         file_nodes = available.json().get("nodes", []) if available and available.is_success else []
         # The chosen nodes' own files come first; a file anywhere else is copied to them.
         ordered = sorted(file_nodes, key=lambda row: row['name'] not in add_nodes)
         def files_that_are(what):
             """The usable files of one kind ("model" or "projector"), each with the node it is on."""
             return [{**file, "machine": node["name"]} for node in ordered for file in node.get("files", [])
-                    if file.get("facts", {}).get("what") == what and not file.get("moving")]
+                    if (file.get("facts", {}).get("what") == what or what == "model" and file.get("facts", {}).get("what") == "classifier" and file["path"].lower().endswith(".gguf")) and not file.get("moving")]
         return page(request, 'models_editor.html' if part == 'editor' else "models.html", person, status=400 if failed else 200, known=known,
                     kind=kind, installations=installations, file_choices=files_that_are("model"), projector_choices=files_that_are("projector"),
                     file_nodes=file_nodes, node_choices=node_choices, shown_node=shown_node, add_nodes=add_nodes,
@@ -2622,6 +2623,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 for ours, theirs, cost_in, cost_out, capability in zip(form.get("ours", []), form.get("theirs", []), form.get("in", []), form.get("out", []), capabilities):
                     if ours.strip() and theirs.strip():
                         models[ours.strip()] = {"theirs": theirs.strip()} | {way: read(text.strip()) for way, text in (("in", cost_in), ("out", cost_out)) if text.strip()}
+                        if capability == 'classifier':
+                            models[ours.strip()]['systemone'] = True
                         if capability in ('vision', 'schema'):
                             models[ours.strip()]['vision'] = True
                         if capability == 'schema':
@@ -3645,7 +3648,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         # The page asking for its middle again, once an answer has ended. It is a page of its own in everything but its frame.
         template = "chat_main.html" if request.query_params.get("part") == "main" else "chat.html"
         return page(request, template, person, status=400 if said else 200, conversations=listed["conversations"], talk=talk,
-                    models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio")], *asked_as(person)], said=said, typed_in=typed_in or {},
+                    models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier")], *asked_as(person)], said=said, typed_in=typed_in or {},
                     adaptor_names={row["id"] for row in plugins.models(person.me)})  # fmt: skip
 
     async def collections_page(request: Request, person: Person, said='', result=None, form=None, failed=False) -> Response:
@@ -3673,7 +3676,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         levels=levels[:levels.index(maximum)+1] if maximum in levels else []
         response=page(request,'collections.html',person,status=400 if failed else 200,collections=listing['collections'],
             collection=selected,embedders=[m for m in models if m.get('embedding')],
-            answer_models=[m for m in models if not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio')],levels=levels,
+            answer_models=[m for m in models if not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier')],levels=levels,
             said=said,unavailable=unavailable,result=result,form=form or {},
             conversations=listed.get('conversations',[]) if isinstance(listed,dict) else [])
         response.headers['cache-control']='no-store'
@@ -3765,7 +3768,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         try:
             catalog=await ask('GET','/v1/models',person.key)
             if catalog.is_success:
-                models=[m for m in catalog.json()['data'] if m.get('owned_by')=='loadcoach' and not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and m.get('local_model_guard')]
+                models=[m for m in catalog.json()['data'] if m.get('owned_by')=='loadcoach' and not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier') and m.get('local_model_guard')]
             else:
                 unavailable='The model catalogue is unavailable. Saved prompts and outputs remain on front.'
         except ServiceUnavailable:
@@ -4419,7 +4422,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     # ---- files ------------------------------------------------------------------------------
 
-    file_types = (("", "All files"), ("model", "Models"), ("image", "Images"), ("audio", "Audio"),
+    file_types = (("", "All files"), ("model", "Models"), ("image", "Images"), ("audio", "Audio"), ("classifier", "Classifier"),
                   ("adapter", "Adapters"), ("projector", "Projectors"))
 
     def file_address(path: str) -> str:
@@ -5275,6 +5278,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     from mirrorwall.ui import routes as image_routes
     from soundroom.ui import routes as audio_routes
     from weightroom.extraction_views import routes as extraction_routes
+    from weightroom.classifier_views import routes as classifier_routes
 
     app = Starlette(
         lifespan=lifespan,
@@ -5283,6 +5287,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             *image_routes(for_people, page, ask, model_api),
             *audio_routes(for_people, page, ask, model_api, settings, platform),
             *extraction_routes(for_people, page, ask),
+            *classifier_routes(for_people, page, ask, platform),
             *plugin_routes(plugins, plugin_controller, for_people, page, go, typed),
             *conversations.routes,
             Route("/sign-in", sign_in_page),

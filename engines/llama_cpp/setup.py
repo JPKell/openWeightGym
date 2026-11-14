@@ -100,7 +100,7 @@ def preview(name: str, candidate: dict, library, runner, supported: list[dict], 
         if role == "model":
             model_facts = item["facts"]
             item["compatibility"] = "model metadata read; runtime unqualified" if model_facts else "metadata unavailable"
-            if model_facts and model_facts.get("what") != "model":
+            if model_facts and model_facts.get("what") not in ("model", "classifier"):
                 errors.append("The selected model file describes a projector or adapter, not model weights.")
         elif item["facts"]:
             expected = "projector" if role == "mmproj" else "adapter"

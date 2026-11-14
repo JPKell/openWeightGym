@@ -208,6 +208,9 @@ def build_app(config: Config) -> Starlette:
     from toollocker.extraction import ExtractionTools
     if config.extraction_url and 'extraction' not in config.servers:
         servers.append(ExtractionTools(config.extraction_url, config.machine_key_file))
+    if config.extraction_url and 'classifier' not in config.servers:
+        from toollocker.classifier import ClassifierTools
+        servers.append(ClassifierTools(config.extraction_url, config.machine_key_file))
     # Every tool on offer, by the name a harness sees: the server's name, two underscores, then
     # the tool's own name. Filled in when the servers have started.
     tools: dict[str, tuple[Server | Remote, dict]] = {}
