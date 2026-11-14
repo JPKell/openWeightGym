@@ -1,5 +1,5 @@
 {% from "parts.html" import card, empty_row, more %}
-{% from "reliability_parts.html" import identity, state, candidate_choice, outcome_row, inspector_content %}
+{% from "reliability_parts.html" import identity, state, candidate_choice, outcome_row, inspector_content, fault_count %}
 {% set offline = reliability.compute_unavailable %}
 <form method="get" action="/reliability" id="reliability-filters" class="rl-filters mb-3">
 <div><label class="form-label" for="reliability-search">Find a candidate</label><input type="search" name="q" id="reliability-search" class="form-control form-control-sm" value="{{ view.filters.q }}" placeholder="Model, role or fingerprint…"></div>
@@ -18,6 +18,7 @@
 <div id="reliability-chart" class="rl-outcome-list" role="region" aria-label="Recent successful answers and model faults; exact values in Candidate evidence" tabindex="0">{% for row in view.rows %}{{ outcome_row(row, offline) }}{% else %}<p class="small text-secondary mb-2">No scored outcomes to compare.</p>{% endfor %}</div>
 <script id="reliability-data" type="application/json">{{ view.rows|tojson }}</script>
 {% endcall %}
+{% if view.filters.model %}{% include "reliability_issues.html" %}{% endif %}
 {% set table_actions %}<span class="small fw-normal text-secondary">{{ view.rows|length }} candidates</span><label class="d-flex align-items-center gap-2 small fw-normal">Sort<select id="reliability-sort" name="sort" form="reliability-filters" class="form-select form-select-sm w-auto" data-reliability-sort>{% for value, label in [('attention','Attention first'), ('rate','Lowest success rate'), ('faults','Most faults'), ('model','Model name')] %}<option value="{{ value }}"{% if view.filters.sort == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>{% endset %}
 {% call card('Candidate evidence', id='inventory', header_id='reliability-heading', body_class='p-0', actions=table_actions) %}
 <div class="table-responsive" tabindex="0" role="region" aria-label="Candidate evidence table">
@@ -25,9 +26,9 @@
 <thead><tr><th scope="col">Model / fingerprint</th><th scope="col">Role</th><th scope="col" class="text-end">Success rate</th><th scope="col" class="text-end">Successful</th><th scope="col" class="text-end">Errors</th><th scope="col" class="text-end">Timeouts</th><th scope="col" class="text-end">Empty</th><th scope="col" class="text-end">Preference</th><th scope="col">Routing state</th><th scope="col">Inspect / manage</th></tr></thead>
 <tbody>{% for row in view.rows %}<tr>
 <th scope="row"><a class="rl-model-button" href="#{{ row.detail_id }}" data-reliability-open="{{ row.detail_id }}">{{ identity(row, offline) }}</a></th><td>{{ row.role or 'Direct model request' }}</td>
-<td class="rl-numeric">{{ '%.1f%%'|format(row.success_rate) if row.success_rate is not none else '—' }}</td>{% for kind in ('success','error','timeout','empty') %}<td class="rl-numeric">{{ row.counts[kind] }}</td>{% endfor %}
+<td class="rl-numeric">{{ '%.1f%%'|format(row.success_rate) if row.success_rate is not none else '—' }}</td>{% for kind in ('success','error','timeout','empty') %}<td class="rl-numeric">{% if kind == 'success' %}{{ row.counts[kind] }}{% else %}{{ fault_count(row, kind) }}{% endif %}</td>{% endfor %}
 <td class="rl-numeric">{{ '—' if offline else '×%.3f'|format(row.factor) }}</td><td>{{ state(row, offline) }}{% if row.regression %}<small class="d-block" data-regression>Regression warning</small>{% endif %}</td>
-<td>{% call more('Inspect', attrs={'id': row.detail_id, 'data-reliability-detail': ''}) %}{{ inspector_content(row, view.filters, offline) }}{% endcall %}</td>
+<td>{% call more('Inspect', attrs={'id': row.detail_id, 'data-reliability-detail': ''}) %}{{ inspector_content(row, view.action_filters, offline) }}{% endcall %}</td>
 </tr>{% else %}{{ empty_row(10, 'No reliability outcomes in this view. Clear filters or make a new logged request.') }}{% endfor %}</tbody>
 </table></div>
 {% endcall %}

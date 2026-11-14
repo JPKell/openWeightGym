@@ -14,6 +14,10 @@
 
 {% macro state(row, offline=false) -%}<span class="badge {{ 'bg-secondary-lt' if offline else 'bg-success-lt' if row.state == 'eligible' else 'bg-warning-lt' if row.state == 'cooldown' else 'bg-danger-lt' }}" data-state>{{ 'State unavailable' if offline else row.state }}</span>{%- endmacro %}
 
+{% macro fault_count(row, kind) -%}
+{% if row.counts[kind] and row.issue_urls is defined %}<a href="{{ row.issue_urls[kind] }}" aria-label="View {{ kind }} requests for {{ row.model }}, {{ row.role or 'direct requests' }}">{{ row.counts[kind] }}</a>{% else %}{{ row.counts[kind] }}{% endif %}
+{%- endmacro %}
+
 {% macro candidate_choice(row=none, offline=false) %}
 <{{ 'a' if row else 'button' }}{% if row %} href="#{{ row.detail_id }}" data-reliability-open="{{ row.detail_id }}"{% else %} type="button" data-open{% endif %} class="rl-choice">
 <span class="d-flex justify-content-between gap-2"><span class="min-w-0">{{ identity(row, offline) }}</span>{% if row %}{{ state(row, offline) }}{% else %}<span class="badge align-self-start" data-state></span>{% endif %}</span>
@@ -41,7 +45,8 @@
 {{ kpi('Success rate', ('%.1f%%'|format(row.success_rate) if row.success_rate is not none else '—') if row else '—', value_attrs={'id':prefix ~ 'detail-rate'}) }}{{ kpi('Preference', ('Unavailable' if offline else '×%.3f'|format(row.factor)) if row else '—', value_attrs={'id':prefix ~ 'detail-factor'}) }}
 {% endcall %}
 <dl class="rl-facts mb-3">
-{% for label, key, id in [('Successful', 'success', 'success'), ('Errors', 'error', 'error'), ('Timeouts', 'timeout', 'timeout'), ('Empty answers', 'empty', 'empty-count')] %}<dt>{{ label }}</dt><dd id="{{ prefix }}detail-{{ id }}">{{ row.counts[key] if row }}</dd>{% endfor %}
+{% for label, key, id in [('Successful', 'success', 'success'), ('Errors', 'error', 'error'), ('Timeouts', 'timeout', 'timeout'), ('Empty answers', 'empty', 'empty-count')] %}<dt>{{ label }}</dt><dd id="{{ prefix }}detail-{{ id }}">{% if row %}{% if key == 'success' %}{{ row.counts[key] }}{% else %}{{ fault_count(row, key) }}{% endif %}{% endif %}</dd>{% endfor %}
+{% if row and row.issues_url is defined %}<dt>Issue requests</dt><dd><a href="{{ row.issues_url }}">View errors, timeouts & empty responses</a></dd>{% endif %}
 <dt>Recent feedback</dt><dd id="{{ prefix }}detail-feedback">{% if row %}{{ row.positive }} positive / {{ row.negative }} negative{% endif %}</dd>
 <dt>Ignored outcomes</dt><dd id="{{ prefix }}detail-ignored">{% if row %}{% for kind, count in row.ignored.items() %}{{ kind }}: {{ count }}{{ ' · ' if not loop.last }}{% else %}None{% endfor %}{% endif %}</dd>
 <dt>Latest request</dt><dd>{% if row %}{% if row.last_request %}<a href="/requests/{{ row.last_request }}">Latest request #{{ row.last_request }}</a>{% else %}No recent request in scope{% endif %}{% else %}<button type="button" class="btn btn-link p-0" id="detail-request"></button>{% endif %}</dd>

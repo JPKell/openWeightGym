@@ -83,15 +83,25 @@ class Reliability:
                     blocked = 0
             self.db.execute('INSERT INTO reliability_state VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(model_id,fingerprint,role) DO UPDATE SET epoch=excluded.epoch,streak=excluded.streak,blocked_until=excluded.blocked_until', (*key, epoch, streak, blocked))
 
+    def _scored(self, key, epoch, now, owner, limit=100):
+        """Read the same ordered scoring window for aggregates and request drilldowns."""
+        return self.db.execute('''SELECT outcome, feedback, recovery, request, at FROM reliability_outcomes
+            WHERE model_id=? AND fingerprint=? AND role=? AND epoch=? AND at>=?
+            AND (CAST(? AS TEXT) IS NULL OR owner_id=?) AND outcome IN ('success', 'error', 'timeout', 'empty')
+            ORDER BY at DESC, request DESC LIMIT ?''',
+            (*key, epoch, now-WINDOW, owner, owner, limit)).fetchall()
+
+    def issue_requests(self, key, epoch, now=None, owner=None):
+        """Request metadata for faults counted in the caller's latest 50 scored outcomes."""
+        now = time.time() if now is None else now
+        return [dict(request=row[3], at=row[4], outcome=row[0], recovery=bool(row[2]))
+                for row in self._scored(key, epoch, now, owner, limit=50) if row[0] in FAULTS]
+
     def summary(self, key, now=None, owner=None):
         """Summarize recent outcomes and the model's current exclusion status."""
         now = time.time() if now is None else now
         state = self.state(key)
-        rows = self.db.execute('''SELECT outcome, feedback, recovery FROM reliability_outcomes
-            WHERE model_id=? AND fingerprint=? AND role=? AND epoch=? AND at>=?
-            AND (CAST(? AS TEXT) IS NULL OR owner_id=?) AND outcome IN ('success', 'error', 'timeout', 'empty')
-            ORDER BY at DESC, request DESC LIMIT 100''',
-            (*key, state['epoch'], now-WINDOW, owner, owner)).fetchall()
+        rows = self._scored(key, state['epoch'], now, owner)
         scored = [row for row in rows if row[0] == 'success' or row[0] in FAULTS]
         recent, previous = scored[:50], scored[50:100]
         counts = Counter(row[0] for row in recent)

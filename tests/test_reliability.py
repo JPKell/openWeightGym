@@ -19,6 +19,28 @@ def store():
     return Reliability(sqlite3.connect(':memory:'))
 
 
+def test_issue_requests_match_scoring_window_epoch_role_and_owner():
+    kept = store(); key = ('id', 'fp', 'chat')
+    kept.record(1, 'pat', 'small', key, 0, 'error', now=1000, owner_id='pat-id')
+    for number in range(2, 53):
+        kept.record(number, 'pat', 'small', key, 0, 'success', now=1000 + number, owner_id='pat-id')
+    for number, outcome in enumerate(('error', 'timeout', 'empty', 'cancelled'), 53):
+        kept.record(number, 'renamed-pat', 'small', key, 0, outcome, now=1100, owner_id='pat-id')
+    kept.record(57, 'jordan', 'small', key, 0, 'error', recovery=True, now=1100, owner_id='jordan-id')
+    kept.record(58, 'pat', 'small', ('id', 'older-fp', 'chat'), 0, 'error', now=1100, owner_id='pat-id')
+    kept.record(59, 'pat', 'small', ('id', 'fp', 'tools'), 0, 'error', now=1100, owner_id='pat-id')
+    for owner, requests in ((None, [57, 55, 54, 53]), ('pat-id', [55, 54, 53]), ('jordan-id', [57])):
+        issues = kept.issue_requests(key, 0, owner=owner, now=1200)
+        summary = kept.summary(key, owner=owner, now=1200)
+        assert [one['request'] for one in issues] == requests
+        assert len(issues) == sum(summary['counts'][kind] for kind in ('error', 'timeout', 'empty'))
+        assert 'issue_requests' not in summary  # routing summaries never acquire request IDs
+    assert kept.issue_requests(key, 0, owner='jordan-id', now=1200)[0]['recovery']
+    assert kept.issue_requests(key, 0, now=1200 + 8 * 86400) == []
+    kept.reset(key)
+    assert kept.issue_requests(key, kept.state(key)['epoch'], now=1200) == []
+
+
 @pytest.mark.parametrize('outcome', ['cancelled', 'benchmark', 'restart', 'refused', 'unscored'])
 def test_non_model_outcomes_neither_penalize_nor_break_failure_streak(outcome):
     kept = store(); key = ('id', 'fp', 'chat')

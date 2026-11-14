@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 from loadcoach import observability as observation
 import json
+import time
 from urllib.parse import quote
 
 import httpx
@@ -555,7 +556,8 @@ class Routing:
     async def reliability_report(self, request: Request, user: User) -> Response:
         """Return authorized reliability summaries for the requested model and role."""
         owner = None if user.can('see-log') else user.identity or user.name
-        rows = self.reliability.report(owner, role=request.query_params.get('role') or None)
+        now = time.time()
+        rows = self.reliability.report(owner, role=request.query_params.get('role') or None, now=now)
         facts = await self.facts_for(request, user)
         compute_unavailable = isinstance(facts, Response) or facts.get('compute_unavailable', False)
         facts = {'models': {}} if isinstance(facts, Response) else facts
@@ -569,7 +571,7 @@ class Routing:
                 if key in present or not name or (request.query_params.get('role') and key[2] != request.query_params['role']):
                     continue
                 rows.append({'model_id': key[0], 'fingerprint': key[1], 'role': key[2], 'model': name, 'last_request': None,
-                             **self.reliability.summary(key, owner=owner)})
+                             **self.reliability.summary(key, owner=owner, now=now)})
         for row in rows:
             key = (row['model_id'], row['fingerprint'], row['role'])
             row['model'] = current_names.get(row['model_id'], row['model'])
@@ -580,6 +582,10 @@ class Routing:
                 row['reason'] = f"Shared routing preference x{row['factor']:.3f}; counts and feedback above are yours only."
         if wanted := request.query_params.get('model'):
             rows = [row for row in rows if row['model'] == wanted]
+            if request.query_params.get('include_issues') == '1':
+                for row in rows:
+                    key = (row['model_id'], row['fingerprint'], row['role'])
+                    row['issue_requests'] = self.reliability.issue_requests(key, row['epoch'], now=now, owner=owner)
         return JSONResponse({'rows': rows, 'window_days': 7, 'sample_limit': 50,
                              'scope': 'all users' if owner is None else 'your requests',
                              'compute_unavailable': compute_unavailable})

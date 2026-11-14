@@ -6,6 +6,41 @@ import json
 from urllib.parse import urlencode
 
 FILTERS = ('model', 'role', 'issues', 'q', 'fingerprints', 'sort')
+ISSUE_FILTERS = ('issue_candidate', 'issue_outcome', 'issue_page')
+OUTCOMES = {'error': 'Error', 'timeout': 'Timeout', 'empty': 'Empty response'}
+
+
+def candidate_key(row):
+    return json.dumps([row.get('model_id', ''), row['fingerprint'], row['role']], separators=(',', ':'))
+
+
+def issue_workspace(rows, asked, filters):
+    """Page only the faults counted in the currently displayed, authorized candidates."""
+    selected = asked.get('issue_candidate', '')
+    outcome = asked.get('issue_outcome', '')
+    if outcome not in OUTCOMES:
+        outcome = ''
+    found = [dict(one, model=row['model'], fingerprint=row['fingerprint'], role=row['role'], current=row['current'])
+             for row in rows if not selected or candidate_key(row) == selected
+             for one in row.get('issue_requests', []) if not outcome or one['outcome'] == outcome]
+    found.sort(key=lambda one: (one['at'], one['request']), reverse=True)
+    try:
+        page = max(1, int(asked.get('issue_page', '1')))
+    except (ValueError, TypeError):
+        page = 1
+    page = min(page, max(1, (len(found) + 49) // 50))
+    start = (page - 1) * 50
+    query = {**filters, 'issue_candidate': selected, 'issue_outcome': outcome}
+
+    def link(number):
+        return '/reliability?' + urlencode({**query, 'issue_page': number}) + '#reliability-issues'
+
+    return dict(rows=found[start:start + 50], total=len(found), page=page, start=start + 1 if found else 0,
+                end=min(start + 50, len(found)), selected=selected, outcome=outcome,
+                candidates=[dict(value=candidate_key(row), role=row['role'], fingerprint=row['fingerprint'], current=row['current']) for row in rows],
+                unavailable=bool(selected and not any(candidate_key(row) == selected for row in rows)),
+                previous=link(page - 1) if page > 1 else None,
+                next=link(page + 1) if start + 50 < len(found) else None)
 
 
 def faults(row):
@@ -48,7 +83,14 @@ def workspace(report, quality, asked):
     ratings = [row for row in quality if fingerprint_matches(row) and (not filters['model'] or row['model'] == filters['model'])]
     for index, row in enumerate(rows):
         row['detail_id'] = f'reliability-candidate-{index}'
+        query = dict(model=row['model'], fingerprints='all' if offline else 'current' if row['current'] else 'historical',
+                     issue_candidate=candidate_key(row))
+        row['issues_url'] = '/reliability?' + urlencode(query) + '#reliability-issues'
+        row['issue_urls'] = {kind: '/reliability?' + urlencode({**query, 'issue_outcome': kind}) + '#reliability-issues'
+                             for kind in OUTCOMES}
     return dict(rows=rows, quality=ratings, summary=summary, filters=filters,
+                action_filters={**filters, **{key: asked[key] for key in ISSUE_FILTERS if asked.get(key)}},
+                issue_view=issue_workspace(rows, asked, filters),
                 attention=[row for row in rows if (row['current'] or offline) and (row['state'] != 'eligible' or row['regression'])],
                 export_url='/reliability?' + urlencode({**filters, 'export': 'csv'}))
 

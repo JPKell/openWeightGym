@@ -39,3 +39,34 @@ def test_csv_quotes_evidence_and_neutralizes_formulas():
     exported = list(csv.DictReader(io.StringIO(export_csv([row]))))[0]
     assert exported['model'].startswith("'=") and exported['reason'].startswith("'  +")
     assert exported['last_request'] == '' and exported['ignored'] == '{"cancelled": 1}'
+
+
+def test_issue_requests_filter_by_exact_candidate_and_outcome_with_stable_paging():
+    from urllib.parse import parse_qs, urlsplit
+    first, second = candidate(), candidate()
+    second['role'] = 'tools'
+    first['issue_requests'] = [dict(request=n, at=1000, outcome='error', recovery=False) for n in range(1, 51)]
+    second['issue_requests'] = [dict(request=n, at=1000, outcome='timeout', recovery=False) for n in range(51, 101)]
+    report = dict(rows=[first, second])
+    view = workspace(report, [], dict(model='small'))
+    issues = view['issue_view']
+    assert issues['total'] == 100 and issues['rows'][0]['request'] == 100
+    assert issues['rows'][-1]['request'] == 51 and issues['next']
+    next_query = {key: value[0] for key, value in parse_qs(urlsplit(issues['next']).query).items()}
+    page_two = workspace(report, [], next_query)['issue_view']
+    assert page_two['page'] == 2 and page_two['rows'][0]['request'] == 50 and not page_two['next']
+    exact_query = {key: value[0] for key, value in parse_qs(urlsplit(view['rows'][0]['issue_urls']['error']).query).items()}
+    exact = workspace(report, [], exact_query)['issue_view']
+    assert exact['total'] == 50 and all(one['role'] == 'chat' for one in exact['rows'])
+    exact_query['issue_outcome'] = 'empty'
+    assert workspace(report, [], exact_query)['issue_view']['total'] == 0
+    assert workspace(report, [], dict(model='small', issue_page='invalid'))['issue_view']['page'] == 1
+
+
+def test_issue_candidate_identity_separates_recreated_model_names():
+    from weightroom.reliability_views import candidate_key
+    old, current = candidate(), candidate()
+    old.update(model_id='old-id', current=False, issue_requests=[dict(request=1, at=1000, outcome='error', recovery=False)])
+    current.update(model_id='new-id', issue_requests=[dict(request=2, at=1001, outcome='error', recovery=False)])
+    view = workspace(dict(rows=[old, current]), [], dict(model='small', fingerprints='all', issue_candidate=candidate_key(old)))
+    assert [one['request'] for one in view['issue_view']['rows']] == [1]
