@@ -1799,10 +1799,10 @@ def test_the_batches_page_shows_how_far_each_has_got_and_gives_its_answers(live_
     sign_in(browser, "pat")
     assert 'href="/batches"' in browser.get("/batches").text
     deadline = time.monotonic() + 5
-    while "1 of 3" not in browser.get("/batches?part=list").text and time.monotonic() < deadline:
+    while "1 / 3 processed" not in browser.get("/batches?part=list").text and time.monotonic() < deadline:
         time.sleep(0.05)
     listed = browser.get("/batches").text
-    assert f"<code>{batch['id']}</code>" in listed and "being answered" in listed and "1 of 3" in listed and 'value="cancel"' in listed and "<td>pat</td>" in listed
+    assert f"data-id>{batch['id']}</code>" in listed and 'data-state="in_progress">Running' in listed and "1 / 3 processed" in listed and 'value="cancel"' in listed and '<span data-owner>pat</span>' in listed
     assert "<html" not in browser.get("/batches?part=list").text and "/v1/files" in listed  # the list alone asks for itself again; how to hand one in is on the page
 
     cancelled = browser.post("/batches", data={"batch": batch["id"], "do": "cancel"})
@@ -1819,7 +1819,7 @@ def test_the_batches_page_shows_how_far_each_has_got_and_gives_its_answers(live_
     browser.post("/sign-out")
     sign_in(browser, "jordan")
     others = browser.get("/batches").text
-    assert f"<code>{batch['id']}</code>" in others and "Answers</a>" not in others and browser.get(f"/batches/{output}").status_code == 404
+    assert f"data-id>{batch['id']}</code>" in others and "Answers</a>" not in others and browser.get(f"/batches/{output}").status_code == 404
     browser.post("/sign-out")
     sign_in(browser, "cam")
     assert "No batches." in browser.get("/batches").text

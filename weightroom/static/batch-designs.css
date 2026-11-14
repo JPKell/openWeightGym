@@ -1,0 +1,36 @@
+/* Standalone proposals share the console palette, typography and component tokens. */
+.bt-review { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; padding:1rem 2.5rem; border-bottom:1px solid var(--bs-border-color); background:var(--tblr-bg-surface); }
+.bt-brand { display:inline-flex; align-items:center; gap:.65rem; font-size:1.1rem; letter-spacing:-.025em; }
+.bt-brand .suite-icon { width:1.65rem; height:1.65rem; color:var(--bs-primary); }
+.bt-page { max-width:1660px; margin:0 auto; padding:1.5rem 2.5rem 3rem; }
+.bt-proposals { border-bottom:1px solid var(--bs-border-color); padding-bottom:1.25rem; margin-bottom:2rem; }
+.bt-proposals .nav-link { padding:.6rem 1rem; }
+.bt-scope-bar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.6rem; margin-bottom:1.5rem; }
+.bt-live-dot { width:7px; height:7px; border-radius:50%; background:var(--bs-primary); }
+.bt-body, .bt-body > * { min-width:0; }
+.bt-board { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1.5rem; align-items:start; }
+.bt-lane { min-width:0; padding:1rem; border:1px solid var(--bs-border-color); border-radius:var(--suite-frame-radius); background:var(--tblr-bg-surface-secondary); }
+.bt-lane-heading { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:0 .25rem; }
+.bt-lane-heading .section-heading { margin-bottom:.4rem !important; }
+.bt-lane-items { display:grid; gap:1rem; }
+.bt-entry { padding:1.25rem; border:1px solid var(--bs-border-color); border-radius:var(--suite-frame-radius); background:var(--tblr-bg-surface); min-width:0; }
+.bt-entry .bt-open { font-size:1rem; }
+.bt-entry .bt-actions { margin-top:.3rem; }
+.bt-lane-empty { text-align:center; padding:2rem 0; }
+[data-layout='inspector'] .bt-body { display:grid; grid-template-columns:minmax(300px,.85fr) minmax(400px,1.25fr); gap:1.5rem; align-items:start; }
+#batch-list { max-height:760px; overflow:auto; }
+#batch-list .bt-entry { border:0; border-bottom:1px solid var(--bs-border-color); border-radius:0; border-left:3px solid transparent; padding:1.35rem; }
+#batch-list .bt-entry:last-child { border-bottom:0; }
+#batch-list .bt-entry[data-selected='true'] { background:var(--suite-accent-bg); border-left-color:var(--bs-primary); }
+#batch-list .bt-entry .bt-endpoint, #batch-list .bt-entry .bt-actions { display:none; }
+#batch-list .bt-entry .bt-open { width:100%; }
+#inspector-slot { position:sticky; top:1.5rem; }
+.bt-empty { text-align:center; border:1px dashed var(--bs-border-color); border-radius:var(--suite-frame-radius); padding:4rem 1.5rem; background:var(--tblr-bg-surface); }
+.bt-empty > .suite-icon { width:2.5rem; height:2.5rem; color:var(--bs-primary); margin-bottom:1rem; }
+.bt-empty .section-heading { justify-content:center; }
+#workspace > .more, #batch-inspector .more { margin-top:1.5rem; }
+@media (min-width:1100px) { [data-layout='inspector'] .kpi-row { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+@media (max-width:1100px) { .bt-toolbar { grid-template-columns:repeat(4,minmax(0,1fr)); } .bt-toolbar > :first-child { grid-column:1 / -1; } .bt-board { gap:.75rem; } .bt-lane { padding:.75rem; } .bt-entry { padding:1rem; } }
+@media (max-width:850px) { .bt-board { grid-template-columns:1fr; } .bt-lane-items { grid-template-columns:repeat(2,minmax(0,1fr)); } [data-layout='inspector'] .bt-body { grid-template-columns:minmax(0,1fr); } #inspector-slot { position:static; } #batch-list { max-height:540px; } }
+@media (max-width:600px) { .bt-review { padding:1rem; } .bt-page { padding:1.25rem 1rem 2rem; } .bt-proposals { margin-bottom:1.5rem; } .bt-toolbar { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; } .bt-toolbar > :last-child { grid-column:1 / -1; } .bt-toolbar > :nth-child(4) { grid-column:1 / -1; } .bt-proposals .nav-link { padding:.5rem .65rem; font-size:.8rem; } .bt-lane-items { grid-template-columns:1fr; } .bt-dialog { padding:.75rem; } .bt-facts { grid-template-columns:100px minmax(0,1fr); gap:.5rem; } .bt-pagination { align-items:flex-start; } .bt-scope-bar { margin-bottom:1rem; } }
+@media (prefers-reduced-motion:reduce) { .bt-progress .progress-bar { transition:none; } }

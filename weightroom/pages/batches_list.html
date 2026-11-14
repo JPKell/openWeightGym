@@ -1,40 +1,22 @@
-{# The batches, the latest first. It asks for itself again every 5 seconds, so the counts move as requests are answered. #}
-{% from "parts.html" import swaps , confirm_two, empty_row %}
-<div id="batches" hx-get="/batches?part=list&limit={{ paging.limit }}&page={{ paging.page }}" hx-trigger="every 5s" hx-swap="outerHTML">
-<form method="get" action="/batches" class="d-flex gap-2 align-items-center mb-2" {{ swaps('batches', true) }} data-auto-submit>
-<label for="batch-limit">Results per page</label><select id="batch-limit" name="limit" class="form-select form-select-sm w-auto">{% for n in paging.sizes %}<option value="{{ n }}" {{ 'selected' if n == paging.limit }}>{{ n }}</option>{% endfor %}</select><noscript><button class="btn btn-primary btn-sm">Show</button></noscript></form>
-<div class="table-responsive">
-<table id="batches-table" class="table table-sm table-hover align-middle sortable compact-batches">
-  <thead><tr><th data-sort="value">Handed in</th><th data-sort="text">By</th><th data-sort="text">Now</th><th data-sort="value">Answered</th><th data-sort="text">Sent to</th><th data-sort="text">Batch</th><th></th></tr></thead>
-  <tbody>
-  {% for batch in batches %}
-  {% set counts = batch.request_counts %}
-  <tr>
-    <td class="when" data-value="{{ batch.created_at }}">{{ batch.created_at|timestamp }}</td>
-    <td>{{ batch.user }}</td>
-    <td>{% if batch.status == "in_progress" %}<span class="badge text-bg-primary">being answered</span>{% elif batch.status == "cancelling" %}being cancelled{% else %}{{ batch.status }}{% endif %}</td>
-    <td data-value="{{ counts.completed + counts.failed }}" style="min-width: 10rem">
-      <div class="d-flex align-items-center gap-2 flex-nowrap"><div class="progress flex-grow-1" role="progressbar" aria-label="how much of the batch is answered" aria-valuenow="{{ (100 * (counts.completed + counts.failed) / (counts.total or 1))|int }}" aria-valuemin="0" aria-valuemax="100">
-        <div class="progress-bar" style="width: {{ (100 * counts.completed / (counts.total or 1))|round(1) }}%"></div>
-        <div class="progress-bar bg-danger" style="width: {{ (100 * counts.failed / (counts.total or 1))|round(1) }}%"></div>
-      </div>
-      <small class="text-secondary text-nowrap">{{ counts.completed }} of {{ counts.total }}{% if counts.failed %}, {{ counts.failed }} with an error{% endif %}</small></div>
-    </td>
-    <td><code>{{ batch.endpoint }}</code></td>
-    <td><code>{{ batch.id }}</code>{% if "see-log" in person.can or batch.user == person.name %} <a href="/log?trace={{ batch.id }}">its requests</a>{% endif %}</td>
-    <td class="text-end text-nowrap">
-      {# The answers are for whoever handed the batch in. Others see that it is there, and how far it has got. #}
-      {% if batch.user == person.name and batch.output_file_id %}<a class="btn btn-outline-primary btn-sm" href="/batches/{{ batch.output_file_id }}">Answers</a>{% endif %}
-      {% if batch.user == person.name and batch.error_file_id %}<a class="btn btn-outline-secondary btn-sm" href="/batches/{{ batch.error_file_id }}">Errors</a>{% endif %}
-      {% if batch.status == "in_progress" and (batch.user == person.name or "stop" in person.can) %}
-      <form method="post" action="/batches" class="d-inline m-0"><input type="hidden" name="batch" value="{{ batch.id }}"><button  class="btn btn-outline-danger btn-sm" name="do" value="cancel" {{ confirm_two() }}>Cancel</button></form>{% endif %}
-    </td>
-  </tr>
-  {% else %}
-  {% call empty_row(7) %}No batches.{% endcall %}
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% with target='batches' %}{% include 'pagination.html' %}{% endwith %}
+{% from 'parts.html' import swaps, card, confirm_two, empty_row %}
+{% from 'batch_parts.html' import overview, table_row, inspector %}
+<div id="batches" hx-get="{{ batch_poll }}" hx-trigger="every 5s" hx-swap="outerHTML">
+{{ overview(batch_overview) }}
+<form id="batch-filters" method="get" action="/batches" class="bt-toolbar" role="search" {{ swaps('batches', true) }} data-hold-refresh hx-sync="this:replace">
+  <div><label class="form-label" for="batch-search">Find a batch</label><input class="form-control form-control-sm" type="search" id="batch-search" name="q" value="{{ batch_filters.q }}" placeholder="Name, batch ID or endpoint…"></div>
+  <div><label class="form-label" for="batch-status">Status</label><select class="form-select form-select-sm" id="batch-status" name="status">{% for value, label in [('','All statuses'),('in_progress','Running'),('completed','Completed'),('cancelling','Cancelling'),('cancelled','Cancelled'),('paused','Paused'),('errors','With errors')] %}<option value="{{ value }}"{{ ' selected' if value == batch_filters.status }}>{{ label }}</option>{% endfor %}</select></div>
+  <div><label class="form-label" for="batch-owner">Owner</label><select class="form-select form-select-sm" id="batch-owner" name="owner"><option value="">Everyone</option>{% for owner in batch_owners %}<option value="{{ owner }}"{{ ' selected' if owner == batch_filters.owner }}>{{ 'My batches' if owner == person.name else owner }}</option>{% endfor %}{% if batch_filters.owner and batch_filters.owner not in batch_owners %}<option value="{{ batch_filters.owner }}" selected>{{ batch_filters.owner }} (unavailable)</option>{% endif %}</select></div>
+  <div><label class="form-label" for="batch-sort">Sort by</label><select class="form-select form-select-sm" id="batch-sort" name="sort">{% for value,label in [('newest','Newest first'),('oldest','Oldest first'),('errors','Most errors'),('progress','Most processed')] %}<option value="{{ value }}"{{ ' selected' if value == batch_filters.sort }}>{{ label }}</option>{% endfor %}</select></div>
+  <input type="hidden" name="limit" value="{{ paging.limit }}">
+  <div class="d-flex gap-2"><button class="btn btn-primary btn-sm">Apply</button><a class="btn btn-outline-secondary btn-sm" href="/batches" {{ swaps('batches', true) }}>Clear</a></div>
+</form>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><div><strong id="batch-visible-count">{{ paging.total }} {{ 'batch' if paging.total == 1 else 'batches' }}</strong><span class="small text-secondary ms-2">{{ 'Filtered' if batch_filters.q or batch_filters.status or batch_filters.owner else 'All visible batches' }} · <span data-local-zone>times in UTC</span></span></div><div class="d-flex flex-wrap gap-2"><a class="btn btn-outline-secondary btn-sm" href="{{ batch_export }}" download>Export list ↓</a><form method="post" action="/batches" class="m-0"><input type="hidden" name="return_to" value="{{ batch_return }}"><button class="btn btn-outline-danger btn-sm" name="do" value="cancel-all" {{ confirm_two() }}{{ ' disabled' if not batch_can_stop }}>Stop all running</button></form></div></div>
+{% call card('', body_class='p-0') %}
+<div class="table-responsive" role="region" tabindex="0" aria-label="Batch ledger">
+<table id="batches-table" class="table table-hover align-middle bt-table mb-0"><caption class="visually-hidden">Batches with status, processed requests, ownership, submission time, endpoint and results</caption><thead><tr><th scope="col">Batch</th><th scope="col">Status</th><th scope="col">Request progress</th><th scope="col">Owner / submitted</th><th scope="col">Endpoint</th><th scope="col">Results & actions</th></tr></thead><tbody>
+{% for batch in batches %}{{ table_row(batch, person, loop.index, batch_return) }}{% else %}{% call empty_row(6) %}{% if batch_count %}No matching batches. <a href="/batches" {{ swaps('batches', true) }}>Clear filters</a>.{% else %}No batches. <a href="#batch-submission" data-batch-guide>Submit a batch through the API</a>.{% endif %}{% endcall %}{% endfor %}
+</tbody></table></div>
+{% endcall %}
+<div class="bt-pagination"><form method="get" action="/batches" class="d-flex align-items-center gap-2" {{ swaps('batches', true) }} data-auto-submit><label for="batch-limit" class="small text-secondary text-nowrap">Per page</label><select class="form-select form-select-sm w-auto" id="batch-limit" name="limit">{% for size in paging.sizes %}<option value="{{ size }}"{{ ' selected' if size == paging.limit }}>{{ size }}</option>{% endfor %}</select>{% for key,value in batch_filters.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<noscript><button class="btn btn-primary btn-sm">Show</button></noscript></form>{% with target='batches' %}{% include 'pagination.html' %}{% endwith %}</div>
+{% for batch in batches %}<template id="batch-detail-{{ loop.index }}">{{ inspector(batch,person,batch_return) }}</template>{% endfor %}
 </div>

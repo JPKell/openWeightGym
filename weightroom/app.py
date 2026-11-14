@@ -49,6 +49,7 @@ import uvicorn
 from weightroom.forms import refill, error_message
 from weightroom.model_catalogue import catalogue as model_catalogue
 from weightroom.cloud_views import accounts_view, SECTIONS as CLOUD_SECTIONS
+from weightroom import batch_views
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException
@@ -2500,16 +2501,31 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if isinstance(found, Response):
             return found
         template = "batches_list.html" if request.query_params.get("part") == "list" else "batches.html"  # the list asking for itself again
+        view = batch_views.workspace(found['batches'], person, request.query_params)
+        if request.query_params.get('export') == 'csv':
+            return Response(batch_views.export_csv(view['batches']), media_type='text/csv',
+                            headers={'content-disposition': 'attachment; filename="batches.csv"'})
         limit, current = controls(request.query_params)
-        current = min(current, max(1, (len(found['batches']) + limit - 1) // limit))
+        total = len(view['batches'])
+        current = min(current, max(1, (total + limit - 1) // limit))
+        view['batches'] = view['batches'][(current - 1) * limit:current * limit]
+        query = {key: value for key, value in view['batch_filters'].items() if value}
+        query.update(limit=limit, page=current)
+        view['batch_return'] = '/batches?' + urlencode(query)
+        view['batch_poll'] = '/batches?' + urlencode({**query, 'part': 'list'})
         return page(request, template, person, status=400 if failed else 200,
-                    batches=found['batches'][(current - 1) * limit:current * limit],
-                    paging=pagination('/batches', request.query_params, len(found['batches']), limit, current),
+                    **view, paging=pagination('/batches', request.query_params, total, limit, current),
                     said=said or request.query_params.get("said", ""), failed=failed)
 
     async def batch_do(request: Request, person: Person) -> Response:
         """Cancel a batch. What was answered so far is kept, and the rest is not asked."""
         form = await typed(request)
+        destination = form.get('return_to', '/batches')
+        if urlsplit(destination).path != '/batches' or urlsplit(destination).netloc or urlsplit(destination).scheme:
+            destination = '/batches'
+        def batch_redirect(message):
+            query = {key: value for key, value in parse_qsl(urlsplit(destination).query) if key in ('q', 'status', 'owner', 'sort', 'limit', 'page')}
+            return go('/batches?' + urlencode({**query, 'said': message}))
         if form.get("do") == "cancel-all":
             found = await fetch(request, person, "/loadcoach/batches")
             if isinstance(found, Response):
@@ -2526,12 +2542,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             message = f"Stopped {cancelled} {'batch' if cancelled == 1 else 'batches'}. Completed answers are kept."
             if failed:
                 return await batches_page(request, person, message + f" Could not stop {failed} batches.", failed=True)
-            return go("/batches?said=" + quote(message))
+            return batch_redirect(message)
         number = form.get("batch", "")
         answer = await ask("POST", f"/v1/batches/{quote(number, safe='')}/cancel", person.key)
         if answer.status_code != 200:
             return await batches_page(request, person, answer.json()["error"]["message"], failed=True)
-        return go("/batches?said=" + quote("Cancelled. The answers there were are kept, and the rest is not asked."))
+        return batch_redirect("Cancelled. The answers there were are kept, and the rest is not asked.")
 
     async def batch_file(request: Request, person: Person) -> Response:
         """A batch's answers, or its errors, as a file to keep: one line for each request."""

@@ -1,0 +1,78 @@
+{% from 'parts.html' import card, section_title, more, confirm_two, empty_row %}
+{% from 'docs_parts.html' import doc_code %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+
+{% macro state(batch=none) %}<span class="bt-state" data-state="{{ batch.status if batch else '' }}">{{ {'in_progress':'Running','completed':'Completed','cancelled':'Cancelled','cancelling':'Cancelling','paused':'Paused'}.get(batch.status, batch.status) if batch else '' }}</span>{% endmacro %}
+
+{% macro identity(batch=none, index='') %}
+<button type="button" class="bt-open" data-open{% if batch %} data-batch-open="batch-detail-{{ index }}" aria-label="Inspect {{ (batch.get('metadata') or {}).get('name') or batch.id }}"{% endif %}><strong data-name>{{ ((batch.get('metadata') or {}).get('name') or batch.id) if batch else '' }}</strong><code class="bt-id" data-id>{{ batch.id if batch else '' }}</code></button>
+{% endmacro %}
+
+{% macro progress(batch=none) %}
+{% set counts = batch.request_counts if batch else {'completed':0,'failed':0,'total':0} %}
+{% set done = counts.completed + counts.failed %}
+{% set percent = (100 * done / (counts.total or 1))|int %}
+<div class="bt-progress">
+  <div class="d-flex justify-content-between gap-2 small mb-1"><strong data-progress-label>{% if batch %}{{ '{:,}'.format(done) }} / {{ '{:,}'.format(counts.total) }} processed{% endif %}</strong><span class="text-secondary" data-percent>{{ (percent ~ '%') if batch else '' }}</span></div>
+  <div class="progress" role="progressbar" aria-label="Processed requests" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ percent }}"{% if batch %} aria-valuetext="{{ done }} of {{ counts.total }} processed: {{ counts.completed }} successful, {{ counts.failed }} errors"{% endif %} data-progress><div class="progress-bar" data-completed-bar style="width:{{ 100 * counts.completed / (counts.total or 1) }}%"></div><div class="progress-bar bg-danger" data-failed-bar style="width:{{ 100 * counts.failed / (counts.total or 1) }}%"></div></div>
+  <div class="d-flex justify-content-between gap-2 small mt-1"><span class="text-secondary" data-success-label>{{ ('{:,}'.format(counts.completed) ~ ' successful') if batch else '' }}</span><span class="{{ 'text-danger' if not batch or counts.failed else 'text-secondary' }}" data-error-label>{{ (('{:,}'.format(counts.failed) ~ ' errors') if counts.failed else 'No errors') if batch else '' }}</span></div>
+</div>
+{% endmacro %}
+
+{% macro actions(batch=none, person=none, return_to='/batches') %}
+{% if batch %}<div class="bt-actions">
+{% if batch.user == person.name and batch.output_file_id %}<a class="btn btn-outline-primary btn-sm" href="/batches/{{ batch.output_file_id|urlencode }}">Answers</a>{% endif %}
+{% if batch.user == person.name and batch.error_file_id %}<a class="btn btn-outline-secondary btn-sm" href="/batches/{{ batch.error_file_id|urlencode }}">Errors</a>{% endif %}
+{% if batch.status == 'in_progress' and (batch.user == person.name or 'stop' in person.can) %}<form method="post" action="/batches" class="m-0"><input type="hidden" name="batch" value="{{ batch.id }}"><input type="hidden" name="return_to" value="{{ return_to }}"><button class="btn btn-outline-danger btn-sm" name="do" value="cancel" aria-label="Cancel {{ (batch.get('metadata') or {}).get('name') or batch.id }}" {{ confirm_two() }}>Cancel</button></form>{% endif %}
+{% if batch.user != person.name %}<span class="small text-secondary">Files visible to owner</span>{% elif not batch.output_file_id and not batch.error_file_id %}<span class="small text-secondary">{{ 'Files available when finished' if batch.status in ('in_progress','paused','cancelling') else 'No result files' }}</span>{% endif %}
+</div>{% else %}
+<div class="bt-actions"><button type="button" class="btn btn-outline-primary btn-sm" data-download="answers" hidden>Answers ↓</button><button type="button" class="btn btn-outline-secondary btn-sm" data-download="errors" hidden>Errors ↓</button><form class="m-0" data-cancel-form hidden><input type="hidden" name="batch"><button class="btn btn-outline-danger btn-sm" name="do" value="cancel" {{ confirm_two() }}>Cancel</button></form><span class="small text-secondary" data-file-note></span></div>{% endif %}
+{% endmacro %}
+
+{% macro inspector(batch=none, person=none, return_to='/batches') %}
+{% set close %}<button type="button" class="btn btn-outline-secondary btn-sm" id="close-inspector"{% if not batch %} hidden{% endif %} data-batch-close>Close</button>{% endset %}
+{% call card('Batch details', id='batch-inspector', actions=close, body_class='p-4', header_id='inspector-heading') %}
+<div id="inspector-content">
+  <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">{{ state(batch) }}<span class="small text-secondary" data-owner>{{ batch.user if batch else '' }}</span></div>
+  {{ section_title(((batch.get('metadata') or {}).get('name') or batch.id) if batch else '', id='detail-name', level=3, class_='bt-detail-title') }}
+  <div class="d-flex align-items-start gap-2 mb-3"><code class="text-break flex-grow-1" data-id id="batch-copy-id">{{ batch.id if batch else '' }}</code><button type="button" class="btn btn-outline-secondary btn-sm" id="copy-id"{% if batch %} data-copy-target="batch-copy-id"{% endif %}>Copy ID</button></div>
+  {{ progress(batch) }}
+  <p class="small text-secondary mt-3" id="detail-outcome">{% if batch %}{{ 'Cancelled. Completed answers are kept; unprocessed requests will not run.' if batch.status == 'cancelled' else 'Live requests take priority. Progress survives restarts.' }}{% endif %}</p>
+  <dl class="bt-facts"><dt>Submitted</dt><dd data-created>{{ batch.created_at|timestamp if batch else '' }}</dd><dt>Endpoint</dt><dd><code data-endpoint>{{ batch.endpoint if batch else '' }}</code></dd><dt>Input file</dt><dd><code data-input-file>{{ batch.input_file_id if batch else '' }}</code></dd><dt>Finished</dt><dd data-finished>{{ (batch.completed_at or batch.cancelled_at)|timestamp if batch else '' }}</dd><dt>Unprocessed</dt><dd data-remaining>{{ '{:,}'.format(batch.request_counts.total - batch.request_counts.completed - batch.request_counts.failed) if batch else '' }}</dd></dl>
+  <div class="border-top pt-3 mt-3">{{ section_title('Results & actions', level=3) }}{{ actions(batch,person,return_to) }}{% if batch and ('see-log' in person.can or batch.user == person.name) %}<a class="d-inline-block mt-3" href="/log?trace={{ batch.id|urlencode }}">View requests →</a>{% endif %}<p class="small text-secondary mt-3 mb-0">Answers and errors are downloadable by the batch owner. Files remain available until the configured retention period ends.</p></div>
+  {% call more('Batch API record') %}<pre class="small mb-0" id="batch-record">{{ batch|tojson(indent=2) if batch else '' }}</pre>{% endcall %}
+</div>
+<p id="inspector-empty" class="text-secondary mb-0" hidden>Select a batch to see its progress, files and submission details.</p>
+{% endcall %}
+{% endmacro %}
+
+{% macro table_row(batch=none, person=none, index='', return_to='/batches') %}
+<tr{% if batch %} data-batch="{{ batch.id }}"{% endif %}><td>{{ identity(batch,index) }}{% if batch and ('see-log' in person.can or batch.user == person.name) %}<a class="small d-inline-block mt-1" href="/log?trace={{ batch.id|urlencode }}">View requests</a>{% endif %}</td><td>{{ state(batch) }}</td><td>{{ progress(batch) }}</td><td><span data-owner>{{ batch.user if batch else '' }}</span><div class="small text-secondary mt-1" data-created>{{ batch.created_at|timestamp if batch else '' }}</div></td><td><code class="bt-endpoint" data-endpoint>{{ batch.endpoint if batch else '' }}</code></td><td>{{ actions(batch,person,return_to) }}</td></tr>
+{% endmacro %}
+
+{% macro overview(data=none) %}
+{% call kpi_row('Batch overview', class_='mb-3') %}
+{{ kpi('Active batches', data.active if data else '—', 'Running, paused or cancelling', value_attrs={'id':'active-count'}) }}
+{{ kpi('Requests processed', '{:,}'.format(data.processed) if data else '—', ('of ' ~ '{:,}'.format(data.total) ~ ' submitted requests') if data else 'Successful answers + errors', value_attrs={'id':'processed-count'}, note_attrs={'id':'processed-note'}) }}
+{{ kpi('Batches with errors', data.errors if data else '—', 'Review the error count below', value_attrs={'id':'error-count'}) }}
+{{ kpi('Your result files', data.ready if data else '—', 'Batches with answers to download', value_attrs={'id':'ready-count'}) }}
+{% endcall %}
+{% endmacro %}
+
+{% macro guide() %}
+<p>Submit a JSONL file to the front’s OpenAI-compatible Batch API using your own API key. Each line contains one request.</p>
+{% call doc_code('batch-example-input', 'requests.jsonl') %}{"custom_id":"ticket-001","method":"POST","url":"/v1/chat/completions","body":{"model":"YOUR_MODEL","messages":[{"role":"user","content":"Classify this support ticket."}]}}{% endcall %}
+{{ section_title('1. Upload your requests', level=3) }}
+{% call doc_code('batch-example-upload', 'Shell') %}curl FRONT/v1/files \
+  -H "Authorization: Bearer KEY" \
+  -F purpose=batch -F file=@requests.jsonl{% endcall %}
+{{ section_title('2. Create the batch', level=3) }}
+{% call doc_code('batch-example-create', 'Shell') %}curl FRONT/v1/batches \
+  -H "Authorization: Bearer KEY" \
+  -H "content-type: application/json" \
+  -d '{"input_file_id":"FILE_ID","endpoint":"/v1/chat/completions","completion_window":"24h","metadata":{"name":"Support ticket classification"}}'{% endcall %}
+{{ section_title('3. Check progress and retrieve results', level=3) }}
+{% call doc_code('batch-example-results', 'Shell') %}curl FRONT/v1/batches/BATCH_ID -H "Authorization: Bearer KEY"
+curl FRONT/v1/files/OUTPUT_FILE_ID/content -H "Authorization: Bearer KEY"{% endcall %}
+<p class="small text-secondary mb-0">Replace FRONT, KEY, YOUR_MODEL and the file and batch IDs with your own values. Live requests take priority; batch progress survives restarts.</p>
+{% endmacro %}
