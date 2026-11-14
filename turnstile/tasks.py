@@ -198,7 +198,8 @@ class TaskRecords:
                 self.batches.db.execute("INSERT INTO batch_lines(batch,line,custom_id,body,model_id) VALUES(?,0,'task',?,?)", (number, json.dumps(line), subject["model_id"]))
                 self.batches.db.execute("INSERT INTO benchmark_tasks(id,token_hash,model,fingerprint,subject,environment,model_id,machine,owner_id) VALUES(?,?,?,?,?,?,?,?,?)",
                     (number, digest, selected["id"], frozen["fingerprint"], json.dumps(subject), json.dumps(environment), subject["model_id"], name, user.identity))
-            self.log.add("task", "created", user.name, task=number, machine=name, owner="front")
+            self.log.add("task", "created", user.name, trace=number, task=number, batch=number,
+                         machine=name, owner="front", model=selected['id'])
             return JSONResponse(self.public(self.get(number)), status_code=201)
         except (ValueError, KeyError, TypeError) as problem:
             return error(400, str(problem))
@@ -463,6 +464,14 @@ class TaskRecords:
                         self.batches.db.execute("UPDATE batch_lines SET result=? WHERE batch=? AND line=0", (json.dumps(result), task["id"]))
                     column = "error_file" if state == "failed" else "output_file"
                     self.batches.db.execute(f"UPDATE batches SET status=?,ended=?,{column}=? WHERE id=?", ("cancelled" if state == "cancelled" else "completed", time.time(), file, task["id"]))
+            if claimed:
+                counts = self.batches.get(task['id'])['request_counts']
+                result = body.get('result')
+                failure = result.get('error') if state == 'failed' and isinstance(result, dict) else None
+                detail = {'error': str(failure.get('message') or failure.get('code') or 'Task failed.')
+                          if isinstance(failure, dict) else str(failure)} if failure else {}
+                self.log.add('task', state, task['user'], model=task.get('model'), trace=task['id'],
+                             task=task['id'], batch=task['id'], machine=task['machine'], **counts, **detail)
             await self.publish_pending()
             return JSONResponse(self.public(self.get(task["id"])))
         except ValueError as problem:

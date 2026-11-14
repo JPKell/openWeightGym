@@ -18,12 +18,18 @@ def metadata(event):
     return {key: value for key, value in event.items() if key != 'text'}
 
 
+def context_trace(event):
+    """Associate retained batch/task references without altering recorded traces."""
+    return event.get('trace') or (event.get('batch') if event.get('kind') == 'batch' else
+                                 event.get('task') if event.get('kind') == 'task' else None)
+
+
 def event_view(event, query):
     """Add links and labels without rewriting recorded evidence."""
     event = metadata(event)
     what = event.get('what', '')
     failed, denied = what == 'failed', what in ('denied', 'refused')
-    complete = what in ('done', 'created', 'loaded', 'signed-in')
+    complete = what in ('done', 'completed', 'created', 'loaded', 'signed-in')
     outcome = 'Failed' if failed else 'Denied' if denied else 'Completed' if complete else 'Activity'
     summary = next((event[key] for key in ('error', 'why', 'reason', 'message') if event.get(key)), '')
     if not isinstance(summary, str):
@@ -31,7 +37,11 @@ def event_view(event, query):
     request_id = event.get('of') or event.get('source') or event['id']
     if event.get('kind') == 'request' and not event.get('of') and not event.get('source') and event.get('machine') in (None, 'front'):
         request_id = public_number(None, event['id'])
-    return dict(event, raw=event, outcome=outcome,
+    if not summary and event.get('kind') == 'batch_request':
+        summary = f"Request {event.get('custom_id', '')} · HTTP {event.get('status', '—')}"
+    if not summary and event.get('kind') in ('batch', 'task') and what in ('completed', 'cancelled'):
+        summary = f"{event.get('completed', 0)} successful · {event.get('failed', 0)} failed · {event.get('total', 0)} total"
+    return dict(event, raw=event, outcome=outcome, context_trace=context_trace(event),
                 badge='red' if failed else 'orange' if denied else 'green' if complete else 'secondary',
                 title=f"{event.get('kind', '')} / {what}",
                 summary=summary or (f"Request #{request_id}" if event.get('kind') == 'request' else f"Event #{event['id']}"),
@@ -44,18 +54,18 @@ def event_view(event, query):
 
 
 def workspace(events, query, selected=None, context=None, context_error=False):
-    """Group only exact trace IDs; untraced events remain separate records."""
+    """Group exact trace IDs and retained batch references; other events stay separate."""
     views = [event_view(event, query) for event in events]
     selected = event_view(selected, query) if selected else None
     groups = {}
     for event in views:
-        key = ('trace', event['trace']) if event.get('trace') else ('event', event['id'])
+        key = ('trace', event['context_trace']) if event['context_trace'] else ('event', event['id'])
         groups.setdefault(key, []).append(event)
     choices = []
     for (kind, key), group in groups.items():
         representative = next((event for event in group if event['outcome'] == 'Failed'),
                               next((event for event in group if event['outcome'] == 'Denied'), group[0]))
-        active = bool(selected and (selected.get('trace') == key if kind == 'trace' else selected['id'] == key))
+        active = bool(selected and (selected['context_trace'] == key if kind == 'trace' else selected['id'] == key))
         choices.append(dict(event=representative, label=str(key) if kind == 'trace' else f'Event #{key}',
                             count=len(group), active=active))
     chain = [event_view(event, query) for event in (context or ([selected['raw']] if selected else []))]

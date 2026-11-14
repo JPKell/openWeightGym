@@ -246,8 +246,15 @@ class Log:
             values.append(before)
         for column, wanted in (("user", user), ("kind", kind), ("trace", trace), ("what", what), ("model", model)):
             if wanted is not None:
-                where.append(f"{column} = ?")
-                values.append(wanted)
+                if column == 'trace':
+                    # Older lifecycle entries recorded only detail.batch/task. Read
+                    # that exact association without rewriting the chained evidence.
+                    where.append(f"(trace = ? OR (kind = 'batch' AND {self.json_value('detail', 'batch')} = ?)"
+                                 f" OR (kind = 'task' AND {self.json_value('detail', 'task')} = ?))")
+                    values.extend((wanted, wanted, wanted))
+                else:
+                    where.append(f"{column} = ?")
+                    values.append(wanted)
         order = "ASC" if after else "DESC"
         if q:
             from loadcoach.event_filters import expressions

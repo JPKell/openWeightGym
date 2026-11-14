@@ -134,6 +134,24 @@ def test_front_creation_probe_receipt_finish_are_local_atomic_and_idempotent(fak
         async def counts():
             return [front.batches.db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0] for table in ('benchmark_tasks', 'batches', 'batch_lines', 'files')]
         assert caller.portal.call(counts) == [1, 1, 1, 2]
+        history = caller.get('/loadcoach/events', headers=owner, params={'trace': intent['id'], 'kind': 'task'}).json()['events']
+        assert [entry['what'] for entry in history] == ['created', 'completed']
+        assert all(entry['trace'] == intent['id'] for entry in history)
+
+
+def test_failed_task_history_keeps_reason_without_copying_private_results(fake_llama_server, fake_cards, tmp_path):
+    with task_gateway(fake_llama_server, fake_cards, tmp_path) as caller:
+        owner = add_user(caller, 'owner', 'admin')
+        intent = create(caller, owner)
+        finish = {'state': 'failed', 'result': {'error': 'The measurement worker disconnected.', 'private': 'PRIVATE RESULT'}}
+        for _ in range(2):
+            result = caller.post('/loadcoach/tasks/' + intent['id'] + '/finish',
+                                 headers={'x-loadcoach-task': intent['token']}, json=finish)
+            assert result.status_code == 200
+        history = caller.get('/loadcoach/events', headers=owner, params={'trace': intent['id'], 'kind': 'task'}).json()['events']
+        assert [entry['what'] for entry in history] == ['created', 'failed']
+        assert history[-1]['error'] == 'The measurement worker disconnected.'
+        assert history[-1]['failed'] == 1 and 'PRIVATE RESULT' not in json.dumps(history)
 
 
 def test_dispatch_is_private_and_wrong_scope_never_touches_compute(fake_llama_server, fake_cards, tmp_path):
