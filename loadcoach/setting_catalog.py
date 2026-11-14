@@ -40,6 +40,7 @@ class Setting:
     choices_from: str = ''
     help: str = ''
     retired: bool = False
+    retired_when: str = ''
     derived: bool = False
     deprecated: bool = False
     control: str = ''
@@ -222,6 +223,17 @@ def changeable():
     return result
 
 
+def retired_for(program, name, context=None):
+    """A conditional retirement must not retire the same key on standalone nodes."""
+    entry = get(program, name)
+    return bool(entry and (entry.retired or entry.retired_when and (context or {}).get(entry.retired_when)))
+
+
+def changeable_for(program, context=None):
+    return {entry.name: entry.tier for entry in entries(program)
+            if entry.tier != FILE and not entry.derived and not retired_for(program, entry.name, context)}
+
+
 # Existing service settings.
 
 # loadcoach
@@ -244,7 +256,7 @@ _add('loadcoach', 'host_ram_headroom_mib', 'int', tier='now', scope='node', page
 _add('loadcoach', 'host_ram_limit_mib', 'int', tier='now', scope='node', page='nodes', section='RAM policy', label='Host RAM limit', unit='MiB', control='number', min=0, help="Optional MiB budget for CPU model processes on this node. 0 uses the smaller of host availability and the service's systemd/cgroup memory ceiling.")
 _add('loadcoach', 'disable_ram_offload', 'bool', tier='restart', scope='node', page='nodes', section='RAM policy', label='Disable RAM offload', control='switch', help='Keep GPU models in VRAM and fail admission/loading instead of allowing CUDA unified-memory spill into host RAM. Changing this requires a LoadCoach restart.')
 _add('loadcoach', 'cpu_idle_minutes', 'float', tier='now', scope='node', page='nodes', section='Power and idle', label='CPU model idle timeout', unit='min', control='number', min=0, help='Unload CPU models after this many idle minutes; 0 disables automatic CPU eviction. Active requests, holds, locks and GPU models stay protected.')
-_add('loadcoach', 'keep_days', 'float', tier='now', scope='node', page='retention', section='Logs and retention', label='Event retention', unit='days', control='number', min=0, help='Days that event log entries are kept. 0 keeps them for ever.')
+_add('loadcoach', 'keep_days', 'float', tier='now', scope='node', page='retention', section='Logs and retention', label='Event retention', unit='days', control='number', min=0, help='Standalone event retention in days; 0 keeps everything. Retired on nodes with a control node; acknowledged local copies retain their fixed bound.', retired_when='front')
 _add('loadcoach', 'batch_keep_days', 'float', tier='now', scope='node', page='retention', section='Logs and retention', label='Batch retention', unit='days', control='number', min=0, help='Days after a batch has ended that its files are kept: the requests that were handed in, and the answers. After that both are removed, and the batch stays listed with its counts. 0 keeps them for ever.')
 _add('loadcoach', 'keep_text', 'int', tier='now', scope='node', page='retention', section='Logs and retention', label='Request text retention', control='number', min=0, help='How many of the latest requests are kept in full: what was sent and what came back, whatever their level. It is for finding out what went wrong. The owner of a request can read its text, and so can those who may "see-capture". 0 keeps none.')
 _add('loadcoach', 'unlogged', 'bool', tier='now', scope='node', page='retention', section='Logs and retention', label='Allow requests without logs', control='switch', help='Whether a request may be sent that leaves nothing behind: no entry in the event log, no request number, no kept text. false, as here, refuses every such request. With true, an account that has the ability "unlogged" may send one, by adding this header to it: X-LoadCoach-Log: off Such a request is not counted in anyone\'s usage, cannot be marked sensitive or given a piece of work, and cannot go to a hosted model. Asking for one without the ability is refused, and that refusal is put on record.')
@@ -368,7 +380,7 @@ _add('turnstile', 'artifact_machine', 'text', tier='restart', scope='front', pag
 _add('turnstile', 'image_adult_previews', 'bool', tier='now', scope='front', page='machine', section='Additional settings', label='Image adult previews')
 _add('turnstile', 'files_every', 'float', tier='now', scope='front', page='retention', section='Logs and retention', label='Check model files every', unit='min', control='number', min=0)
 _add('turnstile', 'component_versions_every', 'float', tier='now', scope='front', page='alerts', section='Alerts and monitoring', label='Component version check interval', unit='min', control='number', min=0, rule=_component_interval)
-_add('turnstile', 'keep_days', 'float', tier='file', scope='front', page='machine', section='Logs and retention', label='Event retention', unit='days', control='number', min=0)
+_add('turnstile', 'keep_days', 'float', tier='now', scope='front', page='retention', section='Logs and retention', label='Event log retention', unit='days', control='number', min=0, help='Days the control node retains the suite event log. Applies immediately to pruning; 0 keeps everything.')
 _add('turnstile', 'compute', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Compute')
 _add('turnstile', 'data', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Data')
 _add('turnstile', 'wake_mac', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Wake mac')

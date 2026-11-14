@@ -78,7 +78,9 @@ use them as written.
 ### Decisions made during implementation
 
 - Catalogue entries describe top-level settings; tables retain their existing whole-table POST contract. Nested tuning entries will validate the editable subset without exposing model paths.
-- Baseline checks at `b040cbc` reproduce eight console failures and 109 failures across legacy service tests; these must be resolved or accounted for in the clean-commit suite before pushing. Machine-readable logs are under `/tmp/owg-settings-*` on the implementation workstation.
+- Phase 0 verification: the clean `717890d` full suite reports 3,708 passed, 322 failed, 11 errors and 60 skipped; all 437 settings-focused cases pass. Baseline `b040cbc` reproduces eight console and 109 legacy-service failures. Final shared `28e06ec` passes 482 focused settings/API checks. Machine-readable evidence: `/home/jpk/ai/owg-settings-phase0-full.xml`, `owg-settings-phase0-focused-results.json` and `owg-settings-phase0-live.json`; broader failures include legacy routing and control-node wording expectations.
+- Live verification uses an expiring session for the existing owner account, revoked afterward. No accounts or provider/channel credentials are created.
+- Conditional retirement uses catalogue context (`front`) so the shared compatibility map still supports standalone nodes; node admission and startup filter retired overrides without deleting them.
 - Clean-worktree verification exposed the rename’s uncommitted `weightroom/display.py::node_label` dependency; include it with the shared configured-timezone fallback before deployment.
 - No exact commit attribution line was supplied in this session; commits use `Co-authored-by: Codex <noreply@openai.com>`.
 
@@ -418,8 +420,8 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 0.3 Shared validation in APIs and loaders (323 focused checks pass; secret reports are filtered at storage).
 - [x] 0.4 Common live getter and generic live application (374 focused checks pass; resets restore original file/default values).
 - [x] 0.5 Catalogue, validation, live and secret tests (437 focused checks pass).
-- [ ] Phase 0 clean-commit full suite, push, deployment and live verification.
-- [ ] 1a Event retention and conditional node retirement.
+- [x] Phase 0 full clean-commit run, shared main pushed, normal deployment and live verification (28e06ec; five settings surfaces; Backups 10 → 11 → 10 without restart).
+- [x] 1a Event retention and conditional node retirement (416 focused checks pass).
 - [ ] 1b Live observation policy.
 - [ ] 1c Live display, costs and audio defaults.
 - [ ] 1d Live control node request settings.

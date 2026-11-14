@@ -6,9 +6,9 @@ specific to that kind of event is kept beside it as a small JSON object.
 Entries are only ever added, never changed. Each one carries a hash of itself and of the entry
 before it, so the entries form a chain, and a later change to any of them shows.
 
-Since milestone 91 the log that is kept is the front machine's. Compute writes its entries
+Since milestone 91 the log that is kept is the control node's. Compute writes its entries
 without the chain, sends them to turnstile within seconds (`unsent` and `sent`), and keeps a day
-of them for its own checks during requests. Front takes them (`take`), keeping compute's numbers
+of them for its own checks during requests. Control node takes them (`take`), keeping compute's numbers
 beside its own, and chains them as they arrive, with its own entries in the same chain.
 
 For most requests only facts are kept, such as how long they took and how many tokens. For
@@ -42,10 +42,10 @@ COUNTS = {
 DECIMALS = {"tokens_per_second": 1, "cost": 6}  # the counts that are not whole numbers, and how fine to keep them
 
 COLUMNS = "id, at, kind, what, user, caller, model, trace, level, detail, text, hash"
-SENT_KEPT = 86400  # seconds compute keeps an entry after front has it, for its own checks
+SENT_KEPT = 86400  # seconds compute keeps an entry after control node has it, for its own checks
 MACHINE_SHIFT = 40  # public IDs for secondary machines fit exactly in JavaScript's 53-bit integers
 LEGACY = "compute"  # the old default node's name: its requests kept unprefixed numbers, which now resolve through `node_aliases`
-FRONT = "front"  # the range of the front machine's own requests, such as hosted answers, numbered by front's entries
+FRONT = "front"  # the range of the control node's own requests, such as hosted answers, numbered by the control node's entries
 
 
 def machine_slot(name: str) -> int:
@@ -54,9 +54,9 @@ def machine_slot(name: str) -> int:
 
 
 def public_number(machine: str | None, source: int) -> int:
-    """Keep the primary's request links intact; give each additional machine, and front's own requests (machine None), a separate range.
+    """Keep the primary's request links intact; give each additional machine, and the control node's own requests (machine None), a separate range.
 
-    Front numbers its entries with its own counter, so a hosted answer's entry number would otherwise meet a
+    Control node numbers its entries with its own counter, so a hosted answer's entry number would otherwise meet a
     compute request with the same number as compute's counter catches up."""
     if machine == LEGACY:
         return source
@@ -102,10 +102,10 @@ class Log:
     """The events table. Entries are added, read, and removed when old. Nothing else."""
 
     def __init__(self, path: DatabaseSource, keep_days: float = 90, keep_text: int = 0, chained: bool = True) -> None:
-        """`chained` false for compute, which sends its entries to front, where the chain is."""
+        """`chained` false for compute, which sends its entries to the control node, where the chain is."""
         self.keep_days, self.keep_text, self.chained = keep_days, keep_text, chained
         self.machine_names = (LEGACY,)
-        self.former: dict[str, str] = {}  # old node name → its current name, from `node_aliases` on front
+        self.former: dict[str, str] = {}  # old node name → its current name, from `node_aliases` on the control node
 
         # isolation_level=None: transactions begin and end only where this class says so.
         source = database(path)
@@ -115,6 +115,15 @@ class Log:
             for private in (file, str(file) + "-wal", str(file) + "-shm"):  # readable by the owner only
                 if os.path.exists(private):
                     os.chmod(private, 0o600)
+
+    @property
+    def keep_days(self):
+        """Read live retention at each use while keeping standalone assignment compatible."""
+        return self._keep_days() if callable(self._keep_days) else self._keep_days
+
+    @keep_days.setter
+    def keep_days(self, value):
+        self._keep_days = value
 
     def json_value(self, column: str, key: str, kind: str = "text") -> str:
         """Return an engine-specific scalar JSON expression for trusted column/key names."""
@@ -371,7 +380,7 @@ class Log:
             where += ' AND e.what = ?'
             values.append(filters['status'])
         if any(key in filters for key in ('request_min', 'request_max')) or filters.get('q', '').isdecimal():
-            # SQL compares displayed public IDs, including front and historical node prefixes.
+            # SQL compares displayed public IDs, including the control node and historical node prefixes.
             names = {row[0] for row in self.db.execute('SELECT DISTINCT machine FROM events')}
             names.update((None, LEGACY, *self.machine_names))
             prefixes = [(name, public_number(name, 1) - 1) for name in sorted(names, key=lambda value: value or '')]
@@ -429,7 +438,7 @@ class Log:
         if machine and machine != LEGACY and isinstance(details.get("of"), int):
             details["of"] = public_number(machine, details["of"])
         elif not machine and kind == "request" and isinstance(details.get("of"), int) and 0 < details["of"] < 1 << MACHINE_SHIFT:
-            details["of"] = public_number(None, details["of"])  # how one of front's own requests ended, under its public number
+            details["of"] = public_number(None, details["of"])  # how one of the control node's own requests ended, under its public number
         entry = {
             "id": number,
             **({"source": public_number(machine, source)} if source is not None else {}),
@@ -451,12 +460,12 @@ class Log:
     def about(self, number: int, with_text: bool = False, request: bool = False) -> list[dict]:
         """One entry, and every later entry that says it is `of` that one: a request, then how it ended.
 
-        `number` is the entry's id here, or with `request`, the request's number, which on front is
+        `number` is the entry's id here, or with `request`, the request's number, which on the control node is
         compute's: the number it was given where it was answered. `of` always means that number.
         """
         machine = None
         if request and number >= 1 << MACHINE_SHIFT and number >> MACHINE_SHIFT == machine_slot(FRONT):
-            local = number & ((1 << MACHINE_SHIFT) - 1)  # one of front's own requests: numbered by its entry here
+            local = number & ((1 << MACHINE_SHIFT) - 1)  # one of the control node's own requests: numbered by its entry here
             first = self.db.execute("SELECT id, id FROM events WHERE machine IS NULL AND id = ? AND kind = 'request' AND what = 'asked'",
                                     (local,)).fetchone()
         elif request and number >= 1 << MACHINE_SHIFT:
@@ -514,7 +523,7 @@ class Log:
         """What a request sent and what it was answered, if it is among those still kept in full."""
         legacy_entry = entry
         if entry >= 1 << MACHINE_SHIFT and entry >> MACHINE_SHIFT == machine_slot(FRONT):
-            entry = entry & ((1 << MACHINE_SHIFT) - 1)  # front's own request: its text is kept under its entry here
+            entry = entry & ((1 << MACHINE_SHIFT) - 1)  # the control node's own request: its text is kept under its entry here
         elif entry >= 1 << MACHINE_SHIFT:
             slot, local = entry >> MACHINE_SHIFT, entry & ((1 << MACHINE_SHIFT) - 1)
             machine = next((name for name in self.machine_names if name != LEGACY and machine_slot(name) == slot), None)
@@ -536,10 +545,10 @@ class Log:
             row = self.db.execute("SELECT asked, said FROM texts WHERE entry = ?", (legacy_entry,)).fetchone()
         return row and {"asked": json.loads(row[0]), "said": row[1] and json.loads(row[1])}
 
-    # ---- forwarding to the front machine ---------------------------------------------------------
+    # ---- forwarding to the control node ---------------------------------------------------------
 
     def unsent(self, limit: int = 500) -> tuple[list[dict], list[dict]]:
-        """Compute's entries front does not have yet, the oldest first, and the texts of the requests among them that have ended."""
+        """Compute's entries control node does not have yet, the oldest first, and the texts of the requests among them that have ended."""
         through = self.db.execute("SELECT MAX(through) FROM forwarded").fetchone()[0] or 0
         rows = self.db.execute(f"SELECT {COLUMNS} FROM events WHERE id > ? ORDER BY id LIMIT ?", (through, limit)).fetchall()
         entries = [dict(zip(COLUMNS.split(", "), row)) for row in rows]
@@ -549,7 +558,7 @@ class Log:
         return entries, texts
 
     def sent(self, through: int) -> None:
-        """Front has every entry up to `through`."""
+        """Control node has every entry up to `through`."""
         self.db.execute("DELETE FROM forwarded")
         self.db.execute("INSERT INTO forwarded (through) VALUES (?)", (through,))
 
@@ -562,7 +571,7 @@ class Log:
         return tuple(dict.fromkeys((LEGACY, self.former.get(LEGACY, LEGACY))))
 
     def take(self, machine: str, entries: list[dict], texts: list[dict], keep_text: int) -> int:
-        """On front: entries a compute machine sent, chained here as they come. One already here is not taken again. Gives the last one's number there."""
+        """On control node: entries a compute machine sent, chained here as they come. One already here is not taken again. Gives the last one's number there."""
         for one in entries:
             names = self.known_as(machine)
             if self.db.execute(f"SELECT 1 FROM events WHERE machine IN ({','.join('?' * len(names))}) AND source = ?",
@@ -665,7 +674,7 @@ class Log:
         row = self.db.execute("SELECT level FROM traces WHERE user = ? AND trace = ?", (user, trace)).fetchone()
         if row is None and self.chained:
             from loadcoach.groups import LEVELS
-            # Existing front logs were imported before trace levels moved here. Recover a
+            # Existing control node logs were imported before trace levels moved here. Recover a
             # previously sensitive trace from its chained events on first use.
             levels = [value for (value,) in self.db.execute("SELECT DISTINCT level FROM events WHERE user = ? AND trace = ?", (user, trace))]
             known = [value for value in levels if value in LEVELS]
@@ -705,19 +714,25 @@ class Log:
 
     def prune(self) -> int:
         """Remove entries older than `keep_days`. Returns how many went. 0 days keeps everything."""
-        if not self.keep_days:
+        days = self.keep_days
+        if self.chained and not days:
             return 0
-        oldest = time.time() - self.keep_days * 86400
-        self.db.execute("DELETE FROM traces WHERE at < ?", (oldest,))
-        self.db.execute("DELETE FROM seen WHERE at < ?", (oldest,))
         if self.chained:
-            # Everything before the first entry that is still young enough. On front, entries from compute come in after
+            oldest = time.time() - days * 86400
+            self.db.execute("DELETE FROM traces WHERE at < ?", (oldest,))
+            self.db.execute("DELETE FROM seen WHERE at < ?", (oldest,))
+            # Everything before the first entry that is still young enough. On control node, entries from compute come in after
             # entries made here, or all at once when the log moved, so `at` is not in the order of the chain. Removing
             # only from its start keeps what is left a whole chain.
             gone = self.db.execute("DELETE FROM events WHERE id < COALESCE((SELECT MIN(id) FROM events WHERE at >= ?), (SELECT MAX(id) + 1 FROM events))", (oldest,)).rowcount
-        else:  # compute: what front has, after a day. What it does not have yet is kept, however old: it is the spool
+        else:  # compute: what control node has, after a day. What it does not have yet is kept, however old: it is the spool
             through = self.db.execute("SELECT MAX(through) FROM forwarded").fetchone()[0] or 0
             gone = self.db.execute("DELETE FROM events WHERE at < ? AND id <= ?", (time.time() - SENT_KEPT, through)).rowcount
+            # Keep privacy/deduplication metadata while an unsent event still refers to it.
+            for table in ('traces', 'seen'):
+                self.db.execute(f'DELETE FROM {table} WHERE at < ? AND NOT EXISTS '
+                                f'(SELECT 1 FROM events WHERE events."user"={table}."user" AND events.trace={table}.trace)',
+                                (time.time() - SENT_KEPT,))
         names = self.legacy_names()
         self.db.execute(f"DELETE FROM texts WHERE entry NOT IN (SELECT id FROM events UNION SELECT source FROM events WHERE machine IN ({','.join('?' * len(names))}) AND source IS NOT NULL)", names)
         return gone

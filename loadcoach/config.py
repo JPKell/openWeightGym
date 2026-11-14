@@ -159,6 +159,8 @@ def config_from(path: Path, data: dict, file: dict) -> Config:
         data = current_names(data, str(path))  # renamed and retired keys (docs/peer-nodes-plan.md)
     except ValueError as problem:
         raise SystemExit(str(problem)) from None
+    if data.get('front'):
+        data['keep_days'] = 0  # Forwarded logs retain unsent events; SENT_KEPT bounds acknowledged copies.
     if "groups" in data:
         raise SystemExit(f"{path}: [groups] is kept on the control node since milestone 76. Remove it here; add groups there with: weightroom group add NAME")
     if "api_keys" in data:

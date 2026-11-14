@@ -51,7 +51,7 @@ observation_min_samples = 100
 observation_window_seconds = 300
 observation_alert_hold_seconds = 60
 
-# Observation spans kept on front: days kept (1-30), the percent of all-successful traces kept
+# Observation spans kept on the control node: days kept (1-30), the percent of all-successful traces kept
 # (0-100; spans that did not succeed are always kept, and every span still counts in the metrics),
 # and a cap on stored spans (0 is none). Polling makes most spans, so a low percent saves the most.
 # Applied when weightroom starts.
@@ -127,13 +127,13 @@ observation_quiet_routes = ["/loadcoach/status", "/v1/models", "/loadcoach/facts
 #   power         restart compute, put it to sleep and switch it off
 #   drain         stop new requests being taken so that the line empties, and let them in again
 #   sign-in       have someone else's sign-in checked here, for a session that can do all that
-#                 person may (for the front machine's own key)
+#                 person may (for the control node's own key)
 #   app-sign-in   the same, for a session that can do no more than this account (for an app's own key)
-#   mirror-users  read the list of models for front's plugins, and the evidence for alerts (for the front machine's own key)
+#   mirror-users  read the list of models for the control node's plugins, and the evidence for alerts (for the control node's own key)
 #   follow-settings  read what was changed in a program's settings and say what it runs with (for a
-#                 program's own key: the front machine's, the voice service's, the voice gateway's)
-#   front-...     anything starting with front- is the front machine's to interpret
-#   superuser     everything a person can be allowed to do, here and on the front machine, also what
+#                 program's own key: the control node's, the voice service's, the voice gateway's)
+#   front-...     anything starting with front- is the control node's to interpret
+#   superuser     everything a person can be allowed to do, here and on the control node, also what
 #                 is added later: every ability above except sign-in, app-sign-in and
 #                 mirror-users, which are for a program's own key. It also lifts max_sensitivity
 #                 to the highest, unless the group sets one.
@@ -205,19 +205,19 @@ response_max_tool_seconds = 900
 response_keep_days = 30
 wait = 180
 # Let callers choose the node their work runs on, such as benchmark runs on Node measurements that
-# name a node. When off, the front picks the node and a request that names one is refused with a
-# message saying so. The front keeps task records for every node either way. Changes apply immediately.
+# name a node. When off, the control node picks the node and a request that names one is refused with a
+# message saying so. The control node keeps task records for every node either way. Changes apply immediately.
 allow_caller_to_specify_destination = true
 # The node new voice sessions start on. When it is full or not answering, another node running voice
 # takes the session, which stays there until it ends. Empty: the first node running voice. Changes apply immediately.
 preferred_voice_node = ""
-# LoadCoach on the front host that owns the model-file storage library and active cache. Empty prefers
+# LoadCoach on the control node that owns the model-file storage library and active cache. Empty prefers
 # front_cpu when configured, otherwise the first node. Changing it requires restarting turnstile.
 artifact_machine = ""
 # Allow each user to opt in to adult Civitai previews. Off hides the user control and
 # enforces safe previews for every account. Changes apply immediately.
 image_adult_previews = false
-# Minutes between looks through front's own model cache and storage for the Files page. Between
+# Minutes between looks through the control node's own model cache and storage for the Files page. Between
 # looks the page answers from the list kept in the data folder; its Refresh button looks again at
 # once, and the files the page moves, copies, deletes or downloads are put right straight away.
 # Only files that are new or have changed are read. 0 means only when asked. Changes apply immediately.
@@ -225,6 +225,6 @@ files_every = 10
 
 # Check installed service and engine versions this often, in minutes (above 0). Changes apply immediately.
 component_versions_every = 60
-# Days the event log is kept on this machine: compute's requests and what was done here to the
-# accounts and roles. Older entries are removed once a day. 0 keeps everything.
+# Days the control node retains the suite event log, including forwarded entries and local
+# account/role changes. Changes apply immediately to pruning; 0 keeps everything.
 keep_days = 90

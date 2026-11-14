@@ -68,7 +68,7 @@ from db.health import stores_health, async_stores_health
 from loadcoach.tasks import Tasks
 from loadcoach.capture import answer_text, request_text, said_wrong
 from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings, shared_places, storage_places
-from loadcoach.setting_catalog import validate_patch
+from loadcoach.setting_catalog import changeable_for, retired_for, validate_patch
 from loadcoach.settings import CHANGEABLE, NOW, Changes, front_programs, program_name, said
 from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
 from loadcoach.file_index import NODE_INDEX, FileIndex, tier_of
@@ -180,7 +180,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     # No read timeout: a model can think for minutes before its first token.
     client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5.0))
     # With a control node, the log that is kept is the control node's: entries go there (see front.py), and the chain is made there.
-    log = Log(":memory:" if emergency else core, config.keep_days, config.keep_text, chained=not config.front or emergency)
+    log = Log(":memory:" if emergency else core, (0 if config.front else config.keep_days), config.keep_text, chained=not config.front or emergency)
     library = Models(core, config.model_defaults, config.models)  # the models there are, read live
     runner = Runner(config, client, log.add, library)
     loadouts = Loadouts(library, runner)
@@ -2640,7 +2640,10 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """Keep what LoadCoach itself runs with, so that the page can show it: by the names its file uses."""
         simple = ("host", "port", "engines", "llama_server", "load_timeout", "max_wait", "card_margin", "model_idle_minutes", "host_ram_headroom_mib", "host_ram_limit_mib", "cpu_idle_minutes", "disable_ram_offload", "models_folder", "models_storage_folder", "keep_days", "keep_text", "unlogged", "database", "places", "model_defaults", "disabled_gpus", "engine_gpus")
         running = {**config.file, **{name: getattr(config, name) for name in simple}, "gpus": list(config.gpus)}
-        reported = said(running, config.file, config.says)
+        reported = said(running, config.file, config.says, 'loadcoach')
+        for name, row in reported.items():
+            if retired_for('loadcoach', name, vars(config)):
+                row['retired'] = True
         reported["disable_ram_offload"].update(
             label="Disable RAM offload",
             choices=[["true", "Yes - require VRAM"], ["false", "No - allow host RAM spill"]],
@@ -2717,13 +2720,14 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         known = next((one for one in changes.everything() if one["program"] == program), None)
         if known is None:
             return error(404, f"{program} has not said what it runs with. It is not a program of this suite, or has not run since this was built.")
-        allowed = {"disabled_gpus", 'engine_gpus'} if request.url.path == "/loadcoach/cards" else set(CHANGEABLE[program]) | {setting["name"] for setting in known["settings"]}
+        editable = changeable_for(program, vars(config) if program == 'loadcoach' else {})
+        allowed = {"disabled_gpus", 'engine_gpus'} if request.url.path == "/loadcoach/cards" else set(editable) | {setting["name"] for setting in known["settings"]}
         asked = await read_json(request, allowed)
         if isinstance(asked, Response):
             return asked
         now = {setting["name"]: setting["value"] for setting in known["settings"]}
         for name in asked:
-            if name not in CHANGEABLE[program]:
+            if name not in editable:
                 return error(403, f"{name} is not changed from here. It is changed in {program}'s file, on its machine.")
         try:
             validate_patch(program, now, asked)
@@ -2732,7 +2736,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if program == "loadcoach":  # its own: checked whole before anything is kept, and taken on at once where that is safe
             # Validate the entire next-start configuration, including pending engine aliases.
             # Looking only at this POST wrongly conflicts with another engine's saved path.
-            wanted = {name: of_the_file(name) if value is None else value for name, value in {**changes.of(program), **asked}.items()}
+            wanted = {name: of_the_file(name) if value is None else value for name, value in {**changes.of(program), **asked}.items() if name in editable}
             try:
                 candidate = checked(replace(config, **{name: tuple(value) if name == "gpus" else value for name, value in wanted.items()}), "settings")
             except (SystemExit, TypeError) as problem:
@@ -2753,7 +2757,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 await runner.stop(server)
                 log.add("model", "unloaded", user.name, address(request), model=server.model, why="its card was disabled")
             runner.wake.set()
-            log.keep_days, log.keep_text, library.defaults = config.keep_days, config.keep_text, config.model_defaults
+            log.keep_days, log.keep_text, library.defaults = (0 if config.front else config.keep_days), config.keep_text, config.model_defaults
         for name, value in asked.items():
             changes.take_away(program, name) if value is None else changes.put(program, name, value, user.name)
         if program == "loadcoach":

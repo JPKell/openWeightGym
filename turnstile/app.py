@@ -225,7 +225,7 @@ def say_what_runs(path: Path, settings: Settings) -> None:
                "voice_port": settings.voice_port, "artifact_machine": artifact_machine,
                "models_folder": settings.models_folder, "models_storage_folder": settings.models_storage_folder,
                "image_adult_previews": settings.image_adult_previews, "files_every": settings.files_every,
-               "component_versions_every": settings.component_versions_every, "response_keep_days": settings.response_keep_days,
+               "component_versions_every": settings.component_versions_every, "keep_days": settings.keep_days, "response_keep_days": settings.response_keep_days,
                "response_max_tool_calls": settings.response_max_tool_calls, "response_max_tool_seconds": settings.response_max_tool_seconds,
                "allow_caller_to_specify_destination": settings.allow_caller_to_specify_destination,
                "preferred_voice_node": settings.preferred_voice_node}
@@ -306,7 +306,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     passive_reads = contextvars.ContextVar("turnstile_passive_reads", default=False)
     users = users or Users(stores.database("weightroom.accounts"), settings.groups)
     # The one event log: what was done here to the accounts, and since milestone 91 every entry compute sends.
-    log = Log(stores.database("weightroom.accounts"), keep_days=settings.keep_days)
+    log = Log(stores.database("weightroom.accounts"), keep_days=lambda: live("turnstile", "keep_days", settings.keep_days))
     log.machine_names = tuple(settings.machines)
     # Old node names (`formerly`) stay readable: rows, request numbers and statements that still use them.
     log.former = model_locations.former = nodes.remember_aliases(log.db, nodes.aliases_from(settings.machines))

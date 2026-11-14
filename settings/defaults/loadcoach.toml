@@ -63,7 +63,9 @@ disable_ram_offload = true
 # Active requests, holds, locks and GPU models stay protected.
 cpu_idle_minutes = 15
 
-# Days that event log entries are kept. 0 keeps them for ever.
+# Standalone nodes only: days event entries are kept; 0 keeps them for ever. With `front`
+# configured this setting is retired and its overrides are ignored. Unsent events remain in
+# the spool; acknowledged copies are bounded by SENT_KEPT. Set suite retention on the control node.
 keep_days = 90
 
 # Days after a batch has ended that its files are kept: the requests that were handed in, and
