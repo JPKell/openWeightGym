@@ -252,7 +252,16 @@ class Tasks:
                 raise ValueError('The input and output must fit the requested context.')
             evaluation = body.get('evaluation')
             dialogue = body.get('dialogue')
-            if type(body.get('reuse', False)) is not bool or body.get('reuse') and evaluation is None and dialogue is None:
+            decisions = body.get('decisions')
+            if decisions is not None:
+                if not isinstance(decisions, dict):
+                    raise ValueError('decisions must contain a native Classifier request object.')
+                from loadcoach.classifier import validate, model_facts, limits
+                facts = model_facts(task['subject']['settings'])
+                if not facts or evaluation is not None or dialogue is not None or any(body.get(key) for key in ('inputs', 'outputs', 'warmup_outputs')):
+                    raise ValueError('Typed decision probes require a Classifier model and no generation workload.')
+                body['decisions'] = validate({**decisions, 'model': task['model']}, limits(facts)['choices'])
+            if type(body.get('reuse', False)) is not bool or body.get('reuse') and evaluation is None and dialogue is None and decisions is None:
                 raise ValueError('reuse is a boolean, and only a conversation or evaluation may keep its model server.')
             embedding, warmup = body.get('embedding', False), body.get('warmup_embeddings', False)
             if type(embedding) is not bool or type(warmup) is not bool:

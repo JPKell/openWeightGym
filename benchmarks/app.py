@@ -230,6 +230,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             if place is not None and not place.get('enabled', True):
                 return error(400, f"{logical['id']} is disabled at {machine}.")
             capabilities = (place or logical).get('capabilities', logical.get('capabilities', {}))
+            if definition['id'] != 'load' and bool(capabilities.get('classifier')) != bool(definition.get('classifier')):
+                return error(400, 'Choose Classifier benchmarks for Classifier models, and a matching model kind for other benchmarks.')
             if capabilities.get('load_probes') and definition['id'] != 'load':
                 return error(400, f"{logical['id']}: image/audio models support load-time benchmarks only; context is unavailable.")
             if capabilities.get('native_probes') is False and not (definition['id'] == 'load' and capabilities.get('load_probes')):

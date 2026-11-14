@@ -1751,7 +1751,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                             request.query_params.get('adult') == 'true', cursor,
                             request.query_params.get('kind', ''), request.query_params.get('base', '')))
                     return JSONResponse(await hub.search_page(web, words, hub_token(), cursor,
-                        *hub.search_order(request.query_params)) if words else {'found': [], 'next_cursor': ''})
+                        *hub.search_order(request.query_params), kind=request.query_params.get('kind', '')) if words else {'found': [], 'next_cursor': ''})
                 if request.query_params.get('source')=='civitai':
                     from mirrorwall.civitai import search as image_search
                     return JSONResponse({'found':await image_search(web,words,download_token('civitai/'),request.query_params.get('adult')=='true') if words else []})
@@ -1761,6 +1761,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             listed = hub.rows(await hub.files(web, repository, download_token(repository)))
         except hub.Refused as problem:
             return error(problem.status, str(problem))
+        if request.query_params.get('kind') == 'classifier':
+            for row in listed:
+                row['decision_ready'] = await hub.decision_header(web, repository, row['file'], hub_token())
         spots = {name: folder for name, folder in places().items() if Path(folder).is_dir()}
         for row in listed:
             names = [Path(part["path"]).name for part in row["parts"]]

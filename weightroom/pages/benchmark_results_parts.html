@@ -4,7 +4,7 @@
 
 {% macro overview(view) %}
 {% call kpi_row('Quality result coverage', class_='results-overview mb-3') %}
-{{ kpi('LLM models', view.model_count, 'One result per model across nodes', value_attrs={'id': 'kpi-models'}) }}
+{{ kpi('Classifier models' if view.benchmark.get('classifier') else 'LLM models', view.model_count, 'One result per model across nodes', value_attrs={'id': 'kpi-models'}) }}
 {{ kpi('Quality benchmarks', view.benchmark_count, 'Structured data, reasoning, context & tools', value_attrs={'id': 'kpi-benchmarks'}) }}
 {{ kpi('Scored coverage', (view.coverage ~ '%') if view.coverage is not none else '—', view.scored ~ ' of ' ~ view.total ~ ' model / benchmark pairs', value_attrs={'id': 'kpi-coverage'}, note_attrs={'id': 'coverage-note'}) }}
 {{ kpi('Evidence to review', view.review, 'Changed settings or older protocols', value_attrs={'id': 'kpi-review'}) }}
@@ -13,6 +13,7 @@
 
 {% macro filters(benchmarks, models, selected, search='', baseline='', evidence='all', preview=false) %}
 <form id="results-filters" class="results-filters" aria-label="Filter measurements" method="get" action="/benchmarks/results#measurements"{% if preview %} data-preview-results-filters{% else %} hx-get="/benchmarks/results" hx-target="#benchmark-measurements" hx-select="#benchmark-measurements" hx-swap="outerHTML show:none" hx-replace-url="true" hx-sync="this:replace"{% endif %}>
+{% if selected.get('classifier') %}<input type="hidden" name="kind" value="classifier">{% endif %}
 <div class="filter-field"><label class="form-label" for="search-models">Find a model</label><input id="search-models" name="q" class="form-control form-control-sm" type="search" value="{{ search }}" placeholder="Search model or family…"></div>
 <div class="filter-field"><label class="form-label" for="benchmark">Focus benchmark</label><select id="benchmark" name="benchmark" class="form-select form-select-sm"{% if not preview %} data-benchmark-select{% endif %}>{% for b in benchmarks %}<option value="{{ b.id }}"{{ ' selected' if b.id == selected.id }}>{{ b.name }} · {{ b.kpis|length }} metrics</option>{% endfor %}</select></div>
 <div class="filter-field"><label class="form-label" for="baseline">Compare against</label><select id="baseline" name="baseline" class="form-select form-select-sm"{% if not preview %} data-benchmark-select{% endif %}><option value="">No baseline</option>{% for model in models %}<option value="{{ model.id }}"{{ ' selected' if model.id == baseline }}>{{ model.id }}</option>{% endfor %}</select></div>

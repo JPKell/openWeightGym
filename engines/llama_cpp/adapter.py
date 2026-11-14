@@ -119,7 +119,7 @@ class LlamaCpp:
             return {'version': 1, 'classifier': decision['decision_type'], 'chat': False, 'streaming': False,
                     'embeddings': False, 'raw_completion': False, 'prompt_rendering': False, 'tools': False,
                     'tokenize': True, 'images': bool(settings.get('flags', {}).get('mmproj')),
-                    'json_schema': True, 'adapters': False, 'native_probes': False, 'limits': limits(decision)}
+                    'json_schema': True, 'adapters': False, 'native_probes': True, 'limits': limits(decision)}
         embedding = bool(settings.get("flags", {}).get("embedding"))
         return {"version": 1, "chat": not embedding, "streaming": not embedding,
                 "embeddings": embedding, "tokenize": True, "raw_completion": not embedding,

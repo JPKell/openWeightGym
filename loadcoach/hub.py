@@ -78,10 +78,12 @@ def search_order(params) -> tuple[str, str]:
 
 
 async def search_page(http: httpx.AsyncClient, words: str, token: str = "", cursor: str = "",
-                      sort: str = 'downloads', direction: str = '-1') -> dict:
+                      sort: str = 'downloads', direction: str = '-1', kind: str = '') -> dict:
     """Read one bounded result page; only forward the provider's opaque cursor."""
     sort, direction = search_order({'sort': sort, 'direction': direction})
     params = {'search': words, 'filter': 'gguf', 'sort': sort, 'direction': direction, 'limit': '20'}
+    if kind == 'classifier':
+        params['pipeline_tag'] = 'text-classification'
     if cursor:
         params['cursor'] = cursor[:4096]
     try:
@@ -95,6 +97,30 @@ async def search_page(http: httpx.AsyncClient, words: str, token: str = "", curs
                        "likes": one.get('likes', 0), "made": one.get('createdAt', '')[:10]}
                       for one in answer.json()], 'next_cursor': next_cursor,
             'paging': {'limit': 20, 'sort': sort, 'direction': direction}}
+
+
+async def decision_header(http, repository, filename, token=''):
+    """Inspect a bounded GGUF range; absence or truncated metadata never earns a badge."""
+    import tempfile
+    from engines.llama_cpp.gguf import facts, read_metadata
+    maximum = 8 * 2**20
+    try:
+        async with http.stream('GET', HUB + f'/{repository}/resolve/main/' + quote(filename, safe='/'),
+                headers={**signed(token), 'range': f'bytes=0-{maximum-1}'}, follow_redirects=True) as response:
+            if response.status_code not in (200, 206):
+                return False
+            with tempfile.NamedTemporaryFile(suffix='.gguf') as file:
+                size = 0
+                async for chunk in response.aiter_bytes():
+                    piece = chunk[:maximum-size]
+                    file.write(piece)
+                    size += len(piece)
+                    if size >= maximum:
+                        break
+                file.flush()
+                return facts(read_metadata(file.name)).get('what') == 'classifier'
+    except (httpx.HTTPError, OSError, ValueError):
+        return False
 
 
 async def files(http: httpx.AsyncClient, repository: str, token: str = "") -> list[dict]:

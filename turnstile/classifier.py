@@ -10,7 +10,9 @@ from loadcoach.classifier import Invalid, validate, MAX_BODY
 
 
 def routes(delegate, routing):
+    """Register the signed classifier tool operation."""
     async def classify(request):
+        """Recheck caller identity and submit typed questions through normal routing."""
         from weightroom.classifier_views import bounded_json
         from weightroom.extraction import Problem
         try:

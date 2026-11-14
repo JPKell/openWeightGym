@@ -54,6 +54,11 @@ class FrontFiles:
         self.fetching, self.tasks, self.receiving = {}, set(), set()
         self.moving, self.transfer_failures = {}, {}
         self.cleanup, self.stopping = {}, threading.Event()
+        # An upgraded installation may predate this kind. Create only its child
+        # beneath an already mounted, configured root, never a missing root.
+        for name, folder in self.places().items():
+            if name in ('classifier', 'storage_classifier') and Path(folder).parent.is_dir():
+                Path(folder).mkdir(exist_ok=True)
 
     def places(self):
         """Resolve configured tiers; empty paths leave front storage disabled."""
@@ -191,7 +196,7 @@ class FrontFiles:
                                 adult=query.get('adult') == 'true', cursor=query.get('cursor', ''),
                                 kind=query.get('kind', ''), base=query.get('base', '')))
                         sort, direction = hub.search_order(query)
-                        return response(await hub.search_page(self.web, query['search'], cursor=query.get('cursor', ''), sort=sort, direction=direction)
+                        return response(await hub.search_page(self.web, query['search'], cursor=query.get('cursor', ''), sort=sort, direction=direction, kind=query.get('kind', ''))
                                         if query.get('search') else {'found': [], 'next_cursor': ''})
                     if query.get('source') == 'civitai':
                         from mirrorwall.civitai import search
@@ -201,6 +206,9 @@ class FrontFiles:
                 if not hub.REPOSITORY.fullmatch(repository):
                     raise ValueError('A repository is written OWNER/NAME.')
                 rows = hub.rows(await hub.files(self.web, repository))
+                if query.get('kind') == 'classifier':
+                    for row in rows:
+                        row['decision_ready'] = await hub.decision_header(self.web, repository, row['file'])
                 spots = self.places()
                 for row in rows:
                     names = [Path(part['path']).name for part in row['parts']]

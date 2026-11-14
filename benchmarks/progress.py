@@ -33,6 +33,8 @@ def progress(run: dict, now: float) -> dict:
     elif run['benchmark'] == 'embedding_speed' and samples:
         effective = samples[0]['values'].get('context_tokens', min(configured, ceiling))
         total = len(embedding_speed.input_sizes(effective)) * embedding_speed.PROTOCOL['repetitions']
+    if run['benchmark'] == 'classifier_speed':
+        total = 27
     if total is not None:
         total = max(total, done)
         remaining = total - done

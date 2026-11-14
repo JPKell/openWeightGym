@@ -350,8 +350,9 @@ def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs,
                              report.get('hostname') or ('Front host' if node['state'] == 'front' else 'Hardware not reported'))
     measurement = selected['id'].removeprefix('embedding_')
     metric = {'context': 'max_context_tokens', 'load': 'load_seconds',
-              'speed': 'embedding_tokens_per_second' if selected.get('embedding') else 'generation_tokens_per_second'}[measurement]
-    value_unit = 'tokens' if measurement == 'context' else 's' if measurement == 'load' else 'tokens/s'
+              'speed': 'embedding_tokens_per_second' if selected.get('embedding') else 'generation_tokens_per_second',
+              'classifier_speed': 'decisions_per_second'}[measurement]
+    value_unit = 'tokens' if measurement == 'context' else 's' if measurement == 'load' else 'decisions/s' if measurement == 'classifier_speed' else 'tokens/s'
     # Legacy evidence without a location belongs only to implicit compute, never to a named copy.
     legacy = latest_results([run for run in runs if not run.get('location')])
     attempts = {}

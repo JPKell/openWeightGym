@@ -42,6 +42,7 @@ packages = ["engines", "engines.llama_cpp", "engines.strata", "mirrorwall", "sou
 [tool.setuptools.package-data]
 mirrorwall = ["patches/*.patch", "patches/*.json", "pages/*.html", "static/*"]
 soundroom = ["catalog.toml", "pages/*.html", "static/*"]
+"benchmarks.suites" = ["*.json"]
 "benchmarks.suites.ifeval" = ["*.json", "*.jsonl"]
 "benchmarks.suites.ifeval.vendor" = ["LICENSE", "nltk_data/tokenizers/punkt_tab/README", "nltk_data/tokenizers/punkt_tab/english/*"]
 loadcoach = ["test.html", "pages/*.html"]

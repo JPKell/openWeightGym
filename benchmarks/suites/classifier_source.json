@@ -1,0 +1,13 @@
+{
+  "dataset": "jaredpalmer/kev-suites",
+  "revision": "cc4bac803e73112689ec327ffa481c519cbc7a05",
+  "path": "decision-v1/test.jsonl",
+  "split": "test",
+  "sha256": "ee81c59634915e32b7da880912c5b1dcfd1ee0bbeb2221ab703158c486452be5",
+  "records": 588,
+  "questions": 852,
+  "code_license": "Apache-2.0",
+  "code_license_url": "https://github.com/jaredpalmer/kev/blob/main/LICENSE",
+  "data_license": "Underlying source dataset terms; no dataset-level license declared on the Hub. Raw data is fetched on demand and is not redistributed here.",
+  "source_terms": "https://github.com/jaredpalmer/kev#license"
+}

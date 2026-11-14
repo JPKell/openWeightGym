@@ -446,7 +446,10 @@ class Probes:
                             return
                         await asyncio.sleep(.5)
                 watch = asyncio.create_task(memory())
-            if options.get('dialogue') is not None or 'messages' in (options.get('evaluation') or {}):
+            if options.get('decisions') is not None:
+                measured, content, evidence = await self.classify(server, options['decisions'])
+                values.update(measured)
+            elif options.get('dialogue') is not None or 'messages' in (options.get('evaluation') or {}):
                 measured, content, evidence = await self.dialogue(server, options)
                 values.update(measured)
                 if options.get('evaluation') is not None:
@@ -550,8 +553,25 @@ class Probes:
             raise ValueError('Model fingerprint changed during the sample; the sample was discarded.')
         if ok and options.get('reuse'):
             self.candidate = (server, key)
-        return {'values': values, 'output': content if options.get('evaluation') is not None or options.get('dialogue') is not None else content[:32000],
+        return {'values': values, 'output': content if any(options.get(key) is not None for key in ('evaluation', 'dialogue', 'decisions')) else content[:32000],
                 'log': server.output()[-16000:], 'evidence': evidence}
+
+    async def classify(self, server, body):
+        """Time one native request and retain all distributions without generating tokens."""
+        began = time.perf_counter()
+        response = await self.runner.client.post(server.url + '/v1/systemone', json=body,
+                                                  headers=server.headers, timeout=httpx.Timeout(600, connect=5))
+        elapsed = time.perf_counter() - began
+        if not response.is_success:
+            raise ValueError(response.text[:1000])
+        data = response.json()
+        usage, answers = data.get('usage', {}), data.get('answers', {})
+        if set(answers) != set(body['questions']) or type(usage.get('input_tokens')) is not int or usage.get('output_tokens') != 0:
+            raise ValueError('Classifier probe requires complete answers and native input-only usage.')
+        return {'input_tokens': usage['input_tokens'], 'output_tokens': 0, 'decisions': len(answers),
+                'decisions_per_second': len(answers) / elapsed, 'request_seconds': elapsed}, json.dumps(data), {
+                'endpoint': '/v1/systemone', 'request': body, 'usage': usage, 'answers': answers,
+                'uncalibrated': True, 'timing': 'local native request through complete response'}
 
     async def embedding(self, server: Server, prompt: list[int]):
         """Time a single pooled vector, requiring proof that the entire input was processed."""

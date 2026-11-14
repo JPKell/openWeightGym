@@ -17,6 +17,7 @@ def check_source(folder):
                 raise ValueError('Source configuration exceeds 1 MiB.')
             value = json.loads(file.read_text())
             def custom(data):
+                """Find custom-code configuration without executing repository files."""
                 return isinstance(data, dict) and (bool(data.get('auto_map')) or bool(data.get('trust_remote_code')) or
                     any(custom(v) for v in data.values())) or isinstance(data, list) and any(custom(v) for v in data)
             if custom(value):

@@ -20,6 +20,7 @@ PRIVATE = {'cache-control': 'no-store'}
 
 
 async def bounded_json(request):
+    """Read one bounded JSON object and preserve its original signed bytes."""
     raw = bytearray()
     async for chunk in request.stream():
         raw.extend(chunk)
@@ -38,9 +39,11 @@ async def bounded_json(request):
 def routes(for_people, page, ask, platform):
     """Expose only the model catalogue, classification and starter-set operations."""
     async def workspace(request, person):
+        """Render the Classifier workspace in the shared console shell."""
         return page(request, 'classifier.html', person, uncalibrated=UNCALIBRATED)
 
     async def api(request, person):
+        """Dispatch bounded session-authenticated Classifier operations."""
         origin = request.headers.get('origin')
         if request.method == 'POST' and origin and origin.rstrip('/') != str(request.base_url).rstrip('/'):
             return JSONResponse({'error': {'message': 'Submit this request from the console.'}}, 403, headers=PRIVATE)
