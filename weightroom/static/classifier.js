@@ -153,7 +153,7 @@
             position.setAttribute('aria-valuetext',`Expected level ${Number(answer.score).toFixed(3)}`);
             for(const [key,label] of Object.entries(answer.legend || {})) {
               const level=clone('score-level');level.textContent=label;
-              if(Number(key)===Math.round(answer.score))level.className='badge rounded-pill bg-primary text-white';
+              if(Number(key)===Math.round(answer.score)) {level.classList.remove('bg-secondary-lt');level.classList.add('bg-primary','text-white');}
               card.querySelector('[data-score-levels]').append(level);
             }
           }

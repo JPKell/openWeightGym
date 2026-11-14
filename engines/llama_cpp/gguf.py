@@ -43,7 +43,10 @@ def read_metadata(path: str, count_parameters: bool = False, shapes: bool = Fals
             if length > SANE:
                 raise ValueError("it does not read as a .gguf file")
             if keep:
-                return file.read(length).decode("utf-8", "replace")
+                raw = file.read(length)
+                if len(raw) != length:
+                    raise ValueError('the file ends in the middle of its own description')
+                return raw.decode("utf-8", "replace")
             file.seek(length, 1)  # stepped over, not read
             return None
 

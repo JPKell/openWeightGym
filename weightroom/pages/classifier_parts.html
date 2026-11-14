@@ -20,7 +20,7 @@
 {% macro result() %}
 {% call card('', attrs={'data-result':''}) %}{{ section_title('', level=3, attrs={'data-result-title':''}) }}<p class="mb-2" data-result-value></p><div data-score-rubric hidden><input type="range" disabled class="form-range" min="0" max="1" step="0.001" data-score-position aria-label="Expected position on the ordered score rubric"><div class="d-flex flex-wrap justify-content-between gap-2 small mb-3" data-score-levels></div></div><div class="d-grid gap-2" data-distribution></div><small class="text-secondary d-block mt-2" data-confidence></small>{% endcall %}
 {% endmacro %}
-{% macro score_level() %}<span class="badge rounded-pill bg-secondary-lt" data-score-level></span>{% endmacro %}
+{% macro score_level() %}<span class="badge rounded-pill bg-secondary-lt text-wrap text-break" data-score-level></span>{% endmacro %}
 {% macro run_group() %}
 {% from 'parts.html' import alert %}
 <section>{{ section_title('', attrs={'data-run-heading':''}) }}{% call alert('danger', attrs={'data-run-error':'','hidden':true}) %}<span data-run-error-text></span>{% endcall %}<div data-run-cards></div></section>

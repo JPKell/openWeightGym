@@ -171,6 +171,24 @@ def test_classifier_discovery_merges_tags_and_pipeline_with_stable_private_pagin
     assert any(query.get('pipeline_tag') == 'text-classification' for query in seen)
 
 
+def test_ready_badge_reads_large_complete_headers_without_accepting_truncated_text(tmp_path):
+    """Native tokenizer metadata can exceed 8 MiB; partial templates cannot earn readiness."""
+    import httpx
+    from loadcoach.hub import decision_header
+    path = Path(decision_file(str(tmp_path / 'large.gguf')))
+    raw = bytearray(path.read_bytes())
+    struct.pack_into('<Q', raw, 16, struct.unpack_from('<Q', raw, 16)[0] + 1)
+    name, padding = b'general.description', b'x' * (9 * 2**20)
+    raw += struct.pack('<Q', len(name)) + name + struct.pack('<I', 8) + struct.pack('<Q', len(padding)) + padding
+    path.write_bytes(raw[:-1])
+    with pytest.raises(ValueError, match='middle'):
+        read_metadata(str(path))
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(206, content=bytes(raw)))) as http:
+            assert await decision_header(http, 'example/decision', 'large.gguf')
+    asyncio.run(check())
+
+
 def test_front_native_alias_shim_permissions_and_service_disable(fake_llama_server):
     path = decision_file('classifier/repo/decision.gguf', 'kev')
     with gateway(fake_llama_server, {'test': model(path, 0), 'text': model('text.gguf', 0)}) as client:
