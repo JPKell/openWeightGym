@@ -122,6 +122,7 @@ def test_private_gateway_admin_refreshes_actual_front_cache_and_respects_revocat
 
 def voice_panel(tmp_path, **more):
     telephone_data = more.pop('telephone_data', None)
+    status_data = more.pop('voice_status_data', None)
     users = Users(str(tmp_path / 'accounts.db'), GROUPS)
     for name, group in [('jordan', 'admin'), ('pat', 'plain'), ('panel', 'front')]:
         users.add(name, group)
@@ -143,11 +144,17 @@ def voice_panel(tmp_path, **more):
     def respond(request):
         calls.append(request)
         if request.url.path == '/admin/status':
+            if status_data is not None:
+                return httpx.Response(status_data, json={}) if isinstance(status_data, int) else httpx.Response(200, json=status_data)
             return httpx.Response(200, json=dict(services=[dict(name='Voice gateway', state='Available', address='front')],
                 active=0, profile='default', modes=['direct'], readiness={'profiles': {}}, latency=timings.snapshot(),
                 recordings=dict(source='Cached on the control node', speaker=3, texts=prompts.TEXTS)))
         if request.url.path == '/admin/telephone':
             return httpx.Response(200, json=telephone_data or {'credentials': {'token': {'saved': False}, 'api': {'saved': False}}})
+        if request.url.path.startswith('/admin/calls/') and request.method == 'POST':
+            if isinstance(status_data, dict):
+                status_data['calls'] = []
+            return httpx.Response(200, json={'ended': True})
         if request.url.path == '/admin/regenerate':
             return httpx.Response(200, json={'saved': True})
         if request.url.path == '/browser/sessions':

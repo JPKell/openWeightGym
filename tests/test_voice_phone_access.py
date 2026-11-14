@@ -94,7 +94,7 @@ def test_pin_hashing_three_attempts_and_idempotent_retry(admission):
             assert again.text == response.text  # Twilio's delivery retry does not spend another attempt
     assert '<Hangup/>' in response.text and '<Gather' not in response.text
     assert not app.state.phone_calls
-    assert [row['reason'] for row in app.state.phone_attempts['Office']] == ['bad_pin'] * 3
+    assert [row['reason'] for row in app.state.phone_attempts['Office'] if row['outcome'] == 'rejected'] == ['bad_pin'] * 3
     assert '<Hangup/>' in send(digits='684297').text  # cannot reset the same CallSid's attempt budget
     challenge = send(call='CAgood')
     action = ElementTree.fromstring(challenge.text).find('Gather').attrib['action']

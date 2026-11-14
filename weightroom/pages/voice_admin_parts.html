@@ -15,6 +15,24 @@
 {% endcall %}
 {% endmacro %}
 
+{% macro readiness_badge(ready, yes='Ready', no='Needs attention') %}
+<span class="badge bg-{{ 'green' if ready else 'orange' }}-lt">{{ yes if ready else no }}</span>
+{% endmacro %}
+
+{% macro latency_cell(cell) %}
+<td class="text-end text-nowrap">{% if cell.value is not none %}<span{% if cell.within is not none %} class="badge bg-{{ 'green' if cell.within else 'orange' }}-lt"{% endif %}>{{ cell.value }}</span>{% else %}—{% endif %}
+{% if cell.target is not none %}<small class="d-block text-secondary">{{ 'Within' if cell.within else 'Over' }} target ≤{{ cell.target }}</small>{% endif %}</td>
+{% endmacro %}
+
+{% macro telephone_activity(numbers) %}
+{% call card('Recent phone activity') %}
+{% for number in numbers %}<p><strong>{{ number.label }}</strong> · {{ number.number }} · {{ number.day.accepted }} accepted / {{ number.day.rejected }} rejected in 24 hours</p>
+<div class="table-responsive"><table class="table table-sm align-middle" aria-label="{{ number.label }} recent phone activity"><thead><tr><th>Time</th><th>Caller</th><th>Account</th><th>Outcome</th><th>Reason</th><th>Duration</th></tr></thead><tbody>
+{% for row in number.attempts[:20] %}<tr><td>{{ row.at|timestamp }}</td><td>{{ row.caller }}</td><td>{{ row.account or '—' }}</td><td>{{ row.outcome }}</td><td>{{ row.reason or '—' }}</td><td>{{ row.duration if row.duration is not none else '—' }}{% if row.duration is not none %} s{% endif %}</td></tr>{% else %}{% from 'parts.html' import empty_row %}{{ empty_row(6, 'No inbound attempts reported for this number.') }}{% endfor %}
+</tbody></table></div>{% else %}<p class="text-secondary mb-0">Phone activity appears here after a configured number receives a call.</p>{% endfor %}
+{% endcall %}
+{% endmacro %}
+
 {% macro number_editor(number, index, accounts, choices, typed={}, caller_accounts=[]) %}
 {% set prefix = 'phone-' ~ index %}
 <section data-voice-panel="{{ number.number }}" aria-label="{{ number.label }} settings">
