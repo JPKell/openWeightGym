@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic node measurement sample records without calling live services."""
     nodes = [
         dict(id='atlas', hardware='2 × RTX 6000 Ada · 96 GiB', state='Ready', count=30, factor=1),
         dict(id='orion', hardware='2 × RTX 4090 · 48 GiB', state='Ready', count=27, factor=.82),
@@ -71,6 +72,7 @@ def sample_data():
 
 
 def render():
+    """Render portable node measurement proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'
     return pages.get_template('node_measurement_designs.html').render(

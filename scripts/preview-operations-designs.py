@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 
 def render(telemetry=False, status=False):
+    """Render portable operations proposals from shared templates and prepared sample data."""
     static = ROOT / 'weightroom/static'
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     name = 'status-designs' if status else 'telemetry-design' if telemetry else 'operations-designs'
@@ -34,6 +35,7 @@ def render(telemetry=False, status=False):
     if telemetry or status:
         # Bundle the real shell's appearance and navigation without live service scripts.
         def script(match):
+            """Inline supported browser assets for the portable preview."""
             asset = match.group(1).split('?')[0]
             if asset == 'themes.js':
                 return '<script>' + (static / asset).read_text() + '</script>'

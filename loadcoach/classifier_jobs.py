@@ -19,6 +19,7 @@ class ClassifierJobs:
     """Keep tooling outside model libraries and preserve the configured runtime."""
 
     def __init__(self, root, server, places, changed=lambda *paths: None):
+        """Bind classifier conversion work to its job folder, executable and file inventory."""
         self.root = Path(root)
         self.server = server
         self.places = places

@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def render():
+    """Render portable generation proposals from shared templates and prepared sample data."""
     static = ROOT / 'weightroom/static'
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     samples = {name: 'data:image/webp;base64,' + base64.b64encode(

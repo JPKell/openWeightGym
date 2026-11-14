@@ -11,6 +11,7 @@ OUTCOMES = {'error': 'Error', 'timeout': 'Timeout', 'empty': 'Empty response'}
 
 
 def candidate_key(row):
+    """Encode the exact model, fingerprint and role identity for a candidate."""
     return json.dumps([row.get('model_id', ''), row['fingerprint'], row['role']], separators=(',', ':'))
 
 
@@ -33,6 +34,7 @@ def issue_workspace(rows, asked, filters):
     query = {**filters, 'issue_candidate': selected, 'issue_outcome': outcome}
 
     def link(number):
+        """Build an issue-page link while retaining the current reliability filters."""
         return '/reliability?' + urlencode({**query, 'issue_page': number}) + '#reliability-issues'
 
     return dict(rows=found[start:start + 50], total=len(found), page=page, start=start + 1 if found else 0,
@@ -44,6 +46,7 @@ def issue_workspace(rows, asked, filters):
 
 
 def faults(row):
+    """Count retained error, timeout and empty outcomes."""
     return sum(row['counts'].get(kind, 0) for kind in ('error', 'timeout', 'empty'))
 
 
@@ -62,6 +65,7 @@ def workspace(report, quality, asked):
 
     def fingerprint_matches(row):
         # Compute cannot identify current fingerprints during an outage.
+        """Apply current, historical or all-fingerprint filtering without hiding offline evidence."""
         return offline or fingerprints == 'all' or row['current'] == (fingerprints == 'current')
 
     rows = [dict(row, faults=faults(row), scored=sum(row['counts'].values())) for row in report['rows']
@@ -70,6 +74,7 @@ def workspace(report, quality, asked):
             and (filters['issues'] != '1' or faults(row))
             and (not query or query in f"{row['model']} {row['role'] or 'direct'} {row['fingerprint']}".casefold())]
     def priority(row):
+        """Prioritize ineligible or regressed candidates and their observed faults."""
         return (100 if row['state'] != 'eligible' else 0) + (50 if row['regression'] else 0) + row['faults']
     rows.sort(key=lambda row: (row['model'].casefold(), row['role'], row['fingerprint']) if sort == 'model' else
               (row['success_rate'] if row['success_rate'] is not None else 101, row['model']) if sort == 'rate' else

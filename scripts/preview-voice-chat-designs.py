@@ -31,6 +31,7 @@ def sample_data():
 
 
 def render():
+    """Render portable voice chat proposals from shared templates and prepared sample data."""
     static = ROOT / 'weightroom/static'
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     return pages.get_template('voice_chat_designs.html').render(

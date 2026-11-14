@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def render() -> str:
+    """Render portable file proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     pages.filters['shown'] = lambda value: str(value)
     facts = dict(name='Qwen3 32B', size_label='32B', architecture='qwen3', layers=64,

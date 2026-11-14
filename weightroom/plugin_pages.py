@@ -146,6 +146,7 @@ def build_routes(registry, controller, for_people, page, go, typed):
         params.update(limit=limit, page=current)
         if request.query_params.get('export') == 'csv':
             async def exported():
+                """Stream authorized plugin activity through the shared CSV formatter."""
                 for line in csv_lines(registry.activity_export(user, filters=filters, **ordering)):
                     yield line
             return StreamingResponse(exported(), media_type='text/csv', headers={

@@ -6,6 +6,7 @@ from weightroom.alerts import OBSERVATION_BACKLOG_SECONDS
 
 
 def step(label, href, text, ability=''):
+    """Describe one actionable alert-recovery link and its required ability."""
     return dict(label=label, href=href, text=text, ability=ability)
 
 

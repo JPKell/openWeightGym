@@ -19,6 +19,7 @@ SECTIONS = [
 
 
 def render():
+    """Render portable account proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'
     return pages.get_template('account_designs.html').render(

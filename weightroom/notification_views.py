@@ -11,6 +11,7 @@ from weightroom.notify import DeliveryError, account_owner
 
 
 def context(notifications,program='weightroom',owner='system',choices=None,operational=False,refused=''):
+    """Describe available delivery credentials and presence for the selected owner."""
     owner = account_owner(owner) if program=="account" and owner else owner
     definitions = entries(program)
     credentials = [entry for entry in definitions if entry.kind=='secret' and entry.name.startswith('notify_')]
@@ -28,11 +29,14 @@ def routes(base,for_people,typed,go,notifications,render,note,*,personal=False):
     landing = '/account/privacy' if personal else '/settings/alerts'
     program = 'account' if personal else 'weightroom'
     def allowed(person):
+        """Permit personal delivery changes or authorized system settings management."""
         return personal or 'manage-settings' in person.can
     def owner(person):
+        """Choose the stable personal credential scope or the system scope."""
         return account_owner(person.me['identity']) if personal else 'system'
 
     async def credential(request,person):
+        """Authorize and validate a delivery credential action for its actual owner."""
         if personal and not person.me.get('identity'):
             return await render(request,person,'Sign in to an account before configuring delivery.',True)
         if not allowed(person):
@@ -60,6 +64,7 @@ def routes(base,for_people,typed,go,notifications,render,note,*,personal=False):
         return go(landing+'?said='+quote('Credential removed.' if operation=='remove' else 'Credential saved. Blank fields keep the current value.'))
 
     async def test(request,person):
+        """Authorize and queue a test delivery using the current owner and settings."""
         if personal and not person.me.get('identity'):
             return await render(request,person,'Sign in to an account before configuring delivery.',True)
         if not allowed(person):

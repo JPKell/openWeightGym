@@ -123,6 +123,7 @@ class Log:
 
     @keep_days.setter
     def keep_days(self, value):
+        """Replace the live event-retention policy."""
         self._keep_days = value
 
     def json_value(self, column: str, key: str, kind: str = "text") -> str:

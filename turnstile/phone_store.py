@@ -12,14 +12,18 @@ from voice.phone_access import digest, masked
 
 
 class PhoneStore:
+    """Persistent phone identities, PIN verifiers and scoped telephone sessions."""
     def __init__(self, users, folder):
+        """Bind telephone records to the authoritative account database and key folder."""
         self.users, self.db, self.folder = users, users.db, folder
         migrate(self.db.database, self.db, 'loadcoach.telephone', TELEPHONE)
 
     def pin_saved(self, number):
+        """Check for a PIN verifier using the phone number's private digest."""
         return bool(self.db.execute('SELECT 1 FROM telephone_pins WHERE number_key=?', (digest(self.folder, number),)).fetchone())
 
     async def set_pin(self, number, pin):
+        """Validate and hash a telephone PIN before storing its verifier."""
         import re
         if not isinstance(pin, str) or not re.fullmatch(r'[0-9]{4,12}', pin):
             raise ValueError('Use a PIN of 4 to 12 digits.')
@@ -29,34 +33,41 @@ class PhoneStore:
                             (digest(self.folder, number), verifier))
 
     async def check_pin(self, number, pin):
+        """Check a telephone PIN against its stored verifier."""
         if not isinstance(pin, str) or not 4 <= len(pin) <= 12 or not pin.isascii() or not pin.isdigit():
             return False
         row = self.db.execute('SELECT verifier FROM telephone_pins WHERE number_key=?', (digest(self.folder, number),)).fetchone()
         return bool(row and await asyncio.to_thread(check_password, row[0], pin))
 
     def remove_pin(self, number):
+        """Delete the selected telephone PIN verifier."""
         with self.db:
             self.db.execute('DELETE FROM telephone_pins WHERE number_key=?', (digest(self.folder, number),))
 
     def own(self, owner, mask=False):
+        """List an owner's registered numbers, optionally masking their display."""
         return [{'id': key, 'number': masked(number) if mask else number, 'created': created}
                 for key, number, created in self.db.execute('SELECT number_key,number,created FROM telephone_numbers WHERE owner=? ORDER BY created', (owner,))]
 
     def pending(self, owner):
+        """List the owner's unexpired verification attempts still eligible for a code."""
         return [{'number': number, 'expires': expires} for number, expires in self.db.execute(
             'SELECT number,expires FROM telephone_verifications WHERE owner=? AND expires>? AND attempts<5 ORDER BY created', (owner, time.time()))]
 
     def registered(self, number):
+        """Resolve a registered phone number to its current authoritative account."""
         row = self.db.execute('SELECT owner FROM telephone_numbers WHERE number_key=?', (digest(self.folder, number),)).fetchone()
         return self.users.by_identity(row[0]) if row else None
 
     def lock_owner(self, owner):
+        """Serialize phone changes for one owner using the database engine's lock."""
         if self.db.engine == 'sqlite':
             self.db.execute('BEGIN IMMEDIATE')
         else:
             self.db.execute('SELECT identity FROM users WHERE identity=? FOR UPDATE', (owner,)).fetchone()
 
     def sms_budget(self, owner, key):
+        """Check recent per-owner and per-number verification message use."""
         now = time.time()
         user_count, latest = self.db.execute('SELECT count(*),max(created) FROM telephone_sms_attempts WHERE owner=? AND created>?', (owner, now-3600)).fetchone()
         number_count, number_latest = self.db.execute('SELECT count(*),max(created) FROM telephone_sms_attempts WHERE number_key=? AND created>?', (key, now-3600)).fetchone()
@@ -64,6 +75,7 @@ class PhoneStore:
             raise ValueError('Too many verification messages. Wait before sending another code (at most three per hour).')
 
     async def start_verification(self, owner, number):
+        """Validate the phone number and create a bounded verification attempt."""
         from voice.telephone_settings import E164
         if not isinstance(number, str) or not E164.fullmatch(number):
             raise ValueError('Use an E.164 phone number, such as +15555550123.')
@@ -92,6 +104,7 @@ class PhoneStore:
         return code
 
     async def verify(self, owner, number, code):
+        """Validate the submitted code against the current phone verification attempt."""
         from voice.telephone_settings import E164
         if not isinstance(number, str) or not E164.fullmatch(number):
             raise ValueError('Use a valid phone number to verify.')
@@ -116,6 +129,7 @@ class PhoneStore:
             self.db.execute('DELETE FROM telephone_verifications WHERE owner=? AND number_key=?', (owner, key))
 
     def remove_number(self, owner, key):
+        """Remove an owned registered number and revoke its related telephone sessions."""
         import re
         if not isinstance(key, str) or not re.fullmatch(r'[0-9a-f]{64}', key):
             raise ValueError('Choose one of your registered numbers.')
@@ -126,6 +140,7 @@ class PhoneStore:
             self.db.execute('DELETE FROM telephone_verifications WHERE owner=? AND number_key=?', (owner, key))
 
     def mint_session(self, account, app, number=None, registered=False):
+        """Create an expiring telephone session limited by the app identity."""
         key = self.users.new_key(account.name, 'telephone', hours=.5, via=app.name)
         with self.db:
             self.db.execute('INSERT INTO telephone_sessions VALUES (?,?,?)',
@@ -133,6 +148,7 @@ class PhoneStore:
         return key
 
     def scope_session(self, user, key):
+        """Reapply current account, app and phone authorization to a telephone session."""
         row = self.db.execute('SELECT number_key,kind FROM telephone_sessions WHERE key_hash=?', (hash_key(key),)).fetchone()
         if not row:
             return user

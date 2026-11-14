@@ -60,6 +60,7 @@ def workflow_notices(data, choices, identity, clearance, workflows):
 def routes(for_people, page, ask, typed, go, platform, workflows, *, notifications=None, notification_note=None):
     """Reuse authenticated account APIs and the established origin-checked form wrapper."""
     async def render(request, person, section=None, said='', failed=False):
+        """Render the selected account panel using current session-owned preferences."""
         section = section or request.url.path.rsplit('/', 1)[-1]
         section = 'privacy' if section=='notifications' else section
         context = dict(me=person.me, said=said or request.query_params.get('said', ''), failed=failed)
@@ -82,6 +83,7 @@ def routes(for_people, page, ask, typed, go, platform, workflows, *, notificatio
         return page(request, 'account_' + section + '.html', person, status=400 if failed else 200, **context)
 
     async def save(request, person):
+        """Validate and save only the selected account preference section."""
         section = request.path_params['section']
         if section not in FIELDS:
             return Response('Unknown preference section.', status_code=404)
@@ -107,6 +109,7 @@ def routes(for_people, page, ask, typed, go, platform, workflows, *, notificatio
         return go('/account/' + ('privacy' if section=='notifications' else section) + '?said=Preferences+saved.')
 
     async def end_session(request, person):
+        """Revoke the selected owned sign-in or all other sign-ins through the account API."""
         identifier = request.path_params.get('identifier')
         answer = await ask('DELETE' if identifier else 'POST',
                            '/loadcoach/sessions/' + (quote(identifier, safe='') if identifier else 'end-others'), person.key)
@@ -116,6 +119,7 @@ def routes(for_people, page, ask, typed, go, platform, workflows, *, notificatio
         return go('/account?' + ('failed=1&' if not answer.is_success else '') + 'said=' + quote(message))
 
     async def feed(request, person):
+        """Read and present the caller's current authorized notices."""
         answer = await ask('GET', '/loadcoach/account-notices', person.key)
         if not answer.is_success:
             return JSONResponse({'error': {'message': 'Notices are unavailable.'}}, status_code=503)
@@ -125,12 +129,14 @@ def routes(for_people, page, ask, typed, go, platform, workflows, *, notificatio
         return JSONResponse(data, headers={'cache-control': 'private, no-store'})
 
     async def read_notices(request, person):
+        """Advance this account's notice-read instant through the validated account API."""
         answer = await ask('POST', '/loadcoach/me', person.key, json={'notices_read_at': time.time()})
         if not answer.is_success:
             return await render(request, person, 'privacy', 'Could not mark notices as read. Retry shortly.', True)
         return go('/account/privacy?said=Notices+marked+as+read.')
 
     async def export(request, person):
+        """Export account and audio preferences without credentials."""
         audio = await ask('GET', '/soundroom/preferences', person.key)
         if not audio.is_success:
             return Response('Audio preferences could not be exported. Retry shortly.', status_code=503)
@@ -143,6 +149,7 @@ def routes(for_people, page, ask, typed, go, platform, workflows, *, notificatio
     if notifications is not None:
         from weightroom.notification_views import routes as notification_routes
         async def notify_render(request,person,said,failed):
+            """Render personal delivery feedback in Alerts and privacy."""
             return await render(request,person,'privacy',said,failed)
         extra = notification_routes('/account/notifications',for_people,typed,go,notifications,notify_render,notification_note,personal=True)
     return extra + [Route('/account/' + section, for_people(render)) for section in ('keys', 'workspace', 'privacy')] + [

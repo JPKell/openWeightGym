@@ -14,6 +14,7 @@ from weightroom.navigation import navigation
 
 
 def render():
+    """Render portable benchmark manage proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'
     definitions = [dict(b, enabled=True, green='high', server='reuse') for b in BENCHMARKS]

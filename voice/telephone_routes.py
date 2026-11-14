@@ -15,6 +15,7 @@ from voice.telephone import signature, valid
 
 
 def append_query(url, query):
+    """Append a query to a URL that may already contain parameters."""
     return url + ('&' if urlsplit(url).query else '?') + query
 
 
@@ -31,10 +32,12 @@ def webhook_target(base, supplied, challenges):
 
 
 def probe_url(webhook, at=None, nonce=None):
+    """Build a fresh timestamped public-route probe address."""
     return append_query(webhook, 'probe=' + (nonce or secrets.token_urlsafe(24)) + '&at=' + str(int(time.time() if at is None else at)))
 
 
 def valid_probe(phone, token, params, supplied):
+    """Validate the probe fields without permitting changes to the configured route query."""
     query = {key: params.getlist(key) for key in params}
     nonce, at = query.pop('probe', []), query.pop('at', [])
     if query != parse_qs(urlsplit(phone['webhook_url']).query, keep_blank_values=True) or len(nonce) != 1 or len(at) != 1:
@@ -45,6 +48,7 @@ def valid_probe(phone, token, params, supplied):
 
 
 async def public_dns(url):
+    """Require public HTTPS addressing without embedded credentials or private destinations."""
     address = urlsplit(url)
     if address.scheme != 'https' or not address.hostname or address.username or address.password or address.fragment:
         raise ValueError('Use a public HTTPS address without embedded credentials.')
@@ -57,6 +61,7 @@ async def public_dns(url):
 
 
 async def check_route(phone, client):
+    """Probe the configured signed telephone webhook after current readiness checks."""
     if not phone.get('enabled'):
         raise ValueError('Enable telephone before checking the public route.')
     token = Path(phone['token_file']).read_text().strip()
@@ -74,6 +79,7 @@ async def check_route(phone, client):
 
 
 async def detected_routes(port):
+    """Inspect available tunnel tools and report a detected public route when available."""
     result = {'tailscale': bool(shutil.which('tailscale')), 'cloudflared': bool(shutil.which('cloudflared')), 'funnel_url': ''}
     if result['tailscale']:
         process = None

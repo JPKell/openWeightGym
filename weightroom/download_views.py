@@ -30,6 +30,7 @@ async def context(ask, person, choices, machine, refused=''):
 def routes(for_people, typed, go, ask, render):
     """Only settings administrators may submit credentials, directly to the chosen node."""
     async def credential(request, person):
+        """Require settings permission before changing a node-owned provider credential."""
         if 'manage-settings' not in person.can:
             return Response('Download credentials require manage-settings.', 403)
         machine, kind = request.path_params['machine'], request.path_params['kind']

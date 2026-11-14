@@ -12,13 +12,16 @@ class TwilioError(ValueError):
 
 
 class TwilioAPI:
+    """Bounded Twilio account operations with private credential lookup and safe errors."""
     def __init__(self, client, account_sid, keys):
+        """Validate the Twilio account identifier and bind its private credential reader."""
         if not isinstance(account_sid, str) or not re.fullmatch(r'AC[0-9a-fA-F]{32}', account_sid):
             raise TwilioError('Save a valid Twilio Account SID first.')
         self.client, self.account, self.keys = client, account_sid, keys
         self.root = '/2010-04-01/Accounts/' + account_sid
 
     def auth(self):
+        """Choose saved API credentials or the account token without exposing them to callers."""
         token = self.keys.read('token')
         if not token:
             raise TwilioError('Save the Twilio auth token first.')
@@ -30,6 +33,7 @@ class TwilioAPI:
             raise TwilioError('Save the optional API key again.') from None
 
     async def request(self, method, path, **kwargs):
+        """Send one authenticated Twilio request with bounded time and safe failures."""
         auth = self.auth()
         try:
             response = await self.client.request(method, 'https://api.twilio.com' + path,
@@ -58,10 +62,12 @@ class TwilioAPI:
             raise TwilioError('Twilio returned an unreadable response.') from None
 
     async def account_info(self):
+        """Read the Twilio account's display name and status."""
         result = await self.request('GET', self.root + '.json')
         return {'name': result.get('friendly_name', ''), 'status': result.get('status', 'unknown')}
 
     async def numbers(self):
+        """Read a bounded paginated inventory of Twilio incoming numbers."""
         path, result = self.root + '/IncomingPhoneNumbers.json?PageSize=100', []
         for _ in range(10):
             page = await self.request('GET', path)
@@ -76,6 +82,7 @@ class TwilioAPI:
         raise TwilioError('This account has too many numbers to list at once. Use manual setup.')
 
     async def connect_number(self, sid, webhook):
+        """Configure voice routing only for a validated Twilio number identifier."""
         if not isinstance(sid, str) or not re.fullmatch(r'PN[0-9a-fA-F]{32}', sid):
             raise TwilioError('Choose a number returned by Find my numbers.')
         result = await self.request('POST', self.root + '/IncomingPhoneNumbers/' + sid + '.json',
@@ -83,6 +90,7 @@ class TwilioAPI:
         return {'connected': result.get('voice_url') == webhook and result.get('voice_method') == 'POST'}
 
     async def send_code(self, sender, number, code):
+        """Validate sender, destination and code before sending a verification SMS."""
         from voice.telephone_settings import E164
         if not all(isinstance(value, str) and E164.fullmatch(value) for value in (sender, number)) or not re.fullmatch(r'[0-9]{6}', code):
             raise TwilioError('Choose valid verification numbers and code.')

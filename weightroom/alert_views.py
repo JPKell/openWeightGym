@@ -9,6 +9,7 @@ PAGE_SIZE = 25
 
 
 def link(filters, **more):
+    """Build a native alert-filter link while omitting empty query fields."""
     return '/alerts?' + urlencode({key: value for key, value in (filters | more).items() if value != '' and value is not None})
 
 
@@ -25,6 +26,7 @@ def return_url(value):
 
 
 def timeline(row):
+    """Present recorded alert observation, acknowledgment and resolution instants."""
     events = [('First observed', row['first_at']), ('Last observed', row['last_at'])]
     if row['acknowledged_at']:
         events.append(('Acknowledged by ' + row['acknowledged_by'], row['acknowledged_at']))
@@ -35,6 +37,7 @@ def timeline(row):
 
 
 def workspace(store, asked,owner="system"):
+    """Validate alert filters and build the retained episode workspace."""
     scope = asked.get('scope', 'open')
     if scope not in dict(SCOPES):
         raise ValueError('Choose a supported episode scope.')

@@ -37,6 +37,7 @@ def fingerprint_context(records: list[dict], params) -> dict:
     back = directory_url(params.get('return', '/fingerprints'))
 
     def record_url(record):
+        """Build a fingerprint selection link retaining its safe return destination."""
         return '/fingerprints?' + urlencode({'start': record['fingerprint'], 'return': back if peek else current})
 
     files = {file.get('sha256') or file.get('path') for record in records for file in record.get('files', {}).values()}

@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic alert sample records without calling live services."""
     def at(clock):
+        """Convert a prepared sample instant to the preview timestamp representation."""
         return datetime.fromisoformat('2026-11-14T' + clock + ':00-08:00').timestamp()
 
     common = dict(state='active', manual=False, first_at=at('09:10'), last_at=at('10:42'),
@@ -64,9 +66,11 @@ def sample_data():
 
 
 def render():
+    """Render portable alert proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     # The live timestamp filter keeps absent values blank; the browser localizes sample facts.
     def timestamp(value):
+        """Convert a prepared sample instant to the preview timestamp representation."""
         return datetime.fromtimestamp(value, timezone.utc).strftime('%d %b %Y %H:%M UTC') if value else ''
     pages.filters['timestamp'] = timestamp
     static = ROOT / 'weightroom/static'

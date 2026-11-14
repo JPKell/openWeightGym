@@ -80,6 +80,7 @@ class Alerts:
         result = {source:[] for source in thresholds}
         known = {source:{row['condition']:row for row in self.rows(open_only=True) if row['source']==source} for source in thresholds}
         def append(source,key,title,value):
+            """Describe one threshold observation while keeping missing readings unknown."""
             threshold = thresholds[source]
             active = False if not threshold else None if value is None else value < threshold if source=='Disk space' else value >= threshold
             result[source].append({'key':key,'active':active,'title':title,
@@ -95,6 +96,7 @@ class Alerts:
                 identity = host.get('fingerprint') or host.get('hostname','host')
                 name = host.get('hostname') or identity
                 def percent(numerator,denominator):
+                    """Return a valid bounded percentage, or unknown for unusable readings."""
                     if all(type(value) in (int,float) and math.isfinite(value) for value in (numerator,denominator)) and denominator>0 and 0<=numerator<=denominator:
                         return numerator/denominator*100
                     return None
@@ -135,14 +137,17 @@ class Alerts:
         return result
 
     def one(self,identifier):
+        """Read one retained operational alert by identifier."""
         row = self.db.execute('SELECT '+','.join(COLUMNS)+' FROM operational_alerts WHERE id=?',(identifier,)).fetchone()
         return dict(zip(COLUMNS,row)) if row else None
 
     def resolved_since(self,since):
+        """List episodes resolved at or after the selected instant."""
         return [dict(zip(COLUMNS,row)) for row in self.db.execute('SELECT '+','.join(COLUMNS)+
                 ' FROM operational_alerts WHERE resolved_at>=? ORDER BY resolved_at,id',(since,)).fetchall()]
 
     def notification_status(self,episode,owner="system"):
+        """Read bounded system and caller delivery outcomes for one episode."""
         with self.db:
             rows = self.db.execute('SELECT channel,phase,state,attempts,last_at,last_error,owner FROM notification_deliveries '
                                    'WHERE episode=? AND owner IN (?,?) ORDER BY created DESC LIMIT 20',(episode,'system',owner)).fetchall()
@@ -177,6 +182,7 @@ class Alerts:
 
     @staticmethod
     def _where(filters):
+        """Build parameterized retained-episode filters for a supported scope."""
         scopes = {'open': 'resolved_at IS NULL', 'history': 'resolved_at IS NOT NULL', 'all': '1=1',
                   'unseen': 'resolved_at IS NULL AND acknowledged_at IS NULL',
                   'review': 'resolved_at IS NULL AND manual=1',

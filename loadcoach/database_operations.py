@@ -27,6 +27,7 @@ class OperationRefused(ValueError):
 
 
 def revision(source):
+    """Compute a store revision through a bounded read-only connection."""
     with read_connection(source) as connection:
         if source.database.engine == 'postgresql':
             connection.execute("SET TRANSACTION READ ONLY")
@@ -45,6 +46,7 @@ def revision(source):
 
 @contextmanager
 def read_connection(source):
+    """Open a read-only store inspection connection and always close it."""
     connection = source.database.connect(connect_timeout=2) if source.database.engine == 'postgresql' else connect(source.path.resolve().as_uri() + '?mode=ro', uri=True, timeout=2)
     try:
         yield connection
@@ -99,7 +101,9 @@ def maintenance_lease(source, identity):
 
 
 class DatabaseOperations:
+    """Owner-scoped, reviewed database maintenance on the store's owning node."""
     def __init__(self, sources, root, audit=None, *, machine='compute', recovery_prefix=''):
+        """Bind database sources, private jobs, audit reporting and recovery locations."""
         self.sources = sources
         self.jobs = DatabaseJobs(root)
         self.audit = audit or (lambda *args, **kwargs: None)
@@ -149,6 +153,7 @@ class DatabaseOperations:
             return JSONResponse({'error': {'message': message}}, status_code=409)
 
     def _source(self, identifier, identity=None):
+        """Require a configured bound store with the reviewed identity."""
         source = self.sources().get(identifier)
         if source is None or not source.expected:
             raise OperationRefused('Maintenance requires a configured, bound database store.')
@@ -157,6 +162,7 @@ class DatabaseOperations:
         return source
 
     def preview(self, owner, body):
+        """Validate a maintenance scope and save its reviewed store revisions."""
         action = body.get('action')
         if action not in {'purge', 'reclaim'}:
             raise OperationRefused('Choose purge or reclaim.')
@@ -226,6 +232,7 @@ class DatabaseOperations:
                 'notice': 'A verified recovery copy is created before each store is changed. Purge does not shrink files. Jobs stop between batches/stores on cancellation; completed work is not rolled back.'}
 
     async def execute(self, owner, review, confirmed):
+        """Consume an explicitly confirmed owner review before starting maintenance."""
         if confirmed is not True:
             raise OperationRefused('Confirm the reviewed deletion or maintenance locks first.')
         plan = self.jobs.consume(review, owner)
@@ -236,6 +243,7 @@ class DatabaseOperations:
         row = self.jobs.create(owner, plan[0]['action'], [{'id': item['id'], 'identity': item['identity']} for item in plan])
 
         async def worker(identifier):
+            """Execute reviewed store operations while checking cancellation and retaining outcomes."""
             outcomes = []
             for item in plan:
                 if self.jobs.cancelled(identifier):
@@ -283,6 +291,7 @@ class DatabaseOperations:
         return self.jobs.start(row, worker)
 
     def _purge_batch(self, source, plan, keys):
+        """Delete one bounded batch only while the reviewed store schema still matches."""
         self._source(source.id, plan['identity'])
         if revision(source) != plan['revision']:
             raise OperationRefused('The schema changed during purge. Completed batches are recorded; refresh and preview the remaining records.')
@@ -304,6 +313,7 @@ class DatabaseOperations:
             connection.close()
 
     def _reclaim(self, source, plan):
+        """Reclaim database space with engine-specific locking and storage headroom."""
         before = summaries({source.id: source}, '')[0]['size']
         if source.database.engine == 'sqlite':
             storage_headroom(source, before * 2)

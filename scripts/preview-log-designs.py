@@ -13,10 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic log sample records without calling live services."""
     now = datetime(2026, 11, 13, 10, 42, tzinfo=ZoneInfo('America/Vancouver'))
     events = []
 
     def add(at, kind, what, user, node, model=None, trace=None, **detail):
+        """Append one prepared event with its identity, trace and details."""
         event = dict(id=84001 + len(events), at=at.isoformat(timespec='milliseconds'),
                      kind=kind, what=what, user=user, caller='web' if user != 'scheduler' else 'schedule',
                      machine=node, model=model, trace=trace, level='normal', **detail)
@@ -69,6 +71,7 @@ def sample_data():
 
 
 def render():
+    """Render portable log proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     pages.filters['timestamp'] = timestamp
     static = ROOT / 'weightroom/static'

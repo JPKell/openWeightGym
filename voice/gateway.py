@@ -88,6 +88,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
     from loadcoach.client_origin import ClientOrigin, forward as forward_origin
 
     def rejected(source, reason):
+        """Record the latest rejected attempt for the selected voice entry."""
         entry_history[source]['last_rejection'] = {'at': gateway_status.stamp(), 'reason': reason}
 
     async def carry_context(request):
@@ -160,6 +161,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         return FileResponse(assets / "index.html", headers={"cache-control": "no-store"})
 
     def start_reply(value, status_code=200, **options):
+        """Record browser-start refusals before returning the admission response."""
         if status_code >= 400:
             rejected('browser', {403: 'unauthorized', 429: 'busy', 400: 'invalid_options', 413: 'invalid_options'}.get(status_code, 'unavailable'))
         return JSONResponse(value, status_code=status_code, **options)
@@ -218,11 +220,13 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         return row
 
     def refuse(number, caller, reason):
+        """Record a rejected telephone attempt and return an escaped refusal greeting."""
         phone_attempt(number, caller, 'rejected', reason)
         greeting = number.get('refusal_greeting') if number else None
         return Response('<Response><Say>' + escape(greeting or 'This call cannot be accepted.') + '</Say><Hangup/></Response>', media_type='application/xml')
 
     def connected_xml(phone, item):
+        """Build escaped Twilio connection instructions for an admitted call."""
         number = item['number']
         greeting = '<Say>' + escape(number['greeting']) + '</Say>' if number.get('greeting') else ''
         return ('<?xml version="1.0" encoding="UTF-8"?><Response>' + greeting + '<Connect><Stream url="' + escape(phone['stream_url'], {'"': '&quot;'}) + '">'
@@ -976,6 +980,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             except (httpx.HTTPError, ValueError):
                 pass
         def profile_state(name, mode='direct'):
+            """Check a configured profile's mode and compute readiness."""
             source = hermes_readiness if mode == 'hermes' else readiness
             profile = source.get('profiles', {}).get(name, {})
             if not profile:
@@ -1167,6 +1172,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                     accounts = {one['account'] for one in result.get('telephone', {}).get('numbers', [])}
                     throttle = asyncio.Semaphore(4)
                     async def choices_for(account):
+                        """Read an account's permitted telephone models under the shared concurrency bound."""
                         async with throttle:
                             return account, await phone_choices(account)
                     result['choices_by_account'] = dict(await asyncio.gather(*(choices_for(account) for account in accounts)))

@@ -103,6 +103,7 @@ def apply_live(program: str, settings, changed: dict):
 
 
 def nested_value(values, name, fallback=None):
+    """Read a dotted setting path, returning the fallback when a member is absent."""
     for part in name.split('.'):
         if not isinstance(values, dict) or part not in values:
             return fallback
@@ -111,6 +112,7 @@ def nested_value(values, name, fallback=None):
 
 
 def set_nested(values, name, value):
+    """Set a dotted value, creating missing intermediate tables."""
     parts = name.split('.')
     for part in parts[:-1]:
         values = values.setdefault(part, {})

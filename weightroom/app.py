@@ -678,6 +678,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     pages.env.globals['model_catalogue'] = model_catalogue
     service_defaults = {name: settings.file.get(name, getattr(settings, name)) for name in SERVICE_SETTINGS}
     def platform():
+        """Read the console's effective platform feature switches."""
         return PlatformServices.from_settings(settings)
     pages.env.globals['platform'] = platform
     pages.env.globals.update(setting_label=setting_labels.describe, settings_sections=setting_labels.sections,
@@ -901,6 +902,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             await asyncio.sleep(LOOK_EVERY)
 
     async def notification_feed(identity=''):
+        """Read authorized notification recipients without waking compute nodes."""
         try:
             answer = await ask('GET','/turnstile/notification-feed',settings.key,
                                params={'identity':identity,'metadata':'1'} if identity else {},headers={NO_WAKE:'1'},timeout=10)
@@ -916,15 +918,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return None
 
     async def notification_recipient(identity):
+        """Resolve one current personal notification target by stable identity."""
         body = await notification_feed(identity.removeprefix('account:'))
         return next(iter(body.get('targets',[])),{}) if body is not None else None
 
     notifications.recipient_lookup = notification_recipient
 
     def notification_note(what,person,**detail):
+        """Record a notification settings action in the existing event log."""
         observation_log.add('settings',what,person.name,**detail)
 
     async def notification_render(request,person,said,failed):
+        """Render notification feedback on the Alerts settings surface."""
         return await settings_page(request,person,said,failed,settings_section='alerts')
 
     async def collect_alerts(key):
@@ -1574,6 +1579,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     nav=navigation('/account/keys' if is_keys else '/account', person.can, bool(spotter), platform(), tool_chat=person.me.get('tool_chat', False)))
 
     async def account_phone_number(request: Request, person: Person) -> Response:
+        """Require phone permission before forwarding a supported registration action."""
         if 'front-phone' not in person.can:
             return Response('Registering phone numbers requires front-phone.', status_code=403)
         action = request.path_params['action']
@@ -1718,6 +1724,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def all_models(request: Request, person: Person) -> dict | Response:
         """One logical model with all verified compute locations, with an old-server fallback."""
         def enabled(known):
+            """Filter a returned model inventory through the live platform switches."""
             if isinstance(known, dict):
                 known['models'] = [model for model in known.get('models', []) if platform().model_enabled(model)]
             return known
@@ -1961,6 +1968,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         measurement_setup = section == 'node-measurements' or section == 'control' and one('return_page') == 'node-measurements'
 
         def run_back(said, flag=''):
+            """Return to the selected benchmark setup with its native filters and feedback."""
             query = {'benchmark': one('benchmark'), **({flag: '1'} if flag else {}), 'said': said}
             if measurement_setup:
                 query['kind'] = one('kind') if one('kind') in ('llm', 'embedding', 'rerank', 'image', 'audio', 'classifier') else 'llm'
@@ -2150,6 +2158,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if not targets:
             return None if stop else "Every model already has its memory measured at its minimum and maximum context."
         def path(name: str) -> str:
+            """Select the local or node-scoped measurement API address."""
             return "/turnstile/machines/" + quote(name, safe="") + "/model-api/model-measure-all" if merged else "/loadcoach/model-measure-all"
         answers = await asyncio.gather(*(ask("POST", path(name), person.key, json={"on": not stop, **({"names": models} if models else {})})
                                          for name, models in targets.items()))
@@ -2478,6 +2487,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         candidate = {"settings": {k: v for k, v in made.items() if k != "order"}, "order": FIRST_PLACE if made["order"] is None else made["order"]}
         others = matrix_nodes(form)
         def done(where: list[str], note: str = "") -> RedirectResponse:
+            """Return to model configuration with feedback naming the changed nodes."""
             text = "No changes to save." if not where else "Saved." if where == [here] else "Saved on " + (
                 where[0] if len(where) == 1 else ", ".join(where[:-1]) + " and " + where[-1]) + "."
             return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(text + note))
@@ -2579,6 +2589,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             state = "Enabled" if action == "location-enable" else "Disabled"
             return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(f"{state} {name} on {machine}."))
         def said(text: str) -> RedirectResponse:
+            """Return to the current node's model page with escaped feedback."""
             return go(node_model_address(request, name) + ("&said=" if request.query_params.get("node") else "?said=") + quote(text))
         if action == "delete-preset":
             answer = await model_api(request, person, "POST", "/loadcoach/model-setup",
@@ -2706,6 +2717,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if urlsplit(destination).path != '/batches' or urlsplit(destination).netloc or urlsplit(destination).scheme:
             destination = '/batches'
         def batch_redirect(message):
+            """Retain only supported batch-ledger filters when returning action feedback."""
             query = {key: value for key, value in parse_qsl(urlsplit(destination).query) if key in ('q', 'status', 'owner', 'sort', 'limit', 'page')}
             return go('/batches?' + urlencode({**query, 'said': message}))
         if form.get("do") == "cancel-all":
@@ -2900,6 +2912,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                    'backups': backup_manifests(root),
                    'protection': await asyncio.to_thread(encryption_status, root), 'error': ''}]
         async def read(name):
+            """Read one node's backup inventory while preserving its unavailable state."""
             try:
                 answer = await ask('GET', '/turnstile/machines/' + quote(name, safe='') + '/databases/backups', person.key)
                 if answer.is_success:
@@ -2939,6 +2952,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await backups_page(request, person, 'Choose configured nodes for backup.', failed=True)
         identifier = new_backup_id()
         async def create(name):
+            """Create the selected node's backup through its existing owning-node operation."""
             try:
                 if name == 'front':
                     await scheduled_front_backup(identifier, settings.backup_retention)
@@ -3065,9 +3079,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     migration_reports=migration_reports(migration_locations()[1]), said=request.query_params.get('said', ''))
 
     async def database_console_api(request: Request, person: Person) -> Response:
+        """Dispatch database operations through the shared console controller."""
         return await database_console.api(request, person)
 
     async def database_node_operation(request: Request, person: Person) -> Response:
+        """Require settings permission and forward maintenance to the owning node."""
         if 'manage-settings' not in person.can:
             return JSONResponse({'error': {'message': 'Database operations require manage-settings.'}}, status_code=403)
         machine = request.path_params['machine']
@@ -3087,6 +3103,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return JSONResponse({'error': {'message': 'The owning node is unavailable.'}}, status_code=503)
 
     async def database_details(request: Request, person: Person) -> Response:
+        """Read database details only for an authorized settings manager."""
         if 'manage-settings' not in person.can:
             return Response('Database details require manage-settings.', status_code=403)
         machine, identifier = request.path_params['machine'], request.path_params['database']
@@ -3100,6 +3117,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response('The owning node is unavailable.', status_code=503)
 
     async def database_dump(request: Request, person: Person) -> Response:
+        """Export a selected database or table under current settings permission."""
         if 'manage-settings' not in person.can:
             return Response('Database exports require manage-settings.', status_code=403)
         machine, identifier = request.path_params['machine'], request.path_params['database']
@@ -3266,6 +3284,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             voice_problem=problem, said=said or request.query_params.get('said', ''), failed=failed)
 
     async def voice_telephone_do(request: Request, person: Person) -> Response:
+        """Validate the telephone action and require settings permission before dispatch."""
         if 'manage-settings' not in person.can:
             return Response('Your account may not manage telephone.', status_code=403)
         action = request.path_params['action']
@@ -3350,6 +3369,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             greeting_names=list(voice_settings.TEXTS))
 
     async def voice_end_call(request: Request, person: Person) -> Response:
+        """End a selected voice call only for an authorized settings manager."""
         if 'manage-settings' not in person.can:
             return Response('Your account may not end voice calls.', status_code=403)
         try:
@@ -3431,6 +3451,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return result, unavailable
 
     def settings_api(node, program):
+        """Choose the existing control-node or node-scoped settings API path."""
         return '/loadcoach/settings/' + program if node == 'front' else '/turnstile/machines/' + quote(node, safe='') + '/settings/' + program
 
     async def settings_history_page(request: Request, person: Person) -> Response:
@@ -3993,10 +4014,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 render_settings = allowances_page
             elif settings_return.startswith('/settings/'):
                 async def render_settings(request, person, *args, **kwargs):
+                    """Render operation feedback on the selected settings surface."""
                     return await settings_page(request, person, *args, settings_section=settings_return.rsplit('/', 1)[-1], **kwargs)
         if settings_return == '/settings/downloads' and program == 'loadcoach' and selected_machine:
             destination = '/settings/downloads'
             async def render_settings(request, person, *args, **kwargs):
+                """Render operation feedback on the selected settings surface."""
                 return await settings_page(request, person, *args, settings_section='downloads', **kwargs)
         destination_query = "machine=" + quote(selected_machine or first_node(person), safe="") + "&" if node_return else ""
         found = await fetch(request, person, settings_path)
@@ -5855,6 +5878,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     from weightroom.extraction_views import routes as extraction_routes
     from weightroom.download_views import routes as download_routes
     async def render_downloads(request, person, *args, **kwargs):
+        """Render provider credential feedback within Download settings."""
         return await settings_page(request, person, *args, settings_section="downloads", **kwargs)
     from weightroom.classifier_views import routes as classifier_routes
 

@@ -19,6 +19,7 @@ def checked(values, *, superuser=False):
 class ContentLimits:
     """Read globals for every operation; caller policy comes from authenticated account state."""
     def __init__(self, read=None):
+        """Bind a live policy reader, falling back to shipped content limits."""
         self.read = read or (lambda name: default_for('weightroom', name))
 
     def for_user(self, user=None):

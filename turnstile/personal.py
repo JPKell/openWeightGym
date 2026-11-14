@@ -31,6 +31,7 @@ def notices(users, log, user, spending=None):
     owned_keys = {key_identity(verifier) for (verifier,) in users.db.execute(
         "SELECT hash FROM keys WHERE user=? AND kind='api'", (user.name,))}
     def own_policy(scope, subject):
+        """Limit personal spending notices to owned account, group or key scopes."""
         return ((scope == 'user' and subject == user.identity) or
                 (scope == 'group' and subject == user.group_name) or (scope == 'key' and subject in owned_keys))
     applicable = any(own_policy(scope, subject) for scope, subject in users.db.execute(

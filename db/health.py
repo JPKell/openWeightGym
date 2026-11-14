@@ -150,6 +150,7 @@ async def async_stores_health(stores, machine, manifests=()) -> list[dict]:
     """Keep per-store timeouts from accumulating across a large node's inventory."""
     semaphore = asyncio.Semaphore(4)
     async def probe(store):
+        """Check one store off the event loop under the shared concurrency bound."""
         async with semaphore:
             return await asyncio.to_thread(store_health, store, machine, manifests)
     return await asyncio.gather(*(probe(store) for store in stores))

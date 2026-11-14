@@ -43,6 +43,7 @@ def demo_audio(index):
 
 
 def sample_data():
+    """Build deterministic music sample records without calling live services."""
     families = tomllib.loads((ROOT / 'soundroom/catalog.toml').read_text())['families']
     return dict(models=[dict(id=id_, family=family, **families[family]) for id_, family in [
         ('ACE-Step Studio', 'ace_step'), ('HeartMuLa Songs', 'heartmula'),
@@ -51,6 +52,7 @@ def sample_data():
 
 
 def render():
+    """Render portable music proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader([ROOT / 'weightroom/pages', ROOT / 'soundroom/pages']),
                         autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'

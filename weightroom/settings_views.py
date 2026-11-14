@@ -32,6 +32,7 @@ def filtered(programs, page):
 
 
 def surface(path):
+    """Identify pages using the shared settings workspace and navigation."""
     return path.startswith('/settings') or path in ('/compute-nodes', '/system/voice', '/system/audio', '/tools', '/allowances')
 
 

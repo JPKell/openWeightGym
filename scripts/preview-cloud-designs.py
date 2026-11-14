@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic cloud sample records without calling live services."""
     endpoints = [
         ('OpenRouter', 'https://openrouter.ai/api/v1', 'OR'),
         ('OpenAI', 'https://api.openai.com/v1', 'OA'),
@@ -35,6 +36,7 @@ def sample_data():
 
 
 def render():
+    """Render portable cloud proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'
     return pages.get_template('cloud_designs.html').render(

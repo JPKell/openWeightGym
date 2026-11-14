@@ -1086,9 +1086,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     users.policy_getter = lambda name: live('turnstile',name,getattr(settings,name))
 
     def node_policy(name):
+        """Resolve a compute node's effective Wake policy."""
         return nodes.wake_policy(name, settings.machines.get(name, {}), console_settings.changes)
 
     def wake_settings(name):
+        """Present node-owned Wake fields with their current source metadata."""
         from loadcoach.settings import said
         from loadcoach.setting_catalog import entries
         namespace = 'machines:' + name
@@ -1108,6 +1110,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         Path(settings.machine_key_file).parent if settings.machine_key_file else Path(settings.data) / 'keys')
 
     def platform():
+        """Read the effective platform switches from control-node overrides."""
         return PlatformServices.from_settings(settings, console_settings.changes.of('weightroom'))
 
     routing.platform = platform
@@ -1789,6 +1792,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         own = {one["id"] for one in mine}
 
         def shown(one: dict) -> bool:
+            """Keep an active benchmark batch visible without repeating retained batch jobs."""
             kept = batch_work.store.get(one["id"])
             return kept is None or one.get("caller") == "benchmark" and kept.get("status") == "in_progress"
         return [one for one in listed if one["id"] not in own and shown(one)] + mine
@@ -3299,6 +3303,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 await answer.aclose()
 
         async def chunks():
+            """Stream the upstream body and close its response on completion or cancellation."""
             try:
                 async for block in answer.aiter_bytes():
                     yield block
@@ -3401,6 +3406,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 
     async def checkpoint_installations():
+        """Periodically persist progress for active model installations."""
         while True:
             installation_store.checkpoint(job for job in distributions.values() if job.get('kind')=='model-install')
             await asyncio.sleep(2)

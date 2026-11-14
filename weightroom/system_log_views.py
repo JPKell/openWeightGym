@@ -25,6 +25,7 @@ def level(text):
 
 
 def workspace(lines, node, source, timezone):
+    """Parse retained journal lines while preserving continuation text and original records."""
     entries = []
     for line in lines:
         stamp = STAMP.match(line)

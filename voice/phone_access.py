@@ -29,10 +29,12 @@ def correlation_key(folder):
 
 
 def digest(folder, value):
+    """Correlate a phone value through the private per-installation HMAC key."""
     return hmac.new(correlation_key(folder).encode(), value.encode(), hashlib.sha256).hexdigest()
 
 
 def masked(number):
+    """Show a phone number's ends while hiding its middle digits."""
     return number[:2] + ' ••• ••• ' + number[-4:] if isinstance(number, str) and number.startswith('+') and len(number) >= 9 else 'Hidden'
 
 
@@ -61,16 +63,20 @@ def decide(number, caller, attestation='', pin_ok=False, pin_saved=False, regist
 
 
 class RateLimits:
+    """Bounded per-number and per-caller telephone attempt counters."""
     def __init__(self):
+        """Initialize in-memory telephone rate-limit queues."""
         self.rows = defaultdict(deque)
 
     def count(self, key):
+        """Count attempts in the rolling hour after dropping expired entries."""
         rows, now = self.rows[key], time.monotonic()
         while rows and rows[0] <= now - 3600:
             rows.popleft()
         return len(rows)
 
     def allowed(self, number, caller, limit, continuation=False):
+        """Check attempt limits while bounding the number of remembered scopes."""
         if len(self.rows) > 20000:
             for key in list(self.rows):
                 if not self.count(key):
@@ -81,6 +87,7 @@ class RateLimits:
         return self.count(('number', number)) < bound and self.count(('caller', number, caller)) < bound
 
     def charge(self, number, caller):
+        """Record an attempt in both number and caller scopes."""
         now = time.monotonic()
         self.rows[('number', number)].append(now)
         self.rows[('caller', number, caller)].append(now)

@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic system logs sample records without calling live services."""
     now = datetime(2026, 11, 13, 14, 32, 18, tzinfo=ZoneInfo('America/Vancouver'))
     messages = [
         ('info', 'Request completed · 328 tokens in 4.82 s · 68.0 tok/s'),
@@ -57,6 +58,7 @@ def sample_data():
 
 
 def render():
+    """Render portable system logs proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'
     return pages.get_template('system_logs_designs.html').render(

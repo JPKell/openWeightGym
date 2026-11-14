@@ -112,6 +112,7 @@ def verified_backup(data: str | Path, now: float | None = None, machine: str = "
     except (OSError, ValueError):
         return None
     def created(manifest):
+        """Read a manifest creation instant, treating invalid metadata as unknown."""
         value = manifest.get('created_at', 0)
         try:
             return float(value) if isinstance(value, (int, float)) else datetime.fromisoformat(value).timestamp()
@@ -145,6 +146,7 @@ def rename_stored(store: str, db, aliases: dict[str, str], backup: dict | None, 
     source = db.database
     changed = 0
     def rename(database, connection):
+        """Rewrite supported stored node references while tracking actual changes."""
         nonlocal changed
         tables = set(database.tables(connection))
         for old, new in aliases.items():

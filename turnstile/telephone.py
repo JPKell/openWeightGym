@@ -17,7 +17,9 @@ from weightroom.bootstrap import ensure_service_identity
 
 
 class TelephoneAdmin:
+    """Control-node telephone configuration, admission and credential operations."""
     def __init__(self, users, log, changes, folder):
+        """Bind telephone administration to authoritative accounts, settings and private credentials."""
         self.users, self.log, self.changes = users, log, changes
         self.keys = TelephoneKeys(folder)
         self.discovery = {}
@@ -84,6 +86,7 @@ class TelephoneAdmin:
         return JSONResponse(decision, headers={'cache-control': 'no-store'})
 
     async def handle(self, request, user):
+        """Dispatch telephone operations through their existing permission and caller checks."""
         if request.url.path == '/loadcoach/phone-numbers':
             return await self.registration.handle(request, user)
         if request.url.path == '/loadcoach/telephone/admit' and request.method == 'POST':

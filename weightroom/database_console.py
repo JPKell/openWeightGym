@@ -23,20 +23,25 @@ MAX_EXPORT_BYTES = 2 * 1024 ** 3
 
 
 def owner_of(person):
+    """Use stable account identity for private database-operation ownership."""
     return person.me.get('identity') or person.name
 
 
 class DatabaseConsole:
+    """Permission-scoped fleet database inspection, reviewed maintenance and exports."""
     def __init__(self, sources, health, local_operations, ask, client, root):
+        """Bind local sources, owning-node clients and private database jobs."""
         self.sources, self.health, self.local = sources, health, local_operations
         self.ask, self.client = ask, client
         self.jobs = DatabaseJobs(root)
 
     @staticmethod
     def remote_path(machine, operation):
+        """Build the node-scoped database API path with an escaped node name."""
         return '/turnstile/machines/' + quote(machine, safe='') + '/databases/' + operation
 
     async def snapshot(self, person):
+        """Collect a fleet database inventory without hiding missing or retired nodes."""
         inventory_error = ''
         try:
             answer = await self.ask('GET', '/turnstile/machines?include_retired=1', person.key, timeout=5)
@@ -49,6 +54,7 @@ class DatabaseConsole:
         semaphore = asyncio.Semaphore(4)
 
         async def remote(node):
+            """Read one active node's database state, retaining explicit unavailable details."""
             result = dict(node, databases=[], tools={}, health=[], answering=False, error='')
             if node.get('lifecycle') == 'retired' or node.get('configured') is False:
                 result['error'] = 'Retired or unconfigured; excluded from active scope.'
@@ -92,6 +98,7 @@ class DatabaseConsole:
                     complete=not inventory_error and all(node['answering'] for node in active_nodes) and all(not row['error'] for row in active))
 
     async def stream(self, person, machine, operation, media_type=None):
+        """Open an authenticated owning-node stream without waking compute."""
         request = self.client.build_request('GET', self.remote_path(machine, operation),
             headers={'authorization': f'Bearer {person.key}', 'x-turnstile-no-wake': '1'}, timeout=httpx.Timeout(910, connect=2))
         answer = await self.client.send(request, stream=True)
@@ -99,6 +106,7 @@ class DatabaseConsole:
             await answer.aclose()
             raise OperationRefused('The owning node refused the download or is unreachable.')
         async def chunks():
+            """Stream the remote response and always close it afterward."""
             try:
                 async for chunk in answer.aiter_bytes():
                     yield chunk
@@ -108,6 +116,7 @@ class DatabaseConsole:
         return StreamingResponse(chunks(), media_type=media_type or answer.headers.get('content-type'), headers={**headers, 'cache-control': 'no-store'})
 
     async def export(self, person, body):
+        """Validate export scope and preserve explicit partial-fleet omissions."""
         snapshot = await self.snapshot(person)
         scope = body.get('scope')
         partial = body.get('partial') is True
@@ -135,6 +144,7 @@ class DatabaseConsole:
         folder = self.jobs.folder(row['id'])
 
         async def worker(identifier):
+            """Run the reviewed database job while retaining per-store outcomes and cancellation."""
             outcomes, total = [], 0
             manifest = {'schema': 1, 'kind': 'SQL export', 'consistency': 'independent per-database snapshots',
                         'requested_scope': scope, 'partial_requested': partial, 'omissions': omissions, 'stores': outcomes}
@@ -190,6 +200,7 @@ class DatabaseConsole:
                     return
                 archive = folder / 'export.zip'
                 def package():
+                    """Build a private SQL export archive with its inventory and retained outcomes."""
                     descriptor = os.open(archive, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
                     with os.fdopen(descriptor, 'wb') as output, ZipFile(output, 'w', ZIP_DEFLATED) as bundle:
                         for entry in outcomes:
@@ -214,6 +225,7 @@ class DatabaseConsole:
         return self.jobs.start(row, worker)
 
     async def preview(self, person, body):
+        """Validate selected store keys against the current fleet inventory."""
         snapshot = await self.snapshot(person)
         indexed = {row['key']: row for row in snapshot['databases']}
         keys = body.get('scope')
@@ -243,12 +255,14 @@ class DatabaseConsole:
         return dict(review=row['id'], action=body.get('action'), stores=stores, expires_at=row['expires_at'])
 
     async def execute(self, person, body):
+        """Consume an explicitly confirmed owner review before starting fleet maintenance."""
         if body.get('confirmed') is not True:
             raise OperationRefused('Confirm the reviewed purge or maintenance locks first.')
         plan = self.jobs.consume(body.get('review'), owner_of(person))
         row = self.jobs.create(owner_of(person), 'maintenance', plan)
 
         async def worker(identifier):
+            """Run the reviewed database job while retaining per-store outcomes and cancellation."""
             outcomes = []
             for node in plan:
                 if self.jobs.cancelled(identifier):
@@ -301,6 +315,7 @@ class DatabaseConsole:
         return self.jobs.start(row, worker)
 
     async def api(self, request, person):
+        """Authorize and dispatch supported database operations for this caller."""
         if 'manage-settings' not in person.can:
             return JSONResponse({'error': {'message': 'Database operations require manage-settings.'}}, status_code=403)
         operation = request.path_params['operation'].split('/')
@@ -324,6 +339,7 @@ class DatabaseConsole:
                 jobs = [{**job, 'machine': 'front', 'type': 'export' if job['kind'] == 'export' else 'coordinator'} for job in self.jobs.recent(owner)]
                 jobs += [{**job, 'machine': 'front', 'type': 'maintenance'} for job in self.local.jobs.recent(owner)]
                 async def remote_jobs(node):
+                    """List current jobs only from active configured compute nodes."""
                     if node['name'] == 'front' or node.get('lifecycle') == 'retired' or node.get('configured') is False:
                         return []
                     try:

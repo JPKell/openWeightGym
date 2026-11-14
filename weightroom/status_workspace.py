@@ -4,6 +4,7 @@ from loadcoach.log import LEGACY  # the old default node, which rows and catalog
 
 
 def present(now, nodes, counts=None):
+    """Build status lanes without repeating requests already grouped under active batches."""
     live = now or {}
     batches = live.get('active_batches') or []
     grouped = {number for batch in batches for number in batch.get('request_ids', [])}

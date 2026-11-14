@@ -39,6 +39,7 @@ class ConsoleSettings:
         from ipaddress import ip_address
         records = self.log.read(limit=100,kind='user',what='signed-in') if hasattr(self.log,'read') else []
         def obscured(entry):
+            """Detect proxy-hidden or loopback caller addresses for settings presentation."""
             if entry.get('proxy_seen'):
                 return True
             try:

@@ -28,9 +28,11 @@ class TelephoneKeys:
     """Keep credentials out of settings, templates, logs and API responses."""
 
     def __init__(self, folder):
+        """Bind telephone credentials to their owning private key directory."""
         self.folder = Path(folder)
 
     def path(self, kind):
+        """Resolve only a supported telephone credential or its legacy file reference."""
         if kind not in ('token', 'api'):
             raise ValueError('Choose auth token or API key.')
         if kind == 'token' and self.references().get('token_file'):
@@ -38,6 +40,7 @@ class TelephoneKeys:
         return self.folder / ('voice-twilio.key' if kind == 'token' else 'voice-twilio-api.key')
 
     def references(self):
+        """Read saved legacy credential references, treating missing or invalid metadata as empty."""
         try:
             value = json.loads((self.folder / 'voice-twilio-source.json').read_text())
             return value if isinstance(value, dict) else {}
@@ -45,6 +48,7 @@ class TelephoneKeys:
             return {}
 
     def import_legacy(self, legacy, base_url, account):
+        """Retain existing machine credential references only after their files are present."""
         if not Path(legacy['token_file']).is_file() or not Path(legacy['key_file']).is_file():
             raise ValueError('Restore the machine-file telephone credentials before importing.')
         atomic_secret(self.folder / 'voice-twilio-source.json', json.dumps({
@@ -53,15 +57,18 @@ class TelephoneKeys:
             'webhook_url': legacy['webhook_url'], 'stream_url': legacy['stream_url']}))
 
     def account_path(self, account):
+        """Resolve an app-account key through saved references or its private key filename."""
         return Path(self.references().get('account_keys', {}).get(account) or self.folder / (account + '.key'))
 
     def read(self, kind):
+        """Read a telephone credential, returning empty text when it is absent."""
         try:
             return self.path(kind).read_text().strip()
         except FileNotFoundError:
             return ''
 
     def status(self):
+        """Expose credential presence and modification times without their values."""
         result = {}
         for kind in ('token', 'api'):
             try:
@@ -72,6 +79,7 @@ class TelephoneKeys:
 
     def save(self, token='', api_sid='', api_secret=''):
         # Validate all supplied fields before changing either credential.
+        """Validate and save telephone credentials through private atomic files."""
         for value in (token, api_secret):
             if not isinstance(value, str) or (value and (len(value) > 8192 or any(not 33 <= ord(char) <= 126 for char in value))):
                 raise ValueError('Enter a credential without spaces or control characters (at most 8192 characters).')
@@ -85,4 +93,5 @@ class TelephoneKeys:
             atomic_secret(self.path('api'), json.dumps({'sid': api_sid, 'secret': api_secret}))
 
     def remove(self, kind):
+        """Remove only the selected telephone credential."""
         self.path(kind).unlink(missing_ok=True)

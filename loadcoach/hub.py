@@ -34,6 +34,7 @@ CLASSIFIER_PAGES = {}
 class DownloadSlots:
     """A live node-wide transfer cap; running transfers survive a lower limit."""
     def __init__(self, limit):
+        """Initialize the live transfer limit, active count and wait condition."""
         self.limit = limit
         self.active = 0
         self.condition = asyncio.Condition()

@@ -15,10 +15,12 @@ PROGRAMS = ('loadcoach', 'weightroom', 'turnstile', 'toollocker', 'spotter', 'vo
 
 
 def words(value):
+    """Parse shell command words without treating comments as syntax."""
     return shlex.split(value, comments=False)
 
 
 def quoted(value):
+    """Quote a literal value for the service configuration."""
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
@@ -31,6 +33,7 @@ def source_path(value, root):
 
 
 def logical_lines(text):
+    """Read continued service lines while retaining their original text."""
     raw = ''
     for line in text.splitlines(keepends=True):
         raw += line
@@ -72,6 +75,7 @@ def rewrite(text, root, *, environment_file=False):
 
 
 def directives(text):
+    """Read uncommented directives from the service section."""
     section = ''
     for _, line in logical_lines(text):
         if line.startswith('['):
@@ -85,6 +89,7 @@ def worker_memory(text, *, defaults=False):
     """Keep worker processes in a delegated supervisor; retain other controllers and policies."""
     result, section, seen = [], '', set()
     def missing():
+        """Fill absent service delegation defaults while preserving existing directives."""
         if defaults and section == '[Service]':
             for key, value in (('Delegate', 'memory'), ('DelegateSubgroup', 'supervisor')):
                 if key not in seen:
@@ -114,6 +119,7 @@ def worker_memory(text, *, defaults=False):
 
 
 def expanded(value):
+    """Expand supported home and percent service specifiers."""
     return value.replace('%h', str(Path.home())).replace('%%', '%')
 
 
@@ -160,6 +166,7 @@ def plan(root, unit_dir, programs):
 
 
 def replace(path, contents):
+    """Atomically replace text while retaining the original file mode."""
     mode = stat.S_IMODE(path.stat().st_mode)
     temporary = None
     try:
@@ -174,6 +181,7 @@ def replace(path, contents):
 
 
 def apply(changes, backup_root):
+    """Back up the proposed file changes before applying them."""
     if not changes:
         return
     backup = backup_root / uuid.uuid4().hex
@@ -225,6 +233,7 @@ def renamed_settings(root):
 
 
 def main():
+    """Parse source-update arguments and dispatch the selected file operations."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--unit-dir', type=Path, required=True)

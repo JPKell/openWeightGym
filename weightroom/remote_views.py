@@ -9,10 +9,12 @@ from loadcoach.setting_catalog import REMOTE_SERVER_FIELDS, get, validate
 
 
 def fields():
+    """Return the canonical remote-server editor contracts."""
     return REMOTE_SERVER_FIELDS
 
 
 async def context(client,person):
+    """Read sanitized remote-server status only for a superuser."""
     if 'superuser' not in person.can:return {'remote_admin':False}
     try:
         answer=await client.get('/remote-servers',headers={'authorization':'Bearer '+person.key},timeout=10)
@@ -25,7 +27,9 @@ async def context(client,person):
 
 
 def routes(for_people,client,typed,render,go):
+    """Register caller-authenticated remote-server settings actions."""
     async def save(request,person):
+        """Require superuser access before forwarding a validated remote-server action."""
         if 'superuser' not in person.can:return Response('Remote MCP management requires superuser.',status_code=403)
         form=await typed(request)
         name=request.path_params.get('server') or form.get('name','')

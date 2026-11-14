@@ -12,8 +12,10 @@ def workspace(batches, person, params):
     owners = sorted({batch['user'] for batch in batches})
     query = filters['q'].strip().casefold()
     def title(batch):
+        """Use a saved batch name when present, otherwise its stable identifier."""
         return str((batch.get('metadata') or {}).get('name') or batch['id'])
     def processed(batch):
+        """Count completed and failed requests as processed batch lines."""
         counts = batch['request_counts']
         return counts['completed'] + counts['failed']
     selected = [batch for batch in batches if

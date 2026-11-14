@@ -137,8 +137,10 @@ def summaries(sources: dict[str, DatabaseSource], machine: str) -> list[dict]:
 
 
 async def async_summaries(sources: dict[str, DatabaseSource], machine: str) -> list[dict]:
+    """Read store summaries off the event loop with bounded concurrency."""
     semaphore = asyncio.Semaphore(4)
     async def probe(identifier, source):
+        """Read one store's summaries under the shared concurrency bound."""
         async with semaphore:
             return await asyncio.to_thread(summaries, {identifier: source}, machine)
     return [row for batch in await asyncio.gather(*(probe(identifier, source) for identifier, source in sources.items())) for row in batch]
@@ -349,6 +351,7 @@ def _python_dump(source: DatabaseSource, output: Path, table: str | None) -> Non
             written = 0
             checked_bytes = 0
             def emit(line):
+                """Write one SQL export line while enforcing size, time and free-space budgets."""
                 nonlocal written, checked_bytes
                 written += len(line.encode('utf-8'))
                 if written > 2 * 1024 ** 3 or time.monotonic() > deadline:

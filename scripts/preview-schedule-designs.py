@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic schedule sample records without calling live services."""
     common = dict(timezone='America/Vancouver', owner='jordan', missed='skip', retention=14,
                   model='qwen3-32b', benchmark='ifeval', machine='atlas', model_ids=[], benchmarks=[])
     jobs = [
@@ -31,6 +32,7 @@ def sample_data():
 
 
 def render():
+    """Render portable schedule proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     from weightroom.display import node_label
     pages.filters['node_label'] = node_label

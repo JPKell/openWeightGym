@@ -125,6 +125,7 @@ class Machines:
 
     @every.setter
     def every(self, value):
+        """Replace the live node-poll interval."""
         self._every = value
 
     def all_names(self) -> list[str]:

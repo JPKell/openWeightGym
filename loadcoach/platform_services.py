@@ -16,6 +16,7 @@ SPEECH_TASKS = frozenset({'speech', 'clone', 'design', 'transcription', 'alignme
 
 @dataclass(frozen=True)
 class PlatformServices:
+    """Platform feature switches shared by navigation, model discovery and request admission."""
     images: bool = True
     speech: bool = True
     audio: bool = True
@@ -31,15 +32,19 @@ class PlatformServices:
 
     @property
     def audio_models(self):
+        """Return whether any speech or general audio task is enabled."""
         return self.speech or self.audio
 
     def kind_enabled(self, kind):
+        """Check whether the platform enables this model or file kind."""
         return self.classifiers if kind == 'classifier' else self.images if kind == 'image' else self.audio_models if kind == 'audio' else True
 
     def audio_task_enabled(self, task):
+        """Apply the speech and audio switches to a specific task."""
         return self.speech if task in SPEECH_TASKS else self.audio if task in ('music', 'sound') else self.audio_models
 
     def model_enabled(self, model):
+        """Filter a model by its declared engine and media capabilities."""
         capabilities = model.get('capabilities', {})
         if capabilities.get('classifier') or model.get('type') == 'classifier' or model.get('systemone'):
             return self.classifiers
@@ -51,6 +56,7 @@ class PlatformServices:
         return True
 
     def file_enabled(self, file):
+        """Filter file metadata through the enabled kinds and audio tasks."""
         facts = file.get('facts') or {}
         kind = facts.get('what', file.get('what'))
         if not self.kind_enabled(kind):
@@ -59,6 +65,7 @@ class PlatformServices:
         return kind != 'audio' or not tasks or any(self.audio_task_enabled(task) for task in tasks)
 
     def download_enabled(self, repository):
+        """Require downloads and the image switch for Civitai sources."""
         return self.downloads and (self.images or not str(repository).startswith('civitai/'))
 
     def path_enabled(self, path, method='GET', query=None):
@@ -106,9 +113,11 @@ class PlatformServiceGate:
     """Reject disabled control node services before they can submit work or contact providers."""
 
     def __init__(self, app, policy):
+        """Bind the wrapped application to a live platform-policy reader."""
         self.app, self.policy = app, policy
 
     async def __call__(self, scope, receive, send):
+        """Refuse disabled platform routes before dispatching the wrapped application."""
         if scope['type'] == 'http':
             from starlette.requests import HTTPConnection
             from starlette.responses import JSONResponse

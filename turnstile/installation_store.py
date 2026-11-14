@@ -10,6 +10,7 @@ TERMINAL=frozenset({'complete','failed','cancelled'})
 class Installations:
     """Keep exact retry settings and explicit interruptions in the control node accounts store."""
     def __init__(self,source):
+        """Open and migrate retained model-installation progress."""
         self.source=database(source)
         self.db=self.source.connect(check_same_thread=False)
         migrate(self.source,self.db,'turnstile.installations',MIGRATIONS)
@@ -17,9 +18,11 @@ class Installations:
 
     @staticmethod
     def owner(user):
+        """Use stable account identity, with a legacy name fallback."""
         return user.identity or 'name:'+user.name
 
     def add(self,job,user,asked):
+        """Retain the installation request and its initial destination progress."""
         request={key:asked[key] for key in ('name','settings','source_machine','source_model_id','generation','move') if key in asked}
         request['machine']=job['destination']
         progress=json.dumps(job)
@@ -29,6 +32,7 @@ class Installations:
         self.saved[job['id']]=progress
 
     def checkpoint(self,jobs):
+        """Persist changed installation progress without rewriting unchanged records."""
         changed=[]
         for job in jobs:
             progress=json.dumps(job)
@@ -39,6 +43,7 @@ class Installations:
             self.saved.update({id:progress for progress,_,id in changed})
 
     def recover(self):
+        """Load retained installations and mark interrupted attempts as failed."""
         jobs={id:json.loads(progress) for id,progress in self.db.execute('SELECT id,progress FROM model_installations').fetchall()}
         for job in jobs.values():
             if job['state'] not in TERMINAL:
@@ -47,10 +52,12 @@ class Installations:
         return jobs
 
     def can_retry(self,id,user):
+        """Permit retry only for the saved owner or a superuser."""
         row=self.db.execute('SELECT owner_id FROM model_installations WHERE id=?',(id,)).fetchone()
         return bool(row and (row[0]==self.owner(user) or user.can('superuser')))
 
     def retry_request(self,id,user):
+        """Recover a failed installation request after current owner authorization."""
         row=self.db.execute('SELECT request,progress FROM model_installations WHERE id=?',(id,)).fetchone()
         if row is None:raise KeyError('That installation is not recorded.')
         if not self.can_retry(id,user):raise PermissionError('Only its owner or a superuser may retry this installation.')

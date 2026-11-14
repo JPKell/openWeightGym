@@ -8,12 +8,14 @@ MAX_BYTES = 65536
 
 
 def transferable(program, name, value):
+    """Allow only editable non-secret settings without redacted or derived content."""
     entry = get(program, name)
     return bool(entry and entry.tier != 'file' and entry.kind != 'secret' and not entry.retired
                 and not entry.derived and redacted(value, name) == value and '(not shown)' not in json.dumps(value))
 
 
 def export_rows(node, programs):
+    """Collect transferable explicit overrides for the selected node."""
     return [{'node':node, 'program':program['program'], 'name':row['name'], 'value':row['changed']['value']}
             for program in programs for row in program['settings'] if row.get('changed')
             and not row.get('retired') and not row.get('derived')

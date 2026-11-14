@@ -7,6 +7,7 @@ EMPTY = {'enabled': False, 'account_sid': '', 'public_url': '', 'numbers': []}
 
 
 def effective(changes):
+    """Resolve telephone configuration from file values and current gateway overrides."""
     override = changes.of('voice-gateway')
     known = next((one for one in changes.everything() if one['program'] == 'voice-gateway'), {})
     current = {one['name']: one['value'] for one in known.get('settings', [])}
@@ -66,6 +67,7 @@ def edited(phone, form):
 
 
 def verdict(phone, credentials, active=0, entry=None):
+    """Explain telephone setup readiness without exposing saved credentials."""
     if not phone.get('enabled'):
         return {'state': 'Off', 'reason': 'Enable telephone after completing setup.'}
     for ready, reason in ((bool(phone.get('account_sid')), 'Save your Twilio Account SID.'),

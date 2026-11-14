@@ -227,6 +227,7 @@ def workspace(programs):
         profiles[primary].setdefault('Voice and greetings', []).extend(greetings)
         shared = [entry for entry in shared if entry not in greetings]
     def groups(rows, profile=None):
+        """Group voice setting rows by their canonical task-oriented headings."""
         result = []
         for title in ('Conversation', 'Voice and greetings', 'Recognition', 'Synthesis', 'Hermes', 'Capacity'):
             entries = []

@@ -9,16 +9,19 @@ class FailureCounter:
     """Small bounded windows; every writer serializes the two affected counter rows."""
 
     def __init__(self, connection, setting):
+        """Bind persistent failure counters to the current sign-in policy reader."""
         self.db, self.setting = connection, setting
 
     @staticmethod
     def scope(account, address):
+        """Normalize and bound the account and client-address failure scope."""
         account = account.lower() or 'invalid:empty'
         if len(account) > 128:
             account = 'invalid:' + hashlib.sha256(account.encode()).hexdigest()
         return account, str(address or 'unknown')[:100]
 
     def remaining(self, account, address, now=None):
+        """Read the remaining account/address lockout under the current clock."""
         now = time.time() if now is None else now
         account, address = self.scope(account, address)
         with self.db:
@@ -62,6 +65,7 @@ class FailureCounter:
             self.db.execute('DELETE FROM sign_in_failures WHERE account=? AND address=?', (account,address))
 
     def listing(self, account=''):
+        """List persistent sign-in lockouts that have not expired."""
         with self.db:
             rows = self.db.execute('SELECT account,address,locked_until FROM sign_in_failures WHERE locked_until>? ORDER BY account,address', (time.time(),)).fetchall()
         return [{'account':who, 'address':address, 'until':until} for who,address,until in rows

@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic models sample records without calling live services."""
     nodes = [
         dict(id='atlas', hardware='2 × RTX 6000 Ada', memory='96 GiB VRAM', count=30, online=True),
         dict(id='orion', hardware='2 × RTX 4090', memory='48 GiB VRAM', count=27, online=True),
@@ -59,6 +60,7 @@ def sample_data():
 
 
 def render():
+    """Render portable models proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'
     return pages.get_template('models_designs.html').render(

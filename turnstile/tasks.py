@@ -271,6 +271,7 @@ class TaskRecords:
                 if spec['kind'] == 'backup':
                     selected = spec.get('nodes') or ['front', *self.names]
                     async def backup(node):
+                        """Reuse or create the scheduled node backup using its stable occurrence identity."""
                         _, node_id = occurrence_ids(identifier + ':' + node, due)
                         receipt = {'node': node, 'id': node_id}
                         existing = await self.ask(owner, 'GET', '/loadcoach/backups/' + node_id, machine=node)

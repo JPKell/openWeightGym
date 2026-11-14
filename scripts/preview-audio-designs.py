@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic audio sample records without calling live services."""
     families = tomllib.loads((ROOT / 'soundroom/catalog.toml').read_text())['families']
     entries = [
         ('ace-step-studio', 'ACE-Step Studio', 'ace_step', 'music', 6.8, ['atlas', 'nova']),
@@ -42,6 +43,7 @@ def sample_data():
 
 
 def render():
+    """Render portable audio proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'
     return pages.get_template('audio_designs.html').render(

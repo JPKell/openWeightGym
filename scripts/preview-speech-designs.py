@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic speech sample records without calling live services."""
     families = tomllib.loads((ROOT / 'soundroom/catalog.toml').read_text())['families']
     return dict(
         models=[dict(id=identifier, name=name, family=family, kind=kind,
@@ -32,6 +33,7 @@ def sample_data():
 
 
 def render():
+    """Render portable speech proposals from shared templates and prepared sample data."""
     static = ROOT / 'weightroom/static'
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     return pages.get_template('speech_designs.html').render(

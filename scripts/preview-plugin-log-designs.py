@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic plugin log sample records without calling live services."""
     now = datetime(2026, 11, 13, 14, 30, tzinfo=ZoneInfo('America/Vancouver'))
     rows = []
     for group in range(24):
@@ -31,6 +32,7 @@ def sample_data():
 
 
 def render():
+    """Render portable plugin log proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'
     return pages.get_template('plugin_log_designs.html').render(

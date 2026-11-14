@@ -25,9 +25,11 @@ class ProxyAddress:
     """Apply the machine-file trust policy before request attribution is captured."""
 
     def __init__(self, app, trusted=()):
+        """Bind the application and explicitly trusted proxy networks."""
         self.app, self.trusted = app, trusted
 
     async def __call__(self, scope, receive, send):
+        """Resolve the request address only through explicitly trusted proxy headers."""
         if scope['type'] in ('http','websocket') and (peer := scope.get('client')):
             headers = dict(scope.get('headers', []))
             forwarded = headers.get(b'x-forwarded-for', b'').decode('latin-1')

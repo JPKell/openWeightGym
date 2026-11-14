@@ -221,6 +221,7 @@ def build_app(config: Config) -> Starlette:
     changed_signal = asyncio.Event()
     key_folder = Path(config.machine_key_file).resolve().parent if config.machine_key_file else folder.parent/'keys'
     def file_names():
+        """Reserve configured and automatic built-in server names from remote replacements."""
         return {*config.servers, *({'extraction','classifier'} if config.extraction_url else set())}
     remote_settings = RemoteSettings(identity, RemoteKeys(key_folder),
         config.file.get('remote_servers', config.remote_servers), file_names, log, changed_signal)
@@ -279,6 +280,7 @@ def build_app(config: Config) -> Starlette:
                 remote_servers[name]=server;remote_specs[name]=spec;remote_signatures[name]=signatures[name];new.append(server)
             semaphore=asyncio.Semaphore(4)
             async def start(server):
+                """Start one tool server under the shared startup concurrency limit."""
                 async with semaphore:await bring_up(server)
             await asyncio.gather(*(start(server) for server in new))
             if new:note_changes(tools,log)

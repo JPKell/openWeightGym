@@ -17,6 +17,7 @@ ACTIVE = {'queued', 'running', 'cancelling'}
 class DatabaseJobs:
     """Persist receipts without persisting caller credentials or replaying interrupted work."""
     def __init__(self, root):
+        """Prepare the private job directory and recover interrupted work."""
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.root.chmod(0o700)
@@ -24,11 +25,13 @@ class DatabaseJobs:
         self._recover()
 
     def folder(self, identifier):
+        """Validate an operation identifier before resolving its private directory."""
         if not isinstance(identifier, str) or not ID.fullmatch(identifier):
             raise ValueError('Invalid database operation identifier.')
         return self.root / identifier
 
     def write(self, identifier, name, value):
+        """Publish private job metadata through an exclusive temporary file."""
         folder = self.folder(identifier)
         folder.mkdir(mode=0o700, exist_ok=True)
         temporary = folder / ('.' + name + '.' + secrets.token_hex(4))
@@ -45,9 +48,11 @@ class DatabaseJobs:
             os.close(directory)
 
     def read(self, identifier, name='job.json'):
+        """Read a named JSON record from a validated job directory."""
         return json.loads((self.folder(identifier) / name).read_text())
 
     def _recover(self):
+        """Expire downloads and reconcile interrupted or expired job records."""
         for folder in self.root.iterdir():
             if not folder.is_dir() or not ID.fullmatch(folder.name):
                 continue
@@ -71,6 +76,7 @@ class DatabaseJobs:
                 continue
 
     def get(self, identifier, owner):
+        """Read one unexpired job after checking its owner."""
         row = self.read(identifier)
         if row['owner'] != owner:
             raise PermissionError('This operation belongs to another account.')
@@ -79,6 +85,7 @@ class DatabaseJobs:
         return row
 
     def recent(self, owner):
+        """List the owner's retained operations after expiry and recovery checks."""
         self._recover()
         result = []
         for folder in self.root.iterdir():
@@ -93,9 +100,11 @@ class DatabaseJobs:
 
     @staticmethod
     def public(row):
+        """Remove internal ownership and reviewed-plan fields from job metadata."""
         return {key: value for key, value in row.items() if key not in {'owner', 'plan'}}
 
     def create(self, owner, kind, scope, *, plan=None):
+        """Create a bounded private operation record after recovering old jobs."""
         self._recover()
         active = 0
         for folder in self.root.iterdir():
@@ -120,6 +129,7 @@ class DatabaseJobs:
         return row
 
     def update(self, identifier, **changes):
+        """Serialize metadata changes using the operation's file lock."""
         descriptor = os.open(self.folder(identifier) / 'metadata.lock', os.O_CREAT | os.O_RDWR, 0o600)
         with os.fdopen(descriptor, 'a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -129,15 +139,18 @@ class DatabaseJobs:
             return row
 
     def cancelled(self, identifier):
+        """Read the operation's cancellation request flag."""
         return self.read(identifier)['cancel_requested']
 
     def start(self, row, worker):
         # Lock before scheduling, so another worker cannot mistake a queued job for a restart.
+        """Acquire an exclusive job lease and start its supervised worker."""
         lease = (self.folder(row['id']) / 'lease').open('a')
         os.chmod(lease.name, 0o600)
         fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         async def run():
+            """Record job execution and its terminal state while retaining failure details."""
             try:
                 self.update(row['id'], state='running')
                 await worker(row['id'])
@@ -173,5 +186,6 @@ class DatabaseJobs:
 
     async def close(self):
         # Let in-flight bounded DB transactions finish, preserving accurate receipts.
+        """Wait for supervised operation tasks to finish."""
         if self.tasks:
             await asyncio.gather(*self.tasks, return_exceptions=True)

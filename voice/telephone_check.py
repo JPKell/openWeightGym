@@ -22,7 +22,9 @@ from voice.telephone import signature
 
 
 class CheckFailed(ValueError):
+    """A simulated telephone check that retains its failed stages."""
     def __init__(self, stages):
+        """Keep the simulated check stages with a safe failure message."""
         super().__init__('The simulated call did not complete. Check caller access, the public route and Voice status.')
         self.stages = stages
 

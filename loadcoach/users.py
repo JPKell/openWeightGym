@@ -167,6 +167,7 @@ class Users:
         return self.policy_getter(name) if self.policy_getter else default_for('turnstile', name)
 
     def check_password_length(self, password):
+        """Validate a new password against the live minimum-length policy."""
         minimum = self.security_setting('password_min_length')
         if not isinstance(password, str) or len(password) < minimum:
             raise ValueError(f'New passwords must contain at least {minimum} characters.')
@@ -445,6 +446,7 @@ class Users:
         name = name.lower()  # one identity for lookup, failed attempts and authenticator replay checks
         now = time.time()
         def throttled(seconds):
+            """Describe a refused sign-in with the caller's retry delay."""
             return SignInRefused(429, 'throttled', 'Too many sign-in failures from this address. Try again later.', retry_after=seconds)
         if remaining := self.failures.remaining(name,address,now):
             raise throttled(remaining)

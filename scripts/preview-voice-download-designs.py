@@ -33,6 +33,7 @@ def render(base_url='http://192.168.1.10:8440'):
     )
     # Use frame.html itself, with local assets inlined and backend behavior omitted.
     def script(match):
+        """Inline supported browser assets for the portable preview."""
         name = match[1].split('?')[0].rsplit('/', 1)[-1]
         if name not in ('themes.js', 'navigation.js'):
             return ''

@@ -29,6 +29,7 @@ def interval_seconds(minutes) -> float:
 def git_version(root: Path) -> str:
     """Nearest release tag and the actual checkout commit, including untagged checkouts."""
     def git(*args):
+        """Read a bounded Git command result, returning empty text on command failure."""
         result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=10)
         return result.stdout.strip() if result.returncode == 0 else ""
 
@@ -97,6 +98,7 @@ class Versions:
     """One persisted suite identity per host, and one reported identity per installed engine."""
 
     def __init__(self, source, root: Path = ROOT, *, minutes=EVERY / 60):
+        """Open this host's component-version store and configure its check interval."""
         self.every = interval_seconds(minutes)
         self.source, self.root = database(source), root
         self.db = self.source.connect(check_same_thread=False)
@@ -106,17 +108,20 @@ class Versions:
         self.suite_checked = False
 
     def read(self) -> dict:
+        """Read the last recorded component versions for this physical host."""
         return {name: {"version": version, "version_checked": checked, "version_error": error}
                 for name, version, checked, error in self.db.execute(
                     "SELECT component,version,checked,error FROM component_versions WHERE hostname=?", (self.hostname,))}
 
     def save(self, name: str, version: str, error: str = "") -> None:
+        """Persist a component version, check time and error for this host."""
         with self.db:
             self.db.execute("INSERT INTO component_versions(hostname,component,version,checked,error) VALUES(?,?,?,?,?) "
                             "ON CONFLICT(hostname,component) DO UPDATE SET version=excluded.version,checked=excluded.checked,error=excluded.error",
                             (self.hostname, name, version, time.time(), error))
 
     async def suite(self) -> None:
+        """Record the installed checkout's Git version without blocking the event loop."""
         try:
             version = await asyncio.to_thread(git_version, self.root)
             self.save("suite", version, "Git tag/commit unavailable." if not version else "")

@@ -116,6 +116,7 @@ class FrontBatches:
                              reason=reason, **details)
                 waiting = key
         def keep(line, status, request_id, result, **details):
+            """Retain one batch line and record its scoped lifecycle outcome."""
             store.keep(number, line['line'], status, request_id, result)
             self.line_outcome(batch, line, status, request_id, result, **details)
         try:

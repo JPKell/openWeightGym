@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sample_data():
+    """Build deterministic benchmark run sample records without calling live services."""
     samples = []
     categories = ['Direct fields', 'Cross-reference', 'Absent fields']
     for index in range(48):
@@ -72,6 +73,7 @@ def sample_data():
 
 
 def render():
+    """Render portable benchmark run proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     static = ROOT / 'weightroom/static'
     return pages.get_template('benchmark_run_designs.html').render(

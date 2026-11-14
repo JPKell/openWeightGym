@@ -83,6 +83,7 @@ class Setting:
 
 
 def _timezone(value):
+    """Validate the timezone setting before saving it."""
     try:
         if value:
             ZoneInfo(value)
@@ -91,22 +92,26 @@ def _timezone(value):
 
 
 def _absolute(value):
+    """Validate the absolute setting before saving it."""
     if value and not value.startswith('/'):
         raise ValueError('Model folders must be a full path, or empty.')
 
 
 def _distinct(value):
+    """Validate the distinct setting before saving it."""
     if any(not isinstance(one, str) or not one for one in value) or len(value) != len(set(value)):
         raise ValueError('Use a list of distinct names.')
 
 
 def _services(value):
+    """Validate the services setting before saving it."""
     _distinct(value)
     if set(value) - {'ollama', 'docker', 'apache', 'nginx'}:
         raise ValueError('third_party_services may contain ollama, docker, apache and nginx once each.')
 
 
 def _engine_gpus(value):
+    """Validate the engine gpus setting before saving it."""
     from engines import engine_for
     for name, cards in value.items():
         engine_for(name)
@@ -116,31 +121,37 @@ def _engine_gpus(value):
 
 
 def _engines(value):
+    """Validate the engines setting before saving it."""
     from engines import checked_installations
     checked_installations(value, value.get('llama_cpp', {}).get('executable', 'llama-server'))
 
 
 def _component_interval(value):
+    """Validate the component interval setting before saving it."""
     from loadcoach.component_versions import interval_seconds
     interval_seconds(value)
 
 
 def _greetings(value):
+    """Validate the greetings setting before saving it."""
     from voice.prompt_recordings import texts
     texts({'greetings': value})
 
 
 def _telephone(value):
+    """Validate the telephone setting before saving it."""
     from voice.telephone_settings import validate
     validate(value)
 
 
 def _console_owner(value):
+    """Validate the console owner setting before saving it."""
     if not value:
         raise ValueError('keep_console_settings_on_front=false is no longer supported; the control node stores its console settings.')
 
 
 def _toolsets(value):
+    """Validate the toolsets setting before saving it."""
     for name, toolset in value.items():
         tools = toolset.get('tools') if isinstance(toolset, dict) and toolset.keys() == {'tools'} else None
         if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', name) or not isinstance(tools, list) or not all(isinstance(tool, str) for tool in tools):
@@ -148,6 +159,7 @@ def _toolsets(value):
 
 
 def _tool_levels(value):
+    """Validate the tool levels setting before saving it."""
     from loadcoach.groups import LEVELS
     if not all(isinstance(tool, str) and level in LEVELS for tool, level in value.items()):
         raise ValueError(f'tool_levels gives each tool one of {", ".join(LEVELS)}.')
@@ -172,7 +184,9 @@ def validate_patch(program, current, patch, *, context=None):
 
 
 def _policy(name):
+    """Build a validator against the shared observation retention policy."""
     def check(value):
+        """Validate this value through its shared observation contract."""
         from loadcoach.observation_store import POLICY, check_policy
         values = {**POLICY, name.removeprefix('observation_'): value}
         check_policy(**values)
@@ -180,19 +194,23 @@ def _policy(name):
 
 
 def _alert(name):
+    """Build a validator against the named observation alert contract."""
     def check(value):
+        """Validate this value through its shared observation contract."""
         from loadcoach.observability import alert_value
         alert_value(name, value)
     return check
 
 
 def _wake_mac(value):
+    """Validate the wake mac setting before saving it."""
     import re
     if value and not re.fullmatch(r'(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}|[0-9a-fA-F]{12}', value):
         raise ValueError('Wake MAC must be a hardware address, or empty to disable Wake.')
 
 
 def _wake_address(value):
+    """Validate the wake address setting before saving it."""
     from ipaddress import IPv4Address
     try:
         IPv4Address(value)
@@ -201,6 +219,7 @@ def _wake_address(value):
 
 
 def _http_url(value):
+    """Validate the http url setting before saving it."""
     from urllib.parse import urlsplit
     try:
         url = urlsplit(value)
@@ -212,6 +231,7 @@ def _http_url(value):
 
 
 def _hermes_tools(value):
+    """Validate the hermes tools setting before saving it."""
     import re
     _distinct(value)
     if len(value) > 64 or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', name) for name in value):
@@ -219,11 +239,13 @@ def _hermes_tools(value):
 
 
 def _disks(value):
+    """Validate the disks setting before saving it."""
     if len(value) > 32 or any(not isinstance(path, str) or not path.startswith('/') or '\0' in path for path in value):
         raise ValueError('disks must contain at most 32 absolute paths.')
 
 
 def _proxy_networks(value):
+    """Validate the proxy networks setting before saving it."""
     from ipaddress import ip_network
     if len(value) > 128 or any(not isinstance(item, str) for item in value):
         raise ValueError('trusted_proxies accepts at most 128 IP addresses or CIDR networks.')
@@ -240,6 +262,7 @@ CATALOG: dict[tuple[str, str], Setting] = {}
 
 
 def _add(program, name, kind, **metadata):
+    """Register one setting contract, rejecting duplicate program and key pairs."""
     entry = Setting(program, name, kind, **metadata)
     if (program, name) in CATALOG:
         raise ValueError(f'Duplicate setting: {program}.{name}')
@@ -252,6 +275,7 @@ def get(program, name):
 
 
 def entries(program=None):
+    """Return catalogue entries, optionally limited to one program."""
     return tuple(value for value in CATALOG.values() if program is None or value.program == program)
 
 
@@ -287,6 +311,7 @@ def validate_values(program, values, *, context=None):
 
 
 def changeable():
+    """Group non-retired editable settings by their owning program and change tier."""
     result = {}
     for setting in CATALOG.values():
         if setting.scope in ('node','front') and setting.tier != FILE and not (setting.retired or setting.derived):
@@ -301,6 +326,7 @@ def retired_for(program, name, context=None):
 
 
 def changeable_for(program, context=None):
+    """Return settings editable in the supplied program and runtime context."""
     return {entry.name: entry.tier for entry in entries(program)
             if entry.scope in ('node','front') and entry.tier != FILE and not entry.derived and not retired_for(program, entry.name, context)}
 
@@ -583,6 +609,7 @@ for name, kind, default, minimum, maximum, label, unit, help_text in (
 
 
 def _notification_url(value):
+    """Validate the notification url setting before saving it."""
     from urllib.parse import urlsplit
     if not value:
         return
@@ -597,6 +624,7 @@ def _notification_url(value):
 
 
 def _mailboxes(value):
+    """Validate the mailboxes setting before saving it."""
     from email.utils import parseaddr
     if not value:
         return
@@ -607,11 +635,13 @@ def _mailboxes(value):
 
 
 def _notification_text(value):
+    """Validate the notification text setting before saving it."""
     if len(value)>1024 or any(ord(char)<32 or ord(char)==127 for char in value):
         raise ValueError('Use at most 1024 characters without control characters.')
 
 
 def _quiet_hours(value):
+    """Validate the quiet hours setting before saving it."""
     if value and not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]-(?:[01][0-9]|2[0-3]):[0-5][0-9]',value):
         raise ValueError('Quiet hours use HH:MM-HH:MM in the control node time zone, or are empty.')
     if value and value[:5] == value[6:]:
@@ -619,22 +649,26 @@ def _quiet_hours(value):
 
 
 def _ntfy_topic(value):
+    """Validate the ntfy topic setting before saving it."""
     if value and not re.fullmatch(r'[-_A-Za-z0-9]{1,64}',value):
         raise ValueError('An ntfy topic uses 1–64 letters, numbers, underscores or dashes.')
 
 
 def _mailbox(value):
+    """Validate the mailbox setting before saving it."""
     _mailboxes(value)
     if ',' in value:
         raise ValueError('Use one plain email address.')
 
 
 def _smtp_host(value):
+    """Validate the smtp host setting before saving it."""
     if len(value)>253 or any(ord(char)<=32 or char in '/\\@?#' for char in value):
         raise ValueError('Use an SMTP server name or IP address without a port or path.')
 
 
 def _notification_secret(value):
+    """Validate the notification secret setting before saving it."""
     if len(value)>8192 or any(ord(char)<32 or ord(char)==127 for char in value):
         raise ValueError('Use a credential of at most 8192 characters without control characters.')
 
@@ -665,6 +699,7 @@ for name, kind, default, minimum, maximum, label, unit, choices, rule, help_text
          control='plain-text' if kind=='text' else 'number' if kind in ('int','float') else '',help=help_text)
 
 def _bearer_secret(value):
+    """Validate the bearer secret setting before saving it."""
     _notification_secret(value)
     if any(not 33 <= ord(char) <= 126 for char in value):
         raise ValueError('A bearer token must use printable ASCII without spaces.')
@@ -736,6 +771,7 @@ for name, label, source, filename in (
 
 
 def _backup_time(value):
+    """Validate the backup time setting before saving it."""
     if not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]', value):
         raise ValueError('Use a backup time in HH:MM format.')
 
@@ -758,11 +794,13 @@ PALETTES = ('slate', 'ocean', 'lagoon', 'forest', 'sage', 'clay', 'rose', 'orchi
 
 
 def _site_name(value):
+    """Validate the site name setting before saving it."""
     if not value.strip() or len(value) > 80 or any(ord(char) < 32 for char in value):
         raise ValueError('Use a site name from 1 to 80 characters on one line.')
 
 
 def _chat_default(value):
+    """Validate the chat default setting before saving it."""
     if len(value) > 160 or any(ord(char) < 32 for char in value):
         raise ValueError('Use a model or role name up to 160 characters on one line, or leave it empty.')
 
@@ -784,6 +822,7 @@ def banner_end(value):
 
 
 def _site_banner(value):
+    """Validate the site banner setting before saving it."""
     if value.keys() - {'text', 'level', 'ends_at'}:
         raise ValueError('The banner table accepts text, level and ends_at.')
     if not isinstance(value.get('text', ''), str) or len(value.get('text', '')) > 2000:
@@ -814,11 +853,13 @@ _add('weightroom', 'default_chat_model', 'text', tier=NOW, scope='front', page='
 
 
 def _remote_name(value):
+    """Validate the remote name setting before saving it."""
     if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', value):
         raise ValueError('Remote server names use 1–64 lowercase letters, digits or dashes.')
 
 
 def _remote_url(value):
+    """Validate the remote url setting before saving it."""
     from urllib.parse import urlsplit
     try:
         url = urlsplit(value)
@@ -832,6 +873,7 @@ def _remote_url(value):
 
 
 def _remote_description(value):
+    """Validate the remote description setting before saving it."""
     if len(value) > 2000:
         raise ValueError('Remote server descriptions may contain at most 2,000 characters.')
 
@@ -846,6 +888,7 @@ REMOTE_SERVER_FIELDS = (
 
 
 def _remote_servers(value):
+    """Validate the remote servers setting before saving it."""
     if len(value) > 32:
         raise ValueError('At most 32 site-managed remote MCP servers are supported.')
     fields = {entry.name:entry for entry in REMOTE_SERVER_FIELDS}

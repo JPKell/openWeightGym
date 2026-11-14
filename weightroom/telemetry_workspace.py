@@ -124,6 +124,7 @@ def history_groups(host, past, chart):
     groups = []
 
     def one(name, title, maximum=None, current=None, values=None):
+        """Build one sensor chart while preserving unknown or missing history."""
         raw = series.get(name, []) if values is None else values
         raw = [number(value) for value in raw]
         item = chart(name, raw, maximum) | {'title': title, 'current': current}

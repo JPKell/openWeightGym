@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def samples() -> list[dict]:
+    """Build deterministic fingerprint sample records without calling live services."""
     records = []
     models = [('qwen3-32b', 'Qwen3-32B', 'Q6_K', 26.9),
               ('llama-3.3-70b', 'Llama-3.3-70B-Instruct', 'Q4_K_M', 42.5),
@@ -46,6 +47,7 @@ def samples() -> list[dict]:
 
 
 def render() -> str:
+    """Render portable fingerprint proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     # The empty DOM templates share the live components; values are filled by the preview script.
     pages.filters.update(timestamp=str, size=str, count=str,

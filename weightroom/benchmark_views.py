@@ -26,13 +26,16 @@ def results_workspace(models, measurement_models, benchmarks, benchmark, latest,
     import math
 
     def scored(run):
+        """Recognize finite numeric scores while keeping missing scores distinct."""
         return bool(run) and type(run.get('score')) in (int, float) and math.isfinite(run['score'])
 
     def review(run, definition):
+        """Flag results whose identity, rerun state or protocol version needs review."""
         return bool(run) and (run.get('current_fingerprint') is False or bool(run.get('rerun'))
                               or run.get('version', 1) != definition['version'])
 
     def compatible(run, definition):
+        """Require a finite score under the current benchmark protocol version."""
         return scored(run) and run.get('version', 1) == definition['version']
 
     search = query.get('q', '').strip()[:200]
@@ -51,11 +54,13 @@ def results_workspace(models, measurement_models, benchmarks, benchmark, latest,
             continue
         rows.append(model)
     def score_order(model):
+        """Sort measured scores in the benchmark's preferred direction, with missing last."""
         run = latest.get(model['id'], {}).get(benchmark['id'])
         return (not scored(run), run['score'] * (1 if benchmark.get('green') == 'low' else -1) if scored(run) else 0)
     rows.sort(key=score_order)
 
     def leaders(candidates, definition):
+        """Rank compatible candidate results using the benchmark's score direction."""
         ranked = [dict(model=model['id'], run=run) for model in candidates
                   if compatible(run := latest.get(model['id'], {}).get(definition['id']), definition)]
         ranked.sort(key=lambda row: row['run']['score'], reverse=definition.get('green') != 'low')
@@ -93,6 +98,7 @@ def run_briefing(detail, definition):
     from statistics import median
 
     def numeric(value):
+        """Recognize finite numbers without treating booleans as measurements."""
         return type(value) in (int, float) and math.isfinite(value)
 
     plan = detail.get('plan') or {}
@@ -327,9 +333,11 @@ def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs,
     from benchmarks.eligibility import compatible
 
     def numeric(value):
+        """Recognize finite numbers without treating booleans as measurements."""
         return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
     def formatted(value, score=False):
+        """Format measured values while keeping absent values visibly distinct."""
         if not numeric(value):
             return '—'
         if value == int(value):

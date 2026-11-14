@@ -11,15 +11,19 @@ from voice.twilio_api import TwilioAPI, TwilioError
 
 
 def phone_allowed(user):
+    """Check whether this account may register a telephone identity."""
     return user and (user.can('front-phone') or user.can('superuser'))
 
 
 class PhoneRegistration:
+    """Caller-scoped phone-number verification and registration operations."""
     def __init__(self, admin):
+        """Bind registration to the telephone administrator and sender cache."""
         self.admin = admin
         self.cache = None
 
     async def sender(self):
+        """Resolve a configured telephone sender with usable Twilio credentials."""
         phone, keys = effective(self.admin.changes), self.admin.keys
         if not phone.get('enabled') or not phone.get('public_url') or not keys.status()['token']['saved']:
             raise ValueError('Telephone SMS verification is unavailable. An administrator must enable and connect a Twilio number first.')
@@ -36,6 +40,7 @@ class PhoneRegistration:
         raise ValueError('No connected Twilio number supports SMS. An administrator must connect an SMS-capable number on Telephone.')
 
     async def handle(self, request, user):
+        """Apply current phone permission before dispatching number registration operations."""
         if user is None:
             return error(401, 'Sign in to manage your phone numbers.')
         if not phone_allowed(user):

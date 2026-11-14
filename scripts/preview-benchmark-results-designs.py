@@ -135,6 +135,7 @@ def sample_data():
 
 
 def render():
+    """Render portable benchmark results proposals from shared templates and prepared sample data."""
     data = sample_data()
     static = ROOT / 'weightroom/static'
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())

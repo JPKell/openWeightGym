@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def samples():
+    """Build deterministic request sample records without calling live services."""
     records = []
     models = [('qwen3-32b', 'LoadCoach', '/v1/chat/completions'),
               ('qwen3-coder-30b', 'LoadCoach', '/v1/chat/completions'),
@@ -87,6 +88,7 @@ def samples():
 
 
 def render():
+    """Render portable request proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     pages.filters['timestamp'] = str
     static = ROOT / 'weightroom/static'

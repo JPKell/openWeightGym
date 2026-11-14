@@ -23,6 +23,7 @@ BACKUP_SUFFIX = ".before-peer-nodes"
 
 
 def _say(text: str) -> None:
+    """Print one settings compatibility message to standard error."""
     print(text, file=sys.stderr, flush=True)
 
 

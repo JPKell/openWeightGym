@@ -14,6 +14,7 @@ def contracts():
 class DownloadKeys:
     """Read provider files per use; public status contains only saved/time metadata."""
     def __init__(self, config):
+        """Bind provider credential paths to this node's configuration."""
         self.config = config
 
     def path(self, kind):

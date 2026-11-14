@@ -28,9 +28,11 @@ class NotificationKeys:
     """Read credentials only at use; expose existence and timestamps separately."""
 
     def __init__(self,folder):
+        """Bind live delivery settings, private keys, HTTP transport and SMTP context."""
         self.folder = Path(folder)
 
     def path(self,name,owner='system'):
+        """Validate the credential field and derive an owner-scoped private filename."""
         program = 'weightroom' if owner == 'system' else 'account'
         entry = get(program,name)
         if not entry or entry.kind != 'secret' or not name.startswith('notify_'):
@@ -39,21 +41,25 @@ class NotificationKeys:
         return self.folder/('notifications-'+scope+'-'+name+'.key')
 
     def read(self,name,owner='system'):
+        """Read the selected private notification credential, or empty text if absent."""
         try:
             return self.path(name,owner).read_text().removesuffix('\n')
         except FileNotFoundError:
             return ''
 
     def save(self,name,value,owner='system'):
+        """Validate and atomically save the selected owner's nonempty credential."""
         path = self.path(name,owner)
         get('weightroom' if owner=='system' else 'account',name).check(value)
         if value:
             atomic_secret(path,value)
 
     def remove(self,name,owner='system'):
+        """Delete only the selected owner's notification credential."""
         self.path(name,owner).unlink(missing_ok=True)
 
     def status(self,name,owner='system'):
+        """Read bounded notification delivery outcomes or credential presence without secrets."""
         try:
             stamp = self.path(name,owner).stat().st_mtime
             return {'saved':True,'changed':datetime.fromtimestamp(stamp,timezone.utc).isoformat()}
@@ -78,11 +84,14 @@ class Sender:
     """One bounded delivery attempt. The durable worker schedules retries."""
 
     def __init__(self,settings,keys,client=None,smtp_context=None):
+        """Bind durable notification planning to alerts, live settings and its sender."""
         self.settings,self.keys,self.client,self.smtp_context = settings,keys,client,smtp_context
 
     async def http(self,url,**kwargs):
+        """Send a bounded notification request without buffering the provider's body."""
         async def post(client):
             # Provider response bodies are never buffered, logged or retained.
+            """Read only the provider's response status while closing its streamed body."""
             async with client.stream('POST',url,timeout=10,follow_redirects=False,**kwargs) as answer:
                 return answer.status_code
         try:
@@ -162,6 +171,7 @@ def quiet_now(settings,now):
 
 
 def channels(settings,recipient=None):
+    """List only notification channels enabled for the selected system or personal recipient."""
     if recipient is not None:
         return [name for name,enabled in (('ntfy',recipient.get('notify_ntfy_enabled')),('email',recipient.get('notify_email_enabled'))) if enabled]
     return [name for name,enabled in (('webhook',settings.notify_webhook_url),
@@ -173,6 +183,7 @@ class Notifications:
     """Durable per-episode deliveries; no provider URLs, responses or credentials in the queue."""
 
     def __init__(self,alerts,settings,keys,sender=None):
+        """Bind notification delivery to its private keys, settings and existing store."""
         self.alerts,self.db,self.settings,self.keys = alerts,alerts.db,settings,keys
         self.sender = sender or Sender(settings,keys)
         self.lock = asyncio.Lock()
@@ -181,12 +192,14 @@ class Notifications:
         self.cursor('system',self.system_configuration(),self.system_since)
 
     def system_configuration(self):
+        """Read the system delivery fields used for current notification planning."""
         selected = self.settings()
         return {name:getattr(selected,name) for name in ('notify_webhook_url','notify_ntfy_url','notify_ntfy_topic',
                 'notify_smtp_host','notify_smtp_port','notify_smtp_security','notify_smtp_from','notify_smtp_to','notify_smtp_username')}
 
 
     def cursor(self,owner,recipient,now,began=None):
+        """Track recipient configuration revisions and notice-planning instants."""
         configuration = hashlib.sha256(json.dumps({name:value for name,value in recipient.items() if name.startswith(('notify_','alert_'))},sort_keys=True).encode()).hexdigest()
         with self.db:
             row = self.db.execute('SELECT since,last_planned,configuration FROM notification_cursors WHERE owner=?',(owner,)).fetchone()
@@ -199,6 +212,7 @@ class Notifications:
         return row[0],row[1]
 
     def enqueue(self,episode,owner,channel,phase,message,now):
+        """Deduplicate a notification by episode, owner, channel and lifecycle phase."""
         identifier = hashlib.sha256(json.dumps([episode,owner,channel,phase],separators=(',',':')).encode()).hexdigest()
         with self.db:
             self.db.execute('INSERT INTO notification_deliveries(id,episode,owner,channel,phase,payload,created,next_at) '
@@ -330,6 +344,7 @@ class Notifications:
                                      ended+(60 if attempt==1 else 300),ended,failure,identifier))
 
     def status(self,owner='system',limit=20):
+        """Read bounded notification delivery outcomes or credential presence without secrets."""
         with self.db:
             rows = self.db.execute('SELECT episode,channel,phase,state,attempts,last_at,last_error FROM notification_deliveries '
                                    'WHERE owner=? ORDER BY created DESC,id DESC LIMIT ?',(owner,limit)).fetchall()

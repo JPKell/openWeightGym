@@ -53,6 +53,7 @@ def sample_data():
 
 
 def render():
+    """Render portable reliability proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     pages.filters['timestamp'] = timestamp
     static = ROOT / 'weightroom/static'

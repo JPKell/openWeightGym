@@ -5,6 +5,7 @@ NAMES = {'browser': 'Browser', 'desktop': 'Desktop', 'telephone': 'Phone', 'herm
 
 
 def normalized(status):
+    """Normalize gateway status into the supported empty-safe presentation shape."""
     status = dict(status) if isinstance(status, dict) else {}
     for name, default in {'entries': {}, 'telephone': {'numbers': []}, 'readiness': {'profiles': {}},
                           'version': {}, 'recordings': {}, 'latency': {}}.items():
@@ -13,6 +14,7 @@ def normalized(status):
 
 
 def workspace(status, problem=''):
+    """Present each voice entry's readiness and explicit unavailable reason."""
     entries = []
     for key, name in NAMES.items():
         entry = dict(status.get('entries', {}).get(key, {}))
