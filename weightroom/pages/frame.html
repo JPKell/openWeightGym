@@ -67,6 +67,11 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {{ section_children(nav.children.get(url)) }}
 {% endfor %}
 {% endmacro %}
+{% macro mobile_category(name, links, headings={}) %}
+<details class="mobile-category mb-2"{{ ' open' if nav.section == name }}><summary class="fw-semibold py-2">{{ name }}</summary>
+{{ section_links(links, headings) }}
+</details>
+{% endmacro %}
 {% if person %}
 <a class="visually-hidden-focusable skip-content" href="#page-content">Skip to content</a>
 <div class="site-layout{{ ' d-block' if not nav.links }}">
@@ -106,11 +111,9 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
   <div class="d-flex align-items-center justify-content-between gap-2 mb-3"><strong id="mobile-navigation-title">Navigation</strong><button type="button" class="btn btn-outline-secondary btn-sm" data-close-navigation>Close menu</button></div>
   <nav aria-label="All pages">
   {% for category in nav.groups %}
-    <details class="mobile-category mb-2"{{ ' open' if nav.section == category.name }}><summary class="fw-semibold py-2">{{ category.name }}</summary>
-    {{ section_links(category.links, category.headings|default({})) }}
-    </details>
+    {{ mobile_category(category.name, category.links, category.headings|default({})) }}
   {% endfor %}
-  <a class="section-link" href="/account">My account</a>
+  {% if nav.section == 'My account' %}{{ mobile_category('My account', nav.links, nav.headings) }}{% else %}<a class="section-link" href="/account">My account</a>{% endif %}
   </nav>
   <div data-mobile-conversations></div>
 </dialog>

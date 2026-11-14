@@ -32,6 +32,15 @@ def test_every_service_combination_keeps_navigation_consistent(images, speech, a
                          '/hub': downloads, '/civitai': images and downloads}.items():
         assert (url in links) == enabled, url
     assert {'/chat', '/models', '/files', '/settings'} <= links
+    for group in nav['groups']:
+        assert set(group['headings']) <= {url for _, url in group['links']}
+        if not downloads:
+            assert 'Downloads' not in group['headings'].values()
+        if group['name'] == 'Interact':
+            if not images:
+                assert group['headings'].get('/chat/extraction') == 'Images'
+            if audio and not speech:
+                assert group['headings'].get('/chat/music') == 'Audio'
     account = navigation('/account', can, True, services)
     assert ('/account/audio' in dict(account['links']).values()) == (speech or audio)
 

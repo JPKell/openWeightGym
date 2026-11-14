@@ -4,6 +4,71 @@ from weightroom.system_docs import BY_SLUG as DOC_SECTIONS, visible as visible_d
 from loadcoach.platform_services import PlatformServices
 
 
+NAV_SECTIONS = {
+    'Interact': (
+        ('Chat & analysis', ('/chat', '/voice', '/chat/classifier')),
+        ('Images', ('/chat/images', '/chat/extraction')),
+        ('Audio', ('/chat/speech', '/chat/transcribe', '/chat/music', '/chat/sounds')),
+        ('Desktop apps', ('/voice/desktop',)),
+    ),
+    'Models': (
+        ('Catalogue', ('/models', '/models/images', '/models/audio', '/cloud-apis')),
+        ('Routing & capacity', ('/roles', '/dry-fit')),
+        ('Files & provenance', ('/files', '/fingerprints')),
+        ('Downloads', ('/hub', '/civitai')),
+    ),
+    'Benchmark': (
+        ('Run benchmarks', ('/benchmarks/runs',)),
+        ('Results', ('/benchmarks/results', '/benchmarks/node-measurements', '/benchmarks/compare')),
+        ('Test assets', ('/collections', '/workflows')),
+        ('Administration', ('/benchmarks/manage',)),
+    ),
+    'Logs': (
+        ('Overview', ('/usage', '/reliability')),
+        ('Model activity', ('/requests', '/batches')),
+        ('Diagnostics', ('/log', '/plugins/activity', '/output')),
+    ),
+    'System': (
+        ('Monitoring', ('/status', '/telemetry', '/alerts')),
+        ('Services', ('/system/components', '/system/voice/status')),
+        ('Automation', ('/schedules',)),
+        ('Data & recovery', ('/databases', '/backups')),
+    ),
+    'Settings': (
+        ('Platform', ('/settings', '/compute-nodes')),
+        ('Access & spending', ('/users', '/groups', '/allowances')),
+        ('Tools & plugins', ('/tools', '/plugins')),
+        ('Media', ('/settings/image', '/system/audio', '/system/voice')),
+    ),
+    'Docs': (
+        ('Reference', ('/docs', '/docs/api', '/docs/modules')),
+        ('Guides', ('/docs/web-app', '/docs/benchmarks', '/docs/operations', '/docs/data')),
+    ),
+    'My account': (
+        ('Profile', ('/account',)),
+        ('Preferences', ('/account/appearance', '/account/audio')),
+        ('Activity', ('/account/logs',)),
+    ),
+}
+
+
+def grouped_links(links, section):
+    """Order visible links by task and put headings before each populated group."""
+    available = {url: label for label, url in links}
+    ordered, headings = [], {}
+    for title, paths in NAV_SECTIONS[section]:
+        visible = [(available.pop(url), url) for url in paths if url in available]
+        if visible:
+            headings[visible[0][1]] = title
+            ordered.extend(visible)
+    # Future links remain reachable until their section is added to the catalogue.
+    remaining = sorted(((label, url) for url, label in available.items()), key=lambda item: item[0].casefold())
+    if remaining:
+        headings[remaining[0][1]] = 'Other'
+        ordered.extend(remaining)
+    return ordered, headings
+
+
 def navigation(path: str, can: list[str], machine: bool, services: PlatformServices | None = None) -> dict:
     """Choose the category and page for the current route.
 
@@ -42,29 +107,18 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
     groups[4]["links"].append(("Telemetry", "/telemetry"))
     if "manage-settings" in can:
         groups[4]["links"].append(("Components", "/system/components"))
-        groups[4]["links"].append(("Voice", "/system/voice/status"))
+        groups[4]["links"].append(("Voice status", "/system/voice/status"))
         groups[4]["links"].append(("Alerts", "/alerts"))
         groups[4]["links"].append(("Schedules", "/schedules"))
         groups[5]["links"].insert(0, ("Compute nodes", "/compute-nodes"))
-    for ability, label, url in [("manage-users", "Users", "/users"), ("manage-groups", "Groups", "/groups"), ("manage-settings", "Tools", "/tools"), ("front-manage-plugins", "Plugins", "/plugins"), ("manage-settings", "Backups", "/backups"), ("manage-settings", "DB", "/databases"), ("manage-settings", "General", "/settings")]:
+    for ability, label, url in [("manage-users", "Users", "/users"), ("manage-groups", "Groups", "/groups"), ("manage-settings", "Tools", "/tools"), ("front-manage-plugins", "Plugins", "/plugins"), ("manage-settings", "Backups", "/backups"), ("manage-settings", "Databases", "/databases"), ("manage-settings", "General", "/settings")]:
         if ability in can:
             groups[4 if url in ('/backups', '/databases') else 5]["links"].append((label, url))
     # Everyone may open it: members see their own and their group's allowance, managers edit them.
     groups[5]["links"].append(("Spending allowances", "/allowances"))
-    settings_order = ['Compute nodes', 'Users', 'Groups', 'Spending allowances', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
-    groups[5]['links'].sort(key=lambda link: settings_order.index(link[0]))
-    groups[4]['links'].sort(key=lambda link: ['Status', 'Telemetry', 'Components', 'Voice', 'Alerts', 'Schedules', 'DB', 'Backups'].index(link[0]))
     for group in groups:
         group['links'] = [link for link in group['links'] if services.path_enabled(link[1])]
-        first_download = next((url for _, url in group['links'] if url in ('/hub', '/civitai')), None)
-        group['headings'] = {first_download: 'Downloads'} if first_download else {}
-        if group['name'] == 'Logs':
-            for label, paths in [('Overview', ('/usage', '/reliability')),
-                                 ('Model activity', ('/requests', '/batches')),
-                                 ('Diagnostics', ('/log', '/plugins/activity', '/output'))]:
-                first = next((url for _, url in group['links'] if url in paths), None)
-                if first:
-                    group['headings'][first] = label
+        group['links'], group['headings'] = grouped_links(group['links'], group['name'])
     root = "/" + path.strip("/").split("/")[0]
     active = {"/": "/status", "/file": "/files", "/downloads": "/hub", "/measure-models": "/models", "/outside": "/cloud-apis",
               "/control": "/status", "/ask": "/log", "/machines": "/telemetry"}.get(root, root)
@@ -100,7 +154,8 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
     if root == "/account":
         links = [(label, url) for label, url in [("Account", "/account"), ("Appearance", "/account/appearance"), ("Audio", "/account/audio"), ("Logs", "/account/logs")]
                  if services.path_enabled(url)]
+        links, headings = grouped_links(links, 'My account')
         active = next((url for _, url in links[1:] if path.rstrip('/') == url), '/account')
-        return {"groups": [group for group in groups if group['links']], "section": "My account", "links": links, "active": active, "children": {}, "headings": {}}
+        return {"groups": [group for group in groups if group['links']], "section": "My account", "links": links, "active": active, "children": {}, "headings": headings}
     return {"groups": [group for group in groups if group["links"]], "section": selected["name"] if selected else "", "links": selected["links"] if selected else [],
             "active": active if selected else "", "children": children if selected else {}, "headings": selected['headings'] if selected else {}}
