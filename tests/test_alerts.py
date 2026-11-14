@@ -150,7 +150,7 @@ def test_alert_page_permissions_ack_csrf_and_history(desk):
     assert kept.rows(open_only=True)[0]['acknowledged_by'] == 'jordan'
     assert browser.post('/alerts/' + identifier, data={'do': 'review'}).status_code == 409
     kept.observe('GPU temperature', [condition(False, key='gpu:0')])
-    page = browser.get('/alerts')
+    page = browser.get('/alerts?scope=history&source=GPU+temperature')
     assert 'recovered' in page.text and 'Acknowledged by jordan' in page.text
     assert browser.get('/alerts?page=bad').status_code == 400
 

@@ -9,6 +9,9 @@ import uuid
 from db import database, migrate
 from db.schemas import ALERTS
 
+COLUMNS = ('id', 'condition', 'source', 'title', 'explanation', 'state', 'first_at', 'last_at',
+           'checked_at', 'resolved_at', 'recovery', 'acknowledged_by', 'acknowledged_at', 'manual')
+
 
 class Alerts:
     """Durable operational alert episodes, acknowledgements and reviewed incidents."""
@@ -67,13 +70,60 @@ class Alerts:
 
     def rows(self, open_only=False, limit=100, offset=0):
         """List retained alert episodes and their current acknowledgement state."""
-        columns = ('id', 'condition', 'source', 'title', 'explanation', 'state', 'first_at', 'last_at',
-                   'checked_at', 'resolved_at', 'recovery', 'acknowledged_by', 'acknowledged_at', 'manual')
         where = ' WHERE resolved_at IS NULL' if open_only else ' WHERE resolved_at IS NOT NULL'
-        sql = 'SELECT ' + ', '.join(columns) + ' FROM operational_alerts' + where + ' ORDER BY first_at DESC, id DESC'
+        sql = 'SELECT ' + ', '.join(COLUMNS) + ' FROM operational_alerts' + where + ' ORDER BY first_at DESC, id DESC'
         if not open_only:
             sql += ' LIMIT ? OFFSET ?'
-        return [dict(zip(columns, row)) for row in self.db.execute(sql, () if open_only else (limit, offset)).fetchall()]
+        return [dict(zip(COLUMNS, row)) for row in self.db.execute(sql, () if open_only else (limit, offset)).fetchall()]
+
+    def matching(self, filters, limit=None, offset=0):
+        """Iterate matching episodes with portable, parameterized filtering."""
+        where, values = self._where(filters)
+        sql = 'SELECT ' + ', '.join(COLUMNS) + ' FROM operational_alerts WHERE ' + where + ' ORDER BY first_at DESC, id DESC'
+        if limit is not None:
+            sql += ' LIMIT ? OFFSET ?'
+            values += [limit, offset]
+        cursor = self.db.execute(sql, values)
+        try:
+            for row in cursor:
+                yield dict(zip(COLUMNS, row))
+        finally:
+            cursor.close()
+
+    def count(self, filters):
+        """Count the complete filtered set, independently of the visible page."""
+        where, values = self._where(filters)
+        return self.db.execute('SELECT COUNT(*) FROM operational_alerts WHERE ' + where, values).fetchone()[0]
+
+    @staticmethod
+    def _where(filters):
+        scopes = {'open': 'resolved_at IS NULL', 'history': 'resolved_at IS NOT NULL', 'all': '1=1',
+                  'unseen': 'resolved_at IS NULL AND acknowledged_at IS NULL',
+                  'review': 'resolved_at IS NULL AND manual=1',
+                  'unknown': "resolved_at IS NULL AND state='unknown'"}
+        clauses, values = [scopes[filters['scope']]], []
+        if filters['source']:
+            clauses.append('source=?')
+            values.append(filters['source'])
+        if filters['q']:
+            pattern = '%' + filters['q'].lower().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+            fields = ('title', 'source', 'explanation', 'recovery', 'acknowledged_by')
+            clauses.append('(' + ' OR '.join("LOWER(COALESCE(" + field + ", '')) LIKE ? ESCAPE '!'" for field in fields) + ')')
+            values.extend([pattern] * len(fields))
+        return ' AND '.join(clauses), values
+
+    def summary(self):
+        """Keep the KPI band scoped to all open episodes, including filtered-out rows."""
+        row = self.db.execute('''SELECT COUNT(*),
+            SUM(CASE WHEN acknowledged_at IS NULL THEN 1 ELSE 0 END),
+            SUM(CASE WHEN manual=1 THEN 1 ELSE 0 END),
+            SUM(CASE WHEN state='unknown' THEN 1 ELSE 0 END)
+            FROM operational_alerts WHERE resolved_at IS NULL''').fetchone()
+        return dict(zip(('open', 'unseen', 'review', 'unknown'), (value or 0 for value in row)))
+
+    def source_names(self):
+        """Include retained historical sources even if they no longer have a reading."""
+        return [row[0] for row in self.db.execute('SELECT source FROM alert_sources UNION SELECT source FROM operational_alerts ORDER BY source')]
 
     def sources(self):
         """Read source freshness metadata for operational monitoring."""

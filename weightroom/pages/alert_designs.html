@@ -2,7 +2,7 @@
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'icons.html' import icon %}
-{% from 'alert_parts.html' import source_notes %}
+{% from 'alert_parts.html' import source_notes, overview %}
 {% from 'alert_design_parts.html' import templates %}
 <!doctype html>
 <html lang="en" data-bs-theme="light" data-site-theme="slate">
@@ -20,9 +20,7 @@
 <div id="workspace" data-layout="desk">
 {% call page_header('Operational alerts') %}<button type="button" class="btn btn-outline-secondary btn-sm" id="export">Export JSON</button><button type="button" class="btn btn-primary btn-sm" id="refresh">Refresh sample</button>{% endcall %}
 <div class="al-briefing mb-4"><div><span class="al-signal" aria-hidden="true"></span><strong id="briefing-title">A clear view of what needs you.</strong><p class="text-secondary small mb-0 mt-1">Inspect the evidence, acknowledge the episode, follow its recovery.</p></div><div class="small text-secondary al-snapshot">Sample snapshot · 14 Nov 2026<br><span id="snapshot-time">10:42 America/Vancouver</span></div></div>
-{% call kpi_row('All sample episodes', class_='mb-4') %}
-{{ kpi('Open episodes', 6, value_attrs={'id':'open-count'}) }}{{ kpi('Unacknowledged', 4, value_attrs={'id':'unseen-count'}) }}{{ kpi('Review required', 1, value_attrs={'id':'review-count'}) }}{{ kpi('Recovery unknown', 1, value_attrs={'id':'unknown-count'}) }}
-{% endcall %}
+{{ overview({'open':6, 'unseen':4, 'review':1, 'unknown':1}, sample=true) }}
 <div class="al-controls mb-3"><input type="search" class="form-control" id="search" aria-label="Search alerts" placeholder="Search an episode, node or condition…"><select class="form-select" id="scope" aria-label="Episode scope"><option value="open">Open episodes</option><option value="history">Closed history</option><option value="all">All episodes</option><option value="unseen">Unacknowledged open</option><option value="review">Needs manual review</option><option value="unknown">Recovery unknown</option></select><select class="form-select" id="source" aria-label="Alert source"><option value="all">All sources</option>{% for source in data.sources %}<option value="{{ source.source }}">{{ source.source }}</option>{% endfor %}</select><button type="button" class="btn btn-outline-secondary" data-clear>Clear filters</button></div>
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3"><span class="small text-secondary" id="result-count" role="status"></span><span class="small text-secondary">Acknowledgement records attention; it does not clear a condition.</span></div>
 <div class="al-body">

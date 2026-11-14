@@ -1,22 +1,44 @@
-{% extends "frame.html" %}
-{% from "navigation_parts.html" import pager %}
-{% from "parts.html" import card, page_header %}
-{% from "alert_parts.html" import episode, source_entry, source_notes %}
+{% extends 'frame.html' %}
+{% from 'navigation_parts.html' import pager %}
+{% from 'parts.html' import card, page_header, section_title, more, said_box, swaps %}
+{% from 'alert_parts.html' import episode, source_entry, source_notes, overview, choice, timeline_entry, empty_state %}
 {% block title %}Alerts · openWeightGym{% endblock %}
+{% block page_class %}console-page alerts-page{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/alerts.css?v=1"><script src="/static/alerts.js?v=1" defer></script>{% endblock %}
 {% block main %}
-{% set _page_lead1 %}Checked every 30 seconds while openWeightGym runs. Acknowledgement records that someone has seen an episode; the condition stays open until recovery. Memory-kill incidents require a separate review.{% endset %}
-{% call page_header("Operational alerts", lead=_page_lead1) %}<a href="/alerts" class="btn btn-outline-secondary btn-sm">Refresh</a>{% endcall %}
-{% call card("Sources", true) %}
-<div class="d-flex flex-wrap gap-3">{% for source in sources %}{{ source_entry(source) }}{% else %}<div class="text-secondary">No readings yet.</div>{% endfor %}</div>
-{{ source_notes(threshold) }}
+<div id="alert-workspace" data-layout="desk">
+{% call page_header('Operational alerts') %}<a href="{{ view.export_url }}" class="btn btn-outline-secondary btn-sm" download>Export JSON</a><a href="{{ view.refresh_url }}" class="btn btn-primary btn-sm" {{ swaps('alert-workspace', true) }}>Refresh</a>{% endcall %}
+{{ said_box(said) }}
+<div class="al-briefing mb-4"><div><span class="al-signal" aria-hidden="true"></span><strong>{{ 'Open episodes need attention.' if view.summary.open else 'No open episodes.' }}</strong><p class="text-secondary small mb-0 mt-1">Inspect the evidence, acknowledge the episode, follow its recovery.</p></div><div class="small text-secondary al-snapshot">{% if view.checked_at %}Last collection<br>{{ view.checked_at|timestamp }}{% else %}No readings yet{% endif %}</div></div>
+{{ overview(view.summary) }}
+<form method="get" action="/alerts" class="al-controls mb-3" {{ swaps('alert-workspace', true) }} data-hold-refresh>
+<input type="search" class="form-control" id="search" name="q" value="{{ view.filters.q }}" aria-label="Search alerts" placeholder="Search an episode, node or condition…">
+<select class="form-select" id="scope" name="scope" aria-label="Episode scope">{% for value, label in view.scopes %}<option value="{{ value }}"{% if value == view.filters.scope %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+<select class="form-select" id="source" name="source" aria-label="Alert source"><option value="">All sources</option>{% for source in view.source_names %}<option value="{{ source }}"{% if source == view.filters.source %} selected{% endif %}>{{ source }}</option>{% endfor %}</select>
+<button class="btn btn-outline-secondary" type="submit">Filter</button>
+</form>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3"><span class="small text-secondary" id="result-count" role="status">{{ view.total }} matching episode{{ '' if view.total == 1 else 's' }} · KPIs cover all open episodes</span><a class="small" href="/alerts" {{ swaps('alert-workspace', true) }}>Clear filters</a></div>
+<div class="al-body">
+{% call card('Episode queue', id='inventory', body_class='p-0', actions='<span class="small text-secondary">Newest first</span>'|safe) %}
+<div id="episode-list" class="al-list" data-list-key="{{ view.key }}">
+{% for row in view.rows %}{{ choice(row, row.href, row.id == view.selected.id) }}{% else %}{% set empty_message %}{% if view.filters.scope == 'open' and not view.summary.open %}No open alerts. Check source availability before assuming everything is healthy. Closed episodes are retained in History.{% elif view.filters.scope == 'history' %}No closed episodes match these filters.{% else %}Try a different source, search or episode scope.{% endif %}{% endset %}{{ empty_state('No matching episodes', empty_message) }}{% endfor %}
+</div>
+<div class="al-inventory-footer">{{ pager(view.previous, view.next, view.start ~ '–' ~ view.end ~ ' of ' ~ view.total if view.total else '0 episodes', label='Alert episode pages', target='alert-workspace') }}</div>
 {% endcall %}
-{% call card("Active alerts", true) %}
-{% for alert in active %}
-{{ episode(alert) }}
-{% else %}<p class="text-secondary mb-0">No open alerts. Check source availability above before assuming everything is healthy.</p>{% endfor %}
+{% call card('Episode details', id='inspector', body_class='p-4', attrs={'tabindex':'-1', 'aria-label':'Selected episode details'}) %}
+{% if view.selected %}
+{{ episode(view.selected, history=view.selected.resolved_at is not none, return_to=view.refresh_url) }}
+<div class="al-context-note small mt-3">{% if view.selected.manual %}Memory-kill incidents close only after explicit review. Review records investigation; it does not prove memory recovery.{% elif view.selected.state == 'unknown' %}Missing or stale evidence cannot close this episode. Wait for a fresh reading that establishes recovery.{% else %}Acknowledgement records attention for this episode. Recovery is established separately by source evidence.{% endif %}</div>
+{{ section_title('Episode timeline', level=3, wrapper_class='mt-4') }}<ol class="al-timeline">{% for title, at in view.timeline %}{{ timeline_entry(title, at) }}{% endfor %}</ol>
+<p class="small text-secondary mb-0 mt-4">Only recorded observations are shown. Transient states between collection intervals may be missed.</p>
+{% else %}{{ empty_state('No episode selected', 'Choose an episode to inspect its evidence and acknowledgement.') }}{% endif %}
 {% endcall %}
-{% call card("History", true) %}
-{% for alert in history %}{{ episode(alert, history=true) }}{% else %}<p class="text-secondary mb-0">No closed episodes.</p>{% endfor %}
-{{ pager('/alerts?page=' ~ (history_page - 1) if history_page > 1 else none, '/alerts?page=' ~ (history_page + 1) if more_history else none, 'Page ' ~ history_page, label='Alert history pages') }}
+{% set source_count %}<span class="badge bg-secondary-lt" id="source-count">{{ view.available }} / {{ view.sources|length }} available</span>{% endset %}
+{% call card('Source coverage', id='sources-panel', actions=source_count) %}
+<p class="small text-secondary mb-3">Availability describes the reading, not the health of the monitored service.</p><div class="al-sources">{% for source in view.sources %}{{ source_entry(source) }}{% else %}<p class="small text-secondary mb-0">No readings yet.</p>{% endfor %}</div>
+{% call more('Thresholds & collection') %}{{ source_notes(threshold) }}<p class="mb-0 mt-2">Checked every 30 seconds while openWeightGym runs. Refresh shows the latest stored episodes and source evidence. Collection does not wake sleeping compute.</p>{% endcall %}
 {% endcall %}
+</div>
+<p class="small text-secondary mt-3 mb-0">Acknowledgement records that someone has seen an episode; it does not clear the condition. Memory-kill incidents require a separate review.</p>
+</div>
 {% endblock %}
