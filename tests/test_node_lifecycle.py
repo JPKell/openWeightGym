@@ -149,7 +149,9 @@ def test_removed_registration_can_be_selected_and_retired_from_settings(metadata
         assert saved.status_code == 200 and "is retired. Reachability:" in saved.text
         assert "Historical logs are preserved" in saved.text
         assert "uninstalled" not in server.get("/telemetry").text
-        assert server.get("/telemetry/" + fingerprint).status_code == 404
+        historical = server.get("/telemetry/" + fingerprint)
+        assert historical.status_code == 200 and 'Only retained history is shown' in historical.text
+        assert 'Wake removed' not in historical.text
         assert log.db.execute("SELECT COUNT(*) FROM events WHERE kind='service' AND what='uninstalled'").fetchone()[0] == 1
         assert log.db.execute("SELECT COUNT(*) FROM machine_hosts WHERE fingerprint=?", (fingerprint,)).fetchone()[0] == 1
 

@@ -21,7 +21,7 @@
 <p class="mb-4">
   {% if "restart-services" in person.can and spotter_available and entry.machine in (none, "compute") %}<a class="btn btn-outline-secondary btn-sm" href="/output?at={{ entry.at|urlencode }}">What LoadCoach printed around then</a>
   <a class="btn btn-outline-secondary btn-sm" href="/output?source=kernel&amp;at={{ entry.at|urlencode }}&amp;before=300&amp;after=60">What the kernel said about the cards and memory</a>{% endif %}
-  {% if entry.machine_fingerprint %}<a class="btn btn-outline-secondary btn-sm" href="/telemetry/{{ entry.machine_fingerprint }}?until={{ entry.at|urlencode }}&amp;hours=0.5">The machine in the half hour before</a>
+  {% if entry.machine_fingerprint %}<a class="btn btn-outline-secondary btn-sm" href="/telemetry/{{ entry.machine_fingerprint }}?until={{ telemetry_until|urlencode }}&amp;hours=0.5">The machine in the half hour before</a>
   {% elif spotter_available %}<a class="btn btn-outline-secondary btn-sm" href="/telemetry">Host telemetry</a>{% endif %}
 </p>
 

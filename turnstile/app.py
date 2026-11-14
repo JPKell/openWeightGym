@@ -29,6 +29,7 @@ import threading
 import base64
 import binascii
 import json
+import re
 import secrets
 import socket
 import time
@@ -3248,18 +3249,34 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     async def telemetry_history(request: Request) -> Response:
         """Return retained physical-host telemetry within the requested range."""
-        if caller(key_of(request)) is None:
+        user = caller(key_of(request))
+        if user is None:
             return error(401, "Missing or wrong API key.")
         fingerprint = request.path_params["fingerprint"]
-        if fingerprint not in {host["fingerprint"] for host in machines.hosts()}:
+        if not re.fullmatch(r'[0-9a-f]{64}', fingerprint):
             return error(404, "Machine fingerprint is unknown.")
+        retained = None
+        if fingerprint not in {host["fingerprint"] for host in machines.hosts()}:
+            retained = machines.retained_host(fingerprint)
+            if retained is None:
+                try:
+                    recorded = await run_report(log, lambda view: view.has_host_reference(
+                        fingerprint, None if user.can('see-log') else user.name))
+                except ReportTimeout:
+                    return error(503, 'The retained host lookup took too long. Retry shortly.')
+                if not recorded:
+                    return error(404, "Machine fingerprint is unknown.")
+                retained = {'fingerprint': fingerprint, 'hostname': 'Recorded host ' + fingerprint[:12],
+                            'machines': [], 'state': 'unknown', 'telemetry': None, 'age': None,
+                            'loaded': [], 'models_unknown': True, 'wake_nodes': [], 'retained_only': True}
         try:
             end = float(request.query_params.get("end") or time.time())
             seconds = min(max(float(request.query_params.get("seconds") or 3600), 60), 28 * 86400)
             points = min(max(int(request.query_params.get("points") or 240), 2), 1000)
         except ValueError:
             return error(400, "end, seconds and points must be numbers.")
-        return JSONResponse(machines.history(fingerprint, end, seconds, points), headers={"cache-control": "no-store"})
+        history = machines.history(fingerprint, end, seconds, points)
+        return JSONResponse({**history, **({'host': retained} if retained else {})}, headers={"cache-control": "no-store"})
 
     methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 

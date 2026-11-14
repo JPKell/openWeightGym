@@ -293,6 +293,16 @@ class Machines:
             host["disabled_nodes"] = [name for name in host["machines"] if self.state(name) == "disabled"]
         return list(grouped.values())
 
+    def retained_host(self, fingerprint: str) -> dict | None:
+        """Resolve historical identity without restoring nodes to the active inventory."""
+        known = self.known_hosts.get(fingerprint)
+        if known is None and (self.store is None or self.store.execute(
+                'SELECT 1 FROM machine_telemetry WHERE fingerprint = ? LIMIT 1', (fingerprint,)).fetchone() is None):
+            return None
+        return {'fingerprint': fingerprint, 'hostname': known['hostname'] if known else 'Recorded host ' + fingerprint[:12],
+                'machines': [], 'state': SILENT, 'telemetry': None, 'age': None,
+                'loaded': [], 'models_unknown': True, 'wake_nodes': [], 'retained_only': True}
+
     def history(self, fingerprint: str, end: float, seconds: float, points: int) -> dict:
         """Read retained machine telemetry for the selected physical host."""
         if self.store is None:

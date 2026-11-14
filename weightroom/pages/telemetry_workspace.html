@@ -35,7 +35,8 @@
       {% call card(class_='mb-0 tw-focus', body=false, attrs={'id':'host-view'}) %}
         {% call host_header(host.hostname, snapshot(host), host.uptime) %}{{ state(host) }}<a href="/telemetry" class="btn btn-outline-secondary btn-sm" {{ swaps('telemetry-workspace', true) }}>All hosts</a>{% endcall %}
         <div class="p-3">
-          {% if not host.fresh %}{% call alert('warning', class_='py-2', role='status') %}Current readings are unknown. Retained history and known device capacity remain available.{% endcall %}{% endif %}
+          {% if host.retained_only %}{% call alert('warning', class_='py-2', role='status') %}This physical host is outside the current telemetry inventory. Only retained history is shown; current readings and controls are unavailable.{% endcall %}
+          {% elif not host.fresh %}{% call alert('warning', class_='py-2', role='status') %}Current readings are unknown. Retained history and known device capacity remain available.{% endcall %}{% endif %}
           <div class="tw-readings mb-3" id="host-totals" aria-label="Selected host readings">
             {{ meter('CPU load', host.cpu) }}{{ meter('CPU temperature', host.temperature, 110, 'temperature') }}{{ meter('Memory used', host.ram, host.ram_total, 'memory', 'of ' ~ amount(host.ram_total, 'memory')) }}{{ meter('Disk used', host.disk_percent) }}
           </div>
@@ -45,7 +46,7 @@
               <form id="history-range" method="get" action="{{ host.href.split('?')[0] }}" class="d-flex flex-wrap align-items-end gap-2 mb-3" data-hold-refresh {{ swaps('telemetry-workspace', true) }}>
                 {% if not host.fingerprint %}<input type="hidden" name="node" value="{{ host.identity }}">{% endif %}
                 <div><label for="hours" class="form-label small">Hours</label><input id="hours" name="hours" type="number" class="form-control form-control-sm" min="0.016666666666666666" max="672" step="any" value="{{ hours }}" required></div>
-                <div><label for="until" class="form-label small">Until <span class="text-secondary">(empty = now)</span></label><input id="until" name="until" type="datetime-local" data-input-zone="{{ server_timezone }}" data-instant="{{ input_utc(until, server_timezone) }}" class="form-control form-control-sm" value="{{ until }}"></div>
+                <div><label for="until" class="form-label small">Until <span class="text-secondary">(empty = now)</span></label><input id="until" name="until" type="datetime-local" step="1" data-input-zone="{{ server_timezone }}" data-instant="{{ until_instant|default(input_utc(until, server_timezone)) }}" class="form-control form-control-sm" value="{{ until }}"></div>
                 <button class="btn btn-primary btn-sm">Show</button>
                 <select id="history-preset" class="form-select form-select-sm w-auto" aria-label="History range"><option value="">Range…</option>{% for label, value in [('1 hour',1),('6 hours',6),('1 day',24),('1 week',168),('4 weeks',672)] %}<option value="{{ value }}"{% if hours == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
               </form>
@@ -69,7 +70,7 @@
               {{ section_title('Device capacity', wrapper_class='mb-1') }}<p class="small text-secondary mb-2">{{ host.gpus|length }} known GPU devices</p>
               {% if host.gpus %}{{ gpu_table(host, true) }}{% else %}<p class="small text-secondary">{{ 'No GPU devices reported' if host.has_inventory else 'Device inventory unavailable' }}</p>{% endif %}
               <div class="mt-3"><div class="border rounded p-2 mb-2 small"><strong>System RAM</strong><span class="d-block text-secondary">{{ amount(host.ram_total, 'memory') }} installed</span></div>{% for disk in host.disks %}<div class="border rounded p-2 mb-2 small"><strong>{{ disk.path }}</strong><span class="d-block text-secondary">{{ amount(disk.free, 'memory') }} / {{ amount(disk.total, 'memory') }} free</span></div>{% endfor %}</div>
-              <div class="mt-3">{% include "host_wake.html" %}</div>
+              {% if not host.retained_only %}<div class="mt-3">{% include "host_wake.html" %}</div>{% endif %}
             </aside>
           </div>
         </div>
