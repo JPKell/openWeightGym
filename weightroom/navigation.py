@@ -18,8 +18,8 @@ NAV_SECTIONS = {
         ('Downloads', ('/hub', '/civitai')),
     ),
     'Benchmark': (
-        ('Run benchmarks', ('/benchmarks/runs',)),
-        ('Results', ('/benchmarks/results', '/benchmarks/node-measurements', '/benchmarks/compare')),
+        ('Run benchmarks', ('/benchmarks/runs', '/benchmarks/node-measurements')),
+        ('Results', ('/benchmarks/results', '/benchmarks/compare')),
         ('Test assets', ('/collections', '/workflows')),
         ('Administration', ('/benchmarks/manage',)),
     ),

@@ -1,0 +1,55 @@
+{% from 'parts.html' import page_header, card, alert, section_title %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'frame.html' import section_links with context %}
+{% from 'icons.html' import icon %}
+{% from 'benchmark_manage_parts.html' import overview, catalogue, editor, insert_template %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Benchmark Manage · Three designs · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to Manage workspace</a>
+<div class="review-bar">
+  <div><strong>Design review</strong><span class="text-secondary ms-3">Benchmark / Manage</span></div>
+  {% call pills('Design options', buttons=true, class_='gap-1 mb-0') %}
+  {{ pill_button('01 Scoring studio · live', true, attrs={'data-design': 'studio'}) }}
+  {{ pill_button('02 Settings ledger', attrs={'data-design': 'ledger'}) }}
+  {{ pill_button('03 Policy desk', attrs={'data-design': 'desk'}) }}
+  {% endcall %}
+  <div class="d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset demo</button></div>
+</div>
+<header class="preview-brand border-bottom">
+  <strong class="d-flex align-items-center gap-2">{{ icon('barbell', source='') }}weightRoom</strong>
+  <span class="small text-secondary">Models <span class="mx-3 text-primary fw-semibold">Benchmark</span> Logs <span class="ms-3">System</span></span>
+  <span class="badge bg-azure-lt">Sample settings · local actions</span>
+</header>
+<div class="preview-shell" data-layout="studio" id="shell">
+<aside class="preview-sidebar" aria-label="Benchmark navigation preview">
+  <div class="section-label">Benchmark</div><nav aria-label="Benchmark pages">{{ section_links(nav.links, nav.headings) }}</nav>
+  <p class="small text-secondary mt-4">Navigation shown for context. Choose a design above to explore.</p>
+</aside>
+<main id="workspace" class="manage-preview benchmark-manage">
+  <div class="design-intro"><span class="badge bg-azure-lt" id="design-number">01 / Recommended</span><span id="design-description">A focused editor with a searchable benchmark library and measurements beside the formula.</span></div>
+  {% call page_header('Manage benchmarks') %}<label class="d-flex align-items-center gap-2 small">Preview state<select class="form-select form-select-sm w-auto" id="scenario"><option value="normal">Configured</option><option value="readonly">View only</option><option value="error">Save error</option><option value="empty">Empty catalogue</option></select></label>{% endcall %}
+  {{ overview(benchmarks) }}
+  <div id="readonly-note" hidden>{{ alert('info', 'View only. Benchmark settings require the manage-settings ability.') }}</div>
+  <div id="feedback" role="status" aria-live="polite"></div>
+  <div class="manage-grid" id="manage-grid">
+    {{ catalogue(groups, 'json_schema', preview=true) }}
+    <div id="selected-workspace"></div>
+  </div>
+  <div id="catalogue-empty" hidden>{% call card('No benchmark definitions') %}<p class="text-secondary">There are no definitions to configure. Built-in definitions normally appear here automatically.</p><button type="button" class="btn btn-outline-primary" id="restore-catalogue">Restore sample catalogue</button>{% endcall %}</div>
+  <div class="reference-footer">
+    {% include 'benchmark_external.html' %}
+    {% include 'benchmark_freshness.html' %}
+  </div>
+  <p class="small text-secondary mt-3 mb-0">Design preview · all {{ benchmarks|length }} built-in definitions and recorded values. Saves affect this tab only. No models are loaded.</p>
+</main>
+</div>
+{% for bench in benchmarks %}<template data-editor="{{ bench.id }}">{{ editor(bench, preview=true) }}</template>{% endfor %}
+{{ insert_template() }}
+<script id="definitions" type="application/json">{{ benchmarks|tojson }}</script>
+<script>{{ javascript|safe }}</script>
+</body></html>

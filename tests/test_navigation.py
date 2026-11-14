@@ -9,6 +9,15 @@ MODEL_LINKS = ['Models', 'Images', 'Audio', 'Cloud APIs', 'Roles', 'Dry fit', 'F
 MODEL_HEADINGS = {'/models':'Catalogue', '/roles':'Routing & capacity', '/files':'Files & provenance', '/hub':'Downloads'}
 
 
+def test_node_measurements_are_under_run_benchmarks():
+    nav = navigation('/benchmarks/node-measurements', ['manage-settings'], True)
+    assert nav['links'][:3] == [('Runs', '/benchmarks/runs'), ('Node measurements', '/benchmarks/node-measurements'), ('Results', '/benchmarks/results')]
+    assert nav['headings']['/benchmarks/runs'] == 'Run benchmarks'
+    assert '/benchmarks/node-measurements' not in nav['headings']
+    assert nav['headings']['/benchmarks/results'] == 'Results'
+    assert nav['active'] == '/benchmarks/node-measurements'
+
+
 @pytest.mark.parametrize('can', [[], ['manage-hosted'], ['manage-models'], ['manage-models', 'manage-hosted']])
 def test_model_navigation_order_headings_and_permissions(can):
     nav = navigation('/models', can, True)
