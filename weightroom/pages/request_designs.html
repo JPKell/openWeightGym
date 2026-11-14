@@ -16,7 +16,7 @@
 <div id="source-alert" hidden>{{ alert('warning', 'Orion has not reported for 4 minutes. Showing the retained snapshot; active states may be out of date. Live controls are unavailable.', class_='mb-3') }}</div>
 <div id="missing-alert" hidden>{{ alert('warning', 'This request is unavailable in the sample archive. Choose a request below.', class_='mb-3') }}</div>
 <section id="directory-view" aria-label="Requests">
-{% call page_header('Requests', pretitle='OBSERVE / REQUEST ACTIVITY') %}<button class="btn btn-outline-secondary" id="export-directory">Export filtered CSV ↓</button>{% endcall %}
+{% call page_header('Requests') %}<button class="btn btn-outline-secondary" id="export-directory">Export filtered CSV ↓</button>{% endcall %}
 <div class="rq-context"><span><span class="rq-dot" aria-hidden="true"></span> Snapshot · 13 Nov 2026, 11:00 PST</span><span>Retained metadata · benchmarks excluded</span></div>
 {% call kpi_row('Filtered request measurements', class_='mb-4') %}{{ kpi('Requests', '72', note='in the selected window', value_attrs={'id':'count'}) }}{{ kpi('Active', '—', note='running + queued', value_attrs={'id':'active-count'}) }}{{ kpi('Server errors', '—', note='failures + timeouts / endings', value_attrs={'id':'error-rate'}, note_attrs={'id':'error-note'}) }}{{ kpi('p95 compute total', '—', note='measured completed requests', value_attrs={'id':'p95'}, note_attrs={'id':'p95-note'}) }}{% endcall %}
 <div class="rq-directory-grid">
