@@ -162,7 +162,7 @@ async def decision_header(http, repository, filename, token=''):
     """Inspect a bounded GGUF range; absence or truncated metadata never earns a badge."""
     import tempfile
     from engines.llama_cpp.gguf import facts, read_metadata
-    maximum = 8 * 2**20
+    maximum = 32 * 2**20  # Julia's metadata alone is 14 MiB; Qwen decision vocabularies exceed 10 MiB.
     try:
         async with http.stream('GET', HUB + f'/{repository}/resolve/main/' + quote(filename, safe='/'),
                 headers={**signed(token), 'range': f'bytes=0-{maximum-1}'}, follow_redirects=True) as response:

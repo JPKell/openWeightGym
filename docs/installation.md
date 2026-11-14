@@ -561,7 +561,7 @@ same-host second LoadCoach and identity portability are covered in the [operatio
 ## Classifier runtime
 
 Classifiers use the configured llama.cpp engine and native `/v1/systemone` support
-(`server-decision.cpp`, available in builds from b11361; the readiness probe requires
+(`server-decision.cpp`, verified with the configured b12008 build; the readiness probe requires
 `/v1/models` to report `decisions`). A decision GGUF must contain its architecture’s
 `decision.type` and `tokenizer.chat_template.systemone`. Files are recognized wherever
 they are stored; new downloads use `classifier/`. Laya and Clef evaluate the whole prompt
