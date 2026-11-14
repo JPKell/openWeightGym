@@ -9692,6 +9692,17 @@ forms, missing fingerprints/readings, source outages and both maintenance bounda
 1440×1000 and mobile 390×844 Chromium checks passed acknowledgement, explicit incident review
 and history with no overflow or JavaScript errors. The existing Starlette/httpx warning remains.
 
+### Alerts design previews
+
+Run `.venv/bin/python scripts/preview-alert-designs.py` and open
+`build/alert-designs/index.html` to compare **01 Alert desk** (recommended), **02 Incident board**
+and **03 Episode ledger**. The portable page includes sample-only search/source/scope filters,
+pagination, episode timelines, acknowledgement, explicit memory-kill review, scoped JSON export,
+light/dark appearances and first-visit/no-open/unavailable-source states. Actions stay in tab
+memory; reload or Reset demo restores the fixtures. No live service is contacted. The live page
+and proposals share episode facts/actions and source presentation in `alert_parts.html`;
+the three proposals share row and DOM templates in `alert_design_parts.html`.
+
 ## Recurring schedules, milestone 71
 
 Current schedule kinds are `backup`, `benchmark` and `outstanding`. Optional `machine` selects

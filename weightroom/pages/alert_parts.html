@@ -1,0 +1,31 @@
+{# Episode facts and actions shared by the live page and its sample proposals. #}
+{% from 'parts.html' import section_title %}
+
+{% macro state_badge(alert={}) %}<span data-state class="badge {{ 'text-bg-danger' if alert.state == 'active' else 'text-bg-warning' if alert.state == 'unknown' else 'text-bg-secondary' }}">{{ 'Review required' if alert.manual and not alert.resolved_at else alert.state }}</span>{% endmacro %}
+
+{% macro acknowledgement(alert={}, preview=false) %}{% if preview %}<div class="small mt-2" data-acknowledgement hidden>Acknowledged by <span data-acknowledged-by></span> at <span data-acknowledged-at></span>.</div>{% elif alert.acknowledged_at %}<div class="small mt-2">Acknowledged by {{ alert.acknowledged_by }} at {{ alert.acknowledged_at|timestamp }}.</div>{% endif %}{% endmacro %}
+
+{% macro episode(alert={}, history=false, preview=false) %}
+<article class="border-bottom py-3" data-episode>
+  <div class="d-flex flex-wrap gap-2 align-items-center">{{ section_title(alert.title or '', attrs={'data-title':''}) }}{{ state_badge(alert) }}</div>
+  <p class="my-2 text-break" data-explanation>{{ alert.explanation or '' }}</p>
+  <div class="small text-secondary text-break">Source: <span data-source>{{ alert.source or '' }}</span> · first <span data-first-at>{{ alert.first_at|timestamp }}</span> · last observed <span data-last-at>{{ alert.last_at|timestamp }}</span> · checked <span data-checked-at>{{ alert.checked_at|timestamp }}</span></div>
+  <div class="small fw-semibold" data-unknown{% if alert.state != 'unknown' %} hidden{% endif %}>Current condition unavailable. Last observed alert remains open.</div>
+  {{ acknowledgement(alert, preview) }}
+  {% if history or preview %}<div data-closure{% if not history %} hidden{% endif %}><div class="small text-secondary mt-2">Closed <span data-resolved-at>{{ alert.resolved_at|timestamp }}</span></div><p class="small mb-0 text-break" data-recovery>{{ alert.recovery or '' }}</p></div>{% endif %}
+  {% if not history %}
+  <form method="post" action="{{ '#' if preview else '/alerts/' ~ alert.id }}" class="d-flex flex-wrap gap-2 mt-2"{% if preview %} data-demo-actions{% endif %}>
+    {% if preview or not alert.acknowledged_at %}<button name="do" value="acknowledge" class="btn btn-outline-primary btn-sm">Acknowledge</button>{% endif %}
+    {% if preview or alert.manual %}<button name="do" value="review" class="btn btn-outline-secondary btn-sm">Mark incident reviewed</button>{% endif %}
+  </form>
+  {% endif %}
+</article>
+{% endmacro %}
+
+{% macro source_entry(source={}) %}
+<div data-source-entry><b data-source-name>{{ source.source or '' }}</b><div data-source-status class="small {{ 'text-secondary' if source.available else 'text-body fw-semibold' }}">{{ 'Available' if source.available else 'Unavailable; recovery unknown' }} · checked <span data-source-checked>{{ source.checked_at|timestamp }}</span></div></div>
+{% endmacro %}
+
+{% macro source_notes(threshold=85, preview=false) %}
+<p class="small text-secondary mt-2 mb-0">Missing readings can mean compute is asleep, stopped or disconnected. They do not establish a service failure or recovery. Spending alerts use recorded 24-hour costs; in-flight and unknown costs are excluded. GPU threshold: {{ threshold }}°C; {% if preview %}configured in Settings{% else %}change it in <a href="/settings?open=weightroom">Settings</a>{% endif %}.</p>
+{% endmacro %}

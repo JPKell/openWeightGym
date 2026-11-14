@@ -1,0 +1,50 @@
+{% from 'parts.html' import page_header, card, section_title, more %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'icons.html' import icon %}
+{% from 'alert_parts.html' import source_notes %}
+{% from 'alert_design_parts.html' import templates %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Alerts · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to alerts</a>
+<header class="al-review"><span class="al-brand">{{ icon('barbell') }} weightRoom <span class="text-secondary fw-normal small">/ Alerts design review</span></span><div class="d-flex gap-2 flex-wrap"><span class="badge bg-secondary-lt">Interactive sample</span><button class="btn btn-outline-secondary btn-sm" type="button" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" type="button" id="reset">Reset demo</button></div></header>
+<main class="al-page">
+<section class="al-designs" aria-label="Design proposals">
+{% call pills('Design options', buttons=true, class_='gap-2 mb-0') %}{{ pill_button('01 / Alert desk', true, attrs={'data-design':'desk'}) }}{{ pill_button('02 / Incident board', attrs={'data-design':'board'}) }}{{ pill_button('03 / Episode ledger', attrs={'data-design':'ledger'}) }}{% endcall %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3"><p class="small text-secondary mb-0" id="design-description">A focused queue beside the evidence. Recommended for daily operations.</p><label class="small text-secondary d-flex align-items-center gap-2">Preview state<select id="scenario" class="form-select form-select-sm w-auto"><option value="normal">Mixed episodes</option><option value="healthy">No open episodes</option><option value="unavailable">Sources unavailable</option><option value="empty">First visit</option></select></label></div>
+</section>
+<div id="workspace" data-layout="desk">
+{% call page_header('Operational alerts') %}<button type="button" class="btn btn-outline-secondary btn-sm" id="export">Export JSON</button><button type="button" class="btn btn-primary btn-sm" id="refresh">Refresh sample</button>{% endcall %}
+<div class="al-briefing mb-4"><div><span class="al-signal" aria-hidden="true"></span><strong id="briefing-title">A clear view of what needs you.</strong><p class="text-secondary small mb-0 mt-1">Inspect the evidence, acknowledge the episode, follow its recovery.</p></div><div class="small text-secondary al-snapshot">Sample snapshot · 14 Nov 2026<br><span id="snapshot-time">10:42 America/Vancouver</span></div></div>
+{% call kpi_row('All sample episodes', class_='mb-4') %}
+{{ kpi('Open episodes', 6, value_attrs={'id':'open-count'}) }}{{ kpi('Unacknowledged', 4, value_attrs={'id':'unseen-count'}) }}{{ kpi('Review required', 1, value_attrs={'id':'review-count'}) }}{{ kpi('Recovery unknown', 1, value_attrs={'id':'unknown-count'}) }}
+{% endcall %}
+<div class="al-controls mb-3"><input type="search" class="form-control" id="search" aria-label="Search alerts" placeholder="Search an episode, node or condition…"><select class="form-select" id="scope" aria-label="Episode scope"><option value="open">Open episodes</option><option value="history">Closed history</option><option value="all">All episodes</option><option value="unseen">Unacknowledged open</option><option value="review">Needs manual review</option><option value="unknown">Recovery unknown</option></select><select class="form-select" id="source" aria-label="Alert source"><option value="all">All sources</option>{% for source in data.sources %}<option value="{{ source.source }}">{{ source.source }}</option>{% endfor %}</select><button type="button" class="btn btn-outline-secondary" data-clear>Clear filters</button></div>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3"><span class="small text-secondary" id="result-count" role="status"></span><span class="small text-secondary">Acknowledgement records attention; it does not clear a condition.</span></div>
+<div class="al-body">
+{% call card('Episode queue', id='inventory', body_class='p-0', actions='<span class="small text-secondary" id="inventory-label">Newest first</span>'|safe) %}
+<div id="episode-list" class="al-list"></div>
+<div id="episode-board" class="al-board" hidden></div>
+<div id="episode-ledger" class="table-responsive" hidden><table class="table table-hover align-middle mb-0 al-ledger"><caption class="visually-hidden">Alert episodes and recorded acknowledgement</caption><thead><tr><th scope="col">Episode / source</th><th scope="col">Condition</th><th scope="col">Attention</th><th scope="col">First observed</th><th scope="col">Closed</th></tr></thead><tbody id="ledger-rows"></tbody></table></div>
+<div id="empty-slot"></div>
+<nav class="al-inventory-footer" aria-label="Sample episode pages"><span id="page-summary" class="small text-secondary"></span><div class="d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" id="previous" type="button">Previous</button><button class="btn btn-outline-secondary btn-sm" id="next" type="button">Next</button></div></nav>
+{% endcall %}
+{% call card('Episode details', id='inspector', body_class='p-4') %}
+<div id="detail-content"></div>
+<div id="detail-extra"><div class="al-context-note small mt-3" id="detail-rule"></div>{{ section_title('Episode timeline', level=3, wrapper_class='mt-4') }}<ol id="timeline" class="al-timeline"></ol><p class="text-secondary small mb-0 mt-4">Only recorded observations are shown. Transient states between collection intervals may be missed.</p></div>
+{% endcall %}
+{% call card('Source coverage', id='sources-panel', actions='<span class="badge bg-secondary-lt" id="source-count">6 / 7 available</span>'|safe) %}
+<p class="small text-secondary mb-3">Availability describes the reading, not the health of the monitored service.</p><div id="source-list" class="al-sources"></div>
+{% call more('Thresholds & collection') %}{{ source_notes(85, preview=true) }}<p class="mb-0 mt-2">The live collector checks every 30 seconds while openWeightGym runs. Collection does not wake sleeping compute. This preview never polls live services.</p>{% endcall %}
+{% endcall %}
+</div>
+<p class="al-feedback small text-secondary mt-3" id="feedback" aria-live="polite" role="status">Sample data · actions affect this tab only. Reload or Reset demo restores the fixtures.</p>
+</div>
+</main>
+{{ templates() }}
+<script type="application/json" id="alert-data">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>
