@@ -293,7 +293,8 @@ Spotter's machine-file service allowlist; control node actions use the installed
 **Machine configuration** selects one node and shows read-only file values, their reported source,
 defaults, differences, retired/derived/deprecated flags and service restart commands. Wake entries
 identify the control node’s machine-file section and apply immediately through Turnstile.
-The [restart matrix](operations.md#settings-catalogue-and-restarts) lists site-editable restart fields. Old services
+The [restart matrix](operations.md#settings-catalogue-and-restarts) lists site-editable restart fields.
+The live Documentation library includes **Deployment and operations → Settings policies and restarts**. Old services
 may not report source/default evidence yet. Retired overrides remain stored and are ignored.
 Security and sign-in also shows the file-controlled cookie, browser-origin and trusted-proxy settings.
 [Sign-in policy](operations.md#sign-in-policy) explains per-address locks, CLI recovery, new-key

@@ -1519,7 +1519,7 @@ node signatures, tools and adapters. Browser users sign in again. Normal recover
 continue excluding raw keys; this separate encrypted bundle supplies the private source.
 
 
-### Conversation expiry and built-in backups
+## Conversation expiry and built-in backups
 
 `chat_keep_days` defaults to 0 (indefinite). The control node checks the live policy every minute
 and claims a daily sweep in the chat store. CHAT migration 7 seeds last activity from the existing
@@ -1537,7 +1537,7 @@ being written finish. After downtime only the latest missed occurrence is eligib
 the same verified archive identifier. Raw keys remain excluded from normal recovery archives.
 
 
-### Site identity and presentation defaults
+## Site identity and presentation defaults
 
 General’s live `site_name` changes the shared header, page titles and test notification title.
 `site_banner` is a TOML table with plain `text`, `level` (`info`, `warning`, `danger`) and optional
@@ -1552,7 +1552,7 @@ choices and explicit links take precedence; unavailable or unauthorized names fa
 first permitted choice. Existing conversations and permissions are unaffected.
 
 
-### Site-managed remote MCP servers
+## Site-managed remote MCP servers
 
 Tools exposes URL-server management to superusers, enforced by both the signed ToolLocker
 endpoint and the generic settings authority (including preview, reset and import). The catalogue’s

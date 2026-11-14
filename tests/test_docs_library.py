@@ -18,6 +18,22 @@ def test_docs_navigation_keeps_home_guides_and_code_separate():
     assert public['links'] == [('Documentation', '/docs'), ('Web app', '/docs/web-app')]
 
 
+def test_settings_policy_guide_is_rendered_searchable_and_permission_scoped(desk):
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    address = '/docs/operations/settings-policy'
+    shown = server.get(address)
+    assert shown.status_code == 200
+    for heading in ('Settings catalogue and restarts', 'Sign-in policy', 'Notification delivery',
+                    'Download credentials and concurrency', 'Site-managed remote MCP servers'):
+        assert heading in shown.text
+    result = server.get('/docs', params={'q':'remote MCP', 'scope':'operations'})
+    assert result.status_code == 200 and 'class="search-result" href="'+address+'"' in result.text
+    sign_in(server, 'pat')
+    assert server.get(address).status_code == 403
+    assert address not in server.get('/docs?q=remote+MCP').text
+
+
 def test_docs_home_and_search_are_permission_scoped_even_after_admin_search(desk):
     server, _, _ = desk
     sign_in(server, 'jordan')

@@ -77,6 +77,8 @@ use them as written.
 
 ### Decisions made during implementation
 
+- The Docs library exposes the canonical operations sections through one permission-scoped Settings policies and restarts topic, rather than leaving new guidance outside its selected article parts. Existing templates, source readers and revision-aware search remain shared.
+
 - Final audit: settings timestamps carry explicit UTC offsets so reports from different host zones preserve their instant. Wake defaults come from the catalogue; its machine inspector identifies the control node’s `[machines.NAME]` file section and live Turnstile ownership, without suggesting a nonexistent `machines` service. The CLI reset notice follows the displayed tier. Spotter retention is labeled Telemetry and documents its existing zero-days behavior.
 
 - Phase 3 final `9b6a783`: clean full suite 4,369 passed, 311 failed, 11 known fixture errors and 69 skipped. Artifact retry passes separately; CPU embedding cleanup reproduces on Phase 2. The remaining old restart-order assertion is corrected in the final audit; the actual coordinator, stop-failure and PostgreSQL migration checks pass. Normal update/restart and source verification succeeded on all five installed checkouts. Live evidence: `/home/owgadmin/ai/owg-settings-phase3-live-final.json` and `owg-settings-phase3-source-verified.json`; notification destinations and all eight node tokens remain empty.
