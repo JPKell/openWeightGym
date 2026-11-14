@@ -79,7 +79,7 @@ CHANGEABLE: dict[str, dict[str, str]] = {
                    "observation_error_percent": NOW, "observation_p95_seconds": NOW, "observation_min_samples": NOW,
                    "observation_window_seconds": NOW, "observation_alert_hold_seconds": NOW,
                    **{f"audio_{kind}_model": RESTART for kind in ("lyrics", "music", "sound", "speech", "transcription")}},
-    "turnstile": {"response_keep_days": NOW, "wait": RESTART, "artifact_machine": RESTART, "image_adult_previews": NOW, "files_every": NOW, "component_versions_every": NOW,
+    "turnstile": {"response_max_tool_calls": NOW, "response_max_tool_seconds": NOW, "response_keep_days": NOW, "wait": RESTART, "artifact_machine": RESTART, "image_adult_previews": NOW, "files_every": NOW, "component_versions_every": NOW,
                   "models_folder": NOW, "models_storage_folder": NOW, "allow_caller_to_specify_destination": NOW, "preferred_voice_node": NOW},
 }
 SECRET = re.compile(r"(^|_)(key|token|secret|password)$")  # a setting with such a name is never handed out

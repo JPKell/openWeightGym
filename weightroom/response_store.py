@@ -101,8 +101,8 @@ class Responses:
         with self.db:
             self.db.execute('DELETE FROM responses WHERE owner=?', (owner,))
 
-    def history(self, user, identifier):
-        """Rebuild at most fifty same-owner inputs and outputs, dropping old instructions."""
+    def chain(self, user, identifier):
+        """Read at most fifty same-owner ancestors under current clearance."""
         records, visited = [], set()
         while identifier:
             if identifier in visited or len(records) >= 50:
@@ -111,19 +111,51 @@ class Responses:
             record = self.one(user, identifier, own=True)
             records.append(record)
             identifier = record['previous']
-        items = []
-        level = 'normal'
+        return list(reversed(records))
+
+    def pending_approvals(self, user, identifier):
+        """Resolve outstanding approval IDs only from the authorized previous-response chain."""
+        pending, resolved = {}, set()
+        for record in self.chain(user, identifier):
+            for item in record['request']['input']:
+                if item['type'] == 'mcp_approval_response':
+                    resolved.add(item['approval_request_id'])
+                    pending.pop(item['approval_request_id'], None)
+            for item in record['response']['output']:
+                if item['type'] == 'mcp_approval_request' and item['id'] not in resolved:
+                    pending[item['id']] = item
+        return pending
+
+    def history(self, user, identifier):
+        """Rebuild text, function and MCP history without carrying old instructions."""
+        items, known_calls, level = [], set(), 'normal'
         from turnstile.responses import append_input
-        for record in reversed(records):
+        from turnstile.tool_loop import model_result
+        for record in self.chain(user, identifier):
             level = max(level, record['level'], key=LEVELS.index)
             for item in record['request']['input']:
-                append_input(items, item)
+                if item['type'] != 'mcp_approval_response':
+                    append_input(items, item)
+            results = []
             for item in record['response']['output']:
                 if item['type'] == 'message':
+                    items.extend(results); results = []
                     content = ''.join(part.get('text', part.get('refusal', '')) for part in item['content'])
                     append_input(items, {'type': 'message', 'role': 'assistant', 'content': content})
                 elif item['type'] == 'function_call':
                     append_input(items, item)
+                elif item['type'] in ('mcp_call', 'mcp_approval_request'):
+                    call_id = item['call_id']
+                    if call_id not in known_calls:
+                        append_input(items, {'type': 'function_call', 'call_id': call_id,
+                            'name': item['name'], 'arguments': item['arguments']})
+                        known_calls.add(call_id)
+                    if item['type'] == 'mcp_call':
+                        result = (json.loads(item['output']) if item.get('output') is not None else
+                                  item['error']['content'] if (item.get('error') or {}).get('type') == 'mcp_tool_execution_error' else
+                                  {'isError': True, 'error': item.get('error')})
+                        results.append({'role': 'tool', 'tool_call_id': call_id, 'content': model_result(result)})
+            items.extend(results)
         return items, level
 
     def listing(self, user, filters, *, limit=25, offset=0):

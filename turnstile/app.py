@@ -109,6 +109,8 @@ class Settings:
     hosted_keys: str = ""  # the folder with outside services' private NAME.key files. Empty: the folder of machine_key_file
     machines: dict = field(default_factory=dict)  # every compute node, a peer of the others: [machines.NAME] with compute, spotter, machine_key_file and wake settings
     machines_poll_seconds: float = 10  # how often each machine is asked about itself, and how long a fact stays "ready" (three times this)
+    response_max_tool_calls: int = 25  # maximum tool calls per Responses/Tool chat model turn
+    response_max_tool_seconds: float = 900  # elapsed seconds allowed per tool-enabled model turn
     response_keep_days: float = 30  # days stored Responses are retained; adjustable in General settings
     keep_days: float = 90  # days the event log is kept here. 0 keeps everything
     voice_port: int = 8445
@@ -210,6 +212,10 @@ def load_settings(path: Path) -> Settings:
                     raise TypeError("toollocker_url must be an HTTP service base URL without credentials, path or query")
                 if 8443 not in settings.ports or not settings.keep_console_settings_on_front:
                     raise TypeError("toollocker_url requires port 8443 and keep_console_settings_on_front")
+            if type(settings.response_max_tool_calls) is not int or not 1 <= settings.response_max_tool_calls <= 10000:
+                raise TypeError('response_max_tool_calls must be from 1 to 10000')
+            if type(settings.response_max_tool_seconds) not in (int, float) or not 0 < settings.response_max_tool_seconds <= 86400:
+                raise TypeError('response_max_tool_seconds must be above zero and at most 86400')
             if type(settings.response_keep_days) not in (int, float) or not 0 < settings.response_keep_days <= 3650:
                 raise TypeError('response_keep_days must be above zero and at most 3650 days')
             if type(settings.keep_days) not in (int, float) or settings.keep_days < 0:
@@ -249,6 +255,7 @@ def say_what_runs(path: Path, settings: Settings) -> None:
                "models_folder": settings.models_folder, "models_storage_folder": settings.models_storage_folder,
                "image_adult_previews": settings.image_adult_previews, "files_every": settings.files_every,
                "component_versions_every": settings.component_versions_every, "response_keep_days": settings.response_keep_days,
+               "response_max_tool_calls": settings.response_max_tool_calls, "response_max_tool_seconds": settings.response_max_tool_seconds,
                "allow_caller_to_specify_destination": settings.allow_caller_to_specify_destination,
                "preferred_voice_node": settings.preferred_voice_node}
     (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))))
@@ -1069,6 +1076,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     response_store = Responses(stores.database('weightroom.accounts'),
         lambda: console_settings.changes.of('turnstile').get('response_keep_days', settings.response_keep_days))
     extractions.responses = response_store
+    extractions.tool_url = 'http://turnstile.internal:8443/mcp'
+    extractions.tool_level = lambda user, trace: log.trace_level(user.name, trace)
+    extractions.hosted_models = hosted.models
+    extractions.tool_limits = lambda: (
+        console_settings.changes.of('turnstile').get('response_max_tool_calls', settings.response_max_tool_calls),
+        console_settings.changes.of('turnstile').get('response_max_tool_seconds', settings.response_max_tool_seconds))
 
     async def forget_responses(owner):
         """Erase stored Responses through the existing account-deletion lifecycle."""

@@ -171,10 +171,12 @@ def test_recorded_qwen_reasoning_stream():
 
 def test_official_sdk_parses_stream_when_installed():
     openai = pytest.importorskip('openai', reason='Official openai SDK is not installed in the test venv.')
+    from openai import _base_client as sdk_base
+    sdk_httpx = getattr(sdk_base, 'httpx2', httpx)
 
     async def run():
         async with response_app(Source([frame({'content': 'Hi'}), frame(finish='stop')])) as (app, _):
-            async with httpx.AsyncClient(transport=httpx.ASGITransport(app)) as http:
+            async with sdk_httpx.AsyncClient(transport=sdk_httpx.ASGITransport(app)) as http:
                 client = openai.AsyncOpenAI(api_key='key', base_url='http://test/v1', http_client=http)
                 stream = await client.responses.create(model='test', input='Hi', stream=True, store=False)
                 data = [event async for event in stream]

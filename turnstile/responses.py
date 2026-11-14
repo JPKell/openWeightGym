@@ -385,8 +385,8 @@ class ResponseStream:
             raise Problem('Upstream returned an invalid chat chunk.', 502, 'invalid_upstream_response') from None
         return events
 
-    def done(self):
-        """Close output parts and emit a terminal response with final-chunk usage."""
+    def close_output(self):
+        """Close one model step while keeping output open for a subsequent server-tool step."""
         if self.finish is None:
             raise Problem('Upstream stream ended before completion.', 502, 'upstream_disconnected')
         events = self.end_reasoning()
@@ -404,12 +404,21 @@ class ResponseStream:
         if self.message:
             events.append(self.event('response.output_item.done', output_index=self.output.index(self.message), item=self.message))
         for item in self.calls.values():
-            if not valid_function_name(item['name']):
-                raise Problem('Upstream returned an invalid function name.', 502, 'invalid_upstream_response')
-            item['status'] = status
-            fields = {'item_id': item['id'], 'output_index': self.output.index(item)}
-            events.append(self.event('response.function_call_arguments.done', **fields, arguments=item['arguments']))
-            events.append(self.event('response.output_item.done', output_index=fields['output_index'], item=item))
+            events += self.close_call(item, status)
+        return events, status
+
+    def close_call(self, item, status):
+        """Close the arguments and final item of a client-run function call."""
+        if not valid_function_name(item['name']):
+            raise Problem('Upstream returned an invalid function name.', 502, 'invalid_upstream_response')
+        item['status'] = status
+        fields = {'item_id': item['id'], 'output_index': self.output.index(item)}
+        return [self.event('response.function_call_arguments.done', **fields, arguments=item['arguments']),
+                self.event('response.output_item.done', output_index=fields['output_index'], item=item)]
+
+    def done(self):
+        """Close output parts and emit a terminal response with final-chunk usage."""
+        events, status = self.close_output()
         result = self.body(status)
         if self.on_done:
             self.on_done(result)
@@ -438,7 +447,10 @@ class ResponseStream:
             yield self.event('error', **details, param=None)
             result = self.body('failed', details)
             if self.on_done and details['code'] != 'storage_limit':
-                self.on_done(result)
+                try:
+                    self.on_done(result)
+                except Problem:
+                    pass  # Revoked/deleted identities and exhausted quotas cannot retain new state.
             yield self.event('response.failed', response=result)
 
 
@@ -515,11 +527,15 @@ def routes(caller, service):
                 if not checked.is_success:
                     return preserved_response(checked, {})
                 return denied
-            sent = chat_request(body)
+            store = getattr(service, 'responses', None)
+            from turnstile.response_tools import prepare as prepare_tools
+            tool_context = prepare_tools(body, request, service, user, store)
+            sent = chat_request(tool_context.ordinary if tool_context else body)
+            if tool_context and tool_context.empty:
+                sent['messages'].pop()
             storing = body.get('store', True)
             if storing and request.headers.get('x-loadcoach-log', '').lower() == 'off':
                 raise Problem('Stored Responses require logging. Send store:false with X-LoadCoach-Log: off.')
-            store = getattr(service, 'responses', None)
             if (storing or body.get('previous_response_id')) and store is None:
                 raise Problem('Responses storage is unavailable.', 503, 'storage_unavailable')
             level = request.headers.get('x-loadcoach-sensitivity', 'normal')
@@ -545,8 +561,13 @@ def routes(caller, service):
                     current = caller(request.headers.get('authorization', '').removeprefix('Bearer '))
                     if not current or owner_of(current) != owner_of(user):
                         raise Problem('Caller authorization changed.', 403, 'authorization_changed')
-                    store.save(user, saved, result, level, response_headers.get('x-loadcoach-request-id'))
+                    actual = service.tool_level(current, headers.get('x-loadcoach-trace')) if hasattr(service, 'tool_level') and headers.get('x-loadcoach-trace') else level
+                    stored_level = max(level, actual if actual in LEVELS else level, key=LEVELS.index)
+                    store.save(user, saved, result, stored_level, response_headers.get('x-loadcoach-request-id'))
             attempted = True
+            if tool_context:
+                from turnstile.response_tools import respond as tool_response
+                return await tool_response(tool_context, body, sent, headers, service, user, finished, store)
             if sent['stream']:
                 return await stream_response(service, body, sent, headers, finished)
             answer = await service.door.post('/v1/chat/completions', json=sent, headers=headers, timeout=None)
