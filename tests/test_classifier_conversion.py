@@ -56,7 +56,7 @@ def test_ollama_prompt_has_compact_quoted_fields_and_go_json_escaping():
     # applies Go encoding/json's HTML escapes to the complete outer JSON string.
     encode = lambda value: json.dumps(value, ensure_ascii=False, separators=(',', ':'))
     environment.filters['tojson'] = encode
-    state = {'text': '<hello> & goodbye'}
+    state = {'text': '<hello> & goodbye' + chr(0x2028) + 'next' + chr(0x2029)}
     instructions = {'question': '<read> & choose'}
     question = {'id': 'tag', 'type': 'choice', 'instructions': instructions, 'options': [
         {'label': 'A', 'key': 'one', 'description': None}, {'label': 'B', 'key': 'two', 'description': 'Other'}]}
@@ -64,7 +64,7 @@ def test_ollama_prompt_has_compact_quoted_fields_and_go_json_escaping():
     actual = prompt.split('<|im_start|>user\n')[1].split('\n\nRequested field:')[0]
     expected = encode({'context': encode(state), 'schema': [{'name': 'tag', 'description': encode(instructions), 'choices': [
         {'code': 'A', 'value': 'one', 'description': 'one'}, {'code': 'B', 'value': 'two', 'description': 'Other'}]}]})
-    expected = expected.replace('<', r'\u003c').replace('>', r'\u003e').replace('&', r'\u0026')
+    expected = expected.replace('<', r'\u003c').replace('>', r'\u003e').replace('&', r'\u0026').replace(chr(0x2028), r'\u2028').replace(chr(0x2029), r'\u2029')
     assert actual == expected
 
 
