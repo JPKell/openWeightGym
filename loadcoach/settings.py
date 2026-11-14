@@ -170,7 +170,7 @@ def said(running: dict, file: dict, says: dict, program='') -> dict:
     from loadcoach.setting_catalog import entries
     running, file = dict(running), dict(file)
     for definition in entries(program):
-        if '.' in definition.name and definition.name.split('.')[0] in running:
+        if '.' in definition.name:
             value = nested_value(running, definition.name, definition.default)
             if value is not None:
                 running[definition.name] = value

@@ -20,11 +20,14 @@ INSTRUCTIONS = "This is a voice call. Answer in one or two short sentences of pl
 
 def configuration(gateway):
     """Snapshot editable voice-agent choices without exposing machine paths or credentials to edits."""
-    settings = deepcopy(gateway["hermes"])
+    settings = deepcopy(gateway.get("hermes", {}))
     for name in ("model", "system_prompt", "max_turns", "context_tokens", "max_output_tokens", "reasoning_effort"):
         value = gateway.get("hermes_" + name)
         if value is not None and (name != "model" or value):
             settings[name] = value
+    # Editable choices alone never enable an unconfigured execution environment.
+    if not (settings.get('python') or settings.get('url')) or not settings.get('model'):
+        return {}
     return settings
 
 
