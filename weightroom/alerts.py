@@ -5,12 +5,15 @@ acknowledgement belongs to that episode and never changes its condition state.
 """
 import time
 import uuid
+import math
+from datetime import datetime, timezone
 
 from db import database, migrate
 from db.schemas import ALERTS
 
 COLUMNS = ('id', 'condition', 'source', 'title', 'explanation', 'state', 'first_at', 'last_at',
            'checked_at', 'resolved_at', 'recovery', 'acknowledged_by', 'acknowledged_at', 'manual')
+OBSERVATION_BACKLOG_SECONDS = 60
 
 
 class Alerts:
@@ -164,6 +167,43 @@ def machine_conditions(reading, threshold):
     return services, heat
 
 
+def observation_evidence(row, suffix, now, baseline, lost, hold_seconds):
+    """Describe the actual health snapshot without inferring a service failure."""
+    from loadcoach.observation_store import SOURCE_FRESH_SECONDS
+    name = row['machine']
+    recording = 'true' if row.get('recording') is True else 'false' if row.get('recording') is False else 'not reported'
+    origin = ("front's local Turnstile observation writer" if row['_local'] else
+              f"LoadCoach on node {name}, forwarded to front's Turnstile through signed POST /turnstile/log")
+    facts = f"Observation health from {origin}: fresh={'true' if row.get('fresh') else 'false'}; recording={recording}. "
+    received = row.get('received')
+    if not row['_local']:
+        if type(received) in (int, float) and math.isfinite(received):
+            try:
+                stamp = datetime.fromtimestamp(received, timezone.utc).strftime('%d %b %Y, %H:%M:%S UTC')
+                facts += f"Front last received this node's health report at {stamp} ({max(0, now-received):.1f} seconds before this check). "
+            except (OverflowError, ValueError, OSError):
+                facts += 'The last health receipt time is unavailable. '
+        else:
+            facts += 'The report did not provide a last health receipt time. '
+    if suffix == 'freshness':
+        if row['_local']:
+            return facts + 'This check uses the presence of local writer health in front\'s metrics report. No service-status probe was made.'
+        return facts + (f'A source is fresh only while its last receipt is less than {SOURCE_FRESH_SECONDS} seconds old '
+                        'and recording=true. The report does not identify whether the node is asleep, the sender stopped, '
+                        'forwarding failed or recording is unavailable; it does not prove that a service crashed.')
+    if suffix == 'backlog':
+        return facts + (f"The last reported forwarding backlog contains {row.get('backlog_count', 0)} observations; "
+                        f"the oldest is {row.get('backlog_age_seconds', 0):g} seconds old. "
+                        f'An alert requires a nonempty backlog at least {OBSERVATION_BACKLOG_SECONDS} seconds old and fresh source evidence. '
+                        'Compare subsequent reports to see whether forwarding is draining it.')
+    reasons = ', '.join(f'{key}={row.get("dropped", {}).get(key, 0)}' for key in
+                        ('queue_full', 'spool_full', 'writer_error', 'shutdown') if row.get('dropped', {}).get(key))
+    return facts + (f'Reported process-lifetime loss count {lost}; previous count for this process {baseline}. '
+                    + (f'Reason counters: {reasons}. ' if reasons else '')
+                    + f'The alert stays open for {hold_seconds:g} seconds after an observed increase. '
+                    'A process replacement resets the comparison baseline; sampled successful observations are excluded.')
+
+
 def observation_conditions(report, previous=None, now=None, error_percent=0, p95_seconds=0, min_samples=100, hold_seconds=60):
     """Detect fresh observation loss/backlogs; old loss counters do not imply a new incident."""
     if report is None or 'local' not in report:
@@ -171,7 +211,8 @@ def observation_conditions(report, previous=None, now=None, error_percent=0, p95
     now = time.time() if now is None else now
     previous = previous or {}
     latest, conditions = {}, []
-    rows = [{'machine':'front', 'fresh':report.get('local') is not None, **(report.get('local') or {})}, *report.get('sources', [])]
+    rows = [{'machine':'front', 'fresh':report.get('local') is not None, **(report.get('local') or {}), '_local':True},
+            *(dict(row, _local=False) for row in report.get('sources', []))]
     for row in rows:
         name = row['machine']
         process = row.get('process', '')
@@ -179,18 +220,19 @@ def observation_conditions(report, previous=None, now=None, error_percent=0, p95
         lost = sum(value for key,value in counts.items() if key != 'sampled_success' and type(value) is int)
         old = previous.get(name)
         # A restart resets counters; its first snapshot reports health, not an invented delta.
-        rising = lost > (old.get('lost', 0) if old and old.get('process') == process else 0)
+        baseline = old.get('lost', 0) if old and old.get('process') == process else 0
+        rising = lost > baseline
         loss_at = now if rising else (old or {}).get('loss_at', 0)
         latest[name] = {'process':process, 'lost':lost, 'loss_at':loss_at}
         fresh = row.get('fresh', False)
         for suffix, active, title in (
             ('loss', bool(loss_at and now-loss_at < hold_seconds) if fresh else None, 'Optional observation data loss'),
-            ('backlog', row.get('backlog_count', 0) > 0 and row.get('backlog_age_seconds', 0) >= 60 if fresh else None,
+            ('backlog', row.get('backlog_count', 0) > 0 and row.get('backlog_age_seconds', 0) >= OBSERVATION_BACKLOG_SECONDS if fresh else None,
              'Observation forwarding backlog'),
             ('freshness', not fresh, 'Observation source unavailable')):
             conditions.append({'key':'observation:'+name+':'+suffix, 'active':active,
                                'title':title+' · '+name,
-                               'explanation':'Inspect Requests → Operational metrics for source freshness, queue limits and dropped-record reasons.',
+                               'explanation':observation_evidence(row, suffix, now, baseline, lost, hold_seconds),
                                'recovery':'A fresh snapshot confirms the condition has cleared.'})
     rules = dict(previous.get('_rules', {}))
     for group in report.get('groups', []):
@@ -212,8 +254,17 @@ def observation_conditions(report, previous=None, now=None, error_percent=0, p95
                 old = {'above':state, 'since':now}
             rules[key] = old
             active = state if state is not None and now-old['since'] >= hold_seconds else None
+            measurement = (f"{group['outcomes'].get('error', 0)} recorded errors / {group['count']} ingress calls = {rate:.2f}%; "
+                           f'configured threshold {error_percent:g}%') if rule == 'error-rate' else (
+                           f"approximate p95 {group['p95'] if group.get('p95') is not None else 'unavailable'} seconds; configured threshold {p95_seconds:g} seconds. "
+                           'Histogram p95 is an upper-bound estimate')
+            window = (f"Window: {report['until']-report['since']:g} seconds. "
+                      if type(report.get('since')) in (int, float) and type(report.get('until')) in (int, float) else '')
             conditions.append({'key':key, 'active':active, 'title':title+' · '+name,
-                               'explanation':'Measured window with minimum sample count; histogram p95 is an upper-bound estimate.',
+                               'explanation':f'Service {name}: {measurement}. {window}'
+                                   f'Minimum sample count {min_samples}; observed count {group["count"]}. '
+                                   f'The measured condition must persist for {hold_seconds:g} seconds. '
+                                   'WeightRoom reads the retained ingress metric window from front\'s Turnstile; benchmarks are excluded.',
                                'recovery':'A sustained fresh measured window is below the configured threshold.'})
     latest['_rules'] = rules
     return conditions, latest
