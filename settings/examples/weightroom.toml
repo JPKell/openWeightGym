@@ -192,8 +192,8 @@ toollocker_url = "http://127.0.0.1:9443"
 # spotter = "http://compute.lan:9444"
 # formerly = "compute"
 # Optional wake settings for this node (otherwise it cannot be woken).
-# # Wake MAC/address may also be changed live per node on Compute nodes; reset restores this file.
-wake_mac = "aa:bb:cc:dd:ee:ff"
+# Wake MAC/address may also be changed live per node on Compute nodes; reset restores this file.
+# wake_mac = "aa:bb:cc:dd:ee:ff"
 # wake_address = "192.168.1.255"
 # With voice installed, include 8445 in ports above. Readiness probes never wake compute.
 # voice_port = 8445

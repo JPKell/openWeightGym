@@ -105,3 +105,12 @@ def test_restart_value_reports_the_started_value_even_with_a_different_file_fall
         assert console.reported()[0]['settings'][0]['value'] == 37
     finally:
         console.changes.db.close()
+
+
+def test_weightroom_example_does_not_enable_the_commented_wake_sample(tmp_path):
+    from pathlib import Path
+    import tomllib
+    example = Path(__file__).resolve().parents[1] / 'settings/examples/weightroom.toml'
+    values = tomllib.loads(example.read_text())
+    assert 'wake_mac' not in values.get('turnstile', {})
+    assert load_settings(example).max_in_flight > 0

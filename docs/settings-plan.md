@@ -78,6 +78,7 @@ use them as written.
 ### Decisions made during implementation
 
 - Catalogue entries describe top-level settings; tables retain their existing whole-table POST contract. Nested tuning entries will validate the editable subset without exposing model paths.
+- Phase 1 initial clean `ad39197`: 3,831 passed, 325 failed, 11 errors and 60 skipped; all 515 settings and 39 UI cases pass. Fixed an accidentally uncommented example Wake MAC and updated the old timezone restart assertion before push; final clean run follows. Evidence: `/home/jpk/ai/owg-settings-phase1-full.xml` and `owg-settings-phase1-comparison.json`.
 - Phase 0 verification: the clean `717890d` full suite reports 3,708 passed, 322 failed, 11 errors and 60 skipped; all 437 settings-focused cases pass. Baseline `b040cbc` reproduces eight console and 109 legacy-service failures. Final shared `28e06ec` passes 482 focused settings/API checks. Machine-readable evidence: `/home/jpk/ai/owg-settings-phase0-full.xml`, `owg-settings-phase0-focused-results.json` and `owg-settings-phase0-live.json`; broader failures include legacy routing and control-node wording expectations.
 - Live verification uses an expiring session for the existing owner account, revoked afterward. No accounts or provider/channel credentials are created.
 - Live template time zones use a per-render context function to preserve existing template callers; Audio routes receive a settings getter so replaced immutable settings are visible to new requests.
