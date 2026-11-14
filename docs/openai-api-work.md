@@ -67,6 +67,9 @@ Keep refusing tool parameters exactly as today.
 
 ## R1. Responses streaming
 
+**Implemented 2026-11-14:** shared streamed/non-streamed output builder, reasoning/refusal events, final usage, failure boundaries and disconnect cleanup. Real Qwen3.6 chat capture: request `1810895650947769`, fixture `tests/fixtures/responses/qwen3.6-35b-a3b-q4.sse` (length termination). Native usage omits a separate reasoning-token count; supplied counts are preserved without estimating.
+
+
 **Today:** `chat_request` refuses `stream:true`, and `create` makes a single non-streaming
 `door.post`.
 

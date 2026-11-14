@@ -1,5 +1,7 @@
 # OpenAI-compatible API completion plan
 
+Implementation status: see [R1 in the brief](openai-api-work.md#r1-responses-streaming).
+
 Drafted **2026-11-13**. Covers the endpoints judged worth adding or easy to add. Moderations is
 held for an owner decision (see [Open decision](#open-decision-moderations)). Out of scope:
 Assistants/Threads, vector stores, Realtime, fine-tuning, evals, containers, videos, image
