@@ -384,9 +384,9 @@ def test_audio_pages_assets_sharing_and_voices_require_identity_origin_and_conse
         answer = browser.get(path)
         assert answer.status_code == 200 and title in answer.text, path
     assert browser.get("/soundroom-static/music.js").status_code == 200
-    # This harness's weightroom never reports its settings, so there is nothing yet to change: the form says so.
+    # Reported defaults are editable and apply to the next page request in this app.
     saved = browser.post("/system/audio", data={"value-audio_lyrics_model": "writer-model"})
-    assert saved.status_code == 200 and "Nothing was changed." in saved.text and 'name="value-audio_lyrics_model"' in saved.text
+    assert saved.status_code == 200 and "Applied immediately." in saved.text and 'name="value-audio_lyrics_model"' in saved.text
     assert browser.post("/soundroom-api/preferences", json={"format": "mp3"}).json()["format"] == "mp3"
     assert browser.post("/soundroom-api/preferences", json={"format": "exe"}).status_code == 400
     state = browser.get("/soundroom-api/state").json()

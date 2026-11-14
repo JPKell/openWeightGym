@@ -80,6 +80,7 @@ use them as written.
 - Catalogue entries describe top-level settings; tables retain their existing whole-table POST contract. Nested tuning entries will validate the editable subset without exposing model paths.
 - Phase 0 verification: the clean `717890d` full suite reports 3,708 passed, 322 failed, 11 errors and 60 skipped; all 437 settings-focused cases pass. Baseline `b040cbc` reproduces eight console and 109 legacy-service failures. Final shared `28e06ec` passes 482 focused settings/API checks. Machine-readable evidence: `/home/jpk/ai/owg-settings-phase0-full.xml`, `owg-settings-phase0-focused-results.json` and `owg-settings-phase0-live.json`; broader failures include legacy routing and control-node wording expectations.
 - Live verification uses an expiring session for the existing owner account, revoked afterward. No accounts or provider/channel credentials are created.
+- Live template time zones use a per-render context function to preserve existing template callers; Audio routes receive a settings getter so replaced immutable settings are visible to new requests.
 - Conditional retirement uses catalogue context (`front`) so the shared compatibility map still supports standalone nodes; node admission and startup filter retired overrides without deleting them.
 - Clean-worktree verification exposed the rename’s uncommitted `weightroom/display.py::node_label` dependency; include it with the shared configured-timezone fallback before deployment.
 - No exact commit attribution line was supplied in this session; commits use `Co-authored-by: Codex <noreply@openai.com>`.
@@ -423,7 +424,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] Phase 0 full clean-commit run, shared main pushed, normal deployment and live verification (28e06ec; five settings surfaces; Backups 10 → 11 → 10 without restart).
 - [x] 1a Event retention and conditional node retirement (416 focused checks pass).
 - [x] 1b Live observation policy (414 focused checks pass; shared policy updates on save).
-- [ ] 1c Live display, costs and audio defaults.
+- [x] 1c Live display, costs and audio defaults (459 feature checks and all 39 UI consistency/browser cases pass).
 - [ ] 1d Live control node request settings.
 - [ ] 1e Live disk monitoring paths.
 - [ ] 1f Per-node Wake overrides.

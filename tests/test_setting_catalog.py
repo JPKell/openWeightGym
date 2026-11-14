@@ -166,6 +166,7 @@ def live_examples(entry):
         'toolsets': ({}, {'catalogue': {'tools': []}}),
         'tool_levels': ({}, {'catalogue': 'normal'}),
         'third_party_services': (['ollama'], ['docker']),
+        'timezone': ('UTC', 'America/Vancouver'),
         'observation_quiet_routes': (['/one'], ['/two']),
         'disabled_gpus': ([], ['unavailable-test-card']),
         'models_folder': ('/tmp/catalogue-original', '/tmp/catalogue-changed'),

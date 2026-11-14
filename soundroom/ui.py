@@ -8,14 +8,16 @@ from starlette.routing import Route
 from loadcoach import observability as observation
 from soundroom.front import Front
 from loadcoach.platform_services import PlatformServices
+from loadcoach.setting_catalog import entries
 
 
-def routes(for_people, page, ask, model_api, settings=None, platform=None):
+def routes(for_people, page, ask, model_api, settings=None, platform=None, refresh_settings=None):
     """Keep browser credentials server-side and reuse the ordinary session authority."""
-    services = platform or (lambda: PlatformServices.from_settings(settings))
+    current_settings = settings if callable(settings) else lambda: settings
+    services = platform or (lambda: PlatformServices.from_settings(current_settings()))
     def defaults():
         """The administrator's first choices for the audio pages."""
-        return {kind: getattr(settings, "audio_" + kind + "_model", "") for kind in ("lyrics", "music", "sound", "speech", "transcription")}
+        return {kind: getattr(current_settings(), "audio_" + kind + "_model", "") for kind in ("lyrics", "music", "sound", "speech", "transcription")}
 
     async def music(request, person):
         """Render the private music window."""
@@ -37,11 +39,7 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
         """Render the person's own audio choices."""
         return page(request, "soundroom_preferences.html", person)
 
-    DEFAULTS = (("audio_lyrics_model", "Lyrics helper model", "A chat model or role, such as chat, that writes the style caption and lyrics."),
-                ("audio_music_model", "Music page model", "Selected first on Interact → Music; empty selects the first available."),
-                ("audio_sound_model", "Sounds page model", "Selected first on Interact → Sounds."),
-                ("audio_speech_model", "Voice generation model", "Selected first on Interact → Voice generation."),
-                ("audio_transcription_model", "Transcription model", "Selected first on Interact → Transcribe."))
+    DEFAULTS = tuple((entry.name, entry.label, entry.help) for entry in entries('weightroom') if entry.page == 'audio')
 
     async def system(request, person):
         """Show and change the administrator's audio defaults, kept with weightroom's own settings."""
@@ -72,7 +70,9 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
                 return RedirectResponse("/system/audio?said=Nothing+was+changed.", 303)
             answer = await ask("POST", "/loadcoach/settings/weightroom", person.key, json=asked)
             if answer.is_success:
-                return RedirectResponse("/system/audio?said=Saved.+Applied+when+weightroom+restarts.", 303)
+                if refresh_settings:
+                    await refresh_settings()
+                return RedirectResponse("/system/audio?said=Saved.+Applied+immediately.", 303)
             said, failed = answer.json().get("error", {}).get("message", "Not saved."), True
         listed = await ask("GET", "/turnstile/machines", person.key)
         nodes = []

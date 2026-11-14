@@ -129,7 +129,7 @@ voice_gateway = "http://127.0.0.1:8446"
 
 # SoundRoom audio pages (Chat → Music, Sounds and Speech). The chat model or role that writes
 # a style caption and lyrics on the Music page, and the model each page selects first; empty
-# selects the first audio model of that kind the person may use. Applied when weightroom starts.
+# selects the first audio model of that kind the person may use. Changes apply immediately to new requests.
 audio_lyrics_model = "chat"  # or a model name such as "qwen3-14b"
 audio_music_model = ""
 audio_sound_model = ""
