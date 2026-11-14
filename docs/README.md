@@ -43,7 +43,7 @@ from the private console and browser voice. Console HTTP is intended for the tru
 
 **Docs → API reference** (`/docs/api`, administrator access) lists implemented OpenAI-compatible
 endpoints, compatibility gaps, custom APIs and accepted request headers. Its custom route inventory
-is read directly from the installed source; handler details remain in the same page's code reference.
+is read directly from the installed source; handler details are under **Docs → Code references**.
 
 ## Use the app
 
@@ -57,7 +57,7 @@ The app opens on **System → Status**. Pages and controls depend on your accoun
 | Logs | Inspect usage/costs, requests and traces, batches, reliability, plugin activity and system output. |
 | System | Inspect status, telemetry, alerts, schedules, databases and backups. |
 | Settings | Manage compute nodes, users, groups, tools, plugins, voice, audio, image policy and general settings. |
-| Docs | Open the administrative system map and source references. |
+| Docs | Search permitted guides and references, browse by subject, and open the system map or separate code references. |
 | My account | Manage your password/API keys, appearance, audio choices and account activity. |
 
 An explicit model name always selects that model. A role such as `chat` selects an eligible
@@ -217,6 +217,29 @@ regional formatting, workspace defaults, personal alerts and preference portabil
 Blue **Proposed** labels distinguish additions from current settings. Edits and sample
 credentials stay in page memory and reset on reload; no live services are contacted.
 The preview remains a standalone sample; it never edits real account settings.
+
+### Documentation library
+
+**Docs** (`/docs`) opens the Search-first library: search the current article text, filter by
+section, or browse topic cards. Queries are bookmarkable (`/docs?q=…&scope=…`); the form and
+article links also work without JavaScript. Every account can search its Web app guides.
+Administrator guides, search results and **Code references** (`/docs/code`) require
+`manage-settings`. The system map is under **System reference** (`/docs/system`). Article
+contents and previous/next links keep navigation local to a section. Source-module links
+and older source bookmarks retain their selected module in the separate code browser.
+
+### Documentation design previews
+
+Run `.venv/bin/python scripts/preview-docs-designs.py`, then open
+`build/docs-designs/index.html` to compare **01 Search-first library** (selected for the live page),
+**02 Guided hub** and **03 Reference desk**. All three use the current docs templates,
+repository Markdown and API/source inventories, with full-text search, section filters,
+article contents, previous/next navigation, light/dark appearance and mobile browsing.
+**Code references** is a separate top-level section; guides link to it instead of appending
+source inventories. Article links support browser history and bookmarked section anchors.
+Search and reading work offline; explicit live-console links (including source-module
+choices) use `--base-url http://CONSOLE:8440` (default `http://localhost:8440`). Regenerate
+after documentation edits.
 
 ## Where things run
 

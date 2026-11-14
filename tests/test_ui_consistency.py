@@ -1028,7 +1028,7 @@ def test_every_account_has_usage_help_but_source_reference_stays_private(desk):
     assert 'href="/docs/web-app/collections"' in server.get('/collections').text
     assert 'href="/docs/web-app/workflows"' in server.get('/workflows').text
     assert 'href="/docs/web-app/api-keys"' in server.get('/account').text
-    assert server.get('/docs').url.path == '/docs/web-app'
+    assert server.get('/docs').url.path == '/docs'
     assert server.get('/docs/api').status_code == 403
     moved=server.get('/guide',follow_redirects=False)
     assert moved.status_code == 308 and moved.headers['location'] == '/docs/web-app'

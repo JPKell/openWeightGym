@@ -1,20 +1,28 @@
 {% extends "frame.html" %}
-{% from "docs_parts.html" import doc_header, doc_document, doc_section, doc_directory, doc_source %}
-{# Every docs page: a section's overview, which ends with its topics, or one topic. What is written for a page
-   is pages/docs/SECTION.html or pages/docs/SECTION/TOPIC.html, a Markdown document from the repository, or both,
-   and a topic with modules ends with their code reference. #}
-{% block title %}{{ topic.title ~ ' · ' if topic }}{{ section.title }} · Docs · openWeightGym{% endblock %}
+{% from 'parts.html' import page_header, section_title %}
+{% import 'docs_library_parts.html' as library %}
+{% block title %}{{ (topic or section).title ~ ' · ' if section }}Documentation · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/docs.css?v=1"><script src="/static/docs.js?v=1" defer></script>{% endblock %}
 {% block main %}
-<div class="docs-page">
-  {% if topic %}
-    {{ doc_header(topic.title, back=(section.title, section.url), lead=topic.summary) }}
-    {% include "docs/" ~ section.slug ~ "/" ~ topic.slug ~ ".html" ignore missing %}
-    {% if document %}{{ doc_document(document, more=[('source', 'Code reference')] if topic.source else []) }}{% endif %}
-    {% if topic.source %}{{ doc_source(reference, section.title if topic.slug == 'source' else topic.title) }}{% endif %}
-  {% else %}
-    {{ doc_header(section.title, lead=section.summary) }}
-    {% include "docs/" ~ section.slug ~ ".html" ignore missing %}
-    {% call doc_section("In this section", "topics") %}{{ doc_directory(section.topics) }}{% endcall %}
-  {% endif %}
+<div class="docs-workspace" id="docs-workspace" data-docs-home="{{ 'true' if home else 'false' }}" data-docs-searching="{{ 'true' if searching else 'false' }}">
+  {% if home %}<div class="docs-hero"{% if searching %} hidden{% endif %}><div class="hero-meta"><span class="hero-rule" aria-hidden="true"></span>THE OPENWEIGHTGYM HANDBOOK</div>{{ page_header('A clear path to what you need.') }}<p>Use the console, connect an application, or run your installation.<br class="d-none d-md-block"> Find the guide, then get back to your work.</p></div>{% endif %}
+  {{ library.search_form(sections, q, scope) }}
+  {% include 'docs_search_results.html' %}
+  <div id="docs-reading"{% if searching %} hidden{% endif %}>
+    {% if home %}
+      {{ library.shortcuts(sections) }}
+      <div class="browse-heading">{{ section_title('Browse documentation') }}<span class="small text-secondary">{{ sections|length }} {{ 'section' if sections|length == 1 else 'sections' }} · {{ page_count }} pages</span></div>
+      <div class="library-categories">{% for one in sections %}{{ library.category(one, '%02d'|format(loop.index)) }}{% endfor %}</div>
+    {% else %}
+      <div class="docs-reader-layout">
+        <div class="docs-reader-main"><nav class="reader-breadcrumb" aria-label="Documentation location"><a href="/docs">Documentation</a><span aria-hidden="true">/</span>{% if topic %}<a href="{{ section.url }}">{{ section.title }}</a><span aria-hidden="true">/</span><span>{{ topic.title }}</span>{% else %}<span>{{ section.title }}</span>{% endif %}</nav>
+          <article class="docs-page" id="docs-article">{{ article_html }}</article>
+          <nav class="reader-pagination" aria-label="Adjacent documentation">{% if previous %}<a href="{{ previous.url }}">← {{ previous.title }}</a>{% endif %}{% if following %}<a href="{{ following.url }}">Next: {{ following.title }} →</a>{% endif %}</nav>
+        </div>
+        <aside class="reader-outline" aria-label="Article navigation"><div class="rail-label">ON THIS PAGE</div><nav aria-label="Article contents">{% for id, label in contents %}<a href="#{{ id }}">{{ label }}</a>{% endfor %}</nav><div class="outline-related"><div class="rail-label">IN THIS SECTION</div><nav aria-label="Related topics"><a href="{{ section.url }}"{% if not topic %} aria-current="page"{% endif %}>Overview</a>{% for one in section.topics %}<a href="{{ one.url }}"{% if topic and topic.url == one.url %} aria-current="page"{% endif %}>{{ one.title }}</a>{% endfor %}</nav></div></aside>
+      </div>
+    {% endif %}
+  </div>
+  <footer class="docs-footer"><span>openWeightGym documentation</span>{% if 'manage-settings' in person.can %}<a href="/docs/system#system-map">Explore the system map →</a>{% else %}<a href="/docs/web-app">Explore the Web app guides →</a>{% endif %}</footer>
 </div>
 {% endblock %}

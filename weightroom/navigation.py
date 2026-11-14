@@ -41,8 +41,10 @@ NAV_SECTIONS = {
         ('Media', ('/settings/image', '/system/audio', '/system/voice')),
     ),
     'Docs': (
-        ('Reference', ('/docs', '/docs/api', '/docs/modules')),
+        ('', ('/docs',)),
+        ('Reference', ('/docs/system', '/docs/api', '/docs/modules')),
         ('Guides', ('/docs/web-app', '/docs/benchmarks', '/docs/operations', '/docs/data')),
+        ('Development', ('/docs/code',)),
     ),
     'My account': (
         ('Profile', ('/account', '/account/keys')),
@@ -101,7 +103,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
         groups[5]["links"].extend([("Voice", "/system/voice"), ("Audio", "/system/audio"), ("Image", "/settings/image")])
         groups[2]["links"].append(("Manage", "/benchmarks/manage"))
     docs = visible_docs(can)
-    groups.append({"name": "Docs", "links": [(section["title"], section["url"]) for section in docs]})
+    groups.append({"name": "Docs", "links": [('Documentation', '/docs'), *[(section["title"], section["url"]) for section in docs]]})
     if "restart-services" in can:
         groups[3]["links"].append(("System logs", "/output"))
     groups[4]["links"].append(("Telemetry", "/telemetry"))
@@ -147,8 +149,8 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
     if root == '/docs':
         selected = next((group for group in groups if group['name'] == 'Docs'), None)
         parts = path.strip('/').split('/')
-        active = '/docs' if parts[1:] in ([], ['system']) else '/' + '/'.join(parts)
-        section = DOC_SECTIONS.get(parts[1] if len(parts) > 1 else 'system')
+        active = '/' + '/'.join(parts)
+        section = DOC_SECTIONS.get(parts[1]) if len(parts) > 1 else None
         if section in docs:
             children = {section['url']: [(topic['title'], topic['url']) for topic in section['topics']]}
     if root == "/account":

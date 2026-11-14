@@ -1,0 +1,29 @@
+{# Shared library navigation for live documentation and its standalone design proposals. #}
+{% from 'parts.html' import section_title %}
+{% macro topic_link(url, title, summary='') %}
+<a href="{{ url }}" class="library-link"><span><strong>{{ title }}</strong>{% if summary %}<small>{{ summary }}</small>{% endif %}</span><span aria-hidden="true">↗</span></a>
+{% endmacro %}
+
+{% macro search_form(sections, query='', scope='', preview=false) %}
+{% set query_id = 'query' if preview else 'docs-query' %}{% set scope_id = 'search-scope' if preview else 'docs-scope' %}
+<form class="docs-search" role="search" id="docs-search" action="/docs" method="get"><label for="{{ query_id }}" class="visually-hidden">Search documentation</label><span aria-hidden="true" class="search-symbol">⌕</span><input id="{{ query_id }}" name="q" type="search" class="form-control" placeholder="Search guides, endpoints, commands…" value="{{ query }}" maxlength="300" autocomplete="off" aria-controls="{{ 'search-results' if preview else 'docs-search-results' }}"><kbd aria-hidden="true">/</kbd><label for="{{ scope_id }}" class="visually-hidden">Search section</label><select id="{{ scope_id }}" name="scope" class="form-select"><option value="">All documentation</option>{% for section in sections %}<option value="{{ section.slug }}"{% if scope == section.slug %} selected{% endif %}>{{ section.title }}</option>{% endfor %}</select><button class="btn btn-outline-secondary" type="submit">Search</button>{% if preview %}<button class="btn btn-outline-secondary" type="button" id="clear-search" hidden>Clear</button>{% else %}<a href="/docs" class="small" data-docs-clear{% if not query and not scope %} hidden{% endif %}>Clear</a>{% endif %}</form>
+{% endmacro %}
+
+{% macro search_result(result) %}
+<a class="search-result" href="{{ result.url }}"><span class="result-category">{{ result.category }}</span><strong class="result-title">{{ result.title }}</strong><p class="result-summary">{{ result.summary }}</p><p class="result-excerpt">{{ result.excerpt }}</p></a>
+{% endmacro %}
+
+{% macro shortcuts(sections) %}
+<section class="home-shortcuts" aria-label="Quick routes"><a href="/docs/web-app/chat"><span class="shortcut-icon" aria-hidden="true">↗</span><span><strong>Use the console</strong><small>Chat, media & workflows</small></span><span aria-hidden="true">→</span></a><a href="/docs/web-app/api-keys"><span class="shortcut-icon" aria-hidden="true">⌘</span><span><strong>Connect an application</strong><small>API keys & compatibility</small></span><span aria-hidden="true">→</span></a>{% if sections|selectattr('slug', 'equalto', 'operations')|list %}<a href="/docs/operations/installation"><span class="shortcut-icon" aria-hidden="true">⚙</span><span><strong>Run your installation</strong><small>Setup, updates & recovery</small></span><span aria-hidden="true">→</span></a>{% endif %}</section>
+{% endmacro %}
+
+{% macro journey(number, title, description, links) %}
+<section class="docs-journey"><span class="journey-number" aria-hidden="true">{{ number }}</span>{{ section_title(title) }}<p class="text-secondary">{{ description }}</p><ol>{% for url, label in links %}<li><a href="{{ url }}">{{ label }}<span aria-hidden="true">→</span></a></li>{% endfor %}</ol></section>
+{% endmacro %}
+
+{% macro category(section, number) %}
+<section class="library-category" data-category="{{ section.slug }}"><div class="category-heading"><span class="category-number" aria-hidden="true">{{ number }}</span><span class="small text-secondary">{{ section.topics|length }} topics</span></div>
+{{ section_title(section.title) }}<p class="text-secondary">{{ section.summary }}</p>
+<a class="category-overview" href="{{ section.url }}">Overview & all {{ section.topics|length }} topics <span aria-hidden="true">→</span></a>
+<div class="category-topics">{% for topic in section.topics %}{{ topic_link(topic.url, topic.title) }}{% endfor %}</div></section>
+{% endmacro %}

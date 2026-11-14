@@ -46,19 +46,19 @@ def test_navigation_orders_and_detail_parents():
     assert navigation('/status', [], False)['links'] == [('Status', '/status'), ('Telemetry', '/telemetry')]
     docs = navigation('/docs/modules/voice', can, True)
     assert docs['section'] == 'Docs' and docs['active'] == '/docs/modules/voice'
-    assert [name for name, _ in docs['links']] == ['System reference', 'API reference', 'Modules', 'Web app', 'Benchmarks',
-                                                   'Deployment and operations', 'Data and backups']
-    assert docs['links'][0] == ('System reference', '/docs')
+    assert [name for name, _ in docs['links']] == ['Documentation', 'System reference', 'API reference', 'Modules', 'Web app', 'Benchmarks',
+                                                   'Deployment and operations', 'Data and backups', 'Code references']
+    assert docs['links'][0] == ('Documentation', '/docs')
     # The section being read opens beneath its link; the others stay closed.
     assert list(docs['children']) == ['/docs/modules'] and ('Voice', '/docs/modules/voice') in docs['children']['/docs/modules']
     front = navigation('/docs', can, True)
-    assert front['active'] == '/docs' and list(front['children']) == ['/docs'] and front['children']['/docs'][0] == ('Models', '/docs/system/models')
+    assert front['active'] == '/docs' and front['children'] == {}
     assert navigation('/docs/api', can, True)['children']['/docs/api'][0] == ('OpenAI compatibility', '/docs/api/openai')
     assert navigation('/status', can, True)['children'] == {}
     assert all(url != '/deploy' for group in navigation('/status', [*can, 'superuser'], True)['groups']
                for _, url in group['links'])
     # Everyone else reads the Web app section only, and never sees the topics of a section they may not read.
-    assert next(group for group in navigation('/status', [], False)['groups'] if group['name'] == 'Docs')['links'] == [('Web app', '/docs/web-app')]
+    assert next(group for group in navigation('/status', [], False)['groups'] if group['name'] == 'Docs')['links'] == [('Documentation', '/docs'), ('Web app', '/docs/web-app')]
     assert navigation('/docs/api', [], False)['children'] == {}
     account = navigation('/account/appearance', can, True)
     assert account['section'] == 'My account' and account['active'] == '/account/appearance'
@@ -115,9 +115,9 @@ def test_admin_docs_map_and_component_outlines(desk):
     sign_in(browser, 'pat')
     assert browser.get('/docs/api').status_code == 403
     assert browser.get('/docs/modules/voice').status_code == 403
-    assert browser.get('/docs', follow_redirects=False).headers['location'] == '/docs/web-app'  # the front page is not theirs to read
+    assert browser.get('/docs', follow_redirects=False).status_code == 200  # the home is scoped to permitted guides
     sign_in(browser, 'jordan')
-    overview = browser.get('/docs')
+    overview = browser.get('/docs/system')
     assert overview.status_code == 200
     assert '<title id="map-title">openWeightGym component map</title>' in overview.text
     for url in ('/docs/modules/loadcoach', '/docs/modules/toollocker', '/docs/modules/weightroom', '/docs/modules/turnstile',
@@ -131,13 +131,13 @@ def test_admin_docs_map_and_component_outlines(desk):
         for topic in section['topics']:
             assert f'href="{topic["url"]}"' in page.text  # the overview lists its topics, and the menu opens beneath it
             page = browser.get(topic['url'])
-            assert page.status_code == 200 and '<h2 ' in page.text, topic['url']
+            assert page.status_code == 200 and '<h1 ' in page.text, topic['url']
             assert f'aria-current="page">{topic["title"]}</a>' in page.text
             assert ('aria-label="Source modules"' in page.text) == bool(topic['source']), topic['url']
-    voice = browser.get('/docs/modules/voice').text
+    voice = browser.get('/docs/code/voice').text
     assert 'gateway.py' in voice and 'desktop.py' in voice
     assert browser.get('/docs/not-a-topic').status_code == 404 and browser.get('/docs/modules/not-a-topic').status_code == 404
-    assert browser.get('/docs/system', follow_redirects=False).headers['location'] == '/docs'
+    assert browser.get('/docs/system', follow_redirects=False).status_code == 200
     assert browser.get('/docs/mirrorwall', follow_redirects=False).headers['location'] == '/docs/modules/mirrorwall'
     images = browser.get('/docs/modules/mirrorwall').text
     assert '<title id="flow-title">Image generation workflow</title>' in images and 'id="models"' in images

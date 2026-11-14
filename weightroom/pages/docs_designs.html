@@ -1,0 +1,37 @@
+{% from 'parts.html' import page_header, section_title %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% import 'docs_library_parts.html' as library %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Documentation · Three designs · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body data-design="library" data-view="home">
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" id="preview-mode" aria-label="Preview appearance"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></form></div>
+<a class="visually-hidden-focusable" href="#content">Skip to documentation</a>
+<header class="docs-review"><strong>openWeightGym <span class="text-secondary fw-normal">/ Design review</span></strong><button class="btn btn-sm btn-outline-secondary" type="button" id="theme">Dark mode</button></header>
+<div class="docs-design-picker">{% call pills('Documentation designs', buttons=true, class_='gap-2 mb-0') %}{{ pill_button('01 / Search-first library', true, attrs={'data-design': 'library'}) }}{{ pill_button('02 / Guided hub', attrs={'data-design': 'guided'}) }}{{ pill_button('03 / Reference desk', attrs={'data-design': 'reference'}) }}{% endcall %}<span class="small text-secondary">Current documentation · standalone previews</span></div>
+<div class="docs-design-note"><span class="badge bg-azure-lt" id="recommendation">Recommended</span><span id="design-note">Search first, browse by subject, then read with a persistent contents rail.</span></div>
+<div class="docs-app">
+  <header class="docs-appbar"><a href="#home" class="docs-brand"><span class="brand-symbol" aria-hidden="true">W</span><strong>openWeightGym</strong></a><span class="appbar-divider" aria-hidden="true">/</span><span>Documentation</span><span class="ms-auto small text-secondary appbar-status">Guides & reference</span><button type="button" class="btn btn-sm btn-outline-secondary" id="menu" aria-expanded="false" aria-controls="library-rail">Browse</button></header>
+  <nav class="docs-topnav" aria-label="Documentation categories"><a href="#home">Overview</a>{% for section in sections %}<a href="{{ section.url }}">{{ section.title }}</a>{% endfor %}</nav>
+  <div class="docs-layout">
+    <aside class="library-rail" id="library-rail"><a href="#home" class="library-home">← Documentation home</a><div class="rail-label">BROWSE THE DOCS</div><nav aria-label="Documentation library">{% for section in sections %}<details data-section="{{ section.slug }}"{% if loop.first %} open{% endif %}><summary><span>{{ section.title }}</span><small>{{ section.topics|length }}</small></summary><a class="section-overview" href="{{ section.url }}">Overview</a>{% for topic in section.topics %}<a href="{{ topic.url }}">{{ topic.title }}</a>{% endfor %}</details>{% endfor %}</nav><p class="rail-foot">Web app guides are available to every account. System and API references require administrator access.</p></aside>
+    <main id="content" class="docs-content" tabindex="-1">
+      <div class="docs-hero" id="home-heading"><div class="hero-meta"><span class="hero-rule"></span>THE OPENWEIGHTGYM HANDBOOK</div>{{ page_header('A clear path to what you need.') }}<p>Use the console, connect an application, or run your installation. <br class="d-none d-md-block">Find the guide, then get back to your work.</p></div>
+      {{ library.search_form(sections, preview=true) }}
+      <section id="search-results" hidden aria-labelledby="results-title"><div class="results-heading">{{ section_title('Search results', id='results-title') }}<span id="result-count" class="small text-secondary" role="status" aria-live="polite"></span></div><div id="results-list"></div><div id="search-empty" hidden><p>No matching documentation.</p><p class="text-secondary">Try a shorter phrase, a command such as “owg”, or search all sections.</p><button type="button" class="btn btn-outline-secondary" id="reset-search">Clear search & filters</button></div></section>
+      <div id="home-content">
+        {{ library.shortcuts(sections) }}
+        <section class="guided-journeys" aria-label="Suggested reading paths">{{ library.journey('01', 'Start using the console', 'Get oriented, start a conversation, then work with your own sources.', [('/docs/web-app', 'Find your way around'), ('/docs/web-app/chat', 'Start a conversation'), ('/docs/web-app/collections', 'Work with sources')]) }}{{ library.journey('02', 'Connect your application', 'Move from an account key to a working model API connection.', [('/docs/web-app/api-keys', 'Create an API key'), ('/docs/api', 'Connect your client'), ('/docs/api/openai', 'Check endpoint support')]) }}{{ library.journey('03', 'Operate with confidence', 'Install the system, keep it current, and prepare for recovery.', [('/docs/operations/installation', 'Install openWeightGym'), ('/docs/operations/deploying', 'Update your nodes'), ('/docs/data/backups', 'Prepare backups & restore')]) }}</section>
+        <div class="browse-heading">{{ section_title('Browse documentation') }}<span class="small text-secondary">{{ sections|length }} sections · {{ records|length }} pages</span></div>
+        <div class="library-categories">{% for section in sections %}{{ library.category(section, '%02d'|format(loop.index)) }}{% endfor %}</div>
+      </div>
+      <div id="reader" hidden><nav class="reader-breadcrumb" aria-label="Documentation breadcrumb"><a href="#home">Documentation</a><span aria-hidden="true">/</span><a href="#" id="reader-category"></a><span id="reader-topic"></span></nav><div class="reader-tools"><span class="small text-secondary" id="reader-context"></span><a id="code-link" class="small" href="#" hidden>Code reference →</a><a id="live-link" class="small" href="{{ base_url }}/docs" target="_blank" rel="noopener">Open in live console ↗</a></div><article id="article"></article><nav class="reader-pagination" aria-label="Adjacent documentation"><a id="previous" href="#"></a><a id="next" href="#"></a></nav></div>
+      <footer class="docs-footer"><span>openWeightGym documentation</span><a href="/docs">Explore the system map →</a></footer>
+      <noscript><p>Enable JavaScript to search and open articles in this preview. The complete topic index is shown above.</p></noscript>
+    </main>
+    <aside class="reader-outline" id="reader-outline" hidden aria-label="Article navigation"><div class="rail-label">ON THIS PAGE</div><nav id="outline-links" aria-label="On this page"></nav><div class="outline-related"><div class="rail-label">IN THIS SECTION</div><nav id="related-links" aria-label="Related topics"></nav></div></aside>
+  </div>
+</div>
+<template id="search-result-template">{{ library.search_result({'url':'#', 'category':'', 'title':'', 'summary':'', 'excerpt':''}) }}</template>
+<script id="docs-data" type="application/json">{{ {'pages':records, 'aliases':aliases, 'baseUrl':base_url}|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>

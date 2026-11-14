@@ -52,6 +52,7 @@ from weightroom.cloud_views import accounts_view, SECTIONS as CLOUD_SECTIONS
 from weightroom.account_views import routes as account_routes, device_name, chat_models
 from weightroom import batch_views
 from weightroom import evaluation_views
+from weightroom.docs_views import documentation_page
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException
@@ -5104,36 +5105,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Open a bookmarkable host inside the same Telemetry workspace."""
         return await telemetry_workspace_page(request, person)
 
+    docs_search_cache = {}
+
     async def docs_page(request: Request, person: Person) -> Response:
-        """A docs section's overview or one of its topics. Every account may read the Web app section; the rest needs manage-settings."""
-        name, part = request.path_params.get("section", "system"), request.path_params.get("topic")
-        query = "?" + request.url.query if request.url.query else ""
-        if part is None and (name in MOVED_DOCS or "section" in request.path_params and name == "system"):
-            return RedirectResponse(MOVED_DOCS.get(name, "/docs") + query, status_code=308)  # a page from before the docs had sections
-        section = DOC_SECTIONS.get(name)
-        topic = section["by_slug"].get(part) if section and part else None
-        if section is None or part and topic is None:
-            return Response("Documentation page not found.", status_code=404)
-        if not section["public"] and "manage-settings" not in person.can:
-            if "section" not in request.path_params:
-                return go("/docs/web-app")  # the docs' front page is the system reference, which this account may not read
-            return Response("Your account may not view system documentation.", status_code=403)
-        reference = api = document = None
-        try:
-            if topic and topic["source"]:
-                reference = await asyncio.to_thread(source_reference, topic["source"], request.query_params.get("module", ""))
-            if topic and (name, part) == ("api", "custom"):
-                api = await asyncio.to_thread(lambda: api_reference(source_files("api")))
-            if topic:
-                document = await asyncio.to_thread(written_doc, topic)
-        except ValueError:
-            return Response("Documentation source not found.", status_code=404)
-        except (OSError, SyntaxError):
-            return Response("Source documentation is temporarily unavailable.", status_code=503)
-        host = request.url.hostname or "FRONT"
-        host = "[" + host + "]" if ":" in host else host
-        return page(request, "docs_page.html", person, section=section, topic=topic, reference=reference, api=api,
-                    document=document, sections=visible_docs(person.can), api_base=f"http://{host}:8442/v1")
+        """Search the permitted documentation or read a guide and its separate code reference."""
+        return await documentation_page(request, person, page, pages.env, source_reference, api_reference, docs_search_cache)
 
     async def guide_moved(request: Request) -> Response:
         """The user guide is now the Web app section of the docs; old links and bookmarks arrive there."""
