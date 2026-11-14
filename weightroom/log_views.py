@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 
 from weightroom.display import moment
 from loadcoach.event_filters import SEARCH_FIELDS
+from loadcoach.log import public_number
 
 FILTERS = ('q', 'q_field', 'kind', 'what', 'user', 'group', 'model', 'trace', 'start', 'end', 'node')
 CORE = {'id', 'at', 'kind', 'what', 'user', 'caller', 'machine', 'model', 'trace', 'level', 'text'}
@@ -28,12 +29,15 @@ def event_view(event, query):
     if not isinstance(summary, str):
         summary = json.dumps(summary, ensure_ascii=False)
     request_id = event.get('of') or event.get('source') or event['id']
+    if event.get('kind') == 'request' and not event.get('of') and not event.get('source') and event.get('machine') in (None, 'front'):
+        request_id = public_number(None, event['id'])
     return dict(event, raw=event, outcome=outcome,
                 badge='red' if failed else 'orange' if denied else 'green' if complete else 'secondary',
                 title=f"{event.get('kind', '')} / {what}",
                 summary=summary or (f"Request #{request_id}" if event.get('kind') == 'request' else f"Event #{event['id']}"),
                 href='/log?' + urlencode({**query, 'view': 'traces', 'selected': event['id']}),
                 record_url=f'/requests/{request_id}' if event.get('kind') == 'request' else f"/log/{event['id']}",
+                record_label='Open request' if event.get('kind') == 'request' else 'Open log record',
                 details={key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else '—' if value is None else str(value)
                          for key, value in event.items() if key not in CORE},
                 request_id=request_id if event.get('kind') == 'request' or event.get('of') else None)

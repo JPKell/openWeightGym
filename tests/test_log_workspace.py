@@ -67,7 +67,7 @@ def test_trace_navigation_refresh_and_mobile_preserve_selected_evidence(recorded
         page.goto('http://console.test/log?what=failed')
         playwright.expect(page.locator('#detail-id')).to_have_text(f"#{ids['tool']}")
         playwright.expect(page.locator('#timeline-events li')).to_have_count(3)
-        page.locator(f'[data-event-id="{ids["asked"]}"] a').click()
+        page.locator(f'[data-event-id="{ids["asked"]}"] [data-log-select]').click()
         playwright.expect(page.locator('#detail-id')).to_have_text(f"#{ids['asked']}")
         assert parse_qs(urlsplit(page.url).query)['selected'] == [str(ids['asked'])]
         page.locator('#log-raw summary').click()
@@ -206,7 +206,7 @@ def test_table_switch_double_click_keyboard_and_field_filters_survive_refresh(re
         page.locator(f'[data-log-table-row][data-event-id="{ids["tool"]}"] td').last.dblclick()
         playwright.expect(page.locator('#detail-id')).to_have_text(f"#{ids['tool']}")
         playwright.expect(page.locator('#detail-title')).to_be_focused()
-        playwright.expect(page.locator(f'[data-event-id="{ids["tool"]}"] a')).to_have_attribute('aria-current', 'true')
+        playwright.expect(page.locator(f'[data-event-id="{ids["tool"]}"] [data-log-select]')).to_have_attribute('aria-current', 'true')
         page.get_by_role('link', name='Table', exact=True).click()
         row = page.locator('[data-log-table-row]').first
         row.focus(); page.keyboard.press('Enter')
@@ -236,3 +236,41 @@ def test_table_switch_double_click_keyboard_and_field_filters_survive_refresh(re
         playwright.expect(page.locator('#log-table')).to_contain_text('No events match these filters')
         assert not errors
         browser.close()
+
+
+def test_record_links_open_request_and_event_detail_pages(recorded):
+    server, log, ids = recorded
+    sign_in(server, 'pat')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/log?view=table&kind=request&what=done')
+        link = page.locator(f'[data-event-id="{ids["done"]}"] [data-log-record]')
+        playwright.expect(link).to_contain_text('Open request')
+        request_url = link.get_attribute('href')
+        assert request_url.startswith('/requests/')
+        link.click()
+        playwright.expect(page).to_have_url('http://console.test' + request_url)
+        playwright.expect(page.locator('h1')).to_contain_text('Request')
+        assert server.get(request_url).status_code == 200
+        page.goto('http://console.test/log?view=table&kind=model')
+        link = page.locator(f'[data-event-id="{ids["lone"]}"] [data-log-record]')
+        playwright.expect(link).to_have_attribute('href', f'/log/{ids["lone"]}')
+        link.click()
+        playwright.expect(page).to_have_url(f'http://console.test/log/{ids["lone"]}')
+        playwright.expect(page.locator('h1')).to_have_text('model loaded')
+        page.goto('http://console.test/log?kind=request&what=done')
+        playwright.expect(page.locator('#inspector [data-log-record]')).to_have_attribute('href', request_url)
+        playwright.expect(page.locator(f'#timeline-events [data-event-id="{ids["done"]}"] [data-log-record]')).to_have_attribute('href', request_url)
+        browser.close()
+
+
+def test_request_record_links_keep_front_and_forwarded_identifiers_distinct():
+    from loadcoach.log import public_number
+    from weightroom.log_views import event_view
+
+    front = dict(id=7, kind='request', what='asked', machine='front')
+    forwarded = dict(front, id=99, machine='compute', source=7)
+    ended = dict(front, id=100, what='done', of=public_number(None, 7))
+    assert event_view(front, {})['record_url'] == f'/requests/{public_number(None, 7)}'
+    assert event_view(forwarded, {})['record_url'] == '/requests/7'
+    assert event_view(ended, {})['record_url'] == event_view(front, {})['record_url']
