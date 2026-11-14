@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from urllib.parse import quote
 
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from plugins._installer import bundle
@@ -132,16 +132,60 @@ def build_routes(registry, controller, for_people, page, go, typed):
             headers={"content-disposition": f'attachment; filename="suite-{plugin}-{instance}-linux.tar.gz"', "cache-control": "no-store"})
 
     async def activity(request, person):
-        """Show minimal adaptor records under the caller's own identity or see-log permission."""
+        """Show the activity desk and export only the caller's authorized retained metadata."""
         if not set(person.can) & {"front-plugins", "front-manage-plugins", "see-log"}:
             raise AdapterError("You may not read adaptor activity.", 403, "permission_denied")
         from weightroom.pagination import controls, pagination
+        from weightroom.plugin_activity import options, activity_url, public_record, csv_lines
+        from plugins._registry import ACTIVITY_SORTS
         limit, current = controls(request.query_params)
         user = principal(person)
-        total = registry.activity_count(user)
+        values, filters = options(request.query_params)
+        ordering = {key: values[key] for key in ("sort", "direction")}
+        params = {key: value for key, value in values.items() if value and value != 'all'}
+        params.update(limit=limit, page=current)
+        if request.query_params.get('export') == 'csv':
+            async def exported():
+                for line in csv_lines(registry.activity_export(user, filters=filters, **ordering)):
+                    yield line
+            return StreamingResponse(exported(), media_type='text/csv', headers={
+                'content-disposition': 'attachment; filename="plugin-logs.csv"', 'cache-control': 'no-store',
+                'x-content-type-options': 'nosniff'})
+        selected = None
+        if requested := request.query_params.get('record'):
+            try:
+                identifier = int(requested)
+                if not 0 < identifier < 2**63:
+                    identifier = -1
+            except ValueError:
+                identifier = -1
+            found = registry.activity(user, 1, filters={**filters, 'id': identifier})
+            selected = found[0] if found else None
+        if request.query_params.get('export') == 'json':
+            if not selected:
+                raise AdapterError('Plugin record not found.', 404, 'record_not_found')
+            return JSONResponse(public_record(selected), headers={'cache-control': 'no-store',
+                'content-disposition': 'attachment; filename="plugin-record.json"', 'x-content-type-options': 'nosniff'})
+        summary = registry.activity_summary(user, filters)
+        total = summary['total']
         current = min(current, max(1, (total + limit - 1) // limit))
-        return page(request, "plugin_activity.html", person, uses=registry.activity(user, limit, (current - 1) * limit),
-                    paging=pagination('/plugins/activity', request.query_params, total, limit, current))
+        params['page'] = current
+        uses = registry.activity(user, limit, (current - 1) * limit, filters=filters, **ordering)
+        selected = selected or (uses[0] if uses else None)
+        sort_urls = {}
+        for field in ACTIVITY_SORTS:
+            direction = ('asc' if values['direction'] == 'desc' else 'desc') if values['sort'] == field else ('desc' if field == 'at' else 'asc')
+            sort_urls[field] = activity_url(params, sort=field, direction=direction, page=None)
+        return page(request, "plugin_activity.html", person, uses=uses, selected=selected,
+                    selected_record=public_record(selected) if selected else None, filters=values,
+                    choices=registry.activity_choices(user), summary=summary, retained=registry.activity_count(user),
+                    record_url=lambda record: activity_url(params, record=record['id']),
+                    sort_urls=sort_urls,
+                    export_url=activity_url(params, export='csv', page=None),
+                    session_url=activity_url(params, session=selected['session'], page=None) if selected and selected['session'] else '',
+                    json_url=activity_url(params, record=selected['id'], export='json') if selected else '',
+                    clear_session_url=activity_url(params, session=None, page=None),
+                    paging=pagination('/plugins/activity', params, total, limit, current))
 
     def route(path, handler, methods=None):
         """Retain WeightRoom's cookie/CSRF checks and make authorized plugin management work offline."""

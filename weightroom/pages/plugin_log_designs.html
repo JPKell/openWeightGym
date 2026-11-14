@@ -1,0 +1,51 @@
+{% from 'parts.html' import page_header, card, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'plugin_activity_parts.html' import activity_overview, activity_head, inspector %}
+{% from 'plugin_log_design_parts.html' import templates %}
+{% from 'icons.html' import icon %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Plugin logs · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body><div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a class="visually-hidden-focusable" href="#workspace">Skip to plugin logs</a>
+<header class="pl-review"><div class="d-flex align-items-center gap-3 flex-wrap"><strong>{{ icon('barbell') }} weightRoom</strong><span class="small text-secondary">Design review / Plugin logs</span></div><div class="d-flex align-items-center gap-2"><span class="badge bg-secondary-lt">Sample data</span><button class="btn btn-outline-secondary btn-sm" type="button" id="theme">Dark mode</button></div></header>
+<main class="pl-page">
+<section class="pl-proposals" aria-label="Design proposals">
+{% call pills('Design options', buttons=true, class_='gap-2 mb-3') %}{{ pill_button('01 / Activity desk', true, attrs={'data-design':'desk'}) }}{{ pill_button('02 / Session trail', attrs={'data-design':'trail'}) }}{{ pill_button('03 / Outcome ledger', attrs={'data-design':'ledger'}) }}{% endcall %}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-3"><p class="text-secondary small mb-0" id="design-description">Scan every request, then inspect its routing and identifiers alongside the table. Recommended.</p><label class="d-flex align-items-center gap-2 small text-secondary">Preview state<select id="scenario" class="form-select form-select-sm w-auto"><option value="normal">Retained activity</option><option value="empty">No activity</option><option value="error">Loading error</option></select></label></div>
+</section>
+<div id="workspace" data-layout="desk">
+{% call page_header('Plugin logs', pretitle='OBSERVE / PLUGINS') %}<button type="button" class="btn btn-outline-secondary" id="reset">Reset demo</button><button type="button" class="btn btn-primary" id="export">Export filtered CSV</button>{% endcall %}
+{{ activity_overview() }}
+<form id="filters" class="pl-filters" role="search">
+<div class="pl-search"><label class="form-label" for="search">Search records</label><input type="search" id="search" class="form-control" placeholder="User, model, request or session ID…"></div>
+<div><label class="form-label" for="period">Recorded</label><select id="period" class="form-select"><option value="all">All retained</option><option value="24">Last 24 hours</option><option value="168">Last 7 days</option></select></div>
+<div><label class="form-label" for="user-filter">User</label><select id="user-filter" class="form-select"><option value="">All users</option></select></div>
+<div><label class="form-label" for="outcome-filter">Outcome</label><select id="outcome-filter" class="form-select"><option value="">All outcomes</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="interrupted">Interrupted</option></select></div>
+<div><label class="form-label" for="instance-filter">Instance</label><select id="instance-filter" class="form-select"><option value="">All instances</option></select></div>
+<button type="button" class="btn btn-outline-secondary" id="clear">Clear filters</button>
+</form>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 small text-secondary mb-3"><span id="filter-summary" role="status" aria-live="polite"></span><span>Sample snapshot · 13 Nov 2026, 14:30 · America/Vancouver</span></div>
+<div id="load-error" hidden>{% call alert('danger') %}<strong>Plugin activity could not be loaded.</strong><p class="small mb-2">Try loading the sample again.</p><button type="button" class="btn btn-outline-danger btn-sm" id="retry">Try again</button>{% endcall %}</div>
+<div class="pl-body" id="log-body">
+<aside id="browse-panel" hidden>
+{% call card('Sessions', id='session-browser', body_class='p-0') %}<div class="small text-secondary p-3 border-bottom">Grouped by retained session ID</div><div id="sessions" class="pl-choices"></div>{% endcall %}
+{% call card('Plugin instances', id='instance-browser', body_class='p-0') %}<div class="small text-secondary p-3 border-bottom">Compare recorded outcomes by route</div><div id="instances" class="pl-choices"></div>{% endcall %}
+</aside>
+<div id="main-slot">
+{% call card('Retained requests', id='table-panel', body_class='p-0', actions='<span class="small text-secondary">Select a time to inspect</span>'|safe) %}
+<div class="pl-table-scroll" tabindex="0" role="region" aria-label="Scrollable plugin requests"><table class="table table-hover align-middle mb-0 pl-table"><caption class="visually-hidden">Recorded plugin requests. Select a timestamp to inspect the complete retained record.</caption>{{ activity_head() }}<tbody id="log-rows"></tbody></table></div>
+<nav class="pl-table-footer" aria-label="Request pages"><span class="small text-secondary" id="page-summary"></span><div class="d-flex align-items-center gap-2 flex-wrap"><label for="page-size" class="small text-secondary">Rows</label><select id="page-size" class="form-select form-select-sm w-auto"><option>10</option><option>25</option><option>50</option></select><button type="button" class="btn btn-outline-secondary btn-sm" id="previous">Previous</button><button type="button" class="btn btn-outline-secondary btn-sm" id="next">Next</button></div></nav>
+{% endcall %}
+{% call card('Session trail', id='trail-panel', body_class='p-4') %}<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4"><div><strong id="trail-title"></strong><p class="small text-secondary mt-1 mb-0" id="trail-subtitle"></p></div><label class="small text-secondary d-flex align-items-center gap-2">Order<select id="trail-order" class="form-select form-select-sm w-auto"><option value="asc">Oldest first</option><option value="desc">Newest first</option></select></label></div><ol id="trail-records" class="pl-trail"></ol><div id="trail-empty"></div>{% endcall %}
+</div>
+<aside class="pl-inspector" id="detail-slot" aria-label="Request inspector">{{ inspector() }}</aside>
+</div>
+<p class="small text-secondary mt-3 mb-0">Interactive sample · filters and exports use only the records in this preview.</p>
+<p class="small text-secondary mt-2" id="feedback" role="status" aria-live="polite"></p>
+</div></main>
+<dialog id="detail-dialog" class="pl-dialog" aria-labelledby="record-title"><div id="dialog-slot"></div></dialog>
+{{ templates() }}
+<script id="plugin-log-data" type="application/json">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>

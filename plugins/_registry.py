@@ -18,6 +18,8 @@ from plugins._auth import Authorization
 from plugins._sdk import ALIAS, SLUG, MODEL, AdapterError, Manifest, atomic_json, read_json, validate
 
 LEVELS = ("normal", "sensitive", "restricted")
+ACTIVITY_FIELDS = ("id", "at", "owner", "user", "model", "plugin", "instance", "profile", "session", "request", "outcome")
+ACTIVITY_SORTS = ("at", "user", "model", "plugin", "instance", "outcome")
 
 
 class Registry:
@@ -298,16 +300,70 @@ class Registry:
             self.db.execute("INSERT INTO uses (at, owner, user, model, plugin, instance, profile, session, request, outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (time.time(), user["identity"], user["name"], model, plugin, instance, profile, session, request, outcome))
 
-    def activity(self, user: dict, limit: int = 100, offset: int = 0) -> list[dict]:
-        """Show one's own uses, or everyone's when the effective account has see-log."""
-        all_uses = "see-log" in user.get("can", [])
-        query = "SELECT * FROM uses" + ("" if all_uses else " WHERE owner = ?") + " ORDER BY id DESC LIMIT ? OFFSET ?"
-        parameters = (limit, offset) if all_uses else (user["identity"], limit, offset)
-        names = ("id", "at", "owner", "user", "model", "plugin", "instance", "profile", "session", "request", "outcome")
-        return [dict(zip(names, row)) for row in self.db.execute(query, parameters)]
+    def _activity_where(self, user: dict, filters: dict | None = None) -> tuple[str, list]:
+        """Keep every activity query within the caller's stable ownership boundary."""
+        filters = filters or {}
+        clauses, parameters = [], []
+        if "see-log" not in user.get("can", []):
+            clauses.append("owner = ?")
+            parameters.append(user["identity"])
+        for field in ("user", "instance", "outcome", "session", "id"):
+            if filters.get(field) is not None and filters.get(field) != "":
+                clauses.append(f'"{field}" = ?')
+                parameters.append(filters[field])
+        if filters.get("since") is not None:
+            clauses.append("at >= ?")
+            parameters.append(filters["since"])
+        if query := filters.get("q"):
+            # Literal substring matching on both supported database engines.
+            pattern = "%" + query.lower().replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
+            fields = ("id", "user", "model", "plugin", "instance", "profile", "session", "request", "outcome")
+            clauses.append("(" + " OR ".join(f'LOWER(COALESCE(CAST("{field}" AS TEXT), \'\')) LIKE ? ESCAPE \'!\'' for field in fields) + ")")
+            parameters.extend([pattern] * len(fields))
+        return (" WHERE " + " AND ".join(clauses) if clauses else ""), parameters
 
-    def activity_count(self, user: dict) -> int:
-        """Count plugin requests still active for the selected instance."""
-        all_uses = "see-log" in user.get("can", [])
-        return self.db.execute("SELECT COUNT(*) FROM uses" + ("" if all_uses else " WHERE owner = ?"),
-                               () if all_uses else (user['identity'],)).fetchone()[0]
+    def activity(self, user: dict, limit: int = 100, offset: int = 0, *, filters: dict | None = None,
+                 sort: str = "at", direction: str = "desc") -> list[dict]:
+        """Page authorized records after filtering and sorting the complete retained set."""
+        where, parameters = self._activity_where(user, filters)
+        order = self._activity_order(sort, direction)
+        return [dict(zip(ACTIVITY_FIELDS, row)) for row in self.db.execute(
+            "SELECT " + ", ".join(f'"{field}"' for field in ACTIVITY_FIELDS) + " FROM uses" + where + order + " LIMIT ? OFFSET ?",
+            (*parameters, limit, offset))]
+
+    @staticmethod
+    def _activity_order(sort: str, direction: str) -> str:
+        """Only fixed column names and directions may enter SQL ordering."""
+        sort = sort if sort in ACTIVITY_SORTS else "at"
+        direction = "ASC" if direction == "asc" else "DESC"
+        return f' ORDER BY "{sort}" {direction}, id DESC'
+
+    def activity_export(self, user: dict, *, filters: dict | None = None, sort="at", direction="desc"):
+        """Iterate all authorized matching metadata without a page-sized export limit."""
+        where, parameters = self._activity_where(user, filters)
+        cursor = self.db.execute("SELECT " + ", ".join(f'"{field}"' for field in ACTIVITY_FIELDS) + " FROM uses" + where +
+                                 self._activity_order(sort, direction), parameters)
+        try:
+            for row in cursor:
+                yield dict(zip(ACTIVITY_FIELDS, row))
+        finally:
+            cursor.close()
+
+    def activity_count(self, user: dict, filters: dict | None = None) -> int:
+        """Count authorized retained requests, optionally within the active filters."""
+        where, parameters = self._activity_where(user, filters)
+        return self.db.execute("SELECT COUNT(*) FROM uses" + where, parameters).fetchone()[0]
+
+    def activity_summary(self, user: dict, filters: dict | None = None) -> dict:
+        """Count each recorded outcome within the full authorized filtered set."""
+        where, parameters = self._activity_where(user, filters)
+        counts = self.db.execute("SELECT COUNT(*), " + ", ".join(
+            f"COALESCE(SUM(CASE WHEN outcome = '{value}' THEN 1 ELSE 0 END), 0)" for value in ("completed", "failed", "interrupted")) +
+            " FROM uses" + where, parameters).fetchone()
+        return dict(zip(("total", "completed", "failed", "interrupted"), counts))
+
+    def activity_choices(self, user: dict) -> dict:
+        """Offer only identities and routes visible to this caller, including removed routes."""
+        where, parameters = self._activity_where(user)
+        return {field: [row[0] for row in self.db.execute(f'SELECT DISTINCT "{field}" FROM uses' + where + f' ORDER BY "{field}"', parameters)]
+                for field in ("user", "instance", "outcome")}

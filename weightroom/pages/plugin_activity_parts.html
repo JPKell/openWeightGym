@@ -1,0 +1,47 @@
+{# Retained plugin metadata shared by the live desk and standalone proposals. #}
+{% from 'parts.html' import section_title, more, swaps %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+
+{% macro activity_overview(summary={}, compact=false) %}
+{% call kpi_row('Filtered activity', class_='mb-3' if compact else 'mb-4') %}
+{{ kpi('Records' if compact else 'Requests', summary.get('total', 0), '' if compact else 'In the current filter', value_attrs={'id':'total-count'}) }}
+{{ kpi('Completed', summary.get('completed', 0), '' if compact else 'Recorded completion', value_attrs={'id':'completed-count'}) }}
+{{ kpi('Failed', summary.get('failed', 0), '' if compact else 'Inspect retained metadata', value_attrs={'id':'failed-count'}) }}
+{{ kpi('Interrupted', summary.get('interrupted', 0), '' if compact else 'Request did not finish', value_attrs={'id':'interrupted-count'}) }}
+{% endcall %}
+{% endmacro %}
+
+{% macro activity_head(sort='at', direction='desc', urls=none) %}
+<thead><tr>{% for field,label in [('at','When'),('user','User'),('model','Model'),('plugin','Plugin'),('instance','Instance / profile'),('outcome','Outcome')] %}
+<th scope="col" data-sort-column="{{ field }}"{% if sort == field %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}>
+{% if urls is not none %}<a class="pl-sort" href="{{ urls[field] }}" {{ swaps('plugin-logs', true) }} aria-label="Sort by {{ label }}">{% else %}<button type="button" class="pl-sort" data-sort="{{ field }}">{% endif %}{{ label }} <span aria-hidden="true" data-sort-mark>{{ ('↑' if direction == 'asc' else '↓') if sort == field else '↕' }}</span>{% if urls is not none %}</a>{% else %}</button>{% endif %}
+</th>{% endfor %}</tr></thead>
+{% endmacro %}
+
+{% macro activity_row(use={}, preview=false, href='', selected=false) %}
+<tr data-record-row{% if not preview %} data-record-id="{{ use.id }}" data-selected="{{ 'true' if selected else 'false' }}"{% endif %}>
+  <td>{% if preview %}<button type="button" class="pl-record-link" data-open><time data-at></time><span class="d-block small text-secondary" data-date></span></button>{% elif href %}<a class="pl-record-link" data-open href="{{ href }}#plugin-detail" hx-get="{{ href }}" hx-target="#plugin-detail" hx-select="#plugin-detail" hx-swap="outerHTML show:none" hx-push-url="true" hx-sync="#plugin-logs:replace" aria-label="Inspect record {{ use.id }}, {{ use.outcome }}, {{ use.user }}"{% if selected %} aria-current="true"{% endif %}>{{ use.at|timestamp }}</a>{% else %}{{ use.at|timestamp }}{% endif %}</td>
+  <td data-user>{{ use.user }}</td>
+  <td><code data-model>{{ use.model }}</code></td>
+  <td data-plugin>{{ use.plugin }}</td>
+  <td><span data-instance>{{ use.instance }}</span> / <span data-profile>{{ use.profile }}</span></td>
+  <td>{{ outcome() if preview else outcome(use.outcome) }}</td>
+</tr>
+{% endmacro %}
+
+{% macro outcome(value='') %}<span class="pl-outcome" data-outcome{% if value %} data-tone="{{ value }}"{% endif %}>{{ value|capitalize }}</span>{% endmacro %}
+
+{% macro inspector(use=none, live=false, session_url='', json_url='') %}
+<section id="record-detail" aria-labelledby="record-title"{% if use %} data-selected-record="{{ use.id }}"{% endif %}>
+<div class="d-flex align-items-center justify-content-between gap-2 mb-2">{{ section_title('Request details', id='record-title', wrapper_class='mb-0') }}<button type="button" class="btn btn-outline-secondary btn-sm" id="close-detail"{% if live %} hidden{% endif %}>Close</button></div>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">{{ outcome(use.outcome if use else '') }}<span class="small text-secondary" data-record-number>{{ '#' ~ use.id if use }}</span></div>
+<dl class="pl-facts">
+{% for field,label in [('at','Recorded at'),('user','User'),('model','Public model'),('plugin','Plugin'),('instance','Instance'),('profile','Profile'),('request','Request ID'),('session','Session ID')] %}
+<div data-fact-row="{{ field }}"><dt>{{ label }}</dt><dd data-fact="{{ field }}">{% if use %}{{ use.at|timestamp if field == 'at' else use[field] or 'Not recorded' }}{% endif %}</dd></div>
+{% endfor %}
+</dl>
+<div class="d-flex flex-wrap gap-2 mt-3"><button type="button" class="btn btn-outline-secondary btn-sm" id="copy-record"{% if live %} hidden{% endif %}>Copy JSON</button>{% if live %}<a class="btn btn-outline-secondary btn-sm" href="{{ json_url }}" data-record-download>Download JSON</a>{% if session_url %}<a class="btn btn-outline-secondary btn-sm" href="{{ session_url }}" {{ swaps('plugin-logs', true) }}>Filter session</a>{% endif %}{% else %}<button type="button" class="btn btn-outline-secondary btn-sm" id="follow-session">Follow session</button>{% endif %}</div>
+<p id="record-feedback" class="small text-secondary mt-2 mb-0" role="status" aria-live="polite"></p>
+<div class="mt-3">{% call more('About these records') %}Identity, routing, time and outcome only. One request may have multiple activity records. Prompts, answers, tool output and token totals are not stored here. An outcome alone does not identify its cause.{% endcall %}</div>
+</section>
+{% endmacro %}

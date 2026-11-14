@@ -95,6 +95,25 @@ def test_plugin_management_pages_permissions_pending_settings_and_private_downlo
     assert browser.get('/plugins/hermes/instances/offline/installer').status_code == 403
 
 
+def test_plugin_activity_shared_rows_keep_retained_values_escaped(desk):
+    browser, _, users = desk
+    registry = browser.app.state.plugins
+    registry.record({'name': 'jordan', 'identity': users.identity('jordan')},
+                    'hermes:<research>', 'hermes', 'jeeves', 'default', 'completed',
+                    'private-session', 'private-request')
+    sign_in(browser, 'jordan')
+    response = browser.get('/plugins/activity')
+    assert response.status_code == 200
+    assert all(value in response.text for value in ('hermes:&lt;research&gt;', 'jeeves', 'default', 'completed'))
+    assert 'hermes:<research>' not in response.text
+    assert 'private-session' in response.text and 'private-request' in response.text
+    assert 'OBSERVE / PLUGINS' not in response.text
+    record = browser.get('/plugins/activity?record=1&export=json')
+    assert record.status_code == 200 and record.json()['session'] == 'private-session'
+    assert 'owner' not in record.json()
+    assert 'name="limit"' in response.text and 'id="plugin-logs"' in response.text
+
+
 def test_adapter_models_remain_in_web_chat_when_compute_service_is_off(desk_with_machine):
     import hashlib
     browser, compute, machine, users, _ = desk_with_machine
