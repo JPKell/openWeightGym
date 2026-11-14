@@ -1,4 +1,5 @@
 {% from 'tool_parts.html' import argument_editor, tool_result, tool_templates %}
+{% from 'remote_server_parts.html' import workspace as remote_workspace %}
 {% extends "frame.html" %}
 {% from "parts.html" import card, said_box, section_title, empty_row %}
 {% from "parts.html" import page_header, form_section, more %}
@@ -16,9 +17,10 @@
 <div class="table-responsive"><table class="sortable table table-sm"><thead><tr><th>Name</th><th>Description</th><th>Command or address</th><th>Sensitivity</th></tr></thead><tbody>
 {% for name, server in tool_config.get('servers', {}).items() %}<tr><td>{{ name }}</td><td>{{ server.description or '' }}</td><td><code>{{ server.url if server.url else server.command|join(' ') }}</code></td><td>{{ server.get('level', 'normal') }}</td></tr>{% else %}{% call empty_row(4) %}No reported servers.{% endcall %}{% endfor %}
 </tbody></table></div>
-<p class="text-secondary small mb-0">Servers and their descriptions are set in <code>settings/toollocker.toml</code> on the gateway host (the control node, when ToolLocker runs there), and change when the tool service restarts.</p>
-<a class="btn btn-outline-secondary btn-sm mt-3" href="/settings?open=toollocker">Tool service settings</a>
+<p class="text-secondary small mb-0">Machine-file servers and their descriptions are set in <code>{{ tool_server_source|default('settings/toollocker.toml') }}</code> on the gateway host (the control node, when ToolLocker runs there), and change when the tool service restarts.</p>
+<a class="btn btn-outline-secondary btn-sm mt-3" href="/settings/machine?machine=front">Tool service settings</a>
 {% endcall %}
+{% if remote_admin|default(false) %}{{ remote_workspace(remote_status, remote_fields, remote_credential, remote_contract) }}{% endif %}
 {% with settings_readonly=false, settings_empty=false %}{% include 'settings_sections.html' %}{% endwith %}
 {% set servers = tool_config.get('servers', {}) %}
 {% set levels = tool_config.get('tool_levels', {}) %}

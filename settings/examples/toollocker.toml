@@ -27,6 +27,13 @@ front = "weightroom.toml"
 # [databases.bindings]
 # "toollocker.identity" = "identity"
 
+
+# Site-managed URL MCP servers, edited on Tools by superusers only. File servers
+# and built-in tools win on name clashes; command servers remain file-only.
+# Private bearer keys are write-only owner-only files beside the machine key.
+# Public servers require HTTPS. Changes are live; active calls finish.
+# remote_servers = {}
+
 # One section per MCP server. The door starts each one and offers its tools to harnesses.
 #
 #   command   the program and its arguments, as a list. Give full paths: a service does not

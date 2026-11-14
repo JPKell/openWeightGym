@@ -25,3 +25,9 @@ call_timeout = 120
 # tool only if their group's max_sensitivity is at least its level, and from "sensitive" up
 # each call is kept in full. Changed on System -> Tools, it holds within seconds.
 tool_levels = {}
+
+# Site-managed URL MCP servers, edited on Tools by superusers only. File servers
+# and built-in tools win on name clashes; command servers remain file-only.
+# Private bearer keys are write-only owner-only files beside the machine key.
+# Public servers require HTTPS. Changes are live; active calls finish.
+remote_servers = {}

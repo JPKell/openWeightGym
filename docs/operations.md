@@ -1493,3 +1493,20 @@ fallback. Saved themes keep winning; Appearance’s Use default clears that expl
 resumes inheritance. `default_chat_model` names a model or role for new text chats. Personal
 choices and explicit links take precedence; unavailable or unauthorized names fall back to the
 first permitted choice. Existing conversations and permissions are unaffected.
+
+
+### Site-managed remote MCP servers
+
+Tools exposes URL-server management to superusers, enforced by both the signed ToolLocker
+endpoint and the generic settings authority (including preview, reset and import). The catalogue’s
+`toollocker.remote_servers` table holds only URL, description, level and public mode. Private bearer
+keys use atomic mode 600 `remote-mcp-HASH.key` files beside the control node machine key. Blank
+keeps a credential; explicit key removal clears it. Removing a site entry retains its credential.
+Keys never enter settings reports, history or export, and require the existing separate key recovery.
+
+File servers and configured built-in extraction/classifier tools win on name clashes. Commands
+and file credential paths remain machine-file configuration. Live metadata/key edits wake the
+existing follower; generic settings edits are picked up within ten seconds. Replaced clients
+unpublish their tools immediately when applied, finish active calls, then close. Caller permissions,
+levels, tool sets and auditing remain authoritative. Provider errors and reflected bearer strings
+are sanitized. Setup and operating details are in the [ToolLocker guide](../toollocker/README.md#add-other-mcp-servers).

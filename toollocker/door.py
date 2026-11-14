@@ -25,7 +25,7 @@ import asyncio
 import sys
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Annotated
@@ -46,10 +46,11 @@ from loadcoach.config import CLI, data_folder, kept_by_loadcoach, read_settings,
 from loadcoach.log import Log
 from loadcoach.groups import LEVELS
 from loadcoach.statement import Statements, user_of
-from loadcoach.setting_catalog import validate_values
-from loadcoach.settings import Changes, changed_for, laid_over, said, taken
+from loadcoach.setting_catalog import default_for, entries as catalog_entries, validate_values
+from loadcoach.settings import apply_live, changed_for, laid_over, said
 from loadcoach.users import User
 from toollocker.servers import Remote, Server, ToolProblem
+from toollocker.remote_settings import ManagedRemote, RemoteKeys, RemoteSettings
 
 TEST_PAGE = Path(__file__).with_name("test.html")
 NAME = re.compile(r"[a-z0-9][a-z0-9-]*")  # a server or a tool set: it becomes part of names and addresses
@@ -62,6 +63,7 @@ class Config:
     """Gateway settings; the signing key and store come from its owning host's file."""
 
     servers: dict[str, dict]  # name -> command, or url with key_file/public; level and description
+    remote_servers: dict = field(default_factory=lambda: default_for("toollocker", "remote_servers"))
     toolsets: dict[str, dict] = field(default_factory=dict)  # name -> {"tools": names or patterns}
     tool_levels: dict[str, str] = field(default_factory=dict)  # tool, by the name a harness sees -> its own level, in place of its server's
     machine_key_file: str = ""  # the key turnstile signs with. Empty: nobody is known, and every call is refused
@@ -187,6 +189,10 @@ def note_changes(tools: dict[str, tuple[Server, dict]], log: Log) -> None:
 
 def build_app(config: Config) -> Starlette:
     """Build the web app: the one MCP address, and the servers behind it."""
+    started_at = time.time()
+    if not config.path:
+        config = replace(config, file={**{entry.name:getattr(config,entry.name) for entry in catalog_entries('toollocker')
+                                        if hasattr(config,entry.name)}, **config.file})
     databases = DatabaseRegistry.from_config(
         config.databases,
         Path(config.path).parent if config.path else Path.cwd(),
@@ -212,26 +218,70 @@ def build_app(config: Config) -> Starlette:
     # lists tools, at most every RETRY seconds, so a machine that was asleep joins when it wakes.
     missing: dict[Server | Remote, float] = {}
 
+    changed_signal = asyncio.Event()
+    key_folder = Path(config.machine_key_file).resolve().parent if config.machine_key_file else folder.parent/'keys'
+    def file_names():
+        return {*config.servers, *({'extraction','classifier'} if config.extraction_url else set())}
+    remote_settings = RemoteSettings(identity, RemoteKeys(key_folder),
+        config.file.get('remote_servers', config.remote_servers), file_names, log, changed_signal)
+    remote_servers, remote_signatures = {}, {}
+    remote_specs = {}
+    remote_settings.runtime=lambda name,spec: ('pending' if remote_signatures.get(name) != (json.dumps(spec,sort_keys=True),remote_settings.keys.revision(name)) else
+        'ready' if remote_servers.get(name) and remote_servers[name].ready else 'unavailable')
+    refresh_lock = asyncio.Lock()
+    policy_lock = asyncio.Lock()
+
     async def bring_up(server: Server | Remote) -> None:
         """Start one server and offer its tools, or note that it is missing."""
+        if getattr(server, 'site_managed', False) and remote_servers.get(server.name) is not server:
+            missing.pop(server, None)
+            return
         missing[server] = time.monotonic()
         try:
-            async with server.starting:
-                if server.dead():
-                    await server.stop()
-                    await server.start()
+            async with remote_settings.using(server):
+                async with server.starting:
+                    if server.dead():
+                        await server.stop()
+                        await server.start()
         except ToolProblem as problem:  # the door opens without it, and says so
             print(f"toollocker: {problem}", file=sys.stderr)
             log.add("tool", "server-failed", server=server.name, why=str(problem))
             return
         missing.pop(server, None)
+        if getattr(server, 'site_managed', False) and remote_servers.get(server.name) is not server:
+            return
         # A server's description is put in front of each of its tools', so that a model can tell
         # the same tool on two machines apart: "nas: the family files. Read a text file, ..."
-        about = config.servers.get(server.name, {}).get("description")
+        about = (config.servers.get(server.name) or remote_specs.get(server.name, {})).get("description")
         for described in server.tools:
             if about:
                 described = {**described, "description": f"{server.name}: {about}. {described.get('description') or ''}".rstrip()}
             tools[f"{server.name}__{described['name']}"] = (server, described)
+
+    async def sync_remotes():
+        """Swap site-managed routes, retain file servers and drain old clients after active calls."""
+        async with refresh_lock:
+            desired = {name:spec for name,spec in config.remote_servers.items() if name not in file_names()}
+            signatures = {name:(json.dumps(spec,sort_keys=True), remote_settings.keys.revision(name))
+                          for name,spec in desired.items()}
+            for name,server in list(remote_servers.items()):
+                if signatures.get(name) == remote_signatures.get(name):
+                    continue
+                for tool,(owner,_) in list(tools.items()):
+                    if owner is server:tools.pop(tool,None)
+                missing.pop(server,None)
+                remote_settings.retire(server)
+                remote_servers.pop(name);remote_signatures.pop(name,None);remote_specs.pop(name,None)
+            new=[]
+            for name,spec in desired.items():
+                if name in remote_servers:continue
+                server = ManagedRemote(name,spec['url'],None if spec.get('public') else str(remote_settings.keys.path(name)),spec.get('level','normal'))
+                remote_servers[name]=server;remote_specs[name]=spec;remote_signatures[name]=signatures[name];new.append(server)
+            semaphore=asyncio.Semaphore(4)
+            async def start(server):
+                async with semaphore:await bring_up(server)
+            await asyncio.gather(*(start(server) for server in new))
+            if new:note_changes(tools,log)
 
     def level_of(name: str, server: Server | Remote) -> str:
         """A tool's level: its own if one is set, otherwise its server's."""
@@ -267,8 +317,9 @@ def build_app(config: Config) -> Starlette:
         started = time.monotonic()
         try:
             with observation.span('tool_execution', tool_executed=False):
-                result = (await server.call_for(user, tool, arguments, level) if isinstance(server, ExtractionTools)
-                          else await server.call(tool, arguments, config.call_timeout))
+                async with remote_settings.using(server):
+                    result = (await server.call_for(user, tool, arguments, level) if isinstance(server, ExtractionTools)
+                              else await server.call(tool, arguments, config.call_timeout))
                 observation.annotate(tool_executed=True)
                 if result.get('isError'):
                     observation.annotate(outcome='error', error_code='tool_failed')
@@ -364,26 +415,44 @@ def build_app(config: Config) -> Starlette:
         """Serve the static MCP exerciser without granting access to any tool."""
         return diagnostic_page(TEST_PAGE)
 
-    async def in_step() -> None:
-        """Every few seconds, take on what was changed in the settings on the site, and say what the door runs with. See loadcoach/settings.py."""
+    async def refresh_settings():
+        """Read the catalogue live policy and write only non-secret runtime evidence."""
         nonlocal config
-        changes, last = Changes(identity), None
+        async with policy_lock:
+            if gate.token():return
+            gate.active += 1
+            try:
+                changed=remote_settings.changes.of('toollocker')
+                config,refused=apply_live('toollocker',config,changed)
+                await sync_remotes()
+                running={**config.file, **{entry.name:getattr(config,entry.name) for entry in catalog_entries('toollocker')
+                                          if hasattr(config,entry.name)}}
+                from loadcoach.settings import dataclass_defaults
+                remote_settings.changes.seen('toollocker',said(running,config.file,config.says,'toollocker',path=config.path,
+                    defaults=dataclass_defaults(config)),refused,started=started_at)
+            finally:
+                gate.active -= 1
+
+    async def in_step() -> None:
+        """Follow ordinary settings and wake promptly after an explicit remote-server edit."""
         while True:
             await gate.wait()
-            changed = changes.of("toollocker")
-            if changed != last:
-                config, refused = taken("toollocker", config, changed, config_from)
-                running = {**config.file, **{name: getattr(config, name) for name in ("host", "port", "call_timeout", "servers", "toolsets", "tool_levels")}}
-                from loadcoach.settings import dataclass_defaults
-                changes.seen("toollocker", said(running, config.file, config.says, 'toollocker', path=config.path, defaults=dataclass_defaults(config)), refused)
-                last = changed
-            await asyncio.sleep(10)
+            changed_signal.clear()
+            try:
+                await refresh_settings()
+            except Exception:
+                print('toollocker: settings refresh failed; retrying.',file=sys.stderr)
+            try:
+                await asyncio.wait_for(changed_signal.wait(),10)
+            except asyncio.TimeoutError:
+                pass
 
     @asynccontextmanager
     async def lifespan(_: Starlette):
         """Start background workers and release service resources on shutdown."""
         for server in servers:
             await bring_up(server)
+        await refresh_settings()
         note_changes(tools, log)
         log.add("toollocker", "started", tools=sorted(tools))
         following = asyncio.create_task(in_step())
@@ -392,6 +461,9 @@ def build_app(config: Config) -> Starlette:
         finally:
             following.cancel()
             await asyncio.gather(following, return_exceptions=True)
+            for server in list(remote_servers.values()):
+                remote_settings.retire(server)
+            await remote_settings.close()
             for server in servers:
                 await server.stop()
                 if isinstance(server, Remote):
@@ -401,9 +473,12 @@ def build_app(config: Config) -> Starlette:
 
     app = Starlette(
         lifespan=lifespan,
-        routes=[Route("/", test_page), Route("/mcp", mcp, methods=["POST"]), Route("/mcp/{toolset}", mcp, methods=["POST"])],
+        routes=[Route("/", test_page), Route("/remote-servers", remote_settings.handle, methods=["GET", "POST"]), Route("/mcp", mcp, methods=["POST"]), Route("/mcp/{toolset}", mcp, methods=["POST"])],
     )
     app.state.databases = databases
+    app.state.remote_settings = remote_settings
+    app.state.refresh_settings = refresh_settings
+    app.state.remote_servers = remote_servers
     app.add_middleware(Barrier, gate=gate)
     app.add_middleware(Statements, key_file=config.machine_key_file)  # who each caller is, as turnstile signed it
     observation.instrument(app, "toollocker", log)

@@ -295,6 +295,7 @@ defaults, differences, retired/derived/deprecated flags and service restart comm
 may not report source/default evidence yet. Retired overrides remain stored and are ignored.
 Security and sign-in also shows the file-controlled cookie, browser-origin and trusted-proxy settings.
 Alerts and notifications contains live thresholds, channel setup, write-only credentials and test delivery.
+Tools includes a superuser-only remote MCP editor with write-only keys; file servers take precedence.
 General also controls the shared site name, escaped announcement, theme defaults and initial text
 chat model or role. Explicit links and permitted personal defaults take precedence.
 

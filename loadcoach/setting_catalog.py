@@ -52,6 +52,7 @@ class Setting:
     choice_labels: tuple = ()
     credential_file: str = ""
     credential_default: str = ""
+    permission: str = 'manage-settings'
 
     def check(self, value, *, context=None):
         """Return a valid value, or raise ValueError without echoing its contents."""
@@ -809,3 +810,58 @@ _add('weightroom', 'default_appearance', 'choice', tier=NOW, scope='front', page
 _add('weightroom', 'default_chat_model', 'text', tier=NOW, scope='front', page='general', section='Display and costs',
      label='Default chat model or role', control='plain-text', default='', rule=_chat_default,
      help='Initial selection for a new text chat. Personal choices and explicit links win. Empty or unavailable names fall back to the first model or role allowed for that account; this never grants access.')
+
+
+
+def _remote_name(value):
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', value):
+        raise ValueError('Remote server names use 1–64 lowercase letters, digits or dashes.')
+
+
+def _remote_url(value):
+    from urllib.parse import urlsplit
+    try:
+        url = urlsplit(value)
+        valid = (len(value) <= 2048 and url.scheme in ('http', 'https') and url.hostname and
+                 url.port != 0 and not url.username and not url.password and not url.query and not url.fragment and
+                 not any(char.isspace() or ord(char) < 32 for char in value))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError('Use an HTTP(S) MCP URL without embedded credentials, query parameters or fragments.')
+
+
+def _remote_description(value):
+    if len(value) > 2000:
+        raise ValueError('Remote server descriptions may contain at most 2,000 characters.')
+
+
+REMOTE_SERVER_FIELDS = (
+    Setting('toollocker', 'name', 'text', label='Server name', control='plain-text', rule=_remote_name, default=''),
+    Setting('toollocker', 'url', 'text', label='MCP URL', control='plain-text', rule=_remote_url, default=''),
+    Setting('toollocker', 'description', 'text', label='Description', control='plain-text', rule=_remote_description, default=''),
+    Setting('toollocker', 'level', 'choice', label='Sensitivity', choices=('normal','sensitive','restricted'), default='normal'),
+    Setting('toollocker', 'public', 'bool', label='Public HTTPS server (no key)', default=False),
+)
+
+
+def _remote_servers(value):
+    if len(value) > 32:
+        raise ValueError('At most 32 site-managed remote MCP servers are supported.')
+    fields = {entry.name:entry for entry in REMOTE_SERVER_FIELDS}
+    for name, server in value.items():
+        fields['name'].check(name)
+        if not isinstance(server, dict) or server.keys() - (fields.keys() - {'name'}):
+            raise ValueError('Remote MCP servers accept URL, description, sensitivity and public mode; commands and key paths stay file-only.')
+        for field in REMOTE_SERVER_FIELDS[1:]:
+            field.check(server.get(field.name, field.default))
+        if server.get('public',False) and not server['url'].startswith('https://'):
+            raise ValueError('Public MCP servers require HTTPS.')
+
+
+_add('toollocker', 'remote_servers', 'table', tier=NOW, scope='front', page='tools', section='Tools',
+     label='Remote MCP servers', default={}, rule=_remote_servers, permission='superuser',
+     help='Superusers can manage URL servers on the control node. File servers and built-in tools win on name clashes. Private servers need a write-only key; public servers require HTTPS. Commands remain file-only. Existing calls finish when a server is changed or removed.')
+_add('toollocker', 'remote_server_key', 'secret', tier=NOW, scope='front', page='tools', section='Tools',
+     label='Remote MCP server key', default='', rule=_bearer_secret, permission='superuser',
+     help='Write-only bearer key for the named site-managed remote server. Blank keeps the saved key. Explicit removal clears it. Never included in history, export or reported settings.')

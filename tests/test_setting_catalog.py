@@ -168,6 +168,7 @@ def live_examples(entry):
         'third_party_services': (['ollama'], ['docker']),
         'timezone': ('UTC', 'America/Vancouver'),
         'backup_time': ('03:00', '04:12'),
+        'remote_servers': ({}, {'catalogue':{'url':'https://example.test/mcp','public':True}}),
         'site_banner': ({'text':'', 'level':'info', 'ends_at':''}, {'text':'Test announcement', 'level':'warning', 'ends_at':''}),
         'notify_quiet_hours': ('', '22:00-07:00'),
         'notify_webhook_url': ('', 'http://127.0.0.1:9991/hook'),
@@ -240,6 +241,15 @@ def test_every_live_setting_changes_through_its_service_getter_without_restart(e
             assert changed not in str(keys.status())
             keys.remove(entry.name)
             assert keys.read(entry.name) == base
+        elif entry.program == 'toollocker':
+            from toollocker.remote_settings import RemoteKeys
+            keys = RemoteKeys(tmp_path/'keys')
+            assert keys.read('catalogue') == base
+            keys.save('catalogue', changed)
+            assert keys.read('catalogue') == changed
+            assert changed not in str(keys.status('catalogue'))
+            keys.remove('catalogue')
+            assert keys.read('catalogue') == base
         else:
             from weightroom.notify import NotificationKeys
             keys = NotificationKeys(tmp_path/'keys')

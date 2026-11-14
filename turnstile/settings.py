@@ -3,7 +3,7 @@
 from starlette.responses import JSONResponse
 
 from loadcoach.settings import CHANGEABLE, Changes, FRONT_PROGRAMS as PROGRAMS, live, program_name, redacted
-from loadcoach.setting_catalog import validate_patch
+from loadcoach.setting_catalog import get as setting_contract, validate_patch
 from loadcoach.tasks import error
 
 class ConsoleSettings:
@@ -108,6 +108,8 @@ class ConsoleSettings:
             for name in body:
                 if name not in CHANGEABLE[program]:
                     return error(403, 'This setting belongs in the program file.')
+                if not user.can(setting_contract(program, name).permission):
+                    return error(403, 'This setting requires '+setting_contract(program, name).permission+'.')
             # A reset validates the effective file fallback as part of the same POST.
             defaults = {row['name']: row.get('file', row['value']) for row in known['settings']}
             effective = {**current, **self.changes.of(program),

@@ -3887,8 +3887,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         reported = await ask('GET', '/loadcoach/settings', person.key)
         programs = settings_views.filtered(reported.json().get('programs', []), 'tools') if reported.is_success else []
         for program in programs:
-            program['settings'] = [row for row in program['settings'] if row['name'] not in ('toolsets', 'tool_levels')]
-        return page(request, 'tools.html', person, status=400 if failed else 200, tool_info=found, tool_config=config, tool_changed={row['name']: bool(row.get('changed')) for row in (found['program'] or {}).get('settings', [])}, programs=programs, settings_return_to='/tools', typed_in=unused.get('typed_in', {}), opened=unused.get('opened', ''),
+            program['settings'] = [row for row in program['settings'] if row['name'] not in ('toolsets', 'tool_levels', 'remote_servers')]
+        from weightroom.remote_views import context as remote_context
+        remotes = await remote_context(tool_http,person)
+        return page(request, 'tools.html', person, status=unused.get('status',400 if failed else 200), **remotes, tool_info=found, tool_config=config, tool_server_source=next((row.get('source','settings/toollocker.toml') for row in (found['program'] or {}).get('settings',[]) if row['name']=='servers'),'settings/toollocker.toml'), tool_changed={row['name']: bool(row.get('changed')) for row in (found['program'] or {}).get('settings', [])}, programs=programs, settings_return_to='/tools', typed_in=unused.get('typed_in', {}), opened=unused.get('opened', ''),
                     said=said or request.query_params.get("said", ""), failed=failed)  # fmt: skip
 
     async def change_tools(request: Request, person: Person) -> Response:
@@ -5856,6 +5858,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return await settings_page(request, person, *args, settings_section="downloads", **kwargs)
     from weightroom.classifier_views import routes as classifier_routes
 
+    from weightroom.remote_views import routes as remote_routes
     app = Starlette(
         lifespan=lifespan,
         exception_handlers={HTTPException: http_error, 500: server_error},
@@ -5927,6 +5930,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route("/databases/migrations/{profile}/preview", database_migration_preview, "POST"),
             route("/databases/migrations/{profile}/start", database_migration_start, "POST"),
             route("/databases/{machine}/{database}/dump", database_dump),
+            *remote_routes(for_people, tool_http, typed, tools_page, go),
             route("/tools", tools_page),
             route("/tools", change_tools, "POST"),
             route("/tools/message", tools_message, "POST"),

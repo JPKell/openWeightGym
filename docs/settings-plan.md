@@ -77,6 +77,8 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Remote MCP policy permits up to 32 URL servers with bounded descriptions, strict URLs without credentials/query/fragment, private write-only bearer keys or public HTTPS. File servers and configured built-in extraction/classifier tools win on name clashes. Removing a site entry retains its key for explicit recovery or removal. Credentials live beside the control node machine key, with hashed names and atomic mode 600 writes. Replaced clients drain active calls; reflected credentials and upstream protocol errors are sanitized before tool results or logs.
+
 - Site announcements use a single validated table (`text`, `level`, optional `ends_at` with an explicit UTC offset), rendered as escaped plain text and expired on open pages. Site theme defaults follow the existing account-scoped browser theme policy; Use default removes the explicit saved theme and resumes inheritance. Unknown or unauthorized default chat names fall back to the account’s permitted choices.
 
 - Chat expiry uses a separate last-activity timestamp so opening a conversation preserves message ordering. Background polls do not renew it; daily claims persist across restarts and active answers are protected. Built-in backups cover the control node through the existing Schedules worker and verified writer, with no service account or remote grant. Weekly means Sunday; downtime catches up the latest occurrence. Policy edits cancel unsubmitted old occurrences and schedule the next future run. Existing per-node schedules remain available.
@@ -474,7 +476,8 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 3.6 Download credentials and concurrency; 707 catalogue/feature checks, 107 UI/browser checks (all 39 consistency cases) and PostgreSQL secret-row preservation pass.
 - [x] 3.7 Chat retention and scheduled backups (669 catalogue/retention checks; 59 broader UI checks plus corrected UTC-offset timing assertion; disposable PostgreSQL contract).
 - [x] 3.8 Display and defaults (745 focused checks, 22 additional native/access checks, shared all-page browser verification and current Reliability theme contract).
-- [ ] 3.9 Remote MCP servers; Phase 3 deployed and verified.
+- [x] 3.9 Remote MCP servers (705 catalogue/workspace checks, signed live routing/rotation/drain and native browser checks, 83 broader UI checks including all 39 consistency cases; disposable PostgreSQL contract).
+- [ ] Phase 3 clean full-suite check, push, normal deployment and live verification.
 - [ ] 4 Documentation, complete clean-worktree suite, final deployment and live verification.
 
 ### Phase 0: Setting catalogue (foundation; fixes P3 and P4)

@@ -274,7 +274,16 @@ so updates preserve them.
 
 ## Add other MCP servers
 
-Add one `[servers.NAME]` section to the gateway configuration. Use `command = ["/absolute/program", "argument"]`
+Superusers can add URL servers in **Tools → Remote MCP servers** without a restart. Set the
+MCP URL, description and sensitivity, then either a write-only bearer key or public HTTPS mode.
+Blank keeps a saved key; Remove saved key clears it. Site policy is stored on the control node,
+and file servers plus configured built-in extraction/classifier tools take precedence on name
+clashes. Commands remain file-only. Replaced or removed clients finish active calls before
+closing. Removing a site entry retains its credential; explicit credential removal is separate.
+The editor refuses embedded credentials, query parameters and fragments in URLs. Discovered
+tools still obey the existing account, group, sensitivity and tool-set rules.
+
+For machine-file configuration, add one `[servers.NAME]` section to the gateway configuration. Use `command = ["/absolute/program", "argument"]`
 for an MCP stdio server. The command is fixed operator configuration; tool arguments travel over
 MCP, not through a shell. For code tools, use `.venv/bin/python -m toollocker.tools.code` followed
 by absolute repository paths; `git` must be installed on that host.
@@ -283,7 +292,7 @@ For an HTTP server, use `url = "https://HOST/mcp"` and `key_file = "../keys/HOST
 `command`. The owner-readable key file contains that upstream server's bearer key, not the
 console's machine signing key. Only intentionally unauthenticated HTTPS servers use `public = true`
 instead of `key_file`. Review discovered tools, levels and account access before enabling a server.
-Restart ToolLocker after changing its server configuration.
+Use `owg restart toollocker` after changing machine-file server configuration. Site-managed URL edits apply live.
 
 ## Remote tool hosts
 

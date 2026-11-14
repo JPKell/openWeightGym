@@ -1,0 +1,35 @@
+{% from 'parts.html' import card, form_section, credential_input, credential_state, confirm_two %}
+{% macro editor(row={}, fields=(), credential=none) %}
+{% set name = row.name|default('') %}
+{% set prefix = 'remote-' ~ (name or 'new') %}
+<form method="post" action="/tools/remotes{{ '/' ~ name if name else '' }}" class="mb-4" data-hold-refresh data-setting-search="Remote MCP servers {{ name }}" data-setting-changed="{{ 'true' if row.changed|default(false) or row.get('credential',{}).get('saved',false) else 'false' }}">
+{% call form_section(name or 'Add a remote server') %}
+{% if name %}<p class="small" role="status"><span class="badge bg-{{ 'green' if row.state == 'ready' else 'secondary' }}-lt">{{ {'ready':'Ready','pending':'Waiting to apply','unavailable':'Unavailable — check the remote service and key','file':'Machine-file or built-in server takes precedence'}.get(row.state, 'Waiting to apply') }}</span></p>{% endif %}
+{% if row.shadowed|default(false) %}<p class="small text-secondary">A machine-file server or built-in tool has this name and takes precedence. These site values remain saved.</p>{% endif %}
+<div class="row g-3">
+{% for field in fields %}{% set value = row.get(field.name, field.default) %}
+<div class="col-md-6">
+{% if field.kind == 'bool' %}<label class="form-check form-switch mt-4"><input id="{{ prefix }}-{{ field.name }}" class="form-check-input" type="checkbox" name="{{ field.name }}"{{ ' checked' if value }}><span class="form-check-label">{{ field.label }}</span></label>
+{% else %}<label class="form-label" for="{{ prefix }}-{{ field.name }}">{{ field.label }}</label>
+{% if field.choices %}<select id="{{ prefix }}-{{ field.name }}" name="{{ field.name }}" class="form-select">{% for choice in field.choices %}<option value="{{ choice }}"{{ ' selected' if choice == value }}>{{ choice }}</option>{% endfor %}</select>
+{% else %}<input id="{{ prefix }}-{{ field.name }}" name="{{ field.name }}" class="form-control" value="{{ value }}" type="{{ 'url' if field.name == 'url' else 'text' }}"{{ ' required' if field.name in ('name','url') }}{{ ' readonly' if name and field.name == 'name' }} autocomplete="off">{% endif %}
+{% endif %}</div>
+{% endfor %}
+<div class="col-md-6">{{ credential_input(prefix ~ '-key', 'credential', credential.label, row.credential|default({})) }}<p class="small text-secondary mb-0">Blank keeps the saved key; public servers send no key.</p></div>
+<div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-primary" name="operation" value="save">{{ 'Save server' if name else 'Add server' }}</button>{% if name %}<button class="btn btn-outline-danger" name="operation" value="remove" {{ confirm_two('Remove this site-managed server? Its saved key is retained.') }}>Remove server</button>{% endif %}</div>
+</div>
+{% endcall %}
+</form>
+{% if name and row.credential.saved %}<form method="post" action="/tools/remotes/{{ name }}" class="mb-4"><button class="btn btn-outline-danger btn-sm" name="operation" value="remove-key" {{ confirm_two('Remove this server’s saved key? Private calls will stop until a key is saved.') }}>Remove saved key · {{ name }}</button></form>{% endif %}
+{% endmacro %}
+
+{% macro workspace(status={}, fields=(), credential=none, contract=none) %}
+{% call card(contract.label, id='remote-servers') %}
+<p class="small text-secondary">Live · Superusers only. URL servers are stored on the control node; machine-file servers and built-in tools take precedence on a name clash. Private servers need a write-only bearer key. Public servers require HTTPS. Commands stay in the machine file. Active calls finish when a server is replaced or removed.</p>
+{% if not status.available %}<p role="status" class="text-secondary mb-0">The control node tool service is unavailable. Reconnect before editing remote servers; changes are never queued.</p>
+{% else %}
+{% for row in status.servers %}{{ editor(row, fields, credential) }}{% else %}<p class="text-secondary">No site-managed remote servers.</p>{% endfor %}
+{{ editor({}, fields, credential) }}
+{% endif %}
+{% endcall %}
+{% endmacro %}
