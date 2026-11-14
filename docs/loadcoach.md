@@ -5269,8 +5269,9 @@ Under the facts are ways on from that moment:
 - **What LoadCoach printed around then**, and **what the kernel said about the cards and
   memory**. Both go to the Output page with the moment filled in. Only for someone who may
   act on services, and only where `spotter` is set up.
-- **The machine in the half hour before**: the recorded physical host's Telemetry charts ending at that moment,
-  where a card filling up shows.
+- **The machine in the half hour before**: the exact recorded host's Telemetry charts,
+  ending at the event's timezone-aware instant. Archived hosts remain readable without
+  live controls; if no samples were retained, the page says so instead of showing another host.
 
 ### The Output page
 

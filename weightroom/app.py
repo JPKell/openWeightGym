@@ -4081,7 +4081,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         entry = found["entry"]
         if entry["kind"] == "request":
             return go(f"/requests/{entry.get('of') or entry.get('source') or entry['id']}")  # a request is known by compute's number
-        return page(request, "entry.html", person, entry=entry, after=found["after"], models=await local_models(person))
+        instant = display.moment(entry.get('at'))
+        return page(request, "entry.html", person, entry=entry, after=found["after"],
+                    telemetry_until=instant.isoformat() if instant else '', models=await local_models(person))
 
     # ---- what the programs on compute printed, and asking a model about it --------------------
 
@@ -4890,25 +4892,40 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         asked = request.query_params
         identity = request.path_params.get("fingerprint") or asked.get("node")
         host = next((one for one in hosts if one["identity"] == identity), None) if identity else None
-        if identity and host is None:
-            return page(request, "refused.html", person, status=404, why="That machine fingerprint is not known to front.")
+        summary = fleet_summary(hosts)
         try:
             hours = float(asked.get("hours") or 1)
             if not math.isfinite(hours):
                 raise ValueError("Hours must be finite")
             hours = min(max(hours, 1 / 60), 672)
-            until = datetime.fromisoformat(asked["until"]).replace(tzinfo=zone).timestamp() if asked.get("until") else time.time()
+            end = datetime.fromisoformat(asked['until']) if asked.get('until') else None
+            until = (end if end.tzinfo else end.replace(tzinfo=zone)).timestamp() if end else time.time()
         except (ValueError, OverflowError, OSError):
             hours, until = 1, time.time()
         past = {"begin": until - hours * 3600, "end": until, "step": hours * 3600 / 240, "series": {}}
         history_error = None
+        if identity and host is None:
+            if not re.fullmatch(r'[0-9a-f]{64}', identity):
+                return page(request, 'refused.html', person, status=404, why='That machine fingerprint is not known to front.')
+            retained = await fetch(request, person, f'/turnstile/telemetry/{identity}/history',
+                                   params={'end': until, 'seconds': hours * 3600, 'points': 240})
+            if isinstance(retained, Response):
+                return retained
+            reference = retained.get('host')
+            if not reference or reference.get('fingerprint') != identity:
+                return page(request, 'refused.html', person, status=404, why='That machine fingerprint is not known to front.')
+            host = hosts_view([reference], source_poll)[0]
+            hosts.append(host)
+            past = retained
         if host and host.get("fingerprint"):
-            answer = await fetch(request, person, f"/turnstile/telemetry/{host['fingerprint']}/history?end={until}&seconds={hours * 3600}&points=240")
-            if isinstance(answer, Response):
-                history_error = "History is temporarily unavailable. Current host readings are still shown. Retry with Refresh."
-            else:
-                past = answer
-        summary = fleet_summary(hosts)
+            if not host.get('retained_only'):
+                answer = await fetch(request, person, f"/turnstile/telemetry/{host['fingerprint']}/history?end={until}&seconds={hours * 3600}&points=240")
+                if isinstance(answer, Response):
+                    history_error = "History is temporarily unavailable. Current host readings are still shown. Retry with Refresh."
+                else:
+                    past = answer
+            elif not any(value is not None for values in past.get('series', {}).values() for value in values):
+                history_error = 'No telemetry samples were retained for this physical host in the selected time range.'
         groups = history_groups(host, past, chart) if host else []
         query = [(key, value) for key, value in asked.multi_items() if key not in ('part', 'said', 'failed')]
         refresh_url = request.url.path + '?' + urlencode([*query, ('part', 'workspace')])
@@ -4916,14 +4933,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                       "identity": identity or "", "hours": hours, "until": asked.get("until", ""),
                       "initial_group": 'gpu-' + asked['gpu'] if asked.get('gpu', '').isdigit() else 'processor'}
         template = "telemetry_workspace.html" if asked.get("part") == "workspace" else "telemetry_host.html" if host else "machines.html"
-        if host and host.get('fingerprint'):  # the controls check that their Spotter is on this very host
+        if host and host.get('fingerprint') and not host.get('retained_only'):  # verify the exact physical host
             snapshot, _ = await physical_host_controls(person, host['fingerprint'])
             if snapshot:
                 uptime = number(snapshot.get('up_for'))
                 host['uptime'] = uptime if uptime is not None and uptime >= 0 else None
         if host:
             host['components'] = None
-            if 'manage-settings' in person.can:
+            if 'manage-settings' in person.can and not host.get('retained_only'):
                 try:
                     components, _ = await component_inventory(person)
                 except ServiceUnavailable:
@@ -4931,7 +4948,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 if components is not None:
                     host['components'] = component_pills(host, components)
         return page(request, template, person, hosts=hosts, host=host, summary=summary, graph_data=graph_data,
-                    poll=poll, hours=hours, until=asked.get("until", ""), refresh_url=refresh_url,
+                    poll=poll, hours=hours,
+                    until=datetime.fromtimestamp(until, zone).replace(tzinfo=None).isoformat(timespec='seconds') if asked.get('until') else '',
+                    until_instant=datetime.fromtimestamp(until).astimezone().isoformat() if asked.get('until') else '',
+                    refresh_url=refresh_url,
                     history_error=history_error, snapshot_at=time.time())
 
     async def machines_page(request: Request, person: Person) -> Response:

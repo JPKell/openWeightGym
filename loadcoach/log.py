@@ -403,6 +403,14 @@ class Log:
                                  benchmark=detail.get('reliability_outcome') == 'benchmark'))
         return {'total': total, 'page': offset // limit + 1, 'requests': requests}
 
+    def has_host_reference(self, fingerprint: str, owner: str | None) -> bool:
+        """Verify an exact host reference in this caller's authorized retained events."""
+        scope = '' if owner is None else ' AND user = ?'
+        values = (fingerprint,) if owner is None else (fingerprint, owner)
+        return self.db.execute(
+            f"SELECT 1 FROM events WHERE {self.json_value('detail', 'machine_fingerprint')} = ?{scope} LIMIT 1",
+            values).fetchone() is not None
+
     @staticmethod
     def entry(row: tuple, with_text: bool = False) -> dict:
         """One row of the table as it is handed out: its columns, with its details beside them."""
