@@ -3,6 +3,8 @@ import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from datetime import datetime
+import time
 
 import pytest
 
@@ -48,6 +50,28 @@ def test_restart_pending_survives_reports_and_resets_and_clears_only_on_start(tm
     changes.put('turnstile', 'max_in_flight', 5, 'operator')
     assert not setting(changes)['pending_since']
     changes.db.close()
+
+
+@pytest.mark.parametrize('zone', ['America/Vancouver', 'Pacific/Auckland'])
+def test_settings_timestamps_keep_their_instant_between_hosts(tmp_path, monkeypatch, zone):
+    from weightroom.display import moment
+    changes = Changes(tmp_path/'settings.db')
+    try:
+        with monkeypatch.context() as patch:
+            patch.setenv('TZ', zone)
+            time.tzset()
+            patch.setattr('loadcoach.settings.time.time', lambda: 110.0)
+            changes.seen('turnstile', {'max_in_flight': {'value':5, 'file':5}}, started=100)
+            changes.put('turnstile', 'max_in_flight', 8, 'operator')
+            program = changes.everything()[0]
+            row = program['settings'][0]
+            instants = [program['seen'], row['changed']['at'], row['pending_since'], changes.listing()[0][-1]]
+            for value in instants:
+                assert datetime.fromisoformat(value).utcoffset() is not None
+                assert moment(value).timestamp() == 110
+    finally:
+        time.tzset()
+        changes.db.close()
 
 
 @pytest.mark.parametrize('value', [-1, float('inf'), float('nan'), True, '100', None])

@@ -77,6 +77,10 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Final audit: settings timestamps carry explicit UTC offsets so reports from different host zones preserve their instant. Wake defaults come from the catalogue; its machine inspector identifies the control node’s `[machines.NAME]` file section and live Turnstile ownership, without suggesting a nonexistent `machines` service. The CLI reset notice follows the displayed tier. Spotter retention is labeled Telemetry and documents its existing zero-days behavior.
+
+- Phase 3 final `9b6a783`: clean full suite 4,369 passed, 311 failed, 11 known fixture errors and 69 skipped. Artifact retry passes separately; CPU embedding cleanup reproduces on Phase 2. The remaining old restart-order assertion is corrected in the final audit; the actual coordinator, stop-failure and PostgreSQL migration checks pass. Normal update/restart and source verification succeeded on all five installed checkouts. Live evidence: `/home/owgadmin/ai/owg-settings-phase3-live-final.json` and `owg-settings-phase3-source-verified.json`; notification destinations and all eight node tokens remain empty.
+
 - Phase 3’s first clean full suite (`85d5731`) reported 4,361 passed, 315 failed, 14 errors and 68 skipped. It exposed the shared schedule preview’s pending `node_label` registration, plus old sign-in and batch-constant assertions. Carry the touched preview dependency and update those tests. A pre-existing CPU embedding cancellation assertion reproduces on Phase 2; request/copy/chart timing cases are checked separately. Comparison evidence: `/home/owgadmin/ai/owg-settings-phase3-comparison.json`.
 
 - A disposable PostgreSQL test reproduced the normal multi-service restart leaving an old account reader alive while a new process attempted account DDL. Fix the existing OWG coordinator to stop all selected services in reverse order before starting them; retain targeted single-service behavior and source selection. The same real migration test passes after the fix. PostgreSQL legacy fixtures now match settings schema 2 and remove all post-v3 account tables when simulating the deployed old ledger; production retirement and data are unchanged.
@@ -481,8 +485,10 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 3.7 Chat retention and scheduled backups (669 catalogue/retention checks; 59 broader UI checks plus corrected UTC-offset timing assertion; disposable PostgreSQL contract).
 - [x] 3.8 Display and defaults (745 focused checks, 22 additional native/access checks, shared all-page browser verification and current Reliability theme contract).
 - [x] 3.9 Remote MCP servers (705 catalogue/workspace checks, signed live routing/rotation/drain and native browser checks, 83 broader UI checks including all 39 consistency cases; disposable PostgreSQL contract).
-- [ ] Phase 3 clean full-suite check, push, normal deployment and live verification.
-- [ ] 4 Documentation, complete clean-worktree suite, final deployment and live verification.
+- [x] Phase 3 clean suite, push and normal deployment verified (9b6a783; 75 tiers, 66 restored live edits, 19 pages and stable service PIDs on five checkouts).
+- [x] 4.1 Final source/default, timestamp, ownership and CLI audit (834 checks pass; two setup failures reproduce in the deployed baseline).
+- [ ] 4.2 Defaults/examples comments, operating/restart guide, walkthrough and template index.
+- [ ] 4.3 Complete clean-worktree suite, final deployment and live verification.
 
 ### Phase 0: Setting catalogue (foundation; fixes P3 and P4)
 

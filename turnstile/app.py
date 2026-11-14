@@ -1093,8 +1093,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         from loadcoach.setting_catalog import entries
         namespace = 'machines:' + name
         fields = {entry.name: node_policy(name)[entry.name] for entry in entries('machines')}
-        file = {entry.name: settings.machines[name].get(entry.name, '' if entry.name == 'wake_mac' else '255.255.255.255') for entry in entries('machines')}
-        console_settings.changes.seen(namespace, said(fields, file, {}, namespace))
+        file = {entry.name: settings.machines[name].get(entry.name, entry.default) for entry in entries('machines')}
+        console_settings.changes.seen(namespace, said(fields, file, {}, namespace, path=settings.path or None))
         report = next(p for p in console_settings.changes.everything() if p['program'] == namespace)
         report['program'] = 'machines'
         return report

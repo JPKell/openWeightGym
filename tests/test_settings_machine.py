@@ -44,6 +44,18 @@ def test_turnstile_source_metadata_reads_its_section_and_nested_voice_defaults(t
     assert report['recognition.threads']['source'] == str(voice)
 
 
+def test_wake_file_source_and_defaults_belong_to_the_control_node(tmp_path):
+    path = tmp_path/'weightroom.toml'
+    path.write_text('[machines.rig]\nwake_mac="00:11:22:33:44:55"\n')
+    report = said({'wake_mac':'00:11:22:33:44:55', 'wake_address':'255.255.255.255'},
+                  {'wake_mac':'00:11:22:33:44:55', 'wake_address':'255.255.255.255'},
+                  {}, 'machines:rig', path=path)
+    assert report['wake_mac']['source'] == str(path)
+    assert report['wake_mac']['default'] == '' and report['wake_mac']['differs']
+    assert report['wake_address']['default'] == '255.255.255.255'
+    assert not report['wake_address']['differs']
+
+
 def test_machine_page_is_read_only_scoped_and_shows_retired_values(desk):
     import time
     browser, switch, _ = desk
@@ -68,6 +80,10 @@ def test_machine_page_is_read_only_scoped_and_shows_retired_values(desk):
     security = browser.get('/settings/security')
     assert security.status_code == 200 and 'secure' in security.text and '/settings/weightroom.toml' in security.text
     assert browser.get('/settings/machine?machine=missing').status_code == 404
+    wake = browser.get('/settings/machine?machine=compute')
+    assert wake.status_code == 200
+    assert 'Turnstile on the control node' in wake.text and '[machines.compute]' in wake.text
+    assert 'owg restart machines' not in wake.text
     sign_in(browser, 'pat')
     assert browser.get('/settings/machine').status_code == 403
 

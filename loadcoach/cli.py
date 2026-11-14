@@ -934,7 +934,7 @@ def settings_command(changes: Changes, action: str = "", program: str = "", name
     if action == "reset":
         if not changes.take_away(program, name):
             raise ValueError(f"Nothing was changed for {name!r} of {program!r}. See what was with: loadcoach settings")
-        print(f"{program}: {name} is as its file says again. LoadCoach takes that on at its next start, the other programs within the minute.")
+        print(f"{program}: {name} is as its file says again. Live settings apply automatically; settings marked Needs restart apply after their service restarts.")
     elif action:
         raise ValueError("loadcoach settings lists what was changed. loadcoach settings reset PROGRAM NAME takes one change away.")
     else:

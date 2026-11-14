@@ -2,7 +2,7 @@
 {% if machine_inspection|default(false) %}
 {% for program in programs|sort(attribute='program') %}
 {% call card(program.program ~ ' configuration', attrs={'aria-label':program.program ~ ' machine configuration'}) %}
-<p class="small text-secondary">Restart on {{ 'the control node' if selected_machine == 'front' else selected_machine }}: <code>owg restart {{ program.program }}</code>{% if program.seen %} · Last report {{ program.seen|timestamp }}{% endif %}</p>
+<p class="small text-secondary">{% if program.program == 'machines' %}Wake settings apply immediately through Turnstile on the control node. File section: <code>[machines.{{ selected_machine }}]</code>.{% else %}Restart on {{ 'the control node' if selected_machine == 'front' else selected_machine }}: <code>owg restart {{ program.program }}</code>{% endif %}{% if program.seen %} · Last report {{ program.seen|timestamp }}{% endif %}</p>
 <div class="table-responsive"><table class="table table-sm" aria-label="{{ program.program }} file values">
 <thead><tr><th>Setting</th><th>File value and source</th><th>Default and status</th></tr></thead><tbody>
 {% for setting in program.settings|sort(attribute='name') %}

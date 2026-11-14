@@ -22,7 +22,7 @@ import re
 import time
 import tomllib
 from dataclasses import MISSING, fields, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -195,6 +195,11 @@ def said(running: dict, file: dict, says: dict, program='', *, path=None, defaul
             if program == 'turnstile':
                 machine, shipped = machine.get('turnstile', {}), {**(defaults or {}), **shipped.get('turnstile', {})}
                 default_file = default_file.get('turnstile', {})
+            elif program.startswith('machines:'):
+                node = program.partition(':')[2]
+                machine = machine.get('machines', {}).get(node, {})
+                shipped = {**(defaults or {}), **shipped.get('machines', {}).get(node, {})}
+                default_file = default_file.get('machines', {}).get(node, {})
         except (OSError, ValueError):
             source = None  # Older/stale reports remain useful without inventing a source.
     for definition in entries(program):
@@ -323,7 +328,7 @@ class Changes:
     def listing(self) -> list[tuple]:
         """Every change there is: program, name, value, who made it and when."""
         rows = self.db.execute("SELECT program, name, value, by, at FROM settings_changed ORDER BY program, name")
-        return [(program, name, redacted(json.loads(value), name), by, datetime.fromtimestamp(at).isoformat(timespec="seconds"))
+        return [(program, name, redacted(json.loads(value), name), by, datetime.fromtimestamp(at, UTC).isoformat(timespec="seconds"))
                 for program, name, value, by, at in rows
                 if not ((entry := catalog_entry(program, name)) and entry.kind == "secret")]
 
@@ -348,7 +353,7 @@ class Changes:
         """Every program that has said what it runs with, and each of its settings as the page shows it."""
         changed: dict[str, dict] = {}
         for program, name, value, by, at in self.db.execute("SELECT program, name, value, by, at FROM settings_changed"):
-            changed.setdefault(program, {})[name] = {"value": redacted(json.loads(value), name), "by": by, "at": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "timestamp": at}
+            changed.setdefault(program, {})[name] = {"value": redacted(json.loads(value), name), "by": by, "at": datetime.fromtimestamp(at, UTC).isoformat(timespec="seconds"), "timestamp": at}
         resets = {(program, name): at for program, name, at in self.db.execute('SELECT program,name,at FROM settings_resets')}
         programs = []
         for program, at, told, refused, started in self.db.execute("SELECT program, at, told, refused, started FROM settings_seen ORDER BY program"):
@@ -367,11 +372,11 @@ class Changes:
                 settings.append({"name": name, **entry,
                     "when": definition.tier if definition else "file",
                     "changed": changed.get(program, {}).get(name), "refused": refusals.get(name),
-                    "pending_since": datetime.fromtimestamp(changed_at).isoformat(timespec="seconds") if pending else None,
+                    "pending_since": datetime.fromtimestamp(changed_at, UTC).isoformat(timespec="seconds") if pending else None,
                     "retired": bool(entry.get('retired') or definition and definition.retired),
                     "derived": bool(definition and definition.derived),
                     "deprecated": bool(definition and definition.deprecated)})
-            programs.append({"program": program, "seen": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "started": started, "settings": settings})
+            programs.append({"program": program, "seen": datetime.fromtimestamp(at, UTC).isoformat(timespec="seconds"), "started": started, "settings": settings})
         return programs
 
 

@@ -393,7 +393,8 @@ owg_systemctl() { printf '%s\\n' "$*" >>"$ATTEMPTS"; [[ $2 != loadcoach.service 
 ''' + one_function("scripts/owg", "control") + '\ncontrol restart loadcoach weightroom\n',
                    env={"ATTEMPTS": str(tmp_path / "attempts")})
     assert answer.returncode == 1
-    assert (tmp_path / "attempts").read_text().splitlines() == ["restart loadcoach.service", "restart weightroom.service"]
+    # Try every stop, then refuse all starts if any old process could still hold a database.
+    assert (tmp_path / "attempts").read_text().splitlines() == ["stop weightroom.service", "stop loadcoach.service"]
 
 
 @pytest.fixture
