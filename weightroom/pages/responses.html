@@ -1,0 +1,27 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, card, empty_row, said_box %}
+{% from 'filter_parts.html' import users_groups %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'response_parts.html' import response_row %}
+{% block title %}Responses · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/requests.css?v=1">{% endblock %}
+{% block main %}
+{{ page_header('Responses') }}{{ said_box(said) }}
+{% call card() %}
+<form method="get" action="/responses" class="row g-3" aria-label="Filter stored Responses">
+{% if 'see-log' in person.can %}
+<div class="col-sm-6 col-lg-3"><label for="responses-scope" class="form-label">Scope</label><select id="responses-scope" name="scope" class="form-select form-select-sm"><option value="own"{{ ' selected' if filters.scope != 'all' }}>My responses</option><option value="all"{{ ' selected' if filters.scope == 'all' }}>All accessible responses</option></select></div>
+<div class="col-sm-6 col-lg-3">{{ users_groups('responses', groups, user_groups, filters.user, filters.group) }}</div>
+{% endif %}
+<div class="col-sm-6 col-lg-3"><label for="responses-model" class="form-label">Model</label><input id="responses-model" name="model" value="{{ filters.model }}" class="form-control form-control-sm"></div>
+<div class="col-sm-6 col-lg-3"><label for="responses-status" class="form-label">Status</label><select id="responses-status" name="status" class="form-select form-select-sm"><option value="">All statuses</option>{% for status in ('completed','incomplete','failed') %}<option value="{{ status }}"{{ ' selected' if filters.status == status }}>{{ status|capitalize }}</option>{% endfor %}</select></div>
+<div class="col-sm-6 col-lg-3"><label for="responses-since" class="form-label">From (UTC)</label><input id="responses-since" name="since" type="datetime-local" value="{{ filters.since }}" class="form-control form-control-sm"></div>
+<div class="col-sm-6 col-lg-3"><label for="responses-until" class="form-label">Until (UTC)</label><input id="responses-until" name="until" type="datetime-local" value="{{ filters.until }}" class="form-control form-control-sm"></div>
+<div class="col-sm-6 col-lg-3"><label for="responses-search" class="form-label">Input text</label><input id="responses-search" type="search" name="q" value="{{ filters.q }}" class="form-control form-control-sm"></div>
+<div class="col-sm-6 col-lg-3"><label for="responses-limit" class="form-label">Per page</label><select id="responses-limit" name="limit" class="form-select form-select-sm">{% for size in paging.sizes %}<option{{ ' selected' if paging.limit == size }}>{{ size }}</option>{% endfor %}</select></div>
+<div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-primary btn-sm">Apply filters</button><a href="/responses" class="btn btn-outline-secondary btn-sm">Clear filters</a></div>
+</form>{% endcall %}
+{% call kpi_row('Stored responses') %}{{ kpi('Responses', paging.total|count) }}{{ kpi('Input tokens · page', input_tokens|count) }}{{ kpi('Output tokens · page', output_tokens|count) }}{% endcall %}
+{% call card(body=false) %}<div class="table-responsive"><table class="table table-sm table-vcenter mb-0"><caption class="visually-hidden">Stored responses matching the current filters</caption><thead><tr><th>Created</th><th>User</th><th>Model</th><th>Status</th><th>Sensitivity</th><th>Input / output tokens</th><th>Input preview</th><th>Chained</th></tr></thead><tbody>{% for record in records %}{{ response_row(record) }}{% else %}{{ empty_row(8, 'No stored responses match these filters. Responses sent with store:false are not saved.') }}{% endfor %}</tbody></table></div>{% endcall %}
+{% include 'pagination.html' %}
+{% endblock %}

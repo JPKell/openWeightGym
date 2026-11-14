@@ -15,6 +15,35 @@ from loadcoach.database_operations import DatabaseOperations, OperationRefused, 
 from db.recovery import RecoveryStore
 
 
+def test_responses_are_in_accounts_inventory_backup_and_verified_transfer(tmp_path):
+    from types import SimpleNamespace
+    from db.recovery import backup_store
+    from db.transfer import copy_store
+    from loadcoach.groups import Group
+    from turnstile.responses import response_body
+    from weightroom.response_store import Responses
+
+    source = Database.sqlite(tmp_path/'accounts.db')
+    kept = Responses(source)
+    user = SimpleNamespace(identity='owner', name='owner', group=Group())
+    request = {'model': 'test', 'input': [{'id': 'msg_input', 'type': 'message', 'role': 'user', 'content': 'Hi'}]}
+    response = response_body({'choices': [{'message': {'content': 'Hello'}, 'finish_reason': 'stop'}]}, request)
+    kept.save(user, request, response, 'normal', 42)
+    kept.db.close()
+    store = RecoveryStore('accounts', source, ('weightroom.accounts',))
+    sources = store_sources([store], tmp_path, {})
+    with source.connection() as connection:
+        assert 'responses' in source.tables(connection)
+    assert sources['accounts.db'].bindings == ('weightroom.accounts',)
+    backup = backup_store(store, tmp_path/'payload')
+    assert backup['verification']['counts']['responses'] == 1
+    target = Database.sqlite(tmp_path/'copied.db')
+    assert copy_store(source, target)['state'] == 'verified'
+    copied = Responses(target)
+    assert copied.one(user, response['id'])['response'] == response
+    copied.db.close()
+
+
 @pytest.fixture
 def telemetry(tmp_path, backup_keys):
     backup_keys.configure(tmp_path / 'backups')

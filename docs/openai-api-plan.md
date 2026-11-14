@@ -1,6 +1,6 @@
 # OpenAI-compatible API completion plan
 
-Implementation status: see [R1 in the brief](openai-api-work.md#r1-responses-streaming).
+Implementation status: see [R1](openai-api-work.md#r1-responses-streaming) and [R3](openai-api-work.md#r3-stored-responses-api-and-console-page) in the brief.
 
 Drafted **2026-11-13**. Covers the endpoints judged worth adding or easy to add. Moderations is
 held for an owner decision (see [Open decision](#open-decision-moderations)). Out of scope:

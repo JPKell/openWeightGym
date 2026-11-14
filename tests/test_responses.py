@@ -44,7 +44,7 @@ async def response_app(source, *, status=200):
         return httpx.Response(status, stream=source, headers={'x-loadcoach-request-id': '42', 'x-suite-node': 'test'})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(upstream), base_url='http://gateway') as door:
-        app = Starlette(routes=routes(lambda key: SimpleNamespace(name='alice') if key == 'key' else None,
+        app = Starlette(routes=routes(lambda key: SimpleNamespace(name='alice', identity='alice', group=SimpleNamespace(max_sensitivity='restricted')) if key == 'key' else None,
                                      SimpleNamespace(door=door)))
         yield app, calls
 

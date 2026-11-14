@@ -1,0 +1,20 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, card, more, confirm_two %}
+{% from 'request_parts.html' import request_fact, security_badge, status_badge %}
+{% from 'response_parts.html' import response_items %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% block title %}Response · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/requests.css?v=1">{% endblock %}
+{% block main %}
+{% call page_header('Response', back=('/responses','Responses')) %}
+<a href="?format=json" class="btn btn-outline-secondary btn-sm">Export JSON</a>
+{% if can_delete %}<form method="post"><button name="do" value="delete" class="btn btn-outline-danger btn-sm" {{ confirm_two('Delete this stored response?') }}>Delete</button></form>{% endif %}
+{% endcall %}
+{% call card() %}<dl class="rq-facts mb-0">{{ request_fact('ID', record.id) }}{{ request_fact('User', record.owner_name) }}{{ request_fact('Model', record.model) }}{% call request_fact('Status') %}{{ status_badge(record.status, error=record.status == 'failed') }}{% endcall %}{% call request_fact('Sensitivity') %}{{ security_badge(record.level) }}{% endcall %}{% call request_fact('Created') %}{{ record.created|timestamp }}{% endcall %}{% if record.request_id %}{% call request_fact('Model request') %}<a href="/requests/{{ record.request_id|urlencode }}">#{{ record.request_id }}</a>{% endcall %}{% endif %}</dl>{% endcall %}
+{% call kpi_row('Usage') %}{{ kpi('Input tokens', record.response.usage.input_tokens|count) }}{{ kpi('Output tokens', record.response.usage.output_tokens|count) }}{{ kpi('Reasoning tokens', record.response.usage.output_tokens_details.reasoning_tokens|count) }}{% endcall %}
+{% if previous or following %}{% call card('Chain') %}<nav aria-label="Response chain" class="d-flex flex-wrap gap-3">{% if previous %}<a href="/responses/{{ previous.id|urlencode }}">← Previous response</a>{% endif %}{% for next in following %}<a href="/responses/{{ next.id|urlencode }}">Next response →</a>{% endfor %}</nav>{% endcall %}{% endif %}
+{% call card('Input') %}{{ response_items(record.request.input) }}{% endcall %}
+{% call card('Output') %}{{ response_items(record.response.output) }}{% if record.response.error %}<p role="alert" class="text-danger">{{ record.response.error.message }}</p>{% endif %}{% if record.response.incomplete_details %}<p class="text-secondary">{{ record.response.incomplete_details.reason|replace('_',' ') }}</p>{% endif %}{% endcall %}
+{% call more('Settings') %}<pre class="text-wrap text-break">{{ record.request|tojson(indent=2) }}</pre>{% endcall %}
+{% call more('Usage details') %}<pre class="text-wrap text-break">{{ record.response.usage|tojson(indent=2) }}</pre>{% endcall %}
+{% endblock %}

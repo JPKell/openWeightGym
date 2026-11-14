@@ -25,7 +25,7 @@ NAV_SECTIONS = {
     ),
     'Logs': (
         ('Overview', ('/usage', '/reliability')),
-        ('Model activity', ('/requests', '/batches')),
+        ('Model activity', ('/requests', '/batches', '/responses')),
         ('Diagnostics', ('/log', '/plugins/activity', '/output')),
     ),
     'System': (
@@ -81,7 +81,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
         {"name": "Models", "links": []},
         # Collections and workflows keep their own addresses; they are here because they are used to compare models.
         {"name": "Benchmark", "links": [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements"), ("Compare", "/benchmarks/compare"), ("Collections", "/collections"), ("Workflows", "/workflows")]},
-        {"name": "Logs", "links": [("Usage", "/usage"), ("Reliability", "/reliability"), ("Model requests", "/requests"), ("Batches", "/batches"), ("Event log", "/log")]},
+        {"name": "Logs", "links": [("Usage", "/usage"), ("Reliability", "/reliability"), ("Model requests", "/requests"), ("Batches", "/batches"), ("Responses", "/responses"), ("Event log", "/log")]},
         {"name": "System", "links": [("Status", "/status")]},
         {"name": "Settings", "links": []},
     ]

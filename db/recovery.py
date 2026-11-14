@@ -96,7 +96,7 @@ def inspect_store(store: RecoveryStore) -> dict:
     """Describe reachability and schema versions without exposing a DSN."""
     descriptions = {
         "loadcoach.core": "models, requests, batches and settings",
-        "weightroom.accounts": "users, keys, groups and what was done to them",
+        "weightroom.accounts": "users, keys, groups, extraction jobs and stored Responses",
         "weightroom.roles": "roles, their benchmark evidence and model reliability",
         "weightroom.chat": "private chats, collections, prompt versions and workflows",
         "weightroom.benchmarks": "benchmark definitions and evidence",

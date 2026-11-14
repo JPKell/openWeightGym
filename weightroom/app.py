@@ -664,6 +664,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             "weightroom.schedules": data / "schedules.db",
         },
     )
+    from weightroom.response_store import Responses
+    from loadcoach.settings import Changes
+    response_settings = Changes(database_registry.database('weightroom.accounts'))
+    response_defaults = (read_settings(Path(settings.path)).get('turnstile', {}) if settings.path else {})
+    response_store = Responses(database_registry.database('weightroom.accounts'),
+        lambda: response_settings.of('turnstile').get('response_keep_days', response_defaults.get('response_keep_days', 30)))
     plugins = PluginRegistry(
         Path(settings.plugins_dir) if settings.plugins_dir else data.parent / "plugins",
         data,
@@ -5335,6 +5341,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         await database_operations.jobs.close()
         await chat_client.aclose()
         await plugin_http.aclose()
+        response_store.db.close()
+        response_settings.db.close()
         plugins.db.close()
         alerts.db.close()
         schedules.db.close()
@@ -5354,6 +5362,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     from mirrorwall.ui import routes as image_routes
     from soundroom.ui import routes as audio_routes
+    from weightroom.response_views import routes as response_routes
     from weightroom.extraction_views import routes as extraction_routes
     from weightroom.classifier_views import routes as classifier_routes
 
@@ -5364,6 +5373,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             *image_routes(for_people, page, ask, model_api),
             *audio_routes(for_people, page, ask, model_api, settings, platform),
             *extraction_routes(for_people, page, ask),
+            *response_routes(for_people, page, response_store),
             *classifier_routes(for_people, page, ask, platform),
             *plugin_routes(plugins, plugin_controller, for_people, page, go, typed),
             *conversations.routes,
@@ -5527,6 +5537,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     app.add_middleware(ClientOrigin)
     app.add_middleware(Barrier, gate=gate)
     from loadcoach.log import Log
+    app.state.responses = response_store
     observation_log = Log(database_registry.database("weightroom.accounts"))
     database_operations.audit = lambda event, owner, **detail: observation_log.add('database', event, owner, machine='front', **detail)
     from loadcoach.observation_store import set_policy

@@ -5,6 +5,18 @@ from __future__ import annotations
 from .migrations import Migration, add_column
 
 
+RESPONSES = (Migration(1, 'front-owned Responses lifecycle and input items', '''
+    CREATE TABLE responses (
+        id TEXT PRIMARY KEY, owner TEXT NOT NULL, owner_name TEXT NOT NULL,
+        level TEXT NOT NULL, created DOUBLE PRECISION NOT NULL, expires DOUBLE PRECISION NOT NULL,
+        status TEXT NOT NULL, model TEXT NOT NULL, previous TEXT, request_id TEXT,
+        request TEXT NOT NULL, response TEXT NOT NULL, preview TEXT NOT NULL,
+        stored_size INTEGER NOT NULL);
+    CREATE INDEX responses_owner_created ON responses(owner,created);
+    CREATE INDEX responses_created ON responses(created);
+'''),)
+
+
 EXTRACTIONS = (Migration(1, 'private extraction sources, jobs and correction revisions', '''
     CREATE TABLE extraction_assets (
         id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL,
@@ -787,6 +799,7 @@ from soundroom.schema import SOUNDROOM
 # The owner supplies the alias-dependent data rewrite at startup. Logical transfers
 # copy those rewritten rows and their ledger, so reproducing the schema is a no-op.
 STREAMS = {
+    "turnstile.responses": RESPONSES,
     'mirrorwall.front': MIRRORWALL, 'soundroom.front': SOUNDROOM,
     'turnstile.installations': MODEL_INSTALLATIONS,
     "components.versions": COMPONENT_VERSIONS,
