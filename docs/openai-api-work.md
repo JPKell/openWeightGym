@@ -322,6 +322,8 @@ covers:
 
 ## T1. Audio translations
 
+**Implemented 2026-11-14:** multipart translation uses ordinary admission and the translates capability, with English-only output and explicit format refusals. Transcribe shows translation only for eligible models, uses Whisper’s supported JSON format and avoids invented subtitle timestamps. Large-v3 translation passed the W1 container qualification. Canary remains unadvertised because no installed weights were available to verify its native target_language path.
+
 **Depends on W1.**
 
 **Build:**

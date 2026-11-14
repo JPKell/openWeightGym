@@ -528,18 +528,29 @@ class Front:
         """Transcribe one of the caller's recordings, optionally with speaker turns, and keep the result with it."""
         try:
             asked = await self.read_json(request)
-            if asked.keys() - {"asset", "model", "diarization_model", "language"}:
-                raise ValueError("Transcribe takes asset, model, diarization_model and language.")
+            if asked.keys() - {"asset", "model", "diarization_model", "language", "translate"}:
+                raise ValueError("Transcribe takes asset, model, diarization_model, language and translate.")
+            translate = asked.get('translate', False)
+            if type(translate) is not bool:
+                raise ValueError('translate must be true or false.')
+            if translate and 'language' in asked:
+                raise ValueError('Translation always returns English; omit language.')
             record = self.store.asset(user.identity, asked.get("asset"), user.group_name)
             if not record:
                 return error(404, "There is no such audio of yours.")
+            selected = next((one for one in await self.catalogue(user) if one['id'] == asked.get('model')), None)
+            if selected is None:
+                return error(404, 'There is no such transcription model available.')
+            if translate and not (selected.get('translates') or selected.get('capabilities', {}).get('translates')):
+                raise ValueError('This model cannot translate speech.')
             content = self.store.content(user.identity, record["id"], user.group_name)
             audio = base64.b64encode(content).decode()
             key = {"authorization": "Bearer " + self.batches.internal_key(user.name)}
-            sent = {"model": asked.get("model"), "file": audio, "response_format": "verbose_json"}
+            sent = {"model": asked.get("model"), "file": audio,
+                    "response_format": "json" if selected.get('engine_id') == 'whispercpp' else "verbose_json"}
             if asked.get("language"):
                 sent["language"] = asked["language"]
-            answer = await self.batches.door.post("/v1/audio/transcriptions", json=sent, headers=key, timeout=None)
+            answer = await self.batches.door.post("/v1/audio/translations" if translate else "/v1/audio/transcriptions", json=sent, headers=key, timeout=None)
             if answer.status_code >= 400:
                 return Response(answer.content, answer.status_code, media_type="application/json")
             result = answer.json()
@@ -550,7 +561,7 @@ class Front:
                 result["speaker_turns"] = turns.json().get("speaker_turns", [])
                 for segment in result.get("segments", []):
                     segment["speaker"] = speaker_at(result["speaker_turns"], (segment["start"] + segment["end"]) / 2)
-            result.update(model=asked.get("model"), diarization_model=asked.get("diarization_model"), at=time.time())
+            result.update(model=asked.get("model"), diarization_model=asked.get("diarization_model"), task='translate' if translate else 'transcribe', at=time.time())
             if record["mine"] and not record["temporary"]:
                 self.store.add_transcript(user.identity, record["id"], result)
             return JSONResponse(result, headers={"cache-control": "no-store"})
