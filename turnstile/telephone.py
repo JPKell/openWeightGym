@@ -85,11 +85,24 @@ class TelephoneAdmin:
                 number['pin_saved'] = self.store.pin_saved(number['number'])
             registered = []
             for owner, name in self.users.db.execute('SELECT identity,name FROM users WHERE enabled<>0'):
-                registered.extend({**one, 'owner': name} for one in self.store.own(owner, mask=True))
+                registered.extend({**one, 'owner': name, 'can_call': bool(phone_allowed(self.users.by_identity(owner)))}
+                                  for one in self.store.own(owner, mask=True))
+            number_facts = {}
+            for number in phone['numbers']:
+                try:
+                    account = self.users.by_key((self.keys.folder / (number['account'] + '.key')).read_text().strip())
+                except OSError:
+                    account = None
+                access = number.get('callers', {'mode': 'allowlist'})
+                number_facts[number['number']] = {'account_ready': bool(account and account.name == number['account'] and account.can('front-voice')),
+                    'models': account.group.models if account else [], 'pin_saved': number['pin_saved'],
+                    'has_callers': bool(access.get('entries') or number.get('accept_user_numbers', access.get('mode') != 'anyone')
+                                        and any(one['can_call'] for one in registered))}
             return JSONResponse({'credentials': self.keys.status(), 'telephone': phone, 'accounts': accounts,
                 'discovered': self.discovery.get(phone.get('account_sid'), []),
                 'caller_accounts': [name for (name,) in self.users.db.execute('SELECT name FROM users WHERE enabled<>0 ORDER BY name')],
                 'registered_numbers': registered,
+                'number_facts': number_facts,
                 'settings': next((one['settings'] for one in self.changes.everything() if one['program'] == 'voice-gateway'), [])},
                 headers={'cache-control': 'no-store'})
         if request.method != 'POST':

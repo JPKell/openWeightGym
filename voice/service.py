@@ -1,7 +1,7 @@
 """Compute's voice service: bounded speech sessions and one conversation owner per call.
 
 It turns speech into text and text into speech. It never asks a model itself: for each turn it
-hands the gateway on the front machine what to ask, and the gateway asks it through turnstile
+hands the gateway on the control node what to ask, and the gateway asks it through turnstile
 with the caller's own key, and sends the answer's words back. Who the caller is comes from
 turnstile's signed statement when the session is made (see loadcoach/statement.py). The sound
 socket then takes the session's own token, which the gateway was given for that one call.
@@ -374,6 +374,9 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
         try:
             caller(request)
             state = await coach("GET", "/loadcoach/status", service_key)
+            audio_profiles = any(profile.get('speech') == 'audiocpp' for profile in settings['profiles'].values())
+            catalogue = await coach('GET', '/v1/models', service_key, no_wake=True) if audio_profiles else {}
+            installed = {one['id'] for one in catalogue.get('data', [])}
             profiles = {}
             for name, p in settings["profiles"].items():
                 chosen = request.query_params.get("agent_model") if request.query_params.get("conversation_mode") == "hermes" else None
@@ -381,10 +384,17 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
                 room = len(sessions) < settings.get("max_active_sessions", 1)
                 heard = speech_of(name)
                 ready_since = heard.ready_since if heard is speech else True  # audio.cpp speech loads on demand
-                available = bool(ready_since and loaded and room and not state.get("draining") and not state.get("lock"))
-                profiles[name] = dict(recognition=bool(ready_since), synthesis=bool(ready_since),
+                recognition = p.get('recognition_model') in installed if heard is not speech else bool(ready_since)
+                synthesis = p.get('synthesis_model') in installed if heard is not speech else bool(ready_since)
+                available = bool(recognition and synthesis and loaded and room and not state.get("draining") and not state.get("lock"))
+                reason = (None if available else 'Compute is draining.' if state.get('draining') else
+                          'Compute models are locked.' if state.get('lock') else 'Voice session capacity is full.' if not room else
+                          'Speech recognition is not ready or its model is not installed.' if not recognition else
+                          'Speech synthesis is not ready or its model is not installed.' if not synthesis else
+                          'Model ' + (chosen or p['model']) + ' is not loaded.')
+                profiles[name] = dict(recognition=recognition, synthesis=synthesis,
                                       model=loaded, since=heard.ready_since, can_start=available,
-                                      modes=p.get("modes", ["direct"]), reason=None if available else "not_ready_or_busy")
+                                      model_name=chosen or p['model'], modes=p.get("modes", ["direct"]), reason=reason)
             return JSONResponse(dict(profiles=profiles, active=sum(s.connected for s in sessions.values()),
                                      starting=sum(not s.connected for s in sessions.values()),
                                      maximum=settings.get("max_active_sessions", 1)))

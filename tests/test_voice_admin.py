@@ -86,6 +86,8 @@ def test_private_gateway_admin_refreshes_actual_front_cache_and_respects_revocat
             raise httpx.ConnectError('compute is off')
         if request.url.path == '/loadcoach/status':
             return httpx.Response(503, json={})
+        if request.url.path == '/loadcoach/telephone':
+            return httpx.Response(200, json={'number_facts': {}})
         if request.url.path == '/voice/preview':
             assert request.method == 'POST' and request.headers['authorization'] == 'Bearer admin'
             return httpx.Response(200, content=prompts.wav(b'\x10\x27' * 240), headers={'content-type': 'audio/wav'})
@@ -143,7 +145,7 @@ def voice_panel(tmp_path, **more):
         if request.url.path == '/admin/status':
             return httpx.Response(200, json=dict(services=[dict(name='Voice gateway', state='Available', address='front')],
                 active=0, profile='default', modes=['direct'], readiness={'profiles': {}}, latency=timings.snapshot(),
-                recordings=dict(source='Cached on front', speaker=3, texts=prompts.TEXTS)))
+                recordings=dict(source='Cached on the control node', speaker=3, texts=prompts.TEXTS)))
         if request.url.path == '/admin/telephone':
             return httpx.Response(200, json=telephone_data or {'credentials': {'token': {'saved': False}, 'api': {'saved': False}}})
         if request.url.path == '/admin/regenerate':

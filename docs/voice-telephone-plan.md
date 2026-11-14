@@ -1,7 +1,7 @@
 # Telephone voice and Voice status plan
 
 Drafted **2026-11-14**; decisions settled with the owner on 2026-11-14 (see
-[Decisions](#decisions)). Status: in progress; P1–P5 complete.
+[Decisions](#decisions)). Status: in progress; P1–P6 complete.
 
 ## Goal
 
@@ -102,7 +102,7 @@ Settled with the owner on 2026-11-14.
 | P3 | Complete — setup/number editors, Twilio discovery/connect and shared signed simulation; 120 checks pass, including real sockets and full UI audit (activity follows P6) | L | P1, P2 |
 | P4 | Complete — caller policy, hashed PINs, attestation, limits and private rejection evidence; 87 focused unit/browser checks pass | M | P1 |
 | P5 | Complete — SMS ownership, private numbers, limited personal sessions and revocation; 132 clean-snapshot unit/browser/UI checks pass, including signed real-socket model attribution | L | P2, P4 |
-| P6 | Gateway status payload v2 | M | — |
+| P6 | Complete — bound listeners, private call controls, scoped readiness reasons and bounded masked activity; 135 clean-snapshot unit/browser checks pass | M | — |
 | P7 | Voice status page rebuild | L | P6 |
 | P8 | Public routes, installer, upgrade and documentation | M | P3 |
 | P9 | Professional design for the Voice area | L | P3, P5, P7 |

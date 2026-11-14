@@ -1,4 +1,4 @@
-"""The front machine's private browser page, which asks for no sign-in, and signed Twilio voice gateway."""
+"""The control node's private browser page, which asks for no sign-in, and signed Twilio voice gateway."""
 
 from loadcoach import observability as observation
 
@@ -27,6 +27,7 @@ from websockets.asyncio.client import connect
 from loadcoach.config import CLI, data_folder
 from loadcoach.settings import with_changes
 from voice import protocol, prompt_recordings, latency
+from voice import gateway_status
 from voice.hermes import Bridge, configuration
 from voice.telephone import Conversion, valid, valid_stream
 from voice.telephone_settings import configuration as telephone_configuration, validate as validate_telephone
@@ -48,7 +49,7 @@ async def prompt_audio(pcm, output):
 
 
 def may(person, mode):
-    """Check whether the account has the requested front voice ability."""
+    """Check whether the account has the requested control node voice ability."""
     abilities = person.get("can", [])
     return "superuser" in abilities or "front-voice" in abilities
 
@@ -57,7 +58,7 @@ RECORDING_BYTES = 16000 * 2 * 60 * 30  # thirty minutes of the caller's 16 kHz s
 KEY_CHECK_SECONDS = 10  # how often a live call asks Turnstile whether its key is still allowed
 
 
-def build_app(settings, client=None, connector=connect, following=None, prompt_cache=None):
+def build_app(settings, client=None, connector=connect, following=None, prompt_cache=None, listeners=()):
     """Build both source adapters; private browser routes never trust proxy headers."""
     http = client or httpx.AsyncClient(timeout=65)
     app_key = Path(settings["key_file"]).read_text().strip()
@@ -68,6 +69,10 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
     phone_rates = RateLimits()
     admitting = set()
     phone_attempts = defaultdict(lambda: deque(maxlen=50))
+    activity = gateway_status.PhoneActivity()
+    live_calls = {}
+    gateway_version = gateway_status.version()
+    entry_history = {name: {'last_success_at': None, 'last_rejection': None} for name in ('browser', 'desktop', 'telephone', 'hermes')}
     sockets = set()
     desktop_sessions = set()
     assets = Path(__file__).with_name("static")
@@ -76,6 +81,9 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
     simulation_lock = asyncio.Lock()
     latencies = latency.Recent()
     from loadcoach.client_origin import ClientOrigin, forward as forward_origin
+
+    def rejected(source, reason):
+        entry_history[source]['last_rejection'] = {'at': gateway_status.stamp(), 'reason': reason}
 
     async def carry_context(request):
         """Propagate context only to configured openWeightGym doors, never arbitrary external services."""
@@ -146,6 +154,11 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         """Render the private browser voice client page."""
         return FileResponse(assets / "index.html", headers={"cache-control": "no-store"})
 
+    def start_reply(value, status_code=200, **options):
+        if status_code >= 400:
+            rejected('browser', {403: 'unauthorized', 429: 'busy', 400: 'invalid_options', 413: 'invalid_options'}.get(status_code, 'unavailable'))
+        return JSONResponse(value, status_code=status_code, **options)
+
     async def start(request):
         """Reserve one browser connection. A browser here signs in as the one account in `browser_key_file`.
 
@@ -155,43 +168,47 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         scheme, _, console = request.headers.get("authorization", "").partition(" ")
         console = console if scheme.lower() == "bearer" else ""
         if not console and not origin_ok(request):
-            return JSONResponse({"error": "Origin refused"}, status_code=403)
+            return start_reply({"error": "Origin refused"}, status_code=403)
         try:
             if len(await request.body()) > MAX_CALL_BYTES:
-                return JSONResponse({'error': 'Voice settings are too large.'}, status_code=413)
+                return start_reply({'error': 'Voice settings are too large.'}, status_code=413)
             asked = await request.json()
             mode, voice, record = asked.get("conversation_mode", "direct"), asked.get("voice") or None, asked.get("record", False) is True
             profile_name, options = asked.get('profile') or None, asked.get('options', {})
             key = console or Path(settings["browser_key_file"]).read_text().strip()
         except (ValueError, KeyError, AttributeError, OSError):
-            return JSONResponse({"error": "Voice is unavailable"}, status_code=503)
+            return start_reply({"error": "Voice is unavailable"}, status_code=503)
         if mode not in settings.get("modes", ["direct"]):
-            return JSONResponse({"error": "That mode is not available"}, status_code=403)
+            return start_reply({"error": "That mode is not available"}, status_code=403)
         if (profile_name is not None and (not isinstance(profile_name, str) or not protocol.ID.fullmatch(profile_name))
                 or not isinstance(options, dict) or options.keys() - CALL_FIELDS):
-            return JSONResponse({'error': 'Choose valid voice settings.'}, status_code=400)
+            return start_reply({'error': 'Choose valid voice settings.'}, status_code=400)
         if voice is not None and (not settings.get("soundroom_profile") or mode != "direct" or not isinstance(voice, str) or not protocol.ID.fullmatch(voice)):
-            return JSONResponse({"error": "That voice is not available"}, status_code=403)
+            return start_reply({"error": "That voice is not available"}, status_code=403)
         if len(browser_sessions) >= settings.get("max_starting_sessions", 4) + settings.get("max_active_sessions", 1):
-            return JSONResponse({"error": "Voice is busy"}, status_code=429)
+            return start_reply({"error": "Voice is busy"}, status_code=429)
         # Nothing is asked of compute here. It is woken, and decides what this account may do, once the socket connects.
         sid, cookie = secrets.token_hex(16), secrets.token_urlsafe(32)
         browser_sessions[sid] = dict(key=key, mode=mode, voice=voice, record=record and voice is not None, cookie=cookie, created=time.monotonic(),
                                      console=bool(console), profile=profile_name, options=options)
         if console:
-            return JSONResponse({"session_id": sid, "cookie": cookie}, headers={"cache-control": "no-store"})
+            return start_reply({"session_id": sid, "cookie": cookie}, headers={"cache-control": "no-store"})
         response = JSONResponse({"session_id": sid}, headers={"cache-control": "no-store"})
         response.set_cookie("voice_" + sid, cookie, httponly=True, samesite="strict", max_age=1800,
                             secure=request.headers.get("origin", "").startswith("https://"))
         return response
 
-    def phone_attempt(number, caller, outcome, reason='', account=None):
+    def phone_attempt(number, caller, outcome, reason='', account=None, caller_hash=None):
         """Only masked numbers and keyed caller correlations enter retained activity or events."""
         label = number.get('label', 'Unknown number') if number else 'Unknown number'
         row = dict(at=time.time(), caller=masked_phone(caller), account=account, outcome=outcome, reason=reason,
-                   caller_hash=phone_digest(Path(settings['key_file']).parent, caller), duration=None)
-        phone_attempts[label].append(row)
+                   caller_hash=caller_hash or phone_digest(Path(settings['key_file']).parent, caller), duration=None)
+        number_key = phone_digest(Path(settings['key_file']).parent, number.get('number', 'legacy') if number else 'unknown')
+        phone_attempts[label] = activity.record(number_key, row)
+        if len(phone_attempts) > 256:
+            phone_attempts.pop(next(iter(phone_attempts)))
         if outcome == 'rejected':
+            rejected('telephone', reason)
             print(json.dumps({'event': 'voice.phone.rejected', 'reason': reason, 'caller_hash': row['caller_hash']}), flush=True)
         return row
 
@@ -307,7 +324,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         item['attempt'] = phone_attempt(number, caller, 'accepted', account=decision['account'])
         return Response(connected_xml(phone, item), media_type='application/xml')
 
-    async def controller(socket, sid, key, mode, source, stream_sid=None, voice_id=None, record=False, chosen_profile=None, options=None):
+    async def controller(socket, sid, key, mode, source, stream_sid=None, voice_id=None, record=False, chosen_profile=None, options=None, number_label=None):
         """Run one call with bounded source queues, startup, prompts and cleanup.
 
         A browser caller may choose a SoundRoom voice: the call then uses `soundroom_profile`, whose
@@ -315,6 +332,10 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         conversation in WeightRoom, and with `record` both sides' sound are kept as SoundRoom recordings.
         """
         profile_name = chosen_profile or (settings["soundroom_profile"] if voice_id and settings.get("soundroom_profile") else settings.get("profile", "default"))
+        end_requested, ended = asyncio.Event(), asyncio.Event()
+        live_calls[sid] = dict(source='telephone' if source == 'twilio' else source, number=number_label, account=None,
+            mode=mode, profile=profile_name, model=None, started=gateway_status.stamp(), turns=0,
+            state='starting', socket=socket, end=end_requested, ended=ended, began=time.monotonic())
         queue = asyncio.Queue(maxsize=25)
         queued_bytes = 0
         conversion = Conversion(cancel_echo=source == "twilio")
@@ -331,7 +352,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         playback_times = {}
         timed_turn = None
         token = ""  # the voice session's own, for its sound socket, given when it is made
-        session_voice = voice  # the node the session started on, which keeps it until it ends; the front says which
+        session_voice = voice  # the node the session started on, which keeps it until it ends; the control node says which
         conversation = None  # the WeightRoom conversation a SoundRoom call's exchanges are kept in
         heard_pcm, said_pcm = bytearray(), bytearray()  # both sides' sound, kept only when recording
 
@@ -353,6 +374,17 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         async def output(value):
             """Send ordered PCM frames to the current client's playback transport."""
             nonlocal segment, turn, segment_played, next_mark, timed_turn
+            if isinstance(value, dict):
+                states = {'session.ready': 'ready', 'turn.started': 'processing', 'playback.segment': 'speaking',
+                          'turn.completed': 'listening', 'playback.clear': 'interrupted', 'session.error': 'failed'}
+                if value.get('type') in states:
+                    live_calls[sid]['state'] = states[value['type']]
+                if value.get('type') == 'turn.started' and type(value.get('turn')) is int and value['turn'] > 0:
+                    live_calls[sid]['turns'] = min(1000000, max(live_calls[sid]['turns'], value['turn']))
+                if value.get('type') == 'session.ready':
+                    entry_history[live_calls[sid]['source']]['last_success_at'] = gateway_status.stamp()
+                    if mode == 'hermes':
+                        entry_history['hermes']['last_success_at'] = gateway_status.stamp()
             if record and isinstance(value, bytes) and len(said_pcm) < RECORDING_BYTES * 3 // 2:
                 said_pcm.extend(value)
             if isinstance(value, dict):
@@ -516,6 +548,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                         raise ValueError("unauthorized")
                     from types import SimpleNamespace
                     info = result.json()
+                    live_calls[sid]['account'] = info.get('name')
                     observation.identify(SimpleNamespace(identity=info.get('identity'), name=info['name'],
                                                          key_identity=None, can=lambda ability:ability in info['can']))
                 if mode == "hermes":
@@ -548,6 +581,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                     code = failure.get('code') if isinstance(failure, dict) else None
                     raise ValueError(code if code in START_FAILURES else "busy" if result.status_code == 429 else "unavailable")
                 token = result.json()["token"]
+                live_calls[sid]['model'] = result.json().get('model')
                 session_voice = (result.json().get("voice_url") or voice).rstrip("/")
                 if mode == "direct":
                     # Exercise the chosen model with the caller's own key, as every turn will.
@@ -725,11 +759,17 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         sockets.add(socket)
         listener = asyncio.create_task(receive())
         running = asyncio.create_task(run())
+        ending = asyncio.create_task(end_requested.wait())
         try:
-            done, _ = await asyncio.wait({listener, running}, return_when=asyncio.FIRST_COMPLETED)
+            done, _ = await asyncio.wait({listener, running, ending}, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
                 await task
         except (Exception, asyncio.CancelledError) as problem:
+            if not isinstance(problem, (asyncio.CancelledError, WebSocketDisconnect)):
+                code = str(problem) if str(problem) in START_FAILURES else 'unavailable'
+                rejected(live_calls[sid]['source'], code)
+                if mode == 'hermes':
+                    rejected('hermes', code)
             if running.done() and not listener.done():
                 with suppress(Exception):
                     if source in ("browser", "desktop"):
@@ -738,10 +778,10 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                     await output(dict(type="playback.clear", turn=turn or 0))
                     await prompt("busy" if str(problem) == "busy" else "unavailable")
         finally:
-            for task in (listener, running, agent_task):
+            for task in (listener, running, ending, agent_task):
                 if task and not task.done():
                     task.cancel()
-            await asyncio.gather(listener, running, *([agent_task] if agent_task else []), return_exceptions=True)
+            await asyncio.gather(listener, running, ending, *([agent_task] if agent_task else []), return_exceptions=True)
             with suppress(Exception):
                 if token:
                     await ask("DELETE", session_voice + "/voice/sessions/" + sid, token, timeout=2)
@@ -752,14 +792,17 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 with suppress(Exception):
                     await bridge.close()
             sockets.discard(socket)
+            live_calls.pop(sid, None)
             with suppress(Exception):
                 await socket.close()
+            ended.set()
 
     async def browser(socket):
         """Authenticate and serve the selected private browser voice WebSocket."""
         sid = socket.path_params["sid"]
         item = browser_sessions.get(sid)
         if socket.scope["server"][1] == settings.get("public_port", 8081) or not item or item.get("connected") or not (item["console"] or origin_ok(socket)) or not secrets.compare_digest(socket.cookies.get("voice_" + sid, ""), item["cookie"]):
+            rejected('browser', 'unauthorized')
             await socket.close(code=1008)
             return
         item["connected"] = True
@@ -779,9 +822,11 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 scheme.lower() != "bearer" or not 1 <= len(key) <= 512 or
                 mode not in settings.get("modes", ["direct"]) or
                 voice_id and (not settings.get("soundroom_profile") or mode != "direct" or not protocol.ID.fullmatch(voice_id))):
+            rejected('desktop', 'unauthorized')
             await socket.close(code=1008)
             return
         if len(desktop_sessions) + len(browser_sessions) >= settings.get("max_starting_sessions", 4) + settings.get("max_active_sessions", 1):
+            rejected('desktop', 'busy')
             await socket.close(code=1013)
             return
         sid = secrets.token_hex(16)
@@ -805,11 +850,12 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             await socket.close(code=1008)
             return
         if not valid_stream(token, phone["stream_url"], socket.headers.get("x-twilio-signature", "")):
-            print(json.dumps({"event": "voice.phone.rejected", "stage": "upgrade", "reason": "invalid_signature"}), flush=True)
+            phone_attempt(None, '', 'rejected', 'invalid_signature')
             await socket.close(code=1008)
             return
         await socket.accept()
         call = None
+        item = None
         claimed = False
         try:
             async with asyncio.timeout(5):
@@ -832,10 +878,11 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             phone_voice = number.get("voice") if number.get("mode", "direct") == "direct" else None
             key_file = number.get('key_file') or str(Path(settings['key_file']).parent / (number['account'] + '.key'))
             await controller(socket, item["id"], item.get("session_key") or Path(key_file).read_text().strip(), number.get("mode", "direct"), "twilio", stream_sid,
-                             voice_id=phone_voice, chosen_profile=number.get('profile'))
+                             voice_id=phone_voice, chosen_profile=number.get('profile'), number_label=number.get('label'))
         except (ValueError, KeyError, TypeError, OSError, TimeoutError, WebSocketDisconnect):
             if not claimed:
-                print(json.dumps({"event": "voice.phone.rejected", "stage": "start", "reason": "invalid_start"}), flush=True)
+                phone_attempt(item.get('number') if item else None, '', 'rejected', 'invalid_start',
+                              caller_hash=item.get('attempt', {}).get('caller_hash') if item else None)
             with suppress(Exception):
                 await socket.close(code=1008)
         finally:
@@ -883,8 +930,123 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         except (OSError, httpx.HTTPError, ValueError):
             return {}
 
+    async def status_payload(headers):
+        """Observe compute and accounts without waking, warming, reserving or loading anything."""
+        readiness, account_facts = {}, {}
+        services = [{'name': 'Voice gateway', 'state': 'Listening' if gateway_status.bound(listeners, settings.get('port', 8446)) else 'Listener not confirmed', 'address': 'front'}]
+        try:
+            response = await http.get(voice_door + '/voice/ready', headers=headers, timeout=3)
+            if response.is_success:
+                readiness = response.json()
+            services.append({'name': 'Compute voice', 'state': 'Responding' if response.is_success else 'Unavailable', 'address': voice_door})
+        except (httpx.HTTPError, ValueError):
+            services.append({'name': 'Compute voice', 'state': 'Unavailable', 'address': voice_door})
+        try:
+            response = await http.get(turnstile + '/loadcoach/telephone', headers=headers, timeout=3)
+            if response.is_success:
+                account_facts = response.json()
+        except (httpx.HTTPError, ValueError):
+            pass
+        try:
+            response = await http.get(turnstile + '/loadcoach/status', headers=headers, timeout=2)
+            services.append({'name': 'LoadCoach', 'state': 'Responding' if response.is_success else 'Unavailable', 'address': turnstile})
+        except httpx.HTTPError:
+            services.append({'name': 'LoadCoach', 'state': 'Unavailable', 'address': turnstile})
+        hermes = configuration(settings) if settings.get('hermes') else {}
+        hermes_problem = ('Hermes is not configured.' if not hermes else
+            'The Hermes runtime is not installed.' if hermes.get('python') and not Path(hermes['python']).is_file() else
+            'The Hermes provider key is missing.' if hermes.get('python') and not Path(hermes.get('provider_key_file', '')).is_file() else
+            'The Hermes API key is missing.' if hermes.get('key_file') and not Path(hermes['key_file']).is_file() else None)
+        hermes_readiness = {}
+        if hermes and 'hermes' in settings.get('modes', ['direct']):
+            try:
+                response = await http.get(voice_door + '/voice/ready', headers=headers, timeout=3,
+                    params={'conversation_mode': 'hermes', 'agent_model': hermes.get('model', '')})
+                hermes_readiness = response.json() if response.is_success else {}
+            except (httpx.HTTPError, ValueError):
+                pass
+        def profile_state(name, mode='direct'):
+            source = hermes_readiness if mode == 'hermes' else readiness
+            profile = source.get('profiles', {}).get(name, {})
+            if not profile:
+                return False, 'Compute voice is unavailable.'
+            if mode not in profile.get('modes', ['direct']):
+                return False, 'This profile does not allow ' + mode + ' calls.'
+            return bool(profile.get('can_start')), profile.get('reason') or ('Ready' if profile.get('can_start') else 'The voice profile is not ready.')
+        private_bound = gateway_status.bound(listeners, settings.get('port', 8446))
+        desktop_bound = gateway_status.bound(listeners, settings.get('desktop_port'))
+        public_bound = gateway_status.bound(listeners, settings.get('public_port', 8081))
+        capacity = len(live_calls) < settings.get('max_active_sessions', 1)
+        default_ready, default_reason = profile_state(settings.get('profile', 'default'))
+        entries = {}
+        for name, configured, listening in [('browser', True, private_bound),
+                ('desktop', bool(settings.get('desktop_port')), desktop_bound),
+                ('hermes', bool(hermes and 'hermes' in settings.get('modes', [])), private_bound or desktop_bound or public_bound)]:
+            ready, reason = profile_state(settings.get('profile', 'default'), 'hermes') if name == 'hermes' else (default_ready, default_reason)
+            if name == 'hermes' and hermes_problem:
+                ready, reason = False, hermes_problem
+            reason = ('Not configured.' if not configured else 'Listener is not bound.' if not listening else
+                      'Gateway call capacity is full.' if not capacity else reason)
+            entries[name] = dict(configured=configured, listening=listening, can_start=bool(configured and listening and ready and capacity),
+                reason=reason, **entry_history[name])
+        phone = telephone_configuration(settings)
+        numbers = []
+        token_saved = bool(phone.get('token_file') and Path(phone['token_file']).is_file())
+        for number in phone.get('numbers', []):
+            key = number.get('number', 'legacy')
+            facts = account_facts.get('number_facts', {}).get(key, {})
+            if number.get('legacy'):
+                try:
+                    phone_key = Path(number['key_file']).read_text().strip()
+                    response = await ask('GET', turnstile + '/loadcoach/me', phone_key, timeout=2, no_wake=True)
+                    facts = {'account_ready': response.is_success and may(response.json(), number.get('mode', 'direct')),
+                             'models': response.json().get('model_access') if response.is_success else []}
+                except (OSError, httpx.HTTPError, ValueError, KeyError):
+                    facts = {}
+            mode, profile_name = number.get('mode', 'direct'), number.get('profile') or settings.get('profile', 'default')
+            ready, reason = profile_state(profile_name, mode)
+            access = number.get('callers', {'mode': 'allowlist'})
+            if not phone.get('enabled'):
+                ready, reason = False, 'Telephone is off.'
+            elif not number.get('enabled', True):
+                ready, reason = False, 'This number is disabled.'
+            elif not token_saved:
+                ready, reason = False, 'Save the Twilio auth token.'
+            elif not public_bound:
+                ready, reason = False, 'The public listener is not bound. Restart the gateway after saving its port.'
+            elif not facts.get('account_ready'):
+                ready, reason = False, 'The phone account or its voice permission/key is unavailable.'
+            elif mode == 'direct' and facts.get('models') is not None and facts.get('models') != '*' and readiness.get('profiles', {}).get(profile_name, {}).get('model_name') and readiness['profiles'][profile_name]['model_name'] not in facts.get('models', []):
+                ready, reason = False, 'The phone account cannot use this profile’s model.'
+            elif access.get('mode') == 'pin' and not facts.get('pin_saved') and not facts.get('has_callers'):
+                ready, reason = False, 'Save a keypad PIN or add an allowed caller.'
+            elif access.get('mode') == 'allowlist' and not facts.get('has_callers'):
+                ready, reason = False, 'Add an allowlist entry or a verified user number.'
+            elif not capacity:
+                ready, reason = False, 'Gateway call capacity is full.'
+            elif mode == 'hermes' and hermes_problem:
+                ready, reason = False, hermes_problem
+            numbers.append(dict(label=number.get('label', 'Legacy'), number=masked_phone(number.get('number')), enabled=number.get('enabled', True),
+                account=number.get('account', 'voice-phone'), mode=mode, profile=profile_name, caller_access=access.get('mode', 'anyone'),
+                can_start=ready, reason=reason, **activity.snapshot(phone_digest(Path(settings['key_file']).parent, key))))
+        phone_ready = any(number['can_start'] for number in numbers)
+        phone_reason = ('Telephone is off.' if not phone.get('enabled') else 'Add a telephone number.' if not numbers else
+                        'Ready' if phone_ready else next(number['reason'] for number in numbers if not number['can_start']))
+        entries['telephone'] = dict(configured=bool(token_saved and phone.get('account_sid') and numbers), listening=public_bound,
+            can_start=phone_ready, reason=phone_reason, **entry_history['telephone'])
+        return {'version': {key: value for key, value in gateway_version.items() if key != 'started'} | {'uptime_seconds': round(time.time()-gateway_version['started'], 1)},
+            'entries': entries, 'services': services, 'readiness': readiness, 'active': len(sockets), 'latency': latencies.snapshot(),
+            'telephone': {'enabled': bool(phone.get('enabled')), 'webhook_url': phone.get('webhook_url', ''), 'stream_url': phone.get('stream_url', ''),
+                'public_port': settings.get('public_port', 8081), 'public_bound': public_bound, 'credentials': {'token': token_saved,
+                'api': (Path(settings['key_file']).parent / 'voice-twilio-api.key').is_file()}, 'numbers': numbers},
+            'calls': [dict(id=sid, duration_seconds=round(time.monotonic()-call['began'], 1), **{key: call[key] for key in ('source', 'number', 'account', 'mode', 'profile', 'model', 'started', 'turns', 'state')}) for sid, call in live_calls.items()],
+            'modes': settings.get('modes', ['direct']), 'profile': settings.get('profile', 'default'),
+            'recordings': {'source': 'Cached on the control node' if prompt_cache and prompt_cache.bundle else 'Bundled defaults',
+                **({key: prompt_cache.bundle[key] for key in ('speaker', 'revision')} if prompt_cache and prompt_cache.bundle else {}),
+                'texts': prompt_cache.bundle.get('texts', prompt_recordings.TEXTS) if prompt_cache and prompt_cache.bundle else prompt_recordings.TEXTS}}
+
     async def admin(request):
-        """Private operator controls, authorized afresh by front's existing accounts."""
+        """Private operator controls, authorized afresh by the control node's existing accounts."""
         scheme, _, key = request.headers.get('authorization', '').partition(' ')
         if scheme.lower() != 'bearer' or not key:
             return Response(status_code=401)
@@ -897,6 +1059,14 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 return Response(status_code=403)
             headers = {'authorization': 'Bearer ' + key, 'x-turnstile-no-wake': '1'}
             action = request.path_params.get('action', 'status')
+            if request.path_params.get('call_id') and request.method == 'POST':
+                call = live_calls.get(request.path_params['call_id'])
+                if call is None:
+                    return Response(status_code=404)
+                call['end'].set()
+                with suppress(TimeoutError):
+                    await asyncio.wait_for(call['ended'].wait(), 5)
+                return JSONResponse({'ended': call['ended'].is_set()}, status_code=200 if call['ended'].is_set() else 202)
             if action == 'telephone':
                 body = await request.body()
                 if len(body) > 16384:
@@ -954,31 +1124,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                     return JSONResponse(result, headers={'cache-control': 'no-store'})
                 return Response(reply.content, status_code=reply.status_code, media_type='application/json', headers={'cache-control': 'no-store'})
             if action == 'status' and request.method == 'GET':
-                services = [{'name': 'Voice gateway', 'state': 'Available', 'address': 'front'},
-                            {'name': 'Turnstile / accounts', 'state': 'Available', 'address': turnstile}]
-                readiness = {}
-                try:
-                    reply = await http.get(voice_door + '/voice/ready', headers=headers, timeout=3)
-                    readiness = reply.json() if reply.is_success else {}
-                    services.append({'name': 'Compute voice', 'state': 'Available' if reply.is_success else f'Not ready (HTTP {reply.status_code})', 'address': voice_door})
-                except (httpx.HTTPError, ValueError):
-                    services.append({'name': 'Compute voice', 'state': 'Unavailable', 'address': voice_door})
-                try:
-                    reply = await http.get(turnstile + '/loadcoach/status', headers=headers, timeout=2)
-                    services.append({'name': 'LoadCoach', 'state': 'Available' if reply.is_success else f'Unavailable (HTTP {reply.status_code})', 'address': turnstile})
-                except httpx.HTTPError:
-                    services.append({'name': 'LoadCoach', 'state': 'Unavailable', 'address': turnstile})
-                hermes = settings.get('hermes', {})
-                services.append({'name': 'Hermes', 'state': 'Starts per call' if hermes.get('python') else 'Configured' if hermes else 'Not configured',
-                                 'address': hermes.get('url', 'front')})
-                return JSONResponse({'services': services, 'readiness': readiness,
-                    'active': len(sockets), 'latency': latencies.snapshot(),
-                    'modes': settings.get('modes', ['direct']), 'profile': settings.get('profile', 'default'),
-                    'recordings': {'source': 'Cached on front' if prompt_cache and prompt_cache.bundle else 'Bundled defaults',
-                                   **({key: prompt_cache.bundle[key] for key in ('speaker', 'revision')}
-                                      if prompt_cache and prompt_cache.bundle else {}),
-                                   'texts': prompt_cache.bundle.get('texts', prompt_recordings.TEXTS) if prompt_cache and prompt_cache.bundle else prompt_recordings.TEXTS}},
-                    headers={'cache-control': 'no-store'})
+                return JSONResponse(await status_payload(headers), headers={'cache-control': 'no-store'})
             if action == 'recordings' and request.method == 'GET':
                 name = request.query_params.get('name', '')
                 if name not in prompt_recordings.TEXTS:
@@ -1013,6 +1159,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             return JSONResponse({'error': {'code': 'voice_admin_unavailable'}}, status_code=503)
 
     app = Starlette(lifespan=lifespan, routes=[Route("/", page), Route("/browser/config", browser_config),
+        Route('/admin/calls/{call_id}/end', admin, methods=['POST']),
         Route('/admin/{action}', admin, methods=['GET', 'POST']),
         Route("/browser/sessions", start, methods=["POST"]),
         WebSocketRoute("/browser/sessions/{sid}/stream", browser),
@@ -1055,6 +1202,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
     app.state.browser_sessions = browser_sessions
     app.state.phone_calls = phone_calls
     app.state.phone_attempts = phone_attempts
+    app.state.live_calls = live_calls
     return app
 
 
@@ -1072,7 +1220,7 @@ def serve(config: Annotated[Path, typer.Option()] = Path("settings/voice-gateway
     if settings.get("public_port"):
         sockets.append(listening(settings.get("public_host", "0.0.0.0"), settings["public_port"]))
     cache = prompt_recordings.PromptCache(data_folder(config, settings) / "voice-prompts.json")
-    uvicorn.Server(uvicorn.Config(build_app(settings, following=following, prompt_cache=cache), access_log=False, ws_max_size=16384, ws_max_queue=4)).run(sockets=sockets)
+    uvicorn.Server(uvicorn.Config(build_app(settings, following=following, prompt_cache=cache, listeners=sockets), access_log=False, ws_max_size=16384, ws_max_queue=4)).run(sockets=sockets)
 
 
 def main():
