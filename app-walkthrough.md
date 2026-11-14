@@ -34,12 +34,11 @@
 - [x] Results
 - [x] Node measurements
 - [x] Compare
-- [ ] Collections
-- [ ] Collection specific page
-- [ ] Source excerpt
-- [ ] Workflows
-- [ ] Workflow specific page
-- [ ] Manage
+- [x] Collections
+- [x] Collection specific page
+- [x] Workflows
+- [x] Workflow specific page
+- [x] Manage
 
 ## Logs
 
@@ -67,6 +66,21 @@
 - [ ] Restore preview
 
 ## Settings
+
+The shared workspace and settings controls are verified in [the settings plan](docs/settings-plan.md#11-work-plan).
+Search, Changed only, native saves/resets, restart notices, source/default inspection and history
+share the same components across General, Compute nodes, Voice, Tools, Audio, Groups and Allowances.
+The existing page checkboxes below continue tracking each page’s broader walkthrough.
+
+- [x] Requests and queue — per-node admission/residency, live routing and batch Advanced controls
+- [x] Retention and privacy — authoritative event retention, observations, chat expiry and built-in backups
+- [x] Alerts and notifications — live thresholds, write-only system/personal channels and delivery status
+- [x] Security and sign-in — address-scoped protection, password/key/session policy and file-tier proxy trust
+- [x] Uploads and limits — live defaults and per-group inheritance/ceilings
+- [x] Downloads and credentials — node-owned tokens and live concurrency without offline queuing
+- [x] Machine configuration — redacted file sources/defaults, compatibility flags and accurate ownership
+- [x] Settings history — single-change revert and validated secret-free JSON preview/import/export
+- [x] General display defaults and superuser remote MCP settings — escaped announcements, inherited themes and live client replacement
 
 - [ ] Compute nodes
 - [ ] Users

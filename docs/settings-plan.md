@@ -487,7 +487,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 3.9 Remote MCP servers (705 catalogue/workspace checks, signed live routing/rotation/drain and native browser checks, 83 broader UI checks including all 39 consistency cases; disposable PostgreSQL contract).
 - [x] Phase 3 clean suite, push and normal deployment verified (9b6a783; 75 tiers, 66 restored live edits, 19 pages and stable service PIDs on five checkouts).
 - [x] 4.1 Final source/default, timestamp, ownership and CLI audit (834 checks pass; two setup failures reproduce in the deployed baseline).
-- [ ] 4.2 Defaults/examples comments, operating/restart guide, walkthrough and template index.
+- [x] 4.2 Defaults/examples comments, operating/restart guide, walkthrough and template index updated in place.
 - [ ] 4.3 Complete clean-worktree suite, final deployment and live verification.
 
 ### Phase 0: Setting catalogue (foundation; fixes P3 and P4)

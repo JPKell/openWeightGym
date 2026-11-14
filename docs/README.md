@@ -291,9 +291,13 @@ action here or in Components. Restarts can interrupt active work. Compute action
 Spotter's machine-file service allowlist; control node actions use the installed `owg restart` route.
 
 **Machine configuration** selects one node and shows read-only file values, their reported source,
-defaults, differences, retired/derived/deprecated flags and service restart commands. Old services
+defaults, differences, retired/derived/deprecated flags and service restart commands. Wake entries
+identify the control node’s machine-file section and apply immediately through Turnstile.
+The [restart matrix](operations.md#settings-catalogue-and-restarts) lists site-editable restart fields. Old services
 may not report source/default evidence yet. Retired overrides remain stored and are ignored.
 Security and sign-in also shows the file-controlled cookie, browser-origin and trusted-proxy settings.
+[Sign-in policy](operations.md#sign-in-policy) explains per-address locks, CLI recovery, new-key
+expiry and idle sessions; configure actual trusted proxy addresses before relying on forwarded clients.
 Alerts and notifications contains live thresholds, channel setup, write-only credentials and test delivery.
 Tools includes a superuser-only remote MCP editor with write-only keys; file servers take precedence.
 General also controls the shared site name, escaped announcement, theme defaults and initial text

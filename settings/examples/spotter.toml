@@ -27,7 +27,7 @@ data = "../data"
 # that holds the users. Left out, as here, it is loadcoach.toml beside this file.
 # loadcoach = "/home/you/openWeightGym/settings/loadcoach.toml"
 
-# Folders whose drives are watched for room.
+# Absolute folders whose drives are watched for free space (at most 32). Changes apply immediately.
 disks = ["/", "/mnt/ssd"]
 
 # Tell turnstile immediately before a power action, signed with the machine key that LoadCoach's

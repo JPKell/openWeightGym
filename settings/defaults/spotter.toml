@@ -10,6 +10,7 @@
 # Seconds between the readings that are kept, and the days they are kept for. A reading is about
 # 400 bytes: every 30 seconds for 28 days is 37 MB.
 sample_every = 30
+# Days of telemetry readings kept on this node. Zero removes readings at the next daily prune. Live.
 keep_days = 28
 
 # Minutes with nothing using the machine before spotter puts it to sleep. 0, or left out, means
@@ -20,8 +21,8 @@ keep_days = 28
 #
 #   systemd-inhibit --what=sleep --why="a long job" COMMAND
 #
-# Before turning this on, make sure the machine can be woken again: see wake_mac in
-# settings/examples/weightroom.toml. A machine that sleeps and cannot be woken has to be walked to.
+# Before turning this on, configure Wake for this node on Compute nodes or under
+# [machines.NAME] in settings/weightroom.toml on the control node. An unreachable sleeping machine needs local access.
 sleep_after = 0
 busy_gpu = 10
 busy_processor = 25

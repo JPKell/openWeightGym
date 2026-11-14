@@ -64,7 +64,7 @@ llama_server = "/home/you/.local/bin/llama-server"
 # display_name = "Compute PostgreSQL"
 
 # Recommended: one root per LoadCoach node. LoadCoach creates and uses exactly the `llm`,
-# `adapters`, `projectors`, `image` and `audio` subfolders. This can also be changed from System > Settings;
+# `adapters`, `projectors`, `image` and `audio` subfolders. This can also be changed from Settings > Compute nodes;
 # restart LoadCoach to apply it.
 # models_folder = "/home/you/openWeightGym/models"
 #

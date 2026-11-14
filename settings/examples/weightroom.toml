@@ -43,12 +43,12 @@ alert_allowance_percent = 0
 
 
 # Default mock rates, in USD per million tokens, for usage without a recorded or model rate.
-# They begin at 2 for input and 10 for output and can be changed under System > Settings.
+# They begin at 2 for input and 10 for output and can be changed under Settings > General.
 # mock_input_rate = 2.0
 # mock_output_rate = 10.0
 
 # Third-party services shown on Machine and in System Logs. Change these with the checkboxes
-# under System > Settings > WeightRoom. Supported names: ollama, docker, apache and nginx.
+# under Settings > General. Supported names: ollama, docker, apache and nginx.
 # third_party_services = ["ollama", "docker"]
 
 # Verified recovery sets retained on each machine. Zero keeps every set.
@@ -64,7 +64,7 @@ alert_allowance_percent = 0
 # backup_every = "off"
 # backup_time = "03:00"
 
-# In-app GPU heat alerts; notification only. Changed live under System > Settings.
+# In-app GPU heat alerts; notification only. Changes apply immediately from Settings > Alerts and notifications.
 # alert_gpu_temperature = 85
 
 # Observation alerts: enable rate/latency thresholds after measuring a baseline.
@@ -77,7 +77,7 @@ alert_allowance_percent = 0
 # Observation spans kept on the control node: days kept (1-30), the percent of all-successful traces kept
 # (0-100; spans that did not succeed are always kept, and every span still counts in the metrics),
 # and a cap on stored spans (0 is none). Polling makes most spans, so a low percent saves the most.
-# Applied when weightroom starts.
+# Changes apply immediately to span writers and pruning.
 # observation_keep_days = 7
 # observation_success_percent = 100
 # observation_max_spans = 0
@@ -275,6 +275,25 @@ responses_max_mib = 256
 # default_chat_model = ""
 
 [turnstile]
+# Security defaults and validated ranges are documented in defaults/weightroom.toml.
+# These live values affect new authentication attempts, passwords and keys; existing
+# passwords, key expiry times and active lock end times are preserved.
+# sign_in_max_failures = 5
+# sign_in_window_minutes = 15
+# sign_in_lockout_minutes = 30
+# password_min_length = 8
+# api_key_max_days = 0
+# session_idle_hours = 0
+# Advanced routing and batch controls also apply live; see Requests and queue.
+# role_tries = 3
+# role_loaded_bonus = 25
+# role_fast_loaded_bonus = 100
+# role_unknown_speed = 10.0
+# role_unknown_load = 60.0
+# batch_max_lines = 10000
+# batch_max_mib = 50
+# batch_tries = 3
+# batch_retry_seconds = 30
 # Live recorded spending policy: advisory, warn, or block (hosted requests only).
 # Unknown and in-flight costs are excluded; existing hosted ceilings still apply.
 allowance_mode = "advisory"

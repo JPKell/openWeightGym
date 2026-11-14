@@ -1240,6 +1240,61 @@ Older `[deploy]` settings are ignored and can be removed. The manual maintenance
 `scripts/deploy-front.sh` and `scripts/deploy.sh` remain available for developer updates and
 the one-time data moves `deploy.sh` performs.
 
+## Settings catalogue and restarts
+
+`loadcoach/setting_catalog.py` defines setting types, ranges, permissions, tiers, labels and
+defaults. Shipped `settings/defaults/PROGRAM.toml` values are laid under the host-local machine
+file; validated web overrides take precedence. Control node program overrides use its configured
+accounts/settings store. LoadCoach, Spotter and Voice overrides remain owned by their selected
+node; Wake overrides live on the control node under `machines:NAME`. No fleet defaults are copied.
+Reset removes only the chosen override and restores its machine-file/default value. Retired
+settings remain stored but are ignored; standalone LoadCoach still owns its event retention.
+
+Use the shared workspace’s Live, Needs restart and File only badges. A pending notice compares
+the edit time with the owning process’s actual start; report polling cannot clear it. Holders of
+`restart-services` can use the existing Components action, or the normal `owg update; owg restart`
+route. Multi-service restart stops all selected services before starting upgraded processes so
+old PostgreSQL readers release migration locks. Check effective source and live behavior afterward.
+Machine-file listeners, paths, database bindings, executable policy and proxy trust stay file-only.
+
+| Service | Site settings requiring restart | Live settings include |
+|---|---|---|
+| LoadCoach, per node | `llama_server`, `models_folder`, `models_storage_folder`, `disable_ram_offload`, `engines` | Admission, queue/residency and download caps, retention and headroom policy |
+| Turnstile, control node | `max_in_flight`, `artifact_machine` | Request timing, routing/batches, security, event/Responses retention and allowance policy |
+| Voice, per node | `model_parallel`, recognition threads/decoding/active paths, synthesis speaker/threads/workers | Recognition endpoint limits for new sessions |
+| Voice gateway, control node | `public_host`, `public_port` | Hermes toolsets, search and new-call settings |
+| WeightRoom, Spotter, ToolLocker | None of their site-editable settings | Display/content policy and notifications; monitored disks; URL remote MCP policy |
+
+Machine inspection identifies each reported source and default. Wake is a live Turnstile policy
+from `[machines.NAME]` in the control node’s `settings/weightroom.toml`, rather than a separate
+service. Change, report and pending timestamps carry explicit UTC offsets before browser localization.
+History export/import excludes credentials, file-only and retired settings; see the
+[settings workspace guide](README.md#settings-data-and-privacy) for validated preview and recovery.
+
+### Sign-in policy
+
+Security and sign-in defaults to five failures per account/client-address pair in 15 minutes,
+locking that pair for 30 minutes. A shared address counter locks password spraying at four times
+the threshold. Locked attempts return 429 with `Retry-After` before password hashing. Counters
+survive restarts; a successful sign-in clears its pair, while existing locks keep their end time.
+Prove throttling with tests; do not deliberately lock an account on the live console.
+
+On the control node, `weightroom user locks [NAME]` lists active pairs/shared address locks.
+`weightroom user unlock NAME` clears that account’s pairs; adding `--address A` also clears the
+shared counter for that address. Unlock is audited. Never clear unrelated accounts to recover one.
+
+Set top-level `trusted_proxies` in `settings/weightroom.toml` to only your actual proxy IP addresses
+or CIDRs, then restart WeightRoom. Its default is empty. The real socket peer must be trusted before
+`X-Forwarded-For` is considered; the last untrusted hop becomes the client. Implicit Uvicorn proxy
+rewriting is disabled. The Security page warns when empty trust makes loopback/proxy traffic share
+an address. Cookie security and permitted browser origins retain their existing machine-file controls.
+
+`password_min_length` defaults to eight and applies to new/changed passwords. `api_key_max_days`
+defaults to zero (unlimited); the API keys page offers never or 30/90/365 days within the current
+maximum. Existing passwords and key expiry times stay intact. `session_idle_hours = 0` disables idle
+expiry. When enabled, only sign-in sessions are affected, and legacy sessions begin activity tracking
+at first use; ordinary API keys are unaffected. Group session lifetime remains an independent bound.
+
 ## Download credentials and concurrency
 
 `/settings/downloads` selects a node for its live transfer cap and write-only Hugging Face/Civitai
