@@ -3,9 +3,10 @@ from engines.llama_cpp.adapter import LlamaCpp
 from engines.strata.adapter import Strata
 from mirrorwall.engine import SDCpp
 from soundroom.engine import AudioCpp
+from engines.whisper_cpp.adapter import WhisperCpp
 
 DEFAULT = "llama_cpp"
-_ENGINES = {DEFAULT: LlamaCpp(), "strata": Strata(), "sdcpp": SDCpp(), "audiocpp": AudioCpp()}
+_ENGINES = {DEFAULT: LlamaCpp(), "strata": Strata(), "sdcpp": SDCpp(), "audiocpp": AudioCpp(), "whispercpp": WhisperCpp()}
 
 
 def engine_ids():
@@ -34,6 +35,11 @@ def checked_installations(engines, legacy: str) -> None:
         raise ValueError("llama_server must name an executable")
     for name, options in engines.items():
         engine_for(name)
+        if name == 'whispercpp':
+            from types import SimpleNamespace
+            from engines.whisper_cpp.adapter import node_options as whisper_options
+            whisper_options(SimpleNamespace(engines=engines))
+            continue
         if name == "sdcpp":
             from types import SimpleNamespace
             from mirrorwall.engine import node_options

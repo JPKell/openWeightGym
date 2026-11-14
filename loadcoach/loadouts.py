@@ -61,7 +61,7 @@ class Loadouts:
                 raise ValueError('Choose existing local models, each once.')
             if not isinstance(cards, list) or not all(isinstance(card, str) for card in cards) or len(set(cards)) != len(cards) or not set(cards) <= set(self.runner.config.gpus):
                 raise ValueError('Cards are a list of distinct configured GPU names; an empty list explicitly selects CPU.')
-            fixed = self.library.get(model).get('engine') in ('sdcpp', 'audiocpp')
+            fixed = self.library.get(model).get('engine') in ('sdcpp', 'audiocpp', 'whispercpp')
             if fixed:
                 key = profile_key(self.library, model)
                 if not isinstance(one.get('profile'), str) or one['profile'] != key:
@@ -105,7 +105,7 @@ class Loadouts:
         if name is None:
             raise ValueError(f"{one['label']} was removed; recreating its name cannot replace its stable model ID.")
         current = self.library.setup(name)
-        fixed = current['settings'].get('engine') in ('sdcpp', 'audiocpp')
+        fixed = current['settings'].get('engine') in ('sdcpp', 'audiocpp', 'whispercpp')
         if fixed:
             if one.get('engine') != current['settings']['engine'] or one.get('profile') != profile_key(self.library, name):
                 raise Conflict(f'{name}: the saved fixed profile changed. Select and save its current envelope again.')

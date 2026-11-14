@@ -61,6 +61,8 @@ def check_model(name, settings, cards):
     if settings.get("engine") != "audiocpp" or not isinstance(flags, dict) or flags.keys() != {"model", "ctx-size"} or flags["ctx-size"] != 0:
         raise ValueError("Audio models require engine=audiocpp, flags.model and ctx-size=0 (no language-token context).")
     path(flags["model"], "model file")
+    if flags["model"].lower().endswith(".bin"):
+        raise ValueError("Whisper GGML .bin files require engine=whispercpp; audio.cpp uses its own packages.")
     options = settings.get("audiocpp")
     allowed = {"family", "kind", "package", "path", "files", "load_options", "session_options", "defaults",
                "limits", "host_ram_mib", "threads", "timeout"}
@@ -269,6 +271,15 @@ def audio_asset(path):
 def facts(path):
     """Describe an audio package file from its place; formats are checked when a model loads."""
     file = Path(path)
+    if file.suffix.lower() == '.bin':
+        from engines.whisper_cpp.model import header
+        try:
+            multilingual = header(file) >= 51865
+        except (OSError, ValueError):
+            pass
+        else:
+            return {'what': 'audio', 'name': file.name, 'kind': 'Whisper model', 'format': 'ggml',
+                    'family': 'whispercpp', 'kinds': ['transcription'], 'translates': multilingual}
     found = embedded_spec(str(file))
     return {"what": "audio", "name": found.get('display_name') or file.name, "kind": "audio package", "format": file.suffix.lstrip("."),
             'family':found.get('family',''), 'kinds':family_kinds(found), 'embedded_contract':bool(found)}

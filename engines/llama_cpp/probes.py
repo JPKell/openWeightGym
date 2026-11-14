@@ -94,7 +94,7 @@ class Probes:
                 raise ValueError("Native llama.cpp probes are unavailable for this model.")
         if settings is None or not Path(settings['flags']['model']).is_file():
             raise ValueError('The model file is not available.')
-        multimedia = adapter.id in ('sdcpp', 'audiocpp')
+        multimedia = adapter.id in ('sdcpp', 'audiocpp', 'whispercpp')
         mark = self.runner.models.fingerprint(settings, model)
         if not mark:
             raise ValueError('The model files are still being fingerprinted. Try again shortly.')

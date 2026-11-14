@@ -102,7 +102,7 @@ def test_engines_are_installed_when_their_program_is_found(tmp_path):
     program.write_text("#!/bin/sh\n")
     program.chmod(0o755)
     found = by_id(components.engines(SimpleNamespace(engines={}, llama_server=str(program))))
-    assert list(found) == ["llama_cpp", "strata", "sdcpp", "audiocpp"]
+    assert list(found) == ["llama_cpp", "strata", "sdcpp", "audiocpp", "whispercpp"]
     assert has(found["llama_cpp"], installed=True, enabled=True, available=True)
     assert not found["strata"]["installed"] and not found["sdcpp"]["installed"] and found["sdcpp"]["why"] == ""
     off = by_id(components.engines(SimpleNamespace(engines={"llama_cpp": {"enabled": False}}, llama_server=str(program))))
@@ -113,7 +113,7 @@ def test_engines_are_installed_when_their_program_is_found(tmp_path):
 
 def test_front_reads_loadcoachs_settings_file_or_lists_every_engine_as_missing(tmp_path):
     none_here = components.engines_from_settings(tmp_path / "loadcoach.toml")
-    assert [row["id"] for row in none_here] == ["llama_cpp", "strata", "sdcpp", "audiocpp"]
+    assert [row["id"] for row in none_here] == ["llama_cpp", "strata", "sdcpp", "audiocpp", "whispercpp"]
     assert not any(row["installed"] for row in none_here)
     program = tmp_path / "llama-server"
     program.write_text("#!/bin/sh\n")
@@ -202,7 +202,7 @@ def test_front_lists_itself_and_every_node_and_says_why_one_cannot_be_checked(tm
     assert not nodes["asleep"]["answering"] and "not answering" in nodes["asleep"]["why"] and nodes["asleep"]["with_front"]
     assert not nodes["old"]["answering"] and "older openWeightGym" in nodes["old"]["why"]
     assert [row["id"] for row in found["services"]] == [name for name, _, _ in components.SERVICES]
-    assert [row["id"] for row in found["engines"]] == ["llama_cpp", "strata", "sdcpp", "audiocpp"]
+    assert [row["id"] for row in found["engines"]] == ["llama_cpp", "strata", "sdcpp", "audiocpp", "whispercpp"]
     users.db.close()
 
 
@@ -242,7 +242,7 @@ def test_the_console_page_shows_every_machine_with_each_component_installed_or_n
     for title, body in cards:
         rows = re.findall(r'<tr class="([^"]*)">\s*<th scope="row" class="fw-normal"><span class="component-name">([^<]+)</span>', body)
         # Every service and every engine is listed on every machine, installed or not.
-        expected = [label for _, label, _ in components.SERVICES] + ["llama.cpp", "Strata", "stable-diffusion.cpp", "audio.cpp"]
+        expected = [label for _, label, _ in components.SERVICES] + ["llama.cpp", "Strata", "stable-diffusion.cpp", "audio.cpp", "whisper.cpp"]
         assert [name for _, name in rows] == expected + (["Classifier conversion tools"] if title == 'compute' else [])
         missing[title] = {name for kind, name in rows if "component-missing" in kind}
         assert body.count("Not installed") == len(missing[title]) and body.count("Installed<") == len(rows) - len(missing[title])

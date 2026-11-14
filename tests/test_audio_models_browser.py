@@ -79,7 +79,7 @@ def studio(desk):
             if route.request.method == 'POST':
                 body = route.request.post_data_json
                 state['posts'].append((node,copy.deepcopy(body)))
-                assert body['settings'].keys() <= {'engine','flags','audiocpp','gpus','alone','allow_split','adapters','min_context','order'}
+                assert body['settings'].keys() <= {'engine','flags','audiocpp','whispercpp','gpus','alone','allow_split','adapters','min_context','order'}
                 if state['install']:
                     jobs=[]
                     for target in body.get('machines',[node]):
@@ -144,6 +144,28 @@ def test_model_and_node_drafts_preserve_unknown_settings_and_save_to_selected_no
     page.reload()
     page.locator('[data-section="output"]').click()
     playwright.expect(page.locator('#am-option-speed')).to_have_value('1.5')
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_whisper_profile_reuses_audio_editor_and_saves_only_native_options(studio, width):
+    page, state = studio
+    path = '/audio/atlas/whisper/ggml-large-v3.bin'
+    state['inventories']['atlas'].append({'name': 'whisper', 'engine': 'whispercpp', 'flags': {'model': path, 'ctx-size': 0},
+        'gpus': 0, 'alone': True, 'whispercpp': {'host_ram_mib': 8192, 'threads': 6, 'max_audio_mib': 32, 'max_seconds': 600}})
+    state['families'].append({'family': 'whispercpp', 'name': 'whisper.cpp', 'kinds': ['transcription'], 'options': {}})
+    state['files'][0]['files'].append({'path': path, 'tier': 'cache', 'facts': {'what': 'audio', 'family': 'whispercpp', 'kinds': ['transcription']}})
+    page.set_viewport_size({'width': width, 'height': 1100})
+    page.goto('http://console.test/models/audio?model=whisper&node=atlas')
+    playwright.expect(page.locator('#am-family')).to_have_value('whispercpp')
+    playwright.expect(page.locator('#am-kind')).to_have_value('transcription')
+    page.locator('[data-section="output"]').click()
+    page.locator('#am-seconds').fill('500')
+    page.locator('#am-submit').click()
+    playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
+    settings = state['posts'][0][1]['settings']
+    assert settings['engine'] == 'whispercpp' and 'audiocpp' not in settings
+    assert settings['whispercpp']['threads'] == 6 and settings['whispercpp']['max_seconds'] == 500
+    assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
 
 
 @pytest.mark.parametrize('width',[1440,390])

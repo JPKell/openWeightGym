@@ -7,7 +7,7 @@ from urllib.parse import quote, urlencode
 
 def editor_address(name, engine, node):
     """Open the correct editor with this copy's local model name and compute node."""
-    workspace = {'audiocpp': 'audio', 'sdcpp': 'images'}.get(engine)
+    workspace = {'audiocpp': 'audio', 'whispercpp': 'audio', 'sdcpp': 'images'}.get(engine)
     if workspace:
         return '/models/' + workspace + '?' + urlencode({'model': name, 'node': node}, quote_via=quote)
     return '/models/' + quote(name, safe='/:') + '?node=' + quote(node, safe='')

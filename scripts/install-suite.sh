@@ -30,8 +30,11 @@ SDCPP_ACTION=keep
 SDCPP_BACKEND=cuda
 SDCPP_EXPLICIT=0
 AUDIOCPP_ACTION=keep
+WHISPERCPP_ACTION=keep
 AUDIOCPP_BACKEND=cuda
+WHISPERCPP_BACKEND=cuda
 AUDIOCPP_EXPLICIT=0
+WHISPERCPP_EXPLICIT=0
 STRATA_ACTION=keep
 STRATA_EXPLICIT=0
 STRATA_HOST_RAM_MIB=22528
@@ -78,7 +81,9 @@ change both the service set and database engine before anything is installed.
   --sdcpp-backend cuda|vulkan|cpu
                              explicit native backend; default cuda, no CPU fallback
   --audiocpp install|skip|keep  optional audio runtime (fresh unattended: skip)
+  --whispercpp install|skip|keep  optional Whisper runtime (fresh unattended: skip)
   --audiocpp-backend cuda|vulkan|cpu
+  --whispercpp-backend cuda|vulkan|cpu
                              explicit native backend; default cuda, no CPU fallback
   --classifier-tools install|skip|keep
                              optional CPU classifier conversion tools (default: keep)
@@ -212,7 +217,9 @@ while (($#)); do
     --sdcpp) (($# >= 2)) || usage_error '--sdcpp needs install, skip or keep'; SDCPP_ACTION=$2; SDCPP_EXPLICIT=1; shift 2 ;;
     --sdcpp-backend) (($# >= 2)) || usage_error '--sdcpp-backend needs cuda, vulkan or cpu'; SDCPP_BACKEND=$2; shift 2 ;;
     --audiocpp) (($# >= 2)) || usage_error '--audiocpp needs install, skip or keep'; AUDIOCPP_ACTION=$2; AUDIOCPP_EXPLICIT=1; shift 2 ;;
+    --whispercpp) (($# >= 2)) || usage_error '--whispercpp needs install, skip or keep'; WHISPERCPP_ACTION=$2; WHISPERCPP_EXPLICIT=1; shift 2 ;;
     --audiocpp-backend) (($# >= 2)) || usage_error '--audiocpp-backend needs cuda, vulkan or cpu'; AUDIOCPP_BACKEND=$2; shift 2 ;;
+    --whispercpp-backend) (($# >= 2)) || usage_error '--whispercpp-backend needs cuda, vulkan or cpu'; WHISPERCPP_BACKEND=$2; shift 2 ;;
     --classifier-tools) (($# >= 2)) || usage_error '--classifier-tools needs install, skip or keep'; CLASSIFIER_TOOLS_ACTION=$2; CLASSIFIER_TOOLS_EXPLICIT=1; shift 2 ;;
     --no-start) START_SERVICES=0; shift ;;
     --topology) (($# >= 2)) || usage_error '--topology needs all, front or compute'; TOPOLOGY=$2; shift 2 ;;
@@ -269,7 +276,9 @@ fi
 [[ $SDCPP_ACTION =~ ^(install|skip|keep)$ ]] || usage_error 'sdcpp must be install, skip, or keep'
 [[ $SDCPP_BACKEND =~ ^(cuda|vulkan|cpu)$ ]] || usage_error 'sdcpp backend must be cuda, vulkan, or cpu'
 [[ $AUDIOCPP_ACTION =~ ^(install|skip|keep)$ ]] || usage_error 'audiocpp must be install, skip, or keep'
+[[ $WHISPERCPP_ACTION =~ ^(install|skip|keep)$ ]] || usage_error 'whispercpp must be install, skip, or keep'
 [[ $AUDIOCPP_BACKEND =~ ^(cuda|vulkan|cpu)$ ]] || usage_error 'audiocpp backend must be cuda, vulkan, or cpu'
+[[ $WHISPERCPP_BACKEND =~ ^(cuda|vulkan|cpu)$ ]] || usage_error 'whispercpp backend must be cuda, vulkan, or cpu'
 [[ $CLASSIFIER_TOOLS_ACTION =~ ^(install|skip|keep)$ ]] || usage_error 'classifier-tools must be install, skip, or keep'
 for name in "${!DSNS[@]}"; do
   [[ $name =~ ^(core|telemetry|accounts|roles|chat|benchmarks|plugins|alerts|schedules)$ ]] || usage_error "unknown DSN name: $name (the names are core, telemetry, accounts, roles, chat, benchmarks, plugins, alerts and schedules)"
@@ -502,6 +511,8 @@ if ((CHECK_ONLY)); then
       ui_warn "The image runtime (sdcpp) in settings/loadcoach.toml does not work" "reinstall it: $(shell_path "$ROOT/scripts/install-sdcpp.sh") --root $(shell_path "$ROOT")"
     "$PY" "$ROOT/soundroom/install.py" --root "$ROOT" --check ||
       ui_warn "The audio runtime (audio.cpp) in settings/loadcoach.toml does not work" "reinstall it: $(shell_path "$ROOT/scripts/install-audiocpp.sh") --root $(shell_path "$ROOT")"
+    "$PY" "$ROOT/engines/whisper_cpp/install.py" --root "$ROOT" --check ||
+      ui_warn "The audio runtime (whisper.cpp) in settings/loadcoach.toml does not work" "reinstall it: $(shell_path "$ROOT/scripts/install-whispercpp.sh") --root $(shell_path "$ROOT")"
   fi
   exit 0
 fi
@@ -522,6 +533,11 @@ if has_service loadcoach; then
       AUDIOCPP_ACTION=install
     fi
   fi
+  if ((!NON_INTERACTIVE && !WHISPERCPP_EXPLICIT)); then
+    if ask_yes_no 'Install optional whisper.cpp speech recognition and translation? Existing support is kept if declined.' n; then
+      WHISPERCPP_ACTION=install
+    fi
+  fi
   if ((!NON_INTERACTIVE && !CLASSIFIER_TOOLS_EXPLICIT)); then
     if ask_yes_no 'Install Classifier conversion tools (CPU; matches the configured llama.cpp build)? Existing tools are kept if declined.' n; then
       CLASSIFIER_TOOLS_ACTION=install
@@ -535,6 +551,9 @@ elif [[ $SDCPP_ACTION == install ]]; then
 elif [[ $AUDIOCPP_ACTION == install ]]; then
   die 'The audio runtime (audio.cpp) runs beside loadcoach, on a GPU node, and loadcoach is not being installed here.' \
     'Install loadcoach too (--services compute), or leave out --audiocpp install'
+elif [[ $WHISPERCPP_ACTION == install ]]; then
+  die 'The audio runtime (whisper.cpp) runs beside loadcoach, on a GPU node, and loadcoach is not being installed here.' \
+    'Install loadcoach too (--services compute), or leave out --whispercpp install'
 elif [[ $CLASSIFIER_TOOLS_ACTION == install ]]; then
   die 'Classifier conversion tools require loadcoach and its configured llama.cpp on this machine.' \
     'Install them on your compute node: owg install --classifier-tools install'
@@ -828,6 +847,7 @@ if ((!EMBEDDED)); then
   has_service loadcoach && ui_kv Strata "$STRATA_ACTION (CUDA; host RAM: $STRATA_HOST_RAM_MIB MiB)"
   has_service loadcoach && ui_kv Images "sdcpp $SDCPP_ACTION (backend: $SDCPP_BACKEND; weights downloaded separately)"
   has_service loadcoach && ui_kv Audio "audio.cpp $AUDIOCPP_ACTION (backend: $AUDIOCPP_BACKEND; weights downloaded separately)"
+  has_service loadcoach && ui_kv Whisper "whisper.cpp $WHISPERCPP_ACTION (backend: $WHISPERCPP_BACKEND; weights downloaded separately)"
   has_service loadcoach && ui_kv 'Classifier conversion tools' "$CLASSIFIER_TOOLS_ACTION (CPU; follows the configured llama.cpp build)"
   ((INSTALL_POSTGRESQL)) && ui_kv Packages 'PostgreSQL server/client'
   ((INSTALL_PGVECTOR)) && ui_kv Optional 'pgvector'
@@ -1075,6 +1095,14 @@ if has_service loadcoach && [[ $AUDIOCPP_ACTION == install ]]; then
       "The lines above, from the log, say why: put that right" \
       "Then install it on its own: $(shell_path "$ROOT/scripts/install-audiocpp.sh") --root $(shell_path "$ROOT") --backend $AUDIOCPP_BACKEND" \
       "Or set up without it: leave out --audiocpp install, or pass --audiocpp skip"
+  fi
+fi
+if has_service loadcoach && [[ $WHISPERCPP_ACTION == install ]]; then
+  if ! run "$PY" "$ROOT/engines/whisper_cpp/install.py" --root "$ROOT" --backend "$WHISPERCPP_BACKEND"; then
+    die "The audio runtime (whisper.cpp) did not install. openWeightGym itself is set up, and any working release was kept." \
+      "The lines above, from the log, say why: put that right" \
+      "Then install it on its own: $(shell_path "$ROOT/scripts/install-whispercpp.sh") --root $(shell_path "$ROOT") --backend $WHISPERCPP_BACKEND" \
+      "Or set up without it: leave out --whispercpp install, or pass --whispercpp skip"
   fi
 fi
 

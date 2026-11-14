@@ -43,7 +43,7 @@
 {% for context in [minimum, model.flags['ctx-size']] %}{% set point = model.measurements|default([])|selectattr('context', 'equalto', context)|first %}
 <dt>Memory at {{ 'min' if loop.first else 'max' }}</dt><dd>{% if point and point.mib %}{{ point.mib|map('mib')|join(' + ') }}{% elif point and point.error %}<span class="text-danger">load failed</span>{% else %}<span class="text-secondary">Not measured</span>{% endif %}</dd>
 {% endfor %}
-{% else %}<dt>Family</dt><dd>{{ model.get(model.engine, {}).get('family', 'Unknown') }}</dd>{% if kind == 'audio' %}<dt>Kind</dt><dd>{{ model.get('audiocpp', {}).get('kind', '')|capitalize }}</dd>{% endif %}
+{% else %}<dt>Family</dt><dd>{{ 'whisper.cpp' if model.engine == 'whispercpp' else model.get(model.engine, {}).get('family', 'Unknown') }}</dd>{% if kind == 'audio' %}<dt>Kind</dt><dd>{{ 'transcription' if model.engine == 'whispercpp' else model.get('audiocpp', {}).get('kind', '')|capitalize }}</dd>{% endif %}
 {% set point = model.measured or model.measurements|default([])|selectattr('context', 'equalto', 0)|first %}<dt>Measured memory</dt><dd>{% if point and point.mib %}{{ point.mib|map('mib')|join(' + ') }}{% else %}<span class="text-secondary">Not measured</span>{% endif %}</dd>
 {% endif %}
 <dt>Now</dt><dd>{% include 'model_now.html' %}</dd>

@@ -79,8 +79,9 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
         for name in [one["name"] for one in listed.json().get("machines", [])] if listed.is_success else []:
             # Each node says whether its audio engine is there; one not answering says why not.
             engines = await ask("GET", "/turnstile/machines/" + quote(name, safe="") + "/engines", person.key)
-            audio = next((one for one in (engines.json().get("engines", []) if engines.is_success else []) if one.get("id") == "audiocpp"), None)
-            nodes.append({"name": name, "available": bool(audio and audio.get("available")), "why": (audio or {}).get("why", "not answering")})
+            audio = [one for one in (engines.json().get("engines", []) if engines.is_success else []) if one.get("id") in ("audiocpp", "whispercpp")]
+            nodes.append({"name": name, "available": any(one.get("available") for one in audio),
+                          "why": '; '.join(one.get('why', '') for one in audio if one.get('why')) or 'not answering'})
         fields = [{"name": name, "label": label, "help": help, "when": current.get(name, {}).get("when", ""),
                    "value": (current[name]["changed"]["value"] if current.get(name, {}).get("changed") else current.get(name, {}).get("value", ""))}
                   for name, label, help in available_defaults]
@@ -153,12 +154,15 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
             return Response(answer.content, answer.status_code, media_type="application/json")
         value = answer.json()
         value['cards'] = value.get('engine_cards', {}).get('audiocpp', value.get('cards', []))
-        value["models"] = [one for one in value["models"] if one.get("engine") == "audiocpp"]
+        value["models"] = [one for one in value["models"] if one.get("engine") in ("audiocpp", "whispercpp")]
         value['models'] = [one for one in value['models'] if services().model_enabled(one)]
         engines = await model_api(request, person, "GET", "/loadcoach/engines")
         value["engines"] = engines.json() if engines.is_success else {}
         packages = await model_api(request, person, "GET", "/loadcoach/audio/families")
         value["catalogue"] = packages.json() if packages.is_success else {"families": [], "error": packages.text[:300]}
+        value['catalogue']['families'].append({'family': 'whispercpp', 'name': 'whisper.cpp', 'kinds': ['transcription'],
+            'description': 'Native Whisper GGML .bin models; multilingual models can translate speech to English.',
+            'options': {}, 'note': 'Uses the optional whisper.cpp runtime; session options and companions are unavailable.'})
         value['catalogue']['families'] = [{**family, 'kinds': [kind for kind in family.get('kinds', []) if services().audio_task_enabled(kind)]}
                                           for family in value['catalogue'].get('families', [])]
         return JSONResponse(value, headers={"cache-control": "no-store"})
@@ -188,7 +192,7 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None):
         try:
             body = await Front.read_json(request)
             name, settings = body["name"], body["settings"]
-            if not isinstance(name, str) or not isinstance(settings, dict) or settings.get("engine") != "audiocpp":
+            if not isinstance(name, str) or not isinstance(settings, dict) or settings.get("engine") not in ("audiocpp", "whispercpp"):
                 raise ValueError("Choose an audio model name and settings.")
             if not services().model_enabled(settings):
                 return JSONResponse({'error': {'message': 'This audio task is disabled in Platform services.'}}, 403)

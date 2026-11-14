@@ -10,7 +10,7 @@ def profile_key(library, name):
     """Bind a saved envelope to settings and file revisions, independently of pinned cards."""
     settings = library.get(name)
     engine = engine_for(settings)
-    if engine.id not in ('sdcpp', 'audiocpp'):
+    if engine.id not in ('sdcpp', 'audiocpp', 'whispercpp'):
         return None
     stamps = []
     for role, path in engine.model.files_of(settings).items():

@@ -242,7 +242,7 @@ class Tasks:
             return error(403, 'The task ended or its owner no longer has model-measurement permission.')
         try:
             body = await self.body(request, allow_large_evaluation=True) if body is None else body
-            multimedia = task['subject']['settings'].get('engine') in ('sdcpp', 'audiocpp')
+            multimedia = task['subject']['settings'].get('engine') in ('sdcpp', 'audiocpp', 'whispercpp')
             for name, low, high in [('context',0 if multimedia else 128,100000000),('inputs',0,100000000),('outputs',0,32768),('warmup_outputs',0,4096)]:
                 value = body.get(name, 0)
                 if type(value) is not int or not low <= value <= high:
