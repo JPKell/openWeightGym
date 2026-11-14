@@ -3,7 +3,7 @@
 {% from "navigation_parts.html" import pills, pill_button %}
 {% from "speech_parts.html" import studio_inputs, voice_card, speaker_row %}
 {% block title %}Voice generation · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><link rel="stylesheet" href="/static/speech.css?v=3"><script src="/soundroom-static/audio-tools.js?v=1" defer></script><script src="/soundroom-static/music.js?v=9" defer></script><script src="/soundroom-static/speech.js?v=6" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><link rel="stylesheet" href="/static/speech.css?v=4"><script src="/soundroom-static/audio-tools.js?v=1" defer></script><script src="/soundroom-static/music.js?v=9" defer></script><script src="/soundroom-static/speech.js?v=6" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom" class="speech-live" data-layout="script" data-mode="speech" data-defaults="{{ audio | tojson | forceescape }}">
   {{ page_header("Voice generation") }}

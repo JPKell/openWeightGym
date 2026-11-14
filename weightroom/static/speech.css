@@ -10,8 +10,8 @@
 .sp-script-input.form-control { border:0; border-radius:0; background:transparent; box-shadow:none; resize:vertical; padding:.6rem 1.5rem 1.2rem; min-height:200px; height:280px; font-family:Georgia,'Times New Roman',serif; font-size:1.22rem; line-height:1.9; letter-spacing:-.015em; }
 .sp-script-input.form-control:focus { outline:2px solid var(--theme-accent); outline-offset:-3px; }
 .sp-script-footer { display:flex; flex-wrap:wrap; gap:.8rem; padding:.8rem 1.25rem; color:var(--theme-muted); font-size:.66rem; border-top:1px solid var(--theme-border); }
-.sp-script-tip { display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; font-size:.69rem; padding:.65rem 1.25rem; color:var(--theme-muted); background:var(--theme-subtle); }
-.sp-script-tip .suite-icon { flex:none; width:15px; }
+.sp-script-tip { flex:1 1 12rem; min-width:0; font-size:.69rem; color:var(--theme-muted); }
+.sp-script-tip .suite-icon { width:15px; margin-inline-end:.4rem; }
 .sp-model-facts { display:flex; justify-content:space-between; gap:1rem; font-size:.66rem; padding-block:.35rem .65rem; border-bottom:1px solid var(--theme-border); }
 .sp-voices { display:grid; gap:.6rem; }
 .sp-voice:hover { background:var(--theme-subtle); }
@@ -42,7 +42,6 @@
 [data-layout=script] .sp-script-input { min-height:330px; font-family:var(--bs-font-monospace); font-size:.94rem; line-height:2; }
 [data-layout=script] .sp-script-tools > .sp-overline { display:none; }
 [data-layout=script] .sp-generation-summary { display:none; }
-[data-layout=script] .sp-action-area > .d-flex { width:100%; justify-content:space-between; }
 @media(min-width:1450px) {
 .sp-key-hint { display:inline; }
 }
