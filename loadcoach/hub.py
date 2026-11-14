@@ -143,6 +143,8 @@ async def search_page(http: httpx.AsyncClient, words: str, token: str = "", curs
         # tagged only as a decision model is not lost behind the pipeline filter.
         return await classifier_search_page(http, words, token, cursor, sort, direction)
     params = {'search': words, 'filter': 'gguf', 'sort': sort, 'direction': direction, 'limit': '20'}
+    if kind == 'rerank':
+        params['pipeline_tag'] = 'text-ranking'
     if cursor:
         params['cursor'] = cursor[:4096]
     try:

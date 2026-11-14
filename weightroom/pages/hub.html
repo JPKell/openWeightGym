@@ -12,9 +12,10 @@
 <form method="get" action="/hub" class="row g-2" {{ swaps("hub-found", true) }}>
   <input type="hidden" name="sort" value="{{ hub_sort.key }}"><input type="hidden" name="direction" value="{{ hub_sort.direction }}">
   <div class="col-12 col-sm"><label for="hub-query" class="visually-hidden">Search Hugging Face</label><input id="hub-query" name="q" class="form-control" value="{{ words }}" aria-label="what to look for" placeholder="Search models or enter owner/name" required autofocus></div>
-  <div class="col-12 col-sm-auto"><label for="hub-kind" class="visually-hidden">Model type</label><select name="kind" id="hub-kind" class="form-select">{% call(value,label) model_type_choices([('','All GGUFs'),('classifier','Classifier')]) %}<option value="{{ value }}"{{ ' selected' if request.query_params.get('kind', '') == value }}>{{ label }}</option>{% endcall %}</select></div>
+  <div class="col-12 col-sm-auto"><label for="hub-kind" class="visually-hidden">Model type</label><select name="kind" id="hub-kind" class="form-select">{% call(value,label) model_type_choices([('','All GGUFs'),('rerank','Reranker'),('classifier','Classifier')]) %}<option value="{{ value }}"{{ ' selected' if request.query_params.get('kind', '') == value }}>{{ label }}</option>{% endcall %}</select></div>
   <div class="col-12 col-sm-auto"><button class="btn btn-primary w-100">Search</button></div>
 </form>
+{% if request.query_params.get('kind') == 'rerank' %}<p class="form-hint mt-2 mb-0">Some conversions lack a ranking tag. Choose All GGUFs if a model is missing.</p>{% endif %}
 {% endcall %}
 <div id="hub-repository" class="hub-repository">{% if found.files is defined %}
 {% set repository_actions %}<a href="https://huggingface.co/{{ found.repository }}" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener noreferrer">Model page ↗</a>{% endset %}
