@@ -1,0 +1,51 @@
+/* Scoring studio: shared by Manage and the design previews. */
+.benchmark-manage .manage-grid { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.benchmark-manage .manage-grid > *, .benchmark-manage .editor-grid > *, .benchmark-manage .selected-heading > * { min-width: 0; }
+.benchmark-manage .manage-catalogue { position: sticky; top: 1rem; }
+.benchmark-manage .benchmark-library { max-height: 750px; overflow-y: auto; }
+.benchmark-manage .library-group { display: flex; justify-content: space-between; padding: 1.15rem 1rem .5rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+.benchmark-manage .benchmark-choice { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: .6rem; padding: .65rem 1rem; border: 0; border-left: 3px solid transparent; color: var(--bs-body-color); background: transparent; text-align: left; font: inherit; font-size: .82rem; }
+.benchmark-manage .benchmark-choice small { display: block; font-size: .69rem; margin-top: .2rem; }
+.benchmark-manage .benchmark-choice:hover { background: var(--bs-tertiary-bg); }
+.benchmark-manage .benchmark-choice[aria-pressed=true] { border-left-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); color: var(--bs-primary); }
+.benchmark-manage .availability-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: var(--bs-success); }
+.benchmark-manage .availability-dot[data-enabled=false] { background: var(--bs-secondary-color); }
+.benchmark-manage .selected-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin: .2rem 0 1.4rem; }
+.benchmark-manage .selected-heading .section-heading { margin-bottom: .6rem !important; }
+.benchmark-manage .selected-heading .section-title { letter-spacing: -.025em; }
+.benchmark-manage .selected-heading p { font-size: .84rem; max-width: 66ch; line-height: 1.55; }
+.benchmark-manage .selected-heading .badge { white-space: nowrap; margin-top: .2rem; }
+.benchmark-manage .editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .9fr); gap: 1rem; grid-template-areas: 'score values' 'execution values' 'protocol values'; align-items: start; }
+.benchmark-manage .editor-grid .card { margin-bottom: 0 !important; height: 100%; }
+.benchmark-manage .scoring-panel { grid-area: score; border-top: 3px solid var(--bs-primary); }
+.benchmark-manage .execution-panel { grid-area: execution; }
+.benchmark-manage .protocol-panel { grid-area: protocol; }
+.benchmark-manage .values-panel { grid-area: values; }
+.benchmark-manage .values-scroll { max-height: 710px; overflow: auto; scrollbar-width: thin; }
+.benchmark-manage .values-scroll .table-responsive { overflow: visible; }
+.benchmark-manage .values-scroll .table { table-layout: fixed; font-size: .75rem; }
+.benchmark-manage .values-scroll th:first-child { width: 36%; }
+.benchmark-manage .values-scroll th:nth-child(2) { width: 15%; }
+.benchmark-manage .values-scroll .text-nowrap { white-space: normal !important; }
+.benchmark-manage .values-scroll code { overflow-wrap: anywhere; font-size: .72rem; }
+.benchmark-manage .values-scroll td, .benchmark-manage .values-scroll th { padding: .6rem .45rem; vertical-align: top; overflow-wrap: anywhere; }
+.benchmark-manage .insert-value { font: inherit; text-align: left; color: var(--bs-primary); border: 0; padding: 0; background: none; line-height: 1.5; }
+.benchmark-manage .insert-value:hover { text-decoration: underline; }
+.benchmark-manage .score-impact { padding: .85rem; background: var(--bs-primary-bg-subtle); border-radius: var(--bs-border-radius); }
+.benchmark-manage .save-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; position: sticky; bottom: .75rem; z-index: 5; padding: .9rem 1.1rem; margin-top: 1rem; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); background: var(--bs-body-bg); box-shadow: 0 4px 18px color-mix(in srgb, var(--bs-body-color) 9%, transparent); }
+.benchmark-manage .save-bar strong { font-size: .83rem; }
+.benchmark-manage .save-bar small { font-size: .73rem; }
+.benchmark-manage .reference-footer { display: grid; grid-template-columns: 1.1fr 1fr; gap: 1.25rem; margin-top: 2rem; align-items: start; }
+.benchmark-manage .reference-footer .table { font-size: .8rem; }
+.benchmark-manage .reference-footer .freshness-rules { font-size: .8rem; padding: 1rem; margin: 0; display: block; }
+.benchmark-manage .freshness-rules dt { margin: 0 0 .3rem; }
+.benchmark-manage .freshness-rules dd { margin: 0 0 1rem; color: var(--bs-secondary-color); }
+
+.benchmark-manage .benchmark-choice[aria-current=page] { border-left-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); color: var(--bs-primary); }
+.benchmark-manage .manage-catalogue { top: 7rem; }
+.benchmark-manage .selected-heading, .benchmark-manage .manage-catalogue { scroll-margin-top: 7rem; }
+.benchmark-manage .insert-value:focus-visible { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
+.benchmark-manage .manage-grid { margin-top: 1.5rem; }
+@media (min-width: 1600px) { .benchmark-manage .manage-grid { grid-template-columns: 255px minmax(0, 1fr); gap: 1.7rem; } }
+@media (max-width: 1250px) { .benchmark-manage .manage-grid { grid-template-columns: 195px minmax(0, 1fr); } .benchmark-manage .editor-grid { grid-template-columns: 1fr; grid-template-areas: 'score' 'execution' 'values' 'protocol'; } .benchmark-manage .reference-footer { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .benchmark-manage .manage-grid { grid-template-columns: 1fr; } .benchmark-manage .manage-catalogue { position: static; } .benchmark-manage .benchmark-library { max-height: 195px; } .benchmark-manage .save-bar { bottom: 0; padding: .8rem; } .benchmark-manage .save-bar > .d-flex { width: 100%; } .benchmark-manage .save-bar .btn { flex: 1; } .benchmark-manage .values-scroll th:first-child { width: 35%; } .benchmark-manage .values-scroll th:nth-child(2) { width: 18%; } .benchmark-manage .reference-footer .table { min-width: 560px; } }

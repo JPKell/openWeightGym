@@ -1,0 +1,97 @@
+{# Canonical Manage controls, shared by the live page and all proposals. #}
+{% macro availability(bench) %}
+<div class="d-flex align-items-center gap-2 mb-3"><input id="enabled" type="checkbox" class="form-check-input mt-0" name="enabled"{% if bench.enabled %} checked{% endif %}><label for="enabled">Include in available benchmarks</label></div>
+
+{% endmacro %}
+
+{% macro score_formula(bench) %}
+<label for="formula" class="form-label">Score calculation</label><p class="small text-secondary mb-2">Formula changes rescore saved measurements without rerunning models. Missing operands produce no score.</p>
+<input id="formula" class="form-control font-monospace" name="formula" value="{{ bench.formula }}" required maxlength="500">
+
+{% endmacro %}
+
+{% macro model_values() %}
+<div class="table-responsive mt-2"><table class="table table-sm mb-0"><thead><tr><th>Model / GPU value</th><th>Unit</th><th>Source</th></tr></thead><tbody><tr><td><code>parameter_count</code></td><td>parameters</td><td>Exact GGUF metadata or tensor count, saved at run creation</td></tr><tr><td><code>trained_context</code></td><td>tokens</td><td>GGUF training context</td></tr><tr><td><code>configured_context</code></td><td>tokens</td><td>Model’s configured context at run creation; probe sizes may differ</td></tr><tr><td><code>layers</code></td><td>layers</td><td>GGUF layer count</td></tr><tr><td><code>gpu_vram_mib</code></td><td>MiB</td><td>Peak summed GPU VRAM across assigned cards; maximum of completed successful probes</td></tr></tbody></table></div>
+
+{% endmacro %}
+
+{% macro server_mode(bench) %}
+{% if bench.quality %}<label for="server" class="form-label mt-3">Model server</label><select id="server" name="server" class="form-select"><option value="reuse" {{ 'selected' if bench.server == 'reuse' }}>Keep one server for all cases (faster)</option><option value="fresh" {{ 'selected' if bench.server == 'fresh' }}>Load a fresh server for every case</option></select><p class="small text-secondary mt-1 mb-0">Applies to runs started after you save. Each case is still its own request with its prompt cache off; a fresh server also restarts the model between cases. Resource measurements always load a fresh server.</p>{% endif %}
+
+{% endmacro %}
+
+{% macro score_direction(bench) %}
+<label for="green" class="form-label mt-3">Green represents</label><select id="green" name="green" class="form-select"><option value="high" {{ 'selected' if bench.green == 'high' }}>Higher values</option><option value="low" {{ 'selected' if bench.green == 'low' }}>Lower values</option></select>
+
+{% endmacro %}
+
+{% macro measurement_notes() %}
+<p class="small text-secondary mt-2">Example: <code>max_context_tokens * parameter_count</code>. GPU MiB is assigned-card VRAM; CPU peak RAM is measured separately. GPU generation probes require full layer and KV offload. Configured CPU embedders support Load and embedding resource probes; embedders keep their configured pooling and physical batch limits.</p>
+{% endmacro %}
+
+
+{% from 'parts.html' import card, section_title, swaps %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'navigation_parts.html' import pill_link %}
+
+{% macro overview(benchmarks) %}
+  {% call kpi_row('Benchmark inventory', class_='mb-4') %}
+  {{ kpi('Benchmarks', benchmarks|length, value_attrs={'id': 'total-count'}) }}
+  {{ kpi('Available', benchmarks|selectattr('enabled')|list|length, value_attrs={'id': 'enabled-count'}) }}
+  {{ kpi('Language quality', benchmarks|selectattr('quality')|rejectattr('classifier')|list|length, value_attrs={'id': 'quality-count'}) }}
+  {{ kpi('IFEval', 'Installed') }}
+  {% endcall %}
+
+{% endmacro %}
+
+{% macro choice_label(bench) %}
+<span>{{ bench.name }}<small class="text-secondary">Version {{ bench.version }}<span data-draft hidden> · Unsaved</span></small></span><span class="availability-dot" data-available data-enabled="{{ 'true' if bench.enabled else 'false' }}" aria-label="{{ 'Available' if bench.enabled else 'Disabled' }}"></span>
+{% endmacro %}
+
+{% macro catalogue(groups, selected, preview=false) %}
+    {% call card('Benchmarks', id='catalogue', class_='manage-catalogue', body_class='p-0') %}
+    <div class="p-3 border-bottom"><label for="benchmark-search" class="visually-hidden">Find a benchmark</label><input type="search" id="benchmark-search" class="form-control" placeholder="Find a benchmark…"></div>
+    <nav class="benchmark-library" aria-label="Choose a benchmark">
+    {% for name, items in groups %}<section data-benchmark-group><div class="library-group">{{ name }} <span class="text-secondary">{{ items|length }}</span></div>
+    {% for bench in items %}{% if preview %}<button type="button" class="benchmark-choice" data-benchmark="{{ bench.id }}" aria-pressed="{{ 'true' if bench.id == selected else 'false' }}">{{ choice_label(bench) }}</button>{% else %}{% set label %}{{ choice_label(bench) }}{% endset %}{{ pill_link(label, '/benchmarks/manage?benchmark=' ~ bench.id ~ '#benchmark-definitions', bench.id == selected, class_='benchmark-choice', attrs={'data-benchmark': bench.id, 'data-benchmark-search': bench.name ~ ' ' ~ bench.id ~ ' ' ~ bench.summary, 'hx-get': '/benchmarks/manage?benchmark=' ~ bench.id, 'hx-target': '#benchmark-definitions', 'hx-select': '#benchmark-definitions', 'hx-swap': 'outerHTML show:none', 'hx-replace-url': 'true'}) }}{% endif %}{% endfor %}
+    </section>{% endfor %}</nav>
+    <p id="no-matches" class="p-3 small text-secondary" hidden>No matching benchmarks. Clear the search to see all tests.</p>
+    {% endcall %}
+{% endmacro %}
+
+{% macro editor(bench, preview=false) %}
+  <form method="post" action="/benchmarks/manage" data-settings-form data-hold-refresh{% if not preview %} {{ swaps("benchmark-definitions") }} hx-replace-url="true"{% endif %}>
+    <input type="hidden" name="benchmark" value="{{ bench.id }}">
+    <header class="selected-heading">
+      <div><div class="small text-secondary mb-2">{{ 'Classifier' if bench.classifier else 'Language quality' if bench.quality else 'Node measurements' }} <span class="mx-1">/</span> <span class="font-monospace">{{ bench.id }}</span></div>{{ section_title(bench.name, id='selected-title') }}<p class="text-secondary mb-0">{{ bench.summary }}</p></div>
+      <span class="badge bg-azure-lt">Version {{ bench.version }}</span>
+    </header>
+    <div class="editor-grid">
+      {% call card('Score calculation', id='scoring-panel', class_='scoring-panel', hint='Define what a strong result means.') %}
+      {{ score_formula(bench) }}
+      <p class="small mt-2 mb-0 text-secondary">Use recorded values, numbers, parentheses and <code>+ − * /</code>.</p>
+      <p id="formula-validation" class="small text-secondary mt-2 mb-0" aria-live="polite">Formula is checked when saved. Missing operands produce no score.</p>
+      {{ score_direction(bench) }}
+      <div class="score-impact mt-3"><strong class="small">Saved measurements → updated score</strong><p class="small text-secondary mb-0 mt-1">Formula changes use existing evidence. No new inference run.</p></div>
+      {% endcall %}
+      {% call card('Availability & execution', id='execution-panel', class_='execution-panel') %}
+      {{ availability(bench) }}{{ server_mode(bench) }}
+      {% if not bench.quality %}<p class="small text-secondary mb-0">Resource measurements always load a fresh server. The server mode is fixed for repeatable measurements.</p>{% endif %}
+      {% endcall %}
+      {% call card('Measurement protocol', id='protocol-panel', class_='protocol-panel') %}
+      <p class="small text-secondary">{{ bench.method }}</p>{{ measurement_notes() }}
+      {% endcall %}
+      {% call card('Recorded values', id='values-panel', class_='values-panel', hint='Click a value to insert it at the formula cursor.', body_class='pt-2') %}
+      <label class="visually-hidden" for="value-search">Find a recorded value</label><input type="search" class="form-control form-control-sm mt-1" id="value-search" placeholder="Find a value or unit…">
+      <div class="values-scroll">{% include 'benchmark_recorded_values.html' %}
+      {{ section_title('Model & GPU values', level=3, class_='mt-4') }}{{ model_values() }}</div>
+      <p class="small text-secondary mt-2 mb-0" id="value-count"></p>
+      {% endcall %}
+    </div>
+    <footer class="save-bar"><div><strong id="save-state">All changes saved</strong><small class="d-block text-secondary">Applies to {{ bench.name }} only</small></div><div class="d-flex gap-2"><button class="btn btn-outline-secondary" type="button" id="discard"{% if preview %} disabled{% else %} hidden{% endif %}>Discard changes</button><button class="btn btn-primary" type="submit" id="save"{% if preview %} disabled{% endif %}>Save settings</button></div></footer>
+  </form>
+{% endmacro %}
+
+{% macro insert_template() %}
+<template id="insert-value-template"><button type="button" class="insert-value" title="Insert into score formula"></button></template>
+{% endmacro %}

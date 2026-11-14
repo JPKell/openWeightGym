@@ -1603,6 +1603,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                              if found['compute_unavailable'] else "")
         models = [model for model in catalogue["data"] if model.get("owned_by") == "loadcoach" and platform().model_enabled(model)]  # in LoadCoach's order: by sort order, then by name
         definitions, runs = found['definitions'], found['runs']
+        if section == 'manage':
+            selected = next((bench for bench in definitions if bench['id'] == request.query_params.get('benchmark')),
+                            definitions[0] if definitions else {})
+            return page(request, 'benchmarks.html', person, section=section, benchmarks=definitions,
+                        benchmark=selected, catalogue_warning=catalogue_warning,
+                        said=request.query_params.get('said', ''), failed='failed' in request.query_params)
         wanted = next((bench for bench in definitions if bench['id'] == request.query_params.get('benchmark')), {})
         kind = request.query_params.get('kind', 'classifier' if request.query_params.get('family') == 'classifier' else 'llm') if section in ('node-measurements', 'results') else 'llm'
         if kind not in ('llm', 'embedding', 'image', 'audio', 'classifier'):

@@ -107,7 +107,7 @@ def test_categories_keep_detail_pages_and_voice_in_their_section():
     assert navigation("/voice/desktop", ["front-voice"], False)["active"] == "/voice/desktop"
     assert navigation("/chat/abc", [], False)["active"] == "/chat"
     assert navigation("/benchmarks/manage", ["manage-settings"], False)["section"] == "Benchmark"
-    assert navigation("/benchmarks", [], False)["links"][:3] == [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements")]
+    assert navigation("/benchmarks", [], False)["links"][:3] == [("Runs", "/benchmarks/runs"), ("Node measurements", "/benchmarks/node-measurements"), ("Results", "/benchmarks/results")]
     assert navigation("/benchmarks", [], False)["active"] == "/benchmarks/runs"
     assert navigation("/batches", [], False)["section"] == "Logs"
     assert "Models" not in [group["name"] for group in navigation("/", [], False)["groups"]]
@@ -206,7 +206,7 @@ def test_admin_can_review_definitions_and_compare_several_benchmarks(desk, tmp_p
     assert 'value="1 / load_seconds"' in browser.get("/benchmarks/manage?benchmark=load").text
     assert "Version 1</span>" in manage.text
     assert "Formula changes rescore saved measurements without rerunning models." in manage.text
-    assert manage.text.count('class="nav-link py-1') == len(browser.app.state.benchmarks.state.store.definitions())
+    assert manage.text.count('data-benchmark-search=') == len(browser.app.state.benchmarks.state.store.definitions())
     assert "max_context_tokens * parameter_count" in manage.text
     compare = browser.get("/benchmarks/compare?selection=1&model=model-one&model=model-two&bench=speed&bench=load").text
     table = compare.split('class="table comparison-table')[1]
