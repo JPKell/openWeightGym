@@ -45,6 +45,14 @@ def effective(settings: dict, defaults: dict) -> dict:
                     'reasoning-budget', 'embedding', 'temp', 'top-k', 'top-p', 'min-p'):
             flags.pop(key, None)
         flags.setdefault('parallel', 1)
+        # mmbert adds Metaspace per fragment itself; this redundant GGUF key
+        # otherwise makes recent llama.cpp builds reject the vocabulary.
+        if (decision.get('architecture') == 'modern-bert' and decision.get('decision_tokenizer_pre') == 'mmbert'
+                and decision.get('decision_metaspace_prepend') == 'always'):
+            override = flags.get('override-kv', [])
+            override = override if isinstance(override, list) else [override]
+            if not any(value.startswith('tokenizer.ggml.metaspace.prepend_scheme=') for value in override):
+                flags['override-kv'] = [*override, 'tokenizer.ggml.metaspace.prepend_scheme=str:never']
         if decision['decision_type'] in ('laya', 'clef'):
             budget = flags.get('ctx-size', decision.get('trained_context') or 8192)
             flags['batch-size'] = max(flags.get('batch-size', 0), budget)

@@ -103,6 +103,15 @@ def test_native_messages_and_per_model_choices():
         validate({'model': 'a', 'state': 'a', 'questions': {'q': {'type': 'choice', 'instructions': 'q', 'criteria': dict.fromkeys('abc')}}}, 2)
 
 
+def test_modernbert_uses_its_native_fragment_prefix_without_rejected_metadata(monkeypatch):
+    monkeypatch.setattr('loadcoach.classifier.model_facts', lambda _: {'decision_type': 'laya', 'architecture': 'modern-bert',
+        'decision_tokenizer_pre': 'mmbert', 'decision_metaspace_prepend': 'always'})
+    settings = {'flags': {'model': 'julia.gguf', 'ctx-size': 8192}}
+    flags = effective(settings, {})['flags']
+    assert flags['override-kv'] == ['tokenizer.ggml.metaspace.prepend_scheme=str:never']
+    assert settings['flags'] == {'model': 'julia.gguf', 'ctx-size': 8192}
+
+
 def test_shim_preserves_bounds_distributions_zero_tokens_and_streaming():
     source = {'model': 'test', 'messages': [{'role': 'user', 'content': 'hello'}], 'response_format': {
         'type': 'json_schema', 'json_schema': {'name': 'test', 'schema': {'type': 'object', 'properties': {
