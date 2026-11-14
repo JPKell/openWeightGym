@@ -25,20 +25,33 @@ class ClassifierJobs:
         self.changed = changed
         self.jobs = DatabaseJobs(self.root / 'jobs')
 
+    def server_signature(self):
+        """Identify the configured binary without executing it during inventory reads."""
+        path = Path(shutil.which(str(self.server)) or self.server).expanduser().resolve()
+        try:
+            info = path.stat()
+            return [str(path), info.st_size, info.st_mtime_ns]
+        except OSError:
+            return None
+
     def status(self):
         """Report tools readiness only after the installation receipt exists."""
         try:
             receipt = json.loads((self.root / 'installed.json').read_text())
         except (OSError, ValueError):
             receipt = {}
-        installed = bool(receipt and (self.root / 'venv/bin/python').is_file())
+        signature = self.server_signature()
+        installed = bool(receipt and (self.root / 'venv/bin/python').is_file()
+                         and signature and receipt.get('server_signature') == signature)
         active = next((row for folder in self.jobs.root.iterdir() if (folder / 'job.json').is_file()
                        and (row := self.jobs.read(folder.name)).get('state') in ('queued', 'running')), None)
         return {'id': 'classifier_conversion', 'label': 'Classifier conversion tools',
                 'installed': installed, 'enabled': True, 'available': installed,
                 'version': receipt.get('commit', ''), 'build': receipt.get('commit', ''),
                 'installing': bool(active),
-                'why': active.get('progress', 'Queued') if active else '' if installed else 'Install on demand; CPU tools are separate from the inference runtime.'}
+                'why': active.get('progress', 'Queued') if active else '' if installed else
+                    'The configured engine changed. Reinstall tools to match its build.' if receipt else
+                    'Install on demand; CPU tools are separate from the inference runtime.'}
 
     async def command(self, identifier, *args, cwd=None, env=None):
         """Run an owned process group and terminate all children on service shutdown."""
@@ -70,6 +83,7 @@ class ClassifierJobs:
         async def worker(identifier):
             """Resolve a build commit, install isolated CPU dependencies and write the receipt last."""
             try:
+                signature = self.server_signature()
                 process = await asyncio.create_subprocess_exec(self.server, '--version',
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
                 raw, _ = await process.communicate()
@@ -105,7 +119,10 @@ class ClassifierJobs:
                 reference = 'tinyjev @ git+https://github.com/ankit-aglawe/tinyjev.git@' + REFERENCE_COMMIT
                 await self.command(identifier, *pip, source / 'gguf-py', 'numpy', 'safetensors', 'sentencepiece',
                     'transformers>=4.57,<5', 'protobuf', reference, 'mistral-common', 'peft', 'zstandard')
-                receipt = {'commit': commit, 'server': str(self.server), 'torch': 'CPU', 'tinyjev_commit': REFERENCE_COMMIT}
+                if not signature or signature != self.server_signature():
+                    raise ValueError('The configured llama-server changed during installation. Retry to use its new build.')
+                receipt = {'commit': commit, 'server': str(self.server), 'server_signature': signature,
+                           'torch': 'CPU', 'tinyjev_commit': REFERENCE_COMMIT}
                 (self.root / 'installed.json').write_text(json.dumps(receipt))
                 self.jobs.update(identifier, progress='Ready', receipt=receipt)
             except Exception as problem:

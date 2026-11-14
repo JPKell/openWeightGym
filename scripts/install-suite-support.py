@@ -768,7 +768,7 @@ def main() -> int:
     rendering.add_argument("--machine-name", default="")
     rendering.add_argument("--voice", action="store_true")
     rendering.add_argument("--voice-model", default="")
-    rendering.add_argument("--platform-services", default="images,speech,audio,downloads")
+    rendering.add_argument("--platform-services", default="images,speech,audio,downloads,classifiers")
     voice = subparsers.add_parser("voice")
     voice.add_argument("--root", type=Path, required=True)
     voice.add_argument("--services", required=True)
@@ -800,7 +800,7 @@ def main() -> int:
         root = args.root.resolve()
         selected = set() if args.platform_services == 'none' else set(args.platform_services.split(','))
         if selected - set(SERVICE_SETTINGS.values()):
-            raise SystemExit('Platform services must be images,speech,audio,downloads or none.')
+            raise SystemExit('Platform services must be images,speech,audio,downloads,classifiers or none.')
         values = {} if args.topology == "keep" else topology_values(
             args.example.stem, args.topology, root, args.address, args.front, args.compute, args.llama_server,
             args.machine_name, args.voice, args.voice_model)

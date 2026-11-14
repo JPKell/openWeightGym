@@ -9,7 +9,7 @@ def supported(path):
     if Path(path).name.startswith('.suite-package-'):
         return False
     if 'classifier' in Path(path).parts:
-        return Path(path).suffix.lower() in ('.gguf', '.safetensors', '.json', '.model', '.txt', '.jinja') or Path(path).name == 'Modelfile'
+        return Path(path).suffix.lower() in ('.gguf', '.safetensors', '.json', '.model', '.txt', '.jinja') or Path(path).name in ('Modelfile', 'head.pt')
     audio_data = ('.json', '.bin', '.onnx', '.npz', '.npy', '.model', '.txt', '.tiktoken', '.pt', '.vocab', '.merges')
     tokenizer_files = {'vocab.json', 'merges.txt', 'token_type.json', 'chat_template.jinja'}
     return Path(path).name in tokenizer_files or str(path).lower().endswith(EXTENSIONS + (audio_data if set(Path(path).parts) & {'audio', 'encoders'} else ()))

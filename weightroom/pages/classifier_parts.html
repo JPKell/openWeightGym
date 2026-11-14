@@ -6,7 +6,7 @@
   <legend class="visually-hidden">Question</legend>
   <div class="d-flex flex-wrap gap-2 justify-content-between mb-2">
     <label class="flex-grow-1">ID<input class="form-control form-control-sm" data-question-id maxlength="128" required aria-label="Question ID"></label>
-    <label>Type<select class="form-select form-select-sm" data-question-type aria-label="Question type"><option value="choice">Choice</option><option value="score">Score</option><option value="noul">Yes/No</option></select></label>
+    <label>Type<select class="form-select form-select-sm rounded-pill" data-question-type aria-label="Question type"><option value="choice">Choice</option><option value="score">Score</option><option value="noul">Yes/No</option></select></label>
     <div class="d-flex gap-1 align-items-end"><button type="button" class="btn btn-outline-secondary btn-sm" data-question-up aria-label="Move question up">↑</button><button type="button" class="btn btn-outline-secondary btn-sm" data-question-down aria-label="Move question down">↓</button><button type="button" class="btn btn-outline-danger btn-sm" data-question-remove>Remove</button></div>
   </div>
   <label class="d-block mb-2">Instructions<textarea rows="2" class="form-control" data-instructions required aria-label="Question instructions"></textarea></label>
@@ -18,7 +18,12 @@
 <div class="d-flex gap-2 align-items-center" data-criterion><input class="form-control form-control-sm" data-label placeholder="Label" aria-label="Option label" required><input class="form-control form-control-sm" data-description placeholder="Description (optional)" aria-label="Option description"><button type="button" class="btn btn-outline-secondary btn-sm" data-criterion-remove aria-label="Remove option">×</button></div>
 {% endmacro %}
 {% macro result() %}
-{% call card('', attrs={'data-result':''}) %}{{ section_title('', level=3, attrs={'data-result-title':''}) }}<p class="mb-2" data-result-value></p><div class="d-grid gap-2" data-distribution></div><small class="text-secondary d-block mt-2" data-confidence></small>{% endcall %}
+{% call card('', attrs={'data-result':''}) %}{{ section_title('', level=3, attrs={'data-result-title':''}) }}<p class="mb-2" data-result-value></p><div data-score-rubric hidden><input type="range" disabled class="form-range" min="0" max="1" step="0.001" data-score-position aria-label="Expected position on the ordered score rubric"><div class="d-flex flex-wrap justify-content-between gap-2 small mb-3" data-score-levels></div></div><div class="d-grid gap-2" data-distribution></div><small class="text-secondary d-block mt-2" data-confidence></small>{% endcall %}
+{% endmacro %}
+{% macro score_level() %}<span class="badge rounded-pill bg-secondary-lt" data-score-level></span>{% endmacro %}
+{% macro run_group() %}
+{% from 'parts.html' import alert %}
+<section>{{ section_title('', attrs={'data-run-heading':''}) }}{% call alert('danger', attrs={'data-run-error':'','hidden':true}) %}<span data-run-error-text></span>{% endcall %}<div data-run-cards></div></section>
 {% endmacro %}
 {% macro probability() %}
 <div data-probability><div class="d-flex justify-content-between gap-2 small mb-1"><span data-option></span><strong data-probability-value></strong></div><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar"></div></div></div>

@@ -130,7 +130,7 @@ printf '%s\\n' "$PLATFORM_SERVICES"
     assert answer.returncode == 0, answer.stderr
     assert answer.stdout.strip() == 'images,downloads'
     questions = (tmp_path / 'questions').read_text().splitlines()
-    assert len(questions) == 4 and any('TTS, STT' in question for question in questions)
+    assert len(questions) == 5 and any('TTS, STT' in question for question in questions)
 
 
 @pytest.mark.parametrize('selected', ['none,images', 'images,,speech', 'images speech', 'unknown'])
@@ -157,7 +157,7 @@ choose_platform_services
 printf '%s\\n' "$PLATFORM_SERVICES"
 ''', env={'INSTALL': str(install)})
     assert answer.returncode == 0, answer.stderr
-    assert answer.stdout.strip() == ('none' if reason == 'explicit' else 'images,speech,audio,downloads')
+    assert answer.stdout.strip() == ('none' if reason == 'explicit' else 'images,speech,audio,downloads,classifiers')
 
 
 @pytest.mark.parametrize('selected', ['none', 'images,downloads', 'speech', 'images,speech,audio,downloads'])

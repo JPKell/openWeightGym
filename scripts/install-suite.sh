@@ -42,7 +42,7 @@ COMPUTE_URL=
 LLAMA_SERVER=
 MACHINE_NAME=
 VOICE_MODEL=
-PLATFORM_SERVICES=images,speech,audio,downloads
+PLATFORM_SERVICES=images,speech,audio,downloads,classifiers
 START_NEW=0
 KEEP_EXISTING_UNITS=0
 UV=
@@ -89,7 +89,7 @@ change both the service set and database engine before anything is installed.
   --llama-server PATH        the llama-server LoadCoach runs (see install-llamacpp.sh)
   --machine-name NAME        the name the console knows this GPU node by (default: compute)
   --voice-model NAME         conversation model for newly written voice settings (default: the voice defaults')
-  --platform-services LIST   initial console services: images,speech,audio,downloads or none
+  --platform-services LIST   initial console services: images,speech,audio,downloads,classifiers or none
   --start-new                also start services whose settings were just written
   --keep-existing-units      preserve existing unit customizations when adding components
   --uv PATH                  make the environment and install packages with uv
