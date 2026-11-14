@@ -1,6 +1,7 @@
 """Node-local installed versions, shared by Components, Spotter and the installer."""
 
 import asyncio
+import json
 import math
 import re
 import socket
@@ -42,8 +43,19 @@ def engine_config(path: Path, source=None):
     """Read only engine settings, including database overrides, without starting LoadCoach."""
     told = tomllib.loads(path.read_text())
     if source is not None:
-        from loadcoach.settings import changed_for, laid_over
-        told = laid_over(told, changed_for("loadcoach", source), "loadcoach")
+        from loadcoach.settings import laid_over
+        target = database(source)
+        try:
+            # OWG update runs while services still use the old schema. Reading overrides
+            # must not start a settings migration that waits for those services to stop.
+            with target.connection() as reader:
+                changed = {name: json.loads(value) for name, value in reader.execute(
+                    'SELECT name,value FROM settings_changed WHERE program=?', ('loadcoach',))}
+        except Exception as problem:
+            if not target.is_error(problem):
+                raise
+            changed = {}
+        told = laid_over(told, changed, "loadcoach")
     return SimpleNamespace(engines=told.get("engines", {}), llama_server=told.get("llama_server", "llama-server"))
 
 

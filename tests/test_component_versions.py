@@ -9,6 +9,7 @@ import pytest
 
 from loadcoach.component_versions import EVERY, Versions, git_version, interval_seconds, reported_version, update_installation
 from test_setup_recovery import ROOT, one_function, shell
+from test_postgresql import postgres  # noqa: F401
 
 
 def program(tmp_path, name, output, status=0):
@@ -135,6 +136,59 @@ def test_installation_forces_refresh_in_configured_store(tmp_path):
     versions.db.close()
 
 
+def test_update_reads_overrides_without_running_pending_settings_migrations(tmp_path, monkeypatch):
+    """OWG update must finish while running services still hold the preceding schema."""
+    import json
+    from db import Database
+    (tmp_path / 'settings').mkdir()
+    first = program(tmp_path, 'first-engine', 'version: old')
+    current = program(tmp_path, 'current-engine', 'version: current')
+    store = Database.sqlite(tmp_path / 'core.db')
+    with store.connection() as connection:
+        connection.execute('CREATE TABLE settings_changed (program TEXT,name TEXT,value TEXT,by TEXT,at REAL)')
+        connection.execute('INSERT INTO settings_changed VALUES (?,?,?,?,?)',
+                           ('loadcoach','llama_server',json.dumps(current),'owner',1))
+        connection.commit()
+    (tmp_path / 'settings/loadcoach.toml').write_text(f'llama_server = "{first}"\ndatabase = "{tmp_path / "core.db"}"\n')
+
+    def no_settings_migration(*args):
+        raise AssertionError('An update version read must not acquire the settings schema lock.')
+    monkeypatch.setattr('loadcoach.settings.migrate', no_settings_migration)
+    asyncio.run(update_installation(tmp_path))
+    versions = Versions(store)
+    assert versions.read()['llama_cpp']['version'] == 'current'
+    assert 'settings_seen' not in store.tables(versions.db)
+    assert 'settings_resets' not in store.tables(versions.db)
+    assert versions.db.execute('SELECT by,at FROM settings_changed').fetchall() == [('owner',1)]
+    versions.db.close()
+
+
+def test_update_version_step_finishes_with_old_postgresql_readers(postgres, tmp_path):
+    """Use the updater's actual module command while a preceding service schema is in use."""
+    import os
+    from db import migrate
+    from db.schemas import SETTINGS
+    with postgres.connection() as connection:
+        migrate(postgres, connection, 'loadcoach.settings', SETTINGS[:1])
+    settings = tmp_path / 'settings'
+    settings.mkdir()
+    executable = program(tmp_path, 'version-engine', 'version: b-postgresql')
+    dsn_file = os.environ['SUITE_TEST_POSTGRES_DSN_FILE']
+    (settings/'loadcoach.toml').write_text(
+        f'llama_server = "{executable}"\n[databases.stores.core]\nengine = "postgresql"\n'
+        f'dsn_file = "{dsn_file}"\n[databases.bindings]\n"loadcoach.core" = "core"\n')
+    with postgres.connection() as previous_service:
+        previous_service.execute('SELECT * FROM settings_seen').fetchall()
+        result = subprocess.run([sys.executable, '-m', 'loadcoach.component_versions', '--root', str(tmp_path)],
+                                capture_output=True, text=True, timeout=10)
+        assert result.returncode == 0, result.stderr
+        # A version refresh leaves the old service's schema alone.
+        assert not previous_service.execute("SELECT 1 FROM information_schema.columns WHERE table_name='settings_seen' AND column_name='started'").fetchone()
+    versions = Versions(postgres)
+    assert versions.read()['llama_cpp']['version'] == 'b-postgresql'
+    versions.db.close()
+
+
 def test_probe_rejects_unbounded_output(tmp_path):
     executable = program(tmp_path, "verbose-engine", "x" * 17000)
     with pytest.raises(ValueError, match="too long"):
@@ -149,8 +203,7 @@ def test_suite_installer_records_versions_after_engine_installation(tmp_path, dr
     (install / "settings/loadcoach.toml").write_text(
         f'llama_server = "{executable}"\ndatabase = "{tmp_path / "core.db"}"\n')
     source = (ROOT / "scripts/install-suite.sh").read_text()
-    hook = source.split("# Save versions after optional engines are installed", 1)[1].split("\nrender_unit()", 1)[0]
-    hook = "\n# Save versions after optional engines are installed" + hook
+    hook = '\n' + source.split("# Save versions after optional engines", 1)[1].split("\n", 1)[1].split("\nrender_unit()", 1)[0]
     # Run the actual installer hook and its dry-run guard, without provisioning services.
     answer = shell(tmp_path, '''
 set -euo pipefail
