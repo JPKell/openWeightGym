@@ -35,6 +35,8 @@ AUDIOCPP_EXPLICIT=0
 STRATA_ACTION=keep
 STRATA_EXPLICIT=0
 STRATA_HOST_RAM_MIB=22528
+CLASSIFIER_TOOLS_ACTION=keep
+CLASSIFIER_TOOLS_EXPLICIT=0
 TOPOLOGY=keep
 ADDRESS=
 FRONT_URL=
@@ -78,6 +80,8 @@ change both the service set and database engine before anything is installed.
   --audiocpp install|skip|keep  optional audio runtime (fresh unattended: skip)
   --audiocpp-backend cuda|vulkan|cpu
                              explicit native backend; default cuda, no CPU fallback
+  --classifier-tools install|skip|keep
+                             optional CPU classifier conversion tools (default: keep)
   --no-start                 install and enable units without starting them
   --topology all|front|compute
                              write new settings for this machine's part: everything on
@@ -209,6 +213,7 @@ while (($#)); do
     --sdcpp-backend) (($# >= 2)) || usage_error '--sdcpp-backend needs cuda, vulkan or cpu'; SDCPP_BACKEND=$2; shift 2 ;;
     --audiocpp) (($# >= 2)) || usage_error '--audiocpp needs install, skip or keep'; AUDIOCPP_ACTION=$2; AUDIOCPP_EXPLICIT=1; shift 2 ;;
     --audiocpp-backend) (($# >= 2)) || usage_error '--audiocpp-backend needs cuda, vulkan or cpu'; AUDIOCPP_BACKEND=$2; shift 2 ;;
+    --classifier-tools) (($# >= 2)) || usage_error '--classifier-tools needs install, skip or keep'; CLASSIFIER_TOOLS_ACTION=$2; CLASSIFIER_TOOLS_EXPLICIT=1; shift 2 ;;
     --no-start) START_SERVICES=0; shift ;;
     --topology) (($# >= 2)) || usage_error '--topology needs all, front or compute'; TOPOLOGY=$2; shift 2 ;;
     --address) (($# >= 2)) || usage_error '--address needs an IP address'; ADDRESS=$2; shift 2 ;;
@@ -265,6 +270,7 @@ fi
 [[ $SDCPP_BACKEND =~ ^(cuda|vulkan|cpu)$ ]] || usage_error 'sdcpp backend must be cuda, vulkan, or cpu'
 [[ $AUDIOCPP_ACTION =~ ^(install|skip|keep)$ ]] || usage_error 'audiocpp must be install, skip, or keep'
 [[ $AUDIOCPP_BACKEND =~ ^(cuda|vulkan|cpu)$ ]] || usage_error 'audiocpp backend must be cuda, vulkan, or cpu'
+[[ $CLASSIFIER_TOOLS_ACTION =~ ^(install|skip|keep)$ ]] || usage_error 'classifier-tools must be install, skip, or keep'
 for name in "${!DSNS[@]}"; do
   [[ $name =~ ^(core|telemetry|accounts|roles|chat|benchmarks|plugins|alerts|schedules)$ ]] || usage_error "unknown DSN name: $name (the names are core, telemetry, accounts, roles, chat, benchmarks, plugins, alerts and schedules)"
 done
@@ -516,6 +522,11 @@ if has_service loadcoach; then
       AUDIOCPP_ACTION=install
     fi
   fi
+  if ((!NON_INTERACTIVE && !CLASSIFIER_TOOLS_EXPLICIT)); then
+    if ask_yes_no 'Install Classifier conversion tools (CPU; matches the configured llama.cpp build)? Existing tools are kept if declined.' n; then
+      CLASSIFIER_TOOLS_ACTION=install
+    fi
+  fi
 elif [[ $STRATA_ACTION == install ]]; then
   die 'Strata requires loadcoach on this machine.' 'Install loadcoach too (--services compute), or leave out --strata install'
 elif [[ $SDCPP_ACTION == install ]]; then
@@ -524,6 +535,9 @@ elif [[ $SDCPP_ACTION == install ]]; then
 elif [[ $AUDIOCPP_ACTION == install ]]; then
   die 'The audio runtime (audio.cpp) runs beside loadcoach, on a GPU node, and loadcoach is not being installed here.' \
     'Install loadcoach too (--services compute), or leave out --audiocpp install'
+elif [[ $CLASSIFIER_TOOLS_ACTION == install ]]; then
+  die 'Classifier conversion tools require loadcoach and its configured llama.cpp on this machine.' \
+    'Install them on your compute node: owg install --classifier-tools install'
 fi
 
 read -r CURRENT_DATABASE DATABASE_CONTENT <<< "$(check_python "$ROOT/scripts/install-suite-support.py" state --root "$ROOT" --services "$SELECTED_CSV")"
@@ -814,6 +828,7 @@ if ((!EMBEDDED)); then
   has_service loadcoach && ui_kv Strata "$STRATA_ACTION (CUDA; host RAM: $STRATA_HOST_RAM_MIB MiB)"
   has_service loadcoach && ui_kv Images "sdcpp $SDCPP_ACTION (backend: $SDCPP_BACKEND; weights downloaded separately)"
   has_service loadcoach && ui_kv Audio "audio.cpp $AUDIOCPP_ACTION (backend: $AUDIOCPP_BACKEND; weights downloaded separately)"
+  has_service loadcoach && ui_kv 'Classifier conversion tools' "$CLASSIFIER_TOOLS_ACTION (CPU; follows the configured llama.cpp build)"
   ((INSTALL_POSTGRESQL)) && ui_kv Packages 'PostgreSQL server/client'
   ((INSTALL_PGVECTOR)) && ui_kv Optional 'pgvector'
   if ((START_SERVICES)); then ui_kv Activation 'enable units and start configured existing services'; else ui_kv Activation 'enable units without starting'; fi
@@ -1063,7 +1078,14 @@ if has_service loadcoach && [[ $AUDIOCPP_ACTION == install ]]; then
   fi
 fi
 
-# Save versions after optional engines are installed, before services start reading them.
+if has_service loadcoach && [[ $CLASSIFIER_TOOLS_ACTION == install ]]; then
+  if ! run "$PY" "$ROOT/scripts/install-classifier-tools.py" --root "$ROOT"; then
+    die 'Classifier conversion tools did not install. Existing settings and model files are kept.' \
+      'Fix the tool log or configured llama.cpp error above, then retry: owg install --classifier-tools install'
+  fi
+fi
+
+# Save versions after optional engines and tools are installed, before services start reading them.
 try_step 'Recording component versions' "$PY" -m loadcoach.component_versions --root "$ROOT" ||
   die 'Component versions could not be saved to the database.' \
     'Put right the database or settings error above, then run owg repair'

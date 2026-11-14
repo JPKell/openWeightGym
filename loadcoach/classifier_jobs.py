@@ -51,7 +51,7 @@ class ClassifierJobs:
                 'installing': bool(active),
                 'why': active.get('progress', 'Queued') if active else '' if installed else
                     'The configured engine changed. Reinstall tools to match its build.' if receipt else
-                    'Install on demand; CPU tools are separate from the inference runtime.'}
+                    'Install with owg install --classifier-tools install on this node; CPU tools are separate from the inference runtime.'}
 
     async def command(self, identifier, *args, cwd=None, env=None):
         """Run an owned process group and terminate all children on service shutdown."""
@@ -132,7 +132,7 @@ class ClassifierJobs:
     async def convert(self, owner, path):
         """Accept a known inert bundle and reserve a sibling output without touching the sources."""
         if not self.status()['available']:
-            raise ValueError('Install Classifier conversion tools in Components on this node first.')
+            raise ValueError('Run owg install --classifier-tools install on this node first.')
         candidate = Path(path)
         source = candidate if candidate.is_dir() else candidate.parent
         roots = [Path(folder).resolve() for folder in self.places().values() if Path(folder).name == 'classifier']
@@ -171,3 +171,52 @@ class ClassifierJobs:
         for task in list(self.jobs.tasks):
             task.cancel()
         await self.jobs.close()
+
+
+async def install_for_node(root):
+    """Install through the shared worker using the owning node's configured paths and engine."""
+    from engines import engine_for
+    from loadcoach.config import load_config
+
+    root = Path(root).expanduser().resolve()
+    config_path = root / 'settings/loadcoach.toml'
+    if not config_path.is_file():
+        raise ValueError('Classifier conversion tools require settings/loadcoach.toml on the compute node.')
+    config = load_config(config_path)
+    folder = Path(config.data)
+    if not folder.is_absolute():
+        folder = (config_path.parent / folder).resolve()
+    server = engine_for('llama_cpp').installation(config).executable
+    jobs = ClassifierJobs(folder / 'classifier-tools', server, lambda: {})
+    try:
+        if jobs.status()['available']:
+            print('Classifier conversion tools already match the configured llama.cpp build.', flush=True)
+            return
+        row = await jobs.install('installer')
+        progress = None
+        while jobs.jobs.tasks:
+            current = jobs.jobs.read(row['id'])
+            if current.get('progress') != progress:
+                progress = current.get('progress')
+                if progress:
+                    print(progress, flush=True)
+            await asyncio.wait(tuple(jobs.jobs.tasks), timeout=0.5)
+        result = jobs.jobs.read(row['id'])
+        if result['state'] != 'complete' or not jobs.status()['available']:
+            raise ValueError(f"{result.get('error') or 'Tools did not become ready.'} Log: {jobs.jobs.folder(row['id']) / 'worker.log'}")
+        print('Classifier conversion tools installed and verified against the configured llama.cpp build.', flush=True)
+    finally:
+        await jobs.close()
+
+
+def main(argv=None):
+    """Expose optional conversion tools through the existing installer workflow."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Install optional CPU Classifier conversion tools.')
+    parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parent.parent)
+    args = parser.parse_args(argv)
+    try:
+        asyncio.run(install_for_node(args.root))
+    except (OSError, ValueError) as problem:
+        raise SystemExit('Classifier conversion tools installation failed: ' + str(problem)) from None

@@ -5041,12 +5041,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Every service and engine on front and on each compute node, installed or not. Changes nothing and wakes nothing."""
         if "manage-settings" not in person.can:
             return page(request, "refused.html", person, status=403, why="Seeing what each machine has installed requires manage-settings.")
-        if request.method == 'POST':
-            form = await typed(request)
-            answer = await ask('POST', f'/turnstile/machines/{quote(form.get("machine", ""), safe="")}/model-api/classifier-tools',
-                               person.key, json={}, timeout=30)
-            message = 'Classifier tools installation started; refresh Components to see readiness.' if answer.status_code == 202 else answer.json()['error']['message']
-            return go('/system/components?said=' + quote(message))
         if initial_page(request):
             return page(request, "components.html", person, deferred=True, fragment_url=fragment_url(request, "page"))
         part = request.query_params.get("part") == "page" and request.query_params.get("complete") != "1"
@@ -5405,7 +5399,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             Route("/guide", guide_moved),
             route("/docs", docs_page),
             route("/system/components", components_page),
-            route('/system/components', components_page, 'POST'),
             route("/docs/{section}", docs_page),
             route("/docs/{section}/{topic}", docs_page),
             Route("/backups", for_people(backups_page)),

@@ -185,3 +185,52 @@ async def test_tool_receipt_is_written_last_and_expires_when_runtime_changes(tmp
     assert any('abcdefa' + '0' * 33 in args for args in commands)
     server.write_text(server.read_text() + '# changed runtime\n')
     assert not jobs.status()['available']
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('failed', [False, True])
+async def test_installer_uses_configured_node_paths_and_waits_for_verified_tools(tmp_path, monkeypatch, failed):
+    """CLI completion follows the shared worker receipt, including failures and repeat installs."""
+    import io
+    from types import SimpleNamespace
+    from loadcoach.classifier_jobs import install_for_node
+
+    root = tmp_path / 'installed suite'
+    (root / 'settings').mkdir(parents=True)
+    config_path = root / 'settings/loadcoach.toml'
+    config_path.write_text('# retained node settings\n')
+    server = tmp_path / 'custom llama-server'
+    server.write_text('#!/bin/sh\necho "version build 12008, commit abcdefa"\n')
+    server.chmod(0o755)
+    config = SimpleNamespace(data='../custom data')
+    def configured(path):
+        assert path == config_path
+        return config
+    monkeypatch.setattr('loadcoach.config.load_config', configured)
+    monkeypatch.setattr('engines.engine_for', lambda name: SimpleNamespace(
+        installation=lambda config: SimpleNamespace(executable=str(server))))
+    monkeypatch.setattr('urllib.request.urlopen', lambda *args, **kwargs:
+        io.BytesIO(json.dumps({'sha': 'abcdefa' + '0' * 33}).encode()))
+    commands = []
+    async def command(self, identifier, *args, **kwargs):
+        commands.append(tuple(map(str, args)))
+        if failed:
+            raise ValueError('Conversion dependency install failed')
+        if '-m' in args and 'venv' in args:
+            python = self.root / 'venv/bin/python'
+            python.parent.mkdir(parents=True)
+            python.touch()
+    monkeypatch.setattr(ClassifierJobs, 'command', command)
+    tools = root / 'custom data/classifier-tools'
+    if failed:
+        with pytest.raises(ValueError, match='Conversion dependency install failed.*worker.log'):
+            await install_for_node(root)
+        assert not (tools / 'installed.json').exists()
+    else:
+        await install_for_node(root)
+        receipt = json.loads((tools / 'installed.json').read_text())
+        assert receipt['server_signature'][0] == str(server)
+        count = len(commands)
+        await install_for_node(root)
+        assert len(commands) == count
+    assert config_path.read_text() == '# retained node settings\n'

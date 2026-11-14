@@ -14,7 +14,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from front_helpers import machine_key
+from front_helpers import OnCompute, Signed, caller as signed_caller, machine_key
 from loadcoach import components, statement
 from loadcoach.groups import Group
 from loadcoach.users import Users
@@ -137,10 +137,9 @@ def test_the_receipt_shows_only_what_is_worth_showing(tmp_path):
 def test_loadcoach_says_what_its_machine_has_to_whoever_manages_settings(fake_llama_server, systemd):
     systemd["user"] = told(**{"spotter.service": ("loaded", "active", "running")})
     with gateway(fake_llama_server) as caller:
-        owner = add_user(caller, "owner", "admin")
-        guest = add_user(caller, "guest", "plain", by=owner)
-        assert caller.get("/loadcoach/components", headers=guest).status_code == 403
-        found = caller.get("/loadcoach/components", headers=owner).json()
+        compute = OnCompute(caller)
+        assert compute.get('/loadcoach/components', auth=Signed(signed_caller('guest'))).status_code == 403
+        found = compute.get('/loadcoach/components', auth=Signed(signed_caller('owner', ('manage-settings',)))).json()
     services, engines = by_id(found["services"]), by_id(found["engines"])
     assert services["loadcoach"]["installed"] and services["spotter"]["state"] == "running" and not services["voice"]["installed"]
     assert engines["llama_cpp"]["installed"] and "build" in engines["llama_cpp"] and not engines["sdcpp"]["installed"]
@@ -243,7 +242,8 @@ def test_the_console_page_shows_every_machine_with_each_component_installed_or_n
     for title, body in cards:
         rows = re.findall(r'<tr class="([^"]*)">\s*<th scope="row" class="fw-normal"><span class="component-name">([^<]+)</span>', body)
         # Every service and every engine is listed on every machine, installed or not.
-        assert [name for _, name in rows] == [label for _, label, _ in components.SERVICES] + ["llama.cpp", "Strata", "stable-diffusion.cpp", "audio.cpp"]
+        expected = [label for _, label, _ in components.SERVICES] + ["llama.cpp", "Strata", "stable-diffusion.cpp", "audio.cpp"]
+        assert [name for _, name in rows] == expected + (["Classifier conversion tools"] if title == 'compute' else [])
         missing[title] = {name for kind, name in rows if "component-missing" in kind}
         assert body.count("Not installed") == len(missing[title]) and body.count("Installed<") == len(rows) - len(missing[title])
     # Front's console is the one showing this page; compute's model runner is the one that answered.
@@ -255,6 +255,27 @@ def test_the_console_page_shows_every_machine_with_each_component_installed_or_n
     assert "Same machine as front" in compute and "3 of 7 installed" in front and "2 of 7 installed" in compute
     whole = browser.get("/system/components?complete=1")
     assert whole.status_code == 200 and "data-deferred-loader" not in whole.text and "component-card" in whole.text
+
+
+def test_missing_classifier_tools_remain_visible_without_web_install_action(desk, monkeypatch):
+    browser, _, _ = desk
+    here = components.here
+
+    async def report(*args, **kwargs):
+        found = await here(*args, **kwargs)
+        found['tools'] = [{'id': 'classifier_conversion', 'label': 'Classifier conversion tools',
+                          'installed': False, 'enabled': True, 'available': False}]
+        return found
+
+    monkeypatch.setattr(components, 'here', report)
+    sign_in(browser, 'jordan')
+    for query in ('?complete=1', '?part=page'):
+        result = browser.get('/system/components' + query)
+        assert result.status_code == 200
+        assert 'Classifier conversion tools' in result.text and 'Not installed' in result.text
+        assert 'Install Classifier conversion tools' not in result.text
+        assert 'action="/system/components"' not in result.text
+    assert browser.post('/system/components', data={'machine': 'compute'}).status_code == 405
 
 
 @pytest.mark.parametrize("width", [1440, 390])

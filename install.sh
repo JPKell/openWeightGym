@@ -48,6 +48,7 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --sdcpp-backend cuda|vulkan|cpu  image backend (default: cuda)
   --audiocpp install|skip|keep   optional audio.cpp runtime
   --audiocpp-backend cuda|vulkan|cpu  audio backend (default: cuda)
+  --classifier-tools install|skip|keep  optional CPU classifier conversion tools
   --admin NAME            the first account (its password from OWG_ADMIN_PASSWORD, or asked)
   --front-url URL         GPU node: the console's turnstile, such as http://192.168.1.10:8442
   --machine-key-file F    GPU node: a copy of the console's keys/machine.key
@@ -199,6 +200,7 @@ parse_arguments() {
   PLATFORM_SERVICES=images,speech,audio,downloads,classifiers
   ADD_SERVICES='' STRATA_ACTION=keep STRATA_HOST_RAM_MIB=22528
   SDCPP_ACTION=keep SDCPP_BACKEND=cuda AUDIOCPP_ACTION=keep AUDIOCPP_BACKEND=cuda
+  CLASSIFIER_TOOLS_ACTION=keep
   OPERATION=install
   RESUMING_INSTALL=0
   # A mistake in the options is told once the screen is set up (main), as loudly as any other stop.
@@ -210,6 +212,7 @@ parse_arguments() {
     [--services]='service names' [--strata]='install, skip or keep' [--strata-host-ram-mib]='a positive MiB budget'
     [--sdcpp]='install, skip or keep' [--sdcpp-backend]='cuda, vulkan or cpu'
     [--audiocpp]='install, skip or keep' [--audiocpp-backend]='cuda, vulkan or cpu'
+    [--classifier-tools]='install, skip or keep'
     [--platform-services]='images,speech,audio,downloads,classifiers or none')
   [[ -n $DIR ]] && DIR_GIVEN=1
   while (($#)); do
@@ -255,6 +258,7 @@ parse_arguments() {
       --sdcpp-backend) SDCPP_BACKEND=$2; PLAN_GIVEN[SDCPP_BACKEND]=1; shift 2 ;;
       --audiocpp) AUDIOCPP_ACTION=$2; PLAN_GIVEN[AUDIOCPP_ACTION]=1; shift 2 ;;
       --audiocpp-backend) AUDIOCPP_BACKEND=$2; PLAN_GIVEN[AUDIOCPP_BACKEND]=1; shift 2 ;;
+      --classifier-tools) CLASSIFIER_TOOLS_ACTION=$2; PLAN_GIVEN[CLASSIFIER_TOOLS_ACTION]=1; shift 2 ;;
       --uninstall) ACTION=uninstall; shift ;;
       --everything|--no-backup) PASSTHROUGH+=("$1"); shift ;;
       -h|--help) usage; exit 0 ;;
@@ -271,7 +275,7 @@ parse_arguments() {
                     'Or install for yourself, without --system, to use PostgreSQL from the start')
   fi
   local variable
-  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION; do
+  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION CLASSIFIER_TOOLS_ACTION; do
     [[ ${!variable} =~ ^(install|skip|keep)$ ]] || ARGUMENT_ERROR="${variable%_ACTION} must be install, skip or keep."
   done
   for variable in SDCPP_BACKEND AUDIOCPP_BACKEND; do
@@ -279,7 +283,7 @@ parse_arguments() {
   done
   [[ $STRATA_HOST_RAM_MIB =~ ^[1-9][0-9]{0,8}$ ]] || ARGUMENT_ERROR='--strata-host-ram-mib needs a positive whole number of MiB.'
   [[ -z $ADD_SERVICES || $ACTION == components ]] || ARGUMENT_ERROR='--services requires --components.'
-  if [[ $TOPOLOGY == front && ( $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install ) ]]; then
+  if [[ $TOPOLOGY == front && ( $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ) ]]; then
     ARGUMENT_ERROR='Engines need a model runner: choose --topology all or compute.'
   fi
   ((ASSUME_YES)) && export OWG_DEFAULTS=1
@@ -395,6 +399,7 @@ resume_settings() {
     LINGER_WANTED:linger_wanted POWER_RULE:power_rule FRONT_URL:front_url COMPUTE_URL:compute_url \
     MACHINE_NAME:machine_name JOIN_URL:join_url STRATA_ACTION:strata STRATA_HOST_RAM_MIB:strata_host_ram_mib \
     SDCPP_ACTION:sdcpp SDCPP_BACKEND:sdcpp_backend AUDIOCPP_ACTION:audiocpp AUDIOCPP_BACKEND:audiocpp_backend \
+    CLASSIFIER_TOOLS_ACTION:classifier_tools \
     PLATFORM_SERVICES:platform_services; do
     variable=${pair%%:*} key=${pair#*:}
     value=$(receipt_get "$key")
@@ -709,7 +714,8 @@ console_account_ready() {
 runtime_options() {
   RUNTIME_OPTIONS=(--strata "$STRATA_ACTION" --strata-host-ram-mib "$STRATA_HOST_RAM_MIB"
     --sdcpp "$SDCPP_ACTION" --sdcpp-backend "$SDCPP_BACKEND"
-    --audiocpp "$AUDIOCPP_ACTION" --audiocpp-backend "$AUDIOCPP_BACKEND")
+    --audiocpp "$AUDIOCPP_ACTION" --audiocpp-backend "$AUDIOCPP_BACKEND"
+    --classifier-tools "$CLASSIFIER_TOOLS_ACTION")
 }
 
 # The service account has no sudo rights. Gather its system tools as the invoking administrator.
@@ -734,11 +740,12 @@ positive_mib() { [[ $1 =~ ^[1-9][0-9]{0,8}$ ]] || { ui_warn 'Enter a positive wh
 choose_runtimes() {
   ((ASSUME_YES)) && return 0
   local variable label default choice backend
-  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION; do
+  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION CLASSIFIER_TOOLS_ACTION; do
     case "$variable" in
       STRATA_ACTION) label='Strata (CUDA text models with host RAM)' ;;
       SDCPP_ACTION) label='stable-diffusion.cpp (images)' ;;
       AUDIOCPP_ACTION) label='audio.cpp (music, sounds and speech)' ;;
+      CLASSIFIER_TOOLS_ACTION) label='Classifier conversion tools (CPU; matches the configured llama.cpp build)' ;;
     esac
     if [[ -z ${PLAN_GIVEN[$variable]:-} ]]; then
       default=n; [[ ${!variable} != install ]] || default=y
@@ -751,7 +758,7 @@ choose_runtimes() {
       if [[ -z ${PLAN_GIVEN[STRATA_HOST_RAM_MIB]:-} ]]; then
         ui_input STRATA_HOST_RAM_MIB 'Strata may use host RAM: maximum MiB (within the worker memory limit)' "$STRATA_HOST_RAM_MIB" positive_mib
       fi
-    else
+    elif [[ $variable != CLASSIFIER_TOOLS_ACTION ]]; then
       backend=${variable%_ACTION}_BACKEND
       [[ -z ${PLAN_GIVEN[$backend]:-} ]] || continue
       case "${!backend}" in cuda) default=0 ;; vulkan) default=1 ;; cpu) default=2 ;; esac
@@ -767,7 +774,7 @@ install_components() {
   # Restore the machine's role, but do not repeat engines selected during its first install.
   local COMPONENT_GIVEN="${!PLAN_GIVEN[*]}"
   local variable old_services service ticked index
-  for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND; do
+  for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND CLASSIFIER_TOOLS_ACTION; do
     PLAN_GIVEN[$variable]=1
   done
   [[ -n ${PLAN_GIVEN[LLAMA]:-} ]] || LLAMA=skip
@@ -834,21 +841,22 @@ PYTHON
       ui_confirm 'Install llama.cpp too?' n && LLAMA=auto
     fi
     # Explicit CLI choices remain fixed; other engines are offered interactively.
-    for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND; do
+    for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND CLASSIFIER_TOOLS_ACTION; do
       [[ " $COMPONENT_GIVEN " == *" $variable "* ]] || unset 'PLAN_GIVEN[$variable]'
     done
     choose_runtimes
-    if [[ $LLAMA != skip || $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install ]]; then
+    if [[ $LLAMA != skip || $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ]]; then
       [[ ,$SERVICES, == *,loadcoach,* ]] || SERVICES+=${SERVICES:+,}loadcoach
     fi
-  elif [[ $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install ]]; then
+  elif [[ $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ]]; then
     ui_die 'Model engines belong on a machine running loadcoach.' 'Run owg install on your GPU node'
   fi
-  if [[ $SERVICES == "$old_services" && $LLAMA == skip && $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install ]]; then
+  if [[ $SERVICES == "$old_services" && $LLAMA == skip && $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install && $CLASSIFIER_TOOLS_ACTION != install ]]; then
     ui_info 'No additional components selected.'; return 0
   fi
   ui_kv Programs "$SERVICES"
   ui_kv Engines "llama.cpp: $LLAMA; Strata: $STRATA_ACTION; stable-diffusion.cpp: $SDCPP_ACTION; audio.cpp: $AUDIOCPP_ACTION"
+  ui_kv 'Classifier conversion tools' "$CLASSIFIER_TOOLS_ACTION"
   if ((!ASSUME_YES)); then ui_confirm 'Install these components?' y || return 0; fi
   apply_components
 }
@@ -923,7 +931,7 @@ game_plan() {
     [[ -z $node ]] || COMPUTE_URL=http://$node:8442
   fi
   if [[ $TOPOLOGY == front ]]; then
-    [[ $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install ]] ||
+    [[ $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install && $CLASSIFIER_TOOLS_ACTION != install ]] ||
       ui_die 'Model engines need a model runner on this machine.' 'Choose everything on this machine or install the engine on your GPU node'
   else choose_runtimes; fi
   choose_platform_services
@@ -1112,6 +1120,7 @@ show_plan() {
   if [[ $TOPOLOGY != front ]]; then
     lines+=("${C_MUTED}Engine       ${C_RESET}llama.cpp · $(backend_label "$engine")")
     lines+=("${C_MUTED}Optional     ${C_RESET}Strata: $STRATA_ACTION · stable-diffusion.cpp: $SDCPP_ACTION · audio.cpp: $AUDIOCPP_ACTION")
+    lines+=("${C_MUTED}Conversion   ${C_RESET}Classifier tools: $CLASSIFIER_TOOLS_ACTION (CPU)")
     ((POWER_RULE)) && lines+=("${C_MUTED}Power        ${C_RESET}the console may sleep, restart or switch off this machine")
   fi
   ui_box "Your setup" "${lines[@]}"
@@ -1594,6 +1603,7 @@ write_receipt() {
     echo "sdcpp_backend=${SDCPP_BACKEND:-cuda}"
     echo "audiocpp=${AUDIOCPP_ACTION:-keep}"
     echo "audiocpp_backend=${AUDIOCPP_BACKEND:-cuda}"
+    echo "classifier_tools=${CLASSIFIER_TOOLS_ACTION:-keep}"
     echo "linger_wanted=$LINGER_WANTED"
     echo "power_rule=$POWER_RULE"
     echo "front_url=$FRONT_URL"

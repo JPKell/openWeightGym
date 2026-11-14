@@ -37,7 +37,7 @@ ui_confirm() { [[ "$1" == 'Install these components?' || "$1" == *"$CONFIRMATION
 ui_choose() { printf -v "$1" '%s' 2; }
 ui_input() { printf -v "$1" '%s' 8192; }
 apply_components() {
-  printf '%s\\n' "$SERVICES" "$LLAMA" "$STRATA_ACTION" "$SDCPP_ACTION" "$SDCPP_BACKEND" "$AUDIOCPP_ACTION" "$STRATA_HOST_RAM_MIB" "$FRONT_URL" "$MACHINE_NAME" >"$PLAN"
+  printf '%s\\n' "$SERVICES" "$LLAMA" "$STRATA_ACTION" "$SDCPP_ACTION" "$SDCPP_BACKEND" "$AUDIOCPP_ACTION" "$STRATA_HOST_RAM_MIB" "$CLASSIFIER_TOOLS_ACTION" "$FRONT_URL" "$MACHINE_NAME" >"$PLAN"
 }
 install_components
 ''', env={"INSTALL": str(install), "PLAN": str(tmp_path / "plan"), "ROWS": str(tmp_path / "rows"),
@@ -66,6 +66,16 @@ def test_empty_component_selection_changes_nothing(tmp_path):
     answer, plan, _ = component_plan(tmp_path, "--yes")
     assert answer.returncode == 0, answer.stderr
     assert not plan.exists() and "No additional components" in answer.stdout
+
+
+@pytest.mark.parametrize('arguments,confirmations', [
+    ('--yes --classifier-tools install', ''), ('', 'Classifier conversion tools'),
+])
+def test_classifier_tools_are_selectable_without_other_component_changes(tmp_path, arguments, confirmations):
+    answer, plan, _ = component_plan(tmp_path, arguments, confirmations=confirmations)
+    assert answer.returncode == 0, answer.stdout + answer.stderr
+    assert plan.read_text().splitlines()[0] == 'loadcoach,weightroom,turnstile'
+    assert plan.read_text().splitlines()[-3] == 'install'
 
 
 def test_legacy_node_keeps_its_console_address_and_machine_name(tmp_path):
@@ -97,6 +107,7 @@ def test_explicit_llama_skip_does_not_prompt_to_install_it(tmp_path):
 @pytest.mark.parametrize("arguments", [
     "--strata wrong", "--sdcpp-backend rocm", "--audiocpp wrong", "--strata-host-ram-mib -1",
     "--services voice", "--topology front --strata install",
+    "--classifier-tools wrong", "--topology front --classifier-tools install",
 ])
 def test_invalid_runtime_arguments_fail_before_installing(tmp_path, arguments):
     answer = shell(tmp_path, script_functions("install.sh") + '''
@@ -109,7 +120,7 @@ parse_arguments ''' + arguments + '''
 def test_initial_plan_passes_engine_choices_and_backends_to_suite(tmp_path):
     answer = shell(tmp_path, script_functions("install.sh") + '''
 source "$TEST_REPO/scripts/lib/ui.sh"
-parse_arguments --yes --topology all --strata install --strata-host-ram-mib 8192 --sdcpp install --sdcpp-backend vulkan --audiocpp install --audiocpp-backend cpu
+parse_arguments --yes --topology all --strata install --strata-host-ram-mib 8192 --sdcpp install --sdcpp-backend vulkan --audiocpp install --audiocpp-backend cpu --classifier-tools install
 ui_init
 DIR=$INSTALL HOST_ADDRESS=127.0.0.1 UV=/fixture/uv
 save_machine_key() { :; }
@@ -117,7 +128,7 @@ as_owner() { printf '%s\\n' "$@"; }
 setting_up
 ''', env={"INSTALL": str(tmp_path)})
     assert answer.returncode == 0, answer.stderr
-    for flag, value in (("strata", "install"), ("strata-host-ram-mib", "8192"), ("sdcpp-backend", "vulkan"), ("audiocpp-backend", "cpu")):
+    for flag, value in (("strata", "install"), ("strata-host-ram-mib", "8192"), ("sdcpp-backend", "vulkan"), ("audiocpp-backend", "cpu"), ("classifier-tools", "install")):
         assert f"--{flag}\n{value}\n" in answer.stdout
 
 
@@ -146,7 +157,7 @@ main --yes --dir "$INSTALL"
     receipt = install / ".install-receipt"
     receipt.write_text("state=pending\noperation=components\nmode=user\ntopology=compute\n"
                       "services=loadcoach,spotter\nfront_url=http://console:8442\nllama=skip\n"
-                      "audiocpp=install\naudiocpp_backend=vulkan\n")
+                      "audiocpp=install\naudiocpp_backend=vulkan\nclassifier_tools=install\n")
     env = {"INSTALL": str(install), "ARGS": str(tmp_path / "args"), "CHILD_STATUS": "9"}
     failed = shell(tmp_path, driver, env=env)
     assert failed.returncode != 0, failed.stdout
@@ -158,6 +169,7 @@ main --yes --dir "$INSTALL"
     arguments = (tmp_path / "args").read_text()
     assert "--keep-existing-units" in arguments
     assert "--audiocpp\ninstall" in arguments and "--audiocpp-backend\nvulkan" in arguments
+    assert "--classifier-tools\ninstall" in arguments and 'classifier_tools=install' in receipt.read_text()
 
 
 @pytest.mark.parametrize("symlink", [False, True])
@@ -216,7 +228,7 @@ def test_suite_plans_optional_engines_only_on_model_nodes(tmp_path, services):
     answer = subprocess.run(["bash", str(install / "scripts/install-suite.sh"), "--services", services,
         "--database", "keep", "--dry-run", "--non-interactive", "--yes", "--strata", "install",
         "--strata-host-ram-mib", "8192", "--sdcpp", "install", "--sdcpp-backend", "cpu",
-        "--audiocpp", "install", "--audiocpp-backend", "vulkan"], env=env, capture_output=True, text=True, timeout=30)
+        "--audiocpp", "install", "--audiocpp-backend", "vulkan", "--classifier-tools", "install"], env=env, capture_output=True, text=True, timeout=30)
     if services == "weightroom":
         assert answer.returncode != 0 and "Strata requires loadcoach" in answer.stderr
     else:
@@ -224,6 +236,7 @@ def test_suite_plans_optional_engines_only_on_model_nodes(tmp_path, services):
         assert "engines/strata/install.py" in answer.stdout and "--host-ram-mib 8192" in answer.stdout
         assert "install-sdcpp.py" in answer.stdout and "--backend cpu" in answer.stdout
         assert "soundroom/install.py" in answer.stdout and "--backend vulkan" in answer.stdout
+        assert 'install-classifier-tools.py' in answer.stdout
     assert not (install / "runtimes").exists() and not (install / ".venv").exists()
 
 

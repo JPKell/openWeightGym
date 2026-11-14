@@ -386,6 +386,7 @@ owg install --yes --sdcpp install --sdcpp-backend cuda --audiocpp install
 owg install --yes --strata install --strata-host-ram-mib 22528
 owg install --yes --services spotter
 owg install --yes --llama auto
+owg install --yes --classifier-tools install
 ```
 
 These engine flags also work with `install.sh` during initial setup and with
@@ -461,6 +462,7 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 | `--discard-install` | remove partial engine builds and cancel a failed installation's saved choices |
 | `--strata install\|skip\|keep`, `--strata-host-ram-mib N` | optional CUDA Strata runtime and host RAM budget |
 | `--sdcpp install\|skip\|keep`, `--audiocpp install\|skip\|keep` | optional image and audio runtimes |
+| `--classifier-tools install\|skip\|keep` | optional CPU Classifier conversion tools on a compute node |
 | `--sdcpp-backend cuda\|vulkan\|cpu`, `--audiocpp-backend cuda\|vulkan\|cpu` | explicitly select each native backend (default CUDA) |
 | `--admin NAME` | the first account; its password from `OWG_ADMIN_PASSWORD`, or a temporary one is shown |
 | `--join URL --code CODE` | join a console as a GPU node |
@@ -567,7 +569,11 @@ Classifiers use the configured llama.cpp engine and native `/v1/systemone` suppo
 they are stored; new downloads use `classifier/`. Laya and Clef evaluate the whole prompt
 in one batch; LoadCoach sizes batch and ubatch to the configured context budget.
 
-Install optional CPU conversion tools on the owning node from Components. Their converter
+Install optional CPU conversion tools on the owning node through **owg → Install
+components**, choosing **Classifier conversion tools**, or run
+`owg install --yes --classifier-tools install`. Fresh installations offer the same choice;
+`install.sh --classifier-tools install` also selects it. Components reports readiness without
+installing tools. Their converter
 source matches the configured engine build; a changed engine requires reinstalling these tools.
 TinyJev references run inside the tools environment, and converted outputs retain their parity manifest.
 
