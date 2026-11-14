@@ -89,7 +89,7 @@ if (documents) {
         if (!next || selected(row) || row.contains(document.activeElement)) continue;
         for (const field of ['[data-document-status]', '[data-document-chunks]']) {
           const before = row.querySelector(field), after = next.querySelector(field);
-          if (before.textContent !== after.textContent) before.replaceChildren(...after.childNodes);
+          if (before.innerHTML !== after.innerHTML) before.replaceChildren(...after.childNodes);
         }
         const button = row.querySelector('[data-document-index]');
         const nextButton = next.querySelector('[data-document-index]');

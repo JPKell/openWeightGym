@@ -1,10 +1,12 @@
 {% extends "frame.html" %}
 {% from "parts.html" import said_box, page_header, card , confirm_check, confirm_loss, confirm_two, alert, empty_row %}
+{% macro request_links(requests) %}{% if requests %}<p class="small mt-2 mb-0">Request diagnostics: {% for entry in requests %}<a href="/requests/{{ entry }}">{{ entry }}</a>{{ ', ' if not loop.last else '' }}{% endfor %}</p>{% endif %}{% endmacro %}
 {% block title %}{{ collection.title if collection else 'Collections' }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/collections.js?v=3" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/collections.js?v=4" defer></script>{% endblock %}
 {% block main %}
 {% call page_header(collection.title if collection else 'Collections', pretitle='Benchmark', lead="Keep private sources and compare grounded answers." if not collection else "", help="/docs/web-app/collections") %}<a class="btn btn-outline-secondary btn-sm" href="{{ '/collections/'+collection.id if collection else '/collections' }}">Refresh status</a>{% endcall %}
 {{ said_box(said, true) }}
+{% if diagnostics and diagnostics.request %}{{ request_links([diagnostics.request]) }}{% endif %}
 {% if unavailable %}{% call alert('warning') %}{{ unavailable }}{% endcall %}{% endif %}
 {% if not collection %}
 <p class="text-secondary">Collections make human evaluation across multiple models repeatable and easier to compare: ask each model the same questions using the same private source material. Sources are stored on front, and indexing and answers use your permitted local models. Other users, including administrators, cannot open your collections through this page.</p>
@@ -19,10 +21,11 @@
 </form>{% endcall %}
 {% else %}
 <p><strong>{{ collection.level }}</strong> · Embedder {{ collection.model_label }} · <span data-collection-dimensions>{{ collection.dimensions or 'No' }}</span> dimensions</p>
+<p class="small"><a href="/log?trace=collection-{{ collection.id }}">View collection event log</a></p>
 {% call card("Documents", attrs={"data-collection-documents": ""}) %}
 <p class="small text-secondary" role="status" aria-live="polite" data-index-status></p>
 <div class="table-responsive"><table class="table table-sm align-middle" aria-label="Collection documents"><thead><tr><th>Source</th><th>Status</th><th>Chunks</th><th class="text-end">Actions</th></tr></thead><tbody>
-{% for doc in collection.documents %}<tr data-document-id="{{ doc.id }}" data-document-state="{{ doc.state }}"><td class="text-break"><a href="/collections/{{ collection.id }}/documents/{{ doc.id }}/download" download="{{ doc.name }}">{{ doc.name }}</a><div class="small text-secondary">{{ 'Selectable PDF' if doc.mime=='application/pdf' else 'UTF-8 text' }}</div></td><td data-document-status>{{ doc.state }}<div class="small text-secondary">{{ doc.status }}</div></td><td data-document-chunks>{{ doc.chunks }}</td><td><form method="post" action="/collections/{{ collection.id }}" class="d-flex flex-wrap justify-content-end gap-1"><input type="hidden" name="document" value="{{ doc.id }}">
+{% for doc in collection.documents %}<tr data-document-id="{{ doc.id }}" data-document-state="{{ doc.state }}"><td class="text-break"><a href="/collections/{{ collection.id }}/documents/{{ doc.id }}/download" download="{{ doc.name }}">{{ doc.name }}</a><div class="small text-secondary">{{ 'Selectable PDF' if doc.mime=='application/pdf' else 'UTF-8 text' }}</div></td><td data-document-status>{{ doc.state }}<div class="small text-secondary">{{ doc.status }}</div>{% if doc.diagnostics and doc.diagnostics.request %}{{ request_links([doc.diagnostics.request]) }}{% endif %}</td><td data-document-chunks>{{ doc.chunks }}</td><td><form method="post" action="/collections/{{ collection.id }}" class="d-flex flex-wrap justify-content-end gap-1"><input type="hidden" name="document" value="{{ doc.id }}">
 {% if doc.state=='indexing' %}<button  class="btn btn-outline-warning btn-sm" name="do" value="cancel" data-document-index {{ confirm_two() }}>Cancel</button>{% else %}<button class="btn btn-outline-primary btn-sm" name="do" value="index" data-document-index>{{ 'Reindex' if doc.state=='ready' else 'Index / retry' }}</button>{% endif %}<button  class="btn btn-outline-danger btn-sm" name="do" value="delete_document" aria-label="Delete {{ doc.name }}" {{ confirm_loss() }}>Delete</button></form></td></tr>{% else %}{% call empty_row(4) %}Upload a source, then select Index / retry.{% endcall %}{% endfor %}
 </tbody></table></div>
 <form method="post" action="/collections/{{ collection.id }}" data-collection-upload><input type="hidden" name="do" value="upload"><input type="hidden" name="name"><input type="hidden" name="data">
@@ -38,7 +41,7 @@
 {% if result is not none %}{% call card('Answer' if result.get('generated') else 'Retrieved evidence', id="collection-result") %}
 {% if result.answer %}<div class="mb-3 text-break" style="white-space:pre-wrap">{{ result.answer }}</div>{% endif %}
 {% for source in result.sources %}<article class="border-top pt-2 mt-2"><p class="mb-1"><a href="/collections/{{ collection.id }}/sources/{{ source.id }}">{{ source.name }}</a> · {{ 'page '+source.page|string if source.page else 'line '+source.line|string }} · similarity {{ '%.3f'|format(source.similarity) }}{% if source.id in result.get('cited',[]) %} · cited{% endif %}</p><div class="small text-break" style="white-space:pre-wrap">{{ source.text }}</div></article>{% else %}<p class="text-secondary mb-0">No indexed source passed this threshold.</p>{% endfor %}
-{% if result.requests %}<p class="small mt-3 mb-0">Request diagnostics: {% for entry in result.requests %}<a href="/requests/{{ entry }}">{{ entry }}</a>{{ ', ' if not loop.last else '' }}{% endfor %}</p>{% endif %}
+{{ request_links(result.requests) }}
 {% endcall %}{% endif %}
 {% call card("Rebuild embedding space", open=false, class_="border-danger") %}<form  method="post" action="/collections/{{ collection.id }}"><input type="hidden" name="do" value="rebuild"><p>Keep the uploaded originals, cancel indexing and clear every vector. Choose the replacement embedder, then explicitly index each source again. This also accepts a changed fingerprint or server build.</p><label class="form-label" for="rebuild-model">Local embedder</label><select class="form-select mb-2" id="rebuild-model" name="model" required><option value="">Choose an embedder</option>{% for model in embedders %}<option value="{{ model.id }}">{{ model.id }}</option>{% endfor %}</select>{{ confirm_check("Yes, clear the current vectors and index the originals again.", "rebuild-confirm", name="confirmed") }}<button  class="btn btn-outline-warning" type="submit" {{ confirm_loss() }}>Reset embedding space</button></form>{% endcall %}
 <form method="post" action="/collections/{{ collection.id }}"><button  class="btn btn-outline-danger" name="do" value="delete_collection" {{ confirm_loss() }}>Delete collection and sources</button></form>

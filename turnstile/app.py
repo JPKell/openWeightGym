@@ -898,17 +898,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         variants: dict[str, list[tuple[str, dict]]] = {}
         location_models: dict[str, dict[str, str]] = {}
         for logical in catalogue:
-            name = logical["id"]
-            if name in variants:
-                continue  # conflicting unverified aliases retain the first visible machine, as before
-            choices = []
             for location in logical.get("locations", []):
+                name = location['id']
                 fact = fresh.get(location["machine"], {}).get("models", {}).get(location["id"])
                 if fact is not None and model_locations.enabled(location["machine"], fact.get("model_id")):
-                    choices.append((location["machine"], fact))
+                    variants.setdefault(name, []).append((location["machine"], fact))
                     location_models.setdefault(name, {})[location["machine"]] = location["id"]
-            if choices:
-                variants[name] = choices
         live = {name for name in fresh if machines.available(name) is not False}
         ordered = {name: sorted(placement_order(choices, reports), key=lambda item: item[0] not in live)
                    for name, choices in variants.items()}

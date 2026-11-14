@@ -45,6 +45,10 @@ Source links show the exact retained chunk, its PDF page or text line, original 
 index generation, and provide an attachment download of the original. Request IDs link to the
 existing request diagnostics; their normal permissions and retention still apply. Collection
 queries themselves do not create a second conversation history.
+Failed indexing and queries retain the upstream HTTP error reason and a direct request link;
+the collection's **View collection event log** link scopes events to its exact trace. Guard
+refusals are recorded before admission, without storing source text. Indexing diagnostics
+survive refreshes and restarts and clear when explicitly retrying or rebuilding.
 
 ## Permissions and embedding spaces
 
@@ -63,9 +67,13 @@ collection inference destinations. Each request uses the caller's key, collectio
 and trace, and `x-turnstile-no-wake: 1`. Normal admission, cancellation, usage and request logs
 remain authoritative. There is no separate GPU scheduler or accounting path.
 
-The embedding space pins model identity, configuration fingerprint, server build and vector
-dimension. Model renames preserve the space; changed settings/build or replacement identities
-require an explicit **Rebuild embedding space** operation. Rebuild cancels indexing, clears
+The collection requests its exact saved model name on any eligible node. A differently named
+copy is refused even when its weights match. The embedding space retains the weights SHA-256
+when available and vector dimension; changing the weights or model name requires an explicit
+**Rebuild embedding space** operation. Node-local identities, settings and builds are checked
+against each copy's current authorized catalogue receipt. Older records without a weights hash
+retain their original reference's settings/build check while that reference remains available.
+Rebuild cancels indexing, clears
 vectors and marks originals pending; index each source again afterward. Originals remain
 available, so an operator can choose the former embedder and reindex to return to that space.
 No automatic conversion or mixing of vectors is attempted. Use a fixed-context embedder and
@@ -76,20 +84,25 @@ prefixes and token-wise pooling are not configured by this increment.
 
 Matching compute advertises `local_model_guard: true` on local `/v1/models` entries. Embedders
 also expose `context_tokens`, the configured minimum request window after parallel-slot caps.
-Requests carry these three headers together:
+Collection requests carry `X-LoadCoach-Require-Model-Name` with the requested name. Turnstile
+selects an eligible node offering that exact name; it does not bind the request to the
+catalogue reference's node-local identity. LoadCoach freezes the chosen copy's identity,
+configured fingerprint and build before admission and checks them again before inference.
+The client accepts a receipt only from an authorized, same-name catalogue copy.
+
+Other callers can still pin one exact local identity with these three headers together:
 
 - `X-LoadCoach-Require-Model-ID`: the immutable local model identity.
 - `X-LoadCoach-Require-Fingerprint`: the required serving fingerprint.
 - `X-LoadCoach-Require-Build`: the required native server build.
 
-LoadCoach checks the configured local identity before routing, refuses hosted destinations and
+LoadCoach checks the configured local identity before admission, refuses hosted destinations and
 any hosted offload header, then checks actual server marks again after admission and before
 sending inference. Mismatches return 409; incomplete headers return 400. A refused admitted
 ticket is released normally. Headers are never forwarded to the native model server. The
 client also validates response identity/build, dimensions and finite complete vectors. This
 prevents a local model name later reused by a hosted service from becoming an egress path.
-A serving context/kin fingerprint different from the pinned one is refused; configure a fixed
-matching model rather than accepting a mixed space. Old compute without this advertised guard
+A serving receipt outside the permitted same-name catalogue copies is refused. Old compute without this advertised guard
 is refused before collection inference. Other ordinary API clients are unchanged when they
 omit these optional guards.
 
@@ -119,7 +132,8 @@ omit these optional guards.
 
 ## Storage, deletion and deployment
 
-`weightroom.chat` migration 3 adds `collections`, `documents` and `document_chunks`, with
+`weightroom.chat` migration 3 adds `collections`, `documents` and `document_chunks`; migration 5
+adds retained indexing diagnostics and a node-independent collection weights hash, with
 portable SQLite/PostgreSQL definitions. Originals are base64 TEXT, vectors JSON TEXT. Existing
 private backup/restore, integrity and cross-engine transfer paths cover these tables. No new
 DSN, store binding or pgvector extension is needed. The old chat-only compute-to-front

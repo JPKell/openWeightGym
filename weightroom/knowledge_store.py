@@ -27,8 +27,8 @@ class Collections:
 
     def one(self, owner, number):
         """Read collection metadata only when its owner matches the caller."""
-        columns = ('id', 'title', 'level', 'model_id', 'fingerprint', 'build', 'model_label', 'dimensions', 'revision', 'created')
-        row = self.db.execute('SELECT id,title,level,model_id,fingerprint,build,model_label,dimensions,revision,created '
+        columns = ('id', 'title', 'level', 'model_id', 'fingerprint', 'build', 'model_label', 'dimensions', 'revision', 'created', 'content_sha256')
+        row = self.db.execute('SELECT id,title,level,model_id,fingerprint,build,model_label,dimensions,revision,created,content_sha256 '
                               'FROM collections WHERE id=? AND owner=?', (number, owner)).fetchone()
         return dict(zip(columns, row)) if row else None
 
@@ -44,8 +44,8 @@ class Collections:
             if self.db.execute('SELECT COUNT(*) FROM collections WHERE owner=?', (owner,)).fetchone()[0] >= MAX_COLLECTIONS:
                 raise ValueError('Keep at most five collections; delete one before creating another.')
             self.db.execute('INSERT INTO collections '
-                '(id,owner,title,level,model_id,fingerprint,build,model_label,created) VALUES (?,?,?,?,?,?,?,?,?)',
-                (number, owner, title, level, model['model_id'], model['fingerprint'], model['build'], model['id'], time.time()))
+                '(id,owner,title,level,model_id,fingerprint,build,model_label,created,content_sha256) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                (number, owner, title, level, model['model_id'], model['fingerprint'], model['build'], model['id'], time.time(),model.get('content_sha256') or ''))
         return number
 
     def lock(self, owner, number):
@@ -56,10 +56,10 @@ class Collections:
         """List a collection's source and chunk metadata after checking ownership."""
         if not self.one(owner, number):
             return []
-        columns = ('id', 'name', 'mime', 'digest', 'state', 'status', 'generation', 'created', 'chunks')
-        return [dict(zip(columns, row)) for row in self.db.execute(
+        columns = ('id', 'name', 'mime', 'digest', 'state', 'status', 'generation', 'created', 'chunks', 'diagnostics')
+        return [{**dict(zip(columns, row)), 'diagnostics': json.loads(row[-1])} for row in self.db.execute(
             'SELECT d.id,d.name,d.mime,d.digest,d.state,d.status,d.generation,d.created,'
-            '(SELECT COUNT(*) FROM document_chunks c WHERE c.document=d.id) '
+            '(SELECT COUNT(*) FROM document_chunks c WHERE c.document=d.id),d.diagnostics '
             'FROM documents d WHERE d.collection=? ORDER BY d.created,d.id', (number,)).fetchall()]
 
     def document(self, owner, number, doc):
@@ -92,7 +92,7 @@ class Collections:
                 return None
             token = row[0] + 1
             self.db.execute('DELETE FROM document_chunks WHERE document=?', (doc,))
-            self.db.execute("UPDATE documents SET generation=?,state='indexing',status='Extracting and embedding.' WHERE id=?",
+            self.db.execute("UPDATE documents SET generation=?,state='indexing',status='Extracting and embedding.',diagnostics='{}' WHERE id=?",
                             (token, doc))
         return token
 
@@ -118,25 +118,25 @@ class Collections:
                                 (identifier(), doc, number, ordinal, chunk['page'], chunk['line'], chunk['text'], json.dumps(chunk['vector'], allow_nan=False)))
         return True
 
-    def stop(self, owner, number, doc, status, state='failed', token=None):
+    def stop(self, owner, number, doc, status, state='failed', token=None, diagnostics=None):
         """Invalidate indexing output and remove the selected source generation's chunks."""
         with self.db:
             if not self.lock(owner, number):
                 return
             condition = ' AND generation=?' if token is not None else ''
-            args = (state, status, doc, number, *((token,) if token is not None else ()))
-            changed = self.db.execute('UPDATE documents SET generation=generation+1,state=?,status=? WHERE id=? AND collection=?'+condition, args).rowcount
+            args = (state, status, json.dumps(diagnostics or {}), doc, number, *((token,) if token is not None else ()))
+            changed = self.db.execute('UPDATE documents SET generation=generation+1,state=?,status=?,diagnostics=? WHERE id=? AND collection=?'+condition, args).rowcount
             if changed:
                 self.db.execute('DELETE FROM document_chunks WHERE document=?', (doc,))
 
     def reset(self, owner, number, model):
         """Replace the embedding identity and invalidate all previously indexed sources."""
         with self.db:
-            changed = self.db.execute('UPDATE collections SET model_id=?,fingerprint=?,build=?,model_label=?,dimensions=0,revision=revision+1 '
-                'WHERE id=? AND owner=?', (model['model_id'], model['fingerprint'], model['build'], model['id'], number, owner)).rowcount
+            changed = self.db.execute('UPDATE collections SET model_id=?,fingerprint=?,build=?,model_label=?,content_sha256=?,dimensions=0,revision=revision+1 '
+                'WHERE id=? AND owner=?', (model['model_id'], model['fingerprint'], model['build'], model['id'], model.get('content_sha256') or '', number, owner)).rowcount
             if changed:
                 self.db.execute('DELETE FROM document_chunks WHERE collection=?', (number,))
-                self.db.execute("UPDATE documents SET generation=generation+1,state='pending',status='Embedding space changed; index again.' WHERE collection=?", (number,))
+                self.db.execute("UPDATE documents SET generation=generation+1,state='pending',status='Embedding space changed; index again.',diagnostics='{}' WHERE collection=?", (number,))
 
     def remove(self, owner, number, doc=None):
         """Delete an owner's source or collection and its associated chunks together."""

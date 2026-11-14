@@ -21,6 +21,7 @@
     <dt><code>X-LoadCoach-Log: off</code></dt><dd>Local unlogged work only, requiring node <code>unlogged</code> support and caller permission. No other value is accepted. Cannot accompany sensitivity or trace headers, hosted work or offload. Does not erase previous records.</dd>
     <dt><code>X-LoadCoach-Require-Model-ID</code>, <code>X-LoadCoach-Require-Fingerprint</code>, <code>X-LoadCoach-Require-Build</code></dt>
       <dd>Send all three together (each 1–256 characters) to pin a local model identity, configured fingerprint and engine build. A mismatch returns 409 before inference. Cannot be combined with offload or a hosted model.</dd>
+    <dt><code>X-LoadCoach-Require-Model-Name</code></dt><dd>Require this exact local model name (1–256 characters) on any eligible node. Differently named copies, hosted models and offload are refused. The selected worker checks its local identity, settings and build again after admission. Guard refusals retain a request diagnostic link unless logging is disabled.</dd>
     <dt><code>X-LoadCoach-Offload</code></dt><dd>Hosted model name to consider when the local model would wait. Turnstile checks access, sensitivity and spending policy. This is permission to consider a fallback, not a forced switch; direct workers reject it.</dd>
   </dl>
   {{ doc_heading("Hosted and plugin differences") }}

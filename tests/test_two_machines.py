@@ -115,6 +115,7 @@ def worker(key_file, name, warm, state=None, model="small", content="a" * 64):
             return JSONResponse({"environment": {}, "models": {model: {"hosted": False, "why_not": None,
                 "sees": False, "tools": True, "room": 4096, "warm": warm, "resident": warm,
                 "speed": 20, "load": 1, "placed": not warm, "context": 4096,
+                "free_now": control.get('free_now', False),
                 "fit": "resident" if warm else "fits now", "cards": [0], "evictions": [],
                 "model_id": name, "fingerprint": name, "prompt_speed": 100}}})
         if path == "/v1/chat/completions":
@@ -512,7 +513,8 @@ def test_warm_machine_is_chosen_then_a_lost_machine_is_replaced_before_output(tm
             assert facts["text"]["asked"]["from"] == name
 
 
-def test_one_logical_model_routes_to_differently_named_location_copies(tmp_path):
+@pytest.mark.parametrize('copy_name,chosen', [('embed-q8','rig'),('embed-cpu','compute')])
+def test_model_requests_use_any_same_name_copy_and_reject_differently_named_copies(tmp_path,copy_name,chosen):
     users = Users(str(tmp_path / "accounts.db"), {
         "plain": Group(can=frozenset({"load", "manage-models"})), "system": Group(can=frozenset({"follow-settings"}))})
     users.add("pat", "plain")
@@ -523,7 +525,7 @@ def test_one_logical_model_routes_to_differently_named_location_copies(tmp_path)
     rig_key = str(tmp_path / "rig.key")
     statement.replace_key(rig_key, "r" * 40)
     wire = Two(worker(primary_key, "compute", False, model="embed-q8"),
-               worker(rig_key, "rig", True, model="embed-cpu"))
+               worker(rig_key, "rig", True, state={'free_now':True}, model=copy_name))
     settings = Settings(compute="compute", data=str(tmp_path), machine_key_file=primary_key,
                         auth_key_file=str(tmp_path / "weightroom.key"),
                         machines={"rig": {"compute": "http://compute:9442", "machine_key_file": rig_key}},
@@ -536,7 +538,7 @@ def test_one_logical_model_routes_to_differently_named_location_copies(tmp_path)
             time.sleep(.05)
         model = listed[0]
         assert model["id"] == "embed-q8" and [(one["machine"], one["id"]) for one in model["locations"]] == [
-            ("compute", "embed-q8"), ("rig", "embed-cpu")]
+            ("compute", "embed-q8"), ("rig", copy_name)]
         managed = front.get("/turnstile/models", headers=headers).json()["models"]
         assert len(managed) == 1 and managed[0]["name"] == "embed-q8" and [one["machine"] for one in managed[0]["locations"]] == ["compute", "rig"]
         assert all(one["enabled"] for one in managed[0]["locations"])
@@ -546,7 +548,13 @@ def test_one_logical_model_routes_to_differently_named_location_copies(tmp_path)
         assert partial['unavailable_machines'] == ['compute'] and partial['data'][0]['id'] == 'embed-q8'
         wire.missing_catalogues.clear()
         answer = front.post("/v1/chat/completions", headers=headers, json={"model": "embed-q8", "messages": []})
-        assert answer.status_code == 200 and answer.json()["machine"] == "rig" and answer.json()["model"] == "embed-cpu"
+        assert answer.status_code == 200 and answer.json()["machine"] == chosen and answer.json()["model"] == "embed-q8"
+        guarded={**headers,'x-loadcoach-require-model-name':'embed-q8','x-loadcoach-trace':'collection-test'}
+        answer=front.post('/v1/chat/completions',headers=guarded,json={'model':'embed-q8','messages':[]})
+        assert answer.status_code==200 and answer.json()['machine']==chosen and answer.json()['model']=='embed-q8'
+        if copy_name!='embed-q8':
+            exact=front.post('/v1/chat/completions',headers=headers,json={'model':copy_name,'messages':[]})
+            assert exact.status_code==200 and exact.json()['machine']=='rig' and exact.json()['model']==copy_name
         disabled = front.post("/turnstile/models/location", headers=headers,
                               json={"machine": "rig", "model_id": "rig", "enabled": False})
         assert disabled.status_code == 200
@@ -554,6 +562,14 @@ def test_one_logical_model_routes_to_differently_named_location_copies(tmp_path)
         assert [one["enabled"] for one in managed[0]["locations"]] == [True, False]
         answer = front.post("/v1/chat/completions", headers=headers, json={"model": "embed-q8", "messages": []})
         assert answer.status_code == 200 and answer.json()["machine"] == "compute"
+        assert front.post('/turnstile/models/location',headers=headers,
+                          json={'machine':'compute','model_id':'compute','enabled':False}).status_code==200
+        before=len([call for call in wire.calls if call[1]=='/v1/chat/completions'])
+        refused=front.post('/v1/chat/completions',headers=guarded,json={'model':'embed-q8','messages':[]})
+        assert refused.status_code==409 and refused.headers['x-loadcoach-request-id'].isdigit()
+        assert len([call for call in wire.calls if call[1]=='/v1/chat/completions'])==before
+        facts=front.get('/loadcoach/requests/'+refused.headers['x-loadcoach-request-id'],headers=headers).json()
+        assert facts['ended']['status']==409 and 'exact requested local model name' in facts['ended']['why']
 
 
 def test_known_down_cpu_worker_returns_retryable_503_without_disclosing_forbidden_alias(tmp_path):
