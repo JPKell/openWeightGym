@@ -77,6 +77,8 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Site announcements use a single validated table (`text`, `level`, optional `ends_at` with an explicit UTC offset), rendered as escaped plain text and expired on open pages. Site theme defaults follow the existing account-scoped browser theme policy; Use default removes the explicit saved theme and resumes inheritance. Unknown or unauthorized default chat names fall back to the account’s permitted choices.
+
 - Chat expiry uses a separate last-activity timestamp so opening a conversation preserves message ordering. Background polls do not renew it; daily claims persist across restarts and active answers are protected. Built-in backups cover the control node through the existing Schedules worker and verified writer, with no service account or remote grant. Weekly means Sunday; downtime catches up the latest occurrence. Policy edits cancel unsubmitted old occurrences and schedule the next future run. Existing per-node schedules remain available.
 
 - Downloads preserve today’s unlimited concurrency with `downloads_at_once = 0` (range 0–32). The limit covers individual Hugging Face/Civitai transfers per node and preserves active transfers when lowered. Credentials honor configured paths or use the node’s existing keys folder, are never queued on the control node, and are read again when a queued transfer begins. Legacy secret override rows are ignored without deletion; write-only forms remain their only management route.
@@ -471,7 +473,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 3.5 Spending policy; 649 catalogue/service checks, 97 UI/browser checks (all 39 consistency cases) and two serial PostgreSQL contracts pass.
 - [x] 3.6 Download credentials and concurrency; 707 catalogue/feature checks, 107 UI/browser checks (all 39 consistency cases) and PostgreSQL secret-row preservation pass.
 - [x] 3.7 Chat retention and scheduled backups (669 catalogue/retention checks; 59 broader UI checks plus corrected UTC-offset timing assertion; disposable PostgreSQL contract).
-- [ ] 3.8 Display and defaults.
+- [x] 3.8 Display and defaults (745 focused checks, 22 additional native/access checks, shared all-page browser verification and current Reliability theme contract).
 - [ ] 3.9 Remote MCP servers; Phase 3 deployed and verified.
 - [ ] 4 Documentation, complete clean-worktree suite, final deployment and live verification.
 

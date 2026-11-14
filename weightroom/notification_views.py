@@ -69,7 +69,7 @@ def routes(base,for_people,typed,go,notifications,render,note,*,personal=False):
             return Response('Choose a notification channel.',status_code=404)
         now = time.time()
         message = {'episode_id':'test-'+uuid.uuid4().hex,'condition':'notification-test','source':'Control node',
-                   'title':'openWeightGym notification test','state':'test','first_at':now,'last_at':now,'resolved_at':None,
+                   'title':getattr(notifications.settings(),'site_name','openWeightGym')+' notification test','state':'test','first_at':now,'last_at':now,'resolved_at':None,
                    'link':notifications.settings().notify_site_url or landing}
         failure = ''
         try:

@@ -23,7 +23,7 @@ def chat_models(person):
     """Match the chat composer's permitted text models and role strengths."""
     details = person.me.get('chat', {}).get('models', {})
     models = [name for name in person.me.get('models', []) if not any(
-        details.get(name, {}).get(kind) for kind in ('image_generation', 'audio', 'classifier'))]
+        details.get(name, {}).get(kind) for kind in ('image_generation', 'audio', 'classifier', 'rerank'))]
     return models + [role + strength for role in person.me.get('roles', []) for strength in ('', ':best', ':available', ':fast')]
 
 

@@ -86,3 +86,18 @@ def input_utc(item, zone):
         return date.astimezone(UTC).isoformat(timespec='seconds')
     except (TypeError, ValueError):
         return ''
+
+
+
+def site_banner(value, now=None):
+    """Render only current, validated plain-text announcements; expiry uses absolute time."""
+    import time
+    from loadcoach.setting_catalog import validate, banner_end
+    try:
+        validate('weightroom', 'site_banner', value)
+        end = banner_end(value.get('ends_at', ''))
+        if not value.get('text') or end is not None and end <= (time.time() if now is None else now):
+            return None
+        return {'text':value['text'], 'level':value.get('level','info'), 'ends_at':end}
+    except (TypeError, ValueError):
+        return None

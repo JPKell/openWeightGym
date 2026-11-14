@@ -749,3 +749,63 @@ _add('weightroom', 'backup_every', 'choice', tier=NOW, scope='front', page='rete
 _add('weightroom', 'backup_time', 'text', tier=NOW, scope='front', page='retention', section='Scheduled backups',
      label='Automatic backup time', control='plain-text', default='03:00', rule=_backup_time,
      help='HH:MM in the configured control node time zone, or its host zone when empty. Changes recalculate the next future run. The latest missed run may catch up after downtime; overlapping runs are skipped.')
+
+
+# Existing theme IDs; the color definitions remain in the shared theme picker.
+PALETTES = ('slate', 'ocean', 'lagoon', 'forest', 'sage', 'clay', 'rose', 'orchid', 'indigo',
+            'coffee', 'graphite', 'snow', 'sunflower', 'carbon-cyan', 'carbon-green', 'carbon-amber', 'carbon-violet')
+
+
+def _site_name(value):
+    if not value.strip() or len(value) > 80 or any(ord(char) < 32 for char in value):
+        raise ValueError('Use a site name from 1 to 80 characters on one line.')
+
+
+def _chat_default(value):
+    if len(value) > 160 or any(ord(char) < 32 for char in value):
+        raise ValueError('Use a model or role name up to 160 characters on one line, or leave it empty.')
+
+
+def banner_end(value):
+    """Parse an optional explicitly zoned ISO time, avoiding ambiguous host-local clocks."""
+    from datetime import datetime
+    if not isinstance(value, str):
+        raise ValueError('Banner end time must be an ISO date and time with a UTC offset, or empty.')
+    if not value:
+        return None
+    try:
+        at = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if at.tzinfo is None or at.utcoffset() is None:
+            raise ValueError
+        return at.timestamp()
+    except (ValueError, OverflowError, OSError):
+        raise ValueError('Banner end time must be an ISO date and time with a UTC offset, or empty.') from None
+
+
+def _site_banner(value):
+    if value.keys() - {'text', 'level', 'ends_at'}:
+        raise ValueError('The banner table accepts text, level and ends_at.')
+    if not isinstance(value.get('text', ''), str) or len(value.get('text', '')) > 2000:
+        raise ValueError('Banner text must be plain text up to 2,000 characters.')
+    if value.get('level', 'info') not in ('info', 'warning', 'danger'):
+        raise ValueError('Banner level must be info, warning or danger.')
+    banner_end(value.get('ends_at', ''))
+
+
+_add('weightroom', 'site_name', 'text', tier=NOW, scope='front', page='general', section='Display and costs',
+     label='Site name', control='plain-text', default='openWeightGym', rule=_site_name,
+     help='Name shown in the shared header, page titles and test notifications. Plain text, up to 80 characters. Runtime and service names stay unchanged.')
+_add('weightroom', 'site_banner', 'table', tier=NOW, scope='front', page='general', section='Display and costs',
+     label='Site announcement', default={'text':'', 'level':'info', 'ends_at':''}, rule=_site_banner,
+     help='An announcement for everyone, including the sign-in page. Set text, level (info, warning or danger), and optional ends_at as an ISO date/time with an explicit UTC offset. Empty text hides it. Text is escaped, never HTML.')
+_add('weightroom', 'default_palette', 'choice', tier=NOW, scope='front', page='general', section='Display and costs',
+     label='Default color palette', choices=PALETTES, default='slate',
+     choice_labels=tuple((name, name.replace('-', ' ').title()) for name in PALETTES),
+     help='Starting palette for accounts without a saved theme in this browser. Existing account choices win. Use default in Appearance resumes inheritance.')
+_add('weightroom', 'default_appearance', 'choice', tier=NOW, scope='front', page='general', section='Display and costs',
+     label='Default appearance', choices=('system','light','dark'), default='system',
+     choice_labels=(('system','Follow the device'),('light','Light'),('dark','Dark')),
+     help='Starting appearance for accounts without a saved browser theme. Existing account choices win.')
+_add('weightroom', 'default_chat_model', 'text', tier=NOW, scope='front', page='general', section='Display and costs',
+     label='Default chat model or role', control='plain-text', default='', rule=_chat_default,
+     help='Initial selection for a new text chat. Personal choices and explicit links win. Empty or unavailable names fall back to the first model or role allowed for that account; this never grants access.')

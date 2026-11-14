@@ -1478,3 +1478,18 @@ use existing explicit schedules for other nodes. Rotation follows `backup_retent
 edit recomputes the next future run, cancels unsubmitted old occurrences, and lets a backup already
 being written finish. After downtime only the latest missed occurrence is eligible. Retries reuse
 the same verified archive identifier. Raw keys remain excluded from normal recovery archives.
+
+
+### Site identity and presentation defaults
+
+General’s live `site_name` changes the shared header, page titles and test notification title.
+`site_banner` is a TOML table with plain `text`, `level` (`info`, `warning`, `danger`) and optional
+`ends_at` ISO time with an explicit offset, for example `2026-12-01T03:00:00Z`. Empty text hides it;
+expired announcements disappear on server renders and already open pages. The shared alert macro
+escapes all announcement text.
+
+`default_palette` and `default_appearance` supply the existing account-scoped browser theme
+fallback. Saved themes keep winning; Appearance’s Use default clears that explicit choice and
+resumes inheritance. `default_chat_model` names a model or role for new text chats. Personal
+choices and explicit links take precedence; unavailable or unauthorized names fall back to the
+first permitted choice. Existing conversations and permissions are unaffected.

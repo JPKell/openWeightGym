@@ -176,6 +176,11 @@ class Settings:
     allow_audio_generation: bool = True
     allow_model_downloads: bool = True
     allow_classifiers: bool = True
+    site_name: str = default_for("weightroom", "site_name")
+    site_banner: dict = field(default_factory=lambda: default_for("weightroom", "site_banner"))
+    default_palette: str = default_for("weightroom", "default_palette")
+    default_appearance: str = default_for("weightroom", "default_appearance")
+    default_chat_model: str = default_for("weightroom", "default_chat_model")
     chat_keep_days: int = default_for("weightroom", "chat_keep_days")
     backup_every: str = default_for("weightroom", "backup_every")
     backup_time: str = default_for("weightroom", "backup_time")
@@ -667,7 +672,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                             context_processors=[lambda request: {
                                 'server_timezone': display.configured_timezone(settings.timezone),
                                 'log_timezone': settings.timezone or 'UTC',
-                                'third_party_services': THIRD_PARTY_SERVICES}])  # values put into a page are escaped, always
+                                'third_party_services': THIRD_PARTY_SERVICES,
+                                'site_name':settings.site_name, 'site_banner':display.site_banner(settings.site_banner),
+                                'theme_defaults':{'palette':settings.default_palette,'mode':settings.default_appearance}}])  # values put into a page are escaped, always
     pages.env.globals['model_catalogue'] = model_catalogue
     service_defaults = {name: settings.file.get(name, getattr(settings, name)) for name in SERVICE_SETTINGS}
     def platform():
@@ -4104,8 +4111,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         # The page asking for its middle again, once an answer has ended. It is a page of its own in everything but its frame.
         template = "chat_main.html" if request.query_params.get("part") == "main" else "chat.html"
         draft = dict(typed_in or {})
-        preferred = person.me.get('choices', {}).get('chat_model')
-        if not ref and not request.query_params.get('model') and preferred in chat_models(person):
+        allowed = chat_models(person)
+        preferred = next((name for name in (person.me.get('choices', {}).get('chat_model'), settings.default_chat_model) if name in allowed), '')
+        if not ref and not request.query_params.get('model') and preferred:
             draft.setdefault('model', preferred)
         return page(request, template, person, status=400 if said else 200, conversations=listed["conversations"], talk=talk,
                     models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("rerank")], *asked_as(person)], said=said, typed_in=draft,

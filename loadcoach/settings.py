@@ -216,6 +216,9 @@ def said(running: dict, file: dict, says: dict, program='', *, path=None, defaul
         if source:
             marker = object()
             baseline = nested_value(shipped, name, marker)
+            definition = catalog_entry(program, name)
+            if baseline is marker and definition and definition.default is not None:
+                baseline = definition.default
             configured = nested_value(machine, name, marker) is not marker
             entry['source'] = str(source) if configured else str(defaults_path) if nested_value(default_file, name, marker) is not marker else 'Built-in service value'
             if baseline is not marker:

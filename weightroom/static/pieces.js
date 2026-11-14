@@ -160,3 +160,26 @@ document.addEventListener("htmx:beforeSwap", event => {
   restore();
   if (location.hash) anchor();
 })();
+
+
+// Announcements expire on already open pages as well as on fresh server renders.
+(() => {
+  const arm = root => {
+    const rows = root.matches?.('[data-expires-at]') ? [root] : [...root.querySelectorAll?.('[data-expires-at]') ?? []];
+    for (const row of rows) {
+      if (!row.dataset.expiresAt || row.dataset.expiryArmed) continue;
+      row.dataset.expiryArmed = 'true';
+      const end = Number(row.dataset.expiresAt) * 1000;
+      if (!Number.isFinite(end)) continue;
+      const check = () => {
+        if (!row.isConnected) return;
+        const left = end - Date.now();
+        if (left <= 0) row.remove();
+        else setTimeout(check, Math.min(left, 2147483647));
+      };
+      check();
+    }
+  };
+  arm(document);
+  document.addEventListener('htmx:afterSwap', event => arm(event.detail?.target || document));
+})();

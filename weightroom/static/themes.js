@@ -29,7 +29,12 @@
   const identity = root.dataset.themeUser || "";
   const key = identity ? `weightroom-theme-v1:${encodeURIComponent(identity)}` : null;
   const legacyKey = identity ? `frontdesk-theme-v1:${encodeURIComponent(identity)}` : null;
-  const defaults = {palette: "slate", mode: "system"};
+  let provided = {};
+  try { provided = JSON.parse(root.dataset.themeDefaults || '{}'); } catch {}
+  const defaults = {
+    palette: palettes.some(theme => theme.id === provided.palette) ? provided.palette : 'slate',
+    mode: ['system', 'light', 'dark'].includes(provided.mode) ? provided.mode : 'system',
+  };
   const properties = ["bg", "surface", "subtle", "text", "muted", "border", "accent", "button", "accent-bg"];
   /** Normalize stored palette and appearance choices against supported values. */
   function valid(value) {
@@ -118,7 +123,10 @@
       current = {...saved}; apply(); notice("Preview reset to your saved theme.");
     }
     if (event.target.closest("[data-theme-default]")) {
-      current = {...defaults}; apply(); save();
+      let kept = true;
+      try { if (key) localStorage.removeItem(key); if (legacyKey) localStorage.removeItem(legacyKey); } catch { kept = false; }
+      saved = {...defaults}; current = {...defaults}; apply();
+      notice(kept ? "Using the site default theme." : "Default theme applied for this page. Your browser could not save the preference.");
     }
   });
   device.addEventListener("change", () => { if (current.mode === "system") apply(); });

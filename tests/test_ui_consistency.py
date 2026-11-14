@@ -889,7 +889,7 @@ def test_user_facing_product_name_does_not_rename_runtime_identity(desk):
     server, _, _ = desk
     sign_in(server, 'pat')
     home = server.get('/')
-    assert '<span>weightRoom</span>' in home.text and '· openWeightGym</title>' in home.text
+    assert '<span>openWeightGym</span>' in home.text and '· openWeightGym</title>' in home.text
     assert 'weightroom' in server.cookies
     manifest = server.get('/static/site.webmanifest').json()
     assert manifest['name'] == manifest['short_name'] == 'openWeightGym'

@@ -1,17 +1,17 @@
 {% from "icons.html" import icon %}
 {% from "parts.html" import danger_confirmation, empty_row, alert, settings_workspace %}
 <!doctype html>
-<html lang="en" data-content-limits="{{ content_limits|default({})|tojson|forceescape }}" data-theme-user="{{ person.me.get('identity', person.name) if person else '' }}"{% if person %} data-personal-preferences="{{ person.me.get('choices', {})|tojson|forceescape }}" data-text-size="{{ person.me.get('choices', {}).get('text_size', 'standard') }}" data-motion="{{ person.me.get('choices', {}).get('motion', 'system') }}"{% endif %}>
+<html lang="en" data-theme-defaults="{{ theme_defaults|default({})|tojson|forceescape }}" data-content-limits="{{ content_limits|default({})|tojson|forceescape }}" data-theme-user="{{ person.me.get('identity', person.name) if person else '' }}"{% if person %} data-personal-preferences="{{ person.me.get('choices', {})|tojson|forceescape }}" data-text-size="{{ person.me.get('choices', {}).get('text_size', 'standard') }}" data-motion="{{ person.me.get('choices', {}).get('motion', 'system') }}"{% endif %}>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="alternate icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/static/site.webmanifest">
-<title>{% block title %}openWeightGym{% endblock %}</title>
+{% set document_title %}{% block title %}openWeightGym{% endblock %}{% endset %}<title>{{ document_title|replace('openWeightGym', site_name|default('openWeightGym')) }}</title>
 {# Light or dark, as the device is set. Done before anything is drawn, so the page never flashes the wrong one. #}
 <script>document.documentElement.dataset.bsTheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";</script>
-<script src="/static/themes.js?v=7"></script>
+<script src="/static/themes.js?v=8"></script>
 <script>
 // Remember the desktop rail without briefly drawing it at the wrong width. Phones start closed.
 try { document.documentElement.dataset.sidebar = matchMedia("(max-width: 767.98px)").matches ? "closed" : (localStorage.getItem("weightroom-sidebar") || localStorage.getItem("frontdesk-sidebar") || "open"); }
@@ -24,7 +24,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {# htmx keeps no copy of a page for the Back button: going back loads the page again, so nothing that was shown is kept in the browser. #}
 <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
 <script src="/static/htmx.min.js" defer></script>
-<script src="/static/pieces.js?v=12" defer></script>
+<script src="/static/pieces.js?v=13" defer></script>
 <script src="/static/deferred.js?v=1" defer></script>
 <script src="/static/telemetry.js?v=4" defer></script>
 <script src="/static/sort.js?v=6" defer></script>
@@ -39,7 +39,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {# The navigation and the telemetry row beneath it stay in view while the page scrolls. #}
 <header class="sticky-top bg-body">
 <nav class="navbar suite-top border-bottom px-3 py-2 gap-2" aria-label="Categories">
-  <a class="navbar-brand fw-bold me-2" href="/status" aria-label="weightRoom status">{{ icon("barbell") }}<span>weightRoom</span></a>
+  <a class="navbar-brand fw-bold me-2 text-wrap text-break mw-100" href="/status" aria-label="{{ site_name|default('openWeightGym') }} status">{{ icon("barbell") }}<span>{{ site_name|default('openWeightGym') }}</span></a>
   {% if person %}
   <button id="mobile-menu-toggle" type="button" class="btn btn-outline-secondary btn-sm d-md-none" aria-controls="mobile-navigation" aria-haspopup="dialog" aria-expanded="false">Menu</button>
   <div class="navbar-nav category-links d-none d-md-flex">
@@ -96,6 +96,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 {% endif %}
 {# Every page uses the same outer spacing; children only add content-specific classes. #}
 <main id="page-content" class="suite-page {% block page_class %}{% endblock %}" {% block main_attributes %}{% endblock %}>
+{% if site_banner|default(none) %}{% call alert(site_banner.level, class_='text-break', attrs={'id':'site-banner', 'data-expires-at':site_banner.ends_at or ''}) %}{{ site_banner.text }}{% endcall %}{% endif %}
 {% if person and person.me.get('unavailable_machines') %}
 {# One notice per node that is not answering, with its Wake button when it has wake settings. Pages never wake a node themselves. #}
 <div id="node-availability" data-offline-nodes="{{ person.me.unavailable_machines|tojson|forceescape }}" data-default-node="{{ (person.me.get('machines') or [''])|first }}">

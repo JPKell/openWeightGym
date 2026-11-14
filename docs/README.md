@@ -191,7 +191,8 @@ with device details where recorded; end another sign-in or all other sign-ins wi
 revoking application keys. Old sign-ins retain access and show unknown device details.
 
 Appearance saves text size, reduced motion and machine-meter visibility with your account;
-the 17 color themes remain specific to each browser. Workspace saves the starting page,
+the 17 color themes remain specific to each browser. Accounts without a saved browser theme
+inherit General’s palette and appearance defaults; **Use default** resumes inheritance. Workspace saves the starting page,
 default chat model/role, time zone, date format and clock. Explicit deep links and existing
 conversations take precedence, and unavailable defaults never expand model access.
 Audio retains unavailable saved choices and adds optional autoplay for new owned output;
@@ -294,6 +295,8 @@ defaults, differences, retired/derived/deprecated flags and service restart comm
 may not report source/default evidence yet. Retired overrides remain stored and are ignored.
 Security and sign-in also shows the file-controlled cookie, browser-origin and trusted-proxy settings.
 Alerts and notifications contains live thresholds, channel setup, write-only credentials and test delivery.
+General also controls the shared site name, escaped announcement, theme defaults and initial text
+chat model or role. Explicit links and permitted personal defaults take precedence.
 
 **Retention and privacy** includes optional conversation expiry (0 keeps indefinitely) and
 automatic control node backups (off by default). Chat expiry counts authorized openings and new

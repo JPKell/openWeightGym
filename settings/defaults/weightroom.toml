@@ -239,6 +239,23 @@ responses_max_records = 10000
 responses_max_mib = 256
 
 
+# Shared header and page-title name; does not rename services, stores or accounts.
+site_name = "openWeightGym"
+
+# Plain-text announcement on every page, including sign-in. Empty text hides it.
+# level: info/warning/danger. ends_at: empty, or an ISO date/time with a UTC offset.
+# See docs/operations.md for an example. Expiry also applies to already open pages.
+site_banner = { text = "", level = "info", ends_at = "" }
+
+# Starting theme for accounts without an explicit theme in this browser. Personal
+# choices win; Appearance > Use default resumes inheritance. Appearance: system/light/dark.
+default_palette = "slate"
+default_appearance = "system"
+
+# New text chat default: model or role name. Empty/unavailable falls back to the first
+# allowed choice. Personal choices and explicit model links win; grants no access.
+default_chat_model = ""
+
 [groups.superuser]
 can = ["use-tools", "superuser"]
 session_hours = 12

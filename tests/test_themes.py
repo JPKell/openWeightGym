@@ -88,13 +88,17 @@ def test_reliability_chart_rethemes_without_changing_appearance_mode(desk):
         page.goto('http://console.test/reliability')
         for palette, mode in [('slate', 'dark'), ('forest', 'dark'), ('clay', 'light')]:
             change_theme(page, palette, mode)
+            # The live workspace uses native outcome bars, sharing the theme's text/surface tokens.
             assert page.locator('#reliability-chart').evaluate('''node => {
-                const options = echarts.getInstanceByDom(node).getOption();
-                const css = getComputedStyle(document.documentElement);
-                return options.textStyle.color === css.getPropertyValue('--bs-body-color').trim() &&
-                    options.tooltip[0].backgroundColor === css.getPropertyValue('--bs-body-bg').trim() &&
-                    options.yAxis[0].splitLine.lineStyle.color === css.getPropertyValue('--bs-border-color').trim();
+                const probe = document.createElement('span');
+                probe.style.color = 'var(--bs-tertiary-bg)'; document.body.append(probe);
+                const expected = getComputedStyle(probe).color; probe.remove();
+                return getComputedStyle(node).color === getComputedStyle(document.body).color &&
+                    [...node.querySelectorAll('.rl-outcome-track')].every(track =>
+                        getComputedStyle(track).backgroundColor === expected);
             }'''), (palette, mode)
+            assert page.locator('html').get_attribute('data-bs-theme') == mode
+            assert page.locator('html').get_attribute('data-site-theme') == palette
         browser.close()
 
 
