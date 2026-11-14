@@ -1,0 +1,85 @@
+{% from 'parts.html' import page_header, card, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'kpi_parts.html' import kpi, kpi_row %}
+{% from 'benchmark_results_parts.html' import overview, filters, insights %}
+{% from 'benchmark_score_parts.html' import score_grid, measurement_grid, metric_ledger with context %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Results · Three LLM design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light" selected>Light</option><option value="dark">Dark</option></select></form></div>
+<a href="#results" class="visually-hidden-focusable">Skip to results</a>
+<div class="results-review-bar"><div class="d-flex flex-wrap align-items-center gap-3"><span class="results-brand"><span aria-hidden="true">◈</span> openWeightGym</span><span class="small text-secondary">Design review / Results</span></div><div class="d-flex gap-2 align-items-center"><span class="badge bg-azure-lt">Illustrative data</span><label class="small text-secondary d-flex gap-2 align-items-center">Preview state<select id="scenario" class="form-select form-select-sm w-auto"><option value="normal">Populated library</option><option value="empty">No models yet</option><option value="unmeasured">No benchmarks run</option></select></label><button id="theme" class="btn btn-sm btn-outline-secondary" type="button">Dark mode</button></div></div>
+<main class="results-shell" id="results" data-layout="briefing">
+<div class="results-design-switch">
+{% call pills('Results design proposals', buttons=true, class_='gap-1 mb-0') %}
+{{ pill_button('01  Results briefing', true, attrs={'data-design': 'briefing'}) }}
+{{ pill_button('02  Comparison atlas', attrs={'data-design': 'atlas'}) }}
+{{ pill_button('03  Model explorer', attrs={'data-design': 'explorer'}) }}
+{% endcall %}
+<p id="design-description" class="small text-secondary mb-0">A metric ledger: all measured fields down the page, models across columns. Recommended for dense benchmarks.</p>
+</div>
+{{ page_header('Results') }}
+{{ overview(results) }}
+<div class="results-workspace">
+<section id="heatmap-panel" class="results-heatmap" aria-label="Complete model comparison">
+{% set heat_actions %}<span class="badge bg-secondary-lt" id="heatmap-count"></span><button class="btn btn-sm btn-outline-secondary" id="keyboard-grid" aria-expanded="false" type="button">Accessible score table</button>{% endset %}
+{% call card('Model × benchmark', hint='All models and all benchmarks · select a column to sort or a cell to inspect.', actions=heat_actions, body=false) %}
+<div class="heatmap-guide d-flex flex-wrap justify-content-between align-items-center gap-2 px-4 py-3"><div class="d-flex align-items-center gap-2 small"><span>Score</span><span>0</span><span class="results-heat-gradient" aria-hidden="true"></span><span>100%</span><span class="text-secondary ms-1">Higher is better</span></div><span class="small text-secondary">Fixed scale · exact scores · scroll for all 13 benchmarks →</span></div>
+<div id="benchmark-heatmap-scroll" class="benchmark-heatmap-scroll px-3" hidden><div id="benchmark-heatmap" class="benchmark-heatmap" role="img" aria-label="Scores for all 12 LLM models across all 13 quality benchmarks. Use the accessible score table for keyboard links."></div></div>
+{{ score_grid(data.models, data.benchmarks, data.latest, colours, preview=true) }}
+<div id="heatmap-empty" class="results-empty" hidden><strong>No LLM models in this library yet.</strong><p class="text-secondary mb-2">Choose the populated library preview to inspect sample results.</p><button type="button" class="btn btn-sm btn-outline-secondary" data-reset>Reset filters</button></div>
+<div class="heatmap-foot px-4 py-3 small text-secondary"><span><strong>—</strong> No final score</span><span><strong>†</strong> Settings changed</span><span><strong>*</strong> Older protocol</span><span>Different tasks have different score meanings. Open a cell for details.</span></div>
+{% endcall %}
+</section>
+
+{{ filters(data.benchmarks, data.models, results.benchmark, baseline='Qwen3-8B', preview=true) }}
+{{ insights(results) }}
+<aside id="model-navigator" class="results-model-navigator" aria-label="Choose a model" hidden>
+{% call card('Model library', body_class='p-2', hint='Explore one capability profile at a time.') %}<div id="model-choices">{% for m in data.models %}<button class="model-choice" type="button" data-focus-model="{{ m.id }}"><strong>{{ m.id }}</strong><span class="small text-secondary">{{ m.family }} · {{ m.parameters }} · {{ m.quant }}</span><small data-model-coverage="{{ m.id }}"></small></button>{% endfor %}</div><p id="model-nav-empty" class="small p-3 text-secondary" hidden>No models match these filters.</p>{% endcall %}
+</aside>
+<section id="profile-panel" class="results-profile" hidden aria-label="Selected model capability profile">
+{% call card('Model measurement desk', body_class='p-4', actions='<span class="badge bg-azure-lt">All metrics</span>'|safe) %}
+<div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3"><div class="min-w-0"><h2 id="profile-title" class="mb-1"></h2><p id="profile-subtitle" class="small text-secondary mb-0"></p></div><span class="badge bg-secondary-lt" id="profile-coverage"></span></div>
+<p class="small text-secondary" id="profile-baseline"></p>
+<div class="table-responsive"><table class="table table-sm profile-metrics mb-0" aria-label="Selected model metrics against baseline"><thead><tr><th scope="col">Measurement</th><th scope="col">Selected model</th><th scope="col">Baseline</th><th scope="col">Difference</th></tr></thead><tbody id="profile-scores"></tbody></table></div>
+{% endcall %}
+</section>
+<section class="results-ranking" aria-label="Focused benchmark ranking">
+{% call card('Benchmark leaders', hint='Ranked on the focused task, with full precision.', body_class='p-3') %}
+<h3 id="ranking-title" class="mb-1"></h3><p class="small text-secondary mb-3" id="ranking-subtitle"></p><ol id="ranking" class="results-leaderboard"></ol><p id="ranking-empty" class="text-secondary small" hidden>No comparable final scores in this view.</p>
+<div class="small text-secondary border-top pt-3 mt-3" id="baseline-note"></div>
+{% endcall %}
+</section>
+<section class="results-measurements" id="measurements" aria-label="Detailed measurements">
+{% call card(body=false) %}
+<div class="measurement-heading px-3 py-2 border-bottom"><div><strong id="measurement-title"></strong><p class="small text-secondary mt-1 mb-0" id="measurement-score-label"></p></div><div class="d-flex flex-wrap gap-2"><span id="metric-count" class="badge bg-azure-lt"></span><span id="measurement-version" class="badge bg-secondary-lt"></span></div></div>
+<nav id="metric-sections" class="d-flex flex-wrap gap-2 px-4 py-3 border-bottom" aria-label="Jump to metric section"></nav>
+<div id="measurement-tables">{% for b in data.benchmarks %}<div data-measurement="{{ b.id }}"{{ ' hidden' if b.id != 'json_schema' }}>{{ measurement_grid(data.models, b, data.latest, preview=true) }}</div>{% endfor %}</div>
+<div id="metric-ledgers" hidden>{% for b in data.benchmarks %}<div data-ledger="{{ b.id }}"{{ ' hidden' if b.id != 'json_schema' }}>{{ metric_ledger(data.models, b, data.latest) }}</div>{% endfor %}</div>
+<p id="measurements-empty" class="results-empty text-secondary" hidden>No matching models to show.</p>
+<details class="px-4 py-3 border-top"><summary class="small fw-medium">Method & score definition</summary><p id="benchmark-method" class="small text-secondary mt-3 mb-0"></p></details>
+{% endcall %}
+</section>
+</div>
+<p class="results-disclosure small text-secondary">Design preview · Scores and model profiles are illustrative, not measured performance claims. Suite definitions and measurement fields come from the existing benchmark registry. All interactions stay in this page.</p>
+<p role="status" aria-live="polite" id="feedback" class="small text-secondary"></p>
+</main>
+<dialog id="evidence-dialog" class="results-evidence" aria-labelledby="evidence-title">
+{% call card('Saved evidence', header_id='evidence-title', class_='mb-0', actions='<button type="button" class="btn btn-sm btn-outline-secondary" id="close-evidence">Close ×</button>'|safe, body_class='p-4') %}
+<p id="evidence-benchmark" class="small text-secondary mb-2"></p><h2 id="evidence-model" class="mb-2"></h2><span id="evidence-status" class="badge bg-secondary-lt mb-4"></span>
+{% call kpi_row('Selected result', class_='mb-3') %}{{ kpi('Saved score', '—', '', value_attrs={'id': 'evidence-score'}, note_attrs={'id': 'evidence-score-label'}) }}{{ kpi('Difference from baseline', '—', '', value_attrs={'id': 'evidence-delta'}, note_attrs={'id': 'evidence-baseline'}) }}{% endcall %}
+<p id="evidence-note" class="small text-secondary"></p><dl id="evidence-facts" class="evidence-facts"></dl>
+<div class="table-responsive"><table class="table table-sm mb-0" aria-label="All metrics from the selected sample result"><thead><tr><th scope="col">Measurement</th><th scope="col" class="text-end">Value</th></tr></thead><tbody id="evidence-metrics"></tbody></table></div>
+<p class="small text-secondary mt-3 mb-0">Illustrative saved record. Deltas require a scored baseline on the same benchmark protocol; differing recorded settings remain visible.</p>
+{% endcall %}
+</dialog>
+<template id="ranking-row"><li><button type="button" class="leader-row"><span class="leader-rank"></span><span class="leader-model"><strong></strong><span class="leader-track" aria-hidden="true"><span></span></span></span><span class="leader-value"></span><span class="leader-delta"></span></button></li></template>
+<template id="profile-row"><tr><th scope="row" class="fw-normal"></th><td data-selected></td><td data-baseline></td><td data-difference class="text-secondary"></td></tr></template>
+<template id="metric-group-button"><button type="button" class="btn btn-sm btn-outline-secondary"></button></template>
+<template id="metric-row"><tr><th scope="row" class="fw-normal"></th><td class="text-end"></td></tr></template>
+<script type="application/json" id="results-data">{{ data|tojson }}</script>
+<script>{{ chart_library|safe }}</script>
+<script>{{ javascript|safe }}</script>
+<script>{{ heatmap_javascript|safe }}</script>
+</body></html>

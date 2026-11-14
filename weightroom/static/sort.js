@@ -17,7 +17,7 @@ function prepareSortableTables() {
   document.querySelectorAll('table.sortable').forEach((table, index) => {
     if (!table.tHead || !table.tBodies.length) return;
     table.id ||= 'console-table-' + index;
-    [...table.tHead.rows[0].cells].forEach(head => {
+    [...(table.tHead.querySelector('[data-sort-columns]') || table.tHead.rows[0]).cells].forEach(head => {
       if (!head.textContent.trim() || head.querySelector('input, select, button')) return;
       head.dataset.sort ||= 'text';
       head.tabIndex = 0;
@@ -36,7 +36,7 @@ document.addEventListener('keydown', event => {
 /** Apply stable multi-column sorting to the selected operator table. */
 function sortTable(table) {
   const picks = chosen[table.id] || [];
-  [...table.tHead.rows[0].cells].forEach((head, column) => {
+  [...(table.tHead.querySelector('[data-sort-columns]') || table.tHead.rows[0]).cells].forEach((head, column) => {
     const place = picks.findIndex(pick => pick.column === column);
     head.dataset.mark = place < 0 ? "" : (picks[place].down ? "\u25BC" : "\u25B2") + (picks.length > 1 ? place + 1 : "");
   });

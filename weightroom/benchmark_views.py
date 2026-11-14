@@ -3,6 +3,90 @@
 from loadcoach.log import LEGACY  # the old default node, which rows and catalogues without a node name mean
 
 
+def metric_sections(benchmark):
+    """Group every configured metric, preserving the registry's order and labels."""
+    sections = []
+    json_groups = {'accuracy': 'Free decoding', 'recorded_samples': 'Coverage',
+                   'forced_accuracy': 'Forced decoding', 'matched_pairs': 'Matched pairs',
+                   'free_output_tokens_per_second': 'Throughput'}
+    label = 'Overall & coverage'
+    for index, metric in enumerate(benchmark['kpis']):
+        if benchmark['id'] == 'json_schema':
+            label = json_groups.get(metric[0], label)
+        elif index == 7:
+            label = 'Detailed measurements'
+        if not sections or sections[-1]['name'] != label:
+            sections.append(dict(name=label, metrics=[]))
+        sections[-1]['metrics'].append(metric)
+    return sections
+
+
+def results_workspace(models, measurement_models, benchmarks, benchmark, latest, query):
+    """Present authorised saved scores without changing grading or the complete heatmap."""
+    import math
+
+    def scored(run):
+        return bool(run) and type(run.get('score')) in (int, float) and math.isfinite(run['score'])
+
+    def review(run, definition):
+        return bool(run) and (run.get('current_fingerprint') is False or bool(run.get('rerun'))
+                              or run.get('version', 1) != definition['version'])
+
+    def compatible(run, definition):
+        return scored(run) and run.get('version', 1) == definition['version']
+
+    search = query.get('q', '').strip()[:200]
+    evidence = query.get('evidence', 'all')
+    if evidence not in ('all', 'current', 'review', 'gaps'):
+        evidence = 'all'
+    baseline = next((model['id'] for model in models if model['id'] == query.get('baseline')), '')
+    rows = []
+    for model in measurement_models:
+        run = latest.get(model['id'], {}).get(benchmark['id'])
+        if search.casefold() not in (model['id'] + ' ' + str(model.get('family', ''))).casefold():
+            continue
+        if (evidence == 'current' and (not scored(run) or review(run, benchmark))
+                or evidence == 'review' and not review(run, benchmark)
+                or evidence == 'gaps' and scored(run)):
+            continue
+        rows.append(model)
+    def score_order(model):
+        run = latest.get(model['id'], {}).get(benchmark['id'])
+        return (not scored(run), run['score'] * (1 if benchmark.get('green') == 'low' else -1) if scored(run) else 0)
+    rows.sort(key=score_order)
+
+    def leaders(candidates, definition):
+        ranked = [dict(model=model['id'], run=run) for model in candidates
+                  if compatible(run := latest.get(model['id'], {}).get(definition['id']), definition)]
+        ranked.sort(key=lambda row: row['run']['score'], reverse=definition.get('green') != 'low')
+        base = latest.get(baseline, {}).get(definition['id'])
+        prior, rank = None, 0
+        for index, row in enumerate(ranked, 1):
+            if row['run']['score'] != prior:
+                rank = index
+            prior = row['run']['score']
+            row.update(rank=rank, delta=row['run']['score']-base['score'] if compatible(base, definition) else None,
+                       bar=row['run']['score'] if definition.get('score_unit') == '%' and 0 <= row['run']['score'] <= 100 else None)
+        return ranked
+
+    pairs = [(latest.get(model['id'], {}).get(definition['id']), definition)
+             for model in models for definition in benchmarks]
+    count = sum(scored(run) for run, _ in pairs)
+    ranked = leaders(rows, benchmark)
+    reasoning = next((definition for definition in benchmarks if definition['id'] == 'reasoning'), None)
+    specialists = leaders(rows, reasoning) if reasoning else []
+    return dict(benchmark={**benchmark, 'metric_sections': metric_sections(benchmark)},
+                models=rows, search=search, evidence=evidence, baseline=baseline,
+                model_count=len(models), benchmark_count=len(benchmarks), scored=count, total=len(pairs),
+                coverage=round(100*count/len(pairs)) if pairs else None,
+                review=sum(review(run, definition) for run, definition in pairs),
+                gaps=sum(not scored(latest.get(model['id'], {}).get(definition['id']))
+                         for model in rows for definition in benchmarks),
+                leaders=ranked, leader=ranked[0] if ranked else None,
+                specialist=specialists[0] if specialists else None, reasoning=reasoning,
+                baseline_scored=compatible(latest.get(baseline, {}).get(benchmark['id']), benchmark))
+
+
 def run_briefing(detail, definition):
     """Present retained evidence; never recalculate the configured run score or grading."""
     import math

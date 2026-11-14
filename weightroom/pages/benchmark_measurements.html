@@ -1,9 +1,14 @@
-{% from "parts.html" import card, empty_row %}
-{% from "benchmark_parts.html" import number, flags %}
-<div id="benchmark-measurements">{% set measurement_actions %}
-<form method="get" action="/benchmarks/results#measurements" class="ms-auto" hx-get="/benchmarks/results" hx-target="#benchmark-measurements" hx-select="#benchmark-measurements" hx-swap="outerHTML show:none" hx-replace-url="true"><label for="benchmark" class="visually-hidden">Benchmark results to view</label><select id="benchmark" name="benchmark" class="form-select form-select-sm" data-benchmark-select>{% for bench in benchmarks %}<option value="{{ bench.id }}" {{ 'selected' if benchmark.id == bench.id }}>{{ bench.name }}</option>{% endfor %}</select></form>{% endset %}
-{% call card('Measurements', open=true, id="measurements", key="benchmark-measurements", actions=measurement_actions) %}
-<div class="table-responsive"><table id="benchmark-results" class="table table-hover align-middle sortable mb-0"><thead><tr><th scope="col" data-sort="text">Model</th><th scope="col" data-sort="value">Score</th>{% for key,label,unit in benchmark.kpis %}<th scope="col" data-sort="value">{{ label }}<small>{{ unit }}</small></th>{% endfor %}<th scope="col" data-sort="value">Last run</th></tr></thead><tbody>
-{% for model in measurement_models %}{% set result = latest.get(model.id, {}).get(benchmark.id) %}<tr{% if result %} data-result-link{% endif %}><th scope="row">{% if result %}<a href="/benchmarks/run/{{ result.id }}">{{ model.id }}</a>{% else %}{{ model.id }}{% endif %}</th><td data-value="{{ result.score if result and result.score is not none else '' }}">{{ number(result.score if result else none) }}{{ flags(result) }}</td>{% for key,label,unit in benchmark.kpis %}<td data-value="{{ result.metrics.get(key) if result and result.metrics.get(key) is not none else '' }}">{{ number(result.metrics.get(key) if result else none, unit) }}</td>{% endfor %}<td data-value="{{ result.ended if result and result.ended else 0 }}" class="text-secondary text-nowrap">{{ result.ended|timestamp if result else 'Not run' }}</td></tr>
-{% else %}{% call empty_row((benchmark.kpis|length + 3), class_='empty-state') %}No models to show.{% endcall %}{% endfor %}</tbody></table></div>
-{% endcall %}</div>
+{% from "parts.html" import card %}
+{% from "benchmark_score_parts.html" import measurement_grid with context %}
+{% from 'benchmark_results_parts.html' import filters, insights, metric_jumps, leaders %}
+<div id="benchmark-measurements" class="results-detail-workspace">
+{{ filters(benchmarks, models, benchmark, results.search, results.baseline, results.evidence) }}
+{{ insights(results) }}
+{% call card(id='measurements', key='benchmark-measurements', body=false, class_='results-measurements') %}
+<div class="measurement-heading px-3 py-2 border-bottom"><div><h2 class="section-title mb-1">{{ benchmark.name }}</h2><p class="small text-secondary mb-0">{{ benchmark.score_unit }} · {{ 'Lower' if benchmark.green == 'low' else 'Higher' }} is better · protocol v{{ benchmark.version }}</p></div><span class="badge bg-secondary-lt">{{ benchmark.kpis|length }} metrics · {{ results.models|length }} models</span></div>
+{{ metric_jumps(results.benchmark) }}
+{{ measurement_grid(results.models, results.benchmark, latest, grouped=true) }}
+<details class="px-3 py-2 border-top"><summary class="small fw-medium">Method & score definition</summary><p class="small text-secondary mt-3 mb-0">{{ benchmark.method }}</p><p class="small text-secondary mt-2 mb-0">Saved score formula: <code>{{ benchmark.formula }}</code></p></details>
+{% endcall %}
+{{ leaders(results) }}
+</div>

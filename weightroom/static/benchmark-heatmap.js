@@ -16,15 +16,17 @@
     const headings = [...table.tHead.rows[0].cells].slice(1);
     /** Read the explicit heatmap label or the table heading text. */
     const headingName = heading => heading.dataset.label || heading.textContent.trim();
-    let models = rows.map(row => row.cells[0].textContent.trim());
+    const modelName = row => row.dataset.model || row.cells[0].textContent.trim();
+    let models = rows.map(modelName);
     const page = getComputedStyle(document.documentElement);
     /** Read a palette color from the current page theme. */
     const colour = name => page.getPropertyValue(name).trim();
-    const points = rows.flatMap((row, y) => [...row.querySelectorAll(".score-cell")].map((link, x) => {
+    const readPoints = () => rows.filter(row => !row.hidden).flatMap((row, y) => [...row.querySelectorAll(".score-cell")].map((link, x) => {
       const missing = link.dataset.score === "";
       return {
         value: [x, y, missing ? 0 : Number(link.dataset.score)],
-        labelText: link.textContent.trim(), score: missing ? "Not measured" : link.dataset.score,
+        sourceRow: rows.indexOf(row),
+        labelText: missing ? '—' : link.textContent.trim(), score: missing ? "Not measured" : link.dataset.score,
         href: link.getAttribute("href"),
         rerun: [...link.querySelectorAll("[title]")].map(note => note.title).join(" · "),
         // The server scales each column independently. Missing scores remain grey, even beside zero.
@@ -32,6 +34,7 @@
         label: { color: missing ? colour("--bs-secondary-color") : "#101a13" },
       };
     }));
+    let points = readPoints();
     document.getElementById(config.scroll).hidden = false;
     place.style.minWidth = `${200 + headings.length * 75}px`;
     place.style.height = `${Math.max(1, rows.length) * 26 + 85}px`;
@@ -82,17 +85,17 @@
         const raw = rows[index].querySelectorAll(".score-cell")[column].dataset.score;
         return raw === "" ? null : Number(raw);
       };
-      const order = rows.map((_, index) => index).sort((a, b) => {
+      const order = rows.map((_, index) => index).filter(index => !rows[index].hidden).sort((a, b) => {
         const left = score(a), right = score(b);
         if (left === null || right === null) return (left === null) - (right === null);
         return headings[column].dataset.green === "low" ? left - right : right - left;
       });
-      models = order.map(index => rows[index].cells[0].textContent.trim());
+      models = order.map(index => modelName(rows[index]));
       const positions = new Map(order.map((original, position) => [original, position]));
       chart.setOption({
         xAxis: { data: headings.map(headingName) }, yAxis: { data: models },
         series: [{ data: points.map(point => ({
-          ...point, value: [point.value[0], positions.get(point.value[1]), point.value[2]],
+          ...point, value: [point.value[0], positions.get(point.sourceRow), point.value[2]],
         })) }],
       });
       for (const index of order) table.tBodies[0].append(rows[index]);
@@ -110,11 +113,20 @@
       });
     });
     chart.on("click", params => {
-      if (params.componentType === "series") window.location.assign(params.data.href);
+      // Follow the retained link so callers can use their normal navigation or evidence inspector.
+      if (params.componentType === "series") rows[params.data.sourceRow].querySelectorAll('.score-cell')[params.data.value[0]].click();
       if (params.componentType === "xAxis") {
         const column = headings.findIndex(heading => headingName(heading) === params.value);
         if (column >= 0) controls[column].click();
       }
+    });
+    // Refresh from the same retained table when a caller replaces the displayed dataset.
+    table.addEventListener('weightroom:benchmark-refresh', () => {
+      models = rows.filter(row => !row.hidden).map(modelName);
+      points = readPoints();
+      place.style.height = `${Math.max(1, models.length) * 26 + 85}px`;
+      chart.setOption({ yAxis: {data: models}, series: [{data: points}] });
+      chart.resize();
     });
     new ResizeObserver(() => chart.resize()).observe(place);
     document.addEventListener('weightroom:theme', () => {

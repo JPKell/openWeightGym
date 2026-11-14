@@ -88,7 +88,7 @@ from weightroom.database_console import DatabaseConsole, owner_of
 from weightroom.conversations import build_app as build_conversations
 from weightroom import pairing
 from weightroom.plugin_pages import build_routes as plugin_routes
-from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, run_lanes, run_model_rows, measurement_matrix, run_briefing, model_kind as benchmark_model_kind
+from weightroom.benchmark_views import latest_results, comparison_ranks, history_page, run_lanes, run_model_rows, measurement_matrix, run_briefing, results_workspace, model_kind as benchmark_model_kind
 from benchmarks.identity import variant
 from turnstile.model_configuration import (configuration as model_configuration, generation as generation_settings, comparable, shared as shared_values,
                                            translate, GLOBAL_FLAGS, PROFILE_GLOBALS)
@@ -1611,7 +1611,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         requested = request.query_params.get('benchmark', '')
         if section == 'node-measurements' and requested:
             requested = ('embedding_' if embedding_family else '') + requested.removeprefix('embedding_')
-        selected = next((bench for bench in definitions if bench["id"] == requested), definitions[0])
+        default = next((bench for bench in definitions if section == 'results' and bench['id'] == 'json_schema'), definitions[0])
+        selected = next((bench for bench in definitions if bench["id"] == requested), default)
         resource_benchmarks = [bench for bench in definitions if bench['id'] in resource_ids]
         score_benchmarks = [bench for bench in definitions if bench['id'] not in resource_ids]
         resource_selected = next((bench for bench in resource_benchmarks if bench['id'] == selected['id']),
@@ -1754,6 +1755,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     lanes=lanes, run_models=run_model_rows(lanes), live_runs=live_runs, selected_target=(request.query_params.get('pick_model'), request.query_params.get('pick_node')),
                     regression=regression, regression_error=regression_error,
                     latest=latest, measurement_models=measurement_models,
+                    results=results_workspace(models, measurement_models, definitions, selected, latest, request.query_params) if section == 'results' else None,
                     resource_benchmarks=resource_benchmarks, score_benchmarks=score_benchmarks,
                     score_models=[model for model in models if benchmark_model_kind(model) == 'llm' and not model.get('embedding')],
                     resource_selected=resource_selected, matrix=matrix, inventory_warning=inventory_warning,

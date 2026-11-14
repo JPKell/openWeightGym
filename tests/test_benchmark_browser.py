@@ -23,18 +23,15 @@ def test_results_are_llm_only_and_node_page_preserves_model_types(desk, typed_mo
         playwright.expect(page.locator('#benchmark-score-table tbody')).to_contain_text('llm-model')
         assert 'image-model' not in page.locator('#benchmark-score-table tbody').inner_text()
         assert 'audio-model' not in page.locator('#benchmark-score-table tbody').inner_text()
-        playwright.expect(page.locator('#measurements > summary .card-actions #benchmark')).to_be_visible()
-        assert page.locator('#measurements > summary').evaluate('''el => {
-            const title = el.querySelector('.card-heading').getBoundingClientRect();
-            const select = el.querySelector('select').getBoundingClientRect();
-            return select.left > title.right && Math.abs((title.top + title.bottom - select.top - select.bottom) / 2) < 3
-                && el.getBoundingClientRect().right - select.right < 30;
-        }''')
+        playwright.expect(page.locator('#results-filters #benchmark')).to_be_visible()
+        assert page.locator('#results-filters').bounding_box()['y'] >= page.locator('#heatmap-panel').bounding_box()['y'] + page.locator('#heatmap-panel').bounding_box()['height']
+        assert page.locator('#results-filters').bounding_box()['height'] < 90
+        assert page.locator('#measurements > .card-header').count() == 0
         page.evaluate("window.previousMeasurements = document.querySelector('#benchmark-measurements')")
         page.select_option('#benchmark', 'tables')
         playwright.expect(page.locator('#benchmark-results thead')).to_contain_text('CSV checks correct')
         assert page.evaluate("document.querySelector('#benchmark-measurements') !== window.previousMeasurements")
-        playwright.expect(page.locator('#measurements')).to_have_attribute('open', '')
+        playwright.expect(page.locator('#measurements')).to_be_visible()
         assert not {'kind', 'family'} & set(page.evaluate('Object.keys(Object.fromEntries(new URLSearchParams(location.search)))'))
         for theme in ('light', 'dark'):
             page.emulate_media(color_scheme=theme)
