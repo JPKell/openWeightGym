@@ -16,7 +16,7 @@ GLOBAL_FLAGS = frozenset({
     "chat-template-kwargs", "jinja", "penalize-nl", "xtc-probability", "xtc-threshold",
     "dynatemp-range", "dynatemp-exp", "top-n-sigma", "adaptive-target", "adaptive-decay",
 })
-SETTING_KEYS = ("engine", "flags", "strata", "sdcpp", "audiocpp", "gpus", "alone",
+SETTING_KEYS = ("engine", "flags", "strata", "sdcpp", "audiocpp", "whispercpp", "gpus", "alone",
                 "allow_split", "adapters", "min_context", "order")
 PROFILE_GLOBALS = {"sdcpp": ("defaults", "limits", "reference_megapixels"),
                    "audiocpp": ("defaults", "limits")}

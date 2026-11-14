@@ -36,16 +36,18 @@ def run(command, **kwargs):
     return subprocess.run([str(v) for v in command], check=True, **kwargs)
 
 
-def configure(path, server, cli, manifest, backup_directory=None):
+def configure(path, server, cli, manifest, backup_directory=None, *, engine='audiocpp'):
     """Replace only the engine table, preserving unrelated configuration bytes."""
     text = path.read_text() if path.exists() else ""
     options = {"enabled": True, "executable": str(server), "cli": str(cli), "manifest": str(manifest)}
-    if tomllib.loads(text).get("engines", {}).get("audiocpp") == options:
+    if engine not in ('audiocpp', 'whispercpp'):
+        raise ValueError('Unknown audio runtime')
+    if tomllib.loads(text).get("engines", {}).get(engine) == options:
         return
-    block = "[engines.audiocpp]\n" + "".join(f"{k} = {str(v).lower() if type(v) is bool else json.dumps(v)}\n" for k, v in options.items())
-    pattern = r"(?ms)^\[engines\.audiocpp\][ \t]*\n.*?(?=^\[|\Z)"
+    block = f"[engines.{engine}]\n" + "".join(f"{k} = {str(v).lower() if type(v) is bool else json.dumps(v)}\n" for k, v in options.items())
+    pattern = rf"(?ms)^\[engines\.{engine}\][ \t]*\n.*?(?=^\[|\Z)"
     made = re.sub(pattern, block + "\n", text) if re.search(pattern, text) else text.rstrip() + "\n\n" + block
-    if tomllib.loads(made)["engines"]["audiocpp"] != options:
+    if tomllib.loads(made)["engines"][engine] != options:
         raise ValueError("Could not safely configure engines.audiocpp")
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():

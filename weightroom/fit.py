@@ -41,8 +41,8 @@ def workspace(known, status, fit_line, fit_cpu_mib):
     for model in known.get('models', []):
         flags = {**(known.get('defaults') or {}), **model.get('flags', {})} if model.get('engine', 'llama_cpp') == 'llama_cpp' else model.get('flags', {})
         line = fit_line(model, cards)
-        fixed = model.get('engine') in ('sdcpp', 'audiocpp')
-        kind = 'classifier' if model.get('capabilities', {}).get('classifier') else 'image' if model.get('engine') == 'sdcpp' else 'audio' if model.get('engine') == 'audiocpp' else 'llm'
+        fixed = model.get('engine') in ('sdcpp', 'audiocpp', 'whispercpp')
+        kind = 'classifier' if model.get('capabilities', {}).get('classifier') else 'image' if model.get('engine') == 'sdcpp' else 'audio' if model.get('engine') in ('audiocpp', 'whispercpp') else 'llm'
         maximum = model.get('flags', {}).get('ctx-size')
         maximum = maximum if type(maximum) is int and maximum > 0 else 0
         minimum = min(maximum, max(1, model.get('min_context') or 1024)) if maximum else 0
@@ -88,9 +88,9 @@ def workspace(known, status, fit_line, fit_cpu_mib):
                        'min': minimum, 'max': maximum, 'context': min(maximum, max(minimum, context)) if maximum else None,
                        'selected': model.get('loaded') == 'ready', 'locked': False, 'placement': chosen,
                        'placements': placements, 'points': gpu_points, 'ram_points': ram_points,
-                       'unknown': unknown, 'guessed': line['guessed'], 'exclusive': bool(model.get('alone', model.get('engine') == 'audiocpp')),
+                       'unknown': unknown, 'guessed': line['guessed'], 'exclusive': bool(model.get('alone', model.get('engine') in ('audiocpp', 'whispercpp'))),
                        'ram_note': ram_note, 'spill': spill, 'enabled': model.get('enabled', True),
-                       'profile_label': (model.get('sdcpp') or model.get('audiocpp') or {}).get('family', '') if fixed else '',
+                       'profile_label': (model.get('sdcpp') or model.get('audiocpp') or model.get('whispercpp') or {}).get('family', '') if fixed else '',
                        'parallel': flags.get('parallel', 1),
                        'shared_context': bool(flags.get('kv-unified') and not flags.get('no-kv-unified'))})
     return {'models': models, 'resources': resources, 'ram_offload': bool((known.get('memory_policy') or {}).get('ram_offload')),

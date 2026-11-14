@@ -345,7 +345,10 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                                      'loras':{key:{'scale':entry.get('scale',1)} for key,entry in options.get('loras',{}).items()}}
         if marks['capabilities'].get('audio'):
             from soundroom.model import profile as audio_profile
-            marks['audio_profile'] = audio_profile(library.get(name), getattr(config, "engines", {}).get("audiocpp", {}).get("manifest", ""))
+            if marks["engine_id"] == "whispercpp":
+                from engines.whisper_cpp.model import profile as audio_profile
+            marks['audio_profile'] = audio_profile(library.get(name), getattr(config, "engines", {}).get(marks["engine_id"], {}).get("manifest", ""))
+            marks["translates"] = marks["capabilities"].get("translates", False)
         marks['name_history'] = library.name_history(name)
         marks['local_model_guard'] = True
         # What a model is, across machines: the SHA-256 of its weights file, absent until the file has been read through.
@@ -2015,7 +2018,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if denied := lacks(user, "manage-models"):
             return denied
         name = request.path_params["name"]
-        settings = await read_json(request, {"engine", "flags", "strata", "sdcpp", "audiocpp", "gpus", "alone", "allow_split", "adapters", "min_context", "order"})
+        settings = await read_json(request, {"engine", "flags", "strata", "sdcpp", "audiocpp", "whispercpp", "gpus", "alone", "allow_split", "adapters", "min_context", "order"})
         if isinstance(settings, Response):
             return settings
         # `order` is the model's sort order and not one of its settings. Left out, the model keeps the one it has: 10, for one being added. null puts it back at 10.
@@ -2247,7 +2250,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     def unmeasured() -> list[str]:
         """The models a run would load: those on a card, whose file is there, with no measure for the settings they have now."""
         on_a_card = lambda settings: settings.get("gpus", len(config.gpus)) != 0  # noqa: E731
-        return [name for name in library.names() if engine_for(library.get(name)).id not in ('sdcpp', 'audiocpp') and on_a_card(library.get(name)) and Path(library.get(name)["flags"]["model"]).is_file() and not library.calibrated(name, runner.measured_settings(name))]
+        return [name for name in library.names() if engine_for(library.get(name)).id not in ('sdcpp', 'audiocpp', 'whispercpp') and on_a_card(library.get(name)) and Path(library.get(name)["flags"]["model"]).is_file() and not library.calibrated(name, runner.measured_settings(name))]
 
     async def measure_all(by: str, caller: str) -> None:
         """Load each model in `measuring["left"]`, one after another. Each is measured as it loads. Says in `measuring["ended"]` why it ended."""

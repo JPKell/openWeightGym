@@ -365,8 +365,8 @@ External or symlinked runtime folders are left alone. A private copy of the old 
 kept as `.install-receipt.before-discard-*`. Cancelled choices are not resumed on the next run;
 use **Install components** to select anything you want to try again. `--yes` skips confirmation.
 
-The node installer offers **Strata**, **stable-diffusion.cpp** (images) and **audio.cpp**
-(music, sounds and speech). They are optional; unattended installs keep them unchanged unless
+The node installer offers **Strata**, **stable-diffusion.cpp** (images), **audio.cpp** (music, sounds and speech), and **whisper.cpp**
+(speech recognition and translation). They are optional; unattended installs keep them unchanged unless
 selected explicitly. Image and audio builds offer CUDA, Vulkan or CPU; Strata uses CUDA.
 All source builders share llama.cpp's toolchain setup: missing git, cmake, C/C++ compilers,
 development headers and the selected CUDA or Vulkan toolkit are installed with the system
@@ -387,6 +387,7 @@ owg install --yes --strata install --strata-host-ram-mib 22528
 owg install --yes --services spotter
 owg install --yes --llama auto
 owg install --yes --classifier-tools install
+owg install --yes --whispercpp install --whispercpp-backend cpu
 ```
 
 These engine flags also work with `install.sh` during initial setup and with
@@ -408,6 +409,10 @@ the matching FP4 kernels on RTX 50 cards. Selecting it permits hybrid host RAM u
 up to `--strata-host-ram-mib` (22528 MiB by default), within the worker budget above.
 The adapter still requires supported text models and prepared tokenizer files.
 Use `scripts/install-strata.sh --check` to verify the installed runtime without loading a model.
+
+whisper.cpp builds pinned [v1.8.7](https://github.com/ggml-org/whisper.cpp/tree/48f628a84833905ee4a0658ee6d4a5c915ce1997) in `runtimes/whispercpp`. The installer records binary hashes, revision and backend; `owg update` updates an activated installation with its existing backend. Select `--whispercpp install|skip|keep` and `--whispercpp-backend cuda|vulkan|cpu`; `scripts/install-whispercpp.sh --check` verifies its manifest. Weights must be Whisper GGML `ggml-*.bin`, which cannot be used by audio.cpp or llama.cpp. Add them through Audio models; they appear in Transcribe and Voice recognition choices. Multilingual weights can translate to English. JSON, text, SRT and VTT are supported; `verbose_json` and requested timestamp granularities are refused because native token timings do not match the OpenAI word contract. The profile reserves a fixed host RAM budget and one GPU or CPU, within the normal LoadCoach admission and delegated memory limits.
+
+Qualification on 2026-11-14: the CPU Docker installer transcribed the JFK sample in 15.13 s and translated synthesized Spanish speech in 13.98 s to “Good morning. This is an English translation test.”, using the verified large-v3 weights. Reproduce with `OWG_WHISPER_MODEL=/path/ggml-large-v3.bin .venv/bin/python -m pytest -n 0 tests/test_whispercpp_docker.py`. The approved jpk-main native installation is at `~/openWeightGym/runtimes/whispercpp/current`; weights are at `~/openWeightGym/model-storage/audio/ggerganov--whisper.cpp/ggml-large-v3.bin`. It was installed with `--runtime-only` to preserve the older running application. After the owner deploys the application normally, activate through `owg install --yes --whispercpp install --whispercpp-backend cpu`, register this model storage location if needed, and add the Whisper profile in Audio models. Live Components/Transcribe verification remains pending that deployment.
 
 ## Uninstalling
 

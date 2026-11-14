@@ -46,12 +46,12 @@ def partial_builds(root, receipt):
                     value = Path(table[key]).expanduser()
                     # Relative engine paths belong to this installation, never the caller's cwd.
                     protected.append((value if value.is_absolute() else root / value).resolve())
-    for engine in ("strata", "sdcpp", "audiocpp", "llamacpp"):
+    for engine in ("strata", "sdcpp", "audiocpp", "whispercpp", "llamacpp"):
         current = root / "runtimes" / engine / "current"
         if current.exists() or current.is_symlink():
             protected.append(current.resolve())
     remove = []
-    for engine in ("strata", "sdcpp", "audiocpp", "llamacpp"):
+    for engine in ("strata", "sdcpp", "audiocpp", "whispercpp", "llamacpp"):
         requested = receipt.get(engine) == "install"
         if engine == "llamacpp":
             choice = receipt.get("llama", "skip")
@@ -169,7 +169,7 @@ def discard(root, apply=False):
             raise ValueError(f"Partial build changed during cleanup: {path}")
         shutil.rmtree(path)
     receipt.update(state="cancelled", operation="cancelled", services=",".join(services),
-                   llama="skip", strata="keep", sdcpp="keep", audiocpp="keep", database="keep",
+                   llama="skip", strata="keep", sdcpp="keep", audiocpp="keep", whispercpp="keep", database="keep",
                    voice=str(int("voice" in services or "voice-gateway" in services)))
     receipt.pop("installer_pid", None)
     receipt.pop("installer_start", None)

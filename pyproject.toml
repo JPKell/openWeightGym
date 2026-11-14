@@ -37,7 +37,7 @@ voice-gateway = "voice.gateway:main"
 voice-desktop = "voice.desktop:main"
 
 [tool.setuptools]
-packages = ["engines", "engines.llama_cpp", "engines.strata", "mirrorwall", "soundroom", "db", "db.drivers", "loadcoach", "benchmarks", "benchmarks.suites", "benchmarks.suites.ifeval", "benchmarks.suites.ifeval.vendor", "toollocker", "toollocker.tools", "weightroom", "spotter", "turnstile", "voice", "plugins", "plugins.hermes"]
+packages = ["engines", "engines.llama_cpp", "engines.whisper_cpp", "engines.strata", "mirrorwall", "soundroom", "db", "db.drivers", "loadcoach", "benchmarks", "benchmarks.suites", "benchmarks.suites.ifeval", "benchmarks.suites.ifeval.vendor", "toollocker", "toollocker.tools", "weightroom", "spotter", "turnstile", "voice", "plugins", "plugins.hermes"]
 
 [tool.setuptools.package-data]
 mirrorwall = ["patches/*.patch", "patches/*.json", "pages/*.html", "static/*"]

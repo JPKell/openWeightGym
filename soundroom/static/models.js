@@ -24,7 +24,8 @@
   const targetDisabled = input => busy || (selected ? !installedOn(input.value) : !input.checked && !accepting(input.value));
   const targetState = name => !available(name) ? ' unavailable' : selected && !installedOn(name) ? ' not installed' : computeNodes.find(node=>node.name === name)?.accepting_work===false ? ' disabled' : '';
   const installing = () => !selected && [...installations.values()].some(job=>!terminal(job) && job.name === $('name').value.trim() && targets().includes(job.destination));
-  const targetCards = () => selected ? inventory.cards || [] : (inventories.get(targets()[0])?.cards || []).filter(card=>targets().every(node=>(inventories.get(node)?.cards || []).includes(card)));
+  const cardsOf = known => known?.engine_cards?.[selected?.engine || ($('family').value === 'whispercpp' ? 'whispercpp' : 'audiocpp')] || known?.cards || [];
+  const targetCards = () => selected ? cardsOf(inventory) : cardsOf(inventories.get(targets()[0])).filter(card=>targets().every(node=>cardsOf(inventories.get(node)).includes(card)));
   function renderTargets(names=[activeNode]) {
     const area=$('install-targets').querySelector('[data-target-choices]');
     area.classList.remove('justify-content-end');
@@ -45,10 +46,15 @@
     if (selected || !targets().length) return '';
     const mode=root.querySelector('[data-hardware-mode]:checked')?.value;
     const pins=[...root.querySelectorAll('[data-gpu-card]:checked')].map(input=>input.value);
-    const incompatible=targets().filter(node=> mode==='auto' ? !(inventories.get(node)?.cards || []).length : mode==='pin' && pins.some(card=>!(inventories.get(node)?.cards || []).includes(card)));
+    const incompatible=targets().filter(node=> mode==='auto' ? !cardsOf(inventories.get(node)).length : mode==='pin' && pins.some(card=>!cardsOf(inventories.get(node)).includes(card)));
     return incompatible.length ? 'Choose CPU only or GPUs available on every selected node. Incompatible nodes: ' + incompatible.join(', ') + '.' : '';
   }
   const safe = action => async event => { try { await action(event); } catch (error) { message(error.message); } };
+  function audioView(row) {
+    if (row.engine !== 'whispercpp') return row;
+    const options=row.whispercpp || {};
+    return {...row,audiocpp:{family:'whispercpp',kind:'transcription',path:row.flags.model,host_ram_mib:options.host_ram_mib || 8192,limits:{max_audio_mib:options.max_audio_mib || 32,max_seconds:options.max_seconds || 600}}};
+  }
   async function call(path, body, node=activeNode) {
     if (path === '/soundroom-models') {
       if (!node) throw new Error('Choose a compute node.');
@@ -60,7 +66,7 @@
     let value;
     try { value = await response.json(); } catch { throw new Error('The server did not return model data. Try again.'); }
     if (!response.ok) throw new Error(value.error?.message || 'The operation failed.');
-    if (path.startsWith('/soundroom-models') && Array.isArray(value.models)) value.models=value.models.filter(row=>row.audiocpp?.kind in kinds);
+    if (path.startsWith('/soundroom-models') && Array.isArray(value.models)) value.models=value.models.map(audioView).filter(row=>row.audiocpp?.kind in kinds);
     return value;
   }
   const chosen = () => $('file').value === '' ? null : choices[Number($('file').value)];
@@ -162,7 +168,7 @@
     const source = nodes.find(one => one.name === file?.machine);
     const available = (source?.files || []).filter(one => !one.moving && one.path !== file?.path && one.path.startsWith(root + '/'));
     const profile=selected?.audiocpp;
-    const savedRoot=profile?.path?.endsWith('.gguf') ? profile.path.slice(0,profile.path.lastIndexOf('/')) : profile?.path;
+    const savedRoot=/\.(gguf|bin)$/i.test(profile?.path || '') ? profile.path.slice(0,profile.path.lastIndexOf('/')) : profile?.path;
     const paths=new Set([...available.map(one=>one.path),...(profile?.files || []).map(path=>savedRoot + '/' + path),...(Array.isArray(extra) ? extra : []),...previous]);
     $('companions').replaceChildren(...[...paths].filter(path=>path.startsWith(root + '/') && path !== file?.path).map(path => { const option = new Option(path.slice(root.length + 1),path); option.selected = previous.has(path); return option; }));
   }
@@ -200,9 +206,9 @@
       input.closest('label').querySelector('[data-node-state]').textContent=targetState(input.value);
     });
     $('target-label').textContent=selected ? 'Compute node' : 'Install on compute nodes';
-    $('target-note').textContent = selected ? 'Choose a node to configure this model.' : hardwareError() || (!destinations.length ? 'Select at least one destination node.' : destinations.some(node=>!accepting(node)) ? 'A selected node is unavailable. Deselect it or retry to reconnect.' : destinations.some(node=>!(inventories.get(node)?.cards || []).length) ? 'CPU only is the default when a selected node has no audio GPUs. The same configuration applies to every selected node.' : 'Select one or more nodes. The same configuration applies to every selected node.');
-    const runtime = (inventory.engines?.engines || []).find(one => one.id === 'audiocpp');
-    $('runtime').textContent = !reachable ? 'This node is unavailable. Saved settings and drafts remain visible; retry to reconnect.' : runtime?.available ? 'audio.cpp is installed on ' + activeNode + '.' : runtime?.why || inventory.catalogue?.error || '';
+    $('target-note').textContent = selected ? 'Choose a node to configure this model.' : hardwareError() || (!destinations.length ? 'Select at least one destination node.' : destinations.some(node=>!accepting(node)) ? 'A selected node is unavailable. Deselect it or retry to reconnect.' : destinations.some(node=>!cardsOf(inventories.get(node)).length) ? 'CPU only is the default when a selected node has no audio GPUs. The same configuration applies to every selected node.' : 'Select one or more nodes. The same configuration applies to every selected node.');
+    const runtime = (inventory.engines?.engines || []).find(one => one.id === (selected?.engine || ($('family').value === 'whispercpp' ? 'whispercpp' : 'audiocpp')));
+    $('runtime').textContent = !reachable ? 'This node is unavailable. Saved settings and drafts remain visible; retry to reconnect.' : runtime?.available ? (runtime.label || runtime.id) + ' is installed on ' + activeNode + '.' : runtime?.why || inventory.catalogue?.error || '';
     $('runtime').hidden = !$('runtime').textContent;
     const file = chosen();
     $('file-note').textContent = file ? file.machine + ' · ' + file.tier + '. ' + (file.tier === 'storage' ? 'Stored files are promoted and copied after space checks when adding a model.' : 'Managed model file.') : $('kind').value ? 'Showing files for ' + kinds[$('kind').value] + '. Choose All tasks to include files with unknown task metadata.' : 'Choose an audio task to filter model files in cache or storage.';
@@ -263,7 +269,7 @@
     $('kind').value=selected?.audiocpp.kind || '';
     filterFiles(selected ? {path:selected.flags.model,machine:activeNode} : null);
     renderTargets();
-    SuiteHardware.set('am',selected?.gpus ?? (inventory.cards?.length ? 1 : 0),inventory.cards || []);
+    SuiteHardware.set('am',selected?.gpus ?? (cardsOf(inventory).length ? 1 : 0),cardsOf(inventory));
     filterFamilies(); familyChanged();
     $('name').readOnly=Boolean(selected);
     $('heading').textContent=selected?.name || 'Add an audio model';
@@ -277,7 +283,7 @@
       $('ram').value=profile.host_ram_mib ?? 8192; $('session').value=JSON.stringify(profile.session_options || {},null,2);
       $('defaults').value=JSON.stringify(profile.defaults || {}); defaultFields(families().find(one=>one.family === profile.family));
       SuiteModelFields.load('am-defaults',profile.defaults || {});
-      $('root').value=profile.path.endsWith('.gguf') ? profile.path.slice(0,profile.path.lastIndexOf('/')) : profile.path;
+      $('root').value=/\.(gguf|bin)$/i.test(profile.path) ? profile.path.slice(0,profile.path.lastIndexOf('/')) : profile.path;
       companions();
       for (const option of $('companions').options) option.selected=(profile.files || []).includes(option.value.slice($('root').value.length+1));
     }
@@ -439,7 +445,7 @@
     const mode=root.querySelector('[data-hardware-mode]:checked')?.value;
     let gpus;
     try { gpus=SuiteHardware.read('am'); } catch { gpus=[]; }
-    if (mode==='auto' && targets().some(node=>!(inventories.get(node)?.cards || []).length)) gpus=0;
+    if (mode==='auto' && targets().some(node=>!cardsOf(inventories.get(node)).length)) gpus=0;
     SuiteHardware.set('am',gpus,targetCards());
     if (mode==='pin' && !gpus.length) {
       root.querySelector('[data-hardware-mode][value="pin"]').checked=true;
@@ -477,12 +483,16 @@
     catch (error) { showSection('advanced'); throw new Error('Advanced JSON: ' + error.message); }
     const device=SuiteHardware.read('am');
     const preserved=Object.fromEntries(['allow_split','adapters','min_context','order'].filter(name=>Object.hasOwn(selected || {},name)).map(name=>[name,selected[name]]));
-    const settings={...preserved,engine:'audiocpp',flags:{...selected?.flags,model:file.path,'ctx-size':0},gpus:device,
+    let settings={...preserved,engine:'audiocpp',flags:{...selected?.flags,model:file.path,'ctx-size':0},gpus:device,
       alone:['music','sound'].includes(kind) || $('alone').checked,
       audiocpp:{...selected?.audiocpp,family,kind,package:selected?.audiocpp.package || '',
         path:file.path.endsWith('.gguf') ? file.path : root,files:[...$('companions').selectedOptions].map(option=>option.value.slice(root.length+1)),
         session_options:session,defaults,
         limits:{...selected?.audiocpp.limits,max_seconds:Number($('seconds').value),max_takes:Number($('takes').value),max_text_chars:Number($('text').value),max_audio_mib:Number($('audio').value)},host_ram_mib:Number($('ram').value)}};
+    if (family === 'whispercpp') {
+      if (Object.keys(session).length || Object.keys(defaults).length || $('companions').selectedOptions.length) throw new Error('Whisper profiles use no session options, generation defaults or companion files.');
+      settings={engine:'whispercpp',flags:{model:file.path,'ctx-size':0},gpus:device,alone:$('alone').checked,whispercpp:{...selected?.whispercpp,host_ram_mib:Number($('ram').value),max_audio_mib:Number($('audio').value),max_seconds:Number($('seconds').value)}};
+    }
     const name=$('name').value.trim(), draftKey=key();
     busy=true; $('controls').disabled=true; updateSummary();
     try {
@@ -504,7 +514,7 @@
       const known=inventories.get(activeNode);
       const row=(known.models || []).find(one=>one.name === savedName);
       if (row) Object.assign(row,settings);
-      else (known.models ||= []).push({...settings,name:savedName});
+      else (known.models ||= []).push(audioView({...settings,name:savedName}));
       populate(savedName); updateLocation(); renderProfiles(); $('saved').textContent='Saved.';
     } finally { busy=false; $('controls').disabled=!selected && !available(activeNode); updateSummary(); }
   }));

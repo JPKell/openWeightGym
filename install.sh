@@ -47,7 +47,9 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --sdcpp install|skip|keep      optional stable-diffusion.cpp runtime
   --sdcpp-backend cuda|vulkan|cpu  image backend (default: cuda)
   --audiocpp install|skip|keep   optional audio.cpp runtime
+  --whispercpp install|skip|keep   optional whisper.cpp runtime
   --audiocpp-backend cuda|vulkan|cpu  audio backend (default: cuda)
+  --whispercpp-backend cuda|vulkan|cpu  audio backend (default: cuda)
   --classifier-tools install|skip|keep  optional CPU classifier conversion tools
   --admin NAME            the first account (its password from OWG_ADMIN_PASSWORD, or asked)
   --front-url URL         GPU node: the console's turnstile, such as http://192.168.1.10:8442
@@ -199,7 +201,7 @@ parse_arguments() {
   VOICE_KEY_FILE='' VOICE_KEY=''
   PLATFORM_SERVICES=images,speech,audio,downloads,classifiers
   ADD_SERVICES='' STRATA_ACTION=keep STRATA_HOST_RAM_MIB=22528
-  SDCPP_ACTION=keep SDCPP_BACKEND=cuda AUDIOCPP_ACTION=keep AUDIOCPP_BACKEND=cuda
+  SDCPP_ACTION=keep SDCPP_BACKEND=cuda AUDIOCPP_ACTION=keep AUDIOCPP_BACKEND=cuda WHISPERCPP_ACTION=keep WHISPERCPP_BACKEND=cuda
   CLASSIFIER_TOOLS_ACTION=keep
   OPERATION=install
   RESUMING_INSTALL=0
@@ -212,6 +214,7 @@ parse_arguments() {
     [--services]='service names' [--strata]='install, skip or keep' [--strata-host-ram-mib]='a positive MiB budget'
     [--sdcpp]='install, skip or keep' [--sdcpp-backend]='cuda, vulkan or cpu'
     [--audiocpp]='install, skip or keep' [--audiocpp-backend]='cuda, vulkan or cpu'
+    [--whispercpp]='install, skip or keep' [--whispercpp-backend]='cuda, vulkan or cpu'
     [--classifier-tools]='install, skip or keep'
     [--platform-services]='images,speech,audio,downloads,classifiers or none')
   [[ -n $DIR ]] && DIR_GIVEN=1
@@ -257,7 +260,9 @@ parse_arguments() {
       --sdcpp) SDCPP_ACTION=$2; PLAN_GIVEN[SDCPP_ACTION]=1; shift 2 ;;
       --sdcpp-backend) SDCPP_BACKEND=$2; PLAN_GIVEN[SDCPP_BACKEND]=1; shift 2 ;;
       --audiocpp) AUDIOCPP_ACTION=$2; PLAN_GIVEN[AUDIOCPP_ACTION]=1; shift 2 ;;
+      --whispercpp) WHISPERCPP_ACTION=$2; PLAN_GIVEN[WHISPERCPP_ACTION]=1; shift 2 ;;
       --audiocpp-backend) AUDIOCPP_BACKEND=$2; PLAN_GIVEN[AUDIOCPP_BACKEND]=1; shift 2 ;;
+      --whispercpp-backend) WHISPERCPP_BACKEND=$2; PLAN_GIVEN[WHISPERCPP_BACKEND]=1; shift 2 ;;
       --classifier-tools) CLASSIFIER_TOOLS_ACTION=$2; PLAN_GIVEN[CLASSIFIER_TOOLS_ACTION]=1; shift 2 ;;
       --uninstall) ACTION=uninstall; shift ;;
       --everything|--no-backup) PASSTHROUGH+=("$1"); shift ;;
@@ -275,15 +280,15 @@ parse_arguments() {
                     'Or install for yourself, without --system, to use PostgreSQL from the start')
   fi
   local variable
-  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION CLASSIFIER_TOOLS_ACTION; do
+  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION WHISPERCPP_ACTION CLASSIFIER_TOOLS_ACTION; do
     [[ ${!variable} =~ ^(install|skip|keep)$ ]] || ARGUMENT_ERROR="${variable%_ACTION} must be install, skip or keep."
   done
-  for variable in SDCPP_BACKEND AUDIOCPP_BACKEND; do
+  for variable in SDCPP_BACKEND AUDIOCPP_BACKEND WHISPERCPP_BACKEND; do
     [[ ${!variable} =~ ^(cuda|vulkan|cpu)$ ]] || ARGUMENT_ERROR="$variable must be cuda, vulkan or cpu."
   done
   [[ $STRATA_HOST_RAM_MIB =~ ^[1-9][0-9]{0,8}$ ]] || ARGUMENT_ERROR='--strata-host-ram-mib needs a positive whole number of MiB.'
   [[ -z $ADD_SERVICES || $ACTION == components ]] || ARGUMENT_ERROR='--services requires --components.'
-  if [[ $TOPOLOGY == front && ( $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ) ]]; then
+  if [[ $TOPOLOGY == front && ( $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $WHISPERCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ) ]]; then
     ARGUMENT_ERROR='Engines need a model runner: choose --topology all or compute.'
   fi
   ((ASSUME_YES)) && export OWG_DEFAULTS=1
@@ -398,7 +403,7 @@ resume_settings() {
   for pair in TOPOLOGY:topology ADMIN:admin DATABASE:database LLAMA:llama VOICE:voice \
     LINGER_WANTED:linger_wanted POWER_RULE:power_rule FRONT_URL:front_url COMPUTE_URL:compute_url \
     MACHINE_NAME:machine_name JOIN_URL:join_url STRATA_ACTION:strata STRATA_HOST_RAM_MIB:strata_host_ram_mib \
-    SDCPP_ACTION:sdcpp SDCPP_BACKEND:sdcpp_backend AUDIOCPP_ACTION:audiocpp AUDIOCPP_BACKEND:audiocpp_backend \
+    SDCPP_ACTION:sdcpp SDCPP_BACKEND:sdcpp_backend AUDIOCPP_ACTION:audiocpp AUDIOCPP_BACKEND:audiocpp_backend WHISPERCPP_ACTION:whispercpp WHISPERCPP_BACKEND:whispercpp_backend \
     CLASSIFIER_TOOLS_ACTION:classifier_tools \
     PLATFORM_SERVICES:platform_services; do
     variable=${pair%%:*} key=${pair#*:}
@@ -624,6 +629,11 @@ update() {
   fi
   refresh_runtime_sources "$DIR" || ui_die 'Code was fetched, but service source overrides could not be updated.' \
     'Resolve the override error above, then run owg update again before restarting services'
+  if [[ -f $DIR/engines/whisper_cpp/install.py ]]; then
+    ui_step 'Updating installed whisper.cpp runtime' -- as_owner "$DIR/.venv/bin/python" \
+      "$DIR/engines/whisper_cpp/install.py" --root "$DIR" --update ||
+      ui_die 'Code was fetched, but the installed whisper.cpp runtime could not be updated.' 'Resolve the build error, then run owg update again'
+  fi
   if [[ -f $DIR/settings/weightroom.toml ]]; then
     ui_step 'Building the Voice desktop download' -- as_owner "$DIR/.venv/bin/python" \
       "$DIR/scripts/package-voice-desktop.py" "$DIR/weightroom/static/LoadCoach-Voice.zip" ||
@@ -715,6 +725,7 @@ runtime_options() {
   RUNTIME_OPTIONS=(--strata "$STRATA_ACTION" --strata-host-ram-mib "$STRATA_HOST_RAM_MIB"
     --sdcpp "$SDCPP_ACTION" --sdcpp-backend "$SDCPP_BACKEND"
     --audiocpp "$AUDIOCPP_ACTION" --audiocpp-backend "$AUDIOCPP_BACKEND"
+    --whispercpp "$WHISPERCPP_ACTION" --whispercpp-backend "$WHISPERCPP_BACKEND"
     --classifier-tools "$CLASSIFIER_TOOLS_ACTION")
 }
 
@@ -722,13 +733,14 @@ runtime_options() {
 prepare_optional_build_tools() {
   ((SYSTEM)) || return 0
   local runtime backend label
-  for runtime in STRATA SDCPP AUDIOCPP; do
+  for runtime in STRATA SDCPP AUDIOCPP WHISPERCPP; do
     local action=${runtime}_ACTION
     [[ ${!action} == install ]] || continue
     case "$runtime" in
       STRATA) backend=cuda; label=Strata ;;
       SDCPP) backend=$SDCPP_BACKEND; label=stable-diffusion.cpp ;;
       AUDIOCPP) backend=$AUDIOCPP_BACKEND; label=audio.cpp ;;
+      WHISPERCPP) backend=$WHISPERCPP_BACKEND; label=whisper.cpp ;;
     esac
     "$DIR/scripts/install-build-tools.sh" "$backend" "$label" >/dev/null ||
       ui_die "Could not prepare $label build tools for the service account." 'Fix the package or toolkit error above, then retry'
@@ -740,11 +752,12 @@ positive_mib() { [[ $1 =~ ^[1-9][0-9]{0,8}$ ]] || { ui_warn 'Enter a positive wh
 choose_runtimes() {
   ((ASSUME_YES)) && return 0
   local variable label default choice backend
-  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION CLASSIFIER_TOOLS_ACTION; do
+  for variable in STRATA_ACTION SDCPP_ACTION AUDIOCPP_ACTION WHISPERCPP_ACTION CLASSIFIER_TOOLS_ACTION; do
     case "$variable" in
       STRATA_ACTION) label='Strata (CUDA text models with host RAM)' ;;
       SDCPP_ACTION) label='stable-diffusion.cpp (images)' ;;
       AUDIOCPP_ACTION) label='audio.cpp (music, sounds and speech)' ;;
+      WHISPERCPP_ACTION) label='whisper.cpp (speech recognition and translation)' ;;
       CLASSIFIER_TOOLS_ACTION) label='Classifier conversion tools (CPU; matches the configured llama.cpp build)' ;;
     esac
     if [[ -z ${PLAN_GIVEN[$variable]:-} ]]; then
@@ -774,7 +787,7 @@ install_components() {
   # Restore the machine's role, but do not repeat engines selected during its first install.
   local COMPONENT_GIVEN="${!PLAN_GIVEN[*]}"
   local variable old_services service ticked index
-  for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND CLASSIFIER_TOOLS_ACTION; do
+  for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND WHISPERCPP_ACTION WHISPERCPP_BACKEND CLASSIFIER_TOOLS_ACTION; do
     PLAN_GIVEN[$variable]=1
   done
   [[ -n ${PLAN_GIVEN[LLAMA]:-} ]] || LLAMA=skip
@@ -841,21 +854,21 @@ PYTHON
       ui_confirm 'Install llama.cpp too?' n && LLAMA=auto
     fi
     # Explicit CLI choices remain fixed; other engines are offered interactively.
-    for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND CLASSIFIER_TOOLS_ACTION; do
+    for variable in STRATA_ACTION STRATA_HOST_RAM_MIB SDCPP_ACTION SDCPP_BACKEND AUDIOCPP_ACTION AUDIOCPP_BACKEND WHISPERCPP_ACTION WHISPERCPP_BACKEND CLASSIFIER_TOOLS_ACTION; do
       [[ " $COMPONENT_GIVEN " == *" $variable "* ]] || unset 'PLAN_GIVEN[$variable]'
     done
     choose_runtimes
-    if [[ $LLAMA != skip || $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ]]; then
+    if [[ $LLAMA != skip || $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $WHISPERCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ]]; then
       [[ ,$SERVICES, == *,loadcoach,* ]] || SERVICES+=${SERVICES:+,}loadcoach
     fi
-  elif [[ $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ]]; then
+  elif [[ $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $WHISPERCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ]]; then
     ui_die 'Model engines belong on a machine running loadcoach.' 'Run owg install on your GPU node'
   fi
-  if [[ $SERVICES == "$old_services" && $LLAMA == skip && $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install && $CLASSIFIER_TOOLS_ACTION != install ]]; then
+  if [[ $SERVICES == "$old_services" && $LLAMA == skip && $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install && $WHISPERCPP_ACTION != install && $CLASSIFIER_TOOLS_ACTION != install ]]; then
     ui_info 'No additional components selected.'; return 0
   fi
   ui_kv Programs "$SERVICES"
-  ui_kv Engines "llama.cpp: $LLAMA; Strata: $STRATA_ACTION; stable-diffusion.cpp: $SDCPP_ACTION; audio.cpp: $AUDIOCPP_ACTION"
+  ui_kv Engines "llama.cpp: $LLAMA; Strata: $STRATA_ACTION; stable-diffusion.cpp: $SDCPP_ACTION; audio.cpp: $AUDIOCPP_ACTION; whisper.cpp: $WHISPERCPP_ACTION"
   ui_kv 'Classifier conversion tools' "$CLASSIFIER_TOOLS_ACTION"
   if ((!ASSUME_YES)); then ui_confirm 'Install these components?' y || return 0; fi
   apply_components
@@ -931,7 +944,7 @@ game_plan() {
     [[ -z $node ]] || COMPUTE_URL=http://$node:8442
   fi
   if [[ $TOPOLOGY == front ]]; then
-    [[ $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install && $CLASSIFIER_TOOLS_ACTION != install ]] ||
+    [[ $STRATA_ACTION != install && $SDCPP_ACTION != install && $AUDIOCPP_ACTION != install && $WHISPERCPP_ACTION != install && $CLASSIFIER_TOOLS_ACTION != install ]] ||
       ui_die 'Model engines need a model runner on this machine.' 'Choose everything on this machine or install the engine on your GPU node'
   else choose_runtimes; fi
   choose_platform_services
@@ -1119,7 +1132,7 @@ show_plan() {
   lines+=("${C_MUTED}Data         ${C_RESET}$([[ $DATABASE == keep ]] && printf 'keep existing stores' || { [[ $DATABASE == sqlite ]] && printf 'SQLite, on this machine' || printf 'PostgreSQL, on this machine'; })")
   if [[ $TOPOLOGY != front ]]; then
     lines+=("${C_MUTED}Engine       ${C_RESET}llama.cpp · $(backend_label "$engine")")
-    lines+=("${C_MUTED}Optional     ${C_RESET}Strata: $STRATA_ACTION · stable-diffusion.cpp: $SDCPP_ACTION · audio.cpp: $AUDIOCPP_ACTION")
+    lines+=("${C_MUTED}Optional     ${C_RESET}Strata: $STRATA_ACTION · stable-diffusion.cpp: $SDCPP_ACTION · audio.cpp: $AUDIOCPP_ACTION; whisper.cpp: $WHISPERCPP_ACTION")
     lines+=("${C_MUTED}Conversion   ${C_RESET}Classifier tools: $CLASSIFIER_TOOLS_ACTION (CPU)")
     ((POWER_RULE)) && lines+=("${C_MUTED}Power        ${C_RESET}the console may sleep, restart or switch off this machine")
   fi
@@ -1602,7 +1615,13 @@ write_receipt() {
     echo "sdcpp=${SDCPP_ACTION:-keep}"
     echo "sdcpp_backend=${SDCPP_BACKEND:-cuda}"
     echo "audiocpp=${AUDIOCPP_ACTION:-keep}"
+    echo "whispercpp=${WHISPERCPP_ACTION:-keep}"
     echo "audiocpp_backend=${AUDIOCPP_BACKEND:-cuda}"
+    echo "whispercpp_backend=${WHISPERCPP_BACKEND:-cuda}"
+    if [[ -r $DIR/runtimes/whispercpp/current/installation.json && -x $DIR/.venv/bin/python ]]; then
+      as_owner "$DIR/.venv/bin/python" -c 'import json,sys; print("whispercpp_version="+json.load(open(sys.argv[1]))["revision"])' \
+        "$DIR/runtimes/whispercpp/current/installation.json"
+    fi
     echo "classifier_tools=${CLASSIFIER_TOOLS_ACTION:-keep}"
     echo "linger_wanted=$LINGER_WANTED"
     echo "power_rule=$POWER_RULE"

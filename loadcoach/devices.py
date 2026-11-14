@@ -122,6 +122,17 @@ def compatible(config, engine, card):
     device = next((one for one in config.gpu_details if one['id'] == card), {})
     if is_integrated(device):
         return False
+    if engine == 'whispercpp':
+        import json
+        manifest = getattr(config, 'engines', {}).get(engine, {}).get('manifest')
+        try:
+            backend = json.loads(Path(manifest).read_text())['backend'] if manifest else 'cuda'
+        except (OSError, ValueError, KeyError):
+            return False
+        if backend == 'cpu':
+            return False
+        if backend == 'vulkan':
+            return device.get('llama_device', card).startswith('Vulkan')
     if not device.get('vendor'):
         return True  # explicitly configured legacy device names
     if engine == 'llama_cpp' and device.get('llama_device'):

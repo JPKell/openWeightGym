@@ -484,7 +484,7 @@ def fit_line(model: dict, cards: list[str]) -> dict:
     wanted = model.get("placement_gpus", 1) if model.get("gpus") == "any" else model.get("gpus", len(cards))
     need = len(wanted) if isinstance(wanted, list) else wanted
     points = [[point["context"], point["mib"]] for point in model.get("measurements", []) if point["mib"] and len(point["mib"]) == need]
-    fixed = model.get('engine') in ('sdcpp', 'audiocpp')
+    fixed = model.get('engine') in ('sdcpp', 'audiocpp', 'whispercpp')
     if fixed:
         profile = model.get('image_profile') or {}
         if model.get('engine') == 'sdcpp' and not profile.get('qualified'):
@@ -1935,7 +1935,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             known = {"models": [], "to_measure": [], "measuring": None}
         if isinstance(known, Response):
             return fragment_error(request, person, 'models', 'list', known) if part == 'list' else known
-        kinds = {"sdcpp": "image", "audiocpp": "audio"}
+        kinds = {"sdcpp": "image", "audiocpp": "audio", "whispercpp": "audio"}
         known['models'] = [one for one in known['models'] if kind == 'all' or benchmark_model_kind(one) == kind]
         measuring = measure_button([one for one in known['models'] if kinds.get(one.get('engine'), 'llm') == 'llm'],
                                    node_measuring(known, shown_node), shown_node)
@@ -2199,7 +2199,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         benchmarks = scored.json().get("definitions", [])
         classifier = bool(model.get('capabilities', {}).get('classifier'))
         benchmarks = [bench for bench in benchmarks if bench['id'] == 'load' or bool(bench.get('classifier')) == classifier]
-        multimedia = model.get("engine") in ("sdcpp", "audiocpp")
+        multimedia = model.get("engine") in ("sdcpp", "audiocpp", "whispercpp")
         if multimedia:
             benchmarks = [bench for bench in benchmarks if bench['id'] == 'load']
         benchmarks = [bench for bench in benchmarks if bool(bench.get('embedding')) == bool(model['flags'].get('embedding'))]
@@ -2409,7 +2409,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     'generation': generation_settings(engine_for(model).model.effective(model_configuration(model), known.get('defaults') or {})),
                     'source_machine': request.query_params.get('node') or (model.get('locations') or [{'machine': first_node(person)}])[0]['machine']}, timeout=None)
                 if answer.status_code == 202:
-                    kind = {'sdcpp':'image','audiocpp':'audio'}.get(engine,'llm')
+                    kind = {'sdcpp':'image','audiocpp':'audio','whispercpp':'audio'}.get(engine,'llm')
                     jobs = answer.json().get('jobs') or [answer.json()]
                     return go('/models?' + urlencode([('kind', kind), *(('install', job['id']) for job in jobs)]))
             else:

@@ -74,7 +74,7 @@ def test_engine_node_settings_validate_without_executing_programs(tmp_path, monk
     config_file.write_text('gpus = []\n[engines.llama_cpp]\nenabled = true\nexecutable = "/missing/llama-server"\n')
     configured = load_config(config_file)
     assert configured.llama_server == "/missing/llama-server"
-    entry, strata, image, audio = catalogue(configured)
+    entry, strata, image, audio, whisper = catalogue(configured)
     assert image["enabled"] is False and image["capabilities"]["image_generation"] is True
     assert audio["enabled"] is False and audio["capabilities"]["audio"] and not audio["capabilities"]["chat"]
     assert strata["enabled"] is False and strata["available"] is False
@@ -140,7 +140,7 @@ def test_engine_catalogue_and_explicit_model_api_keep_permissions(fake_llama_ser
         owner = add_user(caller, "owner", "admin")
         guest = add_user(caller, "guest", "plain", by=owner)
         assert caller.get("/loadcoach/engines", headers=guest).status_code == 403
-        entry, strata, image, audio = caller.get("/loadcoach/engines", headers=owner).json()["engines"]
+        entry, strata, image, audio, whisper = caller.get("/loadcoach/engines", headers=owner).json()["engines"]
         assert image["enabled"] is False
         assert strata["enabled"] is False
         assert entry["id"] == "llama_cpp"

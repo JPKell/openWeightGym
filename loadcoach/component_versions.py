@@ -138,6 +138,13 @@ class Versions:
                     version = await asyncio.to_thread(git_version, Path(source)) if source else ""
                     if not version:
                         raise ValueError("Strata source revision unavailable.")
+                elif name == 'whispercpp':
+                    import json
+                    options = getattr(config, 'engines', {}).get(name, {})
+                    if not options.get('manifest'):
+                        raise ValueError('Whisper installation manifest unavailable.')
+                    manifest = json.loads(Path(options['manifest']).read_text())
+                    version = manifest['release']+' ('+manifest['revision'][:12]+', '+manifest['backend']+')'
                 else:
                     version = await reported_version(installation.executable)
                 self.save(name, version)
