@@ -49,6 +49,8 @@ def test_current_content_complete_and_code_references_separate(preview):
     page = preview
     records = page.evaluate('JSON.parse(document.getElementById("docs-data").textContent).pages')
     by_url = {record['url']: record for record in records}
+    assert all('<!--docs' not in record['html'] for record in records)
+    assert all((ROOT / section['guide']).is_file() for section in system_docs.SECTIONS)
     sources = {topic['source'] for section in system_docs.SECTIONS for topic in section['topics'] if topic['source']}
     assert {record['url'].removeprefix('/docs/code/') for record in records if record['section'] == 'code' and not record['overview']} == sources
     for section in system_docs.SECTIONS:

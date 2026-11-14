@@ -1,6 +1,7 @@
 """Docs written in Markdown are shown with the console's own cards, tables, steps and code blocks."""
 
 import re
+from pathlib import Path
 
 from weightroom import doc_markdown
 from weightroom.system_docs import ROOT, SECTIONS, written
@@ -78,20 +79,20 @@ def test_links_to_other_files_go_to_their_docs_page_or_become_text():
     assert "other" in body and 'href="other.md"' not in body  # a file the docs do not show keeps only its text
     page = written(next(topic for section in SECTIONS for topic in section["topics"] if topic["doc"] == "docs/installation.md"))
     shown = str(page["overview"]) + "".join(str(part["body"]) for part in page["sections"])
-    assert 'href="/docs/modules/toollocker"' in shown
+    assert 'href="/docs/modules/toollocker' in shown
     assert all(href.startswith(("/", "#", "https:", "http:")) for href in re.findall(r'href="([^"]+)"', shown))  # no link is left relative
 
 
 def test_doc_pages_put_each_section_in_a_card_with_links_to_them(desk):
     browser, _, _ = desk
     sign_in(browser, "jordan")
-    pages = {"/docs/modules/toollocker": ("overview", "requirements", "install-toollocker-on-front", "troubleshooting", "source"),
-             "/docs/modules/mirrorwall": ("overview", "workflow", "models", "adding", "references", "trouble", "source"),
+    pages = {"/docs/modules/toollocker": ("overview", "requirements", "install-toollocker-on-the-control-node", "troubleshooting"),
+             "/docs/modules/mirrorwall": ("overview", "workflow", "models", "adding", "references", "trouble"),
              "/docs/api": ("api-connection", "topics"),
              "/docs/api/openai": ("api-compatible", "api-unsupported"),
              "/docs/api/headers": ("api-headers", "api-response-headers"),
-             "/docs/modules/loadcoach": ("source",),
-             "/docs": ("system-map", "docs-sections", "topics"),
+             "/docs/code/loadcoach": ("source",),
+             "/docs/system": ("system-map", "docs-sections", "topics"),
              "/docs/operations/installation": ("overview", "what-you-need", "adding-a-gpu-node"),
              "/docs/benchmarks/measures": ("what-the-benchmarks-measure", "tool-use-and-recovery-p4"),
              "/docs/web-app/chat": ("chat", "chat-options", "chat-list")}
@@ -135,3 +136,43 @@ def test_explicit_legacy_anchors_and_duplicate_anchor_rejection():
 def test_audience_markers_in_fenced_examples_stay_literal():
     text = '## Example\n\n```text\n<!-- audience: admin -->\n```\n'
     assert '&lt;!-- audience: admin --&gt;' in str(doc_markdown.document(text))
+
+
+def test_catalogue_discovery_includes_aliases_and_refuses_history_and_escape(tmp_path, monkeypatch):
+    import pytest
+    from weightroom import system_docs
+    monkeypatch.setattr(system_docs, 'ROOT', tmp_path)
+    folder = tmp_path / 'docs/guide/demo'
+    folder.mkdir(parents=True)
+    (folder / '_section.md').write_text('<!--docs\ntitle="Demo"\nsummary="Examples"\naudience="public"\n-->\n# Demo\n')
+    topic = folder / 'first.md'
+    topic.write_text('<!--docs\ntitle="First"\nsummary="Read it"\ncovers=["/chat"]\naliases=["/docs/old-demo"]\n-->\n# First\n\n## Do it\n\nRead.\n')
+    sections, aliases, _, _ = system_docs.discover()
+    assert sections[0]['topics'][0]['covers'] == ['/chat']
+    assert aliases == {'/docs/old-demo': '/docs/demo/first'}
+    for name in ('demo-plan.md', 'demo-work.md', 'loadcoach.md', 'application-sweep-new.md', 'agent-status.md', 'evidence.md'):
+        path = tmp_path / 'docs' / name
+        path.write_text('# Frozen')
+        with pytest.raises(ValueError):
+            system_docs.include_file(topic, '../../' + name)
+    with pytest.raises(ValueError):
+        system_docs.include_file(topic, '../../../../outside.md')
+    (tmp_path / 'docs/live.md').symlink_to(Path(__file__))
+    with pytest.raises(ValueError):
+        system_docs.include_file(topic, '../../live.md')
+    (tmp_path / 'docs/maintained.md').write_text('# Maintained\n\n## Install\n\nUse the installer.\n')
+    assert system_docs.include_file(topic, '../../maintained.md') == 'docs/maintained.md'
+    (folder / 'second.md').write_text(topic.read_text())
+    with pytest.raises(ValueError, match='Duplicate documentation alias'):
+        system_docs.discover()
+
+
+def test_public_search_never_indexes_admin_blocks_even_after_admin_search(desk):
+    browser, _, _ = desk
+    sign_in(browser, 'jordan')
+    query = {'q': 'ToolLocker setup and adding tools', 'scope': 'web-app'}
+    assert '/docs/web-app/tools' in browser.get('/docs', params=query).text
+    sign_in(browser, 'pat')
+    response = browser.get('/docs', params=query)
+    assert 'id="docs-search-empty"' in response.text
+    assert 'ToolLocker setup and adding tools' not in browser.get('/docs/web-app/tools').text

@@ -99,11 +99,27 @@ Owner decisions D1–D7, recorded 2026-10-15/16, apply to the approved disposabl
 
 ## Documentation maintenance
 
-Record each fact once: human operation in [README](README.md) or its scoped guide, implementation
-contracts in the owning subsystem, and approvals/status/proposals in [agent-status](agent-status.md).
-Keep completed execution narratives out of the backlog; retain unique recovery steps and links to
-machine-readable evidence. Older implementation-guide sections are chronological history: use later
-ownership/protocol sections and current code when they conflict.
+Each fact has one home:
+
+| Fact | Maintained source | Docs presentation |
+|---|---|---|
+| Using a page or workflow | `docs/guide/<section>/<topic>.md` | Discovered TOML front matter; `covers` supplies the page map. |
+| Installation and operation | Existing installation/operations sections and package READMEs | Relative `include` stubs with optional named `parts`; never copy their text. |
+| Routes, methods, summaries and access | Route declarations and handler docstrings | Generated API endpoints. |
+| Setting keys, defaults and meanings | `settings/defaults/*.toml` comments and catalogue labels | Generated settings reference; never live settings values. |
+| Abilities | Ability definitions | Generated abilities reference. |
+| Modules, classes and functions | Allowlisted source docstrings | Code references; `SOURCES` remains an explicit security boundary. |
+| Decisions, history and evidence | Frozen plans and logs | Never included or quoted by guides. Status stays in [agent-status](agent-status.md). |
+
+Update the affected guide in the **same commit** as a page, route, ability or setting change.
+Generated pages need no edits: fix their source descriptions. Link to generated entries instead of
+restating defaults, endpoint lists or abilities. A limit defined only in code may be explained in its
+guide and developer docstring. Check **Docs → Gaps** when choosing documentation work.
+Run `rtk proxy .venv/bin/pytest tests/test_documentation.py tests/test_docs_library.py tests/test_docs_coverage.py tests/test_source_docs.py tests/test_doc_markdown.py tests/test_docs_designs.py`,
+plus Docs browser checks and UI consistency checks for UI changes. `scripts/docs-coverage.py` prints
+the same coverage report. Guide metadata uses TOML in a leading `<!--docs` comment; public prose can
+wrap private paragraphs in `<!-- audience: admin -->` / `<!-- /audience -->`. An explicit heading
+anchor (`## Heading {#old-anchor}`) preserves existing bookmarks.
 
 Update existing files in place. Add a plan/handoff/evidence document only when requested or required
 by an explicit acceptance/recovery contract. Preserve the owner's walkthrough findings. Keep root

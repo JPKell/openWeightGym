@@ -39,7 +39,7 @@ def test_toollocker_setup_guide_is_available_without_compute_and_stays_private(d
         assert instruction in response.text
     sign_in(browser, 'pat')
     guide = browser.get('/docs/web-app/tools').text
-    assert 'id="tools"' in guide and 'http://testserver:8443/mcp' in guide
+    assert 'id="tools"' in guide and 'http://CONTROL_NODE:8443/mcp' in guide
     assert 'href="/docs/modules/toollocker"' not in guide
     assert browser.get('/docs/modules/toollocker').status_code == 403
 

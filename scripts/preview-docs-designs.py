@@ -17,7 +17,8 @@ from weightroom.docs_views import article
 def render(base_url='http://localhost:8440'):
     """Reuse the live docs renderer, metadata, Markdown and API/source inventories without services."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
-    records, sections, aliases = [], system_docs.SECTIONS, system_docs.CODE_ALIASES
+    system_docs.refresh()
+    records, sections, aliases = [], system_docs.SECTIONS, system_docs.ALIASES
     for section in sections:
         for topic in (None, *section['topics']):
             html, text, _ = article(

@@ -101,17 +101,26 @@ def test_search_invalidates_on_document_edit_and_exposes_retry_for_read_failure(
     token.write_text('one')
     monkeypatch.setattr(docs_views, 'revision', lambda sections: token.read_text())
     assert 'id="docs-search-empty"' in server.get('/docs?q=revisionneedle').text
-    def changed(topic):
+    def changed(topic, **kwargs):
         if topic['slug'] == 'chat':
             return {'contents': [], 'overview': 'revisionneedle', 'sections': []}
-        return original_written(topic)
+        return original_written(topic, **kwargs)
     monkeypatch.setattr(system_docs, 'written', changed)
     token.write_text('two')
     assert 'class="search-result" href="/docs/web-app/chat"' in server.get('/docs?q=revisionneedle').text
-    def unavailable(topic):
+    def unavailable(topic, **kwargs):
         raise OSError('unavailable')
     monkeypatch.setattr(system_docs, 'written', unavailable)
     token.write_text('three')
     failure = server.get('/docs?q=revisionneedle&part=search')
     assert failure.status_code == 503 and 'temporarily unavailable' in failure.text
     assert failure.headers['cache-control'] == 'no-store'
+
+
+def test_all_pre_discovery_documentation_addresses_remain_reachable(desk):
+    import json
+    from pathlib import Path
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    for address in json.loads(Path(__file__).with_name('docs_legacy_urls.json').read_text()):
+        assert server.get(address).status_code == 200, address

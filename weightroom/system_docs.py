@@ -1,4 +1,4 @@
-"""The documentation's sections and topics, and a cached source reference, read without importing services.
+"""Discovered Markdown guides and cached source references, read without importing services.
 
 The docs have a searchable home and sections, each with an overview and topics of its own. A topic shows what is
 written for it, as a template in pages/docs/SECTION/TOPIC.html, sections of a Markdown file in the
@@ -20,154 +20,178 @@ from weightroom import doc_markdown
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _topic(slug: str, title: str, summary: str, source: str | None = None, doc: str | None = None, parts: tuple[str, ...] = ()) -> dict:
-    """One topic: `source` names its code reference in SOURCES, `doc` a Markdown file and `parts` the `## ` sections of it to show (all when empty)."""
-    return {"slug": slug, "title": title, "summary": summary, "source": source, "doc": doc, "parts": parts}
+def _metadata(path: Path, *, section=False) -> dict:
+    """Validate guide metadata at discovery, before any page can be searched or rendered."""
+    if path.resolve() != path or not path.is_relative_to(ROOT):
+        raise ValueError('Documentation metadata must be a regular repository file.')
+    found, _ = doc_markdown.front_matter(path.read_text(encoding='utf-8'))
+    allowed = {'title', 'summary', 'order', 'covers', 'aliases', 'include', 'parts', 'audience', 'generated', 'source', 'code', 'route'}
+    if found.keys() - allowed:
+        raise ValueError(f'{path}: unknown documentation metadata: {sorted(found.keys() - allowed)}')
+    for name in ('title', 'summary'):
+        if not isinstance(found.get(name), str) or not found[name].strip():
+            raise ValueError(f'{path}: {name} is required.')
+    if type(found.get('order', 0)) is not int:
+        raise ValueError(f'{path}: order must be a whole number.')
+    if found.get('audience', 'admin' if section else 'public') not in ('public', 'admin'):
+        raise ValueError(f'{path}: audience must be public or admin.')
+    for name in ('covers', 'aliases', 'parts'):
+        if not isinstance(found.get(name, []), list) or any(not isinstance(value, str) for value in found.get(name, [])):
+            raise ValueError(f'{path}: {name} must be a list of strings.')
+    if any(not value.startswith('/') or '?' in value or '#' in value or '..' in value for value in found.get('covers', [])):
+        raise ValueError(f'{path}: covers must contain local page paths.')
+    if any(not re.fullmatch(r'/docs/[a-z0-9/-]+', value) or '..' in value for value in found.get('aliases', [])):
+        raise ValueError(f'{path}: aliases must be documentation paths.')
+    # Validate even hidden text: a malformed private block must not become public later.
+    doc_markdown.audience_text(path.read_text(encoding='utf-8'), True)
+    return found
 
 
-def _section(slug: str, title: str, summary: str, topics: tuple[dict, ...], public: bool = False) -> dict:
-    """One section and its topics, each given its canonical address beneath the docs home."""
-    url = "/docs/" + slug
-    topics = tuple(topic | {"url": f"/docs/{slug}/{topic['slug']}"} for topic in topics)
-    return {"slug": slug, "title": title, "summary": summary, "url": url, "public": public,
-            "topics": topics, "by_slug": {topic["slug"]: topic for topic in topics}}
+def include_file(guide: Path, value: str) -> str:
+    """Resolve only maintained repository Markdown, refusing history, escapes and symlinks."""
+    if not isinstance(value, str) or not value or Path(value).is_absolute():
+        raise ValueError(f'{guide}: include must be a relative repository file.')
+    target = Path(posixpath.normpath(str(guide.parent / value)))
+    if not target.is_relative_to(ROOT) or target.resolve() != target or not target.is_file():
+        raise ValueError(f'{guide}: include leaves the repository or is not a regular file.')
+    name = target.name
+    if (target.suffix.lower() not in ('.md', '.txt') or name.endswith(('-plan.md', '-work.md'))
+            or name in ('loadcoach.md', 'agent-status.md') or name.startswith('application-sweep-')
+            or any('evidence' in part.lower() for part in target.relative_to(ROOT).parts)):
+        raise ValueError(f'{guide}: plans, history and evidence cannot be included in guides.')
+    return target.relative_to(ROOT).as_posix()
 
 
-BENCHMARK_GUIDE = "benchmarks/README.md"
-SECTIONS = (
-    _section("system", "System reference", "How openWeightGym's parts fit together: which machine runs what, how a request travels between them, and the ideas every part shares.", (
-        _topic("models", "Models", "Model files and their metadata, configuration and presets, the roles that stand in for a model's name, and projectors and embedding models.", source="models"),
-        _topic("accounts", "Accounts and groups", "Users and groups, API keys and sessions, and the abilities and sensitivity levels that decide what each account may do.", source="accounts"),
-        _topic("logs", "Logs", "Request records, what is kept of captured content, system and plugin logs, and the reliability evidence built from them.", source="logs"),
-        _topic("hosted-providers", "Hosted providers", "Model services elsewhere whose models are offered here: their configuration, credentials, routing and limits, and costs and allowances.", source="hosted-providers"),
-    )),
-    _section("api", "API reference", "The model API that OpenAI-compatible clients use, openWeightGym's own endpoints, and the headers both accept.", (
-        _topic("openai", "OpenAI compatibility", "Which OpenAI endpoints openWeightGym implements and their limits, and which it does not implement."),
-        _topic("custom", "Custom endpoints", "openWeightGym's own endpoints, read from the route declarations in the source as it is now."),
-        _topic("headers", "Headers", "The request headers that change how work is admitted, traced and logged, and the headers that responses carry."),
-        _topic("source", "Code reference", "The modules that declare the API's routes, with each handler's documentation.", source="api"),
-    )),
-    _section("web-app", "Web app", "Using the web console: chat, collections, workflows, voice and media, tools, and your API keys.", (
-        _topic("classifier", "Classifier", "Ask typed questions and compare uncalibrated decision probabilities.", doc="docs/decision-model-plan.md", parts=("Using Classifier",)),
-        _topic("chat", "Chat", "Start a conversation, choose its model and change its options."),
-        _topic("image-extraction", "Image extraction", "Describe images, extract text and receipts, review corrections and run independent image batches.", doc="docs/image-extraction-plan.md", parts=("Using Image extraction", "Tasks and output", "Storage and recovery")),
-        _topic("collections", "Collections", "Keep private sources and ask questions answered from them."),
-        _topic("workflows", "Workflows", "Run research and drafting as repeatable steps you review."),
-        _topic("voice", "Voice and media", "Talk with a model by voice, and make images, music, sounds and speech."),
-        _topic("tools", "Tools", "Give an MCP client or agent the tools your account may use."),
-        _topic("api-keys", "API keys", "Create a key and connect an OpenAI-compatible client to the model API."),
-    ), public=True),
-    _section("modules", "Modules", "The programs openWeightGym is made of: what each one does, where it runs, and its code.", (
-        _topic("weightroom", "WeightRoom", "The web console on the control node: its pages, chat, collections and workflows, administration and the benchmark worker.", source="weightroom"),
-        _topic("turnstile", "Turnstile", "Control node's door: it signs callers in, checks what they may do, and sends each request to the machine that should do the work, waking it when needed.", source="turnstile"),
-        _topic("loadcoach", "LoadCoach", "Runs on each worker: admits and schedules work, keeps models resident on its GPUs, and serves inference.", source="loadcoach"),
-        _topic("toollocker", "ToolLocker", "The MCP gateway on the control node: which tools exist, who may use them, and how they run.", source="toollocker", doc="toollocker/README.md"),
-        _topic("voice", "Voice", "The voice gateway on the control node and the speech service on compute: clients, recognition and synthesis.", source="voice", doc="voice/README.md"),
-        _topic("spotter", "Spotter", "Runs on each host: telemetry, service health, and the service and power controls the control node may use.", source="spotter"),
-        _topic("plugins", "Plugins", "Adapters that offer external agents and services as models at the same /v1 address.", source="plugins", doc="plugins/README.md"),
-        _topic("mirrorwall", "Mirror Wall", "Image generation with stable-diffusion.cpp: how an image is made, the models and their parts, and adding one.", source="mirrorwall"),
-        _topic("soundroom", "SoundRoom", "Music, sounds, speech and transcription with audio models, and each person's private audio library on the control node.", source="soundroom"),
-    )),
-    _section("benchmarks", "Benchmarks", "How models are measured: what a run does, what each benchmark tests, how scores are kept, and how the benchmark worker is run.", (
-        _topic("runs", "How a run works", "From choosing a model to a saved result.", doc=BENCHMARK_GUIDE, parts=("From a selected model to a result",)),
-        _topic("measures", "What is measured", "Each benchmark: what it tests, how it is scored and what its score does not show.", doc=BENCHMARK_GUIDE,
-               parts=("What the benchmarks measure", "Tool use and recovery (P4)", "General conversation probe (Part 4, milestone 101)",
-                      "Multi-turn consistency (Part 6, milestone 102)", "Extraction and retrieval answer room (2026-10-16)",
-                      "Paired JSON and schema (Part 7, milestone 103)", "Expanded tool use (Part 8, milestone 104)")),
-        _topic("scores", "Scores and results", "The benchmark pages, how scores are calculated, and what makes two results comparable.", doc=BENCHMARK_GUIDE, parts=("Pages, scores and result identity",)),
-        _topic("operation", "Files and operation", "Ports, endpoints, files and the day-to-day running of the benchmark worker.", doc=BENCHMARK_GUIDE, parts=("Key ports and endpoints", "Files and operation")),
-        _topic("source", "Code reference", "The benchmark package: plans, the queue, suites and scoring.", source="benchmarks"),
-    )),
-    _section("data", "Data and backups", "Where openWeightGym keeps its data, which program owns each store, and how to back it up, restore it and move it to another database engine.", (
-        _topic("stores", "Stores and ownership", "Each database, the machine it lives on and the programs that write it."),
-        _topic("backups", "Backups and restore", "Recovery sets from both machines, what they leave out, and keeping identities through a reinstall."),
-        _topic("engines", "SQLite and PostgreSQL", "The two database engines, and moving a store from one to the other."),
-        _topic("source", "Code reference", "The shared storage layer, backups and database administration.", source="data"),
-    )),
-    _section("operations", "Deployment and operations", "Installing openWeightGym, where each part runs, its settings, pairing nodes and updating installations.", (
-        _topic("installation", "Installation", "The installer, one machine or several, adding a GPU node, the owg command, and uninstalling.", doc="docs/installation.md"),
-        _topic("topology", "Where things run", "Which programs run on the control node and which on each worker, and what happens while a worker is away.", doc="docs/README.md", parts=("Where things run",)),
-        _topic("telephone", "Telephone", "Twilio setup, public routes, caller access, SMS registration and troubleshooting.", doc="docs/telephone.md"),
-        _topic("settings", "Settings", "Where settings come from, model file places, and what is kept private.", doc="docs/README.md", parts=("Settings, data and privacy",)),
-        _topic("settings-policy", "Settings policies and restarts", "Live and restart settings, sign-in recovery, notifications, limits, downloads, retention, display and remote tools.", doc="docs/operations.md",
-               parts=("Settings catalogue and restarts", "Download credentials and concurrency", "Spending policy", "Upload and content limits", "Notification delivery", "Conversation expiry and built-in backups", "Site identity and presentation defaults", "Site-managed remote MCP servers")),
-        _topic("deploying", "Node installation and updates", "Pairing nodes from Compute nodes, terminal updates, and serving the console over HTTPS on the LAN.", doc="docs/operations.md",
-               parts=("Node installation and updates", "Console over HTTPS on the LAN")),
-        _topic("source", "Code reference", "Install and deploy scripts, and the settings code.", source="operations"),
-    )),
-)
-
-
-def _separate_code(sections):
-    """Keep written guides intact while collecting their source inventories in one section."""
-    guides, code, aliases, source_pages = [], {}, {}, {}
-    for section in sections:
+def discover() -> tuple[tuple[dict, ...], dict, dict, dict]:
+    """Discover sections, topics and old addresses from folder metadata, with no hand-kept catalogue."""
+    sections, aliases, source_pages, documents = [], {}, {}, {}
+    for index in (ROOT / 'docs/guide').glob('*/_section.md'):
+        meta = _metadata(index, section=True)
+        name = meta.get('route', index.parent.name)
+        if not isinstance(name, str) or not re.fullmatch('[a-z0-9-]+', name):
+            raise ValueError(f'{index}: invalid section route.')
+        url = '/docs/' + name
+        section = {**meta, 'slug': name, 'url': url, 'public': meta.get('audience') == 'public',
+                   'audience': meta.get('audience', 'admin'), 'guide': index.relative_to(ROOT).as_posix(),
+                   'doc': index.relative_to(ROOT).as_posix(), 'parts': (), 'source': None}
         topics = []
-        for topic in section['topics']:
-            source = topic['source']
-            if source:
-                title = section['title'] if topic['slug'] == 'source' else topic['title']
-                code.setdefault(source, _topic(source, title, f'Source modules, classes and functions behind {title}.', source=source))
-                source_pages[topic['url']] = '/docs/code/' + source
-                if topic['slug'] == 'source':
-                    aliases[topic['url']] = source_pages[topic['url']]
-            if topic['slug'] != 'source':
-                topics.append(topic | {'source': None, 'code_url': source_pages.get(topic['url'])})
-        guide = section | {'topics': tuple(topics), 'by_slug': {topic['slug']: topic for topic in topics},
-                           'code_url': source_pages.get(section['url'] + '/source')}
-        guides.append(guide)
-    guides.append(_section('code', 'Code references', 'Source modules, classes and functions, grouped by component.', tuple(code.values())))
-    return tuple(guides), aliases, source_pages
+        for path in index.parent.glob('*.md'):
+            if path.name.startswith('_'):
+                continue
+            data = _metadata(path)
+            topic_url = url + '/' + path.stem
+            source = data.get('source')
+            topic = {**data, 'slug': path.stem, 'url': topic_url, 'source': source,
+                     'audience': 'admin' if section['audience'] == 'admin' else data.get('audience', section['audience']),
+                     'guide': path.relative_to(ROOT).as_posix(), 'parts': tuple(data.get('parts', ())),
+                     'doc': include_file(path, data['include']) if 'include' in data else path.relative_to(ROOT).as_posix(),
+                     'code_url': '/docs/code/' + data['code'] if data.get('code') else None}
+            if source or data.get('generated'):
+                topic['doc'] = None
+            if topic['code_url']:
+                source_pages[topic_url] = topic['code_url']
+            for alias in data.get('aliases', []):
+                if alias in aliases:
+                    raise ValueError(f'Duplicate documentation alias: {alias}')
+                aliases[alias] = topic_url
+            documents[topic['guide']] = topic_url
+            if topic['doc']:
+                documents.setdefault(topic['doc'], url if topic['parts'] else topic_url)
+                if not topic['parts']:
+                    documents[topic['doc']] = topic_url
+            topics.append(topic)
+        topics.sort(key=lambda topic: (topic.get('order', 0), topic['slug']))
+        section.update(topics=tuple(topics), by_slug={topic['slug']: topic for topic in topics})
+        documents[section['doc']] = url
+        sections.append(section)
+    sections.sort(key=lambda section: (section.get('order', 0), section['slug']))
+    urls = {item['url'] for section in sections for item in (section, *section['topics'])}
+    if len(urls) != sum(1 + len(section['topics']) for section in sections) or urls.intersection(aliases):
+        raise ValueError('Documentation routes or aliases overlap.')
+    for section in sections:
+        legacy = aliases.get(section['url'] + '/source')
+        section['code_url'] = legacy
+    return tuple(sections), aliases, source_pages, documents
 
 
-SECTIONS, CODE_ALIASES, SOURCE_PAGES = _separate_code(SECTIONS)
-BY_SLUG = {section["slug"]: section for section in SECTIONS}
-# Where each topic lived before the docs had sections, so that old links and bookmarks still arrive.
-MOVED = {"weightroom": "/docs/modules/weightroom", "turnstile": "/docs/modules/turnstile", "loadcoach": "/docs/modules/loadcoach",
-         "toollocker": "/docs/modules/toollocker", "voice": "/docs/modules/voice", "spotter": "/docs/modules/spotter",
-         "plugins": "/docs/modules/plugins", "mirrorwall": "/docs/modules/mirrorwall", "collections": "/docs/web-app/collections",
-         "models": "/docs/system/models", "accounts": "/docs/system/accounts", "logs": "/docs/system/logs",
-         "hosted-providers": "/docs/system/hosted-providers"}
-# A link in a Markdown file to another file that the docs show goes to that page; whole files go to their topic.
-# A file shown only in parts goes to the section showing them.
-DOC_PAGES = {topic["doc"]: section["url"] for section in SECTIONS for topic in section["topics"] if topic["doc"]}
-DOC_PAGES |= {topic["doc"]: topic["url"] for section in SECTIONS for topic in section["topics"] if topic["doc"] and not topic["parts"]}
+SECTIONS = ()
+BY_SLUG, ALIASES, CODE_ALIASES, SOURCE_PAGES, MOVED, DOC_PAGES = {}, {}, {}, {}, {}, {}
+_GUIDE_REVISION = None
+
+
+def refresh() -> None:
+    """Pick up added and edited guide files without restarting; retain imported lookup dictionaries."""
+    global SECTIONS, _GUIDE_REVISION
+    paths = sorted((ROOT / 'docs/guide').glob('*/*.md'))
+    revision = tuple((str(path), path.stat().st_mtime_ns, path.stat().st_size) for path in paths)
+    if revision == _GUIDE_REVISION:
+        return
+    sections, aliases, source_pages, documents = discover()
+    SECTIONS = sections
+    for target, values in ((BY_SLUG, {section['slug']: section for section in sections}), (ALIASES, aliases),
+                           (CODE_ALIASES, {key: value for key, value in aliases.items() if value.startswith('/docs/code/')}),
+                           (MOVED, {key.removeprefix('/docs/'): value for key, value in aliases.items() if key.count('/') == 2}),
+                           (SOURCE_PAGES, source_pages), (DOC_PAGES, documents)):
+        target.clear()
+        target.update(values)
+    _GUIDE_REVISION = revision
+
+
+refresh()
 
 
 def visible(can) -> tuple[dict, ...]:
-    """The sections this account may read: all of them with manage-settings, otherwise the Web app alone."""
-    return tuple(section for section in SECTIONS if section["public"] or "manage-settings" in can)
+    """Select sections and topics for this audience before indexing or rendering any prose."""
+    refresh()
+    admin = 'manage-settings' in can
+    return tuple(section | {'topics': tuple(topic for topic in section['topics'] if admin or topic['audience'] == 'public'),
+                            'by_slug': {topic['slug']: topic for topic in section['topics'] if admin or topic['audience'] == 'public'}}
+                 for section in SECTIONS if admin or section['audience'] == 'public')
 
 
 def _links(source: str):
-    """How links in the Markdown file `source` are shown on the web: other repository files become their docs page or plain text."""
+    """Rewrite repository links to their one documentation home, retaining valid section anchors."""
     folder = posixpath.dirname(source)
-
     def resolve(href: str) -> str | None:
-        """The link's new address, or None to show only its text."""
-        if not href or href.startswith(("#", "/")) or urlsplit(href).scheme:
+        """Keep web links and map maintained files to their corresponding visible article."""
+        if not href or href.startswith(('#', '/')) or urlsplit(href).scheme:
             return href
-        return DOC_PAGES.get(posixpath.normpath(posixpath.join(folder, href.split("#", 1)[0])))
+        relative, _, anchor = href.partition('#')
+        name = posixpath.normpath(posixpath.join(folder, relative))
+        target = DOC_PAGES.get(name)
+        if anchor:
+            for section in SECTIONS:
+                for topic in section['topics']:
+                    if topic.get('doc') == name and any(doc_markdown.slug(part) == anchor for part in topic['parts']):
+                        target = topic['url']
+                        break
+        return target + ('#' + anchor if anchor else '') if target else None
     return resolve
 
 
-@lru_cache(maxsize=32)
-def _written(relative: str, modified: int, size: int) -> dict:
-    """One Markdown file made into a document, cached for its current revision."""
-    return doc_markdown.document((ROOT / relative).read_text(encoding="utf-8"), links=_links(relative))
+@lru_cache(maxsize=128)
+def _written(relative: str, modified: int, size: int, admin: bool = False) -> dict:
+    """Render one file revision separately for each audience, including filtered private blocks."""
+    if (ROOT / relative).resolve() != ROOT / relative:
+        raise ValueError('Documentation cannot follow symlinks.')
+    return doc_markdown.document((ROOT / relative).read_text(encoding='utf-8'), links=_links(relative), admin=admin)
 
 
-def written(topic: dict) -> dict | None:
-    """What the repository has written for a topic: the whole Markdown file, or only the sections it names."""
-    if not topic.get("doc"):
+def written(topic: dict, *, admin: bool = False) -> dict | None:
+    """Render a guide or its maintained include, refusing silently missing section selections."""
+    if not topic.get('doc'):
         return None
-    stat = (ROOT / topic["doc"]).stat()
-    found = _written(topic["doc"], stat.st_mtime_ns, stat.st_size)
-    if not topic["parts"]:
+    if topic.get('include'):
+        include_file(ROOT / topic['guide'], topic['include'])
+    stat = (ROOT / topic['doc']).stat()
+    found = _written(topic['doc'], stat.st_mtime_ns, stat.st_size, admin)
+    if not topic['parts']:
         return found
-    sections = [section for section in found["sections"] if section["title"] in topic["parts"]]
-    return {"title": found["title"], "overview": Markup(""), "sections": sections,
-            "contents": [(section["id"], section["title"]) for section in sections]}
+    sections = [section for section in found['sections'] if section['title'] in topic['parts']]
+    if set(topic['parts']) != {section['title'] for section in sections}:
+        raise ValueError('An included documentation section no longer exists: ' + topic['doc'])
+    return {'title': topic['title'], 'overview': Markup(''), 'sections': sections,
+            'contents': [(section['id'], section['title']) for section in sections]}
 
 
 # Fixed source ownership keeps query parameters from becoming arbitrary file reads.

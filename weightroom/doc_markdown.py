@@ -124,6 +124,10 @@ def render(text: str, prefix: str = "doc", links=None) -> Markup:
         if token.type != "heading_open":
             continue
         inline = tokens[number + 1]
+        explicit = ANCHOR.search(inline.content)
+        if explicit:
+            inline.content = ANCHOR.sub('', inline.content)
+            inline.children = RENDERER.parseInline(inline.content)[0].children
         if token.tag in ("h1", "h2"):
             token.tag = tokens[number + 2].tag = "h3"  # a section's own headings sit below its card's title
         step = STEP.match(inline.content)
@@ -134,7 +138,7 @@ def render(text: str, prefix: str = "doc", links=None) -> Markup:
                 first.content = STEP.sub("", first.content, count=1)
             token.attrSet("class", "docs-step")
             token.attrSet("data-step", step[1])
-        token.attrSet("id", f"{prefix}-{slug(inline.content)}")
+        token.attrSet("id", explicit[1] if explicit else f"{prefix}-{slug(inline.content)}")
     return Markup(RENDERER.renderer.render(tokens, RENDERER.options, env))
 
 

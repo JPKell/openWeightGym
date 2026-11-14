@@ -46,7 +46,7 @@ def article(environment, section, topic, person, api_base, source_reader, api_re
     api = api_reader(system_docs.source_files('api')) if topic and (section['slug'], topic['slug']) == ('api', 'custom') else None
     html = environment.get_template('docs_article.html').render(
         section=section, topic=topic, sections=system_docs.visible(person.can), person=person,
-        document=system_docs.written(topic) if topic else None, reference=reference, api=api, api_base=api_base,
+        document=system_docs.written(topic or section, admin='manage-settings' in person.can), reference=reference, api=api, api_base=api_base,
     )
     parsed = ArticleText()
     parsed.feed(html)
@@ -57,6 +57,9 @@ def revision(sections):
     """Invalidate the search cache when a guide, template or allowlisted source revision changes."""
     paths = set((system_docs.ROOT / 'weightroom/pages').glob('docs*.html'))
     paths.update((system_docs.ROOT / 'weightroom/pages/docs').rglob('*.html'))
+    paths.update((system_docs.ROOT / 'docs/guide').glob('*/*.md'))
+    paths.update((system_docs.ROOT / 'settings/defaults').glob('*.toml'))
+    paths.update(system_docs.ROOT / name for name in ('loadcoach/groups.py', 'loadcoach/setting_catalog.py', 'weightroom/setting_labels.py', 'weightroom/app.py'))
     paths.update(system_docs.ROOT / topic['doc'] for section in sections for topic in section['topics'] if topic.get('doc'))
     if any(section['slug'] == 'code' for section in sections):
         paths.update(system_docs.ROOT / relative for source in system_docs.SOURCES for relative in system_docs.source_files(source))
@@ -65,7 +68,7 @@ def revision(sections):
 
 def search(environment, sections, person, api_base, query, scope, source_reader, api_reader, cache):
     """Search only permitted rendered pages; cache plain text by permission scope and file revisions."""
-    key = (tuple(section['slug'] for section in sections), api_base, revision(sections))
+    key = (tuple(section['slug'] for section in sections), 'manage-settings' in person.can, api_base, revision(sections))
     records = cache.get(key)
     if records is None:
         records = []
@@ -100,6 +103,12 @@ async def documentation_page(request, person, page, environment, source_reader, 
     path = request.url.path
     sections = system_docs.visible(person.can)
     admin = 'manage-settings' in person.can
+    alias = system_docs.ALIASES.get(path)
+    if alias:
+        destination = system_docs.BY_SLUG.get(alias.split('/')[2])
+        if destination and destination['audience'] == 'admin' and not admin:
+            return page(request, 'refused.html', person, status=403, why='Your account may not view system documentation.')
+        return RedirectResponse(alias + ('?' + request.url.query if request.url.query else ''), status_code=308)
     if part is None and name in system_docs.MOVED:
         if not admin and name != 'collections':
             return page(request, 'refused.html', person, status=403, why='Your account may not view system documentation.')
@@ -117,6 +126,8 @@ async def documentation_page(request, person, page, environment, source_reader, 
         target = alias or system_docs.SOURCE_PAGES[path]
         return RedirectResponse(target + ('?' + request.url.query if request.url.query else ''), status_code=308)
     topic = section['by_slug'].get(part) if section and part else None
+    if topic and topic['audience'] == 'admin' and not admin:
+        return page(request, 'refused.html', person, status=403, why='Your account may not view system documentation.')
     if part and topic is None:
         return Response('Documentation page not found.', status_code=404)
     host = request.url.hostname or 'FRONT'
