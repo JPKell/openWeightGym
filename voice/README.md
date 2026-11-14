@@ -1,14 +1,15 @@
 # Voice service brief
 
-Deployment status reviewed: **2026-10-25**. Voice and gateway are active; this installation
-admits **two active conversations** after [bounded H1/V7 qualification](../docs/voice.md#h1-two-source-trial--2026-10-16).
-The private browser identity has [bounded V10 permission/revocation qualification](../docs/voice.md#v10-browser-identity-qualification--2026-10-16).
-H2 operator pages are [owner-accepted](../docs/voice.md#h2-owner-acceptance--2026-10-16). Earlier V5/V8/V9 acceptance is retained.
+The voice gateway handles browser, desktop and Twilio connections on the control node.
+Compute runs speech recognition, speech synthesis and local inference. Capacity and model
+readiness depend on your configured profiles; inspect **Voice status** before testing.
+Telephone setup, credentials, numbers and caller access are managed in **System → Voice →
+Telephone**. Follow the [telephone guide](../docs/telephone.md) for public HTTPS routes,
+SMS registration and troubleshooting. Existing machine-file Twilio settings keep working
+until explicitly imported in the panel.
 
-The voice service runs across **k-srv (`10.77.10.42`)** and the **compute PC
-(`10.77.10.84`)**. The control node handles connections and authentication; the compute
-PC handles speech recognition, speech synthesis, and local model inference. Capacity is
-currently **two active conversations** on this installation.
+Historical deployment qualifications remain in the [voice acceptance ledger](../docs/voice.md#voice-latency-diagnostics-c06-milestone-100).
+The addresses below are placeholders for your installation.
 
 ```mermaid
 flowchart TD
@@ -17,12 +18,12 @@ flowchart TD
     Twilio["Twilio telephone call"]
 
     Desktop -->|"LAN · API key · port 8447"| Gateway
-    Browser -->|"HTTPS · Tailscale Serve :443"| Serve["k-srv.tailaf60c6.ts.net"]
+    Browser -->|"HTTPS · Tailscale Serve :443"| Serve["control.your-tailnet.ts.net"]
     Serve -->|"localhost :8446"| Gateway
-    Twilio -->|"HTTPS / WSS"| VPS["kellrondgames.com<br/>VPS Caddy :443"]
-    VPS -->|"Existing Tailscale route · :8081"| Gateway
+    Twilio -->|"HTTPS / WSS"| VPS["voice.example.com<br/>VPS Caddy :443"]
+    VPS -->|"Public-only listener · :8081"| Gateway
 
-    subgraph Control node["Control node · 10.77.10.42"]
+    subgraph ControlNode["Control node · control-node.lan"]
         Gateway["Voice gateway"]
         Turnstile["Turnstile<br/>Authentication / readiness / preparation"]
         Hermes["Optional Hermes agent"]
@@ -30,7 +31,7 @@ flowchart TD
         Gateway <--> Hermes
     end
 
-    subgraph Compute["Compute PC · 10.77.10.84"]
+    subgraph Compute["Compute PC · compute-node.lan"]
         Voice["Voice service :8445<br/>Recognition + synthesis"]
         Model["LoadCoach :8442<br/>Local language model"]
     end
@@ -139,7 +140,7 @@ See the [diagnostic contract](../docs/voice.md#voice-latency-diagnostics-c06-mil
 | Compute | 8442 | LoadCoach model API |
 | Compute | 8444 | Spotter compute/power management |
 | Compute | 8445 | Speech service |
-| Public VPS | 443 | Public Twilio HTTPS/WebSocket entry point |
+| Public HTTPS route | 443 | Reverse proxy, Tailscale Funnel or Cloudflare Tunnel |
 
 ## Key endpoints
 
@@ -148,13 +149,13 @@ service paths are on compute port 8445. The model endpoint is on LoadCoach port 
 
 | Address or path | Purpose |
 |---|---|
-| `https://k-srv.tailaf60c6.ts.net/` | Browser interface; Tailscale Serve is configured, and clients need tailnet access |
-| `http://10.77.10.42:8440/static/LoadCoach-Voice.zip` | Desktop client download |
-| `ws://10.77.10.42:8447/desktop/stream?conversation_mode=direct` | Desktop connection; Bearer API key; also accepts `hermes` |
+| `https://control.your-tailnet.ts.net/` | Browser interface; Tailscale Serve is configured, and clients need tailnet access |
+| `http://control-node.lan:8440/static/LoadCoach-Voice.zip` | Desktop client download |
+| `ws://control-node.lan:8447/desktop/stream?conversation_mode=direct` | Desktop connection; Bearer API key; also accepts `hermes` |
 | `POST /browser/sessions` | Browser sign-in and session creation |
 | `WS /browser/sessions/{sid}/stream` | Browser audio connection |
-| `POST https://kellrondgames.com/voice/inbound` | Signed Twilio inbound-call webhook |
-| `wss://kellrondgames.com/voice/stream` | Signed Twilio audio stream |
+| `POST https://voice.example.com/voice/inbound` | Signed Twilio inbound-call webhook |
+| `wss://voice.example.com/voice/stream` | Signed Twilio audio stream |
 | `GET /voice/ready` | Compute speech readiness |
 | `POST /voice/sessions` / `DELETE /voice/sessions/{sid}` | Create or close a compute voice session |
 | `WS /voice/stream?session_id=…` | Internal authenticated audio stream |

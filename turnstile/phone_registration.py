@@ -5,7 +5,7 @@ import httpx
 from starlette.responses import JSONResponse
 from turnstile.accounts import read_json, error
 from voice.telephone_admin import effective
-from voice.telephone_settings import urls
+from voice.telephone_settings import configuration
 from voice.phone_access import masked
 from voice.twilio_api import TwilioAPI, TwilioError
 
@@ -31,7 +31,7 @@ class PhoneRegistration:
         for chosen in phone['numbers']:
             for number in self.cache[2]:
                 if (number.get('phone_number') == chosen['number'] and number.get('capabilities', {}).get('sms')
-                        and number.get('voice_url') == urls(phone['public_url'])[0] and number.get('voice_method') == 'POST'):
+                        and number.get('voice_url') == configuration({'telephone': phone}, keys)['webhook_url'] and number.get('voice_method') == 'POST'):
                     return {**chosen, 'sid': number['sid']}
         raise ValueError('No connected Twilio number supports SMS. An administrator must connect an SMS-capable number on Telephone.')
 

@@ -10,8 +10,11 @@
 {{ voice_tabs('telephone') }}
 {{ said_box(said, failed) }}
 {% if voice_problem %}{% call alert('warning', role='status') %}{{ voice_problem }}{% endcall %}{% endif %}
-{{ telephone_strip(telephone_verdict) }}
-{% if telephone_data.legacy %}{% call alert('info') %}Set in the machine file. The existing Twilio configuration and signed URLs remain in force.{% endcall %}{% endif %}
+{% if not telephone_data.legacy %}{{ telephone_strip(telephone_verdict) }}{% endif %}
+{% if telephone_data.legacy %}
+{% call card('Set in the machine file') %}<p>The existing Twilio configuration and exact signed URLs remain in force. Import its account, profile and credential file references; enter the Twilio number to replace legacy catch-all routing.</p>
+<form method="post" action="/system/voice/telephone/import_legacy" data-hold-refresh><label class="form-label" for="import-number">Existing Twilio number (E.164)</label><input id="import-number" class="form-control mb-2" name="number" pattern="\+[1-9][0-9]{7,14}" required><label class="form-label" for="import-label">Label</label><input id="import-label" class="form-control mb-2" name="label" value="Legacy" maxlength="64" required><button class="btn btn-primary" {{ confirm_two('Import this number into site settings? Other destination numbers will no longer be accepted.') }}>Import to site settings</button></form>{% endcall %}
+{% endif %}
 {% if result.name %}{% call alert('success') %}Twilio account: {{ result.name }} · {{ result.status }}{% endcall %}{% endif %}
 {% if result.connected is defined %}{% call alert('success' if result.connected else 'warning') %}{{ 'Number connected to this gateway.' if result.connected else 'Twilio has not confirmed the requested Voice URL.' }}{% endcall %}{% endif %}
 {% if result.message %}{% call alert('warning', role='status') %}{{ result.message }}{% endcall %}{% endif %}
@@ -23,6 +26,13 @@
 <div class="col-md-6"><label class="form-label" for="telephone-public-port">Public port</label><input class="form-control" id="telephone-public-port" type="number" name="public_port" min="1" max="65535" value="{{ telephone_data.public_port|default(8081) }}" required><p class="small text-secondary">Port changes apply after the voice gateway restarts.</p></div></div>
 <button class="btn btn-primary">Save setup</button></form>
 {% for setting in telephone_data.settings|default([]) if setting.name == 'public_port' and setting.changed and setting.changed.value != setting.value %}<p class="small text-warning mt-2">Public port {{ setting.changed.value }} is saved; port {{ setting.value }} remains in force until the gateway restarts.</p>{% endfor %}
+{% endcall %}
+{% call card('Public route') %}
+<p>Forward public HTTPS and WebSockets to the gateway’s public port. These commands are shown for you to run; the panel does not change your network.</p>
+{% call more('Own reverse proxy · Caddy or nginx', open=true) %}<p>Replace <code>voice.example.com</code> with your domain. If the proxy runs elsewhere, replace <code>127.0.0.1</code> with the gateway’s reachable address. Forward only the public listener.</p><pre><code>{{ (telephone_data.routes|default({})).caddy|default('Route instructions are unavailable until the gateway answers.') }}</code></pre><pre><code>{{ (telephone_data.routes|default({})).nginx|default('') }}</code></pre>{% endcall %}
+{% call more('Tailscale Funnel') %}<p>{{ 'Tailscale detected.' if (telephone_data.routes|default({})).tailscale|default(false) else 'Install and sign in to Tailscale first.' }} Enable Funnel for this node under your tailnet’s policy.</p><pre><code>{{ (telephone_data.routes|default({})).funnel_command|default('tailscale funnel --bg http://127.0.0.1:8081') }}</code></pre><p>Public address: <code class="text-break">{{ (telephone_data.routes|default({})).funnel_url|default('') or 'https://node.your-tailnet.ts.net' }}</code></p>{% endcall %}
+{% call more('Cloudflare Tunnel') %}<p>{{ 'cloudflared detected.' if (telephone_data.routes|default({})).cloudflared|default(false) else 'Install cloudflared first.' }} Create a tunnel for your domain and use this ingress configuration, then run your named tunnel.</p><pre><code>{{ (telephone_data.routes|default({})).cloudflare|default('Route instructions are unavailable until the gateway answers.') }}</code></pre>{% endcall %}
+<form method="post" action="/system/voice/telephone/check_route"><button class="btn btn-outline-primary">Check from outside</button></form><p class="small text-secondary mt-2 mb-0">Sends a signed HTTPS probe through your public address. No call or compute session is started. Use simulation afterwards to check spoken audio and WebSockets. <a href="/docs/operations/telephone">Telephone guide</a></p>
 {% endcall %}
 {{ telephone_credentials(credentials) }}
 {{ telephone_activity(telephone_data.activity|default([])) }}

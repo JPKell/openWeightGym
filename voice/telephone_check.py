@@ -50,9 +50,13 @@ async def _check(args):
         form['StirVerstat'] = getattr(args, 'attestation', 'TN-Validation-Passed-A')
     stages = args.telephone_stages
     phase = time.monotonic()
-    sig = signature(token, args.public_url + "/voice/inbound", {k: [v] for k, v in form.items()})
+    webhook = getattr(args, 'webhook_url', None) or args.public_url + '/voice/inbound'
+    stream_url = (getattr(args, 'stream_url', None) or args.public_url + '/voice/stream').replace('https://', 'wss://').replace('http://', 'ws://')
+    # Local transport overrides remain useful to the CLI; signatures always use the public URL.
+    transport_webhook = webhook.replace(args.public_url, args.url, 1)
+    sig = signature(token, webhook, {k: [v] for k, v in form.items()})
     async with httpx.AsyncClient() as http:
-        reply = await http.post(args.url + "/voice/inbound", data=form, headers={"x-twilio-signature": sig})
+        reply = await http.post(transport_webhook, data=form, headers={"x-twilio-signature": sig})
         reply.raise_for_status()
     parameters = {p.attrib["name"]: p.attrib["value"] for p in ElementTree.fromstring(reply.text).findall(".//Parameter")}
     if not parameters.get('session') or not parameters.get('nonce'):
@@ -71,13 +75,18 @@ async def _check(args):
             pcm, _ = audioop.ratecv(source.readframes(source.getnframes()), 2, 1, source.getframerate(), 8000, None)
         interruption = audioop.lin2ulaw(pcm, 2)
     # Independently reproduce Twilio's URL forms instead of copying gateway normalization.
-    signing_url = args.public_url + "/voice/stream"
+    signing_url = stream_url
     if args.signature_form.startswith("wss"):
         signing_url = signing_url.replace("https://", "wss://").replace("http://", "ws://")
+    else:
+        signing_url = signing_url.replace('wss://', 'https://').replace('ws://', 'http://')
     if args.signature_form.endswith("slash"):
-        signing_url += "/"
+        from urllib.parse import urlsplit, urlunsplit
+        address = urlsplit(signing_url)
+        signing_url = urlunsplit(address._replace(path=address.path.rstrip('/') + '/'))
     signed = signature(token, signing_url, {})
-    url = args.url.replace("http://", "ws://").replace("https://", "wss://") + "/voice/stream"
+    url = stream_url.replace(args.public_url.replace('https://', 'wss://').replace('http://', 'ws://'),
+        args.url.replace('https://', 'wss://').replace('http://', 'ws://'), 1)
     received, marks, clears = [], 0, 0
     stopped_speaking, first_answer = None, None
     answer_started = None

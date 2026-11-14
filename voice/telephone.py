@@ -5,6 +5,7 @@ import base64
 import hashlib
 import hmac
 import time
+from urllib.parse import urlsplit, urlunsplit
 
 
 def signature(token: str, url: str, params: dict[str, list[str]]) -> str:
@@ -26,7 +27,8 @@ def valid_stream(token: str, stream_url: str, supplied: str) -> bool:
     """
     upgrade = stream_url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
     urls = {stream_url, upgrade}
-    return any(valid(token, url, {}, supplied) for base in urls for url in (base, base.rstrip("/") + "/"))
+    return any(valid(token, url, {}, supplied) for base in urls for url in
+        (base, urlunsplit(urlsplit(base)._replace(path=urlsplit(base).path.rstrip('/') + '/'))))
 
 
 class Conversion:

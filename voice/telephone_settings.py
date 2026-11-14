@@ -15,12 +15,17 @@ def urls(base):
     return base + '/voice/inbound', 'wss://' + base.removeprefix('https://') + '/voice/stream'
 
 
-def configuration(settings):
+def configuration(settings, keys=None):
     """An explicit site table wins; absent tables preserve legacy signed URLs exactly."""
     if 'telephone' in settings:
+        from voice.telephone_keys import TelephoneKeys
+        keys = keys or TelephoneKeys(Path(settings.get('key_file', 'keys/gateway.key')).parent)
         phone = deepcopy(settings['telephone'])
         phone['webhook_url'], phone['stream_url'] = urls(phone.get('public_url', ''))
-        phone['token_file'] = settings.get('telephone_token_file', str(Path(settings.get('key_file', 'keys/gateway.key')).parent / 'voice-twilio.key'))
+        phone['token_file'] = settings.get('telephone_token_file', str(keys.path('token')))
+        imported = keys.references()
+        if imported.get('base_url', '').rstrip('/') == phone.get('public_url', '').rstrip('/') and imported.get('account_sid') == phone.get('account_sid'):
+            phone.update({key: imported[key] for key in ('webhook_url', 'stream_url') if imported.get(key)})
         return phone
     legacy = settings.get('twilio', {})
     return {**legacy, 'enabled': bool(legacy.get('token_file')), 'legacy': bool(legacy),
@@ -83,7 +88,7 @@ def validate(phone, profiles=None, voices=None):
             raise ValueError('Choose an available voice profile.')
         if mode not in (profiles[profile].get('modes', ['direct']) if profiles is not None else ['direct', 'hermes']):
             raise ValueError('Choose a mode allowed by this profile.')
-        if not isinstance(number.get('account'), str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', number['account']):
+        if not isinstance(number.get('account'), str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}', number['account']):
             raise ValueError('Choose a phone account.')
         if not isinstance(number.get('voice', ''), str) or (number.get('voice') and not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', number['voice'])):
             raise ValueError('Choose a valid SoundRoom voice.')

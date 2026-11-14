@@ -288,7 +288,7 @@ Usage distinguishes recorded costs from estimates; advisory allowances are not h
 - [Installation](installation.md): the installer, one machine or several, system installations, pairing GPU nodes, `owg`, updating and uninstalling.
 - [Operations and release log](operations.md): runtime source overrides, host/service selection, remote tools, identity portability and every release's delivery notes. Editing the checkout alone may not update a running release.
 - [Database operations](database-storage.md): store inventory, backups, exports, restore and offline engine migration. Restore requires a maintenance window; raw credentials need separate recovery.
-- [Voice](../voice/README.md): clients, modes, addresses and supported capacity; [full specification](voice.md).
+- [Voice](../voice/README.md): clients, modes, addresses and supported capacity; [full specification](voice.md); [telephone setup](telephone.md).
 - [Benchmarks](../benchmarks/README.md): protocols, scoring, evidence and resource limits.
 - [Collections](collections.md), [workflows](workflows.md) and [allowances](allowances.md): feature limits and operating details.
 - [Plugins](../plugins/README.md): adapters and configuration; [Hermes](../plugins/hermes/README.md); [tool authoring](../toollocker/README.md).

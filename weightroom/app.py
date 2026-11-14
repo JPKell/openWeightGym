@@ -3139,7 +3139,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         from voice.telephone_settings import urls
         return page(request, 'voice_telephone.html', person, status=400 if failed else 200,
             credentials=credentials, telephone=telephone, telephone_data=data, telephone_verdict=verdict(telephone, credentials),
-            telephone_urls=urls(telephone.get('public_url', '')) if telephone.get('public_url') else ('', ''),
+            telephone_urls=data.get('planned_urls') or urls(telephone.get('public_url', '')) if telephone.get('public_url') else ('', ''),
             result=result or {}, typed_in=typed_in or {}, selected_number=request.query_params.get('number', ''),
             voice_problem=problem, said=said or request.query_params.get('said', ''), failed=failed)
 
@@ -3149,7 +3149,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         action = request.path_params['action']
         if action not in ('save_credentials', 'remove_credential', 'create_account', 'rotate_account',
                            'save_setup', 'add_number', 'save_number', 'remove_number', 'check_credentials', 'find_numbers', 'connect_number', 'simulate',
-                           'save_access', 'add_caller', 'remove_caller', 'set_pin', 'remove_pin', 'revoke_user_number'):
+                           'save_access', 'add_caller', 'remove_caller', 'set_pin', 'remove_pin', 'revoke_user_number', 'check_route', 'import_legacy'):
             return Response(status_code=404)
         form = await typed(request)
         payload = {name: form[name] for name in ('token', 'api_sid', 'api_secret', 'kind', 'label', 'account_sid', 'public_url',
@@ -3167,7 +3167,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     typed_in={key: value for key, value in form.items() if key not in ('token', 'api_sid', 'api_secret', 'pin')})
             if action in ('create_account', 'rotate_account'):
                 return go(reply.json()['url'])
-            if action in ('check_credentials', 'find_numbers', 'connect_number', 'simulate'):
+            if action in ('check_credentials', 'find_numbers', 'connect_number', 'simulate', 'check_route'):
                 return await voice_telephone_page(request, person, 'Check completed.', result=reply.json())
         except (httpx.HTTPError, ValueError, KeyError):
             return await voice_telephone_page(request, person, 'Telephone settings could not be saved. Check the gateway.', failed=True)

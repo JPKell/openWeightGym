@@ -8,7 +8,7 @@ from turnstile.accounts import error, read_json
 from loadcoach.users import hash_key
 from voice.telephone_keys import TelephoneKeys, atomic_secret
 from voice.telephone_admin import effective, edited
-from voice.telephone_settings import validate, urls
+from voice.telephone_settings import validate, urls, configuration
 from voice.twilio_api import TwilioAPI, TwilioError
 from voice.phone_access import decide
 from turnstile.phone_store import PhoneStore
@@ -59,7 +59,7 @@ class TelephoneAdmin:
                         decision['session_key'] = self.store.mint_session(account, user, form.get('caller'), bool(decision.get('registered')))
             else:
                 try:
-                    owner = self.users.by_key((self.keys.folder / (number['account'] + '.key')).read_text().strip())
+                    owner = self.users.by_key(self.keys.account_path(number['account']).read_text().strip())
                 except OSError:
                     owner = None
                 if owner is None or owner.name != number['account']:
@@ -90,7 +90,7 @@ class TelephoneAdmin:
             number_facts = {}
             for number in phone['numbers']:
                 try:
-                    account = self.users.by_key((self.keys.folder / (number['account'] + '.key')).read_text().strip())
+                    account = self.users.by_key(self.keys.account_path(number['account']).read_text().strip())
                 except OSError:
                     account = None
                 access = number.get('callers', {'mode': 'allowlist'})
@@ -110,12 +110,22 @@ class TelephoneAdmin:
         form = await read_json(request, {'action', 'token', 'api_sid', 'api_secret', 'kind', 'label', 'account',
             'account_sid', 'public_url', 'public_port', 'public_host', 'enabled', 'number', 'mode', 'profile', 'voice',
             'greeting', 'max_calls_per_hour', 'sid', 'access_mode', 'caller_number', 'caller_note', 'caller_account',
-            'accept_user_numbers', 'require_attested_caller_id', 'pin', 'refusal_greeting', 'owner', 'id'})
+            'accept_user_numbers', 'require_attested_caller_id', 'pin', 'refusal_greeting', 'owner', 'id', 'telephone'})
         if not isinstance(form, dict):
             return form
         action = form.get('action')
         try:
-            if action in ('save_setup', 'add_number', 'save_number', 'remove_number', 'save_access', 'add_caller', 'remove_caller'):
+            if action == 'save_import':
+                phone = form.get('telephone')
+                validate(phone)
+                current = effective(self.changes)
+                from voice.telephone_admin import EMPTY
+                if current != EMPTY and current != phone:
+                    return error(409, 'Telephone already uses site settings. The existing settings were preserved.')
+                self.changes.put('voice-gateway', 'telephone', phone, user.name)
+                self.log.add('telephone', 'imported', user.name)
+                return JSONResponse({'saved': True}, headers={'cache-control': 'no-store'})
+            elif action in ('save_setup', 'add_number', 'save_number', 'remove_number', 'save_access', 'add_caller', 'remove_caller'):
                 phone = edited(effective(self.changes), form)
                 validate(phone)
                 for number in phone['numbers']:
@@ -167,10 +177,11 @@ class TelephoneAdmin:
                     else:
                         if not phone.get('public_url'):
                             raise ValueError('Save the public address first.')
-                        result = await api.connect_number(form.get('sid'), urls(phone['public_url'])[0])
+                        webhook = configuration({'telephone': phone}, self.keys)['webhook_url']
+                        result = await api.connect_number(form.get('sid'), webhook)
                         for number in self.discovery.get(phone['account_sid'], []):
                             if number['sid'] == form.get('sid') and result['connected']:
-                                number.update(voice_url=urls(phone['public_url'])[0], voice_method='POST')
+                                number.update(voice_url=webhook, voice_method='POST')
                         self.log.add('telephone', action, user.name)
                 return JSONResponse(result, headers={'cache-control': 'no-store'})
             elif action == 'save_credentials':
@@ -186,7 +197,7 @@ class TelephoneAdmin:
                 if not isinstance(label, str) or not re.fullmatch(r'[a-z0-9_-]{0,50}', label):
                     raise ValueError('Use a phone account label of up to 50 lowercase letters, digits, underscores or hyphens.')
                 name = 'voice-phone' + ('-' + label if label else '')
-                key_file = self.keys.folder / (name + '.key')
+                key_file = self.keys.account_path(name)
                 if action == 'rotate_account':
                     account = self.users.by_name(name)
                     if account is None or account.group_name != 'app' or not key_file.is_file():

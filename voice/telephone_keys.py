@@ -33,7 +33,27 @@ class TelephoneKeys:
     def path(self, kind):
         if kind not in ('token', 'api'):
             raise ValueError('Choose auth token or API key.')
+        if kind == 'token' and self.references().get('token_file'):
+            return Path(self.references()['token_file'])
         return self.folder / ('voice-twilio.key' if kind == 'token' else 'voice-twilio-api.key')
+
+    def references(self):
+        try:
+            value = json.loads((self.folder / 'voice-twilio-source.json').read_text())
+            return value if isinstance(value, dict) else {}
+        except (FileNotFoundError, ValueError):
+            return {}
+
+    def import_legacy(self, legacy, base_url, account):
+        if not Path(legacy['token_file']).is_file() or not Path(legacy['key_file']).is_file():
+            raise ValueError('Restore the machine-file telephone credentials before importing.')
+        atomic_secret(self.folder / 'voice-twilio-source.json', json.dumps({
+            'token_file': str(Path(legacy['token_file']).resolve()), 'account_keys': {account: str(Path(legacy['key_file']).resolve())},
+            'base_url': base_url, 'account_sid': legacy['account_sid'],
+            'webhook_url': legacy['webhook_url'], 'stream_url': legacy['stream_url']}))
+
+    def account_path(self, account):
+        return Path(self.references().get('account_keys', {}).get(account) or self.folder / (account + '.key'))
 
     def read(self, kind):
         try:

@@ -1737,6 +1737,7 @@ finale() {
       lines+=("${C_MUTED}API         ${C_RESET}http://$HOST_ADDRESS:8442/v1")
       [[ -n $API_KEY ]] && lines+=("${C_MUTED}API key     ${C_RESET}$API_KEY  ${C_DIM}(shown once)${C_RESET}")
       [[ $TOPOLOGY == all ]] && lines+=("${C_MUTED}Models      ${C_RESET}download one under Models → HuggingFace, then add it from Files")
+      [[ ,$SERVICES, == *,voice-gateway,* ]] && lines+=("Phone calls: set up under System → Voice → Telephone")
       if [[ $TOPOLOGY == front ]]; then
         lines+=("" "${C_BOLD}Add a compute node${C_RESET}: run ${C_GOLD}owg pair${C_RESET} here, or open Settings → Compute nodes,")
         lines+=("and run the command it gives on the GPU machine.")
