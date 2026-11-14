@@ -109,7 +109,7 @@ def test_length_and_error_boundaries():
     answer, _ = request_stream(source, status=429)
     assert answer.status_code == 429 and answer.json()['error']['code'] == 'busy' and source.closed
     for source, code in [(Source([frame({'content': 'partial'})], fail=True), 'upstream_disconnected'),
-                         (Source([frame({'tool_calls': [{'id': 'call'}]})]), 'unsupported_output'),
+                         (Source([frame({'tool_calls': [{'id': 'call'}]})]), 'invalid_upstream_response'),
                          (Source([frame({'content': 'partial'}), 'data: bad\n\n']), 'invalid_upstream_response'),
                          (Source([frame({'content': 'partial'})]), 'upstream_disconnected')]:
         answer, _ = request_stream(source)

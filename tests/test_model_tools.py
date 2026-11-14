@@ -128,3 +128,16 @@ def test_hosted_entry_point_does_not_send_without_ability(rig):
     rig.users.change('pat', own={'add': ['use-tools']})
     assert rig.coach.post('/v1/chat/completions', json=body, headers=rig.keys['pat']).status_code == 200
     assert len(rig.service_calls) == 1
+
+
+def test_model_without_tool_template_refuses_chat_and_responses(fake_llama_server, tmp_path):
+    from test_weightroom import gguf
+    file = gguf(tmp_path/'plain.gguf', general__architecture='llama', llama__context_length=2048)
+    with gateway(fake_llama_server, models={'plain': {'gpus': 0, 'flags': {'model': file, 'ctx-size': 2048}}}) as caller:
+        admin = add_user(caller, 'admin', 'admin')
+        for path, body in [('/v1/chat/completions', {'model': 'plain', 'messages': [], 'tools': TOOLS}),
+                           ('/v1/responses', {'model': 'plain', 'input': 'Hi', 'store': False,
+                            'tools': [{'type': 'function', 'name': 'lookup', 'parameters': {'type': 'object', 'properties': {}}}]})]:
+            answer = caller.post(path, json=body, headers=admin)
+            assert answer.status_code == 400
+            assert answer.json()['error']['message'] == 'This model does not support tool calls.'
