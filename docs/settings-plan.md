@@ -77,6 +77,8 @@ use them as written.
 
 ### Decisions made during implementation
 
+- WeightRoom disables Uvicorn’s implicit forwarding-header rewrite and applies `trusted_proxies` before capturing client attribution. This preserves the real socket peer for sign-in policy checks and uses the same trusted client address for signed downstream attribution.
+
 - Routing and batch tunables belong to Turnstile: the control node owns both routing and durable batch execution. Queue and resident caps remain per LoadCoach node. A lower resident cap affects new placements and preserves active work, holds, locks and the existing minimum idle interval.
 
 - Security counts failures in rolling windows. A successful sign-in clears its account/address pair, while the shared address counter remains. CLI `unlock NAME` clears pairs; `--address` also clears that address’s shared counter. Legacy sessions start idle tracking at first use; API key lifetime policy affects new keys only.

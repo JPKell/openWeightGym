@@ -19,3 +19,18 @@ def client_address(peer, forwarded='', trusted=()):
         return str(hops[0])
     except (ValueError, TypeError):
         return str(peer or 'unknown')[:100]
+
+
+class ProxyAddress:
+    """Apply the machine-file trust policy before request attribution is captured."""
+
+    def __init__(self, app, trusted=()):
+        self.app, self.trusted = app, trusted
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] in ('http','websocket') and (peer := scope.get('client')):
+            headers = dict(scope.get('headers', []))
+            forwarded = headers.get(b'x-forwarded-for', b'').decode('latin-1')
+            address = client_address(peer[0],forwarded,self.trusted)
+            scope = {**scope, 'suite_socket_peer':peer[0], 'client':(address,peer[1])}
+        return await self.app(scope,receive,send)

@@ -1163,7 +1163,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         try:
             # Turnstile checks it, from the accounts on this machine. weightroom only says where the person is, for the log.
             from loadcoach.client_address import client_address
-            from_where = {"x-loadcoach-from": client_address(request.client.host if request.client else '', request.headers.get('x-forwarded-for',''),settings.trusted_proxies),
+            from_where = {"x-loadcoach-from": client_address(request.scope.get('suite_socket_peer',request.client.host if request.client else ''), request.headers.get('x-forwarded-for',''),settings.trusted_proxies),
                           'x-loadcoach-agent': request.headers.get('user-agent', '')[:300],
                           'x-loadcoach-proxy-seen':'1' if request.headers.get('x-forwarded-for') else '0'}
             answer = await ask("POST", "/loadcoach/sign-in", settings.key, json=asked, headers=from_where)
@@ -5900,6 +5900,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     app.state.alerts = alerts
     app.state.schedules, app.state.schedule_worker = schedules, schedule_worker
     app.add_middleware(ClientOrigin)
+    from loadcoach.client_address import ProxyAddress
+    app.add_middleware(ProxyAddress, trusted=settings.trusted_proxies)
     app.add_middleware(Barrier, gate=gate)
     from loadcoach.log import Log
     app.state.responses = response_store
@@ -5934,7 +5936,7 @@ def root(ctx: typer.Context, config: Annotated[Path, typer.Option(metavar="FILE"
         # Long-lived browser streams must never make a routine service restart wait
         # indefinitely. Uvicorn cancels any connection that misses this drain window.
         return uvicorn.run(build_app(settings), host=settings.host, port=settings.port,
-                           timeout_graceful_shutdown=5)
+                           timeout_graceful_shutdown=5, proxy_headers=False)
 
     @cache
     def accounts() -> tuple[None, Users, Log]:

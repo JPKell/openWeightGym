@@ -326,3 +326,34 @@ def test_old_keys_migrate_without_replacing_credentials_or_expiry(tmp_path):
         assert users.db.execute('SELECT last_seen FROM session_details WHERE key_hash=?',(hash_key('old-session'),)).fetchone()
     finally:
         users.db.close()
+
+
+@pytest.mark.parametrize('trusted,expected',[([], '127.0.0.1'),(['127.0.0.1'],'198.51.100.8')])
+def test_asgi_proxy_policy_precedes_signed_client_attribution(trusted,expected):
+    from starlette.applications import Starlette
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+    from loadcoach.client_address import ProxyAddress
+    from loadcoach.client_origin import ClientOrigin,CURRENT
+    async def inspect(request):
+        return JSONResponse({'peer':request.client.host,'socket':request.scope['suite_socket_peer'],'origin':CURRENT.get()})
+    app = ProxyAddress(ClientOrigin(Starlette(routes=[Route('/',inspect)])),trusted=trusted)
+    async def check():
+        import httpx
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app,client=('127.0.0.1',123)),base_url='http://console') as client:
+            return await client.get('/',headers={'x-forwarded-for':'203.0.113.99,198.51.100.8'})
+    answer = asyncio.run(check())
+    assert answer.json() == {'peer':expected,'socket':'127.0.0.1','origin':expected}
+
+
+def test_console_server_does_not_rewrite_socket_peers_before_trust_checks(monkeypatch):
+    import weightroom.app as service
+    from typer.testing import CliRunner
+    made = []
+    monkeypatch.setattr(service,'load_settings',lambda path:service.Settings(compute='',key='local test'))
+    monkeypatch.setattr(service,'build_app',lambda settings:object())
+    monkeypatch.setattr(service.uvicorn,'run',lambda app,**settings:made.append(settings))
+    answer = CliRunner().invoke(service.cli,[])
+    assert answer.exit_code == 0,answer.output
+    assert made[0]['proxy_headers'] is False
