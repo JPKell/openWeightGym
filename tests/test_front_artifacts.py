@@ -1,4 +1,4 @@
-"""Model-file setup and optional front storage remain usable without an inference worker."""
+"""Model-file setup and optional control node storage remain usable without an inference worker."""
 
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -27,7 +27,7 @@ def test_cold_settings_and_files_are_accessible_without_compute(desk, front_sett
         assert response.status_code == 200, (path, response.status_code, response.text[:500])
         assert 'Something went wrong' not in response.text
     files = browser.get('/files?complete=1').text
-    assert 'Set up optional front cache or storage' in files
+    assert 'Set up optional control node cache or storage' in files
     assert 'store (compute)' not in files
     settings = browser.get('/settings').text
     assert 'id="models-folder"' in settings and 'Save file locations' in settings
@@ -40,14 +40,14 @@ def test_front_locations_work_without_compute_and_persist(desk, tmp_path):
     cache, storage = tmp_path / 'front-cache', tmp_path / 'front-storage'
     saved = browser.post('/settings/model-files', data={
         'file_machine': 'front', 'models_folder': str(cache), 'models_storage_folder': str(storage)})
-    assert saved.status_code == 200 and 'Front file locations are available now' in saved.text, saved.text[saved.text.find('said-box'):][:600]
+    assert saved.status_code == 200 and 'Control node file locations are available now' in saved.text, saved.text[saved.text.find('said-box'):][:600]
     assert (cache / 'llm').is_dir() and (storage / 'image').is_dir()
-    file = gguf(storage / 'llm' / 'front-model.gguf', general__name='Front model', general__architecture='qwen')
+    file = gguf(storage / 'llm' / 'front-model.gguf', general__name='Control node model', general__architecture='qwen')
     listing = browser.get('/files?tier=storage&complete=1')
-    assert listing.status_code == 200 and 'front-model.gguf' in listing.text and 'Front model' in listing.text
+    assert listing.status_code == 200 and 'front-model.gguf' in listing.text and 'Control node model' in listing.text
     assert 'No model-file locations are available yet' not in listing.text
     detail = browser.get('/file', params={'path': file})
-    assert detail.status_code == 200 and 'Front model' in detail.text
+    assert detail.status_code == 200 and 'Control node model' in detail.text
     changed = compute.front.state.console_settings.changes.of('turnstile')
     assert changed['models_folder'] == str(cache) and changed['models_storage_folder'] == str(storage)
     sign_in(browser, 'pat')
@@ -215,7 +215,7 @@ def test_offline_node_locations_are_queued_then_delivered_only_to_that_node(desk
     cache, storage = str(tmp_path / 'node-cache'), str(tmp_path / 'node-storage')
     response = browser.post('/settings/model-files', data={
         'file_machine': 'compute', 'models_folder': cache, 'models_storage_folder': storage})
-    assert response.status_code == 200 and 'Locations saved on front' in response.text
+    assert response.status_code == 200 and 'Locations saved on the control node' in response.text
     pending = compute.front.state.console_settings.changes.of('node-files:compute')['pending']
     assert pending['locations'] == {'models_folder': cache, 'models_storage_folder': storage}
     assert compute.front.state.console_settings.changes.of('turnstile').get('models_folder', '') == ''
@@ -223,7 +223,7 @@ def test_offline_node_locations_are_queued_then_delivered_only_to_that_node(desk
     Changes(str(tmp_path / 'loadcoach.db')).seen('loadcoach', said(
         {'models_folder': '', 'models_storage_folder': ''}, {}, {}))
     response = browser.get('/settings?file_machine=compute')
-    assert response.status_code == 200 and 'Locations saved on front' not in response.text, compute.front.state.log.db.execute("SELECT what, detail FROM events WHERE kind='settings'").fetchall()
+    assert response.status_code == 200 and 'Locations saved on the control node' not in response.text, compute.front.state.log.db.execute("SELECT what, detail FROM events WHERE kind='settings'").fetchall()
     assert cache in response.text and storage in response.text
     assert not compute.front.state.console_settings.changes.of('node-files:compute')
 
@@ -304,7 +304,7 @@ def test_front_promotion_returns_before_copy_finishes_and_prevents_conflicting_a
             deleted = browser.post('/file', data={**form, 'do': 'delete', 'name': source.name})
             assert deleted.status_code == 400 and source.is_file()
             cleanup = browser.post('/files', data={'do': 'clear-cache'})
-            assert 'Wait for active front file transfers' in cleanup.text
+            assert 'Wait for active control node file transfers' in cleanup.text
         finally:
             release.set()
     deadline = time.monotonic() + 5
@@ -414,7 +414,7 @@ def test_offline_node_folder_reset_preserves_other_queued_locations(desk, tmp_pa
     browser.post('/settings/model-files', data={'file_machine': 'compute', 'models_folder': str(tmp_path / 'cache'),
                                               'models_storage_folder': storage})
     reset = browser.post('/settings/loadcoach', data={'machine': 'compute', 'reset': 'models_folder'})
-    assert reset.status_code == 200 and 'File locations are saved on front' in reset.text
+    assert reset.status_code == 200 and 'File locations are saved on the control node' in reset.text
     queued = compute.front.state.console_settings.changes.of('node-files:compute')['pending']['locations']
     assert queued == {'models_folder': None, 'models_storage_folder': storage}
     local = Changes(str(tmp_path / 'loadcoach.db'))
@@ -448,7 +448,7 @@ def test_front_downloads_use_the_existing_verified_hub_contract(desk, tmp_path):
 
 
 def test_front_downloads_never_go_into_the_cache(desk, tmp_path):
-    """With a cache alone on front, nothing is offered or accepted as a download destination."""
+    """With a cache alone on the control node, nothing is offered or accepted as a download destination."""
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, 'jordan')
@@ -468,7 +468,7 @@ def test_front_downloads_never_go_into_the_cache(desk, tmp_path):
 
 
 def test_front_civitai_search_uses_civitai_metadata_and_current_preview_policy(desk, monkeypatch, tmp_path):
-    """Front-only discovery keeps provider fields and cannot bypass the caller's preview policy."""
+    """Control-node-only discovery keeps provider fields and cannot bypass the caller's preview policy."""
     from mirrorwall import civitai
     browser, compute, _ = desk
     compute.off = True
@@ -491,7 +491,7 @@ def test_front_civitai_search_uses_civitai_metadata_and_current_preview_policy(d
     assert calls == [('style', False)]
 
     async def forged_search():
-        """Try an explicit adult flag through the same authenticated front artifact route."""
+        """Try an explicit adult flag through the same authenticated control node artifact route."""
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=compute.front), base_url='http://front:8442') as client:
             return await client.get('/turnstile/artifacts/hub?source=civitai&search=style&adult=true',
                                     headers={'authorization': 'Bearer ' + browser.cookies['weightroom']})
@@ -568,11 +568,11 @@ def test_offline_storage_setup_and_model_list_spacing_in_browser(desk, tmp_path,
         browser, page = browser_context(engine, server)
         page.set_viewport_size({'width': width, 'height': 1000})
         page.goto('http://console.test/files')
-        page.get_by_role('link', name='Set up optional front cache or storage', exact=True).click()
+        page.get_by_role('link', name='Set up optional control node cache or storage', exact=True).click()
         page.get_by_label('Active cache path', exact=True).fill(str(tmp_path / 'cache'))
         page.get_by_label('Storage library path', exact=True).fill(str(tmp_path / 'storage'))
         page.get_by_role('button', name='Save file locations', exact=True).click()
-        playwright.expect(page.locator('.said-box')).to_contain_text('Front file locations are available now')
+        playwright.expect(page.locator('.said-box')).to_contain_text('Control node file locations are available now')
         page.goto('http://console.test/files')
         page.locator('#files-places').wait_for()  # the file data comes after the page
         assert not page.get_by_text('No model-file locations are available yet.', exact=False).count()

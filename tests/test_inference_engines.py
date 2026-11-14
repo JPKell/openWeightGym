@@ -219,7 +219,7 @@ def test_disabled_engine_is_visible_to_managers_but_unavailable_for_calls(fake_l
         assert caller.get("/loadcoach/flags", headers=owner).status_code == 503
         response = caller.post("/v1/chat/completions", headers=owner, json={"model": "example"})
         # Disabled locations leave the caller-visible catalogue, preserving the usual
-        # not-found response rather than leaking an unavailable model through front.
+        # not-found response rather than leaking an unavailable model through the control node.
         assert response.status_code == 404
         assert caller.get("/loadcoach/status", headers=owner).json()["loaded"] == []
 

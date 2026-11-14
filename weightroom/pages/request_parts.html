@@ -17,7 +17,7 @@
 <tr data-record data-request-id="{{ row.id }}">
 <td data-value="{{ row.id }}">{% if row.can_open|default(true) %}<a data-open href="/requests/{{ row.id }}" class="rq-id">#{{ row.id }}</a>{% else %}#{{ row.id }}{% endif %}<small data-field="at" class="d-block text-secondary when">{{ row.at|timestamp }}</small></td>
 <td>{{ status_badge(row.outcome, row.state, row.server_error, attrs={'data-field':'state'}) }}</td><td data-field="level">{{ security_badge(row.level) }}</td>
-<td><span data-field="model" class="fw-medium">{{ row.model or '—' }}</span><small data-field="node" class="d-block text-secondary">{{ row.node|default('front') }}</small></td>
+<td><span data-field="model" class="fw-medium">{{ row.model or '—' }}</span><small data-field="node" class="d-block text-secondary">{{ (row.node|default('front'))|node_label }}</small></td>
 <td><span data-field="user">{{ row.user }}</span><small data-field="caller" class="d-block text-secondary">{{ row.caller or '—' }}</small></td>
 <td data-field="total" class="rq-number" data-value="{{ row.compute_total if row.compute_total is number else row.duration if row.duration is number else '' }}">{{ seconds(row.compute_total if row.compute_total is number else row.duration) }}{% if row.compute_total is not number and row.duration is number %}<small class="d-block text-secondary">event timestamps</small>{% endif %}</td>
 <td data-field="waited" class="rq-number" data-value="{{ row.queue_seconds if row.queue_seconds is number else '' }}">{{ seconds(row.queue_seconds) }}</td><td data-field="ttft" class="rq-number" data-value="{{ row.first_output_seconds if row.first_output_seconds is number else '' }}">{{ seconds(row.first_output_seconds) }}</td>

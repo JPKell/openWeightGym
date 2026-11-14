@@ -1,6 +1,6 @@
 """Durable external tasks and scoped access to model probes.
 
-A client owns its work plan and results. With front task ownership enabled, Turnstile retains
+A client owns its work plan and results. With control node task ownership enabled, Turnstile retains
 durable task state and LoadCoach executes signed scoped probes; legacy installations retain a
 local one-item batch. Compute checks current permissions and exposes one isolated probe at a time.
 Task tokens only authorise their own task; they are never accepted as general API keys.
@@ -47,7 +47,7 @@ class Tasks:
         """Bind durable task storage, native probes and current account authorization."""
         self.batches, self.runner, self.users, self.who, self.log = batches, runner, users, who, log
         self.on_result = on_result
-        self.dispatched = {}  # work the front keeps records for: in memory only here, never a compute batch
+        self.dispatched = {}  # work the control node keeps records for: in memory only here, never a compute batch
         self.front_kept = {}  # permission snapshot while the same probe server is kept
         self.receipts = {}  # bounded completed probe receipts, indexed by task/attempt
         if batches.db is not None:
@@ -168,7 +168,7 @@ class Tasks:
     async def create(self, request, user=None):
         """Create an idempotent, one-item batch for an external tool under the caller's identity."""
         if self.batches.db is None:
-            return error(410, 'The front keeps benchmark tasks for this node; submit them through turnstile.')
+            return error(410, 'The control node keeps benchmark tasks for this node; submit them through turnstile.')
         user = await self.who(request) if user is None else user
         if isinstance(user, Response):
             return user
@@ -219,7 +219,7 @@ class Tasks:
         task = await self.authenticate(request)
         if isinstance(task, Response):
             return task
-        await self.users.fresh()  # the owner's permissions as they are now, from front
+        await self.users.fresh()  # the owner's permissions as they are now, from the control node
         task['allowed'] = self.allowed(task['id'])
         task['current_fingerprint'] = self.runner.models.fingerprint(self.runner.models.get(task['model']), task['model'])
         try:
@@ -237,7 +237,7 @@ class Tasks:
         return await self.run_probe(request, task)
 
     async def run_probe(self, request, task, body=None):
-        """Common native validation/admission for legacy and signed front-dispatched probes."""
+        """Common native validation/admission for legacy and signed control-node-dispatched probes."""
         if not self.allowed(task['id']):
             return error(403, 'The task ended or its owner no longer has model-measurement permission.')
         try:
@@ -313,10 +313,10 @@ class Tasks:
             return error(400, str(problem))
 
     async def dispatch(self, request):
-        """A body-bound front capability for exactly one probe, never a durable compute task."""
+        """A body-bound control node capability for exactly one probe, never a durable compute task."""
         said = getattr(request.state, 'said', {})
         if said.get('purpose') != 'front-probe' or not said.get('caller'):
-            return error(403, 'Only front may dispatch its validated task probes.')
+            return error(403, 'Only control node may dispatch its validated task probes.')
         user = await self.who(request)
         if isinstance(user, Response):
             return user
@@ -376,13 +376,13 @@ class Tasks:
         """Interrupt an active scoped probe and await cleanup."""
         said = getattr(request.state, 'said', {})
         if said.get('purpose') != 'front-probe' or not said.get('caller'):
-            return error(403, 'Only front may interrupt its task probes.')
+            return error(403, 'Only control node may interrupt its task probes.')
         user = await self.who(request)
         if isinstance(user, Response):
             return user
         number = request.path_params['number']
         task = self.dispatched.get(number)
-        # A kept server has no running dispatch; front signed this owner-checked control.
+        # A kept server has no running dispatch; control node signed this owner-checked control.
         if task and task['subject'].get('owner_id') != user.identity:
             return error(403, 'This is another account\'s task.')
         await self.probes.drop_kept(number)
@@ -405,7 +405,7 @@ class Tasks:
                 raise ValueError('Choose completed, failed or cancelled.')
             await self.probes.drop_kept(task['id'])
             await self.users.fresh()
-            evidence = None  # for turnstile, which keeps role evidence on the front machine
+            evidence = None  # for turnstile, which keeps role evidence on the control node
             if self.on_result and state == 'completed' and task['status'] in ('in_progress', 'completed') and body.get('role_evidence') is not None:
                 evidence = self.on_result(task, body['role_evidence'])
             if task['status'] in ('in_progress','cancelling'):

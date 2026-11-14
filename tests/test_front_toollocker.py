@@ -1,4 +1,4 @@
-"""Front ToolLocker ownership with compute unavailable and existing signed MCP clients."""
+"""Control node ToolLocker ownership with compute unavailable and existing signed MCP clients."""
 
 import json
 import subprocess
@@ -35,7 +35,7 @@ def test_installer_generated_gateway_lists_and_calls_tools_without_compute(tmp_p
     shared = tmp_path / 'data/shared'
     shared.mkdir(parents=True)
     sample = shared / 'example.txt'
-    sample.write_text('front tool works with compute offline')
+    sample.write_text('control node tool works with compute offline')
     sample.chmod(0o644)
     for name in ('weightroom', 'toollocker'):
         values = {} if topology == 'keep' else support.topology_values(
@@ -55,7 +55,7 @@ def test_installer_generated_gateway_lists_and_calls_tools_without_compute(tmp_p
         assert {tool['name'] for tool in listed.json()['result']['tools']} == {'files__list_folder', 'files__read_file'}
         call = {'id': 2, 'method': 'tools/call', 'params': {'name': 'files__read_file', 'arguments': {'file': str(sample)}}}
         response = client.post('/mcp', headers=headers, json=call)
-        assert 'front tool works with compute offline' in response.json()['result']['content'][0]['text']
+        assert 'control node tool works with compute offline' in response.json()['result']['content'][0]['text']
         assert client.post('/mcp', headers={'authorization': 'Bearer invalid'}, json=call).status_code == 401
     users.db.close()
     assert not (settings / 'loadcoach.toml').exists() and not (tmp_path / 'data/loadcoach.db').exists()
@@ -110,9 +110,9 @@ def test_front_tools_survive_compute_loss_with_permissions_settings_and_chain(tm
         assert 'error' in client.post('/mcp', headers=plain, json=hidden).json()
         tools = client.get('/loadcoach/tools', headers=owner)
         assert tools.status_code == 200 and len(tools.json()['tools']) == 5
-        # Front's report includes ToolLocker even when compute cannot answer.
+        # Control node's report includes ToolLocker even when compute cannot answer.
         listed = client.get('/loadcoach/settings', headers=owner)
-        # This is front's own settings catalogue; it does not probe compute.
+        # This is the control node's own settings catalogue; it does not probe compute.
         assert listed.status_code == 200 and listed.json()['compute_unavailable'] is False
         assert any(p['program'] == 'toollocker' for p in listed.json()['programs'])
         assert client.post('/loadcoach/settings/toollocker', headers=owner, json={'call_timeout': 41}).status_code == 200
@@ -129,7 +129,7 @@ def test_front_tools_survive_compute_loss_with_permissions_settings_and_chain(tm
 
 def test_front_tool_route_targets_front_and_never_wakes_compute(tmp_path):
     key = tmp_path / 'machine.key'
-    key.write_text('the front signing key')
+    key.write_text('the control node signing key')
     users = Users(tmp_path / 'accounts.db', {'plain': Group()})
     users.add('caller', 'plain')
     headers = {'authorization': 'Bearer ' + users.new_key('caller')}
@@ -146,7 +146,7 @@ def test_front_tool_route_targets_front_and_never_wakes_compute(tmp_path):
     with TestClient(front, base_url='http://front:8443') as client:
         response = client.post('/mcp', headers=headers, json={'id': 1, 'method': 'ping'})
         assert response.status_code == 503 and response.headers['retry-after']
-        assert 'Front ToolLocker' in response.text
+        assert 'Control node ToolLocker' in response.text
     assert targets == ['http://127.0.0.1:9443/mcp'] and not wakes
 
 
@@ -177,7 +177,7 @@ def test_stale_compute_gateway_cannot_restart_after_relocation(tmp_path):
     (tmp_path / 'loadcoach.toml').write_text('toollocker_runs_on_front = true\ndata = "."\n')
     config = tmp_path / 'toollocker.toml'
     config.write_text('port = 8443\n')
-    with pytest.raises(SystemExit, match='ToolLocker moved to front'):
+    with pytest.raises(SystemExit, match='ToolLocker moved to the control node'):
         load_config(config)
 
 

@@ -7,7 +7,7 @@
 {% call page_header(model.name, 'Review this model and its settings on ' ~ selected_node ~ '.') %}<a class="btn btn-primary" href="{{ '/models/images' if model.engine == 'sdcpp' else '/models/audio' }}?node={{ selected_node|urlencode }}&model={{ model.name|urlencode }}">Edit settings</a>{% endcall %}
 {{ said_box(said, failed) }}
 {% call card('Settings', true) %}
-<nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Configure node"><span class="text-secondary">Viewing {{ selected_node }}</span>{% for location in model.locations|default([]) %}<a class="btn btn-sm btn-outline-secondary" href="/models/{{ location.name|urlencode }}?node={{ location.machine|urlencode }}">{{ location.machine }}</a>{% endfor %}</nav>
+<nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Configure node"><span class="text-secondary">Viewing {{ (selected_node)|node_label }}</span>{% for location in model.locations|default([]) %}<a class="btn btn-sm btn-outline-secondary" href="/models/{{ location.name|urlencode }}?node={{ location.machine|urlencode }}">{{ location.machine }}</a>{% endfor %}</nav>
 {% set profile = model_profile|default(model[model.engine]) %}
 <div class="row g-3">
 {% call form_section('Model', 'All nodes') %}<div class="col-md-6"><span class="form-label">Family</span><p>{{ profile.family }}</p>{% if profile.kind %}<span class="form-label">Kind</span><p>{{ profile.kind|capitalize }}</p>{% endif %}</div><div class="col-md-6 wrap"><span class="form-label">File</span><p>{{ model.flags.model }}</p></div>

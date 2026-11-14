@@ -1,4 +1,4 @@
-"""Task records kept on the front, through real signed front/node ASGI boundaries."""
+"""Task records kept on the control node, through real signed front/node ASGI boundaries."""
 
 import asyncio
 import hashlib
@@ -31,7 +31,7 @@ def retire(path):
 
 
 def task_gateway(fake_llama_server, fake_cards, tmp_path, stateless=False):
-    """A front and one node. `stateless`: the node's store is retired, so it keeps no records of its own."""
+    """A control node and one node. `stateless`: the node's store is retired, so it keeps no records of its own."""
     gguf('small.gguf', general__architecture='tiny', tiny__context_length=2048)
     if stateless and not (tmp_path / 'compute.db').exists():
         retire(tmp_path / 'compute.db')
@@ -40,7 +40,7 @@ def task_gateway(fake_llama_server, fake_cards, tmp_path, stateless=False):
 
 
 def legacy_task(caller, name):
-    """A task the node created and keeps itself, as nodes did before the front kept every task record."""
+    """A task the node created and keeps itself, as nodes did before the control node kept every task record."""
     import httpx
     from front_helpers import KEY
     from loadcoach import statement
@@ -93,9 +93,9 @@ def test_retired_node_api_and_cli_cannot_read_or_reset_console_settings(fake_lla
         caller.portal.call(rejected)
         settings_command(changes, excluded=FRONT_PROGRAMS)
         output = capsys.readouterr().out
-        assert 'UTC' not in output and 'managed on front' in output
+        assert 'UTC' not in output and 'managed on the control node' in output
         import pytest
-        with pytest.raises(ValueError, match='The front keeps'):
+        with pytest.raises(ValueError, match='The control node keeps'):
             settings_command(changes, 'reset', 'weightroom', 'timezone', excluded=FRONT_PROGRAMS)
         assert changes.of('weightroom') == {'timezone': 'UTC'}
         changes.db.close()
@@ -463,7 +463,7 @@ def test_terminal_legacy_import_deduplicates_lists_and_recreated_username_cannot
     with task_gateway(fake_llama_server, fake_cards, tmp_path) as caller:
         owner = add_user(caller, 'owner', 'admin')
         manager = add_user(caller, 'manager', 'admin', by=owner)
-        intent = legacy_task(caller, 'owner')  # kept on the node, from before the front kept every task
+        intent = legacy_task(caller, 'owner')  # kept on the node, from before the control node kept every task
         path = '/loadcoach/tasks/' + intent['id']
         scoped = {'x-loadcoach-task': intent['token']}
         assert caller.post(path + '/finish', headers=scoped, json={'state': 'completed', 'result': {'ok': True}}).status_code == 200

@@ -80,7 +80,7 @@ def test_the_settings_page_makes_a_new_key_for_someone_who_may(desk):
     assert "Last rotated" in page and 'name="rotation_days"' in page
     assert "every 14 days" in browser.post("/compute-nodes/machine-key/schedule", data={"machine": "compute", "rotation_days": "14"}).text
     made = browser.post("/compute-nodes/machine-key", data={"machine": "compute"})
-    assert made.status_code == 200 and "A new machine key is in use on front and compute." in made.text
+    assert made.status_code == 200 and "A new machine key is in use on the control node and compute." in made.text
 
 
 def test_the_key_is_set_by_hand_and_an_emergency_answers_anyone_here_and_keeps_no_log(fake_llama_server, tmp_path, monkeypatch):

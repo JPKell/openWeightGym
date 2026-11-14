@@ -90,6 +90,8 @@ def samples():
 def render():
     """Render portable request proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
+    from weightroom.display import node_label
+    pages.filters['node_label'] = node_label
     pages.filters['timestamp'] = str
     static = ROOT / 'weightroom/static'
     return pages.get_template('request_designs.html').render(

@@ -60,7 +60,7 @@
       $('detail-id').textContent = `Line ${row.index + 1}`;
       $('detail-message').textContent = row.message;
       $('detail-at').textContent = row.epoch === null ? 'Not recorded' : fullTime.format(new Date(row.epoch * 1000));
-      $('detail-node').textContent = row.node; $('detail-source').textContent = row.source;
+      $('detail-node').textContent = window.suiteNodeLabel(row.node); $('detail-source').textContent = row.source;
       $('detail-raw').textContent = row.raw;
       $('around-entry').disabled = row.epoch === null || root.dataset.offline === 'true';
       const chronological = [...entries].sort((a,b) => {
@@ -88,9 +88,9 @@
         field('time').textContent = clockText(row);
         if (row.at) field('time').dateTime = row.at;
         setLevel(field('level'),row.level);
-        field('node').textContent = row.node; field('source').textContent = row.source;
+        field('node').textContent = window.suiteNodeLabel(row.node); field('source').textContent = row.source;
         highlight(field('message'),row.message);
-        button.setAttribute('aria-label',`${clockText(row)}, ${levelText(row.level)}, ${row.source} on ${row.node}: ${row.message}`);
+        button.setAttribute('aria-label',`${clockText(row)}, ${levelText(row.level)}, ${row.source} on ${window.suiteNodeLabel(row.node)}: ${row.message}`);
         const tr = document.createElement('tr'), td = document.createElement('td');
         tr.dataset.filterText = row.raw; td.append(button); tr.append(td); body.append(tr);
       });

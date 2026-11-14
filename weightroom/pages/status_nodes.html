@@ -6,7 +6,7 @@
       {% for node in nodes %}
       <section class="list-group-item" aria-label="{{ node.name }} capacity" data-status-node="{{ node.name }}" data-status-live="{{ 'true' if node.status_live and node.state == 'ready' else 'false' }}" data-status-search="{{ node.status_search }}">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
-          <div><strong>{{ node.name }}</strong>{{ node_work(node) }}{% if node.hostname and node.hostname != node.name %}<small class="text-secondary ms-2">{{ node.hostname }}</small>{% endif %}</div>
+          <div><strong>{{ (node.name)|node_label }}</strong>{{ node_work(node) }}{% if node.hostname and node.hostname != node.name %}<small class="text-secondary ms-2">{{ node.hostname }}</small>{% endif %}</div>
           <span class="badge text-bg-{{ 'success' if node.state == 'ready' and node.status_live else 'secondary' }}">{{ 'ready' if node.state == 'ready' and node.status_live else 'unavailable' }}</span>
         </div>
         {% if node.state == 'ready' and node.status_live %}
@@ -40,7 +40,7 @@
           </div>
         {% else %}<span class="text-secondary small">Capacity and loaded models are unavailable while this compute node is not answering.</span>{% endif %}
       </section>
-      {% else %}<div class="list-group-item text-secondary">No compute nodes have reported to front yet.</div>{% endfor %}
+      {% else %}<div class="list-group-item text-secondary">No compute nodes have reported to the control node yet.</div>{% endfor %}
     </div>
   {% endcall %}
   {% call card("Loaded models", body=false, class_="mb-0 status-lock-column") %}
@@ -50,7 +50,7 @@
           <thead><tr><th scope="col">Model</th><th scope="col">Device</th><th scope="col">VRAM</th><th scope="col">RAM · RSS</th><th scope="col">Work</th><th scope="col" class="text-end">Lock</th></tr></thead>
           {% for node in nodes %}
           <tbody data-status-search="{{ node.status_search }}">
-            <tr><th colspan="6" scope="rowgroup" class="pt-2 pb-1 border-top fw-semibold">{{ node.name }}{{ node_work(node) }}{% if node.hostname and node.hostname != node.name %} <small class="text-secondary fw-normal">{{ node.hostname }}</small>{% endif %}</th></tr>
+            <tr><th colspan="6" scope="rowgroup" class="pt-2 pb-1 border-top fw-semibold">{{ (node.name)|node_label }}{{ node_work(node) }}{% if node.hostname and node.hostname != node.name %} <small class="text-secondary fw-normal">{{ node.hostname }}</small>{% endif %}</th></tr>
             {% if node.state == 'ready' and node.status_live %}
               {% for model in node.loaded %}
               <tr><td>{% if now and 'manage-models' in person.can %}<a href="{{ address(model.model) }}">{{ model.model }}</a>{% else %}{{ model.model }}{% endif %}{% if model.state != 'ready' %} <small class="text-secondary">{{ model.state }}</small>{% endif %}</td>
@@ -61,10 +61,10 @@
               {% else %}{% call empty_row(6) %}No models are loaded.{% endcall %}{% endfor %}
             {% else %}{% call empty_row(6) %}Loaded models unavailable.{% endcall %}{% endif %}
           </tbody>
-          {% else %}<tbody>{% call empty_row(6) %}No compute nodes have reported to front yet.{% endcall %}</tbody>{% endfor %}
+          {% else %}<tbody>{% call empty_row(6) %}No compute nodes have reported to the control node yet.{% endcall %}</tbody>{% endfor %}
         </table>
       </div>
-      {% for node in nodes if node.state == 'ready' and node.status_live and node.lock %}<div class="list-group-item small">{{ node.name }} GPUs are held by <b>{{ node.lock.user }}</b> from {{ node.lock.caller }}, {{ node.lock.seconds_left|round|int }} s left{{ ", turning others away" if node.lock.refuse }}.</div>{% endfor %}
+      {% for node in nodes if node.state == 'ready' and node.status_live and node.lock %}<div class="list-group-item small">{{ (node.name)|node_label }} GPUs are held by <b>{{ node.lock.user }}</b> from {{ node.lock.caller }}, {{ node.lock.seconds_left|round|int }} s left{{ ", turning others away" if node.lock.refuse }}.</div>{% endfor %}
       {% if not nodes|selectattr('lock')|list %}<div class="list-group-item small text-secondary">No GPUs are reserved exclusively.</div>{% endif %}
       {% if seen %}{% set others = (seen.others_running or 0) + (seen.others_waiting or 0) + (seen.others_hosted or 0) %}{% if others %}<div class="list-group-item">{{ others }} request{{ "" if others == 1 else "s" }} by other people across the nodes; their details are private.</div>{% endif %}{% endif %}
     </div>

@@ -27,7 +27,7 @@ from weightroom.app import Settings, build_app
 # ---- what the page offers, worked out from a listing ------------------------------------------
 
 def listing(**nodes):
-    """A file inventory as turnstile gives it: front as the store, with a cache and storage, and `nodes`."""
+    """A file inventory as turnstile gives it: control node as the store, with a cache and storage, and `nodes`."""
     front_places = [{"name": "llm", "folder": "/f/cache/llm", "tier": "cache", "free": 100 * SPARE, "filesystem": "c"},
                     {"name": "storage_llm", "folder": "/f/storage/llm", "tier": "storage", "free": 100 * SPARE, "filesystem": "s"}]
     made = [{"name": "front", "answering": True, "places": front_places, "files": nodes.pop("front", [])}]
@@ -128,13 +128,13 @@ def test_one_folder_for_cache_and_storage_is_shared_and_its_cache_box_is_its_sto
     assert row["stored"] and set(row["copies"]) == {"storage", "cache"}
 
 
-# ---- the whole way round: a page, a bulk change, and the files on front and a node -------------
+# ---- the whole way round: a page, a bulk change, and the files on the control node and a node -------------
 
 @pytest.fixture
 def library_desk(tmp_path, monkeypatch):
-    """weightroom and turnstile with front cache and storage, and a compute node whose spotter receives files.
+    """weightroom and turnstile with the control node cache and storage, and a compute node whose spotter receives files.
 
-    Yields the browser, the switch to the node, front's cache and storage, and the node's cache.
+    Yields the browser, the switch to the node, the control node's cache and storage, and the node's cache.
     """
     monkeypatch.setattr("weightroom.app.LOOK_EVERY", 0.05)
     (tmp_path / "data").mkdir()
@@ -160,7 +160,7 @@ def library_desk(tmp_path, monkeypatch):
         cache, storage = tmp_path / "cache", tmp_path / "storage"
         saved = browser.post("/settings/model-files", data={"file_machine": "front", "models_folder": str(cache),
                                                             "models_storage_folder": str(storage)})
-        assert "Front file locations are available now" in saved.text
+        assert "Control node file locations are available now" in saved.text
         yield browser, compute, cache, storage, node
 
 
@@ -252,13 +252,13 @@ def test_one_folder_for_cache_and_storage(desk, tmp_path):
     sign_in(browser, "jordan")
     one = tmp_path / "models"
     saved = browser.post("/settings/model-files", data={"file_machine": "front", "models_folder": str(one), "models_storage_folder": str(one)})
-    assert saved.status_code == 200 and "Front file locations are available now" in saved.text
+    assert saved.status_code == 200 and "Control node file locations are available now" in saved.text
     model = Path(gguf(one / "llm" / "both.gguf", general__name="Both", general__architecture="tiny"))
     browser.post("/files", data={"do": "refresh-files", "back": "/files?tier=storage"})
 
     page = browser.get("/files?tier=storage&complete=1").text
     places = page.split('id="files-places"', 1)[1].split('<nav class="nav nav-pills', 1)[0]
-    assert 'aria-label="Storage and cache"' in places and 'aria-label="Front cache"' not in places and 'aria-label="Storage"' not in places
+    assert 'aria-label="Storage and cache"' in places and 'aria-label="Control node cache"' not in places and 'aria-label="Storage"' not in places
     shown = boxes(page)
     assert shown["both.gguf in Storage"]["ticked"] and not any(" in Cache" in name for name in shown)  # listed once, no cache of its own
     assert browser.get("/files?tier=cache&complete=1").text.count("both.gguf</a>") == 1

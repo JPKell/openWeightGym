@@ -701,7 +701,7 @@ def prepare_voice(root: Path, services: list[str], install_models=None) -> int:
             gateway = root / "settings/voice-gateway.toml"
             gateway_settings = tomllib.loads(gateway.read_text())
             service_identity(config, "voice-gateway", "system", path_from(gateway.parent, gateway_settings["key_file"]),
-                             ("app-sign-in", "load", "front-voice"))
+                             ("app-sign-in", "load", "front-voice", "front-phone"))
             service_identity(config, "voice-browser", "app", path_from(gateway.parent, gateway_settings["browser_key_file"]), ("front-voice",))
     if "voice" not in services:
         return 0

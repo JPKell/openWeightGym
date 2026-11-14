@@ -10,13 +10,13 @@
 <div class="mb-3" id="status-search-control" hx-preserve><label for="status-search" class="visually-hidden">Find requests and nodes</label><input id="status-search" class="form-control form-control-sm" type="search" placeholder="Find a request, model, user or node…"></div>
 {% include 'current_requests.html' %}
 {% if not now and not nodes %}
-{% call alert('warning', class_='said') %}Live node status is unavailable. Front-held history remains available; check Compute nodes for connectivity.{% endcall %}
+{% call alert('warning', class_='said') %}Live node status is unavailable. Control-node-held history remains available; check Compute nodes for connectivity.{% endcall %}
 {% endif %}
 
 {% for node in nodes if node.state == 'ready' and node.status_live and (node.draining or (nodes|length == 1 and seen and seen.draining)) %}
 {% call alert('warning', class_='d-flex flex-wrap align-items-center gap-2', tag='form', attrs={'method': 'post', 'action': '/control'}) %}
   <input type="hidden" name="machine" value="{{ node.name }}"{% if node.state != 'ready' or not node.status_live %} disabled{% endif %}>
-  <span class="flex-grow-1"><b>No new requests are taken by {{ node.name }}.</b>
+  <span class="flex-grow-1"><b>No new requests are taken by {{ (node.name)|node_label }}.</b>
     {% if nodes|length == 1 and seen and seen.draining %}Since {{ seen.draining.since|timestamp }}, asked by {{ seen.draining.by }}: {{ seen.draining.why }}. {{ seen.busy }} still here.{% endif %}</span>
   {% if "drain" in person.can %}<button class="btn btn-outline-secondary btn-sm" name="do" value="open">Take requests again</button>{% endif %}
 {% endcall %}
@@ -29,7 +29,7 @@
   <form method="post" action="/control" {{ confirm_two() }} class="d-flex flex-wrap align-items-center justify-content-end gap-2" data-hold-refresh>
     <label for="status-control-machine" class="visually-hidden">Compute node</label>
     <select id="status-control-machine" name="machine" class="form-select form-select-sm status-node-select" aria-label="Compute node for status control" required>
-      {% for node in nodes %}<option value="{{ node.name }}"{% if node.state != 'ready' or not node.status_live %} disabled{% endif %}>{{ node.name }}{% if node.state != 'ready' or not node.status_live %} (unavailable){% endif %}</option>{% endfor %}
+      {% for node in nodes %}<option value="{{ node.name }}"{% if node.state != 'ready' or not node.status_live %} disabled{% endif %}>{{ (node.name)|node_label }}{% if node.state != 'ready' or not node.status_live %} (unavailable){% endif %}</option>{% endfor %}
     </select>
     {% if 'drain' in person.can %}<div class="input-group input-group-sm status-drain-group"><input name="why" class="form-control" maxlength="200" placeholder="Reason" aria-label="Reason to take no requests"><button class="btn btn-outline-primary" name="do" value="drain">Pause intake</button></div>{% endif %}
     {% if 'clear-line' in person.can %}<button class="btn btn-outline-danger btn-sm" name="do" value="clear">Clear queue</button>{% endif %}

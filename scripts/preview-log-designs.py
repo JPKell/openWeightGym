@@ -73,6 +73,8 @@ def sample_data():
 def render():
     """Render portable log proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
+    from weightroom.display import node_label
+    pages.filters['node_label'] = node_label
     pages.filters['timestamp'] = timestamp
     static = ROOT / 'weightroom/static'
     data = sample_data()

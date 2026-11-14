@@ -4,13 +4,14 @@ Written **2026-11-13** for the agent implementing it, after an interview with th
 same day. Overview and rationale: [openai-api-plan.md](openai-api-plan.md). This brief covers
 **R1, R3, R4, W1, T1 and K1**.
 
-**Not in scope. Do not start these:**
-- Any tool work: Responses `tools`, `tool_choice`, `function_call` items, MCP tools, the
-  `define-tools` ability (R2a/R2b). The owner is still reviewing them.
+**Not in this brief:**
+- **Tool work** (the `use-tools` ability, function and MCP tools in Responses, Tool chat) is
+  specified separately in [openai-tools-work.md](openai-tools-work.md). Do it only if the owner
+  sends you that brief. Until then, keep refusing tool parameters in Responses exactly as today.
+  Build R1's shared response builder and R3's stored items so the tools brief can add tool
+  output items without restructuring them.
 - `/v1/moderations`: awaiting the owner's decision.
 - Everything listed as out of scope in the plan.
-
-Keep refusing tool parameters exactly as today.
 
 ## Owner decisions (2026-11-13)
 
@@ -31,7 +32,7 @@ Keep refusing tool parameters exactly as today.
 
 - Read [AGENTS.md](../AGENTS.md). Its Web UI rules and template index apply to the stored-responses
   page, W1's engine UI and K1's model-type UI. Its deployment rules apply throughout.
-- **Do not deploy** unless the owner asks. When asked, use `owg update; owg restart` on the front
+- **Do not deploy** unless the owner asks. When asked, use `owg update; owg restart` on the control node
   (`ssh 192.168.1.10 '~/.local/bin/owg --plain --yes update; ~/.local/bin/owg --plain --yes restart'`)
   and on each affected node, then verify live behaviour.
 - **Model downloads and model setup** for the rerankers on box-main are approved. Installing a
@@ -69,7 +70,6 @@ Keep refusing tool parameters exactly as today.
 
 **Implemented 2026-11-14:** shared streamed/non-streamed output builder, reasoning/refusal events, final usage, failure boundaries and disconnect cleanup. Real Qwen3.6 chat capture: request `1810895650947769`, fixture `tests/fixtures/responses/qwen3.6-35b-a3b-q4.sse` (length termination). Native usage omits a separate reasoning-token count; supplied counts are preserved without estimating.
 
-
 **Today:** `chat_request` refuses `stream:true`, and `create` makes a single non-streaming
 `door.post`.
 
@@ -101,7 +101,7 @@ Keep refusing tool parameters exactly as today.
     Do not deploy to test this.
 - A `refusal` delta becomes a `refusal` content part (`response.refusal.delta`/`.done`).
 - If the upstream returns a tool call, end with `response.failed`, code `unsupported_output`,
-  just as the non-streaming path refuses it now.
+  just as the non-streaming path refuses it now. (TB in the tools brief later replaces this with `function_call` items.)
 - **Errors:**
   - Before the first byte, return the ordinary JSON error with its upstream status.
   - Mid-stream, emit `error` then `response.failed`, and close.
@@ -126,10 +126,9 @@ Keep refusing tool parameters exactly as today.
 
 **Implemented 2026-11-14:** default storage, private lifecycle and stable input-item paging, same-owner chains, live retention, quota checks, account cleanup and the Responses console ledger. Metadata stays unsupported. SQLite/PostgreSQL backups and verified transfer include the accounts-bound `turnstile.responses` schema; browser layout checks cover both widths and themes.
 
-
 ### Storage
 
-- A new front-owned store following
+- A new control-node-owned store following
   [weightroom/extraction_store.py](../weightroom/extraction_store.py). Register its migration in
   [db/schemas.py](../db/schemas.py) `STREAMS`, named to match where Turnstile keeps similar state,
   using portable SQLite/PostgreSQL SQL.
@@ -194,7 +193,7 @@ whichever you choose.
 - **Route** `/responses` with detail `/responses/{id}`. Add it to
   [weightroom/navigation.py](../weightroom/navigation.py) in `Logs` → `Model activity`, after
   Requests and Batches.
-- **Data** comes from new front-side list/detail functions on the store. Do not add a new public
+- **Data** comes from new control-node-side list/detail functions on the store. Do not add a new public
   API for listing; keep the list to the console. The list is scoped like Requests:
   - the caller's own responses by default;
   - with `see-log`, everyone's within the caller's clearance, with a user filter using the shared
@@ -241,7 +240,7 @@ whichever you choose.
 
 ## R4. Responses in batches
 
-**Implemented 2026-11-14:** stateless Responses lines run through the existing front adapter and admission path. Mixed chat/Responses files retain each line’s endpoint across restart and verified SQLite/PostgreSQL transfer. Stream parameters, storage and chains fail per line.
+**Implemented 2026-11-14:** stateless Responses lines run through the existing control node adapter and admission path. Mixed chat/Responses files retain each line’s endpoint across restart and verified SQLite/PostgreSQL transfer. Stream parameters, storage and chains fail per line.
 
 **Build:**
 - Add `/v1/responses` to `ENDPOINTS` in [loadcoach/batches.py](../loadcoach/batches.py). Batches

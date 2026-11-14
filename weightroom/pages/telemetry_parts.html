@@ -44,7 +44,7 @@
 
 {% macro host_tile(host) %}
 {% call card(tag='article', class_='tw-host-card mb-0', body=false, attrs={'data-host':host.identity}) %}
-  <div class="d-flex justify-content-between align-items-center gap-2 p-3 pb-2"><div><a class="fw-bold" href="{{ host.href }}" {{ swaps('telemetry-workspace', true) }}>{{ host.hostname }}</a><small class="d-block text-secondary">{{ host.machines|join(' · ') }}</small></div>{{ state(host) }}</div>
+  <div class="d-flex justify-content-between align-items-center gap-2 p-3 pb-2"><div><a class="fw-bold" href="{{ host.href }}" {{ swaps('telemetry-workspace', true) }}>{{ host.hostname }}</a><small class="d-block text-secondary">{{ host.machines|map('node_label')|join(' · ') }}</small></div>{{ state(host) }}</div>
   <div class="tw-host-summary px-3 pb-2"><span>CPU {{ amount(host.cpu) }}</span><span>RAM {{ amount(host.ram, 'memory') }}</span><span>Disk {{ amount(host.disk_percent) }}</span><span>Uptime {{ uptime(host.uptime) }}</span></div>
   {% if host.gpus %}{{ gpu_table(host) }}{% elif host.has_inventory %}<p class="small text-secondary px-3 py-2 mb-0">No GPU devices reported</p>{% else %}<p class="small text-secondary px-3 py-2 mb-0">No telemetry is available from this host yet.</p>{% endif %}
   <div class="d-flex justify-content-between gap-2 small text-secondary px-3 py-2 border-top"><span>{{ host.gpus|length }} known GPUs</span><span>{{ snapshot(host) }}</span></div>

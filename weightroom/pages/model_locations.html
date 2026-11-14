@@ -17,11 +17,11 @@
         </form></td>
       </tr>
     {% else %}
-      <tr><td>{{ selected_node }}</td><td><code>{{ model.name }}</code></td><td class="wrap"><code>{{ model.flags.model }}</code></td><td>{{ 'CPU' if model.gpus == 0 else model.gpus|default('default') }} · {{ model.flags['ctx-size'] or 'N/A' }} · {{ model.flags.get('parallel', 1) }}</td><td><span class="badge text-bg-success">Enabled</span></td></tr>
+      <tr><td>{{ (selected_node)|node_label }}</td><td><code>{{ model.name }}</code></td><td class="wrap"><code>{{ model.flags.model }}</code></td><td>{{ 'CPU' if model.gpus == 0 else model.gpus|default('default') }} · {{ model.flags['ctx-size'] or 'N/A' }} · {{ model.flags.get('parallel', 1) }}</td><td><span class="badge text-bg-success">Enabled</span></td></tr>
     {% endfor %}</tbody>
   </table></div>
   <form method="post" action="{{ address(model.name) }}" class="d-flex flex-wrap align-items-end gap-2 mt-3">
-    <div><label for="add-node" class="form-label">Add model to node</label><select id="add-node" name="machine" class="form-select" required>{% for node in node_choices if node.name not in model.locations|default([])|map(attribute='machine') and node.name != selected_node %}<option value="{{ node.name }}">{{ node.name }} · {{ node.state }}</option>{% endfor %}</select></div>
+    <div><label for="add-node" class="form-label">Add model to node</label><select id="add-node" name="machine" class="form-select" required>{% for node in node_choices if node.name not in model.locations|default([])|map(attribute='machine') and node.name != selected_node %}<option value="{{ node.name }}">{{ (node.name)|node_label }} · {{ node.state }}</option>{% endfor %}</select></div>
     <div><label for="add-device" class="form-label">Device on destination</label><select id="add-device" name="device" class="form-select"><option value="gpu">GPU · automatic</option>{% if model.engine|default('llama_cpp') != 'strata' %}<option value="cpu">CPU</option>{% endif %}</select></div>
     <button class="btn btn-outline-primary" name="do" value="location-add">Add to node</button>
   </form>

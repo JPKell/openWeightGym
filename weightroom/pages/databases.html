@@ -35,7 +35,7 @@
 </aside>
 </div>
 {% call card('Diagnostics & migration', false, hint='Engine support, tool availability, store health and offline migration.') %}
-<div class="table-responsive mb-3"><table class="table table-sm" aria-label="Dump tools by node"><thead><tr><th>Node</th><th>sqlite3</th><th>pg_dump</th><th>pg_restore</th><th>psql</th><th>pgloader</th></tr></thead><tbody>{% for node in snapshot.nodes %}<tr><td>{{ node.name }}</td>{% for tool in ['sqlite3','pg_dump','pg_restore','psql','pgloader'] %}<td>{{ 'available' if node.tools.get(tool, {}).get('available') else 'unavailable' if node.answering else 'unknown' }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+<div class="table-responsive mb-3"><table class="table table-sm" aria-label="Dump tools by node"><thead><tr><th>Node</th><th>sqlite3</th><th>pg_dump</th><th>pg_restore</th><th>psql</th><th>pgloader</th></tr></thead><tbody>{% for node in snapshot.nodes %}<tr><td>{{ (node.name)|node_label }}</td>{% for tool in ['sqlite3','pg_dump','pg_restore','psql','pgloader'] %}<td>{{ 'available' if node.tools.get(tool, {}).get('available') else 'unavailable' if node.answering else 'unknown' }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
 {% include "store_health.html" %}
 {% call card('Offline migration', false) %}
 {% for profile in migration_profiles %}<form method="post" action="/databases/migrations/{{ profile }}/preview" class="d-flex gap-2 align-items-center mb-2"><strong>{{ profile }}</strong><button class="btn btn-outline-primary btn-sm">Check and preview</button></form>{% else %}<p class="small text-secondary">No migration profiles are configured. Configure an owner-only profile under <code>settings/migrations/</code> before changing a populated store's engine.</p>{% endfor %}

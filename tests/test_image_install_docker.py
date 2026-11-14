@@ -162,7 +162,7 @@ def test_browser_adds_image_models_and_copies_the_bundle(cluster, nodes, family,
         for target in page.locator('#mw-install-targets input').all():
             target.set_checked(target.input_value() in nodes, force=True)
         expect(page.locator('#mw-diffusion option:checked')).to_have_text(
-            'front · ' + files['diffusion'].split('/')[-2] + ' · ' + files['diffusion'].split('/')[-1])
+            'control node · ' + files['diffusion'].split('/')[-2] + ' · ' + files['diffusion'].split('/')[-1])
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         with page.expect_response(lambda r: '/mirrorwall-models?' in r.url and r.request.method == 'POST') as response:
             page.get_by_role('button', name='Save model', exact=True).click()
