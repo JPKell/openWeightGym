@@ -82,6 +82,6 @@
 {% macro model_type_navigation(kind, type_benchmarks) %}
 {% from 'navigation_parts.html' import pills, pill_link, model_type_choices %}
 {% call pills('Model type') %}
-{% call(value, label) model_type_choices([('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio')]) %}{{ pill_link(label, '/benchmarks/node-measurements?kind=' ~ value ~ '&benchmark=' ~ type_benchmarks[value], kind == value, attrs={'data-matrix-navigation':''}) }}{% endcall %}
+{% call(value, label) model_type_choices([('llm','LLM'),('embedding','Embedders'),('image','Image'),('audio','Audio'),('classifier','Classifier')]) %}{{ pill_link(label, '/benchmarks/node-measurements?kind=' ~ value ~ '&benchmark=' ~ type_benchmarks[value], kind == value, attrs={'data-matrix-navigation':''}) }}{% endcall %}
 {% endcall %}
 {% endmacro %}

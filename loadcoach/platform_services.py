@@ -91,7 +91,7 @@ class PlatformServices:
             return self.downloads and (query.get('source') != 'civitai' or self.images)
         if path in ('/loadcoach/downloads', '/turnstile/artifacts/downloads') and method == 'POST':
             return self.downloads
-        if path in ('/models', '/benchmarks/node-measurements'):
+        if path in ('/models', '/benchmarks/node-measurements', '/benchmarks/results'):
             return self.kind_enabled(query.get('kind'))
         if path == '/files':
             return self.kind_enabled(query.get('type'))

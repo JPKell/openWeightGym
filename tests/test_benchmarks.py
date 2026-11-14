@@ -196,7 +196,7 @@ def queue_fixture(tmp_path, *, disabled=(), offline=(), rejected=(), rejected_st
             return httpx.Response(200, json={'name': 'owner', 'can': list(can)})
         if path == '/v1/models':
             return httpx.Response(200, json=catalogue)
-        if path in ('/loadcoach/probe-environment', '/turnstile/machines/rig/probe-environment'):
+        if path in ('/loadcoach/probe-environment', '/turnstile/machines/compute/probe-environment', '/turnstile/machines/rig/probe-environment'):
             machine = 'rig' if '/rig/' in path else 'compute'
             return httpx.Response(503 if machine in offline else 200, json={
                 'engine_hash': 'engine-' + machine, 'machine_hash': 'host-' + machine})
@@ -389,7 +389,7 @@ def test_queue_outstanding_adds_each_applicable_benchmark_once(fake_llama_server
         owner = add_user(caller, 'owner', 'admin')
         caller.post('/benchmarks/control', headers=owner, json={'action': 'pause'})
         definitions = caller.get('/benchmarks', headers=owner).json()['definitions']
-        applicable = [one for one in definitions if one['enabled'] and not one.get('embedding')]
+        applicable = [one for one in definitions if one['enabled'] and not one.get('embedding') and not one.get('classifier')]
         queued = caller.post('/benchmarks/outstanding', headers=owner, json={'model': 'small'})
         assert queued.status_code == 202 and queued.json()['queued'] == len(applicable)
         again = caller.post('/benchmarks/outstanding', headers=owner, json={'model': 'small'})
@@ -475,7 +475,7 @@ def test_freshness_is_advisory_for_engine_but_distinct_for_model(fake_llama_serv
         rescored=caller.get('/benchmarks/'+number,headers=owner).json()
         assert rescored['score']==2048*123456 and rescored['samples']==samples
         assert caller.post('/benchmarks',headers=owner,json={'benchmark':'context','models':['small']}).status_code==400
-        assert caller.post('/loadcoach/models/small',headers=owner,json={'flags':{'model':'small.gguf','ctx-size':1024},'gpus':['GPU0']}).status_code==200
+        assert caller.post('/turnstile/machines/compute/model-api/models/small',headers=owner,json={'flags':{'model':'small.gguf','ctx-size':1024},'gpus':['GPU0']}).status_code==200
         old=caller.get('/benchmarks',headers=owner).json()['runs'][0]
         assert not old['current_fingerprint'] and old['score']==2048*123456
         # A run made under an older version of its benchmark is kept and marked. One made under the current version is not.
@@ -704,7 +704,7 @@ def test_probe_status_tracks_native_readiness_and_original_settings(fake_llama_s
             model_state = caller.get('/loadcoach/models', headers=owner).json()['models'][0]
             assert model_state['loaded'] == 'probing' and not model_state['stale']
             assert model_state['context_loaded'] != models['small']['flags']['ctx-size']
-            changed = caller.post('/loadcoach/models/small', headers=owner,
+            changed = caller.post('/turnstile/machines/compute/model-api/models/small', headers=owner,
                 json={'flags': {'model': 'small.gguf', 'ctx-size': 8192}, 'gpus': ['GPU0']})
             assert changed.status_code == 200
             assert caller.get('/loadcoach/models', headers=owner).json()['models'][0]['stale']

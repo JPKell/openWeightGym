@@ -6,6 +6,7 @@ Its own database retains samples and queue controls; scoped task tokens survive 
 
 import asyncio
 import hashlib
+import json
 import time
 
 import httpx
@@ -144,6 +145,9 @@ class BenchmarkWorker:
         settings = run['subject']['settings']
         module = self.store.module(run['benchmark'], run['subject'].get('protocol'))
         multimedia = settings.get('engine') in ('sdcpp', 'audiocpp')
+        classifier = bool(run['subject'].get('metadata', {}).get('decision_type'))
+        if run['benchmark'] != 'load' and bool(module.DEFINITION.get('classifier')) != classifier:
+            raise ValueError('Classifier benchmarks require a Classifier model; generation benchmarks require a text model.')
         if multimedia and run['benchmark'] != 'load':
             raise ValueError('Image and audio models support load-time benchmarks only; context is unavailable.')
         if run['benchmark'] != 'load' and bool(module.DEFINITION.get('embedding')) != bool(settings['flags'].get('embedding')):
@@ -162,7 +166,7 @@ class BenchmarkWorker:
         attempts, reason = self.store.probe_attempts(number, sample)
         if attempts >= 3:
             raise ValueError(f'{sample}: already reached the limit of 3 failed native attempts. {reason}')
-        if 'evaluation' in body or 'dialogue' in body:  # a case, not a measurement: it may share its run's model server
+        if 'evaluation' in body or 'dialogue' in body or 'decisions' in body:  # a case, not a measurement: it may share its run's model server
             body = {**body, 'reuse': self.store.execution(number)['subject'].get('server') == 'reuse'}
         try:
             return await self.request(number, 'POST', '/probe', json=body,
@@ -202,6 +206,24 @@ class BenchmarkWorker:
         self.store.keep(number, sample, values, result['output'], result['log'],
                         result.get('evidence') if embedding or values.get('device') == 'cpu' else None)
         self.store.message(number, f'{sample}: ' + ('completed.' if values['success'] else 'does not fit.'))
+
+    async def classify(self, number, sample, body, grade=None, case=None):
+        """Keep typed decision evidence through the normal isolated native probe path."""
+        if self.store.has_sample(number, sample):
+            return
+        run = await self.check(number)
+        self.store.message(number, f'{sample}: evaluating typed decisions.')
+        result = await self.isolated(number, sample, {'context': run['subject']['settings']['flags']['ctx-size'],
+            'inputs': 0, 'outputs': 0, 'decisions': body})
+        await self.check(number)
+        values, evidence = result['values'], result.get('evidence', {})
+        if not values['success']:
+            raise ValueError(values.get('error', 'Classifier probe failed.'))
+        if grade:
+            metrics, checks = grade(case, json.loads(result['output']))
+            values = {**values, **metrics}
+            evidence = {**evidence, 'case': case, 'checks': checks}
+        self.store.keep(number, sample, values, result['output'], result['log'], evidence)
 
     async def evaluate(self, number, case, grade):
         """Send only the question/evidence, score the answer locally and atomically save the case."""

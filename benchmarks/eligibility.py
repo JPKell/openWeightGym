@@ -17,6 +17,10 @@ def evidence_matches(run, definition, fingerprint, environment):
 def compatible(model, definition):
     """Preserve the native capability boundary for LLM, embedding, image and audio runs."""
     caps = model.get('capabilities', {})
+    if caps.get('classifier'):
+        return bool(definition.get('classifier') or definition['id'] == 'load')
+    if definition.get('classifier'):
+        return False
     if caps.get('load_probes'):
         return definition['id'] == 'load'
     return (caps.get('native_probes') is not False and

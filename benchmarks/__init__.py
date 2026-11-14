@@ -8,9 +8,10 @@ The worker calls LoadCoach over HTTP; store and scoring own durable evidence and
 
 from .suites import context, speed, load, json_schema, extraction, arithmetic, retrieval, code_retrieval, ifeval, tool_use, tool_recovery
 from .suites import embedding_context, embedding_speed, embedding_load
+from .suites import classifier_speed, classifier_accuracy
 from .suites import abstention, tables, turns, reasoning, hierarchy
 
-MODULES = {module.DEFINITION['id']: module for module in (context, speed, load, json_schema, extraction, arithmetic, retrieval, code_retrieval, ifeval, tool_use, tool_recovery, embedding_context, embedding_speed, embedding_load, abstention, tables, turns, reasoning, hierarchy)}
+MODULES = {module.DEFINITION['id']: module for module in (context, speed, load, json_schema, extraction, arithmetic, retrieval, code_retrieval, ifeval, tool_use, tool_recovery, embedding_context, embedding_speed, embedding_load, abstention, tables, turns, reasoning, hierarchy, classifier_speed, classifier_accuracy)}
 # Record the actual planner/checker code with the run, including shared deterministic grading.
 from pathlib import Path
 import hashlib

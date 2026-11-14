@@ -1,6 +1,6 @@
 {% extends "frame.html" %}
 {% from "parts.html" import said_box, swaps, empty_row, alert, page_header, card %}
-{% from "navigation_parts.html" import pager %}
+{% from "navigation_parts.html" import pager, model_type_choices %}
 {% from "discovery_parts.html" import source_navigation, search_surface, empty_state, download_queue %}
 {% block title %}Hugging Face · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/static/discovery.css?v=1">{% endblock %}
@@ -12,6 +12,7 @@
 <form method="get" action="/hub" class="row g-2" {{ swaps("hub-found", true) }}>
   <input type="hidden" name="sort" value="{{ hub_sort.key }}"><input type="hidden" name="direction" value="{{ hub_sort.direction }}">
   <div class="col-12 col-sm"><label for="hub-query" class="visually-hidden">Search Hugging Face</label><input id="hub-query" name="q" class="form-control" value="{{ words }}" aria-label="what to look for" placeholder="Search models or enter owner/name" required autofocus></div>
+  <div class="col-12 col-sm-auto"><label for="hub-kind" class="visually-hidden">Model type</label><select name="kind" id="hub-kind" class="form-select">{% call(value,label) model_type_choices([('','All GGUFs'),('classifier','Classifier')]) %}<option value="{{ value }}"{{ ' selected' if request.query_params.get('kind', '') == value }}>{{ label }}</option>{% endcall %}</select></div>
   <div class="col-12 col-sm-auto"><button class="btn btn-primary w-100">Search</button></div>
 </form>
 {% endcall %}
@@ -27,7 +28,7 @@
     {% for row in found.files %}
     <tr>
       <td><input id="file-{{ loop.index }}" name="file" value="{{ row.file }}" type="checkbox" class="form-check-input" {{ "disabled" if row.here }}></td>
-      <td class="wrap"><label for="file-{{ loop.index }}">{{ row.file }}</label>{% if row.parts > 1 %} <small class="text-secondary">and the other {{ row.parts - 1 }} of its {{ row.parts }} parts</small>{% endif %}</td>
+      <td class="wrap"><label for="file-{{ loop.index }}">{{ row.file }}</label>{% if row.decision_ready|default(false) %} <span class="badge bg-success-lt">Ready for llama.cpp</span>{% endif %}{% if row.parts > 1 %} <small class="text-secondary">and the other {{ row.parts - 1 }} of its {{ row.parts }} parts</small>{% endif %}</td>
       <td data-value="{{ row.size }}">{{ row.size|size }}</td>
       <td>{% if row.here %}<span class="badge text-bg-secondary">in {{ row.here }}</span>{% endif %}</td>
     </tr>
@@ -68,7 +69,7 @@
   <tbody>
   {% for one in found.found %}
   <tr>
-    <td class="wrap"><a class="discovery-repository" {{ swaps("hub-repository", true) }} href="/hub?repository={{ one.repository|urlencode }}">{{ one.repository }}</a><div class="text-secondary small mt-1">GGUF · {{ one.repository.split('/')[0] }}</div></td>
+    <td class="wrap"><a class="discovery-repository" {{ swaps("hub-repository", true) }} href="/hub?repository={{ one.repository|urlencode }}&amp;kind={{ request.query_params.get('kind','')|urlencode }}">{{ one.repository }}</a><div class="text-secondary small mt-1">GGUF · {{ one.repository.split('/')[0] }}</div></td>
     <td class="text-end discovery-number">{{ '{:,}'.format(one.downloads) }}</td><td class="text-end discovery-number">{{ '{:,}'.format(one.likes) }}</td><td class="text-secondary text-nowrap">{{ one.made or 'Unknown' }}</td>
   </tr>
   {% endfor %}

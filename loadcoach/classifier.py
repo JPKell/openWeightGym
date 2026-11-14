@@ -15,12 +15,14 @@ UNCALIBRATED = 'Probabilities use the model’s stored temperatures and are not 
 class Invalid(ValueError):
     """A public request error with an HTTP status."""
     def __init__(self, message, status=400):
+        """Bind classifier options and preserve public error metadata."""
         super().__init__(message)
         self.status = status
 
 
 @lru_cache(maxsize=256)
 def _file_facts(path, stamp):
+    """Read metadata for one immutable file stamp."""
     from engines.llama_cpp.gguf import facts, read_metadata
     return facts(read_metadata(path))
 
@@ -39,6 +41,7 @@ def model_facts(settings):
 
 
 def limits(facts):
+    """Publish the supported typed-request limits."""
     return {'questions': 64, 'choices': 52 if facts.get('decision_type') == 'openjev' else 255,
             'score_levels': 10, 'body_bytes': MAX_BODY,
             'max_head_tokens': facts.get('decision_max_head_tokens'),
@@ -46,6 +49,7 @@ def limits(facts):
 
 
 def _payload(value):
+    """Accept native text and JSON containers."""
     return isinstance(value, (str, dict, list))
 
 
