@@ -41,7 +41,7 @@ PAGES = (
     '/settings/image', '/models/images?model=picture',
     '/files?tier=storage', '/files?machine=compute', '/models?kind=image', '/models?kind=audio',
     '/benchmarks/node-measurements?kind=embedding', '/benchmarks/node-measurements?kind=image',
-    '/benchmarks/node-measurements?kind=audio',
+    '/benchmarks/node-measurements?kind=audio', '/system/voice/telephone',
 )
 
 MEASURE = r"""() => {

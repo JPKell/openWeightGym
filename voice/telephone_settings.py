@@ -3,6 +3,7 @@
 from copy import deepcopy
 import ipaddress
 import re
+from pathlib import Path
 from urllib.parse import urlsplit
 
 E164 = re.compile(r"\+[1-9][0-9]{7,14}\Z")
@@ -19,7 +20,7 @@ def configuration(settings):
     if 'telephone' in settings:
         phone = deepcopy(settings['telephone'])
         phone['webhook_url'], phone['stream_url'] = urls(phone.get('public_url', ''))
-        phone['token_file'] = settings.get('telephone_token_file', 'keys/voice-twilio.key')
+        phone['token_file'] = settings.get('telephone_token_file', str(Path(settings.get('key_file', 'keys/gateway.key')).parent / 'voice-twilio.key'))
         return phone
     legacy = settings.get('twilio', {})
     return {**legacy, 'enabled': bool(legacy.get('token_file')), 'legacy': bool(legacy),
@@ -33,6 +34,8 @@ def validate(phone, profiles=None, voices=None):
         raise ValueError('Choose valid telephone settings.')
     if type(phone.get('enabled')) is not bool:
         raise ValueError('Telephone enabled must be true or false.')
+    if not phone['enabled'] and phone.get('account_sid', '') == phone.get('public_url', '') == '' and phone.get('numbers') == []:
+        return phone
     if not isinstance(phone.get('account_sid'), str) or not re.fullmatch(r'AC[0-9a-fA-F]{32}', phone['account_sid']):
         raise ValueError('Account SID must be AC followed by 32 hexadecimal characters.')
     if not isinstance(phone.get('public_url'), str):

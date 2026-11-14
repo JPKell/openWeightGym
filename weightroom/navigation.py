@@ -30,7 +30,7 @@ NAV_SECTIONS = {
     ),
     'System': (
         ('Monitoring', ('/status', '/telemetry', '/alerts')),
-        ('Services', ('/system/components', '/system/voice/status')),
+        ('Services', ('/system/components', '/system/voice/telephone', '/system/voice/status')),
         ('Automation', ('/schedules',)),
         ('Data & recovery', ('/databases', '/backups')),
     ),
@@ -107,7 +107,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
     groups[4]["links"].append(("Telemetry", "/telemetry"))
     if "manage-settings" in can:
         groups[4]["links"].append(("Components", "/system/components"))
-        groups[4]["links"].append(("Voice status", "/system/voice/status"))
+        groups[4]["links"].extend([('Telephone', '/system/voice/telephone'), ("Voice status", "/system/voice/status")])
         groups[4]["links"].append(("Alerts", "/alerts"))
         groups[4]["links"].append(("Schedules", "/schedules"))
         groups[5]["links"].insert(0, ("Compute nodes", "/compute-nodes"))

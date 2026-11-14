@@ -786,6 +786,13 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 return Response(status_code=403)
             headers = {'authorization': 'Bearer ' + key, 'x-turnstile-no-wake': '1'}
             action = request.path_params.get('action', 'status')
+            if action == 'telephone':
+                body = await request.body()
+                if len(body) > 16384:
+                    return Response(status_code=413)
+                reply = await http.request(request.method, turnstile + '/loadcoach/telephone', headers={**headers,
+                    'content-type': 'application/json'}, content=body, timeout=10)
+                return Response(reply.content, status_code=reply.status_code, media_type='application/json', headers={'cache-control': 'no-store'})
             if action == 'status' and request.method == 'GET':
                 services = [{'name': 'Voice gateway', 'state': 'Available', 'address': 'front'},
                             {'name': 'Turnstile / accounts', 'state': 'Available', 'address': turnstile}]

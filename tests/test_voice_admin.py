@@ -143,6 +143,8 @@ def voice_panel(tmp_path, **more):
             return httpx.Response(200, json=dict(services=[dict(name='Voice gateway', state='Available', address='front')],
                 active=0, profile='default', modes=['direct'], readiness={'profiles': {}}, latency=timings.snapshot(),
                 recordings=dict(source='Cached on front', speaker=3, texts=prompts.TEXTS)))
+        if request.url.path == '/admin/telephone':
+            return httpx.Response(200, json={'credentials': {'token': {'saved': False}, 'api': {'saved': False}}})
         if request.url.path == '/admin/regenerate':
             return httpx.Response(200, json={'saved': True})
         if request.url.path == '/browser/sessions':

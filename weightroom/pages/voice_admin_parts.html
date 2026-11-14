@@ -1,0 +1,37 @@
+{% from 'navigation_parts.html' import pill_link, pills %}
+{% from 'parts.html' import card, confirm_two %}
+
+{% macro voice_tabs(selected) %}
+{% call pills('Voice administration') %}
+{{ pill_link('Settings', '/system/voice', selected == 'settings') }}
+{{ pill_link('Telephone', '/system/voice/telephone', selected == 'telephone') }}
+{{ pill_link('Status', '/system/voice/status', selected == 'status') }}
+{% endcall %}
+{% endmacro %}
+
+{% macro credential_state(credential) %}
+{% if credential.saved|default(false) %}<span class="badge bg-green-lt">Saved</span> <span class="small text-secondary">Last changed {{ credential.changed }}</span>{% else %}<span class="badge bg-orange-lt">Not saved</span>{% endif %}
+{% endmacro %}
+
+{% macro telephone_credentials(credentials) %}
+{% call card('Twilio credentials') %}
+<form method="post" action="/system/voice/telephone/save_credentials" data-hold-refresh>
+<div class="row g-3">
+<div class="col-12"><label for="telephone-token" class="form-label">Auth token</label>
+<input id="telephone-token" name="token" type="password" class="form-control" autocomplete="new-password" maxlength="8192">
+{{ credential_state(credentials.token|default({})) }}</div>
+<div class="col-md-6"><label for="telephone-api-sid" class="form-label">API key SID (recommended)</label>
+<input id="telephone-api-sid" name="api_sid" type="password" class="form-control" autocomplete="new-password" maxlength="34"></div>
+<div class="col-md-6"><label for="telephone-api-secret" class="form-label">API key secret</label>
+<input id="telephone-api-secret" name="api_secret" type="password" class="form-control" autocomplete="new-password" maxlength="8192">
+{{ credential_state(credentials.api|default({})) }}</div>
+</div><p class="small text-secondary mt-2">Empty fields keep saved credentials. The auth token verifies signed calls; the optional API key handles Twilio API requests.</p>
+<button class="btn btn-primary">Save credentials</button>
+</form>
+{% for kind, label in [('token', 'auth token'), ('api', 'API key')] if credentials[kind].saved|default(false) %}
+<form method="post" action="/system/voice/telephone/remove_credential" class="mt-2">
+<input type="hidden" name="kind" value="{{ kind }}">
+<button class="btn btn-outline-danger btn-sm" {{ confirm_two('Remove the saved ' ~ label ~ '? Removing the auth token stops telephone admission.') }}>Remove {{ label }}</button>
+</form>{% endfor %}
+{% endcall %}
+{% endmacro %}

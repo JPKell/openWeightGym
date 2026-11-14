@@ -1056,6 +1056,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     console_settings = ConsoleSettings(stores.database('weightroom.accounts'), log, ask_all, True,
                                    programs=FRONT_PROGRAMS | {'toollocker'},
                                    voice_nodes=lambda: voice_order())
+    from turnstile.telephone import TelephoneAdmin
+    telephone_admin = TelephoneAdmin(users, log, console_settings.changes,
+        Path(settings.machine_key_file).parent if settings.machine_key_file else Path(settings.data) / 'keys')
 
     def platform():
         return PlatformServices.from_settings(settings, console_settings.changes.of('weightroom'))
@@ -1550,6 +1553,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             except (ValueError, AttributeError):
                 return error(400, 'Choose a model repository.')
         if port == settings.ports[0]:
+            handled = await telephone_admin.handle(request, user)
+            if handled is not None:
+                return handled
             handled = await console_settings.handle(request, user)
             if handled is not None:
                 handled.headers['x-suite-data-owner'] = 'front'
