@@ -29,7 +29,8 @@ def test_section_merges_and_safe_new_number_defaults():
         edited(added, {'action': 'add_number', 'number': '+15555550123'})
 
 
-def test_real_signed_simulation_for_two_numbers_uses_each_phone_account_and_profile(tmp_path):
+@pytest.mark.parametrize('legacy_urls', [False, True])
+def test_real_signed_simulation_for_two_numbers_uses_each_phone_account_and_profile(tmp_path, legacy_urls):
     from plugin_helpers import serving
     key = tmp_path / 'gateway.key'; key.write_text('app-key')
     token = tmp_path / 'token.key'; token.write_text('twilio-secret')
@@ -71,6 +72,13 @@ def test_real_signed_simulation_for_two_numbers_uses_each_phone_account_and_prof
     config = phone(); config['numbers'][1]['mode'] = 'direct'
     settings = dict(key_file=str(key), telephone_token_file=str(token), telephone=config, turnstile='http://turnstile',
         voice='http://compute', voice_turnstile='http://front:8445', prompts=str(tmp_path / 'no-prompts'), max_active_sessions=3)
+    if legacy_urls:
+        from voice.telephone_keys import TelephoneKeys
+        TelephoneKeys(tmp_path).import_legacy(dict(token_file=str(token), key_file=str(tmp_path / 'voice-phone.key'),
+            account_sid=config['account_sid'], webhook_url=config['public_url']+'/twilio/voice?tenant=one',
+            stream_url='wss://phone.example.com/twilio/media?tenant=one'), config['public_url'], 'voice-phone')
+    from voice.telephone_settings import configuration
+    configured = configuration(settings)
     app = build_app(settings, httpx.AsyncClient(transport=httpx.MockTransport(upstream)), connector)
     with serving(app) as base:
         async def check():
@@ -78,7 +86,8 @@ def test_real_signed_simulation_for_two_numbers_uses_each_phone_account_and_prof
             for number in config['numbers']:
                 args = SimpleNamespace(token_file=token, account=config['account_sid'], public_url=config['public_url'], url=base,
                     to_number=number['number'], audio_pcm=b'\x10\x27' * 2400, audio=None, interrupt_audio=None,
-                    signature_form='wss-slash', wait=0, echo=False, persist=False, reply_seconds=1)
+                    signature_form='wss-slash', wait=0, echo=False, persist=False, reply_seconds=1,
+                    webhook_url=configured['webhook_url'], stream_url=configured['stream_url'])
                 reports.append(await simulate(args))
             return reports
         reports = asyncio.run(check())

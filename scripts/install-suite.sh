@@ -1214,6 +1214,7 @@ if ((!EMBEDDED)); then
   ui_section 'Done' 'Installation complete.'
   ui_attention_box
   ui_note "Run '$ROOT/scripts/install-suite.sh --check --services $SELECTED_CSV' to repeat the compatibility audit."
+  has_service voice-gateway && ui_note 'Phone calls: set up under System → Voice → Telephone'
 fi
 if [[ $DATABASE == postgresql ]]; then
   ui_note 'PostgreSQL credentials are referenced only through owner-only DSN files.'

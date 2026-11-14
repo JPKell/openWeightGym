@@ -25,9 +25,12 @@ from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect
 
 from loadcoach.config import CLI, data_folder
+from loadcoach.groups import NAME as ACCOUNT_NAME
 from loadcoach.settings import with_changes
 from voice import protocol, prompt_recordings, latency
 from voice import gateway_status
+from voice.telephone_keys import TelephoneKeys
+from voice.telephone_routes import webhook_target, append_query, valid_probe, check_route, detected_routes, public_dns
 from voice.hermes import Bridge, configuration
 from voice.telephone import Conversion, valid, valid_stream
 from voice.telephone_settings import configuration as telephone_configuration, validate as validate_telephone
@@ -58,10 +61,11 @@ RECORDING_BYTES = 16000 * 2 * 60 * 30  # thirty minutes of the caller's 16 kHz s
 KEY_CHECK_SECONDS = 10  # how often a live call asks Turnstile whether its key is still allowed
 
 
-def build_app(settings, client=None, connector=connect, following=None, prompt_cache=None, listeners=()):
+def build_app(settings, client=None, connector=connect, following=None, prompt_cache=None, listeners=(), telephone_keys_folder=None):
     """Build both source adapters; private browser routes never trust proxy headers."""
     http = client or httpx.AsyncClient(timeout=65)
     app_key = Path(settings["key_file"]).read_text().strip()
+    phone_keys = TelephoneKeys(telephone_keys_folder or Path(settings["key_file"]).parent)
     turnstile = settings["turnstile"].rstrip("/")
     voice = settings["voice"].rstrip("/")
     voice_door = settings.get("voice_turnstile", turnstile.rsplit(":", 1)[0] + ":8445")
@@ -202,8 +206,8 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         """Only masked numbers and keyed caller correlations enter retained activity or events."""
         label = number.get('label', 'Unknown number') if number else 'Unknown number'
         row = dict(at=time.time(), caller=masked_phone(caller), account=account, outcome=outcome, reason=reason,
-                   caller_hash=caller_hash or phone_digest(Path(settings['key_file']).parent, caller), duration=None)
-        number_key = phone_digest(Path(settings['key_file']).parent, number.get('number', 'legacy') if number else 'unknown')
+                   caller_hash=caller_hash or phone_digest(phone_keys.folder, caller), duration=None)
+        number_key = phone_digest(phone_keys.folder, number.get('number', 'legacy') if number else 'unknown')
         phone_attempts[label] = activity.record(number_key, row)
         if len(phone_attempts) > 256:
             phone_attempts.pop(next(iter(phone_attempts)))
@@ -226,9 +230,15 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
 
     async def inbound(request):
         """Validate signatures and caller policy before a call or compute session is reserved."""
-        phone = telephone_configuration(settings)
+        phone = telephone_configuration(settings, phone_keys)
         if not phone.get('enabled') or not phone.get('token_file'):
             return Response(status_code=404)
+        if request.method == 'HEAD':
+            try:
+                token = Path(phone['token_file']).read_text().strip()
+                return Response(status_code=204 if valid_probe(phone, token, request.query_params, request.headers.get('x-twilio-signature', '')) else 403)
+            except OSError:
+                return Response(status_code=404)
         body = await request.body()
         if len(body) > 16384:
             return Response(status_code=413)
@@ -243,15 +253,11 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 pending_pins.pop(old, None)
         pending = pending_pins.get(call)
         existing = phone_calls.get(call)
-        signed_url = phone['webhook_url']
-        challenge = request.query_params.get('challenge')
-        if request.url.query:
-            claim = pending or existing or {}
-            if (set(request.query_params) != {'challenge'} or len(request.query_params.getlist('challenge')) != 1
-                    or challenge not in claim.get('challenges', [])):
-                phone_attempt(None, caller, 'rejected', 'invalid_signature')
-                return Response(status_code=403)
-            signed_url += '?challenge=' + challenge
+        challenge = request.query_params.get('owg_pin')
+        signed_url = webhook_target(phone['webhook_url'], request.query_params, (pending or existing or {}).get('challenges', []))
+        if signed_url is None:
+            phone_attempt(None, caller, 'rejected', 'invalid_signature')
+            return Response(status_code=403)
         if not valid(token, signed_url, params, request.headers.get('x-twilio-signature', '')):
             phone_attempt(None, caller, 'rejected', 'invalid_signature')
             return Response(status_code=403)
@@ -265,7 +271,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             if existing['number'].get('number') != number.get('number'):
                 return refuse(number, caller, 'unknown_number')
             return Response(connected_xml(phone, existing), media_type='application/xml')
-        caller_key = phone_digest(Path(settings['key_file']).parent, caller)
+        caller_key = phone_digest(phone_keys.folder, caller)
         number_key = number.get('number', 'legacy')
         if sum(not item.get('closed') for item in phone_calls.values()) >= 16 or len(phone_calls) >= 1024:
             return refuse(number, caller, 'rate_limited')
@@ -309,7 +315,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 nonce = pending['challenges'][-1] if not params.get('Digits', [''])[0] and pending['challenges'] else secrets.token_urlsafe(24)
                 if nonce not in pending['challenges']:
                     pending['challenges'].append(nonce)
-                action = escape(phone['webhook_url'] + '?challenge=' + nonce, {'"': '&quot;'})
+                action = escape(append_query(phone['webhook_url'], 'owg_pin=' + nonce), {'"': '&quot;'})
                 xml = ('<Response><Gather input="dtmf" action="' + action + '" method="POST" timeout="10" finishOnKey="#">'
                        '<Say>Enter your telephone PIN, followed by pound.</Say></Gather><Hangup/></Response>')
                 if challenge:
@@ -841,7 +847,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
 
     async def telephone(socket):
         """Validate the signed Twilio stream and bridge its telephone audio."""
-        phone = telephone_configuration(settings)
+        phone = telephone_configuration(settings, phone_keys)
         if not phone.get('enabled') or not phone.get("token_file"):
             await socket.close(code=1008)
             return
@@ -877,7 +883,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 print(json.dumps({"event": "voice.phone.connected", "call": call}), flush=True)
             number = item['number']
             phone_voice = number.get("voice") if number.get("mode", "direct") == "direct" else None
-            key_file = number.get('key_file') or str(Path(settings['key_file']).parent / (number['account'] + '.key'))
+            key_file = number.get('key_file') or str(phone_keys.account_path(number['account']))
             await controller(socket, item["id"], item.get("session_key") or Path(key_file).read_text().strip(), number.get("mode", "direct"), "twilio", stream_sid,
                              voice_id=phone_voice, chosen_profile=number.get('profile'), number_label=number.get('label'))
         except (ValueError, KeyError, TypeError, OSError, TimeoutError, WebSocketDisconnect):
@@ -919,10 +925,10 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
 
     async def phone_choices(account):
         """Read one phone account's permitted profiles/voices without loading or waking compute."""
-        if not isinstance(account, str) or not protocol.ID.fullmatch(account):
+        if not isinstance(account, str) or not ACCOUNT_NAME.fullmatch(account):
             return {}
         try:
-            account_key = (Path(settings['key_file']).parent / (account + '.key')).read_text().strip()
+            account_key = phone_keys.account_path(account).read_text().strip()
             options = await ask('GET', voice_door + '/voice/options', account_key, no_wake=True, timeout=3)
             voices = await ask('GET', turnstile + '/soundroom/voices', account_key, no_wake=True, timeout=3) if settings.get('soundroom_profile') else None
             result = options.json() if options.is_success else {}
@@ -990,7 +996,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                       'Gateway call capacity is full.' if not capacity else reason)
             entries[name] = dict(configured=configured, listening=listening, can_start=bool(configured and listening and ready and capacity),
                 reason=reason, **entry_history[name])
-        phone = telephone_configuration(settings)
+        phone = telephone_configuration(settings, phone_keys)
         numbers = []
         token_saved = bool(phone.get('token_file') and Path(phone['token_file']).is_file())
         for number in phone.get('numbers', []):
@@ -1029,7 +1035,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 ready, reason = False, hermes_problem
             numbers.append(dict(label=number.get('label', 'Legacy'), number=masked_phone(number.get('number')), enabled=number.get('enabled', True),
                 account=number.get('account', 'voice-phone'), mode=mode, profile=profile_name, caller_access=access.get('mode', 'anyone'),
-                can_start=ready, reason=reason, **activity.snapshot(phone_digest(Path(settings['key_file']).parent, key))))
+                can_start=ready, reason=reason, **activity.snapshot(phone_digest(phone_keys.folder, key))))
         phone_ready = any(number['can_start'] for number in numbers)
         phone_reason = ('Telephone is off.' if not phone.get('enabled') else 'Add a telephone number.' if not numbers else
                         'Ready' if phone_ready else next(number['reason'] for number in numbers if not number['can_start']))
@@ -1039,7 +1045,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             'entries': entries, 'services': services, 'readiness': readiness, 'active': len(sockets), 'latency': latencies.snapshot(),
             'telephone': {'enabled': bool(phone.get('enabled')), 'webhook_url': phone.get('webhook_url', ''), 'stream_url': phone.get('stream_url', ''),
                 'public_port': settings.get('public_port', 8081), 'public_bound': public_bound, 'credentials': {'token': token_saved,
-                'api': (Path(settings['key_file']).parent / 'voice-twilio-api.key').is_file()}, 'numbers': numbers},
+                'api': phone_keys.path('api').is_file()}, 'numbers': numbers},
             'calls': [dict(id=sid, duration_seconds=round(time.monotonic()-call['began'], 1), **{key: call[key] for key in ('source', 'number', 'account', 'mode', 'profile', 'model', 'started', 'turns', 'state')}) for sid, call in live_calls.items()],
             'modes': settings.get('modes', ['direct']), 'profile': settings.get('profile', 'default'),
             'recordings': {'source': 'Cached on the control node' if prompt_cache and prompt_cache.bundle else 'Bundled defaults',
@@ -1073,9 +1079,40 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 if len(body) > 16384:
                     return Response(status_code=413)
                 submitted = json.loads(body) if body else {}
+                if submitted.get('action') == 'check_route':
+                    try:
+                        return JSONResponse(await check_route(telephone_configuration(settings, phone_keys), http), headers={'cache-control': 'no-store'})
+                    except ValueError as problem:
+                        return JSONResponse({'error': {'message': str(problem)}}, status_code=400)
+                if submitted.get('action') == 'import_legacy':
+                    legacy = settings.get('twilio', {})
+                    if 'telephone' in settings or not legacy:
+                        return JSONResponse({'error': {'message': 'Telephone already uses site settings or has no machine-file configuration.'}}, status_code=409)
+                    owner = await ask('GET', turnstile + '/loadcoach/me', Path(legacy['key_file']).read_text().strip(), no_wake=True, timeout=3)
+                    if not owner.is_success or not may(owner.json(), legacy.get('mode', 'direct')):
+                        return JSONResponse({'error': {'message': 'The existing phone account or its key is unavailable.'}}, status_code=400)
+                    old_url = urlsplit(legacy['webhook_url'])
+                    path = old_url.path
+                    for suffix in ('/voice/inbound', '/twilio/voice'):
+                        if path.endswith(suffix):
+                            path = path[:-len(suffix)]; break
+                    base_url = old_url.scheme + '://' + old_url.netloc + path.rstrip('/')
+                    phone = {'enabled': True, 'account_sid': legacy['account_sid'], 'public_url': base_url, 'numbers': [{
+                        'label': submitted.get('label') or 'Legacy', 'number': submitted.get('number', ''), 'enabled': True,
+                        'mode': legacy.get('mode', 'direct'), 'profile': legacy.get('profile') or settings.get('profile', 'default'),
+                        'voice': legacy.get('voice') or '', 'greeting': '', 'account': owner.json()['name'],
+                        'callers': {'mode': 'anyone', 'entries': []}, 'max_calls_per_hour': legacy.get('max_calls_per_hour', 60)}]}
+                    try:
+                        validate_telephone(phone)
+                    except ValueError as problem:
+                        return JSONResponse({'error': {'message': str(problem)}}, status_code=400)
+                    phone_keys.import_legacy(legacy, base_url, owner.json()['name'])
+                    reply = await http.post(turnstile + '/loadcoach/telephone', headers=headers,
+                        json={'action': 'save_import', 'telephone': phone}, timeout=5)
+                    return Response(reply.content, status_code=reply.status_code, media_type='application/json')
                 if submitted.get('action') == 'save_number':
                     from voice.telephone_admin import edited
-                    phone = telephone_configuration(settings)
+                    phone = telephone_configuration(settings, phone_keys)
                     # Validate only public site fields; credentials and derived URLs stay internal.
                     proposed = edited({key: phone[key] for key in ('enabled', 'account_sid', 'public_url', 'numbers')}, submitted)
                     number = next(one for one in proposed['numbers'] if one['number'] == submitted.get('number'))
@@ -1091,7 +1128,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 if submitted.get('action') == 'simulate':
                     from types import SimpleNamespace
                     from voice.telephone_check import main as simulate, CheckFailed
-                    phone = telephone_configuration(settings)
+                    phone = telephone_configuration(settings, phone_keys)
                     number = next((one for one in phone.get('numbers', []) if one.get('number') == submitted.get('number')), None)
                     if not phone.get('enabled') or not number or not number.get('enabled'):
                         return JSONResponse({'error': {'message': 'Enable a configured number before testing.'}}, status_code=400)
@@ -1099,10 +1136,12 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                         return JSONResponse({'error': {'message': 'A simulation is already running. Wait for it to finish.'}}, status_code=409)
                     args = SimpleNamespace(token_file=Path(phone['token_file']), account=phone['account_sid'],
                         public_url=phone['public_url'].rstrip('/'), url=phone['public_url'].rstrip('/'), to_number=number['number'],
+                        webhook_url=phone['webhook_url'], stream_url=phone['stream_url'],
                         caller=submitted.get('caller') or '+15555550123', audio_pcm=(prompts / 'ready.pcm').read_bytes(),
                         audio=None, interrupt_audio=None, signature_form='wss-slash', wait=9, echo=False, persist=False)
                     try:
                         async with simulation_lock, asyncio.timeout(55):
+                            await public_dns(args.public_url)
                             result = await simulate(args)
                         return JSONResponse({'stages': result['stages'], 'passed': True}, headers={'cache-control': 'no-store'})
                     except CheckFailed as problem:
@@ -1113,9 +1152,12 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                     'content-type': 'application/json'}, content=body, timeout=10)
                 if reply.is_success and request.method == 'GET':
                     result = reply.json()
-                    phone = telephone_configuration(settings)
+                    phone = telephone_configuration(settings, phone_keys)
+                    planned = telephone_configuration({**settings, 'telephone': result.get('telephone', {})}, phone_keys)
                     result.update(legacy=bool(phone.get('legacy')), webhook_url=phone.get('webhook_url', ''),
                         stream_url=phone.get('stream_url', ''), public_port=settings.get('public_port', 8081), choices={})
+                    result['planned_urls'] = [planned['webhook_url'], planned['stream_url']]
+                    result['routes'] = await detected_routes(settings.get('public_port', 8081))
                     accounts = {one['account'] for one in result.get('telephone', {}).get('numbers', [])}
                     throttle = asyncio.Semaphore(4)
                     async def choices_for(account):
@@ -1123,7 +1165,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                             return account, await phone_choices(account)
                     result['choices_by_account'] = dict(await asyncio.gather(*(choices_for(account) for account in accounts)))
                     result['activity'] = [dict(label=one['label'], number=masked_phone(one['number']),
-                        **activity.snapshot(phone_digest(Path(settings['key_file']).parent, one['number'])))
+                        **activity.snapshot(phone_digest(phone_keys.folder, one['number'])))
                         for one in result.get('telephone', {}).get('numbers', [])]
                     return JSONResponse(result, headers={'cache-control': 'no-store'})
                 return Response(reply.content, status_code=reply.status_code, media_type='application/json', headers={'cache-control': 'no-store'})
@@ -1168,7 +1210,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
         Route("/browser/sessions", start, methods=["POST"]),
         WebSocketRoute("/browser/sessions/{sid}/stream", browser),
         WebSocketRoute("/desktop/stream", desktop),
-        Route("/voice/inbound", inbound, methods=["POST"]), Route("/twilio/voice", inbound, methods=["POST"]),
+        Route("/voice/inbound", inbound, methods=["POST", "HEAD"]), Route("/twilio/voice", inbound, methods=["POST", "HEAD"]),
         WebSocketRoute("/voice/stream", telephone), WebSocketRoute("/twilio/media", telephone),
         Mount("/static", StaticFiles(directory=assets), name="static")])
 
@@ -1224,7 +1266,7 @@ def serve(config: Annotated[Path, typer.Option()] = Path("settings/voice-gateway
     if settings.get("public_port"):
         sockets.append(listening(settings.get("public_host", "0.0.0.0"), settings["public_port"]))
     cache = prompt_recordings.PromptCache(data_folder(config, settings) / "voice-prompts.json")
-    uvicorn.Server(uvicorn.Config(build_app(settings, following=following, prompt_cache=cache, listeners=sockets), access_log=False, ws_max_size=16384, ws_max_queue=4)).run(sockets=sockets)
+    uvicorn.Server(uvicorn.Config(build_app(settings, following=following, prompt_cache=cache, listeners=sockets, telephone_keys_folder=(config.parent / '../keys').resolve()), access_log=False, ws_max_size=16384, ws_max_queue=4)).run(sockets=sockets)
 
 
 def main():

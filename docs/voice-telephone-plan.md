@@ -1,7 +1,7 @@
 # Telephone voice and Voice status plan
 
 Drafted **2026-11-14**; decisions settled with the owner on 2026-11-14 (see
-[Decisions](#decisions)). Status: in progress; P1–P7 complete.
+[Decisions](#decisions)). Status: in progress; P1–P8 complete.
 
 ## Goal
 
@@ -19,7 +19,7 @@ What exists and stays:
 
 - The Twilio adapter in [voice/gateway.py](../voice/gateway.py) and
   [voice/telephone.py](../voice/telephone.py): signed webhook and stream checks, `AccountSid`
-  check, 8 kHz μ-law conversion, front-side echo cancellation, `media`/`mark`/`clear`
+  check, 8 kHz μ-law conversion, control-node-side echo cancellation, `media`/`mark`/`clear`
   bookkeeping, a public listener (`public_port`, default 8081) that serves only the Twilio paths.
 - [scripts/voice-phone-check.py](../scripts/voice-phone-check.py), which simulates a signed call
   end to end without dialling.
@@ -104,7 +104,7 @@ Settled with the owner on 2026-11-14.
 | P5 | Complete — SMS ownership, private numbers, limited personal sessions and revocation; 132 clean-snapshot unit/browser/UI checks pass, including signed real-socket model attribution | L | P2, P4 |
 | P6 | Complete — bound listeners, private call controls, scoped readiness reasons and bounded masked activity; 135 clean-snapshot unit/browser checks pass | M | — |
 | P7 | Complete — polling readiness, active call controls, profile reasons, latency targets and activity; selection/disclosure/scroll and narrow browser checks pass | L | P6 |
-| P8 | Public routes, installer, upgrade and documentation | M | P3 |
+| P8 | Complete — signed public probes, three route guides, lossless legacy import and installer/docs; 143 clean-snapshot unit/browser/UI checks pass | M | P3 |
 | P9 | Professional design for the Voice area | L | P3, P5, P7 |
 
 P6–P7 can run in parallel with P1–P5. P9 comes last because it restyles what P3, P5 and P7 build;
@@ -149,7 +149,7 @@ P3/P5/P7 should still use shared parts so P9 changes templates, not logic.
   the installer uses for `voice-browser`, writes its key file and links to `/users/<name>` for
   models and limits. Several numbers may share one account. **Rotate key** replaces the key file
   in place.
-- **New ability `front-phone`** ("call in by telephone as yourself"), listed with the other front
+- **New ability `front-phone`** ("call in by telephone as yourself"), listed with the other control node
   abilities in [app.py](../weightroom/app.py) and grantable per group/user. It gates P5.
 - Tests: file mode and atomicity, secrets never in HTML/JSON/logs (assert by searching rendered
   output and captured logs), account created once, rotation without restart, ability shown on
@@ -174,7 +174,7 @@ A new **System → Voice → Telephone** view (sibling of Voice settings and Voi
    Twilio's console. A number whose Voice URL points elsewhere is flagged "Not connected here".
    Drafts survive switching between numbers, as on the Cloud APIs page.
 4. **Test:** **Simulate a call** to a chosen number runs the logic of `voice-phone-check.py` from
-   front against the public URL (signed webhook with that `To` → TwiML → signed stream → spoken
+   control node against the public URL (signed webhook with that `To` → TwiML → signed stream → spoken
    reply → marks) and reports each stage with timings. Its core moves into
    `voice/telephone_check.py`, shared by the script and the page. No outbound calls (D3).
 5. **Recent phone activity:** last 20 inbound attempts per number from the ring (P6) — time,
@@ -219,7 +219,7 @@ fallbacks, rate limits, compute never contacted for refused callers.
 - **My account → Phone numbers** section (shared parts from `user_parts.html`), visible with
   `front-phone`: add a number, receive an SMS code, enter it, done. Up to 3 numbers per user;
   remove at any time.
-- **Verification:** front sends a 6-digit code through Twilio Messages from an SMS-capable
+- **Verification:** control node sends a 6-digit code through Twilio Messages from an SMS-capable
   connected number (the page names which; if none is SMS-capable, registration is unavailable
   and says so). Codes are hashed, expire after 10 minutes, allow 5 attempts, and sending is
   rate-limited per user and per number. A number already registered to another user is refused
@@ -253,7 +253,7 @@ Extend `GET /admin/status` (private listener only), keeping existing keys for co
   last state — with an opaque id; no text and no full numbers.
 - `readiness.profiles` gains `reason` for each `No` (missing model, compute asleep, synthesis not
   installed …), from the compute voice service's `/voice/ready`.
-- Drop the hard-coded "Available" rows: the gateway reports its own facts, and front reports
+- Drop the hard-coded "Available" rows: the gateway reports its own facts, and the control node reports
   Turnstile reachability itself.
 - Add `POST /admin/calls/{id}/end` (manage-settings) that ends a call the same way hang-up does.
 
@@ -286,7 +286,7 @@ keeps scroll and open disclosures, narrow layout.
 **Public routes (D1).** Twilio must reach `public_port` over public HTTPS/WSS. The Telephone page
 offers a choice with tailored instructions:
 
-- **Own reverse proxy** (Caddy/nginx on a VPS or the front): generic example configs with WebSocket
+- **Own reverse proxy** (Caddy/nginx on a VPS or the control node): generic example configs with WebSocket
   upgrade and long-lived timeouts, domain as a placeholder.
 - **Tailscale Funnel:** detects `tailscale`, shows the one command that funnels the public port and
   the resulting `https://<node>.<tailnet>.ts.net` URL to use as `public_url`.
@@ -298,7 +298,7 @@ a valid probe signature, served on the public port), so the owner learns whether
 forwards before a real call.
 
 **Installer and upgrade.**
-- `install.sh` on a front with voice: stop telling owners to edit `[twilio]`; print "Phone calls:
+- `install.sh` on a control node with voice: stop telling owners to edit `[twilio]`; print "Phone calls:
   set up under System → Voice → Telephone".
 - `owg update` keeps any existing `[twilio]` table working untouched (P1); the panel offers Import,
   which copies non-secret values into site settings as one number with `callers.mode = anyone` and

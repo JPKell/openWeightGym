@@ -87,6 +87,7 @@ SECTIONS = (
     _section("operations", "Deployment and operations", "Installing openWeightGym, where each part runs, its settings, pairing nodes and updating installations.", (
         _topic("installation", "Installation", "The installer, one machine or several, adding a GPU node, the owg command, and uninstalling.", doc="docs/installation.md"),
         _topic("topology", "Where things run", "Which programs run on front and which on each worker, and what happens while a worker is away.", doc="docs/README.md", parts=("Where things run",)),
+        _topic("telephone", "Telephone", "Twilio setup, public routes, caller access, SMS registration and troubleshooting.", doc="docs/telephone.md"),
         _topic("settings", "Settings", "Where settings come from, model file places, and what is kept private.", doc="docs/README.md", parts=("Settings, data and privacy",)),
         _topic("deploying", "Node installation and updates", "Pairing nodes from Compute nodes, terminal updates, and serving the console over HTTPS on the LAN.", doc="docs/operations.md",
                parts=("Node installation and updates", "Console over HTTPS on the LAN")),

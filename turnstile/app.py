@@ -1067,6 +1067,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                    voice_nodes=lambda: voice_order())
     from turnstile.telephone import TelephoneAdmin
     telephone_admin = TelephoneAdmin(users, log, console_settings.changes,
+        (Path(settings.path).parent / '../keys').resolve() if settings.path else
         Path(settings.machine_key_file).parent if settings.machine_key_file else Path(settings.data) / 'keys')
 
     def platform():

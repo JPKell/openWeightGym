@@ -45,7 +45,8 @@ origins = ["https://front.your-tailnet.ts.net", "http://localhost:8446", "http:/
 # desktop_host = "front.lan"
 # desktop_port = 8447
 
-# Enable only once the existing voice listener has been replaced.
+# Telephone setup is under System → Voice → Telephone. These legacy machine-file
+# settings remain supported; the panel can import them without copying credentials.
 # public_port = 8081
 # public_host = "0.0.0.0"
 # [twilio]

@@ -41,7 +41,14 @@ class TwilioAPI:
         if not response.is_success:
             messages = {401: 'Twilio rejected the credentials (HTTP 401).', 403: 'Twilio refused this operation (HTTP 403).',
                 404: 'Twilio could not find that account or number (HTTP 404).', 429: 'Twilio’s rate limit was reached. Wait before trying again (HTTP 429).'}
-            raise TwilioError(messages.get(response.status_code, f'Twilio returned HTTP {response.status_code}. Check the account in Twilio’s console.'))
+            message = messages.get(response.status_code, f'Twilio returned HTTP {response.status_code}. Check the account in Twilio’s console.')
+            try:
+                code = response.json().get('code')
+                if type(code) is int and 10000 <= code <= 99999:
+                    message += ' Twilio error code: ' + str(code) + '.'
+            except (ValueError, AttributeError):
+                pass
+            raise TwilioError(message)
         try:
             body = response.json()
             if not isinstance(body, dict):
