@@ -23,13 +23,14 @@ import time
 
 from db import DatabaseSource, database, migrate
 from db.schemas import BATCHES
+from loadcoach.setting_catalog import default_for
 
 ENDPOINTS = ("/v1/chat/completions", "/v1/responses", "/v1/completions", "/v1/embeddings", "/v1/rerank", "/v1/images/generations", "/v1/images/edits", "/v1/audio/generations")
-MOST_LINES = 10_000  # requests in one batch
-MOST_BYTES = 50 * 2**20  # the size of one uploaded file
-TRIES = 3  # how often one request is begun. Each time it is cut off by LoadCoach going down counts, so that one which brings it down is not begun for ever
+MOST_LINES = default_for("turnstile","batch_max_lines")  # requests in one batch
+MOST_BYTES = int(default_for("turnstile","batch_max_mib") * 2**20)  # the size of one uploaded file
+TRIES = default_for("turnstile","batch_tries")  # how often one request is begun. Each time it is cut off by LoadCoach going down counts, so that one which brings it down is not begun for ever
 OPEN = ("in_progress", "cancelling")  # the states of a batch that has not ended
-AGAIN_AFTER = 30  # seconds before a request that was turned away for now is tried again
+AGAIN_AFTER = default_for("turnstile","batch_retry_seconds")  # seconds before a request that was turned away for now is tried again
 
 
 class NoLocalBatches:
@@ -73,8 +74,9 @@ def uploaded(content_type: str, body: bytes) -> dict[str, tuple[str, bytes]]:
     return {part.get_param("name", header="content-disposition"): (part.get_filename() or "", part.get_payload(decode=True)) for part in message.iter_parts()}
 
 
-def lines_of(content: bytes, endpoint: str) -> list[dict]:
+def lines_of(content: bytes, endpoint: str, *, maximum: int | None = None) -> list[dict]:
     """The requests in an uploaded file, each as `custom_id` and `body`. Raises ValueError, naming the line, if the file is not a batch for this endpoint."""
+    maximum = MOST_LINES if maximum is None else maximum
     found, seen = [], set()
     for number, text in enumerate(content.decode("utf-8", "replace").splitlines(), 1):
         if not text.strip():
@@ -92,8 +94,8 @@ def lines_of(content: bytes, endpoint: str) -> list[dict]:
         seen.add(one["custom_id"])
         found.append({"custom_id": one["custom_id"], "body": one["body"],
                       **({'endpoint': line_endpoint} if line_endpoint != endpoint else {})})
-    if not found or len(found) > MOST_LINES:
-        raise ValueError(f"A batch has from 1 to {MOST_LINES} requests. This file has {len(found)}.")
+    if not found or len(found) > maximum:
+        raise ValueError(f"A batch has from 1 to {maximum} requests. This file has {len(found)}.")
     return found
 
 
@@ -106,6 +108,7 @@ class Batches:
         self.db = source.connect(check_same_thread=False)
         migrate(source, self.db, "loadcoach.batches", BATCHES)
         self.models = None
+        self.setting = lambda name: default_for("turnstile",name)
 
     # ---- files -----------------------------------------------------------------------------
     def bind_models(self, models) -> None:
@@ -197,7 +200,7 @@ class Batches:
             if row is None:
                 return None
             line, custom_id, body, tries, identity, endpoint = row
-            if tries >= TRIES:
+            if tries >= self.setting("batch_tries"):
                 result = {"error": {"message": f"This request was begun {tries} times and cut off each time, by LoadCoach stopping. It was not begun again.", "code": "cut_off"}}
                 self.keep(number, line, 500, "", result)
                 if on_failure:

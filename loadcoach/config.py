@@ -20,7 +20,7 @@ from loadcoach.gpu_type import is_integrated
 from engines import checked_installations
 from loadcoach.settings import changed_for, comments, laid_over
 from loadcoach.setting_names import current_names
-from loadcoach.setting_catalog import validate_values
+from loadcoach.setting_catalog import validate_values, default_for
 
 @dataclass
 class Config:
@@ -71,6 +71,8 @@ class Config:
     cpu_idle_minutes: float = 15  # unload idle CPU models; 0 disables the timer
     load_timeout: int = 300
     max_wait: int = 600
+    max_queue: int = default_for("loadcoach","max_queue")
+    max_loaded_models: int = default_for("loadcoach","max_loaded_models")
     max_estimated_wait: float = 0  # optional admission limit in seconds; 0 keeps existing admission
     data: str = "."  # the folder LoadCoach keeps its database and its token in, counted from the settings file
     path: str = ""  # the settings file itself

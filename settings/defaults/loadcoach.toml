@@ -26,6 +26,10 @@ load_timeout = 300
 
 # Seconds a request may wait in line, loading included, before it is told to try again.
 max_wait = 600
+# Live per-node queue cap; 0 leaves it uncapped. Excess requests receive 503 with Retry-After.
+max_queue = 0
+# Live per-node residency cap; 0 leaves it uncapped. Active requests, holds and locks are protected.
+max_loaded_models = 0
 
 # Optional estimated-wait admission limit in seconds. 0 disables it. When enabled, unknown
 # or longer estimates are refused immediately; max_wait remains the actual queue timeout.

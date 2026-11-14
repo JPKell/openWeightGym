@@ -114,6 +114,15 @@ class Settings:
     response_max_tool_seconds: float = 900  # elapsed seconds allowed per tool-enabled model turn
     response_keep_days: float = 30  # days stored Responses are retained; adjustable in General settings
     keep_days: float = 90  # days the event log is kept here. 0 keeps everything
+    role_tries: int = default_for("turnstile","role_tries")
+    role_loaded_bonus: float = default_for("turnstile","role_loaded_bonus")
+    role_fast_loaded_bonus: float = default_for("turnstile","role_fast_loaded_bonus")
+    role_unknown_speed: float = default_for("turnstile","role_unknown_speed")
+    role_unknown_load: float = default_for("turnstile","role_unknown_load")
+    batch_max_lines: int = default_for("turnstile","batch_max_lines")
+    batch_max_mib: float = default_for("turnstile","batch_max_mib")
+    batch_tries: int = default_for("turnstile","batch_tries")
+    batch_retry_seconds: float = default_for("turnstile","batch_retry_seconds")
     sign_in_max_failures: int = default_for('turnstile','sign_in_max_failures')
     sign_in_window_minutes: int = default_for('turnstile','sign_in_window_minutes')
     sign_in_lockout_minutes: int = default_for('turnstile','sign_in_lockout_minutes')
@@ -912,6 +921,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return said
 
     routing = roles.Routing(stores.database("weightroom.roles"), log, caller, facts_for, through, relay, placed=True)
+    routing.setting = lambda name: live("turnstile", name, getattr(settings,name))
     routing.node_names = lambda: list(machines.active_names)
 
     async def overflow_candidates(request, user, model, facts, candidates):
@@ -972,6 +982,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     routing.hosted = hosted
     # Batches are the control node's: their files and requests are kept in the accounts store, and each request goes in through turnstile's own door.
     batch_work = FrontBatches(Batches(stores.database("weightroom.accounts")), log, lambda *asked: ask_all(*asked), None, lambda name: f"{internal_token}:{name}")
+    batch_work.setting = lambda name: live("turnstile",name,getattr(settings,name))
+    batch_work.store.setting = batch_work.setting
     from turnstile.extractions import ExtractionService
     extractions = ExtractionService(stores.database('weightroom.accounts'), caller)
     extractions.maintenance = gate
@@ -3481,6 +3493,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     app.state.task_records = task_records
     app.state.mirrorwall = image_work
     app.state.soundroom = audio_work
+    app.state.batches = batch_work
     app.state.responses = response_store
     app.state.extractions = extractions
     app.state.console_settings = console_settings

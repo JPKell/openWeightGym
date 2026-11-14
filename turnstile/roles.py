@@ -39,12 +39,13 @@ from loadcoach.reliability import ANSWERED, OUTCOME, Reliability, answer_outcome
 from loadcoach.role_evidence import RoleEvidence
 from loadcoach.roles import STRENGTHS, Roles, check_role, fast_preference_seconds, loaded_factors, ordered, pick, routing_score, seconds_to_answer
 from loadcoach.users import User
+from loadcoach.setting_catalog import default_for
 from loadcoach.waiting import completion, workload
 from turnstile.accounts import address, error, lacks, read_json, signed_in
 from turnstile.hosted import TRACE
 
 FACTS_FOR = 3  # seconds what compute said of its models is used before it is asked again
-TRIES = 3  # the models of a role tried for one request, when the one picked will not load
+TRIES = default_for("turnstile","role_tries")  # the models of a role tried for one request, when the one picked will not load
 PICKED = ("x-loadcoach-role", "x-loadcoach-because", "x-loadcoach-role-context")  # what turnstile tells compute of a pick. Never taken from a caller
 
 
@@ -151,6 +152,7 @@ class Routing:
 
     def __init__(self, store, log: Log, caller, facts_for, through, relay, placed: bool = False) -> None:
         """Bind role definitions, model evidence and reliability to the control node request routing."""
+        self.setting = lambda name: default_for("turnstile",name)
         self.roles = Roles(store)
         self.evidence, self.reliability = RoleEvidence(self.roles.db), Reliability(self.roles.db)
         self.log, self.caller, self.facts_for, self.through, self.relay = log, caller, facts_for, through, relay
@@ -192,7 +194,8 @@ class Routing:
         `why_not` says why a model cannot answer this request, or is None if it can. `without` are
         models that would not load a moment ago, for this same request.
         """
-        settings_role = self.roles.get(role)
+        settings_role = {"loaded_bonus":self.setting("role_loaded_bonus"),
+                         "fast_loaded_bonus":self.setting("role_fast_loaded_bonus"), **self.roles.get(role)}
         work = needs.get('work', {'prompt_tokens': needs.get('tokens', 0), 'output_tokens': 400,
                                   'basis': 'preview prompt estimate and 400 output tokens'})
         required = settings_role.get("requires", {})
@@ -217,6 +220,7 @@ class Routing:
             found.append({"name": name, "weight": settings_role["models"][name], "why_not": why_not,
                           "warm": bool(not why_not and fact["warm"]), "resident": bool(not why_not and fact["resident"]),
                           **{key: fact.get(key) for key in ("speed", "prompt_speed", "load", "context", "fit")},
+                          "unknown_speed":self.setting("role_unknown_speed"), "unknown_load":self.setting("role_unknown_load"),
                           "cards": fact.get("cards", []), "evictions": fact.get("evictions", [])})
         identities = {one["name"]: identity(facts, one["name"])[:2] for one in found if not one["why_not"] and not facts["models"][one["name"]]["hosted"]}
         ranked = self.evidence.rank(settings_role, identities, facts["environment"])
@@ -435,7 +439,7 @@ class Routing:
         # The least context the picked model must be admitted with, or compute answers 502 and the next is tried.
         headers.append(("x-loadcoach-role-context", str(max(needs["tokens"], required.get("tokens", 0)))))
         without, before = set(), None
-        for attempt in range(TRIES):
+        for attempt in range(self.setting("role_tries")):
             seen, picked = self.chosen((role, strength), needs, facts, without)
             if picked is None:
                 break

@@ -253,6 +253,8 @@ class Runner:
                 raise Refusal(503, f"Not admitted: Estimated wait {seconds:g} seconds exceeds the {self.config.max_estimated_wait:g}-second limit.",
                               max(1, min(3600, math.ceil(seconds))))
 
+        if ticket.model and self.config.max_queue and sum(one.model is not None for one in self.waiting) >= self.config.max_queue:
+            raise Refusal(503, "The compute node request queue is full. Try again shortly.", 5)
         self.waiting.append(ticket)
         self.waiting.sort(key=lambda waiting: RANK[waiting.priority])  # stable: arrival order kept
         self.wake.set()
@@ -830,6 +832,25 @@ class Runner:
                                             -sum(self.free(card, leave + plan[1]) for card in plan[0])))
 
     def fit(self, model: str, settings: dict, taken: set[str], *, configured: dict | None = None) -> tuple[dict, tuple[str, ...], list[Server]] | None:
+        """Apply the live resident cap to the normal memory placement plan."""
+        placed = self._fit(model,settings,taken,configured=configured)
+        limit = self.config.max_loaded_models
+        if placed is None or not limit:
+            return placed
+        selected,cards,gone = placed
+        removed = set(gone) | set(self.replacements(model,configured or self.models.get(model) or settings))
+        count = len(set(self.servers.values()) | self.retiring) - len(removed) + 1
+        if count > limit:
+            idle = sorted((server for server in self.servers.values() if server not in removed and
+                           server.ready and not self.busy(server) and not self.pinned(server) and
+                           not self.holder() and time.monotonic()-server.idle_since >= self.config.model_idle_minutes*60),
+                          key=lambda server:server.idle_since)
+            if len(idle) < count-limit:
+                return None
+            gone = [*gone,*idle[:count-limit]]
+        return selected,cards,gone
+
+    def _fit(self, model: str, settings: dict, taken: set[str], *, configured: dict | None = None) -> tuple[dict, tuple[str, ...], list[Server]] | None:
         """Prefer maximum context, evicting only stale idle models, then try smaller measured sizes.
 
         An uncalibrated model first reserves empty cards to measure its three contexts. Until

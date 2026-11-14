@@ -1,9 +1,9 @@
-"""Batches, on the front machine: files handed in, and their requests answered later, one after another.
+"""Batches, on the control node: files handed in, and their requests answered later, one after another.
 
 Each request of a batch goes through turnstile's own front door, in the name of whoever handed it in, at
 low priority and under the batch's number as its trace. So a role is picked for it, a hosted model may answer
 it, and compute only ever sees a request like any other. The store is the one compute used
-(loadcoach/batches.py), kept in front's accounts store, so that a batch outlives either machine being off.
+(loadcoach/batches.py), kept in the control node's accounts store, so that a batch outlives either machine being off.
 """
 
 import asyncio
@@ -14,9 +14,9 @@ import httpx
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from loadcoach import batches as rules
-from loadcoach.batches import ENDPOINTS, MOST_BYTES, Batches, lines_of, uploaded
+from loadcoach.batches import ENDPOINTS, Batches, lines_of, uploaded
 from loadcoach.users import User
+from loadcoach.setting_catalog import default_for
 from turnstile.accounts import address, error, read_json
 
 
@@ -24,7 +24,7 @@ class Pins:
     """What `Batches.start` pins a queued request by: the model ID compute gave its name when the batch began."""
 
     def __init__(self, ids: dict[str, str]) -> None:
-        """Bind stable model identity lookups used by the batches the front keeps."""
+        """Bind stable model identity lookups used by the batches the control node keeps."""
         self.ids = ids
 
     def identity(self, name: str) -> str | None:
@@ -37,18 +37,25 @@ class Pins:
 
 
 class FrontBatches:
-    """Durable batches the front keeps, executed through authenticated model APIs."""
+    """Durable batches the control node keeps, executed through authenticated model APIs."""
     def __init__(self, store: Batches, log, ask_compute, door: httpx.AsyncClient, internal_key) -> None:
         """`ask_compute(user, method, path)` asks compute as someone. `door` is turnstile's own front door, and `internal_key(name)` the key that opens it for one account."""
         self.store, self.log, self.ask_compute, self.door, self.internal_key = store, log, ask_compute, door, internal_key
         self.working: dict[str, asyncio.Task] = {}
         self.carrying: set[asyncio.Task] = set()
         self.in_flight: dict[str, dict] = {}  # batch number -> the request under way for it, for the status page
-        self.task_owner = None  # front task history additionally checks immutable account identity
+        self.task_owner = None  # control node task history additionally checks immutable account identity
         self.image_work = None  # optional image progress/storage hook; admission stays in LoadCoach
+        self.setting = lambda name: default_for("turnstile",name)
         self.audio_work = None  # the same for SoundRoom's audio
 
     # ---- what compute calls its models -----------------------------------------------------------
+
+    async def retry_delay(self):
+        """Re-read the delay during waits so a live change affects pending retries."""
+        began = time.monotonic()
+        while (left := self.setting('batch_retry_seconds')-(time.monotonic()-began)) > 0:
+            await asyncio.sleep(min(1,left))
 
     async def model_catalogue(self, user: User) -> tuple[list[dict], bool]:
         """Return permitted local models and whether every configured node answered."""
@@ -139,7 +146,7 @@ class FrontBatches:
                         if not complete:  # A partial inventory cannot establish that the pinned model was deleted.
                             deferred(line, 'Waiting for a complete model inventory before retrying.')
                             store.not_begun(number, line["line"])
-                            await asyncio.sleep(rules.AGAIN_AFTER)
+                            await self.retry_delay()
                             continue
                         keep(line, 404, "", {"error": {"message": "The recorded model was removed.", "code": "model_not_found"}})
                         continue
@@ -158,7 +165,7 @@ class FrontBatches:
                 except httpx.HTTPError as problem:
                     deferred(line, 'Inference connection unavailable; waiting to retry.', error_type=type(problem).__name__)
                     store.not_begun(number, line["line"])
-                    await asyncio.sleep(rules.AGAIN_AFTER)
+                    await self.retry_delay()
                     continue
                 finally:
                     self.in_flight.pop(number, None)
@@ -166,7 +173,7 @@ class FrontBatches:
                     # Not now: compute is off or waking, turnstile is full, it waited too long, or the account has too much under way. Not a try, and not an answer.
                     deferred(line, 'Waiting for inference capacity before retrying.', status=answer.status_code)
                     store.not_begun(number, line["line"])
-                    await asyncio.sleep(rules.AGAIN_AFTER)
+                    await self.retry_delay()
                     continue
                 try:
                     said = answer.json()
@@ -178,7 +185,7 @@ class FrontBatches:
         except asyncio.CancelledError:
             if store.get(number)["status"] != "cancelling":
                 self.log.add('batch', 'interrupted', batch['user'], trace=number, batch=number,
-                             reason='Front stopped during execution. Unanswered requests will resume after restart.')
+                             reason='Control node stopped during execution. Unanswered requests will resume after restart.')
                 raise  # turnstile is stopping. Nothing is ended: the batch is gone on with at the next start
         except Exception as problem:
             self.log.add('batch', 'failed', batch['user'], trace=number, batch=number,
@@ -230,9 +237,13 @@ class FrontBatches:
 
     async def file_upload(self, request: Request, user: User) -> Response:
         """Validate and retain one batch input file."""
-        body = await request.body()
-        if len(body) > MOST_BYTES:
-            return error(413, f"A file may be up to {MOST_BYTES // 2**20} MB.")
+        maximum = int(self.setting("batch_max_mib")*2**20)
+        body = bytearray()
+        async for chunk in request.stream():
+            if len(body)+len(chunk) > maximum:
+                return error(413, f"A file may be up to {self.setting("batch_max_mib"):g} MiB.")
+            body.extend(chunk)
+        body = bytes(body)
         try:
             form = uploaded(request.headers.get("content-type", ""), body)
             (name, content), purpose = form["file"], form["purpose"][1].decode()
@@ -273,7 +284,7 @@ class FrontBatches:
         if endpoint not in ENDPOINTS:
             return error(400, f"endpoint is one of {', '.join(ENDPOINTS)}.")
         try:
-            lines = lines_of(self.store.content(file["id"]) or b"", endpoint)
+            lines = lines_of(self.store.content(file["id"]) or b"", endpoint, maximum=self.setting("batch_max_lines"))
         except ValueError as problem:
             return error(400, str(problem))
         self.store.models = Pins(await self.model_ids(user))  # the models as compute names them now, so that a name changing hands later is noticed

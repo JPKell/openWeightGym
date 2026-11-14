@@ -24,14 +24,15 @@ import re
 
 from db import DatabaseSource, database, migrate
 from db.schemas import ROLES
+from loadcoach.setting_catalog import default_for
 
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")  # a role's name. No colon in it: that is what sets a strength apart
 STRENGTHS = ("best", "available", "fast")
-LOADED_BONUS = 25  # percent added to a ready resident local model's preference for an ordinary role request
-FAST_LOADED_BONUS = 100  # :fast weights a ready local resident twice as strongly by default
+LOADED_BONUS = default_for("turnstile","role_loaded_bonus")  # percent added to a ready resident local model's preference for an ordinary role request
+FAST_LOADED_BONUS = default_for("turnstile","role_fast_loaded_bonus")  # :fast weights a ready local resident twice as strongly by default
 ANSWER = 400  # the tokens an answer is taken to have, when working out how soon a model would be done
-UNKNOWN_SPEED = 10.0  # tokens a second assumed for a model that has not answered yet, so that one that has is preferred
-UNKNOWN_LOAD = 60.0  # seconds assumed to load a model that was never loaded
+UNKNOWN_SPEED = default_for("turnstile","role_unknown_speed")  # tokens a second assumed for a model that has not answered yet, so that one that has is preferred
+UNKNOWN_LOAD = default_for("turnstile","role_unknown_load")  # seconds assumed to load a model that was never loaded
 
 
 def check_weights(weights: dict) -> None:
@@ -103,8 +104,8 @@ def seconds_to_answer(candidate: dict) -> float:
     """How soon a model would be done with an ordinary answer: the time to load it, unless it is warm, and the time to write the answer."""
     if candidate.get('estimate', {}).get('seconds') is not None:
         return candidate['estimate']['seconds']
-    waiting = 0 if candidate["warm"] or candidate.get('resident') else candidate["load"] if candidate["load"] is not None else UNKNOWN_LOAD
-    seconds = waiting + ANSWER / (candidate["speed"] or UNKNOWN_SPEED)
+    waiting = 0 if candidate["warm"] or candidate.get('resident') else candidate["load"] if candidate["load"] is not None else candidate.get("unknown_load",UNKNOWN_LOAD)
+    seconds = waiting + ANSWER / (candidate["speed"] or candidate.get("unknown_speed",UNKNOWN_SPEED))
     return min(seconds, float.fromhex('0x1.fffffffffffffp+1023'))
 
 
@@ -150,7 +151,7 @@ def pick(strength: str | None, candidates: list[dict]) -> tuple[str, str] | None
                       if soonest['estimate']['seconds'] is not None else "timing unavailable; provisional preference only")
             return soonest['name'], f"best speed preference: {timing}; {how}; loaded reuse x{factor:g}"
         return soonest["name"], (f"best speed preference: about {seconds_to_answer(soonest):.0f} s before queue/prompt processing, "
-                                f"{how}, at {soonest['speed'] or UNKNOWN_SPEED:.0f} tokens a second; "
+                                f"{how}, at {soonest['speed'] or soonest.get('unknown_speed',UNKNOWN_SPEED):.0f} tokens a second; "
                                 f"loaded reuse x{factor:g}, weighted comparison {fast_preference_seconds(soonest):.1f}")
     chosen = max(candidates, key=lambda one: (routing_score(one), one.get('loaded_factor', 1) > 1))
     factor = chosen.get('loaded_factor', 1)

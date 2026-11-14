@@ -47,5 +47,5 @@ def sections(programs, *, compute_node=False):
             fragment = group.setdefault(program['program'], {**program, 'settings': []})
             fragment['settings'].append(setting)
     order = [*SECTION_ORDER, *(title for title in result if title not in SECTION_ORDER)]
-    return [{'title': title, 'programs': list(result[title].values())}
+    return [{'title': title, 'programs': list(result[title].values()), **({'open':False} if title == 'Advanced' else {})}
             for title in order if title in result]

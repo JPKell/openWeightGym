@@ -260,3 +260,17 @@ password_min_length = 8
 api_key_max_days = 0
 # Sign-in idle expiry in hours; 0 disables it. API keys are unaffected. Changes apply live.
 session_idle_hours = 0
+
+# Advanced routing defaults, live for new requests. Explicit per-role bonuses win.
+role_tries = 3
+role_loaded_bonus = 25
+role_fast_loaded_bonus = 100
+# Provisional preferences only: absent measured wait evidence stays unknown.
+role_unknown_speed = 10.0
+role_unknown_load = 60.0
+# Control node batch limits; existing batches continue. Changes apply without restart.
+batch_max_lines = 10000
+batch_max_mib = 50
+batch_tries = 3
+# Re-read while a temporary refusal waits for retry.
+batch_retry_seconds = 30

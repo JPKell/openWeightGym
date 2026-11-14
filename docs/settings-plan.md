@@ -77,6 +77,8 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Routing and batch tunables belong to Turnstile: the control node owns both routing and durable batch execution. Queue and resident caps remain per LoadCoach node. A lower resident cap affects new placements and preserves active work, holds, locks and the existing minimum idle interval.
+
 - Security counts failures in rolling windows. A successful sign-in clears its account/address pair, while the shared address counter remains. CLI `unlock NAME` clears pairs; `--address` also clears that address’s shared counter. Legacy sessions start idle tracking at first use; API key lifetime policy affects new keys only.
 
 - Phase 2 final `09fa66b`: clean full suite 3,902 passed, 314 failed, 11 known fixture errors and 61 skipped; all 537 settings/component checks and 39 UI cases pass. The PostgreSQL route regression passes separately (21 component checks). Two additional Chat/benchmark timing assertions pass independently. Normal update/restart and source verification passed on all five checkouts. Live evidence `/home/owgadmin/ai/owg-settings-phase2-live-final.json`: 21 pages, 23 moved controls, five source/default reports, pending/reset and preview/apply/revert/export, with restored values and unchanged service PIDs. Full evidence: `owg-settings-phase2-route-full.xml`, `owg-settings-phase2-route-comparison.json` and `owg-settings-phase2-source-verified.json` in the same directory.
@@ -287,8 +289,8 @@ abuse limits, notifications, enforcement and content limits.
 |---|---|---|---|---|
 | `max_queue` per node (requests waiting; above it, 503 with Retry-After, like Ollama `MAX_QUEUE`) | loadcoach | 0 (no cap) | live | LoadCoach line admission |
 | `max_loaded_models` per node (optional cap besides memory fit) | loadcoach | 0 | live | Placement/eviction |
-| `role_tries`, `role_loaded_bonus`, `role_fast_loaded_bonus`, `role_unknown_speed`, `role_unknown_load` (now `TRIES`, `LOADED_BONUS`, … in `turnstile/roles.py`, `loadcoach/roles.py`) | turnstile/loadcoach | today's constants | live | Advanced section |
-| `batch_max_lines`, `batch_max_mib`, `batch_tries`, `batch_retry_seconds` (now `MOST_LINES`, `MOST_BYTES`, `TRIES`, `AGAIN_AFTER`) | loadcoach | 10000 / 50 / 3 / 30 | live | `loadcoach/batches.py` |
+| `role_tries`, `role_loaded_bonus`, `role_fast_loaded_bonus`, `role_unknown_speed`, `role_unknown_load` (now `TRIES`, `LOADED_BONUS`, … in `turnstile/roles.py`, `loadcoach/roles.py`) | turnstile | today's constants | live | Advanced section |
+| `batch_max_lines`, `batch_max_mib`, `batch_tries`, `batch_retry_seconds` (now `MOST_LINES`, `MOST_BYTES`, `TRIES`, `AGAIN_AFTER`) | turnstile | 10000 / 50 / 3 / 30 | live | `loadcoach/batches.py` |
 | `busy_retry_seconds`, `machines_poll_seconds`, `max_in_flight` **R**, `wait` (moved from §4/§5) | turnstile | as file | live (R) | `turnstile/app.py` |
 
 ### 8.3 Alerts and notifications (`/settings/alerts`)
@@ -451,7 +453,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 2.5 History, revert and validated export/import (511 focused checks; 29 transfer/filter/browser checks, including polling drafts and rejected secret input).
 - [x] 2.6 UI checks, docs and Phase 2 deployed/verified (09fa66b; all 39 UI cases, five checkouts, 21 live pages, 23 controls, restored changes and stable PIDs).
 - [x] 3.1 Security and sign-in; 587 focused checks, 87 browser/UI checks and the separate PostgreSQL counter contract pass.
-- [ ] 3.2 Requests, admission, placement, routing and batches.
+- [x] 3.2 Requests, admission, placement, routing and batches; 584 feature/UI checks pass, including real 503/Retry-After and live resident reclamation.
 - [ ] 3.3 Notifications, personal channels and thresholds.
 - [ ] 3.4 Global limits and per-group overrides.
 - [ ] 3.5 Spending policy.

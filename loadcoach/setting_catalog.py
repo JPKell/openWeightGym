@@ -549,3 +549,25 @@ for name, kind, value, minimum, maximum, label, unit, help_text in (
 _add('weightroom','trusted_proxies','list',tier=FILE,scope='front',page='security',section='Connection security',
      label='Trusted proxies',default=[],rule=_proxy_networks,
      help='Set trusted proxy IP addresses or CIDR networks in settings/weightroom.toml. Forwarded client addresses are ignored unless the socket peer is trusted; only the last untrusted hop is used.')
+
+
+for name, maximum, label, help_text in (
+    ('max_queue',100000,'Maximum queued requests','Zero leaves the queue uncapped. Excess requests receive 503 with Retry-After; requests already admitted continue.'),
+    ('max_loaded_models',1000,'Maximum loaded models','Zero leaves residency uncapped. New placements reclaim the oldest eligible idle residents; active requests, holds and model locks remain protected.'),
+):
+    _add('loadcoach',name,'int',tier=NOW,scope='node',page='requests',section='Requests and queue',
+         label=label,min=0,max=maximum,default=0,control='number',help=help_text)
+
+for name, kind, default, minimum, maximum, label, unit, help_text in (
+    ('role_tries','int',3,1,20,'Role candidate attempts','', 'Candidate attempts for a new role request. Explicit model requests are unaffected.'),
+    ('role_loaded_bonus','float',25,0,100,'Default loaded-model bonus','%', 'Used when a role has no explicit loaded bonus. Applies to new role selections.'),
+    ('role_fast_loaded_bonus','float',100,0,500,'Default fast loaded-model bonus','%', 'Used when a role has no explicit fast loaded bonus. Applies to new selections.'),
+    ('role_unknown_speed','float',10.0,0.01,1000000,'Unmeasured output speed','tokens/s', 'Provisional preference for legacy candidates without timing evidence. Measured request estimates remain unknown when evidence is absent.'),
+    ('role_unknown_load','float',60.0,0,86400,'Unmeasured load time','s', 'Provisional preference when load timing has not been measured. Never replaces measured wait evidence.'),
+    ('batch_max_lines','int',10000,1,1000000,'Maximum batch requests','', 'Checked when a new batch starts. Existing batches continue.'),
+    ('batch_max_mib','float',50,1,1024,'Maximum batch upload','MiB', 'Bounds the complete multipart upload before storing it. Applies to new uploads.'),
+    ('batch_tries','int',3,1,100,'Batch cut-off attempts','', 'Maximum interrupted starts of a batch line; checked before its next attempt.'),
+    ('batch_retry_seconds','float',30,1,3600,'Batch retry delay','s', 'Delay after a temporary refusal. Changes interrupt the pending retry delay.'),
+):
+    _add('turnstile',name,kind,tier=NOW,scope='front',page='requests',section='Advanced',
+         label=label,min=minimum,max=maximum,default=default,unit=unit,control='number',help=help_text)
