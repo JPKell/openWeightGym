@@ -426,7 +426,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 1b Live observation policy (414 focused checks pass; shared policy updates on save).
 - [x] 1c Live display, costs and audio defaults (459 feature checks and all 39 UI consistency/browser cases pass).
 - [x] 1d Live control node request settings (447 focused checks pass; connection pool size stays restart-only).
-- [ ] 1e Live disk monitoring paths.
+- [x] 1e Live disk monitoring paths (427 focused checks pass; cached readings invalidate on selection changes).
 - [ ] 1f Per-node Wake overrides.
 - [ ] 1g Voice recognition and synthesis tuning.
 - [ ] 1h Hermes tools for new calls.

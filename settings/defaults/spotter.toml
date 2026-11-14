@@ -34,3 +34,6 @@ files_every = 10
 
 # Check installed service and engine versions this often, in minutes (above 0). Changes apply immediately.
 component_versions_every = 60
+
+# Absolute folders whose drives are watched for free space (at most 32). Applies immediately.
+disks = ["/"]
