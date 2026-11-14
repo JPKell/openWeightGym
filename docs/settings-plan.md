@@ -412,7 +412,7 @@ no design-proposal round: build one new settings design across all settings page
 ### Status
 
 - [x] 0.1 Catalogue entries and typed contracts (221 catalogue tests pass).
-- [ ] 0.2 Derive tiers, labels and section order.
+- [x] 0.2 Derive tiers, labels and section order (235 focused tests pass; broader console failures under baseline review).
 - [ ] 0.3 Shared validation in APIs and loaders.
 - [ ] 0.4 Common live getter and generic live application.
 - [ ] 0.5 Catalogue, validation, live and secret tests; Phase 0 deployed and verified.

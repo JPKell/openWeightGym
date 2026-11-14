@@ -35,7 +35,7 @@ from db.schemas import SETTINGS
 
 
 def front_programs(config, retired: bool = False) -> frozenset[str]:
-    """Programs whose settings this node refuses because the front keeps them.
+    """Programs whose settings this node refuses because the control node keeps them.
 
     `retired` is whether the node's store went through the DB1 retirement (`store_retired`).
     """
@@ -43,7 +43,7 @@ def front_programs(config, retired: bool = False) -> frozenset[str]:
 
 
 def store_retired(source) -> bool:
-    """Whether a node's store has retired its copies of the records the front keeps (DB1)."""
+    """Whether a node's store has retired its copies of the records the control node keeps (DB1)."""
     from db import schema_version
     with database(source).connection() as connection:
         return bool(schema_version(connection, "loadcoach.retirement"))
@@ -57,31 +57,10 @@ def program_name(program: str) -> str:
     """Canonical service names, including existing settings clients during upgrades."""
     return LEGACY_PROGRAMS.get(program, program)
 
-# For each program, the settings that can be changed from the site, and when a change holds:
-# "now", the running program takes it on within a few seconds, or "restart", from its next
-# start. Their starting values are in the program's defaults file, settings/defaults/NAME.toml.
-#
-# A setting that is not named here belongs to the machine: an address, a port, a path, the
-# cards, where things are kept. Those are in the program's own file, settings/NAME.toml, are
-# shown on the site, and cannot be changed there, since they could do harm from a browser.
-# Engine executable paths are an explicit manage-settings exception, pending restart.
-CHANGEABLE: dict[str, dict[str, str]] = {
-    "loadcoach": {"engines": RESTART, "llama_server": RESTART, "disabled_gpus": NOW, "engine_gpus": NOW, "load_timeout": NOW, "max_wait": NOW, "max_estimated_wait": NOW, "keep_days": NOW, "keep_text": NOW, "batch_keep_days": NOW, "unlogged": NOW, "card_margin": NOW, "model_idle_minutes": NOW, "host_ram_headroom_mib": NOW, "host_ram_limit_mib": NOW, "cpu_idle_minutes": NOW, "disable_ram_offload": RESTART, "models_folder": RESTART, "models_storage_folder": RESTART, "model_defaults": NOW},
-    "toollocker": {"call_timeout": NOW, "toolsets": NOW, "tool_levels": NOW},
-    "spotter": {"sample_every": NOW, "keep_days": NOW, "sleep_after": NOW, "busy_gpu": NOW, "busy_processor": NOW, "files_every": NOW, "component_versions_every": NOW},
-    "voice": {"max_active_sessions": NOW, "max_starting_sessions": NOW, "max_session_minutes": NOW, "idle_seconds": NOW, "hold_seconds": NOW,
-              "hold_every": NOW, "hold_after_last_call": NOW, "speech_threshold": NOW, "profiles": NOW, "greetings": NOW, "model_parallel": RESTART},  # fmt: skip
-    "voice-gateway": {"modes": NOW, "profile": NOW, "soundroom_profile": NOW, "startup_seconds": NOW, "max_active_sessions": NOW, "max_starting_sessions": NOW,
-                      "hermes_model": NOW, "hermes_system_prompt": NOW, "hermes_max_turns": NOW, "hermes_context_tokens": NOW,
-                      "hermes_max_output_tokens": NOW, "hermes_reasoning_effort": NOW,
-                      "telephone": NOW, "public_port": RESTART, "public_host": RESTART},
-    "weightroom": {**dict.fromkeys(SERVICE_SETTINGS, NOW), "timezone": RESTART, "mock_input_rate": RESTART, "mock_output_rate": RESTART, "third_party_services": NOW, "backup_retention": NOW, "alert_gpu_temperature": NOW,
-                   "observation_error_percent": NOW, "observation_p95_seconds": NOW, "observation_min_samples": NOW,
-                   "observation_window_seconds": NOW, "observation_alert_hold_seconds": NOW,
-                   **{f"audio_{kind}_model": RESTART for kind in ("lyrics", "music", "sound", "speech", "transcription")}},
-    "turnstile": {"response_max_tool_calls": NOW, "response_max_tool_seconds": NOW, "response_keep_days": NOW, "wait": RESTART, "artifact_machine": RESTART, "image_adult_previews": NOW, "files_every": NOW, "component_versions_every": NOW,
-                  "models_folder": NOW, "models_storage_folder": NOW, "allow_caller_to_specify_destination": NOW, "preferred_voice_node": NOW},
-}
+# Compatibility shape for existing followers; the catalogue is the authority.
+from loadcoach.setting_catalog import changeable
+
+CHANGEABLE: dict[str, dict[str, str]] = changeable()
 SECRET = re.compile(r"(^|_)(key|token|secret|password)$")  # a setting with such a name is never handed out
 
 
