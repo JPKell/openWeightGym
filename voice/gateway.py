@@ -28,7 +28,7 @@ from loadcoach.settings import with_changes
 from voice import protocol, prompt_recordings, latency
 from voice.hermes import Bridge, configuration
 from voice.telephone import Conversion, valid, valid_stream
-from voice.telephone_settings import configuration as telephone_configuration
+from voice.telephone_settings import configuration as telephone_configuration, validate as validate_telephone
 from voice.options import FIELDS as CALL_FIELDS, MAX_CALL_BYTES
 
 START_FAILURES = {'busy', 'unauthorized', 'unavailable', 'invalid_options', 'invalid_voice',
@@ -68,6 +68,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
     assets = Path(__file__).with_name("static")
     prompts = Path(settings.get("prompts", str(Path(__file__).with_name("prompts"))))
     cache_lock = asyncio.Lock()
+    simulation_lock = asyncio.Lock()
     latencies = latency.Recent()
     from loadcoach.client_origin import ClientOrigin, forward as forward_origin
 
@@ -209,7 +210,8 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             phone_calls[call] = dict(id=secrets.token_hex(16), nonce=secrets.token_urlsafe(32),
                                     created=time.monotonic(), connected=False, number=number)
         item = phone_calls[call]
-        xml = ('<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="' + escape(phone["stream_url"], {'"': '&quot;'}) + '">'
+        greeting = '<Say>' + escape(number['greeting']) + '</Say>' if number.get('greeting') else ''
+        xml = ('<?xml version="1.0" encoding="UTF-8"?><Response>' + greeting + '<Connect><Stream url="' + escape(phone["stream_url"], {'"': '&quot;'}) + '">'
                '<Parameter name="session" value="' + item["id"] + '"/><Parameter name="nonce" value="' + item["nonce"] + '"/>'
                '</Stream></Connect></Response>')
         return Response(xml, media_type="application/xml")
@@ -293,7 +295,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 await send(dict(event="media", streamSid=stream_sid, media={"payload": base64.b64encode(ulaw).decode()}))
                 segment_played += len(value) // 2
                 next_mark += 1
-                mark = str(next_mark)
+                mark = f't{turn}:{next_mark}'
                 marks[mark] = dict(type="playback.progress", turn=turn, segment=segment, samples=segment_played)
                 if len(marks) > 60:
                     raise ValueError("Telephone playback stalled")
@@ -772,6 +774,20 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                              'default_profile': settings.get('profile', 'default'), 'cloned_profile': settings.get('soundroom_profile'),
                              'configuration_error': problem}, headers={'cache-control': 'no-store'})
 
+    async def phone_choices(account):
+        """Read one phone account's permitted profiles/voices without loading or waking compute."""
+        if not isinstance(account, str) or not protocol.ID.fullmatch(account):
+            return {}
+        try:
+            account_key = (Path(settings['key_file']).parent / (account + '.key')).read_text().strip()
+            options = await ask('GET', voice_door + '/voice/options', account_key, no_wake=True, timeout=3)
+            voices = await ask('GET', turnstile + '/soundroom/voices', account_key, no_wake=True, timeout=3) if settings.get('soundroom_profile') else None
+            result = options.json() if options.is_success else {}
+            result['voices'] = voices.json().get('voices', []) if voices and voices.is_success else []
+            return result
+        except (OSError, httpx.HTTPError, ValueError):
+            return {}
+
     async def admin(request):
         """Private operator controls, authorized afresh by front's existing accounts."""
         scheme, _, key = request.headers.get('authorization', '').partition(' ')
@@ -790,8 +806,57 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 body = await request.body()
                 if len(body) > 16384:
                     return Response(status_code=413)
+                submitted = json.loads(body) if body else {}
+                if submitted.get('action') == 'save_number':
+                    from voice.telephone_admin import edited
+                    phone = telephone_configuration(settings)
+                    # Validate only public site fields; credentials and derived URLs stay internal.
+                    proposed = edited({key: phone[key] for key in ('enabled', 'account_sid', 'public_url', 'numbers')}, submitted)
+                    number = next(one for one in proposed['numbers'] if one['number'] == submitted.get('number'))
+                    choices = await phone_choices(number['account'])
+                    profiles = {one['id']: one for one in choices.get('profiles', [])}
+                    if not profiles:
+                        return JSONResponse({'error': {'message': 'Voice profile choices are unavailable. Check the phone account, compute connection and its front-voice permission.'}}, status_code=400)
+                    try:
+                        validate_telephone({**proposed, 'numbers': [number]}, profiles,
+                            {number['account']: [one['id'] for one in choices.get('voices', [])]})
+                    except ValueError as problem:
+                        return JSONResponse({'error': {'message': str(problem)}}, status_code=400)
+                if submitted.get('action') == 'simulate':
+                    from types import SimpleNamespace
+                    from voice.telephone_check import main as simulate, CheckFailed
+                    phone = telephone_configuration(settings)
+                    number = next((one for one in phone.get('numbers', []) if one.get('number') == submitted.get('number')), None)
+                    if not phone.get('enabled') or not number or not number.get('enabled'):
+                        return JSONResponse({'error': {'message': 'Enable a configured number before testing.'}}, status_code=400)
+                    if simulation_lock.locked():
+                        return JSONResponse({'error': {'message': 'A simulation is already running. Wait for it to finish.'}}, status_code=409)
+                    args = SimpleNamespace(token_file=Path(phone['token_file']), account=phone['account_sid'],
+                        public_url=phone['public_url'].rstrip('/'), url=phone['public_url'].rstrip('/'), to_number=number['number'],
+                        caller=submitted.get('caller') or '+15555550123', audio_pcm=(prompts / 'ready.pcm').read_bytes(),
+                        audio=None, interrupt_audio=None, signature_form='wss-slash', wait=9, echo=False, persist=False)
+                    try:
+                        async with simulation_lock, asyncio.timeout(55):
+                            result = await simulate(args)
+                        return JSONResponse({'stages': result['stages'], 'passed': True}, headers={'cache-control': 'no-store'})
+                    except CheckFailed as problem:
+                        return JSONResponse({'stages': problem.stages, 'passed': False, 'message': str(problem)}, headers={'cache-control': 'no-store'})
+                    except (AssertionError, httpx.HTTPError, TimeoutError, ValueError):
+                        return JSONResponse({'error': {'message': 'Simulation did not complete a spoken reply and playback marks. Check caller access, the public route and Voice status.'}}, status_code=400)
                 reply = await http.request(request.method, turnstile + '/loadcoach/telephone', headers={**headers,
                     'content-type': 'application/json'}, content=body, timeout=10)
+                if reply.is_success and request.method == 'GET':
+                    result = reply.json()
+                    phone = telephone_configuration(settings)
+                    result.update(legacy=bool(phone.get('legacy')), webhook_url=phone.get('webhook_url', ''),
+                        stream_url=phone.get('stream_url', ''), public_port=settings.get('public_port', 8081), choices={})
+                    accounts = {one['account'] for one in result.get('telephone', {}).get('numbers', [])}
+                    throttle = asyncio.Semaphore(4)
+                    async def choices_for(account):
+                        async with throttle:
+                            return account, await phone_choices(account)
+                    result['choices_by_account'] = dict(await asyncio.gather(*(choices_for(account) for account in accounts)))
+                    return JSONResponse(result, headers={'cache-control': 'no-store'})
                 return Response(reply.content, status_code=reply.status_code, media_type='application/json', headers={'cache-control': 'no-store'})
             if action == 'status' and request.method == 'GET':
                 services = [{'name': 'Voice gateway', 'state': 'Available', 'address': 'front'},

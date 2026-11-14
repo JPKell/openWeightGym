@@ -1,14 +1,45 @@
 {% extends 'frame.html' %}
-{% from 'parts.html' import page_header, card, said_box, alert, confirm_two %}
-{% from 'voice_admin_parts.html' import voice_tabs, telephone_credentials %}
+{% from 'parts.html' import page_header, card, said_box, alert, confirm_two, more, empty_row %}
+{% from 'voice_admin_parts.html' import voice_tabs, telephone_credentials, telephone_strip, number_editor %}
 {% block title %}Telephone · openWeightGym{% endblock %}
+{% block scripts %}<script src="/static/voice-admin.js?v=1" defer></script>{% endblock %}
 {% block main %}
-<div class="settings-page">
+<div class="settings-page" data-voice-admin>
 {{ page_header('Telephone', 'Connect Twilio numbers and manage the accounts used for calls.') }}
 {{ voice_tabs('telephone') }}
 {{ said_box(said, failed) }}
 {% if voice_problem %}{% call alert('warning', role='status') %}{{ voice_problem }}{% endcall %}{% endif %}
+{{ telephone_strip(telephone_verdict) }}
+{% if telephone_data.legacy %}{% call alert('info') %}Set in the machine file. The existing Twilio configuration and signed URLs remain in force.{% endcall %}{% endif %}
+{% if result.name %}{% call alert('success') %}Twilio account: {{ result.name }} · {{ result.status }}{% endcall %}{% endif %}
+{% if result.connected is defined %}{% call alert('success' if result.connected else 'warning') %}{{ 'Number connected to this gateway.' if result.connected else 'Twilio has not confirmed the requested Voice URL.' }}{% endcall %}{% endif %}
+{% if result.message %}{% call alert('warning', role='status') %}{{ result.message }}{% endcall %}{% endif %}
+{% if result.stages %}{% call card('Simulation results') %}<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Stage</th><th>Result</th><th>Time (ms)</th></tr></thead><tbody>{% for stage in result.stages %}<tr><th scope="row">{{ stage.stage }}</th><td>{{ 'Passed' if stage.passed else 'Failed' }}</td><td>{{ stage.ms if stage.ms is not none else 'Unavailable' }}</td></tr>{% endfor %}</tbody></table></div>{% endcall %}{% endif %}
+{% call card('Account and public address') %}
+<form method="post" action="/system/voice/telephone/save_setup" data-hold-refresh>
+<div class="form-check mb-3"><input class="form-check-input" id="telephone-enabled" name="enabled" type="checkbox" value="yes"{% if telephone.enabled %} checked{% endif %}><label class="form-check-label" for="telephone-enabled">Enable telephone calls</label></div>
+<div class="row g-3">{% for name, label in [('account_sid', 'Twilio Account SID'), ('public_url', 'Public HTTPS address')] %}<div class="col-md-6"><label class="form-label" for="telephone-{{ name }}">{{ label }}</label><input class="form-control" id="telephone-{{ name }}" name="{{ name }}" value="{{ typed_in.get(name, telephone.get(name, '')) }}"{% if name == 'public_url' %} type="url" placeholder="https://voice.example.com"{% else %} pattern="AC[0-9a-fA-F]{32}"{% endif %} required></div>{% endfor %}
+<div class="col-md-6"><label class="form-label" for="telephone-public-port">Public port</label><input class="form-control" id="telephone-public-port" type="number" name="public_port" min="1" max="65535" value="{{ telephone_data.public_port|default(8081) }}" required><p class="small text-secondary">Port changes apply after the voice gateway restarts.</p></div></div>
+<button class="btn btn-primary">Save setup</button></form>
+{% for setting in telephone_data.settings|default([]) if setting.name == 'public_port' and setting.changed and setting.changed.value != setting.value %}<p class="small text-warning mt-2">Public port {{ setting.changed.value }} is saved; port {{ setting.value }} remains in force until the gateway restarts.</p>{% endfor %}
+{% endcall %}
 {{ telephone_credentials(credentials) }}
+<form method="post" action="/system/voice/telephone/check_credentials" class="mb-3"><button class="btn btn-outline-primary">Check credentials</button></form>
+{% call more('Manual webhook configuration') %}<p>In Twilio’s console, set the number’s Voice URL to <code class="text-break">{{ telephone_urls[0] or 'Save the public HTTPS address first.' }}</code> with method <strong>POST</strong>. Media uses <code class="text-break">{{ telephone_urls[1] or 'the same public route over WSS' }}</code>.</p>{% endcall %}
+{% call card('Telephone numbers') %}
+<form method="post" action="/system/voice/telephone/find_numbers" class="mb-3"><button class="btn btn-outline-primary">Find my numbers</button></form>
+{% if telephone_data.discovered %}<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Twilio number</th><th>Voice URL</th><th>Connection</th><th>Action</th></tr></thead><tbody>
+{% for number in telephone_data.discovered %}<tr><th scope="row">{{ number.friendly_name }}<span class="d-block small">{{ number.phone_number }}</span></th><td class="text-break">{{ number.voice_url or 'Not set' }}</td><td>{{ 'Connected here' if number.voice_url == telephone_urls[0] and number.voice_method == 'POST' else 'Not connected here' }}</td><td><form method="post" action="/system/voice/telephone/connect_number"><input type="hidden" name="sid" value="{{ number.sid }}"><button class="btn btn-outline-primary btn-sm">Connect</button></form>
+{% if number.phone_number not in telephone.numbers|default([])|map(attribute='number')|list %}<form method="post" action="/system/voice/telephone/add_number" class="mt-1"><input type="hidden" name="number" value="{{ number.phone_number }}"><button class="btn btn-outline-secondary btn-sm">Add</button></form>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+<form method="post" action="/system/voice/telephone/add_number" data-hold-refresh><div class="row g-2"><div class="col-md-5"><label class="form-label" for="new-phone-number">Number (E.164)</label><input class="form-control" id="new-phone-number" name="number" placeholder="+15555550123" pattern="\+[1-9][0-9]{7,14}" required></div><div class="col-md-5"><label class="form-label" for="new-phone-label">Label</label><input class="form-control" id="new-phone-label" name="label" maxlength="64" required></div><div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary">Add number</button></div></div></form>
+{% endcall %}
+{% if telephone.numbers %}
+<nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Telephone numbers">{% for number in telephone.numbers %}<a class="btn btn-outline-secondary btn-sm" data-voice-choice="{{ number.number }}" href="?number={{ number.number|urlencode }}">{{ number.label }}</a>{% endfor %}</nav>
+{% for number in telephone.numbers %}{{ number_editor(number, loop.index, telephone_data.accounts|default([]), (telephone_data.choices_by_account|default({})).get(number.account, {}), typed_in if number.number == selected_number else {}) }}{% endfor %}
+{% call card('Test a number') %}<p>Simulation sends a signed call through your public route and waits for spoken audio and playback marks. It uses compute; it never dials a telephone.</p>
+<form method="post" action="/system/voice/telephone/simulate" data-hold-refresh><label class="form-label" for="simulate-number">Destination</label><select class="form-select mb-2" id="simulate-number" name="number">{% for number in telephone.numbers %}<option value="{{ number.number }}">{{ number.label }}</option>{% endfor %}</select><label class="form-label" for="simulate-caller">Simulated caller (must pass caller access)</label><input class="form-control mb-2" id="simulate-caller" name="caller" value="+15555550123" pattern="\+[1-9][0-9]{7,14}" required><button class="btn btn-outline-primary">Simulate a call</button></form>{% endcall %}
+{% endif %}
 {% call card('Phone accounts') %}
 <p>Each telephone number runs calls as a normal app account. Configure models, tools and limits on its Users page.</p>
 <form method="post" action="/system/voice/telephone/create_account" data-hold-refresh>

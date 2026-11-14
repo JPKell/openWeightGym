@@ -3082,39 +3082,57 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return await voice_http.request(method, '/admin/' + action,
             headers={'authorization': 'Bearer ' + person.key}, **more)
 
-    async def voice_telephone_page(request: Request, person: Person, said='', failed=False) -> Response:
+    async def voice_telephone_page(request: Request, person: Person, said='', failed=False, result=None, typed_in=None) -> Response:
         """Write-only telephone setup, available without waking compute."""
         if 'manage-settings' not in person.can:
             return Response('Your account may not manage telephone.', status_code=403)
-        credentials, problem = {'token': {}, 'api': {}}, ''
+        credentials, problem, telephone = {'token': {}, 'api': {}}, '', {}
+        data = {}
         try:
-            reply = await voice_admin_request(person, 'telephone', timeout=10)
+            reply = await voice_admin_request(person, 'telephone', timeout=10, params={'number': request.query_params.get('number', '')})
             if reply.is_success:
-                credentials = reply.json()['credentials']
+                data = reply.json()
+                credentials, telephone = data['credentials'], data.get('telephone', {})
             else:
                 problem = 'Telephone administration is unavailable. Check the gateway and your permissions.'
         except (httpx.HTTPError, ValueError, KeyError):
             problem = 'Voice gateway is not answering. Check voice-gateway.service on front.'
+        from voice.telephone_admin import verdict
+        from voice.telephone_settings import urls
         return page(request, 'voice_telephone.html', person, status=400 if failed else 200,
-            credentials=credentials, voice_problem=problem, said=said or request.query_params.get('said', ''), failed=failed)
+            credentials=credentials, telephone=telephone, telephone_data=data, telephone_verdict=verdict(telephone, credentials),
+            telephone_urls=urls(telephone.get('public_url', '')) if telephone.get('public_url') else ('', ''),
+            result=result or {}, typed_in=typed_in or {}, selected_number=request.query_params.get('number', ''),
+            voice_problem=problem, said=said or request.query_params.get('said', ''), failed=failed)
 
     async def voice_telephone_do(request: Request, person: Person) -> Response:
         if 'manage-settings' not in person.can:
             return Response('Your account may not manage telephone.', status_code=403)
         action = request.path_params['action']
-        if action not in ('save_credentials', 'remove_credential', 'create_account', 'rotate_account'):
+        if action not in ('save_credentials', 'remove_credential', 'create_account', 'rotate_account',
+                           'save_setup', 'add_number', 'save_number', 'remove_number', 'check_credentials', 'find_numbers', 'connect_number', 'simulate'):
             return Response(status_code=404)
         form = await typed(request)
-        payload = {name: form[name] for name in ('token', 'api_sid', 'api_secret', 'kind', 'label') if name in form}
+        payload = {name: form[name] for name in ('token', 'api_sid', 'api_secret', 'kind', 'label', 'account_sid', 'public_url',
+            'public_port', 'number', 'account', 'mode', 'profile', 'voice', 'greeting', 'max_calls_per_hour', 'sid', 'caller') if name in form}
+        if action in ('save_setup', 'save_number'):
+            payload['enabled'] = form.get('enabled') == 'yes'
         try:
-            reply = await voice_admin_request(person, 'telephone', 'POST', json={'action': action, **payload}, timeout=10)
+            reply = await voice_admin_request(person, 'telephone', 'POST', json={'action': action, **payload}, timeout=60 if action == 'simulate' else 15)
             if not reply.is_success:
-                return await voice_telephone_page(request, person, 'Telephone settings could not be saved. Check the submitted fields and gateway.', failed=True)
+                message = reply.json().get('error', {}).get('message', 'Telephone settings could not be saved. Check the submitted fields and gateway.')
+                return await voice_telephone_page(request, person, message, failed=True,
+                    typed_in={key: value for key, value in form.items() if key not in ('token', 'api_sid', 'api_secret')})
             if action in ('create_account', 'rotate_account'):
                 return go(reply.json()['url'])
+            if action in ('check_credentials', 'find_numbers', 'connect_number', 'simulate'):
+                return await voice_telephone_page(request, person, 'Check completed.', result=reply.json())
         except (httpx.HTTPError, ValueError, KeyError):
             return await voice_telephone_page(request, person, 'Telephone settings could not be saved. Check the gateway.', failed=True)
-        return go('/system/voice/telephone?said=' + quote('Saved. Empty credential fields keep their saved values.'))
+        query = {'said': 'Saved. Empty credential fields keep their saved values.'}
+        if form.get('number') and action != 'remove_number':
+            query['number'] = form['number']
+        return go('/system/voice/telephone?' + urlencode(query))
 
     async def voice_admin_page(request: Request, person: Person, said='', failed=False, typed_in=None, opened='', **unused) -> Response:
         """Render current voice profiles, greetings and diagnostics."""

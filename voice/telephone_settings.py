@@ -85,7 +85,9 @@ def validate(phone, profiles=None, voices=None):
             raise ValueError('Choose a mode allowed by this profile.')
         if not isinstance(number.get('account'), str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', number['account']):
             raise ValueError('Choose a phone account.')
-        if number.get('voice') and (voices is None or number['voice'] not in voices.get(number['account'], ())):
+        if not isinstance(number.get('voice', ''), str) or (number.get('voice') and not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', number['voice'])):
+            raise ValueError('Choose a valid SoundRoom voice.')
+        if number.get('voice') and voices is not None and number['voice'] not in voices.get(number['account'], ()):
             raise ValueError('Choose a SoundRoom voice available to the phone account.')
         if not isinstance(number.get('greeting', ''), str) or len(number.get('greeting', '')) > 300:
             raise ValueError('Use a greeting of at most 300 characters.')

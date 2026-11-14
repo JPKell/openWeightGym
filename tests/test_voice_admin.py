@@ -119,6 +119,7 @@ def test_private_gateway_admin_refreshes_actual_front_cache_and_respects_revocat
 
 
 def voice_panel(tmp_path, **more):
+    telephone_data = more.pop('telephone_data', None)
     users = Users(str(tmp_path / 'accounts.db'), GROUPS)
     for name, group in [('jordan', 'admin'), ('pat', 'plain'), ('panel', 'front')]:
         users.add(name, group)
@@ -144,7 +145,7 @@ def voice_panel(tmp_path, **more):
                 active=0, profile='default', modes=['direct'], readiness={'profiles': {}}, latency=timings.snapshot(),
                 recordings=dict(source='Cached on front', speaker=3, texts=prompts.TEXTS)))
         if request.url.path == '/admin/telephone':
-            return httpx.Response(200, json={'credentials': {'token': {'saved': False}, 'api': {'saved': False}}})
+            return httpx.Response(200, json=telephone_data or {'credentials': {'token': {'saved': False}, 'api': {'saved': False}}})
         if request.url.path == '/admin/regenerate':
             return httpx.Response(200, json={'saved': True})
         if request.url.path == '/browser/sessions':
