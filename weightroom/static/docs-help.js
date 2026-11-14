@@ -94,7 +94,8 @@
     root.addEventListener('submit', submit, true);
     // The form remains a normal HTMX POST if this streaming enhancement is unavailable.
     form.addEventListener('htmx:beforeRequest', event => { if (event.detail.elt === form) event.preventDefault(); });
-    root.querySelector('[data-docs-new]').addEventListener('click', () => {
+    root.querySelector('[data-docs-new]').addEventListener('click', event => {
+      event.preventDefault();
       controller?.abort(); generation++; rows = []; question.value = ''; historyField.value = '[]'; list.replaceChildren();
       root.querySelector('#docs-answer').replaceChildren(); progress.textContent = ''; form.removeAttribute('aria-busy');
       form.querySelector('button[type=submit]').disabled = false;

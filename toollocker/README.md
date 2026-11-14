@@ -177,6 +177,25 @@ separately from `toollocker.toml`. Follow the control-node ToolLocker setup cont
 control node gateway's tool list, permissions and calls before retiring the old service. The installer
 does not disable a legacy compute gateway automatically.
 
+## Built-in Documentation tools
+
+With `front = "weightroom.toml"`, ToolLocker derives the local console address from that
+file's configured port and offers the built-in `docs` server and `/mcp/docs` tool set.
+The file-only `docs_url` setting overrides that console base URL; an explicit empty string
+disables the built-in connection. Use an HTTP/HTTPS base URL without credentials, path or
+query. Keep the existing shared machine-key configuration: each call carries signed proof
+of the actual account, and the console applies its normal documentation visibility rules.
+
+An operator-defined file or remote server named `docs` takes precedence over the built-in
+server. A configured `docs` tool set likewise keeps its own patterns. The built-in tools
+have normal sensitivity and require `use-tools` plus the account's ordinary tool access;
+administrative references still require `manage-settings`.
+
+Try the `docs` set under **Settings → Tools → Try a tool**. Search with `docs__search`, then
+read a returned citation using `docs__read`. Follow `next_offset` for a long read or a
+catalogue page. [MCP clients](/docs/api/mcp) and [Docs Ask](/docs/web-app/help) use the same
+caller-scoped library.
+
 ## Verify the connection
 
 For the bundled file server, create a sample in its default allowed folder on the control node:
@@ -325,7 +344,7 @@ SSH access to the file-owning host.
 | Gateway will not start | Check absolute command paths, Python/server dependencies, database access and the shared machine-key path. A legacy `loadcoach` setting must be replaced by `front` for a control-node-owned gateway. |
 | Address already in use | Turnstile uses 8443; the private gateway uses loopback 9443. Check `ss -ltnp`. |
 | No tools for one account | Check group/account tool patterns, hidden tools, sensitivity and the selected tool set. Refresh the client's list. |
-| No tools for any account | Configure at least one server; inspect the gateway journal for server startup/discovery failures. |
+| No tools for any account | Check configured/built-in server connections and account tool patterns; inspect the gateway journal for startup/discovery failures. |
 | Custom module omitted | Test its stdio command directly. Check its annotations, imports, duplicate names and any required setup section. |
 | Files missing from a listing | Check the configured root, path permissions, dot paths and symlinks. The built-in tools omit private paths. |
 | Remote server unavailable | Check its service, routing/firewall, bearer file and server URL. Missing servers are retried on tool listing, at most once every 30 seconds. |

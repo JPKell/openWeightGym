@@ -131,7 +131,7 @@ def routes(for_people, page, ask, http, environment, unavailable, typed):
                         elif not line and buffer:
                             event, buffer = json.loads(buffer), ''
                             if event.get('type') == 'response.output_text.delta':
-                                text += event.get('delta', '')
+                                text = (text + event.get('delta', ''))[:20000]
                                 yield 'event: progress\ndata: ' + json.dumps({'text': text.replace(MARKER, '')[:20000]}) + '\n\n'
                             elif event.get('type') in ('response.completed', 'response.incomplete', 'response.failed'):
                                 result = event['response']

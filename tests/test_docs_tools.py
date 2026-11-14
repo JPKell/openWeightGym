@@ -137,3 +137,21 @@ def test_proof_replay_forgery_bounds_and_path_rejection(docs_gateway):
     assert len(read['text'])==8000 and read['next_offset']==8000
     following=result_data(rpc(caller,admin,'tools/call',{'name':'docs__read','arguments':{'url':'/docs/api/custom','offset':read['next_offset']}}))
     assert following['offset']==8000 and following['text']!=read['text']
+
+
+def test_catalogue_pages_are_bounded_complete_and_scope_preserving(docs_gateway):
+    from weightroom import system_docs
+    _, users, caller = docs_gateway
+    admin = users.new_key('jordan')
+    offset, found = 0, set()
+    while True:
+        page = result_data(rpc(caller, admin, 'tools/call', {'name': 'docs__list_topics', 'arguments': {'offset': offset}}))
+        assert len(json.dumps(page)) < 64000
+        for section in page['sections']:
+            found.add(section['url'])
+            found.update(topic['url'] for topic in section['topics'])
+        if page['next_offset'] is None:
+            break
+        assert page['next_offset'] > offset
+        offset = page['next_offset']
+    assert found == {item['url'] for section in system_docs.visible({'manage-settings'}) for item in (section, *section['topics'])}

@@ -300,7 +300,7 @@ class DocsAPI:
             if 'use-tools' not in person.can:
                 return JSONResponse({'error': {'message': 'Documentation tools require use-tools.'}}, 403, headers=headers)
             operation = request.path_params.get('operation', request.url.path.rsplit('/', 1)[-1])
-            allowed = {'catalogue': set(), 'search': {'q','scope','limit'}, 'article': {'url','anchor','offset'},
+            allowed = {'catalogue': {'offset'}, 'search': {'q','scope','limit'}, 'article': {'url','anchor','offset'},
                        'endpoints': {'q'}, 'settings': {'q'}, 'abilities': {'q'}, 'source': {'module','symbol','offset'}}
             if operation not in allowed:
                 raise LookupError('Unknown documentation operation.')
@@ -317,9 +317,18 @@ class DocsAPI:
             sections = system_docs.visible(person.can)
             query = params.get('q', '').strip()[:300]
             if operation == 'catalogue':
-                result = {'sections': [{'title': section['title'], 'summary': section['summary'], 'url': section['url'],
-                    'topics': [{key: topic.get(key, []) for key in ('title','summary','url','covers')} for topic in section['topics']]}
-                    for section in sections]}
+                records = [(section, topic) for section in sections for topic in (None, *section['topics'])]
+                if offset > len(records):
+                    raise ValueError('Offset is beyond this catalogue.')
+                selected = {}
+                for section, topic in records[offset:offset + 20]:
+                    row = selected.setdefault(section['url'], {'title': section['title'][:200], 'summary': section['summary'][:500],
+                        'url': section['url'], 'covers': section.get('covers', []), 'topics': []})
+                    if topic:
+                        row['topics'].append({'title': topic['title'][:200], 'summary': topic['summary'][:500],
+                            'url': topic['url'], 'covers': topic.get('covers', [])})
+                result = {'sections': list(selected.values()), 'offset': offset,
+                          'next_offset': offset + 20 if len(records) > offset + 20 else None}
             elif operation == 'search':
                 scope = params.get('scope','')
                 if scope and scope not in {one['slug'] for one in sections}:

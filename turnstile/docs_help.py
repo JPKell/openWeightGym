@@ -157,7 +157,7 @@ def routes(caller, service, create, fallback):
                                                                  if key.lower() not in ('content-length', 'content-type')})
             async def content():
                 """Translate existing Responses text events while retaining stream cancellation ownership."""
-                buffered = ''
+                buffered, pending, identity = '', '', {}
                 async for raw in response.body_iterator:
                     buffered += raw.decode() if isinstance(raw, bytes) else raw
                     while '\n\n' in buffered:
@@ -166,10 +166,23 @@ def routes(caller, service, create, fallback):
                         if not data:
                             continue
                         event = json.loads(data)
-                        if event['type'] == 'response.output_text.delta':
-                            yield 'data: ' + json.dumps({'object': 'chat.completion.chunk', 'model': 'docs-help',
-                                'choices': [{'index': 0, 'delta': {'content': event['delta']}, 'finish_reason': None}]}) + '\n\n'
+                        if event['type'] == 'response.created':
+                            identity = {'id': event['response']['id'], 'object': 'chat.completion.chunk',
+                                        'created': event['response']['created_at'], 'model': 'docs-help'}
+                            yield 'data: ' + json.dumps({**identity, 'choices': [{'index': 0,
+                                'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]}) + '\n\n'
+                        elif event['type'] == 'response.output_text.delta':
+                            pending = (pending + event['delta']).replace(MARKER, '')
+                            length = max(0, len(pending) - len(MARKER) + 1)
+                            text, pending = pending[:length], pending[length:]
+                            if text:
+                                yield 'data: ' + json.dumps({**identity,
+                                    'choices': [{'index': 0, 'delta': {'content': text}, 'finish_reason': None}]}) + '\n\n'
                         elif event['type'] in ('response.completed', 'response.failed', 'response.incomplete'):
+                            if pending:
+                                yield 'data: ' + json.dumps({**identity, 'choices': [{'index': 0,
+                                    'delta': {'content': pending.replace(MARKER, '')}, 'finish_reason': None}]}) + '\n\n'
+                                pending = ''
                             final = chat_result(event['response'])
                             if event['type'] == 'response.failed':
                                 yield 'data: ' + json.dumps({'error': event['response']['error']}) + '\n\n'

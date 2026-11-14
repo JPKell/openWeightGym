@@ -29,7 +29,7 @@ If the model returns nothing, fails, reaches allowance/capacity policy or cannot
 <!-- audience: admin -->
 ## Configure the help role
 
-Open **Models → Roles**, expand **Create a role**, enter `docs-help` under **New role** and choose a chat model that supports tools. Save its candidates and weights using [Roles and routing](/docs/model-guides/roles). The application supplies the documentation prompt and caller-scoped sources; there is no separate knowledge base.
+Open **Models → Roles**, expand **Create a role**, enter `docs-help` under **New role** and choose a chat model that supports tools. Save its candidates and weights using [Roles and routing](/docs/model-guides/roles). The application supplies the documentation prompt and caller-scoped sources; there is no separate knowledge base. For different group access, use the existing [group model policy](/docs/administration/groups) and role candidates. Ask uses the shared role rather than a separate per-group model picker.
 
 Ask offers documentation tools and any `code__*` tools already offered to an administrator by ToolLocker. It never adds permissions. Test source tools in [Settings → Tools](/docs/administration/tools) if listing or calls are refused.
 

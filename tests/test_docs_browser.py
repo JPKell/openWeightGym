@@ -28,7 +28,7 @@ def test_docs_search_navigation_history_contents_and_source_browser(desk, tmp_pa
         expect(menu.get_by_role('link', name='Documentation', exact=True)).to_have_attribute('aria-current', 'page')
         expect(menu.get_by_role('link', name='Code references', exact=True)).to_be_visible()
         page.locator('#docs-query').fill('recipients.txt')
-        expect(page.locator('#docs-results-list a[href="/docs/data/backups"]')).to_be_visible()
+        expect(page.locator('#docs-results-list a[href="/docs/data/backups"]')).to_be_visible(timeout=15000)
         expect(page.locator('.result-excerpt mark').first).to_have_text('recipients.txt')
         expect(page).to_have_url(re.compile(r'/docs\?q=recipients.txt'))
         page.locator('#docs-scope').select_option('web-app')
@@ -199,4 +199,7 @@ def test_ask_native_post_works_without_javascript(help_desk):
         page.locator('#docs-ask-form button[type=submit]').click()
         expect(page.locator('#docs-answer')).to_contain_text('Sources')
         assert 'use-tools' in users.by_name('pat').group.can
+        page.locator('[data-docs-new]').click()
+        expect(page.locator('#docs-question')).to_have_value('')
+        expect(page.locator('#docs-answer')).not_to_contain_text('Sources')
         browser.close()

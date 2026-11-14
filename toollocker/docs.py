@@ -21,7 +21,8 @@ def descriptions():
     """Describe bounded query contracts without accepting arbitrary files or service URLs."""
     query = {'type': 'string', 'maxLength': 300}
     definitions = [
-        ('list_topics', 'List the documentation topics visible to your account, with citation URLs.', {}, []),
+        ('list_topics', 'List a bounded page of visible topics and citation URLs. Follow next_offset to continue.',
+         {'offset': {'type': 'integer', 'minimum': 0, 'maximum': 2000000}}, []),
         ('search', 'Search permitted guides and references before answering. Results carry canonical citation URLs.',
          {'q': query, 'scope': {'type': 'string', 'maxLength': 80}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': SEARCH_LIMIT}}, ['q']),
         ('read', 'Read a permitted canonical /docs article or heading as bounded plain text. Follow next_offset to continue.',

@@ -291,9 +291,16 @@ class Handler(BaseHTTPRequestHandler):
             result = {'choices': [{'message': message, 'finish_reason': reason}],
                       'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5}}
             self.send_response(200)
-            self.send_header('content-type', 'application/json')
+            self.send_header('content-type', 'text/event-stream' if request.get('stream') else 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps(result).encode())
+            if request.get('stream'):
+                delta = {'tool_calls': [{'index': 0, **message['tool_calls'][0]}]} if message.get('tool_calls') else message
+                for chunk in ({'choices': [{'index': 0, 'delta': delta, 'finish_reason': None}]},
+                              {'choices': [{'index': 0, 'delta': {}, 'finish_reason': reason}], 'usage': result['usage']}):
+                    self.wfile.write(('data: ' + json.dumps(chunk) + '\n\n').encode())
+                self.wfile.write(b'data: [DONE]\n\n')
+            else:
+                self.wfile.write(json.dumps(result).encode())
             return
         if '--benchmark-workflow' in arguments and self.path=='/v1/chat/completions' and request.get('stream') is False:
             supplied=json.loads(request['messages'][-1]['content'])

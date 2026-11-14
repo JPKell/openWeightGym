@@ -40,7 +40,7 @@
 <textarea id="docs-question" name="question" class="form-control" rows="3" maxlength="2000" required aria-describedby="docs-ask-privacy">{{ question }}</textarea>
 <input type="hidden" name="history" value="{{ history|tojson|forceescape }}">
 <p id="docs-ask-privacy" class="small text-secondary mt-2">The conversation stays in this browser tab. Normal request usage and logging apply. Unanswered question text is kept anonymously for documentation improvements; leave out private details.</p>
-<div class="d-flex flex-wrap gap-2 mb-3"><button class="btn btn-primary" type="submit">Ask</button><button class="btn btn-outline-secondary" type="button" data-docs-new>Clear conversation</button><a class="btn btn-outline-secondary" href="/docs">Search documentation</a></div>
+<div class="d-flex flex-wrap gap-2 mb-3"><button class="btn btn-primary" type="submit">Ask</button><a class="btn btn-outline-secondary" href="/docs/ask" data-docs-new>Clear conversation</a><a class="btn btn-outline-secondary" href="/docs">Search documentation</a></div>
 <p id="docs-ask-progress" class="small text-secondary" role="status" aria-live="polite"></p>
 </form>
 {% endmacro %}

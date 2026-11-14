@@ -17,6 +17,7 @@ from turnstile.docs_help import MARKER, PROMPT, answer_text
 from turnstile.responses import routes
 from weightroom.docs_gaps import Gaps
 from test_app import fake_llama_server, gateway, add_user, model  # noqa: F401
+from test_postgresql import postgres  # noqa: F401
 
 
 @pytest.fixture
@@ -55,7 +56,18 @@ def help_desk(docs_gateway, tmp_path):
             message, reason = {'content': None, 'tool_calls': [call]}, 'tool_calls'
         else:
             exact = json.loads(latest['content']); rig.tool_results.append(exact)
-            payload = json.loads(exact['content'][0]['text'])
+            if latest['tool_call_id'] == 'search_call' and rig.mode in ('admin-read', 'admin-code', 'unoffered-code'):
+                name, arguments = {'admin-read': ('docs__read', {'url': '/docs/api'}),
+                    'admin-code': ('docs__code_symbol', {'module': 'loadcoach/users.py', 'symbol': 'Users.sign_in'}),
+                    'unoffered-code': ('code__search', {'q': 'sign_in'})}[rig.mode]
+                message, reason = {'content': None, 'tool_calls': [{'id': 'private_call', 'type': 'function',
+                    'function': {'name': name, 'arguments': json.dumps(arguments)}}]}, 'tool_calls'
+                usage = {'prompt_tokens': 4, 'completion_tokens': 2, 'total_tokens': 6}
+                return httpx.Response(200, json={'model': 'fake', 'choices': [{'message': message, 'finish_reason': reason}], 'usage': usage})
+            try:
+                payload = json.loads(exact['content'][0]['text'])
+            except ValueError:
+                payload = {}
             hits = payload.get('hits', [])
             if rig.mode == 'gap':
                 text = 'That is not documented. [Browse guides](/docs/web-app/chat#chat-options). ' + MARKER
@@ -126,7 +138,7 @@ def test_smoke_questions_execute_real_caller_tools_and_cite_sources(help_desk, n
 def test_gap_is_question_only_normalized_bounded_and_admin_dismissed(help_desk):
     server, api, users, rig, gaps = help_desk
     rig.mode = 'gap'
-    for question in ('Undocumented: custom lunar scheduler?', '  UNDOCUMENTED: custom lunar scheduler?  '):
+    for question in ('How do I choose a different docs-help model for each group?', '  HOW do I choose a different docs-help model for each group?  '):
         response = api.post('/v1/responses', json={'model': 'docs-help', 'input': question})
         assert response.status_code == 200 and MARKER not in answer_text(response.json())
     rows = gaps.listing()
@@ -198,6 +210,10 @@ def test_missing_role_setup_native_history_chat_and_streaming_share_the_agent(he
         response = api.post('/v1/chat/completions', json={'model': 'docs-help', 'messages': [{'role': 'user', 'content': 'chat'}], 'stream': stream})
         assert response.status_code == 200, response.text
         assert ('chat.completion.chunk' in response.text and '[DONE]' in response.text) if stream else '[Source]' in response.json()['choices'][0]['message']['content']
+        if stream:
+            chunks = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith('data: ') and line != 'data: [DONE]']
+            assert len({chunk['id'] for chunk in chunks}) == len({chunk['created'] for chunk in chunks}) == 1
+            assert chunks[0]['choices'][0]['delta']['role'] == 'assistant'
     streamed = server.post('/docs/ask', data={'question': 'chat'}, headers={'HX-Request': 'true', 'Accept': 'text/event-stream'})
     assert 'event: progress' in streamed.text and 'event: fragment' in streamed.text
     rig.mode = 'escape'
@@ -225,10 +241,55 @@ def test_real_role_admission_uses_existing_native_chat_without_recursion(fake_ll
         assert role.status_code in (200, 201), role.text
         service = caller.front.state.extractions
         service.tool_http = httpx.AsyncClient(transport=httpx.MockTransport(rpc))
-        for path, body in [('/v1/responses', {'input': 'How do I chat?'}),
-                           ('/v1/chat/completions', {'messages': [{'role': 'user', 'content': 'How do I chat?'}]})]:
-            answer = caller.post(path, json={'model': 'docs-help', **body}, headers=headers)
-            assert answer.status_code == 200, answer.text
-            assert '/docs/web-app/chat#chat-options' in answer.text
-        assert sum(call['method'] == 'tools/call' for call in rpc_calls) == 2
+        for stream in (False, True):
+            for path, body in [('/v1/responses', {'input': 'How do I chat?'}),
+                               ('/v1/chat/completions', {'messages': [{'role': 'user', 'content': 'How do I chat?'}]})]:
+                answer = caller.post(path, json={'model': 'docs-help', 'stream': stream, **body}, headers=headers)
+                assert answer.status_code == 200, answer.text
+                if stream and path.endswith('responses'):
+                    terminal = events(answer.text)[-1]
+                    assert terminal['type'] == 'response.completed'
+                    assert '/docs/web-app/chat#chat-options' in answer_text(terminal['response'])
+                elif stream:
+                    chunks = [json.loads(line[6:]) for line in answer.text.splitlines() if line.startswith('data: ') and line != 'data: [DONE]']
+                    text = ''.join(choice.get('delta', {}).get('content', '') for chunk in chunks for choice in chunk.get('choices', []))
+                    assert '/docs/web-app/chat#chat-options' in text
+                else:
+                    assert '/docs/web-app/chat#chat-options' in answer.text
+        assert sum(call['method'] == 'tools/call' for call in rpc_calls) == 4
         asyncio.run(service.tool_http.aclose())
+
+
+@pytest.mark.parametrize('mode', ['admin-read', 'admin-code', 'unoffered-code'])
+def test_public_model_attempts_cannot_read_private_articles_or_code(help_desk, mode):
+    _, api, users, rig, gaps = help_desk
+    rig.mode = mode
+    key = users.new_key('pat')
+    result = api.post('/v1/responses', json={'model': 'docs-help', 'input': 'chat'}, headers={'authorization': 'Bearer '+key})
+    assert result.status_code == 200, result.text
+    assert rig.tool_results[-1]['isError'] is True
+    assert len(rig.calls) == 3
+    data = json.dumps(rig.tool_results[-1])
+    assert 'settings/defaults/' not in data and 'async def sign_in' not in data
+    assert gaps.listing() == []
+
+
+def test_postgresql_gap_privacy_backup_and_transfer(postgres, tmp_path):
+    from db import Database
+    from db.recovery import RecoveryStore, backup_store
+    from db.transfer import copy_store
+    gaps = Gaps(postgres)
+    gaps.record('How do I choose a help model for each group?')
+    gaps.record('HOW do I choose a help model for each group?')
+    expected = gaps.listing()
+    assert len(expected) == 1 and expected[0]['count'] == 2
+    gaps.db.close()
+    backup = backup_store(RecoveryStore('accounts', postgres, ('weightroom.accounts',)), tmp_path / 'backup')
+    assert backup['verification']['counts']['public.docs_gaps'] == 1
+    target = Database.sqlite(tmp_path / 'copied.db')
+    assert copy_store(postgres, target)['state'] == 'verified'
+    restored = Gaps(target)
+    assert restored.listing() == expected
+    restored.dismiss(expected[0]['id'])
+    assert restored.listing() == []
+    restored.db.close()

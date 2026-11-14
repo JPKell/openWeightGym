@@ -10,7 +10,7 @@ ToolLocker offers permitted tools through the control node's tool listener.
 
 ## Before you start
 
-The caller needs [use-tools](/docs/system/abilities#ability-use-tools), matching tool patterns and an allowed sensitivity level. Administrators configure servers and sets in [Tools](/docs/administration/tools). Documentation tools are offered automatically when the console connection is configured unless an operator supplies a `docs` server.
+The caller needs [use-tools](/docs/system/abilities#ability-use-tools), matching tool patterns and an allowed sensitivity level. Administrators configure servers and sets in [Tools](/docs/administration/tools). [Built-in Documentation tools](/docs/modules/toollocker#built-in-documentation-tools) explains automatic connection settings and operator overrides.
 
 ## Do it
 
@@ -42,7 +42,7 @@ The `docs-help` role also runs this same documentation assistant through Respons
 | `docs__find_endpoint`, `docs__lookup_setting`, `docs__explain_ability` | Read generated references; administrators only. |
 | `docs__code_outline`, `docs__code_symbol` | Inspect allowlisted source documentation; administrators only. |
 
-Reads are paged and search is bounded. A result's `next_offset` continues a long read. Source input must name an offered module; file paths cannot escape the source allowlist. Settings tools show defaults and meanings, never live settings or credentials.
+Reads are paged and search is bounded. A result's `next_offset` continues a long read or catalogue listing. Source input must name an offered module; file paths cannot escape the source allowlist. Settings tools show defaults and meanings, never live settings or credentials.
 
 ## Related
 
