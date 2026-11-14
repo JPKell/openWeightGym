@@ -21,7 +21,9 @@
 {% endmacro %}
 
 {# A file offered in a list to choose from: where it is first, then its name, without its folders. #}
-{% macro file_choice_label(file) %}{{ file.machine }} · {{ file.tier }} · {{ file.path.rsplit('/', 1)[-1] }} · {{ file.size|size }}{% endmacro %}
+{% set conversion_labels = {'verified':'Verified conversion', 'unverified':'Unverified conversion', 'failed':'Failed conversion', 'refused':'Refused (remote code)'} %}
+{% macro conversion_state(facts={}) %}{% if facts and facts.get('conversion') in conversion_labels %}<span class="badge bg-{{ 'success' if facts.conversion == 'verified' else 'danger' if facts.conversion in ('refused', 'failed') else 'warning' }}-lt"{% if facts.get('why') %} title="{{ facts.why }}"{% endif %}>{{ conversion_labels[facts.conversion] }}</span>{% endif %}{% endmacro %}
+{% macro file_choice_label(file) %}{{ file.machine }} · {{ file.tier }} · {{ file.path.rsplit('/', 1)[-1] }} · {{ file.size|size }}{% set state = file.get('facts', {}).get('conversion') %}{% if state in conversion_labels %} · {{ conversion_labels[state] }}{% endif %}{% endmacro %}
 
 {# A drive's size: as |size, but in TB from 1000 GB up, so a big drive fits a narrow card. #}
 {% macro drive_size(count) %}{{ '%.1f TB'|format(count / 2**40) if count >= 1000 * 2**30 else count|size }}{% endmacro %}
@@ -129,7 +131,7 @@
   <tr>
     <td class="wrap"><a href="{{ file_address(file.path) }}">{{ file.relative }}</a>{% if file.moving %} <span class="badge text-bg-primary">{{ "copying" if file.moving.get('copy') else "to" }} {{ file.moving.to }}, {{ (100 * file.moving.done / file.moving.of)|int if file.moving.of else 100 }}%</span>{% endif %}{% if file.transfer_failure %}<span class="d-block text-danger" role="alert">Transfer failed: {{ file.transfer_failure }}</span>{% endif %}</td>
     <td data-value="{{ file.size }}">{{ file.size|size }}</td>
-    <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ file.facts.name or "" }} <small class="text-secondary">{{ file.facts.size_label or "" }} {{ file.facts.kind if file.facts.kind and file.facts.kind != "model" else "" }}</small>{% endif %}</td>
+    <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ file.facts.name or "" }} <small class="text-secondary">{{ file.facts.size_label or "" }} {{ file.facts.kind if file.facts.kind and file.facts.kind != "model" else "" }}</small>{{ conversion_state(file.facts) }}{% endif %}</td>
     <td>{% for name in file.used_by_all %}<a href="{{ address(name) }}">{{ name }}</a>{{ ", " if not loop.last }}{% else %}<span class="text-secondary">no model</span>{% endfor %}</td>
     <td>{% for node in file.used_nodes %}{{ node }}{{ ", " if not loop.last }}{% else %}<span class="text-secondary">none</span>{% endfor %}</td>
     <td class="text-end">{% if what == 'audio' %}<a class="btn btn-outline-secondary btn-sm" href="/models/audio">Configure</a>{% elif not file.used_by and not file.unreadable and file.facts.kind != 'conversion source' and (what != 'classifier' or file.path.lower().endswith('.gguf')) %}<a class="btn btn-outline-primary btn-sm" href="/models?file={{ file.path|urlencode }}&trained={{ file.facts.trained_context or '' }}">Add</a>{% endif %}</td>
@@ -174,7 +176,7 @@
       {% if row.machine == found.artifact_machine and row.what == 'model' and not usage.names and not row.unreadable %}<a class="small ms-2" href="/models?file={{ row.path|urlencode }}&trained={{ row.facts.trained_context or '' }}">Add model</a>{% endif %}
       <input type="hidden" name="boxes" value="{{ row.id }}:{% for column in columns %}{% set box = row.cells[column.name] %}{{ '-' if box.why else 1 if box.present else 0 }}{% endfor %}"></td>
     <td data-value="{{ row.size }}">{{ row.size|size }}</td>
-    <td>{% if row.unreadable %}<span class="text-danger">{{ row.unreadable }}</span>{% else %}{{ row.facts.name or "" }} <small class="text-secondary">{{ row.facts.size_label or "" }} · {{ row.what }}</small>{% endif %}</td>
+    <td>{% if row.unreadable %}<span class="text-danger">{{ row.unreadable }}</span>{% else %}{{ row.facts.name or "" }} <small class="text-secondary">{{ row.facts.size_label or "" }} · {{ row.what }}</small>{{ conversion_state(row.facts) }}{% endif %}</td>
     {% for column in columns %}{% set box = row.cells[column.name] %}
     <td class="text-center"{% if box.why %} title="{{ box.why }}"{% endif %}>
       <input type="checkbox" class="form-check-input" name="want" value="{{ row.id }}:{{ loop.index0 }}" data-column="{{ loop.index0 }}" aria-label="{{ row.name }} in {{ column.label }}{% if box.why %}: {{ box.why }}{% endif %}"{% if box.present %} checked{% endif %}{% if box.why %} disabled{% endif %}>
@@ -215,7 +217,7 @@
   <tr>
     <td class="wrap font-monospace">{{ file.path }}</td>
     <td data-value="{{ file.size }}">{{ file.size|size }}</td>
-    <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ facts.name or "" }} <small class="text-secondary">{{ facts.size_label or "" }} · {{ facts.what or "model" }}</small>{% endif %}</td>
+    <td>{% if file.unreadable %}<span class="text-danger">{{ file.unreadable }}</span>{% else %}{{ facts.name or "" }} <small class="text-secondary">{{ facts.size_label or "" }} · {{ facts.what or "model" }}</small>{{ conversion_state(facts) }}{% endif %}</td>
     <td>{{ 'Storage' if file.tier == 'storage' else 'Cache' }} · {{ file.place }}</td>
     <td>{% for name in file.used_by %}<a href="{{ address(name) }}?node={{ node.name|urlencode }}">{{ name }}</a>{{ ", " if not loop.last }}{% else %}<span class="text-secondary">no model</span>{% endfor %}</td>
   </tr>
