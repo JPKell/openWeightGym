@@ -1,9 +1,10 @@
 {# Shared event components for the live trace workspace and design proposals. #}
 {% from 'parts.html' import card, empty_row, section_title, swaps, alert %}
+{% macro record_link(event, class_='small') %}<a href="{{ event.record_url }}" class="{{ class_ }}" data-log-record aria-label="{{ event.record_label }} for event #{{ event.id }}">{{ event.record_label }} →</a>{% endmacro %}
 {% macro event_row(event=none) %}
 <tr data-event-row{% if event %} data-log-table-row data-event-id="{{ event.id }}" tabindex="0"{% endif %}>
   <td>{% if event %}{{ event.at|timestamp }}{% else %}<time data-field="time"></time><small class="text-secondary d-block" data-field="date"></small>{% endif %}</td>
-  <td>{% if event %}<a href="{{ event.href }}" class="al-event-link" data-log-select data-log-table-open {{ swaps('log', true) }}>{{ event.title }} <span class="text-secondary al-mono">#{{ event.id }}</span><span class="visually-hidden"> · Open in Trace workspace</span></a>{% else %}<button type="button" class="al-event-link" data-open><span data-field="title"></span></button>{% endif %}<small class="text-secondary d-block al-summary" data-field="summary"{% if event %} title="{{ event.summary }}"{% endif %}>{{ event.summary if event }}</small></td>
+  <td>{% if event %}<a href="{{ event.href }}" class="al-event-link" data-log-select data-log-table-open {{ swaps('log', true) }}>{{ event.title }} <span class="text-secondary al-mono">#{{ event.id }}</span><span class="visually-hidden"> · Open in Trace workspace</span></a>{% else %}<button type="button" class="al-event-link" data-open><span data-field="title"></span></button>{% endif %}{% if event %}{{ record_link(event, 'small ms-2 text-nowrap') }}{% endif %}<small class="text-secondary d-block al-summary" data-field="summary"{% if event %} title="{{ event.summary }}"{% endif %}>{{ event.summary if event }}</small></td>
   <td><span class="badge{{ ' bg-' ~ event.badge ~ '-lt' if event }}" data-field="outcome">{{ event.outcome if event }}</span></td>
   <td><span data-field="model">{{ event.model or 'No model' if event }}</span><small class="text-secondary d-block" data-field="node">{{ event.get('machine') or 'front' if event }}</small></td>
   <td data-field="user">{{ event.user if event }}</td>
@@ -22,7 +23,7 @@
 <li class="al-timeline-event"{% if event %} data-event-id="{{ event.id }}"{% endif %}><span class="al-timeline-dot" aria-hidden="true"></span>
 {% if event %}<a class="al-timeline-button d-block text-reset text-decoration-none" href="{{ event.href }}" data-log-select{% if event.id == selected %} aria-current="true"{% endif %} {{ swaps('log', true) }}>{% else %}<button type="button" class="al-timeline-button" data-open>{% endif %}
 <span class="d-flex flex-wrap justify-content-between gap-2"><strong data-field="title">{{ event.title if event }}</strong>{% if event %}<span class="al-mono small text-secondary">{{ event.at|timestamp }}</span>{% else %}<time class="al-mono small text-secondary" data-field="time"></time>{% endif %}</span><span class="d-block text-secondary small mt-1" data-field="summary">{{ event.summary if event }}</span><span class="d-flex gap-2 align-items-center mt-2"><span class="badge{{ ' bg-' ~ event.badge ~ '-lt' if event }}" data-field="outcome">{{ event.outcome if event }}</span><span class="small text-secondary" data-field="node">{{ event.get('machine', 'front') if event }}</span></span>
-{% if event %}</a>{% else %}</button>{% endif %}</li>
+{% if event %}</a><div class="mt-2">{{ record_link(event) }}</div>{% else %}</button>{% endif %}</li>
 {% endmacro %}
 {% macro trace_choice(choice=none) %}
 {% if choice %}<a href="{{ choice.event.href }}" class="al-trace-choice d-block text-reset text-decoration-none" data-log-select{% if choice.active %} aria-current="true"{% endif %} {{ swaps('log', true) }}>{% else %}<button type="button" class="al-trace-choice" data-choose-trace>{% endif %}
@@ -37,7 +38,7 @@
 {% call card('Event inspector', id='inspector', class_='al-inspector', body_class='p-0', actions='<span class="badge bg-secondary-lt">Recorded evidence</span>'|safe) %}
 <div id="inspector-empty" class="p-4 text-secondary"{% if record %} hidden{% endif %}>Select an event to inspect its recorded fields and related activity.</div>
 <div id="inspector-content"{% if not record %} hidden{% endif %}>
-  <div class="p-3 border-bottom"><div class="d-flex align-items-center justify-content-between gap-2 mb-3"><span id="detail-outcome" class="badge{{ ' bg-' ~ record.badge ~ '-lt' if record }}">{{ record.outcome if record }}</span><code id="detail-id">{{ '#' ~ record.id if record }}</code></div>{{ section_title(record.title if record else '', id='detail-title', level=3, class_='h3', attrs={'tabindex':'-1'}) }}<p class="small text-secondary mb-0" id="detail-summary">{{ record.summary if record }}</p></div>
+  <div class="p-3 border-bottom"><div class="d-flex align-items-center justify-content-between gap-2 mb-3"><span id="detail-outcome" class="badge{{ ' bg-' ~ record.badge ~ '-lt' if record }}">{{ record.outcome if record }}</span><code id="detail-id">{{ '#' ~ record.id if record }}</code></div>{{ section_title(record.title if record else '', id='detail-title', level=3, class_='h3', attrs={'tabindex':'-1'}) }}<p class="small text-secondary mb-0" id="detail-summary">{{ record.summary if record }}</p>{% if live and record %}<div class="mt-3">{{ record_link(record, 'btn btn-primary btn-sm') }}</div>{% endif %}</div>
   <div class="p-3 border-bottom"><dl class="al-facts mb-0" id="detail-facts">{% if record %}
     {{ fact('Recorded at', record.at|timestamp) }}{{ fact('Node', record.get('machine') or 'front') }}{{ fact('User', record.user) }}{{ fact('Model', record.model or 'Not recorded') }}{{ fact('Caller', record.caller or 'Not recorded') }}{{ fact('Trace ID', record.trace or 'Not recorded') }}{{ fact('Request reference', '#' ~ record.request_id if record.request_id else 'Not recorded') }}{{ fact('Sensitivity', record.level or 'Not recorded') }}
   {% endif %}</dl></div>
@@ -48,7 +49,7 @@
   <div class="p-3 border-top d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" id="copy-event">Copy JSON</button><button type="button" class="btn btn-outline-secondary btn-sm" id="download-event">Download event</button></div>
   {% else %}
   <details class="p-3" id="log-raw"><summary class="fw-semibold">Raw event JSON</summary><pre class="al-json mt-3 mb-0" id="detail-json" tabindex="0">{{ record.raw|tojson(indent=2) if record }}</pre></details>
-  <div class="p-3 border-top d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-log-copy-event>Copy JSON</button><a class="btn btn-outline-secondary btn-sm" href="{{ json_url }}" download>Download event</a>{% if record %}<a href="{{ record.record_url }}" class="btn btn-outline-secondary btn-sm">Open complete record</a>{% endif %}</div>
+  <div class="p-3 border-top d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-log-copy-event>Copy JSON</button><a class="btn btn-outline-secondary btn-sm" href="{{ json_url }}" download>Download event</a></div>
   {% endif %}
 </div>
 {% endcall %}
