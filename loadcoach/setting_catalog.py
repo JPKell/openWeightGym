@@ -49,6 +49,7 @@ class Setting:
     exclusive_max: bool = False
     ceiling: float | None = None
     default: object = None
+    choice_labels: tuple = ()
 
     def check(self, value, *, context=None):
         """Return a valid value, or raise ValueError without echoing its contents."""
@@ -704,3 +705,13 @@ for name, default, ceiling, unit, label, minimum in (
     _add('weightroom', name, 'int', tier=NOW, scope='front', page='limits', section='Uploads and content limits',
          label=label, unit=unit, control='number', min=minimum, ceiling=ceiling, default=default,
          help=f'Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: {ceiling} {unit}, except for superuser groups.')
+
+
+_add('turnstile', 'allowance_mode', 'choice', tier=NOW, scope='front', page='allowances', section='Spending policy',
+     label='Allowance policy', choices=('advisory', 'warn', 'block'), default='advisory',
+     choice_labels=(('advisory', 'Advisory'), ('warn', 'Warn'), ('block', 'Block hosted requests')),
+     help='Advisory reports recorded spending. Warn adds a response header to hosted requests and enables configured threshold notices. Block refuses hosted requests at an exhausted allowance; local requests continue. Unknown and in-flight costs are excluded.')
+_add('turnstile', 'allowance_period', 'choice', tier=NOW, scope='front', page='allowances', section='Spending policy',
+     label='Allowance period', choices=('rolling_24h', 'calendar_month'), default='rolling_24h',
+     choice_labels=(('rolling_24h', 'Rolling 24 hours'), ('calendar_month', 'Calendar month')),
+     help='Rolling 24 hours, or a calendar month in the control node time zone. Applies immediately to the same retained cost records. Short event retention may understate spending.')

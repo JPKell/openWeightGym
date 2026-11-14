@@ -50,6 +50,7 @@ class Hosted:
             return set()
 
         self.services, self.log, self.client, self.reliability, self.users, self.local_names = services, log, client, reliability, users, local_names or none
+        self.allowances = None
         self.away: list[dict] = []  # requests being answered by a service right now, for the status page
 
     # ---- what there is -------------------------------------------------------------------------
@@ -180,6 +181,12 @@ class Hosted:
             ours = "Your hosted answers" in why or "ceiling" in why
             return refuse(429 if ours else 503, why, {"retry-after": "3600"} if ours else None)
 
+        warning_headers = {}
+        if self.allowances is not None:
+            blocked, warning_headers = self.allowances.admission(user)
+            if blocked:
+                return JSONResponse({'error': {'message': blocked['message'], 'type': 'loadcoach_error', 'code': blocked['code']}}, 403)
+
         about = (user.name, address(request), name, trace, level)
         going = {"hosted": there["theirs"], "service": there["service"], **({"instead_of": instead_of} if instead_of else {}), **chose}
         entry = self.log.add("request", "asked", *about, path=request.url.path.removeprefix("/v1/"), group=user.group_name,
@@ -218,11 +225,11 @@ class Hosted:
         except httpx.PoolTimeout:
             finish()
             ended("refused", 503, "refused", why="turnstile is already carrying all it may")
-            return refuse(503, "Turnstile is already carrying all the requests it may. Try again shortly.", {"retry-after": "5", "x-turnstile": "busy", "x-loadcoach-request-id": str(number)})
+            return refuse(503, "Turnstile is already carrying all the requests it may. Try again shortly.", {**warning_headers, "retry-after": "5", "x-turnstile": "busy", "x-loadcoach-request-id": str(number)})
         except httpx.HTTPError as problem:
             finish()
             ended("failed", 502, "timeout" if isinstance(problem, httpx.TimeoutException) else "error", waited=0, why=f"{type(problem).__name__}: {problem}"[:500])
-            return error(502, f"The hosted service did not answer: {type(problem).__name__}", {"x-loadcoach-request-id": str(number)})
+            return error(502, f"The hosted service did not answer: {type(problem).__name__}", {**warning_headers, "x-loadcoach-request-id": str(number)})
         except asyncio.CancelledError:
             finish()
             ended("hung up", 499, "cancelled")
@@ -273,7 +280,8 @@ class Hosted:
                           diagnostics={**timeline.snapshot(), "role": chose.get("role", "")},
                           **({"prompt_tokens_per_second": rate} if (rate := timeline.native.get("prompt_tokens_per_second")) else {}))
 
-        passed = {k: v for k, v in upstream.headers.items() if k not in HOP}
+        passed = {k: v for k, v in upstream.headers.items() if k not in HOP and k != "x-suite-allowance"}
+        passed.update(warning_headers)
         passed.update({"x-loadcoach-request-id": str(number), "x-loadcoach-hosted": name, "x-loadcoach-service": there["service"],
                        **{f"x-loadcoach-{k}": v for k, v in chose.items()}})
         return StreamingResponse(stream(), status_code=upstream.status_code, headers=passed)

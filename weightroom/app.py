@@ -102,7 +102,7 @@ from plugins._controller import Controller as PluginController
 from loadcoach.groups import NAME
 from loadcoach.roles import STRENGTHS, benchmark_shares, check_loaded_bonuses, check_weights, loaded_factors, pick
 from loadcoach.waiting import completion
-from loadcoach.setting_catalog import entries as catalog_entries, validate_values, default_for
+from loadcoach.setting_catalog import entries as catalog_entries, get as catalog_entry, validate_values, default_for
 from loadcoach.settings import copy_of, laid_over, read_value, said, written, apply_live
 from benchmarks.app import Settings as BenchmarkSettings, build_app as build_benchmarks
 from benchmarks.store import Benchmarks
@@ -3963,6 +3963,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             destination = settings_return
             if settings_return == '/tools':
                 render_settings = tools_page
+            elif settings_return == '/allowances':
+                render_settings = allowances_page
             elif settings_return.startswith('/settings/'):
                 async def render_settings(request, person, *args, **kwargs):
                     return await settings_page(request, person, *args, settings_section=settings_return.rsplit('/', 1)[-1], **kwargs)
@@ -4386,9 +4388,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     and request.query_params.get('complete') != '1' else 'usage_report.html')
         return page(request, template, person, report=answer.json())
 
-    async def allowances_page(request: Request, person: Person) -> Response:
-        """Advisory remaining USD, manually refreshed without replacing active selections."""
-        if request.method == 'POST':
+    async def allowances_page(request: Request, person: Person, said="", failed=False, typed_in=None, opened="") -> Response:
+        """Recorded remaining USD and live policy, manually refreshed without replacing active selections."""
+        if request.method == 'POST' and request.url.path == '/allowances':
             form = await typed(request)
             try:
                 scope, subject = str(form.get('target', '')).split(':', 1)
@@ -4403,7 +4405,19 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         result = await fetch(request, person, '/loadcoach/allowances')
         if isinstance(result, Response):
             return result
-        response = page(request, 'allowances.html', person, report=result)
+        programs = []
+        if 'manage-settings' in person.can:
+            inventory = await fetch(request, person, '/loadcoach/settings')
+            if isinstance(inventory, Response):
+                return inventory
+            for program in inventory['programs']:
+                rows = [row for row in program['settings'] if (definition := catalog_entry(program['program'], row['name'])) and
+                        (definition.page == 'allowances' or row['name'] == 'alert_allowance_percent')]
+                if rows:
+                    programs.append({**program, 'settings': rows})
+        response = page(request, 'allowances.html', person, status=400 if failed else 200, report=result, programs=programs,
+                        settings_return_to='/allowances', said=said or request.query_params.get('said', ''),
+                        failed=failed, typed_in=typed_in or {}, opened=opened or request.query_params.get('open', ''))
         response.headers['cache-control'] = 'no-store'
         return response
 

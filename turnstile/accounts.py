@@ -75,7 +75,7 @@ def signed_in(caller, log: Log, handler):
     return checked
 
 
-def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None, *, hosted_models=lambda: {}, forget_extractions=None, forget_responses=None, phone_numbers=lambda owner: [], forget_phone=lambda name: None, notification_threshold=lambda: 0) -> list[Route]:
+def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None, *, hosted_models=lambda: {}, forget_extractions=None, forget_responses=None, phone_numbers=lambda owner: [], forget_phone=lambda name: None, notification_threshold=lambda: 0, spending=None) -> list[Route]:
     """The account addresses. `caller(key)` is who a key belongs to, as turnstile says.
     `ask_compute(user, method, path, body)` asks compute as that user, or gives None if it is not answering.
     `roles_for(models)` are the roles someone who may use those models may ask for.
@@ -249,7 +249,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
     async def personal_notices(request: Request, user: User) -> Response:
         """Deliver only the current account's opted-in notices."""
         from .personal import notices
-        return JSONResponse(notices(users, log, user), headers={'cache-control': 'private, no-store'})
+        return JSONResponse(notices(users, log, user, spending), headers={'cache-control': 'private, no-store'})
 
     async def notification_feed(request: Request,user: User) -> Response:
         """Only the console's account-mirroring key may fetch opted-in delivery metadata."""
@@ -275,12 +275,12 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
                 effective = {key:choices[key] for key in safe_choices if key.startswith(('notify_','alert_'))}
                 effective['notify_operational'] = bool(choices.get('notify_operational') and account.can('manage-settings'))
                 targets.append({'identity':account.identity,'name':name,'max_sensitivity':account.group.max_sensitivity,
-                                'choices':effective,'since':started or 0,'notices':{'items':[]} if metadata_only else notices(users,log,account)})
+                                'choices':effective,'since':started or 0,'notices':{'items':[]} if metadata_only else notices(users,log,account,spending)})
             conditions = []
             threshold = notification_threshold()
             if not metadata_only and threshold and users.db.execute('SELECT 1 FROM spending_allowances WHERE amount>0 LIMIT 1').fetchone():
                 from .allowances import Allowances
-                for row in Allowances(users,log).report(ANONYMOUS)['rows']:
+                for row in (spending or Allowances(users,log)).report(ANONYMOUS)['rows']:
                     if not row['allowance']:
                         continue
                     percent = row['recorded']/row['allowance']*100

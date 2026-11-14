@@ -1,10 +1,21 @@
-# Advisory spending allowances
+# Spending allowances
 
-C07 / milestone 107 implements the owner's **soft enforcement** decision of 2026-10-15.
-**Settings → Spending allowances** reports rolling 24-hour USD allowances for individual
-users, pooled groups and persistent API keys. All are disabled initially; setting zero disables
-one. Exceeding an allowance does not reject, redirect or reserve a request. Existing hosted
-user/service spending ceilings and all normal authorization/admission rules still apply.
+**Settings → Spending allowances** reports USD allowances for individual users, pooled groups
+and persistent API keys. Targets start disabled; setting zero disables one. The live policy
+section controls `allowance_mode`: advisory (default), warn, or block. Advisory reports spending;
+warn adds an `x-suite-allowance` JSON response header to hosted attempts with applicable policies;
+block returns HTTP 403, code `allowance_exceeded`, naming the exhausted allowance and its reset
+boundary. Block applies only to hosted inference; local requests continue. No money is reserved,
+so unknown/in-flight costs and concurrent attempts can exceed the recorded allowance. Existing
+hosted service ceilings and per-user `max_hosted_spend` remain enforced separately.
+
+`allowance_period` selects rolling 24 hours (default) or calendar month. Months use the configured
+control node time zone, falling back to the host zone when empty. A rolling window has no single
+reset: the refusal reports when the next recorded positive charge leaves it. A calendar policy
+reports the next month's boundary. Mode, period and zone changes affect the next request/report.
+Warn/block personal spending notices use `alert_allowance_percent` (0 disables them) and the
+account's Alerts & privacy preference. Advisory preserves the existing 80% notice. Operational
+threshold delivery follows [notification settings](operations.md#notification-delivery).
 
 ## Meaning of remaining
 
@@ -14,18 +25,18 @@ and recorded group, so these scopes must not be added together. Groups pool thei
 recorded costs; these are separate from the existing per-user `max_hosted_spend` setting.
 
 The ordinary event log is the only accounting authority. The newest retained ending per request
-in the rolling window is counted once, whether completed, failed, refused, stopped or hung up.
+in the selected window is counted once, whether completed, failed, refused, stopped or hung up.
 Separate retries keep separate charges. Known numeric zero counts as known; invalid, negative,
 nonfinite and absent costs remain unknown. Recorded costs can include estimates saved at request
 time. Current pricing and the Usage page's model-rate/mock estimates do not fill missing costs.
 These allowances do not claim a hard cap, provider billing reconciliation or complete accounting.
 
-Window boundaries use absolute seconds and ending timestamps, independent of Usage calendar
-filters or daylight saving. “Without ending” covers retained starts inside the window without
+Rolling boundaries use absolute seconds and ending timestamps; calendar boundaries use the
+control node IANA time zone, including its offset changes. Usage filters do not change this policy. “Without ending” covers retained starts inside the window without
 an ending at the report instant: it includes lost endings, not only currently running work.
 Missing costs, unrecorded requests, log retention and delayed compute delivery may overstate the
 remainder. Isolated benchmark probes, unlogged local requests and plugin-adaptor estimates are
-outside this first increment. Retained records shorter than one day cannot cover the full window.
+outside this first increment. Retained records shorter than the selected window cannot cover it.
 The page refreshes manually. If compute cannot flush its existing outbox without waking, the
 page warns that the report may be stale; the control node's retained history remains available.
 
@@ -48,7 +59,7 @@ User/group rows include their ordinary recorded session work.
 
 Members see their own user/key rows and their current group's pooled allowance, without other
 members' request or key details. `see-log` permits all rows. Editing requires `see-log` plus
-`manage-users` for user/key targets or `manage-groups` for groups. These soft policies grant no
+`manage-users` for user/key targets or `manage-groups` for groups. These spending policies grant no
 inference/account authority. API responses and console pages use existing authentication and
 no-store responses; successful policy changes are recorded in the existing audit log.
 
@@ -60,10 +71,10 @@ Verified full-store backups/transfers preserve the policies and attribution-bear
 legacy `accounts-from` first-move command refuses populated new policies rather than silently
 omit them; use the verified full-store transfer workflow for that case.
 
-`GET /loadcoach/allowances` returns authorized rows, fixed window/currency/mode, coverage and
+`GET /loadcoach/allowances` returns authorized rows, current window/currency/mode, reset boundaries, coverage and
 compute synchronization status. `POST` accepts only `scope`, `subject`, `amount`; the subject
 must be a current target returned to an authorized manager. Amount must be finite, nonnegative
-and at most one billion USD; zero removes the policy. There is no hard-mode flag.
+and at most one billion USD; zero removes the policy. Mode and period use the generic catalogue-validated Turnstile settings endpoint; target records do not carry separate modes.
 The console's `/allowances` page uses those existing control node account APIs and the caller's key.
 
 Matching control node code/templates, accounts migration 4 and compute attribution code were present
@@ -76,7 +87,7 @@ legacy, unknown-cost and missing-ending cases; the live report displayed the cov
 counts, responses and test limits are in the [private qualification receipt](../data/qualification/delivery-2026-10-16.json).
 This qualifies the current soft policy workflow and its coverage display, not complete cost
 accounting or provider billing.
-Old compute/front statements remain readable, but cannot supply the new attribution;
+Old compute/control node statements remain readable, but cannot supply the new attribution;
 coverage must not be called complete until both sides are updated. Keep backups before upgrade.
 Rolling back code leaves the additive policy table and retained audit data intact; older code
 has no allowance UI. Local verification did not itself change the production store.

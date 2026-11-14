@@ -3,7 +3,7 @@
 import time
 
 
-def notices(users, log, user):
+def notices(users, log, user, spending=None):
     """Return this account's enabled notice categories without inference content."""
     choices = users.choices(user.name)
     since = time.time() - 7 * 86400
@@ -35,18 +35,21 @@ def notices(users, log, user):
                 (scope == 'group' and subject == user.group_name) or (scope == 'key' and subject in owned_keys))
     applicable = any(own_policy(scope, subject) for scope, subject in users.db.execute(
         'SELECT scope,subject FROM spending_allowances WHERE amount>0'))
-    if choices['alert_spending'] and applicable:
-        from .allowances import Allowances
-        for row in Allowances(users, log).report(user)['rows']:
+    from .allowances import Allowances
+    spending = spending or Allowances(users, log)
+    threshold = 80 if spending.setting('allowance_mode') == 'advisory' else spending.threshold()
+    if choices['alert_spending'] and applicable and threshold:
+        report = spending.report(user)
+        for row in report['rows']:
             if not own_policy(row['scope'], row['subject']):
                 continue
-            if row['allowance'] and row['recorded'] >= row['allowance'] * .8:
+            if row['allowance'] and row['recorded'] >= row['allowance'] * threshold / 100:
                 field = {'user':'account_id', 'group':'group', 'key':'key_id'}[row['scope']]
                 last = log.db.execute("SELECT MAX(at) FROM events WHERE kind='request' AND at>=? AND " +
-                                      log.json_value('detail', field) + '=?', (time.time() - 86400, row['subject'])).fetchone()[0]
+                                      log.json_value('detail', field) + '=?', (report['since'], row['subject'])).fetchone()[0]
                 items.append(dict(id='spending-' + row['scope'] + '-' + row['subject'], at=last, category='Spending',
                                   title=f"{row['name']} recorded spending is at "
-                                        f"{row['recorded'] / row['allowance']:.0%} of its 24-hour advisory allowance.",
+                                        f"{row['recorded'] / row['allowance']:.0%} of its {report['window_label']} {report['mode']} allowance.",
                                   href='/allowances', unread=bool(last and last > seen)))
     items.sort(key=lambda item: item['at'] or time.time(), reverse=True)
     return {'items': items[:50], 'unread': sum(item['unread'] for item in items[:50]), 'since': since,

@@ -28,7 +28,7 @@ def describe(setting, program=None):
             'ceiling': definition.ceiling if definition else None,
             'help': setting.get('says') or setting.get('help') or (definition.help if definition else ''),
             **({'choices': TIMEZONES} if name == 'timezone' else {}),
-            **({'choices': [(written(value), value) for entry in entries() if entry.name == name for value in entry.choices]} if any(entry.name == name and entry.choices for entry in entries()) else {})}
+            **({'choices': [(written(value), dict(entry.choice_labels).get(value, value)) for entry in entries() if entry.name == name for value in entry.choices]} if any(entry.name == name and entry.choices for entry in entries()) else {})}
 
 
 def sections(programs, *, compute_node=False):

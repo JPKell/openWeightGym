@@ -1,8 +1,13 @@
-"""Advisory USD allowances over retained ordinary request records, never admission rules."""
+"""Recorded USD allowances with live advisory, warning and hosted-only admission policy."""
 import json
 import math
 import time
 from decimal import Decimal
+from datetime import datetime, timezone as utc_timezone
+from zoneinfo import ZoneInfo
+
+from loadcoach.setting_catalog import default_for
+from weightroom.display import configured_timezone
 
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -15,9 +20,47 @@ from .accounts import address, error, read_json, signed_in
 class Allowances:
     """One small policy table beside accounts; the existing event log owns every charge."""
 
-    def __init__(self, users, log):
-        """Bind advisory spending policies to their retained account store."""
+    def __init__(self, users, log, *, setting=None, timezone=lambda: "", threshold=lambda: 0):
+        """Bind recorded spending policies to their retained account store."""
         self.users, self.log = users, log
+        self.setting = setting or (lambda name: default_for("turnstile", name))
+        self.timezone, self.threshold = timezone, threshold
+
+    def window(self, now):
+        """Resolve the current accounting window in the configured control node time zone."""
+        if self.setting('allowance_period') == 'rolling_24h':
+            return now - 86400, None, 'rolling 24 hours'
+        local = datetime.fromtimestamp(now, ZoneInfo(configured_timezone(self.timezone())))
+        first = local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month = first.month % 12 + 1
+        next_month = first.replace(year=first.year + (month == 1), month=month)
+        return first.timestamp(), next_month.timestamp(), 'calendar month'
+
+    def applicable(self, user, row):
+        """Only this account, its current API key and its recorded group can gate a request."""
+        return row['allowance'] and ((row['scope'] == 'user' and row['subject'] == user.identity) or
+            (row['scope'] == 'key' and row['subject'] == user.key_identity) or
+            (row['scope'] == 'group' and row['subject'] == user.group_name))
+
+    def admission(self, user):
+        """Return a refusal or warning metadata for a hosted attempt; never reserve money."""
+        mode = self.setting('allowance_mode')
+        if mode == 'advisory' or not self.users.db.execute('SELECT 1 FROM spending_allowances WHERE amount>0 LIMIT 1').fetchone():
+            return None, {}
+        report = self.report(user)
+        rows = [row for row in report['rows'] if self.applicable(user, row)]
+        if mode == 'block':
+            for row in rows:
+                if row['recorded'] >= row['allowance']:
+                    when = datetime.fromtimestamp(row['reset_at'], utc_timezone.utc).isoformat(timespec='seconds')
+                    reset = 'resets at' if report['period'] == 'calendar_month' else 'next recorded charge leaves the rolling window at'
+                    return {'message': f"The {row['scope']} allowance {row['name']} is exhausted (${row['recorded']:.6f} recorded / ${row['allowance']:.6f}); {reset} {when}.",
+                            'code': 'allowance_exceeded'}, {}
+        if mode == 'warn' and rows:
+            return None, {'x-suite-allowance': json.dumps([
+                {key: row[key] for key in ('scope', 'name', 'recorded', 'allowance', 'remaining', 'reset_at')} for row in rows],
+                ensure_ascii=True, separators=(',', ':'))}
+        return None, {}
 
     def choices(self):
         """Current immutable users/keys and named groups; deleted targets never reattach."""
@@ -43,12 +86,12 @@ class Allowances:
 
     @staticmethod
     def manageable(user, target):
-        """Changing an advisory target also requires permission to inspect its accounting."""
+        """Changing an allowance target also requires permission to inspect its accounting."""
         ability = 'manage-groups' if target['scope']=='group' else 'manage-users'
         return user.can('see-log') and user.can(ability)
 
     def save(self, user, scope, subject, value):
-        """Replace a target atomically; zero disables it. Nothing reserves or refuses inference."""
+        """Replace a target atomically; zero disables it. No money is reserved."""
         target = next((t for t in self.choices() if t['scope']==scope and t['subject']==subject), None)
         if target is None:
             raise ValueError('Choose a current user, group or persistent API key.')
@@ -67,11 +110,11 @@ class Allowances:
     def report(self, user, now=None):
         """Latest ending per request is charged once; missing costs are never mock-priced."""
         now = time.time() if now is None else now
-        since = now - 86400
+        since, period_end, window_label = self.window(now)
         targets = [t for t in self.choices() if self.visible(user, t)]
         policies = {(scope, subject): limit for scope, subject, limit in self.users.db.execute(
             'SELECT scope,subject,amount FROM spending_allowances')}
-        totals = {(t['scope'], t['subject']): dict(recorded=Decimal(0), requests=0, unknown_costs=0, unresolved=0) for t in targets}
+        totals = {(t['scope'], t['subject']): dict(recorded=Decimal(0), requests=0, unknown_costs=0, unresolved=0, next_charge=None) for t in targets}
         marks = ','.join('?' for _ in ENDINGS)
         # Every ending includes snapshots on matching compute. Keep only the newest retained
         # ending for each parent in this window, so multiple endings are not charged twice.
@@ -101,6 +144,8 @@ class Allowances:
                     row['unknown_costs'] += 1
                 else:
                     row['recorded'] += cost
+                    if cost > 0:
+                        row['next_charge'] = min(row['next_charge'] or at, at)
         # Unresolved means no retained ending, not proof that the request is still executing.
         # The unary plus on e.at keeps the planner on the parent index; scanning every earlier
         # request by time took 41 s on 48k events and stalled turnstile's event loop.
@@ -124,17 +169,19 @@ class Allowances:
             rows.append({**target, **value, 'recorded':recorded, 'allowance':limit,
                 'remaining':float(max(Decimal(0), difference)) if limit else None,
                 'over_by':float(max(Decimal(0), -difference)) if limit else None,
+                'reset_at':period_end or ((value['next_charge'] or now) + 86400),
                 'manage':self.manageable(user,target)})
-        return dict(mode='soft', currency='USD', window_seconds=86400, as_of=now, since=since,
+        return dict(mode=self.setting('allowance_mode'), period=self.setting('allowance_period'), window_label=window_label,
+            reset_at=period_end, currency='USD', window_seconds=(period_end - since) if period_end else 86400, as_of=now, since=since,
             rows=rows, legacy_records=legacy, unattributed_keys=unattributed_keys, keep_days=self.log.keep_days)
 
 
-def routes(users, log, caller, ask_compute):
+def routes(users, log, caller, ask_compute, *, service=None):
     """Authenticated reporting and management of allowances the control node keeps; compute is never woken."""
-    allowances = Allowances(users, log)
+    allowances = service or Allowances(users, log)
 
     async def handle(request, user):
-        """Read or change advisory spending allowances under current caller permissions."""
+        """Read or change recorded spending allowances under current caller permissions."""
         if request.method=='POST':
             body = await read_json(request, {'scope','subject','amount'})
             if isinstance(body, Response):
@@ -146,7 +193,7 @@ def routes(users, log, caller, ask_compute):
             except ValueError as why:
                 return error(400,str(why))
             log.add('allowance','changed',user.name,address(request),scope=target['scope'],subject=target['subject'],amount=body['amount'])
-            return JSONResponse({'saved':True,'mode':'soft'},headers={'cache-control':'no-store'})
+            return JSONResponse({'saved':True,'mode':allowances.setting('allowance_mode')},headers={'cache-control':'no-store'})
         synchronized = await ask_compute(user,'POST','/loadcoach/send-log')
         return JSONResponse({**allowances.report(user),'compute_synchronized':synchronized is not None and synchronized.status_code==200},
             headers={'cache-control':'no-store'})

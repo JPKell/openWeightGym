@@ -200,7 +200,8 @@ switches within the current tab; passwords and keys are excluded from browser dr
 
 Alerts & privacy delivers up to 50 owner-scoped notices from the last seven days for
 sign-ins/credential changes, batch/workflow/audio completion and recorded spending at
-80% of an applicable 24-hour advisory allowance. The account menu refreshes unread counts
+80% of an applicable advisory allowance; warn/block use the configured allowance threshold.
+[Spending policy](allowances.md) controls rolling-day or calendar-month accounting and hosted-only blocking. The account menu refreshes unread counts
 once a minute while visible. Mark all read without deleting audit records. Log retention
 is displayed from the deployment policy; other stores retain their own policies. Optional ntfy/email
 delivery starts at opt-in; settings administrators can include operational episodes. See

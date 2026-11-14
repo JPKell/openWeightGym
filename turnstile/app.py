@@ -129,6 +129,8 @@ class Settings:
     password_min_length: int = default_for('turnstile','password_min_length')
     api_key_max_days: int = default_for('turnstile','api_key_max_days')
     session_idle_hours: float = default_for('turnstile','session_idle_hours')
+    allowance_mode: str = default_for('turnstile', 'allowance_mode')
+    allowance_period: str = default_for('turnstile', 'allowance_period')
     voice_port: int = 8445
     machine_key_file: str = ""  # the key control node shares with compute, which statements are signed with
     plugins_dir: str = ""  # plugin folders on the control node; empty leaves the plugin path out
@@ -1076,6 +1078,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     from loadcoach.content_limits import ContentLimits
     content_limits = ContentLimits(lambda name: live("weightroom", name, default_for("weightroom", name)))
     extractions.limits = content_limits
+    spending = allowances.Allowances(users, log,
+        setting=lambda name: live('turnstile', name, getattr(settings, name)),
+        timezone=lambda: live('weightroom', 'timezone', weightroom_defaults.get('timezone') or ''),
+        threshold=lambda: live('weightroom', 'alert_allowance_percent', default_for('weightroom', 'alert_allowance_percent')))
+    hosted.allowances = spending
     users.policy_getter = lambda name: live('turnstile',name,getattr(settings,name))
 
     def node_policy(name):
@@ -3497,8 +3504,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                              hosted_models=hosted.models, forget_extractions=extractions.forget, forget_responses=forget_responses,
                                              phone_numbers=lambda owner: telephone_admin.store.own(owner, mask=True),
                                              forget_phone=telephone_admin.forget_account,
-                                             notification_threshold=lambda:live('weightroom','alert_allowance_percent',default_for('weightroom','alert_allowance_percent'))),
-                            *allowances.routes(users, log, caller, ask_all),
+                                             notification_threshold=lambda:live('weightroom','alert_allowance_percent',default_for('weightroom','alert_allowance_percent')), spending=spending),
+                            *allowances.routes(users, log, caller, ask_all, service=spending),
                             *routing.routes(),
                             Route("/{path:path}", pass_on, methods=methods)])
     app.state.plugins, app.state.users, app.state.log, app.state.routing = plugins, users, log, routing
@@ -3513,6 +3520,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     app.state.responses = response_store
     app.state.extractions = extractions
     app.state.console_settings = console_settings
+    app.state.allowances = spending
     app.state.live_settings = live
     app.state.fallthrough = fallthrough
     app.state.front_files = front_files

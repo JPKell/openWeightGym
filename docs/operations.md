@@ -1238,6 +1238,14 @@ Older `[deploy]` settings are ignored and can be removed. The manual maintenance
 `scripts/deploy-front.sh` and `scripts/deploy.sh` remain available for developer updates and
 the one-time data moves `deploy.sh` performs.
 
+## Spending policy
+
+Allowances supports live advisory/warn/block policy and rolling-day/calendar-month accounting.
+Block checks recorded user/key/group allowances at hosted admission; native local requests remain
+admitted. Warn returns `x-suite-allowance` metadata and uses the configured personal threshold.
+Existing service and per-user hosted ceilings remain separate. Configure policy on `/allowances`;
+see [Spending allowances](allowances.md) for resets, permissions and incomplete-cost coverage.
+
 ## Upload and content limits
 
 `/settings/limits` holds live global defaults for chat attachments, document parsing, Collections,

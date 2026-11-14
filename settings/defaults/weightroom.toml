@@ -287,6 +287,12 @@ can = ["use-tools", "follow-settings"]
 
 # turnstile's own part. Seconds it waits for compute to wake before it gives up on a request.
 [turnstile]
+# Live recorded spending policy: advisory, warn, or block (hosted requests only).
+# Unknown and in-flight costs are excluded; existing hosted ceilings still apply.
+allowance_mode = "advisory"
+# Live accounting window: rolling_24h, or calendar_month in the control node time zone.
+allowance_period = "rolling_24h"
+
 # Limits shared by server-run Responses tools and each Tool chat model turn. Changes apply immediately.
 response_max_tool_calls = 25
 response_max_tool_seconds = 900
