@@ -6,10 +6,10 @@
 {% from 'log_parts.html' import inspector, templates %}
 <!doctype html>
 <html lang="en" data-bs-theme="light" data-site-theme="slate">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI Logs · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Event log · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
 <body>
 <div hidden>{{ icons_svg|safe }}<form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
-<a href="#workspace" class="visually-hidden-focusable">Skip to AI logs</a>
+<a href="#workspace" class="visually-hidden-focusable">Skip to event log</a>
 <header class="al-review"><div class="d-flex align-items-center gap-3"><strong class="al-brand">{{ icon('barbell') }} weightRoom</strong><span class="text-secondary small">Design review / Observability</span></div><div class="d-flex gap-2 align-items-center flex-wrap"><span class="badge bg-secondary-lt">Interactive sample</span><button type="button" class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button type="button" class="btn btn-outline-secondary btn-sm" id="reset-demo">Reset demo</button></div></header>
 <main class="al-page">
 <section class="al-proposals" aria-label="Design proposals">
@@ -17,7 +17,7 @@
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3"><p class="text-secondary small mb-0" id="design-description"></p><label class="small d-flex align-items-center gap-2">Preview state<select class="form-select form-select-sm w-auto" id="scenario"><option value="normal">Sample activity</option><option value="empty">Empty log</option><option value="failure">Loading failed</option></select></label></div>
 </section>
 <div id="workspace" data-layout="explorer">
-{% call page_header('AI Logs', pretitle=none) %}<button type="button" class="btn btn-outline-secondary btn-sm" id="copy-view">Copy view link</button><button type="button" class="btn btn-primary btn-sm" id="export">Export filtered CSV ↓</button>{% endcall %}
+{% call page_header('Event log', pretitle=none) %}<button type="button" class="btn btn-outline-secondary btn-sm" id="copy-view">Copy view link</button><button type="button" class="btn btn-primary btn-sm" id="export">Export filtered CSV ↓</button>{% endcall %}
 <div class="al-context"><span><span class="al-status-dot" aria-hidden="true"></span> Sample snapshot <span class="text-secondary">· 13 Nov 2026, 10:42 Vancouver</span></span><span class="small text-secondary">Counts describe matching events · not request success rates</span></div>
 {% call kpi_row('Matching activity', class_='mb-4') %}
 {{ kpi('Recorded events', '—', note='in the current filters', value_attrs={'id':'metric-events'}) }}
@@ -38,7 +38,7 @@
 <div><label for="log-start" class="form-label">From · Vancouver</label><input type="datetime-local" class="form-control form-control-sm" step="1" id="log-start" name="start"></div>
 <div><label for="log-end" class="form-label">Through · Vancouver</label><input type="datetime-local" class="form-control form-control-sm" step="1" id="log-end" name="end"></div>
 </div>
-<div class="al-filter-bottom"><div class="d-flex gap-2 flex-wrap" role="group" aria-label="Quick views">{% for value,label in [('all','All activity'),('failed','Failures'),('denied','Denied'),('request','Requests'),('model','Model lifecycle')] %}<button type="button" class="btn btn-sm {{ 'btn-primary' if value == 'all' else 'btn-outline-secondary' }}" data-quick="{{ value }}" aria-pressed="{{ 'true' if value == 'all' else 'false' }}">{{ label }}</button>{% endfor %}</div><button type="button" class="btn btn-link btn-sm text-secondary" data-clear>Clear filters</button></div>
+<div class="al-filter-bottom"><div class="d-flex gap-2 flex-wrap" role="group" aria-label="Quick views">{% for value,label in [('all','All activity'),('failed','Failures'),('denied','Denied'),('request','Model requests'),('model','Model lifecycle')] %}<button type="button" class="btn btn-sm {{ 'btn-primary' if value == 'all' else 'btn-outline-secondary' }}" data-quick="{{ value }}" aria-pressed="{{ 'true' if value == 'all' else 'false' }}">{{ label }}</button>{% endfor %}</div><button type="button" class="btn btn-link btn-sm text-secondary" data-clear>Clear filters</button></div>
 <div id="active-filters" class="d-flex flex-wrap gap-2" aria-label="Active filters"></div><p id="filter-error" role="alert" class="text-danger small mb-0" hidden></p>
 </form>
 {% call alert('danger', attrs={'id':'load-error','hidden':''}) %}<strong>AI activity could not be loaded.</strong><p class="mb-3">The log service did not respond. Your filters are kept.</p><button type="button" class="btn btn-outline-danger btn-sm" id="retry">Retry sample load</button>{% endcall %}

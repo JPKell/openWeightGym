@@ -1,11 +1,11 @@
 {% extends "frame.html" %}
 {% from "parts.html" import card, page_header %}
-{% block title %}Requests · openWeightGym{% endblock %}
+{% block title %}Model requests · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/static/requests.css?v=1"><script src="/static/requests.js?v=1" defer></script>{% endblock %}
 {% block page_class %}request-workspace{% endblock %}
 {% block main %}
-{{ page_header('Requests') }}
+{{ page_header('Model requests') }}
 {% if deferred %}{% from "deferred.html" import loading %}
-{{ loading('requests-report', fragment_url, 'Loading requests…') }}
+{{ loading('requests-report', fragment_url, 'Loading model requests…') }}
 {% else %}{% include "requests_content.html" %}{% endif %}
 {% endblock %}

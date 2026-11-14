@@ -4,7 +4,7 @@
 {% block scripts %}<link rel="stylesheet" href="/static/requests.css?v=1"><script src="/static/requests.js?v=1" defer></script>{% endblock %}
 {% block page_class %}request-workspace{% endblock %}
 {% block main %}
-<a href="/requests" class="d-inline-block mb-3" data-request-back>← Back to requests</a>
+<a href="/requests" class="d-inline-block mb-3" data-request-back>← Back to model requests</a>
 {{ said_box(said, 'failed' in request.query_params) }}
 {% include 'request_live.html' %}
 {% include 'request_history.html' %}

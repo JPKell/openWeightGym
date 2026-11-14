@@ -28,7 +28,8 @@ def test_navigation_orders_and_detail_parents():
     assert navigation('/benchmarks/node-measurements', can, True)['active'] == '/benchmarks/node-measurements'
     nav = navigation('/plugins/activity', can, True)
     assert nav['section'] == 'Logs' and nav['active'] == '/plugins/activity'
-    assert [name for name, _ in nav['links']] == ['Usage', 'Requests', 'Batches', 'AI Logs', 'Reliability', 'Plugin logs', 'System logs']
+    assert [name for name, _ in nav['links']] == ['Usage', 'Reliability', 'Model requests', 'Batches', 'Event log', 'Plugin logs', 'System logs']
+    assert nav['headings'] == {'/usage': 'Overview', '/requests': 'Model activity', '/log': 'Diagnostics'}
     for path in ('/no-such-page', '/settings', '/models', '/users', '/deploy'):
         missing = navigation(path, [], False)
         assert missing['section'] == '' and missing['links'] == [] and missing['active'] == ''
