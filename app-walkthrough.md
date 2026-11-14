@@ -44,12 +44,12 @@
 ## Logs
 
 - [x] Usage
-- [ ] Requests
-- [ ] Request specific page
-- [ ] Batches
-- [ ] AI Logs
-- [ ] Log entry
 - [ ] Reliability
+- [ ] Model requests
+- [ ] Model request specific page
+- [ ] Batches
+- [ ] Event log
+- [ ] Log entry
 - [ ] Plugin logs
 - [ ] System logs
 

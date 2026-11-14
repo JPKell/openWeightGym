@@ -1,4 +1,4 @@
-"""Render three self-contained AI Logs proposals with deterministic sample events."""
+"""Render three self-contained Event log proposals with deterministic sample events."""
 
 import argparse
 import re

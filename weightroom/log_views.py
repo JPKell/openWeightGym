@@ -72,7 +72,7 @@ def workspace(events, query, selected=None, context=None, context_error=False):
     chain.sort(key=lambda event: ((moment(event.get('at')).timestamp() if moment(event.get('at')) else 0), event['id']))
     ids = {event['id'] for event in events}
     quick_views = [dict(label=label, href='/log?' + urlencode({**{key: value for key, value in query.items() if key not in ('kind', 'what', 'before')}, **filters}))
-                   for label, filters in [('All activity', {}), ('Failures', {'what': 'failed'}), ('Denied', {'what': 'denied'}), ('Requests', {'kind': 'request'}), ('Model lifecycle', {'kind': 'model'})]]
+                   for label, filters in [('All activity', {}), ('Failures', {'what': 'failed'}), ('Denied', {'what': 'denied'}), ('Model requests', {'kind': 'request'}), ('Model lifecycle', {'kind': 'model'})]]
     return dict(events=views, choices=choices, selected=selected, timeline=chain, quick_views=quick_views,
                 context_error=context_error, context_capped=len(chain) >= 1000,
                 context_matches=sum(event['id'] in ids for event in chain),
