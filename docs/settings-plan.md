@@ -77,6 +77,7 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Components had no restart controls. Its new shared action delegates compute restarts to Spotter’s existing service allowlist and schedules control node restarts through the installed `owg restart PROGRAM`; pending notices reuse that action. Explicit process-start timestamps prevent a report refresh or authority restart from clearing another service’s pending changes.
 - Catalogue entries describe top-level settings; tables retain their existing whole-table POST contract. Nested tuning entries will validate the editable subset without exposing model paths.
 - Node-owned Voice followers name the adjacent LoadCoach file’s existing `machine_name` on settings requests. Live checks exposed the old ambiguous control-node URL, which otherwise left new settings unseen on multi-node installations.
 - Unconfigured Hermes choices remain visible and may be saved for later; choices alone never enable a runtime. Execution still requires a machine-file Python/API endpoint and model.
@@ -440,7 +441,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 1j Responses limits shipped with Phase 0; Phase 1 deployed and verified (a853683; 47 tiers, 33 restored live changes, unchanged PIDs on all five checkouts).
 - [x] 2.1 Shared design, grouped routes and navigation (native saves and drafts verified; 39 UI cases cover all eight new routes).
 - [x] 2.2 Search, Changed only and section navigation across settings (39 feature/browser and all 39 UI consistency cases pass).
-- [ ] 2.3 Pending restart status and authorized restart action.
+- [x] 2.3 Pending restart status and authorized restart action (475 settings checks; 24 restart/Components checks including narrow layouts and failure states).
 - [ ] 2.4 Machine configuration page.
 - [ ] 2.5 History, revert and validated export/import.
 - [ ] 2.6 UI checks and documentation; Phase 2 deployed and verified.

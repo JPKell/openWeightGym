@@ -607,6 +607,7 @@ def of_its_own(ticked, group_can, known: dict) -> dict:
 def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watcher: httpx.AsyncClient | None = None,
               tools_client: httpx.AsyncClient | None = None, voice_client: httpx.AsyncClient | None = None) -> Starlette:
     """Build the web app. `client` is how it reaches LoadCoach and `watcher` how it reaches spotter, both through turnstile; tests hand in their own."""
+    started_at = time.time()
     loadcoach = client or httpx.AsyncClient(base_url=settings.door + ":8442", timeout=httpx.Timeout(10, connect=2))
     tools_url = settings.toollocker or settings.door + ":8443"
     tool_http = tools_client or httpx.AsyncClient(base_url=tools_url, timeout=httpx.Timeout(130, connect=2))
@@ -806,7 +807,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     for entry in catalog_entries('weightroom') if hasattr(settings, entry.name)}}
         # turnstile writes what it runs with into the folder the two share, each time it starts.
         for program, told in (("weightroom", said(running, settings.file, settings.says)), ("turnstile", kept("settings-seen-turnstile.json", None))):
-            report = {'told': told, 'refused': refused if program == 'weightroom' else {}}
+            start = started_at if program == 'weightroom' else (told or {}).get('_started_at', 0)
+            told = {name: row for name, row in (told or {}).items() if name != '_started_at'}
+            report = {'told': told, 'refused': refused if program == 'weightroom' else {}, 'started': start}
             if told and said_last.get(program) != report:
                 if (await ask("POST", f"/loadcoach/settings/{program}/seen", settings.key, json=report)).status_code == 200:
                     said_last[program] = report
@@ -5116,8 +5119,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return now, ''
 
     def machine_action_destination(form):
-        """Keep control outcomes on a local Telemetry page."""
+        """Keep control outcomes on an allowlisted local destination."""
         destination = form.get('return_to', '')
+        base = destination.partition('?')[0]
+        if base in settings_views.RETURNS | {'/system/components', '/compute-nodes', '/system/voice', '/system/audio'} and not any(char in destination for char in '\r\n#'):
+            return destination, ''
         match = re.fullmatch(r'/telemetry/([0-9a-f]{64})(?:\?[^\r\n#]*)?', destination)
         return (destination, match[1]) if match else ('/telemetry', '')
 
@@ -5252,9 +5258,22 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "components_content.html" if part else "components.html", person, found=found, deferred=False)
 
     async def act_on_service(request: Request, person: Person) -> Response:
-        """Start, stop or restart a service on compute. spotter decides whether this person may, and does it."""
+        """Authorize control-node restarts or delegate node actions to Spotter's allowlist."""
         name, action = request.path_params["name"], request.path_params["action"]
-        destination, fingerprint = machine_action_destination(await typed(request))
+        form = await typed(request)
+        destination, fingerprint = machine_action_destination(form)
+        if 'restart-services' not in person.can:
+            return page(request, 'refused.html', person, status=403, why='Service actions require restart-services.')
+        if form.get('control_node') == '1':
+            if action != 'restart' or name not in {'weightroom', 'turnstile', 'toollocker', 'voice-gateway'}:
+                return machine_action_result(destination, 'This control node service action is unavailable.', failed=True)
+            restarted = pairing.restart_program_later(name)
+            return machine_action_result(destination, f'Asked {name} to restart.' if restarted else 'OWG could not schedule the restart. Use owg restart on the control node.', failed=not restarted)
+        node = form.get('node') or form.get('machine')
+        if node:
+            node = node_named(person, node)
+            if not node:
+                return machine_action_result(destination, 'Choose an available compute node.', failed=True)
         if fingerprint:
             _, why = await physical_host_controls(person, fingerprint)
             if why:
@@ -5262,7 +5281,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if name in THIRD_PARTY_NAMES and name not in settings.third_party_services:
             return machine_action_result(destination, f"{name} is not selected under WeightRoom settings.", failed=True)
         try:
-            answer = await ask_spotter("POST", f"/spotter/services/{quote(name, safe='')}/{quote(action, safe='')}", person.key)
+            answer = await ask_spotter("POST", f"/spotter/services/{quote(name, safe='')}/{quote(action, safe='')}", person.key, params={'node': node} if node else None)
         except MachineOff:
             return machine_action_result(destination, 'spotter is not answering.', failed=True)
         if answer.status_code != 200:

@@ -187,6 +187,22 @@ def restart_later(units: tuple[str, ...] = ("turnstile.service", "weightroom.ser
         return False
 
 
+def restart_program_later(program: str, seconds: int = 3) -> bool:
+    """Run the owner's OWG restart route after the HTTP response has completed."""
+    if program not in {'weightroom', 'turnstile', 'toollocker', 'voice-gateway'}:
+        return False
+    command = Path.home() / '.local/bin/owg'
+    if not command.is_file():
+        return False
+    try:
+        subprocess.run(['systemd-run', '--user', '--collect', '--quiet', f'--on-active={seconds}',
+                        str(command), '--plain', '--yes', 'restart', program],
+                       check=True, capture_output=True, timeout=10)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def lan_address() -> str:
     """This machine's address on its network: the one a route out would leave from."""
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:

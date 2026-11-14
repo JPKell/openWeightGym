@@ -224,7 +224,9 @@ def say_what_runs(path: Path, settings: Settings) -> None:
     running = {**file, **{entry.name: getattr(settings, entry.name)
                            for entry in catalog_entries('turnstile') if hasattr(settings, entry.name)},
                'ports': list(settings.ports), 'artifact_machine': artifact_machine}
-    (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))))
+    report = said(running, file, comments(text.partition("[turnstile]")[2]) | comments(text.rpartition("[turnstile]")[2]))
+    report['_started_at'] = time.time()
+    (Path(settings.data) / "settings-seen-turnstile.json").write_text(json.dumps(report))
 
 
 def front_stores(databases: dict, base: Path, data: Path) -> DatabaseRegistry:

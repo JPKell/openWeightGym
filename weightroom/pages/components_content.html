@@ -1,5 +1,5 @@
 {# What each machine has installed: one card per machine, listing every service and engine whether it is there or not. #}
-{% from "parts.html" import card, section_title, node_state, alert %}
+{% from "parts.html" import card, section_title, node_state, alert, service_restart %}
 {% from "icons.html" import icon %}
 
 {# Installed, not installed, or unknown when the machine did not answer or could not be asked. #}
@@ -24,7 +24,7 @@
 {%- endif %}
 {%- endmacro %}
 
-{% macro listing(title, kind, rows, answering, listed=()) %}
+{% macro listing(title, kind, rows, answering, listed=(), node='') %}
 {% set count = rows|selectattr('installed')|list|length %}
 <table class="table table-sm component-table" aria-label="{{ title }} {{ kind }}">
   <caption class="component-caption">{{ kind|capitalize }}{% if answering %}<span class="text-secondary fw-normal"> · {{ count }} of {{ rows|length }} installed</span>{% endif %}</caption>
@@ -36,7 +36,7 @@
       {% if installed %}<div class="small text-secondary text-break"{% if row.version_error %} title="{{ row.version_error }}"{% endif %}>Version: {{ row.version or 'Unknown' }}</div>{% endif %}
       {% if installed == false and row.id in listed %}<div class="small text-warning">The install receipt lists it, but systemd has no unit for it.</div>{% endif %}</th>
     <td class="text-end">{{ have(installed) }}</td>
-    <td class="text-end component-state-cell">{{ how(row, kind) if answering }}</td>
+    <td class="text-end component-state-cell">{{ how(row, kind) if answering }}{% if installed and kind == 'services' and person and 'restart-services' in person.can and (node != 'front' or row.id in ('weightroom','turnstile','toollocker','voice-gateway')) %}<div class="mt-2">{{ service_restart(row.id, node, '/system/components', node == 'front') }}</div>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>
@@ -44,6 +44,7 @@
 {% endmacro %}
 
 <div id="components-report" hx-get="/system/components?part=page" hx-trigger="every 30s" hx-swap="outerHTML">
+{% if request.query_params.get('said') %}{% call alert('danger' if request.query_params.get('failed') else 'info', role='status') %}{{ request.query_params.get('said') }}{% endcall %}{% endif %}
 <div class="component-cards-frame"><div class="component-cards">
 {% for node in found.nodes or [] %}
 {% set title = 'Control node' if node.name == 'front' else node.name %}
@@ -60,7 +61,7 @@
     {% elif node.answering %}<span>No install receipt</span>{% endif %}
   </div>
   {% if not node.answering %}{% call alert('warning', class_='py-2 small mb-2', role='status') %}{{ node.why }}{% endcall %}{% endif %}
-  {{ listing(title, 'services', node.services if node.answering else found.services, node.answering, (receipt.services or '').split(',')) }}
+  {{ listing(title, 'services', node.services if node.answering else found.services, node.answering, (receipt.services or '').split(','), node.name) }}
   {{ listing(title, 'engines', node.engines if node.answering else found.engines, node.answering) }}
   {% if node.tools %}
   {{ listing(title, 'tools', node.tools, node.answering) }}

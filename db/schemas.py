@@ -125,6 +125,12 @@ SETTINGS = (
             program TEXT PRIMARY KEY, at DOUBLE PRECISION NOT NULL,
             told TEXT NOT NULL, refused TEXT NOT NULL);
     """),
+    Migration(2, "settings process starts and reset times", """
+        ALTER TABLE settings_seen ADD COLUMN started DOUBLE PRECISION NOT NULL DEFAULT 0;
+        CREATE TABLE settings_resets (
+            program TEXT NOT NULL, name TEXT NOT NULL, at DOUBLE PRECISION NOT NULL,
+            PRIMARY KEY (program, name));
+    """),
 )
 
 def _group_tool_ability(database, connection):
@@ -228,7 +234,7 @@ def _event_columns(database, connection) -> None:
 
 
 def _forwarded_columns(database, connection) -> None:
-    """Which machine an entry on front came from, and its number there. Compute's own entries leave both empty."""
+    """Which machine an entry on the control node came from, and its number there. Compute's own entries leave both empty."""
     add_column(database, connection, "events", "machine", "TEXT")
     add_column(database, connection, "events", "source", "BIGINT")
     connection.execute("CREATE INDEX IF NOT EXISTS events_source ON events(source)")
@@ -236,7 +242,7 @@ def _forwarded_columns(database, connection) -> None:
 
 
 def _machine_telemetry(database, connection) -> None:
-    """Front keeps sampled readings by physical host, alongside its event log."""
+    """Control node keeps sampled readings by physical host, alongside its event log."""
     connection.execute("CREATE TABLE IF NOT EXISTS machine_telemetry (fingerprint TEXT NOT NULL, at DOUBLE PRECISION NOT NULL, numbers TEXT NOT NULL, PRIMARY KEY(fingerprint, at))")
     connection.execute("CREATE INDEX IF NOT EXISTS machine_telemetry_at ON machine_telemetry(at)")
     connection.execute("CREATE TABLE IF NOT EXISTS machine_hosts (fingerprint TEXT PRIMARY KEY, hostname TEXT NOT NULL, names TEXT NOT NULL, last_seen DOUBLE PRECISION NOT NULL)")
@@ -330,7 +336,7 @@ LOG = (
     Migration(10, "caller scoped node discovery", """
         CREATE TABLE node_discovery (scope TEXT PRIMARY KEY, at DOUBLE PRECISION NOT NULL, data TEXT NOT NULL);
     """),
-    Migration(11, "compute node lifecycle kept on the front", formerly="front owned compute node lifecycle", sqlite="""
+    Migration(11, "compute node lifecycle kept on the front", formerly='front owned compute node lifecycle', sqlite="""
         CREATE TABLE machine_lifecycle (
             name TEXT PRIMARY KEY, state TEXT NOT NULL,
             changed_at DOUBLE PRECISION NOT NULL, changed_by TEXT NOT NULL);
@@ -552,7 +558,7 @@ def stored_table(present, name: str) -> str:
 def _benchmark_task_names(database, connection) -> None:
     """Rename the benchmark task tables wherever the old name exists and the new one does not.
 
-    The front's stream and a node's legacy stream both run this, in either order and on a shared
+    The control node's stream and a node's legacy stream both run this, in either order and on a shared
     or separate store. Renaming keeps every row as it is.
     """
     present = set(database.tables(connection))
@@ -575,7 +581,7 @@ def _task_record_owners(database, connection) -> None:
             connection.execute("UPDATE external_tasks SET owner_id=? WHERE id=?", (owner, number))
 
 
-# Benchmark task records the front keeps for every node. Migrations 1-3 create the tables under
+# Benchmark task records the control node keeps for every node. Migrations 1-3 create the tables under
 # their old names; migration 4 renames them.
 TASK_RECORDS = (Migration(1, "benchmark task records and evidence outbox", """
     CREATE TABLE IF NOT EXISTS external_tasks (
@@ -586,8 +592,8 @@ TASK_RECORDS = (Migration(1, "benchmark task records and evidence outbox", """
         task TEXT PRIMARY KEY, snapshot TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS front_task_finishes (
         task TEXT PRIMARY KEY, payload TEXT NOT NULL);
-""", formerly="front-owned external tasks and evidence outbox"),
-    Migration(2, "immutable benchmark task ownership", _task_record_owners, formerly="immutable front task ownership"))
+""", formerly='front-owned external tasks and evidence outbox'),
+    Migration(2, "immutable benchmark task ownership", _task_record_owners, formerly='immutable front task ownership'))
 
 
 def _chat_columns(database, connection) -> None:
@@ -825,7 +831,7 @@ RETIRED_COMPUTE_TABLES = (
     "batch_lines", "batches", "files",
 )
 
-# Retirement freezes these ledgers after their authoritative tables move to front.
+# Retirement freezes these ledgers after their authoritative tables move to the control node.
 RETIRED_COMPUTE_STREAMS = frozenset({
     "loadcoach.groups", "loadcoach.users", "loadcoach.roles", "loadcoach.outside",
     "loadcoach.reliability", "loadcoach.role_evidence", "loadcoach.batches", "loadcoach.tasks",
@@ -840,7 +846,7 @@ def _retire_compute_copies(database, connection) -> None:
 
 
 COMPUTE_RETIREMENT = (Migration(1, "retire verified compute copies of records the front keeps", _retire_compute_copies,
-                                formerly="retire verified front-owned compute copies"),)
+                                formerly='retire verified front-owned compute copies'),)
 
 
 PEER_NODE_REFERENCES = (Migration(1, 'rename former default node references', 'SELECT 1;'),)

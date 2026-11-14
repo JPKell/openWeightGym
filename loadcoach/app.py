@@ -2779,12 +2779,15 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return denied
         if program_name(request.path_params['program']) in front_programs(config, retired):
             return error(410, 'This program reports settings on the control node.')
-        asked = await read_json(request, {"told", "refused"})
+        asked = await read_json(request, {"told", "refused", "started"})
         if isinstance(asked, Response):
             return asked
         if program_name(request.path_params["program"]) not in CHANGEABLE or not isinstance(asked.get("told"), dict) or not isinstance(asked.get("refused", {}), dict):
             return error(400, "told and refused are objects, and the program is one of this suite's.")
-        changes.seen(request.path_params["program"], asked["told"], asked.get("refused"))
+        try:
+            changes.seen(request.path_params["program"], asked["told"], asked.get("refused"), started=asked.get('started', 0))
+        except ValueError as problem:
+            return error(400, str(problem))
         return JSONResponse({})
 
     def model_recovery_inventory() -> list[dict]:

@@ -5,7 +5,7 @@
 {% set disabled = setting.when == 'file' or setting.disabled|default(false) %}
 {% set choices = setting.choices|default(meta.choices|default([])) %}
 {% set id = setting.id|default('setting-' ~ program.program ~ '-' ~ setting.name) %}
-<div class="col-md-6 settings-row" data-setting-search="{{ meta.label }} {{ setting.name }} {{ program.program }} {{ meta.help }}" data-setting-changed="{{ 'true' if setting.changed else 'false' }}" data-setting-refused="{{ 'true' if setting.refused else 'false' }}">
+<div class="col-md-6 settings-row" data-setting-search="{{ meta.label }} {{ setting.name }} {{ program.program }} {{ meta.help }}" data-setting-changed="{{ 'true' if setting.changed or setting.pending_since else 'false' }}" data-setting-pending="{{ 'true' if setting.pending_since else 'false' }}" data-setting-refused="{{ 'true' if setting.refused else 'false' }}">
   <label class="form-label" for="{{ id }}">{{ meta.label }} <small class="text-secondary"><code>{{ setting.name }}</code></small>{% if setting.when == 'now' %} <span class="badge bg-green-lt">Live</span>{% endif %}{% if setting.when == 'restart' %} <span class="badge bg-orange-lt">Needs restart · {{ program.program }}</span>{% endif %}</label>
   {% if meta.control == 'services' %}
   <input type="hidden" name="third-party-services-present" value="1"><div class="d-flex flex-wrap gap-3">
@@ -28,4 +28,5 @@
   {% if meta.help and show_setting_help|default(true) %}{% call more() %}{{ meta.help }}{% endcall %}{% endif %}
   {% if setting.changed %}<small class="text-secondary d-block mt-1">Changed here by {{ setting.changed.by or 'someone at the node' }}, {{ setting.changed.at|timestamp }}.</small><button class="btn btn-link p-0" name="reset" value="{{ setting.name }}">Revert to file</button>{% endif %}
   {% if setting.refused %}<small class="text-danger d-block">{{ setting.refused }}</small>{% endif %}
+  {% if setting.pending_since %}<small class="text-warning d-block">Waiting for restart since {{ setting.pending_since|timestamp }}.</small>{% endif %}
 </div>

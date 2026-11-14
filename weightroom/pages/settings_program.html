@@ -1,4 +1,11 @@
-{% from 'parts.html' import form_section, more, card, swaps %}
+{% from 'parts.html' import form_section, more, card, swaps, alert, service_restart %}
+{% set pending = program.settings|selectattr('pending_since')|sort(attribute='pending_since')|list %}
+{% if pending %}
+{% call alert('warning', class_='py-2', role='status') %}
+<div class="d-flex flex-wrap gap-2 align-items-center justify-content-between"><span>Waiting for restart since {{ pending[0].pending_since|timestamp }} · {{ program.program }}.</span>
+{% if person and 'restart-services' in person.can %}{{ service_restart(program.program, selected_machine|default(''), settings_return_to|default(request.url.path ~ ('?' ~ request.url.query if request.url.query else '')), program.program in ('weightroom','turnstile','toollocker','voice-gateway')) }}{% endif %}</div>
+{% endcall %}
+{% endif %}
 {% macro settings_form() %}
 <form method="post" action="/settings/{{ program.program }}" class="row g-3 mb-3"{% if fragment|default(false) %} data-settings-fragment{% endif %}{% if selected_machine|default('') %} data-node-draft data-hold-refresh{% endif %} {{ swaps() }}>
 {% if voice_admin %}<input type="hidden" name="return_to" value="voice">{% elif settings_return_to|default('') %}<input type="hidden" name="return_to" value="{{ settings_return_to }}">{% endif %}

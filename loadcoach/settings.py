@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import time
 import tomllib
@@ -235,6 +236,13 @@ def read_value(text: str, table: bool):
         raise ValueError(f"That is not written as a settings file would hold it: {problem}") from None
 
 
+def checked_start(value):
+    """Validate a follower's process start, independently of its report time."""
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value) or value < 0:
+        raise ValueError('started must be a finite, nonnegative timestamp.')
+    return value
+
+
 class Changes:
     """Two small tables in LoadCoach's database: what was changed on the site, and what each program last said it runs with."""
 
@@ -242,6 +250,7 @@ class Changes:
         """Open setting override storage and apply its portable schema migrations."""
         source = database(path)
         self.db = source.connect(check_same_thread=False)
+        self.started_at = time.time()
         migrate(source, self.db, "loadcoach.settings", SETTINGS)
         with self.db:
             for old, new in LEGACY_PROGRAMS.items():
@@ -253,7 +262,7 @@ class Changes:
                 row = self.db.execute('SELECT at,told,refused FROM settings_seen WHERE program=?', (old,)).fetchone()
                 existing = self.db.execute('SELECT at FROM settings_seen WHERE program=?', (new,)).fetchone()
                 if row and (not existing or row[0] > existing[0]):
-                    self.db.execute('INSERT INTO settings_seen VALUES (?,?,?,?) ON CONFLICT(program) DO UPDATE SET at=excluded.at,told=excluded.told,refused=excluded.refused', (new, *row))
+                    self.db.execute('INSERT INTO settings_seen (program,at,told,refused) VALUES (?,?,?,?) ON CONFLICT(program) DO UPDATE SET at=excluded.at,told=excluded.told,refused=excluded.refused', (new, *row))
                 self.db.execute('DELETE FROM settings_changed WHERE program=?', (old,))
                 self.db.execute('DELETE FROM settings_seen WHERE program=?', (old,))
 
@@ -271,16 +280,20 @@ class Changes:
         """Remove a change, so that the file's value holds again. False if there was none."""
         program = program_name(program)
         with self.db:
-            return self.db.execute("DELETE FROM settings_changed WHERE program = ? AND name = ?", (program, name)).rowcount > 0
+            removed = self.db.execute("DELETE FROM settings_changed WHERE program = ? AND name = ?", (program, name)).rowcount > 0
+            if removed:
+                self.db.execute('INSERT INTO settings_resets (program,name,at) VALUES (?,?,?) ON CONFLICT(program,name) DO UPDATE SET at=excluded.at', (program, name, time.time()))
+            return removed
 
     def listing(self) -> list[tuple]:
         """Every change there is: program, name, value, who made it and when."""
         rows = self.db.execute("SELECT program, name, value, by, at FROM settings_changed ORDER BY program, name")
         return [(program, name, json.loads(value), by, datetime.fromtimestamp(at).isoformat(timespec="seconds")) for program, name, value, by, at in rows]
 
-    def seen(self, program: str, told: dict, refused: dict | None = None) -> None:
+    def seen(self, program: str, told: dict, refused: dict | None = None, *, started=None) -> None:
         """Keep what a program says it runs with, in place of what it said before."""
         program = program_name(program)
+        started = checked_start(self.started_at if started is None else started)
         safe = {}
         for name, report in told.items():
             entry = catalog_entry(program, name)
@@ -292,15 +305,16 @@ class Changes:
         safe_refused = {name: reason for name, reason in (refused or {}).items()
                         if not ((entry := catalog_entry(program, name)) and entry.kind == 'secret')}
         with self.db:
-            self.db.execute("INSERT INTO settings_seen (program, at, told, refused) VALUES (?, ?, ?, ?) ON CONFLICT(program) DO UPDATE SET at=excluded.at,told=excluded.told,refused=excluded.refused", (program, time.time(), json.dumps(safe), json.dumps(redacted(safe_refused))))
+            self.db.execute("INSERT INTO settings_seen (program, at, told, refused, started) VALUES (?, ?, ?, ?, ?) ON CONFLICT(program) DO UPDATE SET at=excluded.at,told=excluded.told,refused=excluded.refused,started=CASE WHEN excluded.started>0 THEN excluded.started ELSE settings_seen.started END", (program, time.time(), json.dumps(safe), json.dumps(redacted(safe_refused)), started))
 
     def everything(self, *, include_retired=False) -> list[dict]:
         """Every program that has said what it runs with, and each of its settings as the page shows it."""
         changed: dict[str, dict] = {}
         for program, name, value, by, at in self.db.execute("SELECT program, name, value, by, at FROM settings_changed"):
-            changed.setdefault(program, {})[name] = {"value": json.loads(value), "by": by, "at": datetime.fromtimestamp(at).isoformat(timespec="seconds")}
+            changed.setdefault(program, {})[name] = {"value": json.loads(value), "by": by, "at": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "timestamp": at}
+        resets = {(program, name): at for program, name, at in self.db.execute('SELECT program,name,at FROM settings_resets')}
         programs = []
-        for program, at, told, refused in self.db.execute("SELECT program, at, told, refused FROM settings_seen ORDER BY program"):
+        for program, at, told, refused, started in self.db.execute("SELECT program, at, told, refused, started FROM settings_seen ORDER BY program"):
             refusals = json.loads(refused)
             settings = []
             for name, entry in json.loads(told).items():
@@ -309,13 +323,18 @@ class Changes:
                     definition.deprecated and (name == 'keep_console_settings_on_front' or not entry.get('value')))
                 if hidden and not include_retired:
                     continue
+                override = changed.get(program, {}).get(name)
+                changed_at = override['timestamp'] if override else resets.get((program, name), 0)
+                desired = override['value'] if override else entry.get('file', definition.default if definition else None)
+                pending = bool(definition and definition.tier == RESTART and changed_at > started and desired != entry.get('value'))
                 settings.append({"name": name, **entry,
                     "when": definition.tier if definition else "file",
                     "changed": changed.get(program, {}).get(name), "refused": refusals.get(name),
+                    "pending_since": datetime.fromtimestamp(changed_at).isoformat(timespec="seconds") if pending else None,
                     "retired": bool(entry.get('retired') or definition and definition.retired),
                     "derived": bool(definition and definition.derived),
                     "deprecated": bool(definition and definition.deprecated)})
-            programs.append({"program": program, "seen": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "settings": settings})
+            programs.append({"program": program, "seen": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "started": started, "settings": settings})
         return programs
 
 
@@ -346,7 +365,7 @@ def taken(program: str, settings, changed: dict, made):
     return replace(settings, **{name: getattr(wanted, name) for name, when in CHANGEABLE[program].items() if when == NOW}), {}
 
 
-async def follow(program: str, ask, copy: Path, take, every: float = 10) -> None:
+async def follow(program: str, ask, copy: Path, take, every: float = 10, *, started=None) -> None:
     """Keep a program that reaches LoadCoach over the network in step with what is changed for it. Runs for as long as the program does.
 
     `ask(method, path, json)` makes a request of LoadCoach with the program's own key and
@@ -356,13 +375,14 @@ async def follow(program: str, ask, copy: Path, take, every: float = 10) -> None
     back what it now runs with, as `said` makes it, and what it would not take.
     """
     told = None
+    started = time.time() if started is None else checked_start(started)
     while True:
         changed = await ask("GET", f"/loadcoach/settings/{program}/changes", None)
         if changed is not None:
             if not copy.exists() or json.loads(copy.read_text()) != changed:
                 copy.write_text(json.dumps(changed))
             now, refused = take(changed)
-            if (now, refused) != told and await ask("POST", f"/loadcoach/settings/{program}/seen", {"told": now, "refused": refused}) is not None:
+            if (now, refused) != told and await ask("POST", f"/loadcoach/settings/{program}/seen", {"told": now, "refused": refused, "started": started}) is not None:
                 told = (now, refused)
         await asyncio.sleep(every)
 
@@ -391,6 +411,7 @@ def with_changes(program: str, path: Path):
     """
     from loadcoach.config import data_folder, read_settings, said_in  # here, since config.py reads this file in turn
 
+    started = time.time()
     told = read_settings(path)
     validate_values(program, told)
     copy, says = data_folder(path, told) / f"{path.stem}.changes.json", said_in(path)
@@ -436,7 +457,7 @@ def with_changes(program: str, path: Path):
     if program == 'voice' and machine_file.is_file():
         from loadcoach.log import LEGACY
         node = read_settings(machine_file).get('machine_name', LEGACY)
-    return settings, lambda http, base, key: follow(program, asker(http, base, key, node=node), copy, take)
+    return settings, lambda http, base, key: follow(program, asker(http, base, key, node=node), copy, take, started=started)
 
 
 def copy_of(path: Path) -> dict:

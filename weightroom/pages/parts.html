@@ -99,6 +99,13 @@
 {# Actions ask twice; data or credential loss normally uses the shared checkbox dialog. #}
 {% macro confirm_two(text='') %}data-confirm-two{% if text %} data-confirm-text="{{ text }}"{% endif %}{% endmacro %}
 {% macro confirm_loss() %}data-confirm-loss{% endmacro %}
+{% macro service_restart(program, node='', return_to='/system/components', control=false) %}
+<form method="post" action="/machine/services/{{ program|urlencode }}/restart" class="d-inline">
+  <input type="hidden" name="return_to" value="{{ return_to }}">
+  {% if control %}<input type="hidden" name="control_node" value="1">{% else %}<input type="hidden" name="node" value="{{ node }}">{% endif %}
+  <button class="btn btn-outline-warning btn-sm" {{ confirm_two('Restart ' ~ program ~ '? Active work may be interrupted.') }}>Restart {{ program }}</button>
+</form>
+{% endmacro %}
 {% macro confirm_check(label, id, name='', value='yes', framed=true) %}
 {% set field %}
 <div class="form-check mb-0"><input id="{{ id }}" type="checkbox" class="form-check-input" required data-loss-confirm{% if name %} name="{{ name }}" value="{{ value }}"{% endif %}><label for="{{ id }}" class="form-check-label">{{ label }}</label></div>

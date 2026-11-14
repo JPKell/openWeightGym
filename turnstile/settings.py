@@ -79,9 +79,9 @@ class ConsoleSettings:
             if len(parts) == 5 and parts[4] == 'seen' and request.method == 'POST':
                 if not user.can('follow-settings'):
                     return error(403, 'Settings followers require follow-settings.')
-                if set(body) - {'told', 'refused'} or not isinstance(body.get('told'), dict) or not isinstance(body.get('refused', {}), dict):
+                if set(body) - {'told', 'refused', 'started'} or not isinstance(body.get('told'), dict) or not isinstance(body.get('refused', {}), dict):
                     raise ValueError('told and refused must be objects.')
-                self.changes.seen(program, body['told'], body.get('refused'))
+                self.changes.seen(program, body['told'], body.get('refused'), started=body.get('started', 0))
                 return JSONResponse({})
             if len(parts) != 4 or request.method != 'POST':
                 return error(405, 'Unsupported settings operation.')

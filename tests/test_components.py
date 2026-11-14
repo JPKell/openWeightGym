@@ -154,7 +154,7 @@ def test_front_lists_itself_and_every_node_and_says_why_one_cannot_be_checked(tm
         users.add(name, group)
     owner = {"authorization": "Bearer " + users.new_key("owner")}
     guest = {"authorization": "Bearer " + users.new_key("guest")}
-    (tmp_path / "weightroom.key").write_text(users.new_key("weightroom"))  # front's own account, which its monitor asks as
+    (tmp_path / "weightroom.key").write_text(users.new_key("weightroom"))  # the control node's own account, which its monitor asks as
     primary_key, rig_key, old_key = machine_key(tmp_path), str(tmp_path / "rig.key"), str(tmp_path / "old.key")
     statement.replace_key(rig_key, "r" * 40)
     statement.replace_key(old_key, "o" * 40)
@@ -197,7 +197,7 @@ def test_front_lists_itself_and_every_node_and_says_why_one_cannot_be_checked(tm
     assert list(nodes) == ["front", "compute", "rig", "asleep", "old"]
     assert nodes["front"]["answering"] and nodes["front"]["hostname"] == socket.gethostname()
     assert by_id(nodes["front"]["services"])["turnstile"]["state"] == "running"
-    assert not any(row["installed"] for row in nodes["front"]["engines"])  # front has no LoadCoach settings here
+    assert not any(row["installed"] for row in nodes["front"]["engines"])  # control node has no LoadCoach settings here
     assert nodes["rig"]["answering"] and nodes["rig"]["hostname"] == "rig-host" and not nodes["rig"]["with_front"]
     assert not nodes["asleep"]["answering"] and "not answering" in nodes["asleep"]["why"] and nodes["asleep"]["with_front"]
     assert not nodes["old"]["answering"] and "older openWeightGym" in nodes["old"]["why"]
@@ -237,7 +237,7 @@ def test_the_console_page_shows_every_machine_with_each_component_installed_or_n
     assert part.status_code == 200 and part.text.lstrip().startswith('<div id="components-report" ')
     assert 'hx-get="/system/components?part=page" hx-trigger="every 30s" hx-swap="outerHTML"' in part.text
     cards = re.findall(r'<article class="card mb-3 component-card" aria-label="([^"]+)">(.*?)</article>', part.text, re.S)
-    assert [title for title, _ in cards] == ["Front", "compute"]
+    assert [title for title, _ in cards] == ["Control node", "compute"]
     missing = {}
     for title, body in cards:
         rows = re.findall(r'<tr class="([^"]*)">\s*<th scope="row" class="fw-normal"><span class="component-name">([^<]+)</span>', body)
@@ -246,13 +246,17 @@ def test_the_console_page_shows_every_machine_with_each_component_installed_or_n
         assert [name for _, name in rows] == expected + (["Classifier conversion tools"] if title == 'compute' else [])
         missing[title] = {name for kind, name in rows if "component-missing" in kind}
         assert body.count("Not installed") == len(missing[title]) and body.count("Installed<") == len(rows) - len(missing[title])
-    # Front's console is the one showing this page; compute's model runner is the one that answered.
-    assert {"Voice", "Monitor", "Tools", "Voice gateway"} <= missing["Front"] and not {"Web console", "API gateway", "Model runner"} & missing["Front"]
+    # Control node's console is the one showing this page; compute's model runner is the one that answered.
+    assert {"Voice", "Monitor", "Tools", "Voice gateway"} <= missing["Control node"] and not {"Web console", "API gateway", "Model runner"} & missing["Control node"]
     assert "Model runner" not in missing["compute"] and "Web console" in missing["compute"] and "llama.cpp" not in missing["compute"]
     front, compute = (body for _, body in cards)
     assert 'Version: v1.2.3 (abcdef123456)' in front
     assert 'Version: b999 (&lt;build&gt;)' in compute
-    assert "Same machine as front" in compute and "3 of 7 installed" in front and "2 of 7 installed" in compute
+    assert "Same machine as the control node" in compute and "3 of 7 installed" in front and "2 of 7 installed" in compute
+    assert 'action="/machine/services/turnstile/restart"' in front
+    assert 'name="control_node" value="1"' in front
+    assert 'action="/machine/services/loadcoach/restart"' in compute
+    assert 'name="node" value="compute"' in compute
     whole = browser.get("/system/components?complete=1")
     assert whole.status_code == 200 and "data-deferred-loader" not in whole.text and "component-card" in whole.text
 
