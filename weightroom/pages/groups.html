@@ -169,6 +169,17 @@
         </div>
       {% endcall %}
 
+      {% call card('Uploads and content limits', id='group-content-limits', class_='account-panel', attrs={'data-panel': 'content-limits'}, hint='Leave blank to inherit the live global limit. Overrides apply to new work immediately. Superuser groups are exempt from the fixed ceilings.') %}
+        <div class="row g-3">
+        {% for entry in content_contracts %}
+          {% set program = {'program': 'weightroom'} %}
+          {% set setting = {'name': entry.name, 'value': showing.limits.get(entry.name, '') if showing.limits else '', 'when': 'now', 'inherit': true, 'placeholder': 'Inherit: ' ~ global_limits[entry.name], 'ceiling_exempt': 'superuser' in showing.can} %}
+          {% include 'setting_row.html' %}
+        {% endfor %}
+        </div>
+        <p class="form-hint mt-3 mb-0"><a href="/settings/limits">Global upload and content limits</a>. Lowering a limit preserves existing content.</p>
+      {% endcall %}
+
       {% call card('Models and tools', id='group-models', class_='account-panel', attrs={'data-panel': 'models'}) %}
         <div class="form-check form-switch">
           <input id="every" name="every" type="checkbox" class="form-check-input" {{ "checked" if showing.models == "*" }}>

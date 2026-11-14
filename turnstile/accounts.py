@@ -189,6 +189,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
             "model_access": "*" if group.models is None else list(group.models), "models": [], "roles": [],
             "priority": group.priority, "max_lock": group.max_lock, "max_hold": group.max_hold, "max_requests": group.max_requests,
             "max_sensitivity": group.max_sensitivity, "max_hosted_spend": group.max_hosted_spend,
+            "limits": dict(group.limits),
             "tools": "*" if group.tools is None else list(group.tools), "hidden_tools": list(group.hidden_tools),
             # When this sign-in ends. None for an API key, which does not end.
             "session_ends": datetime.fromtimestamp(user.until).isoformat(timespec="seconds") if user.session and user.until else None,
@@ -213,6 +214,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         said["hosted_spent"] = round(log.spent(user.name), 4)  # in the last 24 hours, from this machine's log
         if said["models"]:
             said["roles"] = roles_for(said["models"])  # kept here, for the models they may use
+        said['limits'] = dict(group.limits)
         return JSONResponse(said)
 
     async def choose(request: Request, user: User) -> Response:
@@ -455,7 +457,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
 
     # ---- groups -----------------------------------------------------------------------------
 
-    GROUP_SETTINGS = {"can", "models", "tools", "priority", "max_hold", "max_lock", "max_requests", "max_sensitivity", "max_hosted_spend", "session_hours", "second_step"}
+    GROUP_SETTINGS = {"can", "models", "tools", "priority", "max_hold", "max_lock", "max_requests", "max_sensitivity", "max_hosted_spend", "session_hours", "second_step", "limits"}
 
     async def group_list(request: Request, user: User) -> Response:
         """Every group with all its settings and its members, and every ability there is with what it allows.

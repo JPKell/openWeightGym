@@ -9,8 +9,11 @@ from turnstile.extractions import bounded_body, PRIVATE
 from weightroom.extraction import MAX_BODY, Problem
 
 
-def routes(for_people, page, ask):
+def routes(for_people, page, ask, content_limits=None):
     """Register the session-authenticated workspace and bounded API proxy."""
+    from loadcoach.content_limits import ContentLimits, body_bytes
+    content_limits = content_limits or ContentLimits()
+
     async def workspace(request, person):
         """Render the extraction desk using the shared console shell."""
         return page(request, 'extraction.html', person)
@@ -35,7 +38,7 @@ def routes(for_people, page, ask):
             return JSONResponse({'error': {'message': 'Unknown extraction operation.'}}, 404, headers=PRIVATE)
         target = roots[first] + ('/' + suffix if suffix else '')
         try:
-            body = await bounded_body(request, MAX_BODY)
+            body = await bounded_body(request, body_bytes(content_limits.for_user(person), "extraction_max_mib"))
         except Problem as error:
             return JSONResponse({'error': {'message': str(error)}}, error.status, headers=PRIVATE)
         answer = await ask(request.method, target, person.key, content=body,

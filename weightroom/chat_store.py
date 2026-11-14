@@ -23,16 +23,22 @@ from db.schemas import CHAT
 
 from PIL import Image
 
-MAX_FILES = 4
-MAX_FILE = 5 * 1024 * 1024
-MAX_FILES_TOTAL = 10 * 1024 * 1024
-MAX_TEXT = 200 * 1024
+from loadcoach.content_limits import value as limit_value
+
+MAX_FILES = limit_value(None, "chat_max_files")
+MAX_FILE = limit_value(None, "chat_max_file_mib") * 1024 * 1024
+MAX_FILES_TOTAL = limit_value(None, "chat_max_total_mib") * 1024 * 1024
+MAX_TEXT = limit_value(None, "chat_max_text_kib") * 1024
 
 
-def attachments(value) -> list[dict]:
+def attachments(value, limits=None) -> list[dict]:
     """Validate inline uploads, without fetching URLs or using filenames as filesystem paths."""
-    if not isinstance(value, list) or len(value) > MAX_FILES:
-        raise ValueError("Attach up to four images or UTF-8 text files.")
+    files = limit_value(limits, "chat_max_files")
+    each = limit_value(limits, "chat_max_file_mib") * 1024 * 1024
+    together = limit_value(limits, "chat_max_total_mib") * 1024 * 1024
+    text_bytes = limit_value(limits, "chat_max_text_kib") * 1024
+    if not isinstance(value, list) or len(value) > files:
+        raise ValueError(f"Attach up to {files} images or UTF-8 text files.")
     result, total = [], 0
     for item in value:
         if not isinstance(item, dict) or set(item) != {"name", "data"}:
@@ -40,15 +46,15 @@ def attachments(value) -> list[dict]:
         name, encoded = item["name"], item["data"]
         if not isinstance(name, str) or not name.strip() or len(name) > 200 or any(ord(c) < 32 for c in name):
             raise ValueError("Attachment names must be 1–200 printable characters.")
-        if not isinstance(encoded, str) or len(encoded) > (MAX_FILE + 2) // 3 * 4:
-            raise ValueError("Each attachment must be at most 5 MiB.")
+        if not isinstance(encoded, str) or len(encoded) > (each + 2) // 3 * 4:
+            raise ValueError(f"Each attachment must be at most {each // 1024 // 1024} MiB.")
         try:
             data = base64.b64decode(encoded, validate=True)
         except (ValueError, binascii.Error):
             raise ValueError("Attachment data must be valid base64.") from None
         total += len(data)
-        if not data or len(data) > MAX_FILE or total > MAX_FILES_TOTAL:
-            raise ValueError("Attachments must be nonempty, at most 5 MiB each and 10 MiB together.")
+        if not data or len(data) > each or total > together:
+            raise ValueError(f"Attachments must be nonempty, at most {each // 1024 // 1024} MiB each and {together // 1024 // 1024} MiB together.")
         mime = None
         try:
             with Image.open(io.BytesIO(data)) as picture:
@@ -61,8 +67,8 @@ def attachments(value) -> list[dict]:
         if mime:
             result.append({"name": name, "mime": mime, "data": encoded, "size": len(data)})
         else:
-            if len(data) > MAX_TEXT:
-                raise ValueError("Text files must be at most 200 KiB; images must be PNG, JPEG or WebP.")
+            if len(data) > text_bytes:
+                raise ValueError(f"Text files must be at most {text_bytes // 1024} KiB; images must be PNG, JPEG or WebP.")
             try:
                 text = data.decode("utf-8-sig")
             except UnicodeError:

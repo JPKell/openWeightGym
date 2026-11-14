@@ -1,4 +1,4 @@
-"""Front-owned Responses records, current-clearance access and bounded history."""
+"""Control-node-owned Responses records, current-clearance access and bounded history."""
 
 import copy
 import json
@@ -6,13 +6,14 @@ import secrets
 import time
 
 from db import database, migrate
+from loadcoach.content_limits import ContentLimits, value as limit_value
 from db.schemas import RESPONSES
 from loadcoach.groups import LEVELS
 from weightroom.extraction import Problem
 from weightroom.extraction_store import encoded
 
-MAX_RECORDS = 10_000
-MAX_BYTES = 256 * 1024 * 1024
+MAX_RECORDS = limit_value(None, "responses_max_records")
+MAX_BYTES = limit_value(None, "responses_max_mib") * 1024 * 1024
 COLUMNS = 'id,owner,owner_name,level,created,expires,status,model,previous,request_id,request,response,preview,stored_size'
 
 
@@ -44,13 +45,14 @@ def input_preview(items):
 
 
 class Responses:
-    """Store lifecycle data beside front accounts, included in existing backups and transfers."""
-    def __init__(self, source, keep_days=lambda: 30):
+    """Store lifecycle data beside control node accounts, included in existing backups and transfers."""
+    def __init__(self, source, keep_days=lambda: 30, content_limits=None):
         """Open the shared accounts database and migrate the owning Turnstile stream."""
         source = database(source)
         self.db = source.connect(check_same_thread=False)
         migrate(source, self.db, 'turnstile.responses', RESPONSES)
         self.keep_days = keep_days
+        self.limits = content_limits or ContentLimits()
 
     def prune(self):
         """Remove expired records and apply a newly shortened retention setting."""
@@ -58,12 +60,13 @@ class Responses:
         with self.db:
             self.db.execute('DELETE FROM responses WHERE expires<=? OR created<=?', (now, now - self.keep_days()*86400))
 
-    def capacity(self, owner, extra=0):
+    def capacity(self, owner, extra=0, user=None):
         """Refuse new stored state before inference when the per-account quota is full."""
         count, size = self.db.execute('SELECT COUNT(*),COALESCE(SUM(stored_size),0) FROM responses WHERE owner=? AND expires>?',
                                       (owner, time.time())).fetchone()
-        if count >= MAX_RECORDS or size + extra > MAX_BYTES:
-            raise Problem('Stored Responses limit reached (10,000 records or 256 MiB). Delete older responses or send store:false.', 409, 'storage_limit')
+        limits = self.limits.for_user(user)
+        if count >= limits["responses_max_records"] or size + extra > limits["responses_max_mib"] * 2**20:
+            raise Problem(f'Stored Responses limit reached ({limits["responses_max_records"]:,} records or {limits["responses_max_mib"]} MiB). Delete older responses or send store:false.', 409, 'storage_limit')
 
     def save(self, user, request, response, level, request_id=None):
         """Save only completed attempts, including failed or incomplete final objects."""
@@ -71,7 +74,7 @@ class Responses:
         size = len(asked.encode()) + len(result.encode())
         now = time.time()
         with self.db:
-            self.capacity(owner_of(user), size)
+            self.capacity(owner_of(user), size, user)
             self.db.execute('INSERT INTO responses (' + COLUMNS + ') VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                 (response['id'], owner_of(user), user.name, level, now, now + self.keep_days()*86400,
                  response['status'], response['model'], request.get('previous_response_id'), str(request_id) if request_id else None,

@@ -27,7 +27,8 @@ window.soundroomAudio = (() => {
     if (chosen) select.value = chosen;
   }
   async function upload(file, kind) {
-    if (file.size > 32 * 1024 * 1024) throw new Error('Recordings are limited to 32 MiB.');
+    const maximum = JSON.parse(document.documentElement.dataset.contentLimits).audio_upload_mib;
+    if (file.size > maximum * 1024 * 1024) throw new Error(`Recordings are limited to ${maximum} MiB.`);
     const data = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result).split(',', 2)[1]);

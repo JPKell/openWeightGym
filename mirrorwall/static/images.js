@@ -334,7 +334,8 @@
     if(p.family!=='sdxl'||!p.exclusive||(limits.max_references??1)<1)return failed('Choose an exclusive SDXL workflow that accepts a source image.');
     if(!resizeSource)return failed('Upload an image or choose a saved source first.');
     if(![targetWidth,targetHeight].every(value=>Number.isInteger(value)&&value>=16&&value<=8192))return failed('Choose whole-number output dimensions from 16 to 8192 pixels.');
-    if(targetWidth*targetHeight>33554432)return failed('The final image must be at most 32 megapixels.');
+    const maximum=JSON.parse(document.documentElement.dataset.contentLimits).image_max_megapixels;
+    if(targetWidth*targetHeight>maximum*2**20)return failed(`The final image must be at most ${maximum} Mi pixels.`);
     const maxWidth=limits.max_width||2048,maxHeight=limits.max_height||2048,maxPixels=limits.max_pixels||2097152;
     const factor=Math.min(1,maxWidth/targetWidth,maxHeight/targetHeight,Math.sqrt(maxPixels/(targetWidth*targetHeight)));
     let width=Math.max(256,Math.floor(targetWidth*factor/16)*16),height=Math.max(256,Math.floor(targetHeight*factor/16)*16);

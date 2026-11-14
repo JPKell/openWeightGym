@@ -16,6 +16,7 @@ import httpx
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from loadcoach.content_limits import ContentLimits, body_bytes
 from weightroom.extraction import (MAX_BODY, MAX_OUTPUT, MIMES, MARKDOWN, Problem, image_upload, render_output,
                                   request_body, specification, validate_output, warnings_for)
 from weightroom.extraction_store import Extractions, ACTIVE
@@ -48,6 +49,7 @@ class ExtractionService:
     """Orchestrate caller-private jobs through ordinary inference admission."""
     def __init__(self, source, caller):
         """Open control node persistence and bounded orchestration slots."""
+        self.limits = ContentLimits()
         self.store = Extractions(source)
         self.caller = caller
         self.door = None
@@ -262,7 +264,7 @@ class ExtractionService:
 
         async def assets(request, user):
             """Validate one bounded image upload and persist its owned source."""
-            raw = await bounded_body(request)
+            raw = await bounded_body(request, body_bytes(self.limits.for_user(user), "extraction_max_mib"))
             content_type = request.headers.get('content-type', '')
             if content_type.lower().startswith('multipart/form-data'):
                 message = email.message_from_bytes(b'Content-Type: ' + content_type.encode() + b'\r\n\r\n' + raw, policy=email.policy.HTTP)
@@ -280,7 +282,7 @@ class ExtractionService:
                     name, data = payload['name'], base64.b64decode(payload['data'], validate=True)
                 except (ValueError, TypeError, binascii.Error):
                     raise Problem('Send an image multipart field, or name and base64 data.') from None
-            asset = await asyncio.to_thread(image_upload, name, data)
+            asset = await asyncio.to_thread(image_upload, name, data, self.limits.for_user(user))
             return JSONResponse(self.store.add_asset(user.identity or user.name, asset), 201, headers=PRIVATE)
 
         async def source(request, user):

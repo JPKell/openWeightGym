@@ -1,6 +1,7 @@
 """Collection status transitions preserve active inputs and retained answers."""
 
 from pathlib import Path
+from loadcoach.content_limits import ContentLimits
 
 import pytest
 from jinja2 import ChoiceLoader, DictLoader, Environment, FileSystemLoader
@@ -29,7 +30,7 @@ def collection_page(state, result=None):
                                       diagnostics={'request':'123'} if state == 'failed' else {})])
     return environment.get_template('collections.html').render(
         collection=collection, collections=[], embedders=[], answer_models=[dict(id='chat')],
-        levels=['normal'], form={}, said='', unavailable='', result=result)
+        levels=['normal'], form={}, said='', unavailable='', result=result, content_limits=ContentLimits().for_user())
 
 
 def test_index_completion_preserves_selection_question_and_answer():

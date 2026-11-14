@@ -11,8 +11,10 @@ from loadcoach.platform_services import PlatformServices
 from loadcoach.setting_catalog import entries
 
 
-def routes(for_people, page, ask, model_api, settings=None, platform=None, refresh_settings=None):
+def routes(for_people, page, ask, model_api, settings=None, platform=None, refresh_settings=None, content_limits=None):
     """Keep browser credentials server-side and reuse the ordinary session authority."""
+    from loadcoach.content_limits import ContentLimits
+    content_limits = content_limits or ContentLimits()
     current_settings = settings if callable(settings) else lambda: settings
     services = platform or (lambda: PlatformServices.from_settings(current_settings()))
     def defaults():
@@ -140,7 +142,7 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None, refre
             more['headers'] = {'range': request.headers['range']}
         if request.method == "POST":
             try:
-                more["json"] = await Front.read_json(request)
+                more["json"] = await Front.read_json(request, content_limits.for_user(person))
             except (ValueError, TypeError) as problem:
                 return JSONResponse({"error": {"message": str(problem)}}, 400)
             if more["json"].get("temporary"):
@@ -200,7 +202,7 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None, refre
         if "manage-models" not in person.can:
             return JSONResponse({"error": {"message": "Model management is required."}}, 403)
         try:
-            body = await Front.read_json(request)
+            body = await Front.read_json(request, content_limits.for_user(person))
             name, settings = body["name"], body["settings"]
             if not isinstance(name, str) or not isinstance(settings, dict) or settings.get("engine") not in ("audiocpp", "whispercpp"):
                 raise ValueError("Choose an audio model name and settings.")

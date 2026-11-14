@@ -1,4 +1,4 @@
-"""Front audio API and assets, run through the existing batch executor; no inference scheduler."""
+"""Control node audio API and assets, run through the existing batch executor; no inference scheduler."""
 import asyncio
 import base64
 import json
@@ -14,6 +14,7 @@ from starlette.routing import Route
 from loadcoach import observability as observation
 from soundroom import stream
 from soundroom.requests import MAX_REQUEST_BYTES
+from loadcoach.content_limits import value as limit_value
 
 GENERATION = "/v1/audio/generations"
 FORMATS = {"wav": ("audio/wav", ["-c:a", "pcm_s16le", "-f", "wav"]), "flac": ("audio/flac", ["-c:a", "flac", "-f", "flac"]),
@@ -91,11 +92,13 @@ def outcome(batches, batch):
 
 
 class Front:
-    """SoundRoom's assets and voices, kept on the front,, and ordinary batch execution hooks."""
+    """SoundRoom's assets and voices, kept on the control node, and ordinary batch execution hooks."""
 
     def __init__(self, store, batches, users, log=None):
         """Initialize private audio state without loading model weights."""
         self.store, self.batches, self.users, self.log = store, batches, users, log
+        from loadcoach.content_limits import ContentLimits
+        self.limits = ContentLimits()
         self.progress, self.transient = {}, {}
 
     def visible(self, user, batch):
@@ -116,7 +119,7 @@ class Front:
         return self.transient.get(identifier, {}).get("owner") or self.store.owner(identifier)
 
     def retain_event(self, user, event, kind, job=None, line=None, quiet=False, model=None):
-        """Keep finished takes on front; progress is held only as the newest event."""
+        """Keep finished takes on the control node; progress is held only as the newest event."""
         if job and self.job_owner(job) != user.identity:
             raise ValueError("There is no such audio job of yours.")
         if job and event.get("type") == "audio_generation.progress":
@@ -144,7 +147,7 @@ class Front:
         return next((one for one in await self.catalogue(user) if one["id"] == name), None)
 
     async def capture(self, request, user, response, asked):
-        """Retain completed takes of an API call on front while passing its events on."""
+        """Retain completed takes of an API call on the control node while passing its events on."""
         if response.status_code >= 400:
             return response
         quiet = request.headers.get("x-loadcoach-log") == "off"
@@ -167,7 +170,7 @@ class Front:
                 yield response.body
         if "text/event-stream" in response.headers.get("content-type", ""):
             async def forwarded():
-                """Keep finished takes on front while passing every event on."""
+                """Keep finished takes on the control node while passing every event on."""
                 try:
                     async for event in events(chunks()):
                         yield stream.encode(self.retain_event(user, event, kind, job, line, quiet, asked.get("model")))
@@ -298,7 +301,7 @@ class Front:
     async def upload(self, request, user):
         """Keep a bounded source or reference upload and its retention choice."""
         try:
-            asked = await self.read_json(request)
+            asked = await self.read_json(request, self.limits.for_user(user))
             temporary = asked.get("temporary", False)
             if type(temporary) is not bool:
                 raise ValueError("temporary must be true or false.")
@@ -310,7 +313,7 @@ class Front:
             if kind not in ("reference", "recording"):
                 raise ValueError("Uploads are references or recordings.")
             content = base64.b64decode(asked.get("b64_audio", ""), validate=True)
-            asset = await asyncio.to_thread(self.store.save, user.identity, content, kind=kind, filename=asked.get("filename", "upload.wav"), temporary=temporary)
+            asset = await asyncio.to_thread(self.store.save, user.identity, content, kind=kind, filename=asked.get("filename", "upload.wav"), temporary=temporary, limits=self.limits.for_user(user))
             return JSONResponse(asset, 201, headers={"cache-control": "no-store"})
         except (ValueError, OSError) as problem:
             return error(400, str(problem))
@@ -358,13 +361,13 @@ class Front:
         return audio_bytes(content, media, headers, request.headers.get('range'), request.method == 'HEAD')
 
     @staticmethod
-    async def read_json(request):
+    async def read_json(request, limits=None):
         """Read a bounded JSON object without buffering an unlimited upload."""
         body = bytearray()
         async for chunk in request.stream():
             body.extend(chunk)
-            if len(body) > MAX_REQUEST_BYTES:
-                raise ValueError("Audio request exceeds 96 MiB.")
+            if len(body) > max(MAX_REQUEST_BYTES, (limit_value(limits, "audio_upload_mib") * 2**20 + 2) // 3 * 4 + 65536):
+                raise ValueError("Audio request exceeds its effective upload limit.")
         value = json.loads(body or b"{}")
         if not isinstance(value, dict):
             raise ValueError("Request must be a JSON object.")
@@ -392,7 +395,7 @@ class Front:
                 for index in range(count)]
 
     async def start(self, request, user):
-        """Submit an audio job to the established front batch executor."""
+        """Submit an audio job to the established control node batch executor."""
         try:
             asked = await self.read_json(request)
             lines = self.lines(asked)
@@ -595,7 +598,7 @@ class Front:
             return error(400, str(problem))
 
     def routes(self, caller, log):
-        """Expose the front's audio operations through the existing API-key authority."""
+        """Expose the control node's audio operations through the existing API-key authority."""
         from turnstile.accounts import signed_in
         self.log = self.log or log
 

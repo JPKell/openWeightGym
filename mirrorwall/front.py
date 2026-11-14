@@ -28,6 +28,8 @@ class Front:
     """Mirror Wall's control-node-owned assets/presets and ordinary batch execution hooks."""
     def __init__(self,store,batches,users,*,adult_previews_allowed=lambda: False):
         """Initialize private image state without loading model weights."""
+        from loadcoach.content_limits import ContentLimits
+        self.limits = ContentLimits()
         self.store=store
         self.batches=batches
         self.users=users
@@ -86,7 +88,7 @@ class Front:
         if job:
             metadata.update(job=job,batch_line=line)
         asset=self.store.save(user.identity,content,kind='output',filename='generated-'+str(event.get('seed',0))+'.png',
-                              metadata=metadata,temporary=quiet,job=job if job and not quiet else None)
+                              metadata=metadata,temporary=quiet,job=job if job and not quiet else None,limits=self.limits.for_user(user))
         if job:
             self.progress[job]={'type':'image_generation.progress','stage':'completed','at':time.time()}
         return {**event,'asset_id':asset['id'],'asset_url':'/mirrorwall/assets/'+asset['id']+'/content'}
@@ -231,7 +233,7 @@ class Front:
     async def upload(self,request,user):
         """Validate a bounded reference/mask upload and its retention choice."""
         try:
-            asked=await self.read_json(request)
+            asked=await self.read_json(request,self.limits.for_user(user))
             temporary=asked.get('temporary',False)
             if type(temporary) is not bool:
                 raise ValueError('temporary must be true or false.')
@@ -240,7 +242,7 @@ class Front:
             if temporary:
                 observation.silence()
             content=base64.b64decode(asked.get('b64_json',''),validate=True)
-            asset=self.store.save(user.identity,content,kind=asked.get('kind','reference'),filename=asked.get('filename','reference.png'),temporary=temporary)
+            asset=self.store.save(user.identity,content,kind=asked.get('kind','reference'),filename=asked.get('filename','reference.png'),temporary=temporary,limits=self.limits.for_user(user))
             return JSONResponse(asset,201,headers={'cache-control':'no-store'})
         except (ValueError,OSError) as problem:
             return error(400,str(problem))
@@ -273,7 +275,7 @@ class Front:
         return Response(content,media_type='image/png' if request.url.path.endswith('/thumbnail') or content.startswith(b'\x89PNG') else 'image/jpeg' if content.startswith(b'\xff\xd8') else 'image/webp',headers=headers)
 
     @staticmethod
-    async def read_json(request):
+    async def read_json(request,limits=None):
         """Read a bounded JSON object without buffering an unlimited upload."""
         body=bytearray()
         async for chunk in request.stream():

@@ -77,6 +77,8 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Content limit ceilings are catalogue metadata: 32 chat files, 64 MiB each / 256 MiB total, 4,096 KiB text, 32 MiB documents / 1,000 pages, 100 collections / 1,000 documents / 50,000 chunks / 10,000 chunks per source, 16,384-byte chunks / 8,192-byte overlap, 32 MiB extraction, 256 MiB audio, 128 Mi pixels and 1,000,000 Responses / 8,192 MiB. Superuser group overrides are exempt; parsing CPU/memory limits and context-dependent chunk width/overlap remain in force. Binary image pixels preserve the previous 33,554,432-pixel default. Lower limits affect new work and preserve stored content.
+
 - Notification URLs reject embedded credentials and query parameters; write-only key files hold credentials. Optional `notify_site_url` supplies absolute console links. Unacknowledged delivery waits 15 minutes by default, SMTP requires TLS or STARTTLS, and quiet hours use the control node time zone. Personal subscriptions begin at their saved opt-in timestamp; current permissions and destinations are checked again before each personal delivery.
 
 - WeightRoom disables Uvicorn’s implicit forwarding-header rewrite and applies `trusted_proxies` before capturing client attribution. This preserves the real socket peer for sign-in policy checks and uses the same trusted client address for signed downstream attribution.
@@ -459,7 +461,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 3.1 Security and sign-in; 587 focused checks, 87 browser/UI checks and the separate PostgreSQL counter contract pass.
 - [x] 3.2 Requests, admission, placement, routing and batches; 584 feature/UI checks pass, including real 503/Retry-After and live resident reclamation.
 - [x] 3.3 Notifications, personal channels and thresholds; 624 catalogue/service checks, all 39 UI cases and the separate PostgreSQL delivery contract pass.
-- [ ] 3.4 Global limits and per-group overrides.
+- [x] 3.4 Global limits and per-group overrides; 728 catalogue/feature checks, 85 UI/browser checks (all 39 consistency cases) and PostgreSQL policy/storage pass.
 - [ ] 3.5 Spending policy.
 - [ ] 3.6 Download credentials and concurrency.
 - [ ] 3.7 Chat retention and scheduled backups.

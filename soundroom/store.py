@@ -1,6 +1,6 @@
-"""Private audio files, kept on the front, and metadata, using the existing accounts store.
+"""Private audio files, kept on the control node, and metadata, using the existing accounts store.
 
-The batch executor remains openWeightGym's existing front executor; this store binds its audio
+The batch executor remains openWeightGym's existing control node executor; this store binds its audio
 jobs to immutable account IDs and keeps audio bytes out of the database. An owner may
 share a take, sound or voice with groups; only the owner may change or delete it.
 """
@@ -16,11 +16,12 @@ import tempfile
 import time
 
 from db import migrate
+from loadcoach.content_limits import value as limit_value
 from soundroom.schema import SOUNDROOM
 
 ASSET_ID = re.compile(r"audio_[a-f0-9]{32}")
 KINDS = ("take", "sound", "speech", "reference", "recording")
-UPLOAD_BYTES = 32 * 2**20
+UPLOAD_BYTES = limit_value(None, "audio_upload_mib") * 2**20
 OUTPUT_BYTES = 256 * 2**20
 TAG = re.compile(r"[\w][\w .+#&'-]{0,39}")
 PREFERENCES = {"format": ("wav", "flac", "mp3", "opus"), "voice": None, "speech_model": None, "transcription_model": None, 'autoplay': False}
@@ -68,12 +69,12 @@ class Store:
         for key in [key for key, value in self.temporary.items() if value["until"] < now]:
             self.temporary.pop(key)
 
-    def save(self, owner, content, *, kind="reference", filename="audio.wav", metadata=None, temporary=False, job=None):
+    def save(self, owner, content, *, kind="reference", filename="audio.wav", metadata=None, temporary=False, job=None, limits=None):
         """Atomically retain one validated asset, or hold it only in bounded temporary memory."""
         if not owner or kind not in KINDS:
             raise ValueError("Invalid audio owner or kind.")
         output = kind in ("take", "sound", "speech")
-        if not isinstance(content, bytes) or not content or len(content) > (OUTPUT_BYTES if output else UPLOAD_BYTES):
+        if not isinstance(content, bytes) or not content or len(content) > (OUTPUT_BYTES if output else limit_value(limits, "audio_upload_mib") * 2**20):
             raise ValueError("Audio exceeds its upload or output size limit.")
         seconds, rate, channels = probe(content)
         identifier = "audio_" + secrets.token_hex(16)
@@ -90,7 +91,7 @@ class Store:
         path = self.path(identifier)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if shutil.disk_usage(self.root).free < len(content) + 2**30:
-            raise ValueError("Front audio storage needs at least 1 GiB free headroom.")
+            raise ValueError("Control node audio storage needs at least 1 GiB free headroom.")
         try:
             with path.open("xb") as stream:
                 os.chmod(path, 0o600)

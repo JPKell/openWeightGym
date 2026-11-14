@@ -15,8 +15,9 @@ import httpx
 from starlette.responses import JSONResponse, Response
 
 from loadcoach.groups import LEVELS
+from loadcoach.content_limits import ContentLimits, value as limit_value, body_bytes
 from .document_text import MAX_FILE, MAX_TEXT
-from .knowledge_store import Collections, MAX_CHUNKS
+from .knowledge_store import Collections
 
 MAX_BODY = (MAX_FILE + 2) // 3 * 4 + 4096
 ABSTAIN = 'No relevant evidence was found in the indexed sources.'
@@ -53,48 +54,51 @@ def vector(value):
     return [n/norm for n in value]
 
 
-def upload(body):
+def upload(body, limits=None):
     """Validate a bounded text or PDF upload and return its encoded source metadata."""
+    maximum = limit_value(limits, "document_max_mib") * 1024 * 1024
+    text_maximum = limit_value(limits, "chat_max_text_kib") * 1024
     name = text(body.get('name'), 'Filename', 200)
     if any(ord(c) < 32 for c in name):
         raise Problem('Filenames cannot contain control characters.')
     encoded = body.get('data')
-    if not isinstance(encoded, str) or len(encoded) > (MAX_FILE+2)//3*4:
-        raise Problem('Upload at most 1 MiB of base64 file data.')
+    if not isinstance(encoded, str) or len(encoded) > (maximum+2)//3*4:
+        raise Problem(f'Upload at most {maximum // 1024 // 1024} MiB of base64 file data.')
     try:
         data = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
         raise Problem('File data must be valid base64.') from None
-    if not data or len(data) > MAX_FILE:
-        raise Problem('Upload a nonempty file of at most 1 MiB.')
+    if not data or len(data) > maximum:
+        raise Problem(f'Upload a nonempty file of at most {maximum // 1024 // 1024} MiB.')
     if name.lower().endswith('.pdf'):
         if not data.startswith(b'%PDF-'):
             raise Problem('The file is not a PDF.')
         mime = 'application/pdf'
     else:
-        if len(data) > MAX_TEXT:
-            raise Problem('UTF-8 text files must be at most 200 KiB.')
+        if len(data) > text_maximum:
+            raise Problem(f'UTF-8 text files must be at most {text_maximum // 1024} KiB.')
         try:
             decoded = data.decode('utf-8-sig')
         except UnicodeError:
             raise Problem('Use UTF-8 text or a selectable-text PDF.') from None
-        text(decoded, 'File contents', MAX_TEXT)
+        text(decoded, 'File contents', text_maximum)
         if decoded.lstrip().startswith(('%PDF', '\x50\x4b\x03\x04')):
             raise Problem('Use a .pdf filename for PDF; archives are unsupported.')
         mime = 'text/plain'
     return name, mime, base64.b64encode(data).decode(), hashlib.sha256(data).hexdigest()
 
 
-async def extract(document):
+async def extract(document, limits=None):
     """Extract source text directly or through the resource-limited PDF subprocess."""
     data = base64.b64decode(document['original'])
     if document['mime'] == 'text/plain':
         return [{'page': 0, 'text': data.decode('utf-8-sig')}]
     process = await asyncio.create_subprocess_exec(sys.executable, str(Path(__file__).with_name('document_text.py')),
+        str(limit_value(limits, 'document_max_mib') * 1024 * 1024), str(limit_value(limits, 'chat_max_text_kib') * 1024), str(limit_value(limits, 'document_max_pages')),
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
     try:
         stdout, _ = await asyncio.wait_for(process.communicate(data), 10)
-        if process.returncode or len(stdout) > 1024*1024:
+        if process.returncode or len(stdout) > limit_value(limits, "chat_max_text_kib") * 1024 * 8 + 65536:
             raise Problem('PDF parsing failed or exceeded its resource limits.')
         parsed = json.loads(stdout)
         if parsed.get('error'):
@@ -110,9 +114,9 @@ async def extract(document):
             await process.communicate()
 
 
-def chunks(pages, context):
+def chunks(pages, context, limits=None):
     """Bound UTF-8 bytes conservatively; retain page/line locations and overlapping context."""
-    width = min(1200, (context-64)//2)
+    width = min(limit_value(limits, "chunk_bytes"), (context-64)//2)
     if width < 32:
         raise Problem('Choose an embedder with at least 128 context tokens.')
     result = []
@@ -124,11 +128,11 @@ def chunks(pages, context):
             end = start + len(piece.encode('utf-8'))
             if piece.strip():
                 result.append({'page': page['page'], 'line': data[:start].count(b'\n')+1, 'text': piece})
-                if len(result) > 256:
-                    raise Problem('The source needs more than 256 chunks. Shorten it or choose a larger-context embedder.')
+                if len(result) > limit_value(limits, "chunks_per_source"):
+                    raise Problem(f'The source needs more than {limit_value(limits, "chunks_per_source")} chunks. Shorten it or choose a larger-context embedder.')
             if end >= len(data):
                 break
-            start = max(start+1, end-min(200, width//5))
+            start = max(start+1, end-min(limit_value(limits, "chunk_overlap_bytes"), width//5))
             while start < len(data) and data[start] & 0xC0 == 0x80:
                 start += 1  # never split a UTF-8 codepoint at the next chunk's start
     if not result:
@@ -164,8 +168,9 @@ def cited_answer(reply, sources):
 
 class Knowledge:
     """Owner-private document indexing, retrieval and guarded local inference."""
-    def __init__(self, database, compute):
+    def __init__(self, database, compute, content_limits=None):
         """Bind private collection storage, authenticated compute access and bounded jobs."""
+        self.limits = content_limits or ContentLimits()
         self.store = Collections(database)
         self.compute = compute
         self.jobs = {}  # document -> (owner, task); credentials remain in task memory only
@@ -204,6 +209,7 @@ class Knowledge:
             raise Problem('The current account is no longer authorized.', 403)
         if not self.permitted(reply.json(), collection['level']):
             raise Problem('Your group may no longer work at this collection’s sensitivity.', 403)
+        user.info.update(limits=reply.json().get('limits', {}), can=reply.json().get('can', []))
 
     async def catalog(self, authorization):
         """Read the caller's current authorized model catalogue through openWeightGym."""
@@ -295,16 +301,16 @@ class Knowledge:
         try:
             async with asyncio.timeout(900), self.slots:
                 await self.fresh(user, authorization, collection)
-                parts = chunks(await extract(document), model['context_tokens'])
-                if len(parts) + sum(d['chunks'] for d in self.store.documents(user.name,number)) > MAX_CHUNKS:
-                    raise Problem('A collection may contain at most 500 indexed chunks. Shorten or remove sources first.')
+                parts = chunks(await extract(document, self.limits.for_user(user)), model['context_tokens'], self.limits.for_user(user))
+                if len(parts) + sum(d['chunks'] for d in self.store.documents(user.name,number)) > self.limits.for_user(user)["chunks_per_collection"]:
+                    raise Problem(f'A collection may contain at most {self.limits.for_user(user)["chunks_per_collection"]} indexed chunks. Shorten or remove sources first.')
                 for part in parts:
                     part['vector'], _ = await self.embed(part['text'], model, self.headers(authorization, collection))
                     if (len(part['vector']) != len(parts[0]['vector'])
                         or collection['dimensions'] and len(part['vector']) != collection['dimensions']):
                         raise Problem('The embedder changed vector dimensions during indexing.', 502)
                 await self.fresh(user, authorization, collection)
-                if not self.store.finish(user.name, number, doc, token, collection['revision'], parts):
+                if not self.store.finish(user.name, number, doc, token, collection['revision'], parts, self.limits.for_user(user)):
                     self.store.stop(user.name, number, doc, 'The source or embedding space changed; index again.', token=token)
         except asyncio.CancelledError:
             self.store.stop(user.name, number, doc, 'Indexing stopped; retry explicitly.', token=token)
@@ -324,12 +330,12 @@ class Knowledge:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
 
-    async def body(self, request, allowed):
+    async def body(self, request, allowed, user=None):
         """Read bounded JSON and reject fields outside the selected operation's contract."""
         data = bytearray()
         async for part in request.stream():
             data.extend(part)
-            if len(data) > MAX_BODY:
+            if len(data) > body_bytes(self.limits.for_user(user), "document_max_mib", 4096):
                 raise Problem('The request is too large.', 413)
         try:
             value = json.loads(data)
@@ -346,13 +352,13 @@ class Knowledge:
             return JSONResponse({'collections': [c for c in self.store.listing(user.name) if self.permitted(user.info,c['level'])]})
         if not user.info.get('identity'):
             raise Problem('A current stable account identity is required.', 403)
-        body = await self.body(request, {'title', 'level', 'model'})
+        body = await self.body(request, {'title', 'level', 'model'}, user)
         title = text(body.get('title'), 'Title', 120)
         level = body.get('level', 'normal')
         if level not in LEVELS or not self.permitted(user.info, level):
             raise Problem('Choose a sensitivity level permitted by your group.', 403)
         model = self.local(await self.catalog(authorization), body.get('model'), True)
-        number = self.store.create(user.name, title, level, model)
+        number = self.store.create(user.name, title, level, model, self.limits.for_user(user))
         return JSONResponse({'id': number}, status_code=201)
 
     async def collection(self, request, user):
@@ -365,7 +371,7 @@ class Knowledge:
             await self.cancel(user.name, number)
             self.store.remove(user.name, number)
         else:
-            body = await self.body(request, {'model'})
+            body = await self.body(request, {'model'}, user)
             model = self.local(await self.catalog(request.headers.get('authorization','')), body.get('model'), True)
             await self.cancel(user.name, number)
             self.store.reset(user.name, number, model)
@@ -377,9 +383,9 @@ class Knowledge:
         self.owned(user, number)
         doc = request.path_params.get('document')
         if not doc:
-            body = await self.body(request, {'name', 'data'})
-            name, mime, original, digest = upload(body)
-            made = self.store.add(user.name, number, name, mime, original, digest)
+            body = await self.body(request, {'name', 'data'}, user)
+            name, mime, original, digest = upload(body, self.limits.for_user(user))
+            made = self.store.add(user.name, number, name, mime, original, digest, self.limits.for_user(user))
             return JSONResponse({'id': made}, status_code=201)
         found = self.store.document(user.name, number, doc)
         if not found:
@@ -446,7 +452,7 @@ class Knowledge:
         async with self.searches:
             number = request.path_params['collection']
             collection = self.owned(user, number)
-            body = await self.body(request, {'question', 'minimum', 'model'})
+            body = await self.body(request, {'question', 'minimum', 'model'}, user)
             question = text(body.get('question'), 'Question', 500)
             minimum = body.get('minimum', .65)
             if type(minimum) not in (int,float) or not math.isfinite(minimum) or not 0 <= minimum <= 1:

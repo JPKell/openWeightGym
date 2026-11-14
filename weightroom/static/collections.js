@@ -16,8 +16,8 @@ for (const form of document.querySelectorAll('[data-collection-upload]')) {
     form.elements.name.value = '';
     const chosen = file.files[0];
     if (!chosen) return;
-    if (!chosen.size || chosen.size > 1024 * 1024) {
-      status.textContent = 'Choose a nonempty file of at most 1 MiB.';
+    if (!chosen.size || chosen.size > Number(form.dataset.documentMib) * 1024 * 1024) {
+      status.textContent = `Choose a nonempty file of at most ${form.dataset.documentMib} MiB.`;
       return;
     }
     try {

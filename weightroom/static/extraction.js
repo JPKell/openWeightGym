@@ -211,7 +211,8 @@
       saveDraft(); uploadBusy = true; controls();
       try {
         for (const file of chosen) {
-          if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Use PNG, JPEG or WebP images of at most 5 MiB.');
+          const maximum = JSON.parse(document.documentElement.dataset.contentLimits).extraction_max_mib;
+          if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > maximum * 1024 * 1024) throw new Error(`Use PNG, JPEG or WebP images of at most ${maximum} MiB.`);
           const form = new FormData(); form.append('image', file);
           const asset = await api('assets', {method: 'POST', body: form});
           records.set(asset.id, {asset, settings: structuredClone(current()?.settings || defaults), selected: true, job: null, correction: null});

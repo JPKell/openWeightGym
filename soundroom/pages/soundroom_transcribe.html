@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% from "parts.html" import page_header, card, section_title, alert %}
 {% block title %}Transcribe · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/audio-tools.js?v=1" defer></script><script src="/soundroom-static/transcribe.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/soundroom-static/soundroom.css?v=4"><script src="/soundroom-static/audio-tools.js?v=2" defer></script><script src="/soundroom-static/transcribe.js?v=1" defer></script>{% endblock %}
 {% block main %}
 <div id="soundroom-transcribe" data-defaults="{{ audio | tojson | forceescape }}">
   {{ page_header("Transcribe") }}

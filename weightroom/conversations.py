@@ -87,11 +87,13 @@ def reason(body: bytes) -> dict:
     return {"why": str(why)[:500]}
 
 
-def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: httpx.AsyncClient | None = None, *, plugins=None, tools=None, tool_level=None, tool_settings=lambda: {}, toolsets=lambda: []) -> Starlette:
+def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: httpx.AsyncClient | None = None, *, plugins=None, tools=None, tool_level=None, tool_settings=lambda: {}, toolsets=lambda: [], content_limits=None) -> Starlette:
     """Host web-chat APIs in WeightRoom's process using the user's own upstream key."""
     inference = inference or compute
     chats = Conversations(database)
-    knowledge = Knowledge(database, compute)
+    from loadcoach.content_limits import ContentLimits
+    content_limits = content_limits or ContentLimits()
+    knowledge = Knowledge(database, compute, content_limits=content_limits)
     workflows = Workflow(database, compute, knowledge)
     keep_private(database)
     passing = Conversations(":memory:")
@@ -114,12 +116,12 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         """Hide forbidden models using the same response as an unknown name."""
         return error(404, f"The model {model!r} does not exist. Available: {', '.join(offered(user))}")
 
-    async def read_json(request: Request, allowed: set[str]) -> dict | Response:
+    async def read_json(request: Request, allowed: set[str], user=None) -> dict | Response:
         """Reject malformed bodies and fields outside this chat operation."""
         try:
             raw = bytearray()
             async for chunk in request.stream():
-                if len(raw) + len(chunk) > 24 * 1024 * 1024:
+                if len(raw) + len(chunk) > max(24 * 1024 * 1024, (content_limits.for_user(user)["chat_max_total_mib"] * 1024 * 1024 + 2) // 3 * 4 + 1048576):
                     return error(413, "The message and attachments are too large.")
                 raw.extend(chunk)
             body = json.loads(raw)
@@ -382,7 +384,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         `sampling`, which may set temperature, top_k, top_p and min_p for every answer, and
         `temporary`, true for a conversation that is not kept and whose requests are unlogged.
         """
-        asked = await read_json(request, {"content", "model", "system", "thinking", "sampling", "temporary", "attachments", "compare_model", "session_mode"})
+        asked = await read_json(request, {"content", "model", "system", "thinking", "sampling", "temporary", "attachments", "compare_model", "session_mode"}, user)
         if isinstance(asked, Response):
             return asked
         content, model, system = asked.get("content"), asked.get("model"), asked.get("system", "")
@@ -392,7 +394,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
             return error(400, "content is what you say, system is text, and thinking is true or false.")
         try:
             check_sampling(asked.get("sampling", {}))
-            files = attachments(asked.get("attachments", []))
+            files = attachments(asked.get("attachments", []), content_limits.for_user(user))
         except ValueError as problem:
             return error(400, str(problem))
         if not isinstance(model, str) or (model not in offered(user) and not role_of(user, model)):
@@ -428,7 +430,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         No model is asked. The first exchange starts a conversation, whose id the caller sends with
         the next ones. `audio` may name SoundRoom recordings of the turn, kept with the messages.
         """
-        asked = await read_json(request, {"conversation", "said", "answered", "model", "voice", "audio"})
+        asked = await read_json(request, {"conversation", "said", "answered", "model", "voice", "audio"}, user)
         if isinstance(asked, Response):
             return asked
         said, answered, model = asked.get("said"), asked.get("answered", ""), asked.get("model", "")
@@ -456,7 +458,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
     async def conversation_change(request: Request, user: Principal) -> Response:
         """Change a conversation's title, its instructions, whether the model is asked to think, or how it is to pick its words."""
         found = talk_of(request, user)
-        asked = found if isinstance(found, Response) else await read_json(request, {"title", "system", "thinking", "sampling", "session_mode"})
+        asked = found if isinstance(found, Response) else await read_json(request, {"title", "system", "thinking", "sampling", "session_mode"}, user)
         if isinstance(asked, Response) or isinstance(found, Response):
             return asked  # type: ignore[return-value]
         title, system, thinking = asked.get("title"), asked.get("system"), asked.get("thinking")
@@ -482,7 +484,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         `continue` asks for more of an answer that was cut off. `model` names who answers.
         """
         found = talk_of(request, user)
-        asked = found if isinstance(found, Response) else await read_json(request, {"content", "model", "do", "attachments"})
+        asked = found if isinstance(found, Response) else await read_json(request, {"content", "model", "do", "attachments"}, user)
         if isinstance(asked, Response) or isinstance(found, Response):
             return asked  # type: ignore[return-value]
         ref, store, number, talk = found
@@ -498,7 +500,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         if talk.get("compare") and do == "continue":
             return error(400, "Use a shared follow-up or Ask both again in a comparison.")
         try:
-            files = attachments(asked.get("attachments", []))
+            files = attachments(asked.get("attachments", []), content_limits.for_user(user))
         except ValueError as problem:
             return error(400, str(problem))
         history_files = [f for m in said for f in m.get("attachments", [])]

@@ -66,6 +66,8 @@ class Setting:
                 raise ValueError(f'{self.name} must be {"above" if self.exclusive_min else "at least"} {self.min}.')
             if self.max is not None and (value > self.max or self.exclusive_max and value == self.max):
                 raise ValueError(f'{self.name} must be {"below" if self.exclusive_max else "at most"} {self.max}.')
+        if self.ceiling is not None and not (context or {}).get('superuser_limits') and value > self.ceiling:
+            raise ValueError(f'{self.name} must be at most {self.ceiling}.')
         if self.choices and value not in self.choices:
             raise ValueError(f'{self.name}: choose one of {", ".join(map(str, self.choices))}.')
         if self.choices_from and context and self.choices_from in context:
@@ -677,3 +679,28 @@ for name,kind,default,label,rule in (
     _add('account',name,kind,tier=NOW,scope='account',page='account',section='Notifications',label=label,default=default,rule=rule)
 _add('account','notify_ntfy_token','secret',tier=NOW,scope='account',page='account',section='Notification credentials',
      label='My ntfy token',default='',rule=_bearer_secret)
+
+
+# Content limits share one contract with global settings and inherited group policy.
+for name, default, ceiling, unit, label, minimum in (
+    ('chat_max_files', 4, 32, 'files', 'Chat attachments', 1),
+    ('chat_max_file_mib', 5, 64, 'MiB', 'Each chat attachment', 1),
+    ('chat_max_total_mib', 10, 256, 'MiB', 'All chat attachments', 1),
+    ('chat_max_text_kib', 200, 4096, 'KiB', 'Extracted or attached text', 1),
+    ('document_max_mib', 1, 32, 'MiB', 'Source document', 1),
+    ('document_max_pages', 40, 1000, 'pages', 'PDF pages', 1),
+    ('collections_per_account', 5, 100, 'collections', 'Collections per account', 1),
+    ('documents_per_collection', 20, 1000, 'documents', 'Documents per collection', 1),
+    ('chunks_per_collection', 500, 50000, 'chunks', 'Chunks per collection', 1),
+    ('chunks_per_source', 256, 10000, 'chunks', 'Chunks per source', 1),
+    ('chunk_bytes', 1200, 16384, 'bytes', 'Chunk width', 32),
+    ('chunk_overlap_bytes', 200, 8192, 'bytes', 'Chunk overlap', 0),
+    ('extraction_max_mib', 5, 32, 'MiB', 'Extraction image upload', 1),
+    ('audio_upload_mib', 32, 256, 'MiB', 'Audio upload', 1),
+    ('image_max_megapixels', 32, 128, 'Mi pixels', 'Image pixels', 1),
+    ('responses_max_records', 10000, 1000000, 'records', 'Stored Responses per account', 1),
+    ('responses_max_mib', 256, 8192, 'MiB', 'Stored Responses per account size', 1),
+):
+    _add('weightroom', name, 'int', tier=NOW, scope='front', page='limits', section='Uploads and content limits',
+         label=label, unit=unit, control='number', min=minimum, ceiling=ceiling, default=default,
+         help=f'Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: {ceiling} {unit}, except for superuser groups.')

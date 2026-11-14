@@ -193,6 +193,60 @@ toollocker = ""
 #   hosted_keys       the folder with the outside services' key files, NAME.key, one for each service registered
 #                     under System > Outside. Counted from this file; left out, the folder machine_key_file is in.
 #                     Hosted models are answered from this machine, so their keys live here and nowhere else
+
+# Live global upload and content limits. Groups may override; blank inherits.
+# Chat attachments; files. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 32 files, except for superuser groups.
+chat_max_files = 4
+
+# Each chat attachment; MiB. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 64 MiB, except for superuser groups.
+chat_max_file_mib = 5
+
+# All chat attachments; MiB. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 256 MiB, except for superuser groups.
+chat_max_total_mib = 10
+
+# Extracted or attached text; KiB. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 4096 KiB, except for superuser groups.
+chat_max_text_kib = 200
+
+# Source document; MiB. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 32 MiB, except for superuser groups.
+document_max_mib = 1
+
+# PDF pages; pages. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 1000 pages, except for superuser groups.
+document_max_pages = 40
+
+# Collections per account; collections. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 100 collections, except for superuser groups.
+collections_per_account = 5
+
+# Documents per collection; documents. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 1000 documents, except for superuser groups.
+documents_per_collection = 20
+
+# Chunks per collection; chunks. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 50000 chunks, except for superuser groups.
+chunks_per_collection = 500
+
+# Chunks per source; chunks. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 10000 chunks, except for superuser groups.
+chunks_per_source = 256
+
+# Chunk width; bytes. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 16384 bytes, except for superuser groups.
+chunk_bytes = 1200
+
+# Chunk overlap; bytes. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 8192 bytes, except for superuser groups.
+chunk_overlap_bytes = 200
+
+# Extraction image upload; MiB. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 32 MiB, except for superuser groups.
+extraction_max_mib = 5
+
+# Audio upload; MiB. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 256 MiB, except for superuser groups.
+audio_upload_mib = 32
+
+# Image pixels; Mi pixels. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 128 Mi pixels, except for superuser groups.
+image_max_megapixels = 32
+
+# Stored Responses per account; records. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 1000000 records, except for superuser groups.
+responses_max_records = 10000
+
+# Stored Responses per account size; MiB. Applies to new work immediately. Groups may override this value; blank inherits. Ceiling: 8192 MiB, except for superuser groups.
+responses_max_mib = 256
+
+
 [turnstile]
 host = "0.0.0.0"
 ports = [8442, 8443, 8444]

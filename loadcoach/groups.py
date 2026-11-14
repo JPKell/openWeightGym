@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field
 from fnmatch import fnmatchcase
 
 from db import migrate
@@ -91,6 +91,8 @@ class Group:
     tools: tuple[str, ...] | None = None
     hidden_tools: tuple[str, ...] = ()  # taken away for one account, whatever `tools` says
 
+    limits: dict[str, int] = field(default_factory=dict, hash=False)  # blank group entries inherit live global content policy
+
     def may_use(self, model: str) -> bool:
         """Return whether the group's model allowlist permits this model."""
         return self.models is None or model in self.models
@@ -111,7 +113,7 @@ NOTHING = Group(models=())  # what a group that no longer exists grants: no abil
 
 def read_group(name: str, section: dict) -> Group:
     """Check one [groups.NAME] section and turn it into a Group. Raises ValueError with the reason."""
-    known = {"can", "models", "tools", "priority", "max_lock", "max_requests", "max_sensitivity", "max_hosted_spend", "session_hours", "second_step", "max_hold"}  # fmt: skip
+    known = {"can", "models", "tools", "priority", "max_lock", "max_requests", "max_sensitivity", "max_hosted_spend", "session_hours", "second_step", "max_hold", "limits"}  # fmt: skip
     if extra := section.keys() - known:
         raise ValueError(f"group {name!r}: unknown setting {sorted(extra)}")
     can = [ability for ability in section.get("can", []) if ability not in RETIRED]
@@ -149,6 +151,8 @@ def read_group(name: str, section: dict) -> Group:
     max_hold = section.get("max_hold", 120)
     if type(max_hold) not in (int, float) or not 0 < max_hold <= 86400:
         raise ValueError("max_hold must be above zero and at most 86400 seconds")
+    from loadcoach.content_limits import checked
+    limits = checked(section.get('limits', {}), superuser=almighty)
     return Group(
         frozenset(can),
         None if allowed == "*" else tuple(allowed),
@@ -161,6 +165,7 @@ def read_group(name: str, section: dict) -> Group:
         second_step,
         max_hold,
         None if tools == "*" else tuple(tools),
+        limits=limits,
     )
 
 
@@ -182,6 +187,7 @@ def section_of(group: Group) -> dict:
         "max_hosted_spend": group.max_hosted_spend,
         "session_hours": group.session_hours,
         "second_step": group.second_step,
+        "limits": dict(group.limits),
     }
 
 

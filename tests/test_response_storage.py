@@ -170,7 +170,9 @@ def test_expiry_account_cleanup_and_quotas(stored, monkeypatch):
     assert client.get('/v1/responses/'+result['id']).status_code == 404
     store.prune()
     assert store.db.execute('SELECT COUNT(*) FROM responses').fetchone()[0] == 0
-    monkeypatch.setattr('weightroom.response_store.MAX_RECORDS', 1)
+    from loadcoach.content_limits import ContentLimits
+    from loadcoach.setting_catalog import default_for
+    store.limits = ContentLimits(lambda name: 1 if name == 'responses_max_records' else default_for('weightroom', name))
     create(client)
     count = len(calls)
     answer = client.post('/v1/responses', json={'model': 'test', 'input': 'Hello'})

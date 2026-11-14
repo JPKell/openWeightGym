@@ -39,7 +39,7 @@
     <div class="row g-2 align-items-start mb-2">
       {% if not retry %}
       <div class="col-12 col-sm-8" data-uploads>
-        <div class="d-flex align-items-baseline gap-2"><strong class="flex-shrink-0">Attach</strong><small class="text-secondary attachment-help">Images or text · up to 4, 5 MiB each, 10 MiB total; text up to 200 KiB</small></div>
+        <div class="d-flex align-items-baseline gap-2"><strong class="flex-shrink-0">Attach</strong><small class="text-secondary attachment-help">Images or text · up to {{ content_limits.chat_max_files }}, {{ content_limits.chat_max_file_mib }} MiB each, {{ content_limits.chat_max_total_mib }} MiB total; text up to {{ content_limits.chat_max_text_kib }} KiB</small></div>
         <input id="{{ prefix }}-files" type="file" multiple class="visually-hidden" data-files aria-label="Attach images or text files" accept="image/png,image/jpeg,image/webp,text/*,.md,.py,.js,.ts,.json,.csv,.toml,.yaml,.yml,.log,.sh,.html,.css" disabled>
         <button type="button" class="btn btn-outline-secondary btn-sm mt-1" data-choose-files disabled>Choose</button> <span class="small" data-file-count></span>
         <input type="hidden" name="attachments" value="{{ typed_in.attachments or '[]' }}">

@@ -1238,6 +1238,18 @@ Older `[deploy]` settings are ignored and can be removed. The manual maintenance
 `scripts/deploy-front.sh` and `scripts/deploy.sh` remain available for developer updates and
 the one-time data moves `deploy.sh` performs.
 
+## Upload and content limits
+
+`/settings/limits` holds live global defaults for chat attachments, document parsing, Collections,
+extraction, audio/image uploads and stored Responses. Groups → Uploads and content limits adds
+optional overrides; a blank field inherits the current global value. Each catalogue entry defines
+its fixed ceiling. Superuser group overrides are exempt; ordinary effective policies are clamped
+if a formerly privileged group loses that permission. Service admission and storage validate the
+current policy; browser hints show the same effective values. Lowering a limit preserves existing
+records and applies to new work. PDF CPU/memory limits, model context bounds and output-format
+checks still apply. Chunk overlap is clipped to one fifth of the effective context-bounded width.
+Image pixel units are binary millions, preserving the previous 33,554,432-pixel default.
+
 ## Notification delivery
 
 Configure system channels in **Settings → Platform → Alerts and notifications**. Endpoints default

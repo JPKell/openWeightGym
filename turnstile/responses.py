@@ -550,7 +550,7 @@ def routes(caller, service):
                 sent['messages'][first:first] = prior
             saved = {**body, 'input': normalized_input(body['input']), 'store': storing}
             if storing:
-                store.capacity(owner_of(user), len(json.dumps(saved).encode()))
+                store.capacity(owner_of(user), len(json.dumps(saved).encode()), user)
             headers = {key: value for key, value in request.headers.items()
                        if key == 'authorization' or key.startswith(('x-loadcoach-', 'x-suite-'))}
             if request.headers.get('x-loadcoach-log') != 'off' or level != 'normal':

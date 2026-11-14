@@ -1,7 +1,7 @@
 {% from "icons.html" import icon %}
 {% from "parts.html" import danger_confirmation, empty_row, alert, settings_workspace %}
 <!doctype html>
-<html lang="en" data-theme-user="{{ person.me.get('identity', person.name) if person else '' }}"{% if person %} data-personal-preferences="{{ person.me.get('choices', {})|tojson|forceescape }}" data-text-size="{{ person.me.get('choices', {}).get('text_size', 'standard') }}" data-motion="{{ person.me.get('choices', {}).get('motion', 'system') }}"{% endif %}>
+<html lang="en" data-content-limits="{{ content_limits|default({})|tojson|forceescape }}" data-theme-user="{{ person.me.get('identity', person.name) if person else '' }}"{% if person %} data-personal-preferences="{{ person.me.get('choices', {})|tojson|forceescape }}" data-text-size="{{ person.me.get('choices', {}).get('text_size', 'standard') }}" data-motion="{{ person.me.get('choices', {}).get('motion', 'system') }}"{% endif %}>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">

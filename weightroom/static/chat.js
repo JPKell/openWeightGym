@@ -268,8 +268,9 @@ function prepareFiles(box) {
   input.onchange = async () => {
     error.textContent = "";
     const files = [...input.files];
-    if (files.length > 4 || files.some(f => f.size > 5 * 1024 * 1024) || files.reduce((n, f) => n + f.size, 0) > 10 * 1024 * 1024) {
-      error.textContent = "Select up to four files, at most 5 MiB each and 10 MiB total."; input.value = ""; return;
+    const limits = JSON.parse(document.querySelector("#chat-main").dataset.contentLimits);
+    if (files.length > limits.chat_max_files || files.some(f => f.size > limits.chat_max_file_mib * 1024 * 1024) || files.reduce((n, f) => n + f.size, 0) > limits.chat_max_total_mib * 1024 * 1024) {
+      error.textContent = `Select up to ${limits.chat_max_files} files, at most ${limits.chat_max_file_mib} MiB each and ${limits.chat_max_total_mib} MiB total.`; input.value = ""; return;
     }
     box.dataset.reading = "yes";
     try {

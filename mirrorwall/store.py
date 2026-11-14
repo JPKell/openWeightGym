@@ -17,8 +17,10 @@ from db import migrate
 from mirrorwall.schema import MIRRORWALL
 
 ASSET_ID=re.compile(r"image_[a-f0-9]{32}")
+from loadcoach.content_limits import value as limit_value
+
 MAX_BYTES=20*2**20
-MAX_PIXELS=33554432
+MAX_PIXELS=limit_value(None, "image_max_megapixels")*2**20
 
 
 class Store:
@@ -38,15 +40,15 @@ class Store:
         return self.root/"assets"/identifier[6:8]/(identifier+(".thumb.png" if thumbnail else ".image"))
 
     @staticmethod
-    def decoded(content,output=False):
+    def decoded(content,output=False,limits=None):
         """Validate size/format and generate an orientation-correct bounded PNG thumbnail."""
         from PIL import Image,ImageOps
         maximum=128*2**20 if output else MAX_BYTES
         if not isinstance(content,bytes) or not content or len(content)>maximum:
             raise ValueError("Image exceeds its upload/output byte limit.")
         with Image.open(io.BytesIO(content)) as source:
-            if source.format not in ("PNG","JPEG","WEBP") or source.width*source.height>MAX_PIXELS:
-                raise ValueError("Use a PNG, JPEG or WebP image up to 32 megapixels.")
+            if source.format not in ("PNG","JPEG","WEBP") or source.width*source.height>limit_value(limits, "image_max_megapixels")*2**20:
+                raise ValueError(f"Use a PNG, JPEG or WebP image up to {limit_value(limits, 'image_max_megapixels')} Mi pixels.")
             source.load()
             image=ImageOps.exif_transpose(source).convert("RGBA")
             width,height=image.size
@@ -61,11 +63,11 @@ class Store:
         for key in [key for key,value in self.temporary.items() if value["until"]<now]:
             self.temporary.pop(key)
 
-    def save(self,owner,content,*,kind="reference",filename="image.png",metadata=None,temporary=False,job=None):
+    def save(self,owner,content,*,kind="reference",filename="image.png",metadata=None,temporary=False,job=None,limits=None):
         """Atomically retain one validated asset, or hold it only in bounded temporary memory."""
         if not owner or kind not in ("reference","output","mask"):
             raise ValueError("Invalid image owner/kind.")
-        width,height,thumb=self.decoded(content,kind=='output')
+        width,height,thumb=self.decoded(content,kind=='output',limits)
         identifier="image_"+secrets.token_hex(16)
         filename=Path(str(filename).replace("\\","/")).name[:160] or "image.png"
         record={"id":identifier,"kind":kind,"filename":filename,"sha256":hashlib.sha256(content).hexdigest(),

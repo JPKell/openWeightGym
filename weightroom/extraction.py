@@ -11,6 +11,8 @@ import json
 import re
 from decimal import Decimal, InvalidOperation, localcontext
 
+from loadcoach.content_limits import value as limit_value
+
 from jsonschema import Draft202012Validator, ValidationError
 from markdown_it import MarkdownIt
 from PIL import Image, ImageOps
@@ -20,7 +22,7 @@ TASKS = ('describe', 'text', 'receipt', 'table', 'custom')
 FORMATS = ('plain', 'layout', 'markdown', 'json', 'csv')
 MIMES = {'plain': ('text/plain', 'txt'), 'layout': ('text/plain', 'txt'),
          'markdown': ('text/markdown', 'md'), 'json': ('application/json', 'json'), 'csv': ('text/csv', 'csv')}
-MAX_BYTES = 5 * 1024 * 1024
+MAX_BYTES = limit_value(None, "extraction_max_mib") * 1024 * 1024
 MAX_BODY = (MAX_BYTES + 2) // 3 * 4 + 65536
 MAX_OUTPUT = 256 * 1024
 MARKDOWN = MarkdownIt('commonmark', {'html': False}).enable('table').disable('image')
@@ -141,12 +143,12 @@ def specification(value):
     return result
 
 
-def image_upload(name, data):
+def image_upload(name, data, limits=None):
     """Decode real raster bytes with existing chat limits; orient a metadata-free derivative."""
     if not isinstance(name, str) or not 1 <= len(name) <= 200 or any(ord(char) < 32 for char in name):
         raise Problem('Image name must contain 1–200 printable characters.')
-    if not isinstance(data, bytes) or not data or len(data) > MAX_BYTES:
-        raise Problem('Upload a nonempty PNG, JPEG or WebP of at most 5 MiB.', 413)
+    if not isinstance(data, bytes) or not data or len(data) > limit_value(limits, "extraction_max_mib") * 2**20:
+        raise Problem(f'Upload a nonempty PNG, JPEG or WebP of at most {limit_value(limits, "extraction_max_mib")} MiB.', 413)
     try:
         with Image.open(io.BytesIO(data)) as picture:
             mime = {'PNG': 'image/png', 'JPEG': 'image/jpeg', 'WEBP': 'image/webp'}.get(picture.format)

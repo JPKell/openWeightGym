@@ -198,6 +198,23 @@ class Settings:
     alert_gpu_memory_percent: float = default_for("weightroom","alert_gpu_memory_percent")
     alert_host_ram_percent: float = default_for("weightroom","alert_host_ram_percent")
     alert_allowance_percent: float = default_for("weightroom","alert_allowance_percent")
+    chat_max_files: int = default_for("weightroom", "chat_max_files")
+    chat_max_file_mib: int = default_for("weightroom", "chat_max_file_mib")
+    chat_max_total_mib: int = default_for("weightroom", "chat_max_total_mib")
+    chat_max_text_kib: int = default_for("weightroom", "chat_max_text_kib")
+    document_max_mib: int = default_for("weightroom", "document_max_mib")
+    document_max_pages: int = default_for("weightroom", "document_max_pages")
+    collections_per_account: int = default_for("weightroom", "collections_per_account")
+    documents_per_collection: int = default_for("weightroom", "documents_per_collection")
+    chunks_per_collection: int = default_for("weightroom", "chunks_per_collection")
+    chunks_per_source: int = default_for("weightroom", "chunks_per_source")
+    chunk_bytes: int = default_for("weightroom", "chunk_bytes")
+    chunk_overlap_bytes: int = default_for("weightroom", "chunk_overlap_bytes")
+    extraction_max_mib: int = default_for("weightroom", "extraction_max_mib")
+    audio_upload_mib: int = default_for("weightroom", "audio_upload_mib")
+    image_max_megapixels: int = default_for("weightroom", "image_max_megapixels")
+    responses_max_records: int = default_for("weightroom", "responses_max_records")
+    responses_max_mib: int = default_for("weightroom", "responses_max_mib")
     observation_error_percent: float = 0.0  # zero disables the measured-window error-rate alert
     observation_p95_seconds: float = 0.0  # zero disables the approximate histogram latency alert
     observation_min_samples: int = 100  # suppress rate/latency alerts below this sample count
@@ -693,6 +710,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     from loadcoach.settings import Changes
     response_settings = Changes(database_registry.database('weightroom.accounts'))
     response_defaults = (read_settings(Path(settings.path)).get('turnstile', {}) if settings.path else {})
+    from loadcoach.content_limits import ContentLimits, contracts as content_contracts
+    content_limits = ContentLimits(lambda name: getattr(settings, name))
     response_store = Responses(database_registry.database('weightroom.accounts'),
         lambda: response_settings.of('turnstile').get('response_keep_days', response_defaults.get('response_keep_days', 30)))
     plugins = PluginRegistry(
@@ -733,10 +752,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         config = {one['name']: one['value'] for one in reported.get('settings', [])}
         return response_settings.of('toollocker').get('toolsets', config.get('toolsets', {}))
 
+    response_store.limits = content_limits
     conversations = build_conversations(
         database_registry.database("weightroom.chat"), loadcoach, chat_inference, plugins=plugins, tools=tool_http,
         tool_level=lambda owner, trace: tool_log.trace_level(owner, trace),
-        tool_settings=lambda: {**response_defaults, **response_settings.of('turnstile')}, toolsets=chat_toolsets
+        content_limits=content_limits, tool_settings=lambda: {**response_defaults, **response_settings.of('turnstile')}, toolsets=chat_toolsets
     )
     benchmarks.state.worker.maintenance = gate
     conversations.state.knowledge.maintenance = gate
@@ -1000,7 +1020,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if template == 'refused.html' and status >= 500:
             context = getattr(request.state, 'observation', None)
             error_request_id = context.root.request_id if context else uuid.uuid4().hex
-        response = pages.TemplateResponse(request, template, {"person": person, "front_state": front_state, "strip": strip, "spotter_available": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, "settings_surface": bool(person and "manage-settings" in person.can and settings_views.surface(nav_path)), **more}, status_code=status)
+        response = pages.TemplateResponse(request, template, {"person": person, "front_state": front_state, "strip": strip, "spotter_available": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, "content_limits": content_limits.for_user(person), "settings_surface": bool(person and "manage-settings" in person.can and settings_views.surface(nav_path)), **more}, status_code=status)
         if error_request_id:
             response.headers['x-request-id'] = error_request_id
         response.headers['cache-control'] = 'no-store'
@@ -1071,7 +1091,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def typed_lists(request: Request) -> dict[str, list[str]]:
         """The fields of a form that was sent. Each name gives a list, since a form may use a name many times."""
-        maximum = (24 * 1024 * 1024 if request.url.path.startswith('/chat') else
+        limits = content_limits.for_user(getattr(request.state, 'person', None))
+        maximum = (max(24 * 1024 * 1024, limits['chat_max_total_mib'] * 2**20 * 4 + 1048576) if request.url.path.startswith('/chat') else
+                   limits['document_max_mib'] * 2**20 * 4 + 65536 if request.url.path.startswith('/collections') else
                    6 * 1024 * 1024 if request.url.path.startswith('/benchmarks') else 256 * 1024)
         body = bytearray()
         async for chunk in request.stream():
@@ -4824,7 +4846,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         accounts = {one["name"]: {**one, **account_facts(one)} for one in listing[0].json()["users"]} if listing and listing[0].is_success else {}
         showing = {**group, **(typed_in or {})} if group else {}  # what was just typed if saving it failed, otherwise what is kept
         models = list(dict.fromkeys([*person.me.get("models", []), *(showing["models"] if isinstance(showing.get("models"), list) else [])]))
-        return page(request, "groups.html", person, status=400 if failed else 200, group=group, groups=groups, showing=showing, known=known,
+        return page(request, "groups.html", person, status=400 if failed else 200, group=group, groups=groups, showing=showing, known=known, content_contracts=content_contracts(), global_limits=content_limits.for_user(),
                     ticks=tick_list(person, known, showing["can"]) if group else [], models=models, form=form or {},
                     members=[accounts.get(member, {"name": member}) for member in (group or {}).get("members", [])],
                     trend_url=f"/groups/{quote(group['name'], safe='')}?part=activity" if group else "",
@@ -4879,6 +4901,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     # A form without the tools leaves them out, as the former combined form did.
                     **({"tools": "*" if "every_tool" in form else names_in(one("tools"))} if "tools" in form or "every_tool" in form else {}),
                 }
+            if do in ("save", "limits") and any("value-" + entry.name in form for entry in content_contracts()):
+                try:
+                    made["limits"] = {entry.name: int(one("value-" + entry.name)) for entry in content_contracts() if one("value-" + entry.name)}
+                except ValueError:
+                    return await group_page(request, person, "Content limits must be whole numbers; leave blank to inherit.", failed=True, typed_in=made)
             answer = await ask("PATCH" if do in ("abilities", "limits", "tools") else "POST", where, person.key, json=made)
         if answer.status_code != 200:
             return await group_page(request, person, answer.json()["error"]["message"], failed=True, typed_in=made)
@@ -5785,8 +5812,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         exception_handlers={HTTPException: http_error, 500: server_error},
         routes=[
             *image_routes(for_people, page, ask, model_api),
-            *audio_routes(for_people, page, ask, model_api, lambda: settings, platform, refresh_settings=in_step),
-            *extraction_routes(for_people, page, ask),
+            *audio_routes(for_people, page, ask, model_api, lambda: settings, platform, refresh_settings=in_step, content_limits=content_limits),
+            *extraction_routes(for_people, page, ask, content_limits),
             *response_routes(for_people, page, response_store),
             *classifier_routes(for_people, page, ask, platform),
             *account_routes(for_people, page, ask, typed, go, platform, conversations.state.workflows,

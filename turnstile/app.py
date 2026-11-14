@@ -1073,6 +1073,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                    programs=FRONT_PROGRAMS | {'toollocker'},
                                    voice_nodes=lambda: voice_order(), defaults={'turnstile': configured_defaults,'weightroom':weightroom_defaults})
     live = console_settings.live
+    from loadcoach.content_limits import ContentLimits
+    content_limits = ContentLimits(lambda name: live("weightroom", name, default_for("weightroom", name)))
+    extractions.limits = content_limits
     users.policy_getter = lambda name: live('turnstile',name,getattr(settings,name))
 
     def node_policy(name):
@@ -1106,6 +1109,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     from weightroom.response_store import Responses
     response_store = Responses(stores.database('weightroom.accounts'),
         lambda: live('turnstile', 'response_keep_days', settings.response_keep_days))
+    response_store.limits = content_limits
     extractions.responses = response_store
     extractions.tool_url = 'http://turnstile.internal:8443/mcp'
     extractions.tool_level = lambda user, trace: log.trace_level(user.name, trace)
@@ -1150,6 +1154,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     from soundroom.store import Store as AudioStore
     from soundroom.front import Front as AudioFront
     audio_work = AudioFront(AudioStore(batch_work.store.db, settings.data), batch_work, users, log)
+    audio_work.limits = content_limits
+    image_work.limits = content_limits
     batch_work.audio_work = audio_work
     batch_work.task_owner = lambda user,row: task_records.visible(user,row) and image_work.visible(user,row) and audio_work.visible(user,row)
 

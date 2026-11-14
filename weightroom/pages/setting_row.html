@@ -1,7 +1,7 @@
 {% from 'parts.html' import more %}
 {% set meta = setting_label(setting, program.program) %}
 {% set holds = setting.changed.value if setting.changed else setting.value %}
-{% set typed = typed_in['value-' ~ setting.name] if opened == program.program and typed_in['value-' ~ setting.name] is defined else (holds if meta.editor == 'text' else holds|written) %}
+{% set typed = typed_in['value-' ~ setting.name] if opened == program.program and typed_in['value-' ~ setting.name] is defined else ('' if setting.inherit|default(false) and holds == '' else (holds if meta.editor == 'text' else holds|written)) %}
 {% set disabled = setting.when == 'file' or setting.disabled|default(false) %}
 {% set choices = setting.choices|default(meta.choices|default([])) %}
 {% set id = setting.id|default('setting-' ~ program.program ~ '-' ~ setting.name) %}
@@ -23,7 +23,7 @@
   {% elif setting.multiline|default(false) %}
   <textarea{{ ' disabled' if disabled }} id="{{ id }}" name="value-{{ setting.name }}" class="form-control" rows="3" aria-label="{{ setting.label|default(meta.label) }}">{{ typed }}</textarea>
   {% else %}
-  <div class="input-group input-group-flat"><input{{ ' disabled' if disabled }} id="{{ id }}" name="value-{{ setting.name }}" class="form-control font-monospace" value="{{ typed }}" type="{{ 'number' if meta.control == 'number' else 'text' }}"{% if meta.control == 'number' %} min="{{ meta.min if meta.min is not none else 0 }}"{% if meta.max is not none %} max="{{ meta.max }}"{% endif %} step="{{ '1' if meta.kind == 'int' or not meta.kind and holds is integer else 'any' }}"{% endif %} aria-label="{{ setting.label|default(meta.label) }}" autocapitalize="none" spellcheck="false">{% if meta.unit %}<span class="input-group-text">{{ meta.unit }}</span>{% endif %}</div>
+  <div class="input-group input-group-flat"><input{{ ' disabled' if disabled }} id="{{ id }}" name="value-{{ setting.name }}" class="form-control font-monospace" value="{{ typed }}" type="{{ 'number' if meta.control == 'number' else 'text' }}"{% if meta.control == 'number' %} min="{{ meta.min if meta.min is not none else 0 }}"{% if not setting.ceiling_exempt|default(false) and (meta.max is not none or meta.ceiling is not none) %} max="{{ meta.max if meta.max is not none else meta.ceiling }}"{% endif %} step="{{ '1' if meta.kind == 'int' or not meta.kind and holds is integer else 'any' }}"{% endif %} {% if setting.placeholder|default('') %}placeholder="{{ setting.placeholder }}"{% endif %} aria-label="{{ setting.label|default(meta.label) }}" autocapitalize="none" spellcheck="false">{% if meta.unit %}<span class="input-group-text">{{ meta.unit }}</span>{% endif %}</div>
   {% endif %}
   {% if meta.help and show_setting_help|default(true) %}{% call more() %}{{ meta.help }}{% endcall %}{% endif %}
   {% if setting.changed %}<small class="text-secondary d-block mt-1">Changed here by {{ setting.changed.by or 'someone at the node' }}, {{ setting.changed.at|timestamp }}.</small><button class="btn btn-link p-0" name="reset" value="{{ setting.name }}">Revert to file</button>{% endif %}

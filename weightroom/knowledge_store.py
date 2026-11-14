@@ -7,9 +7,11 @@ import time
 from db import DatabaseSource, database, migrate
 from db.schemas import CHAT
 
-MAX_COLLECTIONS = 5
-MAX_DOCUMENTS = 20
-MAX_CHUNKS = 500
+from loadcoach.content_limits import value as limit_value
+
+MAX_COLLECTIONS = limit_value(None, "collections_per_account")
+MAX_DOCUMENTS = limit_value(None, "documents_per_collection")
+MAX_CHUNKS = limit_value(None, "chunks_per_collection")
 
 
 def identifier():
@@ -37,12 +39,12 @@ class Collections:
         return [self.one(owner, row[0]) for row in self.db.execute(
             'SELECT id FROM collections WHERE owner=? ORDER BY created DESC,id', (owner,)).fetchall()]
 
-    def create(self, owner, title, level, model):
+    def create(self, owner, title, level, model, limits=None):
         """Create an owner-private collection within its count limit."""
         number = identifier()
         with self.db:
-            if self.db.execute('SELECT COUNT(*) FROM collections WHERE owner=?', (owner,)).fetchone()[0] >= MAX_COLLECTIONS:
-                raise ValueError('Keep at most five collections; delete one before creating another.')
+            if self.db.execute('SELECT COUNT(*) FROM collections WHERE owner=?', (owner,)).fetchone()[0] >= limit_value(limits, "collections_per_account"):
+                raise ValueError(f'Keep at most {limit_value(limits, "collections_per_account")} collections; delete one before creating another.')
             self.db.execute('INSERT INTO collections '
                 '(id,owner,title,level,model_id,fingerprint,build,model_label,created,content_sha256) VALUES (?,?,?,?,?,?,?,?,?,?)',
                 (number, owner, title, level, model['model_id'], model['fingerprint'], model['build'], model['id'], time.time(),model.get('content_sha256') or ''))
@@ -69,14 +71,14 @@ class Collections:
             found['original'] = self.db.execute('SELECT original FROM documents WHERE id=? AND collection=?', (doc, number)).fetchone()[0]
         return found
 
-    def add(self, owner, number, name, mime, original, digest):
+    def add(self, owner, number, name, mime, original, digest, limits=None):
         """Add a pending source under the collection's write lock and document limit."""
         doc = identifier()
         with self.db:
             if not self.lock(owner, number):
                 return None
-            if self.db.execute('SELECT COUNT(*) FROM documents WHERE collection=?', (number,)).fetchone()[0] >= MAX_DOCUMENTS:
-                raise ValueError('Keep at most twenty documents per collection.')
+            if self.db.execute('SELECT COUNT(*) FROM documents WHERE collection=?', (number,)).fetchone()[0] >= limit_value(limits, "documents_per_collection"):
+                raise ValueError(f'Keep at most {limit_value(limits, "documents_per_collection")} documents per collection.')
             self.db.execute('INSERT INTO documents (id,collection,name,mime,original,digest,state,status,created) '
                             'VALUES (?,?,?,?,?,?,?,?,?)',
                             (doc, number, name, mime, original, digest, 'pending', 'Ready to index.', time.time()))
@@ -96,7 +98,7 @@ class Collections:
                             (token, doc))
         return token
 
-    def finish(self, owner, number, doc, token, revision, chunks):
+    def finish(self, owner, number, doc, token, revision, chunks, limits=None):
         """A deleted/replaced/cancelled source cannot be resurrected by an old async result."""
         dimensions = len(chunks[0]['vector'])
         with self.db:
@@ -111,8 +113,8 @@ class Collections:
                 return False
             self.db.execute('UPDATE collections SET dimensions=? WHERE id=?', (dimensions, number))
             count = self.db.execute('SELECT COUNT(*) FROM document_chunks WHERE collection=?', (number,)).fetchone()[0]
-            if count + len(chunks) > MAX_CHUNKS:
-                raise ValueError('A collection may contain at most 500 indexed chunks. Split or shorten its sources.')
+            if count + len(chunks) > limit_value(limits, "chunks_per_collection"):
+                raise ValueError(f'A collection may contain at most {limit_value(limits, "chunks_per_collection")} indexed chunks. Split or shorten its sources.')
             for ordinal, chunk in enumerate(chunks):
                 self.db.execute('INSERT INTO document_chunks (id,document,collection,ordinal,page,line,text,vector) VALUES (?,?,?,?,?,?,?,?)',
                                 (identifier(), doc, number, ordinal, chunk['page'], chunk['line'], chunk['text'], json.dumps(chunk['vector'], allow_nan=False)))
