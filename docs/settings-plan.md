@@ -422,7 +422,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 0.5 Catalogue, validation, live and secret tests (437 focused checks pass).
 - [x] Phase 0 full clean-commit run, shared main pushed, normal deployment and live verification (28e06ec; five settings surfaces; Backups 10 → 11 → 10 without restart).
 - [x] 1a Event retention and conditional node retirement (416 focused checks pass).
-- [ ] 1b Live observation policy.
+- [x] 1b Live observation policy (414 focused checks pass; shared policy updates on save).
 - [ ] 1c Live display, costs and audio defaults.
 - [ ] 1d Live control node request settings.
 - [ ] 1e Live disk monitoring paths.
