@@ -6,7 +6,6 @@
 {% block main %}
 <div class="vc-page vc-live" id="voice-workspace" data-layout="transcript">
 {{ page_header('Voice chat') }}
-<div class="vc-title-line justify-content-end"><span class="vc-overline">LISTEN / THINK / SPEAK</span></div>
 {% call alert('warning', attrs={'id':'configuration-notice','hidden':''}, class_='mb-3') %}<div class="d-flex flex-wrap align-items-center gap-2 w-100"><span id="configuration-error" class="flex-grow-1"></span><button type="button" id="retry-configuration" class="btn btn-outline-secondary btn-sm">Retry settings</button></div>{% endcall %}
 <div class="vc-workspace-grid">{{ language_panel({'en':'English'}, preview=false) }}{{ call_panel(preview=false) }}{{ settings_panel(preview=false) }}{{ transcript_panel(preview=false) }}</div>
 <div id="action-status" class="small mt-3" role="status" aria-live="polite"></div>

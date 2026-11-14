@@ -63,6 +63,7 @@ def start(page):
 def test_live_model_voice_and_language_options_reach_session(studio):
     page = studio
     assert page.locator('#voice-workspace').get_attribute('data-layout') == 'transcript'
+    assert not page.get_by_text('LISTEN / THINK / SPEAK', exact=True).count()
     page.locator('#call-profile').select_option('audio')
     page.locator('#call-speaker').select_option('Vivian')
     page.locator('#listen-language').select_option('es')
