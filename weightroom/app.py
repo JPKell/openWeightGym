@@ -3707,7 +3707,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         node_return = bool(selected_machine) or program in ("loadcoach", "spotter")
         render_settings = voice_admin_page if voice_return else compute_nodes_page if node_return else settings_page
         destination = '/system/voice' if voice_return else '/compute-nodes' if node_return else '/settings'
-        if selected_machine and program not in ("loadcoach", "spotter", 'voice'):
+        if selected_machine and program not in ("loadcoach", "spotter", 'voice', 'machines'):
             return Response("Only LoadCoach and Spotter use a host selection.", status_code=400)
         settings_path = ("/turnstile/machines/" + quote(selected_machine, safe="") + "/settings"
                          if selected_machine else "/loadcoach/settings")

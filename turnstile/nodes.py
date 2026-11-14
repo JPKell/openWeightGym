@@ -49,6 +49,13 @@ def legacy_entry(host: str, ports: tuple[int, ...], offset: int, key_file: str, 
             "machine_key_file": key_file, "wake_mac": wake_mac, "wake_address": wake_address or "255.255.255.255"}
 
 
+def wake_policy(name, entry, changes):
+    """Lay only catalogue-approved Wake overrides over one configured node."""
+    from loadcoach.settings import live
+    return {**entry, **{field: live('machines:' + name, field, entry.get(field, fallback), changes=changes)
+                       for field, fallback in (('wake_mac', ''), ('wake_address', '255.255.255.255'))}}
+
+
 def base(entry: dict, port: int, ports: tuple[int, ...]) -> str:
     """Where a node answers on one of the control node's `ports`.
 

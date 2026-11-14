@@ -267,7 +267,7 @@ class Changes:
         for program, at, told, refused in self.db.execute("SELECT program, at, told, refused FROM settings_seen ORDER BY program"):
             refusals = json.loads(refused)
             settings = [
-                {"name": name, **entry, "when": CHANGEABLE.get(program, {}).get(name, "file"), "changed": changed.get(program, {}).get(name), "refused": refusals.get(name)}
+                {"name": name, **entry, "when": CHANGEABLE.get("machines" if program.startswith("machines:") else program, {}).get(name, "file"), "changed": changed.get(program, {}).get(name), "refused": refusals.get(name)}
                 for name, entry in json.loads(told).items() if include_retired or not entry.get("retired")
             ]
             programs.append({"program": program, "seen": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "settings": settings})
