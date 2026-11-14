@@ -203,7 +203,19 @@ response_max_tool_calls = 25
 response_max_tool_seconds = 900
 # Days stored Responses are kept. Changes apply immediately; above 0, at most 3650.
 response_keep_days = 30
+
+# Seconds to wait for a compute node to wake. Changes apply to new waits immediately.
 wait = 180
+
+# Seconds suggested by Retry-After when the control node is busy. Above zero; applies live.
+busy_retry_seconds = 5
+
+# Seconds between node polls, from 2 to 300. The interval and readiness window apply live.
+machines_poll_seconds = 10
+
+# Connections each control node HTTP pool may carry at once. Whole number above zero.
+# A change takes effect when turnstile restarts; existing pools keep their current capacity.
+max_in_flight = 200
 # Let callers choose the node their work runs on, such as benchmark runs on Node measurements that
 # name a node. When off, the control node picks the node and a request that names one is refused with a
 # message saying so. The control node keeps task records for every node either way. Changes apply immediately.

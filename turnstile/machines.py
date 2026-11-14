@@ -108,6 +108,7 @@ class Machines:
         self.checked: set[str] = set()
         self.last_saved: dict[str, float] = {}
         self.last_pruned = 0.0
+
         self.known_hosts = {} if store is None else {
             fingerprint: {"hostname": hostname, "machines": json.loads(names), "last_seen": last_seen}
             for fingerprint, hostname, names, last_seen in store.execute(
@@ -116,6 +117,15 @@ class Machines:
             name: {"state": state, "changed_at": at, "changed_by": by}
             for name, state, at, by in store.execute(
                 "SELECT name, state, changed_at, changed_by FROM machine_lifecycle").fetchall()}
+
+    @property
+    def every(self):
+        """Read the current poll interval and freshness window together."""
+        return self._every() if callable(self._every) else self._every
+
+    @every.setter
+    def every(self, value):
+        self._every = value
 
     def all_names(self) -> list[str]:
         """Include retained registrations so an uninstalled, offline node can be retired."""
@@ -335,4 +345,7 @@ class Machines:
                 await self.poll()
             except Exception as problem:  # one bad answer never ends the inventory
                 print(f"turnstile: machine poll failed: {problem!r}", flush=True)
-            await asyncio.sleep(self.every)
+            completed = time.monotonic()
+            while (remaining := self.every - (time.monotonic() - completed)) > 0:
+                # A shorter live interval must not wait out the old, longer sleep.
+                await asyncio.sleep(min(remaining, 1))

@@ -20,7 +20,19 @@ class ConsoleSettings:
 
     def live(self, program, name, fallback):
         """A validated read bound to this control node's settings authority."""
-        return live(program, name, self.defaults.get(program, {}).get(name, fallback), changes=self.changes)
+        if CHANGEABLE.get(program, {}).get(name) == 'now':
+            fallback = self.defaults.get(program, {}).get(name, fallback)
+        return live(program, name, fallback, changes=self.changes)
+
+    def reported(self):
+        """Turnstile's direct live readers are its effective running values."""
+        programs = [one for one in self.changes.everything() if one['program'] in self.programs]
+        for program in programs:
+            if program['program'] == 'turnstile':
+                for setting in program['settings']:
+                    if CHANGEABLE['turnstile'].get(setting['name']) == 'now':
+                        setting['value'] = self.live('turnstile', setting['name'], setting['value'])
+        return programs
 
     async def handle(self, request, user):
         """Read or change the console's program settings through the shared settings contract."""
@@ -38,7 +50,7 @@ class ConsoleSettings:
         if path == '/loadcoach/settings' and request.method == 'GET':
             if not user or not user.can('manage-settings'):
                 return error(403, 'Settings require manage-settings.')
-            programs = [one for one in self.changes.everything() if one['program'] in self.programs]
+            programs = self.reported()
             for program in programs:
                 for setting in program['settings']:
                     if program['program'] == 'turnstile' and setting['name'] == 'preferred_voice_node':
@@ -92,6 +104,6 @@ class ConsoleSettings:
                 self.changes.take_away(program, name) if value is None else self.changes.put(program, name, value, user.name)
             self.log.add('settings', 'changed', user.name, program=program,
                          **{name: '(telephone settings updated)' if name == 'telephone' else value for name, value in body.items()})
-            return JSONResponse({'programs': [one for one in self.changes.everything() if one['program'] in self.programs]})
+            return JSONResponse({'programs': self.reported()})
         except (ValueError, TypeError) as problem:
             return error(400, str(problem))
