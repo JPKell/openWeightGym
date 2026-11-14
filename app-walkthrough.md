@@ -86,10 +86,13 @@
 
 ## My account
 
-- [ ] Account
-- [ ] Appearance
-- [ ] Audio
-- [ ] Logs
+- [x] Account — Settings desk with owner-scoped sign-in inspection and revocation
+- [x] API keys
+- [x] Appearance — themes, display and accessibility
+- [x] Audio — defaults and optional new-output autoplay
+- [x] Workspace — starting page, chat default and regional formatting
+- [x] Alerts & privacy — in-app notices, read state and preference export
+- [x] Logs
 - [ ] Sign in
 
 

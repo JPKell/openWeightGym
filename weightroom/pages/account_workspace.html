@@ -1,0 +1,10 @@
+{% extends 'account_base.html' %}
+{% from 'parts.html' import card %}
+{% from 'account_parts.html' import select_field, save_actions %}
+{% set account_title = 'Workspace' %}
+{% set account_hint = 'These defaults apply to your account. Explicit links and choices made on a page take precedence.' %}
+{% block account_body %}<form method="post" action="/account/preferences/workspace" data-account-form data-hold-refresh>
+{% call card('Starting choices') %}{{ select_field('start_page', 'Open after sign-in', destinations, value=me.choices.start_page) }}
+<label for="chat_model" class="form-label">Default chat model or role</label><select id="chat_model" name="chat_model" class="form-select"><option value="">Page default</option>{% if me.choices.chat_model and me.choices.chat_model not in default_models %}<option value="{{ me.choices.chat_model }}" selected>{{ me.choices.chat_model }} · currently unavailable</option>{% endif %}{% for model in default_models %}<option value="{{ model }}"{{ ' selected' if model == me.choices.chat_model }}>{{ model }}</option>{% endfor %}</select><p class="form-hint mb-0">New chats use this choice when it is available. Existing conversations keep their model.</p>{% endcall %}
+{% call card('Region & time') %}<label for="timezone" class="form-label">Time zone</label><select id="timezone" name="timezone" class="form-select mb-3"><option value="device">Follow my device</option>{% for zone in zones %}<option value="{{ zone }}"{{ ' selected' if zone == me.choices.timezone }}>{{ zone }}</option>{% endfor %}</select>
+<div class="row g-3"><div class="col-sm-6">{{ select_field('date_format', 'Date format', [('readable','14 Nov 2026'),('iso','2026-11-14'),('device','Device format')], value=me.choices.date_format) }}</div><div class="col-sm-6">{{ select_field('clock', 'Clock', [('24','24 hour · 16:30'),('12','12 hour · 4:30 PM')], value=me.choices.clock) }}</div></div><div class="account-time-preview"><span class="small text-secondary">Timestamp preview</span><strong class="d-block" id="account-time-preview"></strong></div>{{ save_actions('Save workspace defaults') }}{% endcall %}</form>{% endblock %}

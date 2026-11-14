@@ -23,7 +23,7 @@ KINDS = ("take", "sound", "speech", "reference", "recording")
 UPLOAD_BYTES = 32 * 2**20
 OUTPUT_BYTES = 256 * 2**20
 TAG = re.compile(r"[\w][\w .+#&'-]{0,39}")
-PREFERENCES = {"format": ("wav", "flac", "mp3", "opus"), "voice": None, "speech_model": None, "transcription_model": None}
+PREFERENCES = {"format": ("wav", "flac", "mp3", "opus"), "voice": None, "speech_model": None, "transcription_model": None, 'autoplay': False}
 
 
 def probe(content, most_seconds=3600):
@@ -320,9 +320,14 @@ class Store:
                 raise ValueError("Unknown audio preference.")
             for key, value in settings.items():
                 allowed = PREFERENCES[key]
+                if key == 'autoplay':
+                    if type(value) is not bool:
+                        raise ValueError('Audio autoplay must be true or false.')
+                    continue
                 if value is not None and not (isinstance(value, str) and len(value) <= 160 and (allowed is None or value in allowed)):
                     raise ValueError(f"Invalid audio preference {key}.")
             with self.db:
-                self.db.execute("INSERT INTO soundroom_preferences VALUES (?,?) ON CONFLICT(owner_id) DO UPDATE SET settings=excluded.settings", (owner, json.dumps(settings)))
+                existing = self.preferences(owner)
+                self.db.execute("INSERT INTO soundroom_preferences VALUES (?,?) ON CONFLICT(owner_id) DO UPDATE SET settings=excluded.settings", (owner, json.dumps({**existing, **settings})))
         row = self.db.execute("SELECT settings FROM soundroom_preferences WHERE owner_id=?", (owner,)).fetchone()
-        return {"format": "wav", **(json.loads(row[0]) if row else {})}
+        return {"format": "wav", 'autoplay': False, **(json.loads(row[0]) if row else {})}

@@ -1,67 +1,17 @@
+{% extends 'account_base.html' %}
+{% from 'parts.html' import card, alert, confirm_two %}
+{% from 'account_parts.html' import password_form %}
 {% from 'user_parts.html' import phone_numbers_section %}
-{% extends "frame.html" %}
-{% from "parts.html" import said_box, card, page_header , confirm_loss, empty_row %}
-{% block title %}Account · openWeightGym{% endblock %}
-{% block main %}
-{{ page_header("Account", lead="Manage your password, sign-in security and API keys.", help="/docs/web-app/api-keys") }}
-{{ said_box(said, failed) }}
-<dl class="row facts mb-4">
-  <dt class="col-5 col-md-2">Name</dt><dd class="col-7 col-md-4">{{ me.name }}</dd>
-  <dt class="col-5 col-md-2">Group</dt><dd class="col-7 col-md-4">{{ me.group }}</dd>
-  <dt class="col-5 col-md-2">This sign-in ends</dt><dd class="col-7 col-md-4">{{ me.session_ends|timestamp if me.session_ends else "it does not" }}</dd>
-  <dt class="col-5 col-md-2">Signed in now</dt><dd class="col-7 col-md-4">{{ me.sessions }} place{{ "" if me.sessions == 1 else "s" }}</dd>
-  <dt class="col-5 col-md-2">Authenticator code</dt><dd class="col-7 col-md-4">{{ "set up" if me.second_step else "not used" }}</dd>
-</dl>
-<div class="row g-3 align-items-stretch mb-3">
-<div class="col-lg-6">{% call card("Password", class_="h-100", attrs={"aria-labelledby": "account-password-heading"}, header_id="account-password-heading") %}
-<form method="post" action="/account/password" class="row g-3">
-    <div class="col-12">
-      <label for="current_password" class="form-label">Current password</label>
-      <input id="current_password" name="current_password" type="password" class="form-control" autocomplete="current-password" required>
-    </div>
-
-    <div class="col-md-6">
-      <label for="new_password" class="form-label">New password <small class="text-secondary">at least 8 characters</small></label>
-      <input id="new_password" name="new_password" type="password" class="form-control" autocomplete="new-password" minlength="8" required>
-    </div>
-    <div class="col-md-6">
-      <label for="new_again" class="form-label">The same again</label>
-      <input id="new_again" name="new_again" type="password" class="form-control" autocomplete="new-password" minlength="8" required>
-    </div>
-    <div class="col-12">
-      <button class="btn btn-primary">Change password</button>
-      <span class="text-secondary ms-2">Changing it ends your sign-ins everywhere else.</span>
-    </div>
-  </form>
-{% endcall %}</div>
-<div class="col-lg-6">{% call card("API keys", class_="h-100", attrs={"aria-labelledby": "account-keys-heading"}, header_id="account-keys-heading") %}
-{% if new_key %}<pre class="secret">{{ new_key }}</pre>{% endif %}
-<p class="text-secondary">For programs that use the models in your name. A key is shown once, when it is made.</p>
-  <div class="table-responsive">
-  <table id="keys" class="table table-sm align-middle sortable">
-    <thead><tr><th data-sort="text">Label</th><th data-sort="value">Made</th><th data-sort="text">Id</th><th></th></tr></thead>
-    <tbody>
-    {% for key in me["keys"] %}
-    <tr>
-      <td>{{ key.label or "none" }}</td><td class="when">{{ key.created|timestamp }}</td><td><code>{{ key.id }}</code></td>
-      <td class="text-end"><form method="post" action="/account/keys/{{ key.id }}/remove" class="m-0"><button  class="btn btn-outline-danger btn-sm" {{ confirm_loss() }}>Remove</button></form></td>
-    </tr>
-    {% else %}
-    {% call empty_row(4) %}No keys.{% endcall %}
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-  <form method="post" action="/account/keys" class="row g-3 align-items-end">
-    <div class="col-md-6">
-      <label for="label" class="form-label">Label for a new key</label>
-      <input id="label" name="label" class="form-control" maxlength="60" placeholder="what it is for" required>
-    </div>
-    <div class="col-md-6">
-      <button class="btn btn-primary">Make a key</button>
-    </div>
-  </form>
-{% endcall %}</div>
-</div>
+{% set account_title = 'Account' %}
+{% set account_hint = 'Review your sign-ins here. Application credentials have their own API keys page.' %}
+{% block account_body %}
+{% call card('Your account') %}<dl class="account-identity-facts mb-0"><div><dt>Name</dt><dd>{{ me.name }}</dd></div><div><dt>Group</dt><dd>{{ me.group }}</dd></div><div><dt>This sign-in ends</dt><dd>{{ me.session_ends|timestamp if me.session_ends else 'it does not' }}</dd></div><div><dt>Signed in now</dt><dd>{{ me.sessions }} place{{ '' if me.sessions == 1 else 's' }}</dd></div></dl>{% endcall %}
+{% call card('Password') %}{{ password_form() }}{% endcall %}
+{% call card('Sign-in security') %}<div class="d-flex justify-content-between gap-2 align-items-center"><div><strong>Authenticator code</strong><p class="form-hint mb-0">{{ 'Use your authenticator app when signing in.' if me.second_step else 'Your group controls whether an authenticator code is required.' }}</p></div><span class="badge bg-{{ 'green' if me.second_step else 'secondary' }}-lt">{{ 'Enabled' if me.second_step else 'Not set up' }}</span></div><p class="form-hint mt-2 mb-0">Contact your administrator if you lose access to your authenticator.</p>{% endcall %}
+{% set session_actions %}{% if sessions|rejectattr('current')|list %}<form method="post" action="/account/sessions/end-others"><button class="btn btn-outline-danger btn-sm" {{ confirm_two('End every other sign-in?') }}>Sign out other devices…</button></form>{% endif %}{% endset %}
+{% call card('Your sign-ins', actions=session_actions) %}
+{% if sessions_error %}{{ alert('warning', 'Sign-in details are temporarily unavailable. Reload to retry.') }}{% endif %}
+{% for session in sessions %}<div class="account-session"><div><strong class="d-block">{{ session.device }}</strong><span class="text-secondary small">{% if session.current %}This browser{% elif session.via %}Via {{ session.via }}{% else %}Other sign-in{% endif %}{% if session.peer %} · {{ session.peer }}{% endif %}</span><div class="small text-secondary">{% if session.last_seen %}Last active {{ session.last_seen|timestamp }}{% else %}Started {{ session.created|timestamp }}{% endif %} · Ends {{ session.expires|timestamp }}</div></div>{% if session.current %}<span class="badge bg-green-lt">Current</span>{% else %}<form method="post" action="/account/sessions/{{ session.id }}/remove" class="m-0"><button class="btn btn-outline-danger btn-sm" {{ confirm_two('End this sign-in?') }}>Sign out…</button></form>{% endif %}</div>{% else %}{% if not sessions_error %}<p class="text-secondary mb-0">No active browser sign-ins.</p>{% endif %}{% endfor %}
+{% endcall %}
 {% if phone_numbers %}{{ phone_numbers_section(phone_numbers.numbers, own=true, registration=phone_numbers) }}{% endif %}
 {% endblock %}

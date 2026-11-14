@@ -37,6 +37,7 @@
   const MUSICAL = {bpm: 'Tempo (BPM)', keyscale: 'Key', timesignature: 'Time signature', language: 'Vocal language'};
   let state = {models: [], assets: [], voices: [], jobs: [], groups: []};
   let selected = null, source = null, listSignature = '', jobsSignature = '', polling = false;
+  const openedAt = Date.now() / 1000, autoPlayed = new Set();
   let region = null, peaks = null, licenceNoted = false;
   let older = [], nextPage = null, libraryQuery = '', loadingOlder = false;
   let speakerSignature = '';
@@ -385,6 +386,12 @@
     $('temporary-wrap').hidden = !state.can_unlogged;
     renderList();
     renderJobs();
+    const freshAsset = state.assets.find(row => row.mine && row.kind === kinds && row.created >= openedAt && !autoPlayed.has(row.id));
+    if (freshAsset && state.preferences?.autoplay && document.visibilityState === 'visible' && $('audio').paused) {
+      autoPlayed.add(freshAsset.id);
+      await select(freshAsset);
+      $('audio').play().catch(() => message('Audio is ready. Press Play to listen.'));
+    }
     if (selected && !state.assets.some(row => row.id === selected.id)) select(null);
     if (page === 'speech') root.dispatchEvent(new Event('soundroom:studio'));
     if (!polling && state.jobs.some(row => ['in_progress', 'validating', 'cancelling'].includes(row.status))) poll();

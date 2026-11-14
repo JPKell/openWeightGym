@@ -1,8 +1,8 @@
-{% extends "frame.html" %}
+{% extends "account_base.html" %}
 {% from "parts.html" import said_box, card, page_header %}
-{% block title %}Account logs · openWeightGym{% endblock %}
-{% block main %}
-{{ page_header("Logs", lead="Review your requests and account activity.") }}
+{% set account_title = 'Logs' %}
+{% set account_hint = 'Your own retained requests and account activity. Time stamps use your Workspace preferences.' %}
+{% block account_body %}
 {% call card("Asked for", true, "account-usage") %}
 {% with here = "/account/logs" %}{% include "usage.html" %}{% endwith %}
   {% if "hosted" in me.can %}

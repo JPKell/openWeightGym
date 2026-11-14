@@ -170,7 +170,7 @@ document.addEventListener("click", event => {
   event.preventDefault();
   target.tabIndex = -1;
   target.focus({preventScroll: true});
-  target.scrollIntoView({block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth"});
+  target.scrollIntoView({block: "start", behavior: document.documentElement.dataset.motion === 'reduce' || matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth"});
 });
 
 // Follow the answer that is on its way, if there is one. The server sends all of it so far,

@@ -1,0 +1,7 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, said_box %}
+{% from 'account_parts.html' import workspace %}
+{% block title %}{{ account_title }} · My account · openWeightGym{% endblock %}
+{% block page_class %}account-page{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/account.css?v=1"><script src="/static/account.js?v=1" defer></script>{% block account_scripts %}{% endblock %}{% endblock %}
+{% block main %}{{ page_header(account_title, help='/docs/web-app/api-keys' if account_title in ['Account','API keys'] else none) }}{{ said_box(said, failed) }}{% call workspace(me|default(person.me), account_hint|default('')) %}{% block account_body %}{% endblock %}{% endcall %}<template id="account-draft-template"><span class="badge bg-azure-lt ms-1" data-account-draft>Unsaved</span></template>{% endblock %}

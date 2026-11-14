@@ -45,8 +45,8 @@ NAV_SECTIONS = {
         ('Guides', ('/docs/web-app', '/docs/benchmarks', '/docs/operations', '/docs/data')),
     ),
     'My account': (
-        ('Profile', ('/account',)),
-        ('Preferences', ('/account/appearance', '/account/audio')),
+        ('Profile', ('/account', '/account/keys')),
+        ('Preferences', ('/account/appearance', '/account/audio', '/account/workspace', '/account/privacy')),
         ('Activity', ('/account/logs',)),
     ),
 }
@@ -152,7 +152,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
         if section in docs:
             children = {section['url']: [(topic['title'], topic['url']) for topic in section['topics']]}
     if root == "/account":
-        links = [(label, url) for label, url in [("Account", "/account"), ("Appearance", "/account/appearance"), ("Audio", "/account/audio"), ("Logs", "/account/logs")]
+        links = [(label, url) for label, url in [("Account", "/account"), ('API keys', '/account/keys'), ("Appearance", "/account/appearance"), ("Audio", "/account/audio"), ('Workspace', '/account/workspace'), ('Alerts & privacy', '/account/privacy'), ("Logs", "/account/logs")]
                  if services.path_enabled(url)]
         links, headings = grouped_links(links, 'My account')
         active = next((url for _, url in links[1:] if path.rstrip('/') == url), '/account')

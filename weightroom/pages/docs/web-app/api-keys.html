@@ -1,7 +1,7 @@
 {% from "docs_parts.html" import doc_contents, doc_section %}
 {{ doc_contents([('api', 'Create a key'), ('api-connect', 'Connect a client')]) }}
 {% call doc_section('Create a key', 'api') %}
-<p>Open <a href="/account">My account</a> to create an API key. Copy it when shown; it cannot be displayed again. Give it to your client as its API key, and keep it private. Removing a key ends access for clients using that key.</p>
+<p>Open <a href="/account/keys">My account → API keys</a> to create a key. Copy it when shown; it cannot be displayed again. Give it to your client as its API key, and keep it private. Removing a key ends access for clients using that key.</p>
 {% endcall %}
 {% call doc_section('Connect a client', 'api-connect') %}
 <p>The standard model API address on this front server is <code>{{ api_base }}</code>, for trusted LAN or VPN access. If your administrator configured a different host, port or HTTPS gateway, use that address instead.</p>

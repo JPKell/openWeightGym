@@ -49,6 +49,7 @@ import uvicorn
 from weightroom.forms import refill, error_message
 from weightroom.model_catalogue import catalogue as model_catalogue
 from weightroom.cloud_views import accounts_view, SECTIONS as CLOUD_SECTIONS
+from weightroom.account_views import routes as account_routes, device_name, chat_models
 from weightroom import batch_views
 from weightroom import evaluation_views
 from starlette.applications import Starlette
@@ -139,7 +140,7 @@ LOOK_EVERY = 15  # seconds between looks at compute
 # Answered by turnstile from what is kept on front, so an answer to them says nothing about compute: the accounts, and the log (milestone 91).
 ACCOUNTS = ("/loadcoach/me", "/loadcoach/users", "/loadcoach/groups", "/loadcoach/sign-", "/turnstile/",
             "/loadcoach/observation",
-            "/loadcoach/requests", "/loadcoach/events", "/loadcoach/event-choices", "/loadcoach/usage", "/loadcoach/account-events", "/loadcoach/allowances")
+            "/loadcoach/requests", "/loadcoach/events", "/loadcoach/event-choices", "/loadcoach/usage", "/loadcoach/account-events", "/loadcoach/allowances", "/loadcoach/sessions", "/loadcoach/account-notices")
 THIRD_PARTY_SERVICES = (("ollama", "Ollama"), ("docker", "Docker"), ("apache", "Apache"), ("nginx", "Nginx"))
 THIRD_PARTY_NAMES = {name for name, _ in THIRD_PARTY_SERVICES}
 
@@ -1135,7 +1136,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def sign_in_page(request: Request) -> Response:
         """Render the sign-in form without retaining its response in caches."""
-        return page(request, "sign_in.html", back="back" in request.query_params, next=sign_in_next(request.query_params.get("next", "/")))
+        return page(request, "sign_in.html", back="back" in request.query_params, next=sign_in_next(request.query_params['next']) if 'next' in request.query_params else '')
 
     async def sign_in(request: Request) -> Response:
         """Validate the browser form and request a session from the front account authority."""
@@ -1143,21 +1144,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response("This form was not sent from weightroom's own page.", status_code=403)
         form = await typed(request)
         name, password = form.get("name", "").strip(), form.get("password", "")
-        again = lambda why, **more: page(request, "sign_in.html", name=name, password=password, why=why, next=sign_in_next(form.get("next", "/")), status=401, **more)  # noqa: E731
+        again = lambda why, **more: page(request, "sign_in.html", name=name, password=password, why=why, next=sign_in_next(form['next']) if form.get('next') else '', status=401, **more)  # noqa: E731
         if form.get("new_password", "") != form.get("new_again", ""):
             return again("The two new passwords are not the same.", wants="password")
         asked = {"name": name, "password": password}
         asked |= {field: form[field].strip() for field in ("code", "new_password") if form.get(field)}
         try:
             # Turnstile checks it, from the accounts on this machine. weightroom only says where the person is, for the log.
-            from_where = {"x-loadcoach-from": request.client.host if request.client else "?"}
+            from_where = {"x-loadcoach-from": request.client.host if request.client else "?",
+                          'x-loadcoach-agent': request.headers.get('user-agent', '')[:300]}
             answer = await ask("POST", "/loadcoach/sign-in", settings.key, json=asked, headers=from_where)
         except ServiceUnavailable:
             print('weightroom: sign-in unavailable; administrator: systemctl --user start turnstile', file=sys.stderr)
             return again("Sign-in is unavailable right now. Try again in a minute, or tell your administrator.")
         told = answer.json()
         if answer.status_code == 201:
-            return welcome(told["key"], datetime.fromisoformat(told["ends"]).timestamp() - time.time(), sign_in_next(form.get("next", "/")))
+            destination = sign_in_next(form.get('next', '/'))
+            if form.get('next', '/') in ('', '/'):
+                wanted = told.get('choices', {}).get('start_page', '/status')
+                if wanted in ('/status', '/chat', '/requests') and platform().path_enabled(wanted):
+                    destination = wanted
+            return welcome(told["key"], datetime.fromisoformat(told["ends"]).timestamp() - time.time(), destination)
         why = told.get("error", {})
         if why.get("code") == "password_change":
             return again(why["message"], wants="password")
@@ -1434,13 +1441,22 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Identity, password and API keys on the account's main page."""
         asked = request.query_params
         me = (await ask("GET", "/loadcoach/me", person.key)).json()
+        sessions = await ask('GET', '/loadcoach/sessions', person.key)
+        rows = sessions.json().get('sessions', []) if sessions.is_success else []
+        for session in rows:
+            session['device'] = device_name(session['agent'])
+        is_keys = opened == 'keys' or bool(new_key)
         phone_numbers = None
         if 'front-phone' in person.can:
             phone_reply = await ask('GET', '/loadcoach/phone-numbers', person.key, timeout=15)
             phone_numbers = phone_reply.json() if phone_reply.is_success else {'numbers': [], 'pending': [], 'available': False,
                 'reason': 'Phone numbers are unavailable. Try again later.'}
-        return page(request, "account.html", person, status=400 if failed else 200, me=me,
-                    said=said or asked.get("said", ""), new_key=new_key, failed=failed, phone_numbers=phone_numbers)
+        return page(request, 'account_keys.html' if is_keys else 'account.html', person,
+                    status=400 if failed else 200, me=me, sessions=rows,
+                    sessions_error=not sessions.is_success, said=said or asked.get("said", ""),
+                    new_key=new_key, failed=failed or asked.get('failed') == '1',
+                    phone_numbers=phone_numbers,
+                    nav=navigation('/account/keys' if is_keys else '/account', person.can, bool(spotter), platform()))
 
     async def account_phone_number(request: Request, person: Person) -> Response:
         if 'front-phone' not in person.can:
@@ -1466,10 +1482,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Render account-specific retained activity and usage."""
         asked = request.query_params
         limit, current = controls(asked)
-        found = await fetch(request, person, '/loadcoach/account-events', params={'limit': limit, 'page': current})
+        found = await fetch(request, person, '/loadcoach/account-events', params={'limit': limit, 'page': current,
+                            'q': asked.get('q', ''), 'kind': asked.get('kind', '')})
         if isinstance(found, Response):
             return found
         context = dict(events=found['events'], days=asked.get('days', '28'),
+                       activity_total=found['total'], activity_query=asked.get('q', ''), activity_kind=asked.get('kind', ''),
                        paging=pagination('/account/logs', asked, found['total'], limit, found['page']))
         if asked.get('part') == 'list':
             return page(request, 'account_logs_list.html', person, **context)
@@ -3740,8 +3758,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return answer
         # The page asking for its middle again, once an answer has ended. It is a page of its own in everything but its frame.
         template = "chat_main.html" if request.query_params.get("part") == "main" else "chat.html"
+        draft = dict(typed_in or {})
+        preferred = person.me.get('choices', {}).get('chat_model')
+        if not ref and not request.query_params.get('model') and preferred in chat_models(person):
+            draft.setdefault('model', preferred)
         return page(request, template, person, status=400 if said else 200, conversations=listed["conversations"], talk=talk,
-                    models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier")], *asked_as(person)], said=said, typed_in=typed_in or {},
+                    models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier")], *asked_as(person)], said=said, typed_in=draft,
                     adaptor_names={row["id"] for row in plugins.models(person.me)})  # fmt: skip
 
     async def collections_page(request: Request, person: Person, said='', result=None, form=None, failed=False, diagnostics=None) -> Response:
@@ -5475,6 +5497,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             *extraction_routes(for_people, page, ask),
             *response_routes(for_people, page, response_store),
             *classifier_routes(for_people, page, ask, platform),
+            *account_routes(for_people, page, ask, typed, go, platform, conversations.state.workflows),
             *plugin_routes(plugins, plugin_controller, for_people, page, go, typed),
             *conversations.routes,
             Route("/sign-in", sign_in_page),

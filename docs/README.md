@@ -37,7 +37,7 @@ Replace `CONSOLE` with the console machine's address (the installer prints it at
 
 This project's own deployment addresses are in the [operations log](operations.md#this-deployment).
 
-API clients use a key from **My account → Account**. Browser voice needs HTTPS or localhost;
+API clients use a key from **My account → API keys**. Browser voice needs HTTPS or localhost;
 desktop/LAN API access does not require Tailscale. The signed public telephone route is separate
 from the private console and browser voice. Console HTTP is intended for the trusted LAN or VPN.
 
@@ -182,6 +182,41 @@ Audio playback uses authenticated byte-range requests so seeking works through t
 Use **Settings → Tools** to connect and try tools your account may use. For gateway requirements,
 installation on a console-only machine, a custom Python tool and troubleshooting, see
 [ToolLocker setup and adding tools](../toollocker/README.md), also in **Docs → Modules → ToolLocker**.
+
+### My account
+
+The Settings desk uses the existing left menu: **Account**, **API keys**, **Appearance**,
+**Audio**, **Workspace**, **Alerts & privacy** and **Logs**. Account lists active sign-ins
+with device details where recorded; end another sign-in or all other sign-ins without
+revoking application keys. Old sign-ins retain access and show unknown device details.
+
+Appearance saves text size, reduced motion and machine-meter visibility with your account;
+the 17 color themes remain specific to each browser. Workspace saves the starting page,
+default chat model/role, time zone, date format and clock. Explicit deep links and existing
+conversations take precedence, and unavailable defaults never expand model access.
+Audio retains unavailable saved choices and adds optional autoplay for new owned output;
+playback remains subject to browser permission. Unsaved preference drafts follow menu
+switches within the current tab; passwords and keys are excluded from browser draft storage.
+
+Alerts & privacy delivers up to 50 owner-scoped notices from the last seven days for
+sign-ins/credential changes, batch/workflow/audio completion and recorded spending at
+80% of an applicable 24-hour advisory allowance. The account menu refreshes unread counts
+once a minute while visible. Mark all read without deleting audit records. Log retention
+is displayed from the deployment policy; other stores retain their own policies.
+Export account/audio preferences as JSON, optionally including this browser's saved theme;
+exports contain no credentials or conversation/request content. These settings remain on
+the control node when inference nodes are offline. No deployment/restart method changes are required.
+
+### My account design previews
+
+Run `.venv/bin/python scripts/preview-account-designs.py`, then open
+`build/account-designs/index.html`. The portable page compares **01 Settings desk**
+(implemented in the console), **02 Personal overview** and **03 Preferences notebook** in light/dark
+and mobile layouts. Its design rationale evaluates proposed sessions, accessibility,
+regional formatting, workspace defaults, personal alerts and preference portability.
+Blue **Proposed** labels distinguish additions from current settings. Edits and sample
+credentials stay in page memory and reset on reload; no live services are contacted.
+The preview remains a standalone sample; it never edits real account settings.
 
 ## Where things run
 

@@ -276,12 +276,22 @@ class Log:
             f"SELECT DISTINCT {key} FROM events{where} ORDER BY {key}", values) if row[0]]
             for key in ("kind", "what", "model", "trace", "user")}
 
-    def personal_events(self, owner: str, limit: int, offset: int = 0) -> dict:
+    def personal_events(self, owner: str, limit: int, offset: int = 0, query: str = '', kind: str = '') -> dict:
         """Page one account's newest events without returning captured text."""
-        total = self.db.execute('SELECT COUNT(*) FROM events WHERE user = ?', (owner,)).fetchone()[0]
+        where, values = 'user = ?', [owner]
+        if kind:
+            where += ' AND kind = ?'
+            values.append(kind)
+        if query:
+            needle = '%' + query.lower().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+            status = self.json_value('detail', 'status')
+            columns = ['kind', 'what', 'model', f'CAST({status} AS TEXT)']
+            where += ' AND (' + ' OR '.join(f"LOWER(COALESCE({column},'')) LIKE ? ESCAPE '\\'" for column in columns) + ')'
+            values.extend([needle] * len(columns))
+        total = self.db.execute('SELECT COUNT(*) FROM events WHERE ' + where, values).fetchone()[0]
         offset = min(max(offset, 0), max(0, (total - 1) // limit) * limit)
-        rows = self.db.execute(f'SELECT {COLUMNS}, source, machine FROM events WHERE user = ? ORDER BY id DESC LIMIT ? OFFSET ?',
-                               (owner, limit, offset))
+        rows = self.db.execute(f'SELECT {COLUMNS}, source, machine FROM events WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?',
+                               (*values, limit, offset))
         return {'total': total, 'page': offset // limit + 1, 'events': [self.entry(row) for row in rows]}
 
     def request_counts(self, owner: str | None, now: float) -> list[int]:

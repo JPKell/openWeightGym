@@ -155,9 +155,12 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
                 body["uri"] = f"otpauth://totp/LoadCoach:{name}?secret={refused.secret}&issuer=LoadCoach"
             return JSONResponse({"error": body}, status_code=refused.status)
         user = users.by_key(key)
+        users.note_session(key, request.headers.get('x-loadcoach-agent', '') if trusted else request.headers.get('user-agent', ''),
+                           seen.get('at_front_from', address(request)))
         log.add("user", "signed-in", name, address(request), hours=user.group.session_hours, **seen, **({"via": app} if app else {}))
         ends = datetime.fromtimestamp(user.until).isoformat(timespec="seconds")
-        return JSONResponse({"key": key, "name": name, "group": user.group_name, "can": sorted(user.group.can), "ends": ends}, status_code=201)
+        return JSONResponse({"key": key, "name": name, "group": user.group_name, "can": sorted(user.group.can), "ends": ends,
+                             'choices': users.choices(name)}, status_code=201)
 
     async def sign_out(request: Request, user: User) -> Response:
         """End the sign-in this request came with. An API key is not a sign-in and is left alone."""
@@ -205,11 +208,32 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         chosen = await read_json(request, set(users.choices(user.name)))
         if isinstance(chosen, Response):
             return chosen
+        # Model references may be offline or plugin-owned. The browser form validates its
+        # current catalogue; every consumer still checks availability and authorization.
         try:
             users.choose(user.name, chosen)
         except ValueError as problem:
             return error(400, str(problem))
         return JSONResponse(users.choices(user.name))
+
+    async def sessions(request: Request, user: User) -> Response:
+        """Owner-scoped session inspection and revocation; no credential verifiers leave control node."""
+        key = key_of(request)
+        if request.method == 'GET':
+            return JSONResponse({'sessions': users.sessions(user.name, key)}, headers={'cache-control': 'private, no-store'})
+        if request.method == 'POST':
+            users.end_sessions(user.name, but=key)
+            log.add('user', 'sessions-ended', user.name, address(request))
+            return JSONResponse({'ended': True})
+        if not users.revoke_session(user.name, request.path_params['identifier'], key):
+            return error(404, 'No other active sign-in with that identifier.')
+        log.add('user', 'session-ended', user.name, address(request))
+        return JSONResponse({'ended': True})
+
+    async def personal_notices(request: Request, user: User) -> Response:
+        """Deliver only the current account's opted-in notices."""
+        from .personal import notices
+        return JSONResponse(notices(users, log, user), headers={'cache-control': 'private, no-store'})
 
     # ---- users ------------------------------------------------------------------------------
 
@@ -512,6 +536,10 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         route("/loadcoach/sign-out", sign_out, "POST"),
         route("/loadcoach/me", me),
         route("/loadcoach/me", choose, "POST"),
+        route('/loadcoach/sessions', sessions),
+        route('/loadcoach/sessions/end-others', sessions, 'POST'),
+        route('/loadcoach/sessions/{identifier}', sessions, 'DELETE'),
+        route('/loadcoach/account-notices', personal_notices),
         route("/loadcoach/users", user_list),
         route("/loadcoach/users", user_add, "POST"),
         route("/loadcoach/users/{name}", user_one),

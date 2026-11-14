@@ -1,0 +1,21 @@
+/* Settings desk uses frame.html's existing section navigation. */
+.account-desk { display: grid; grid-template-columns: minmax(0, 1fr) 13rem; gap: 1.5rem; align-items: start; max-width: 86rem; }
+.account-editor, .account-guidance { min-width: 0; }
+.account-context-facts { margin: 0; font-size: .85rem; }
+.account-context-facts dt { margin: 1rem 0 .25rem; color: var(--bs-secondary-color); font-weight: 400; }
+.account-context-facts dt:first-child { margin-top: 0; }
+.account-context-facts dd { margin: 0; overflow-wrap: anywhere; }
+.account-guidance > p { line-height: 1.7; padding: 0 .25rem; }
+.account-identity-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+.account-identity-facts dt { font-size: .8rem; color: var(--bs-secondary-color); font-weight: 400; margin-bottom: .3rem; }
+.account-identity-facts dd { margin: 0; overflow-wrap: anywhere; }
+.account-session, .account-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem 0; border-bottom: 1px solid var(--bs-border-color); }
+.account-session:first-child, .account-notice:first-child { padding-top: 0; }
+.account-session:last-child, .account-notice:last-child { border: 0; padding-bottom: 0; }
+.preference-line { padding: .8rem 0; border-bottom: 1px solid var(--bs-border-color); }
+.preference-line .form-hint { margin: .3rem 0 0; padding-left: 2.5rem; }
+.account-time-preview { border: 1px solid var(--bs-border-color); background: var(--theme-subtle); padding: 1rem; border-radius: var(--bs-border-radius); }
+.account-page .theme-options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); }
+.account-page .secret { overflow-wrap: anywhere; white-space: pre-wrap; }
+@media(max-width:1100px) { .account-desk { grid-template-columns: minmax(0,1fr); } .account-guidance { display: none; } }
+@media(max-width:575px) { .account-identity-facts { grid-template-columns: minmax(0,1fr); } }

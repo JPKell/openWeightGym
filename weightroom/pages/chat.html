@@ -1,6 +1,6 @@
 {% extends "frame.html" %}
 {% block title %}{{ talk.title if talk else "Chat" }} · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/chat.js?v=13" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/chat.js?v=14" defer></script>{% endblock %}
 {% block main %}
 <button type="button" class="btn btn-outline-secondary btn-sm d-none d-md-inline-flex d-xl-none mb-3" data-open-chat-navigation aria-controls="mobile-navigation" aria-haspopup="dialog" aria-expanded="false">Chat options</button>
 <div class="chat-workspace{{ ' compare' if talk and talk.compare }}">

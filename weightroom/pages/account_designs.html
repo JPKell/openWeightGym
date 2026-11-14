@@ -1,0 +1,80 @@
+{% from 'parts.html' import page_header, card, section_title, alert, danger_confirmation %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'user_parts.html' import account_avatar %}
+{% import 'account_design_parts.html' as account %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>My account · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<a href="#workspace" class="visually-hidden-focusable">Skip to account settings</a>
+<div class="review-bar"><strong>openWeightGym <span class="text-secondary fw-normal">/ Design review</span></strong><div class="d-flex gap-2"><button type="button" id="theme" class="btn btn-outline-secondary btn-sm">Dark mode</button><button type="button" id="reset" class="btn btn-outline-secondary btn-sm">Reset sample</button></div></div>
+<div class="review-options">
+  {% call pills('Design proposals', buttons=true, class_='gap-2 mb-0') %}
+  {{ pill_button('01 / Settings desk', true, attrs={'data-design': 'desk'}) }}{{ pill_button('02 / Personal overview', attrs={'data-design': 'overview'}) }}{{ pill_button('03 / Preferences notebook', attrs={'data-design': 'notebook'}) }}
+  {% endcall %}
+  <span class="small text-secondary">Sample data · changes last only in this tab</span>
+</div>
+<div class="design-brief"><span class="badge bg-green-lt" id="recommended">Recommended</span><span id="design-description">A stable settings rail, a focused editor and useful context. Best fit for the existing console.</span></div>
+<div id="workspace" class="account-review" data-layout="desk" data-section="account" data-view="editor">
+  <div class="app-bar"><strong>openWeightGym</strong><span class="text-secondary small app-location">My account</span><span class="ms-auto small d-flex align-items-center gap-2">{{ account_avatar({'initials':'AM', 'kind':'person'}) }}alex.morgan</span></div>
+  <div class="account-shell">
+    <aside class="account-rail" aria-label="Account navigation">
+      <div class="rail-identity">{{ account_avatar({'initials':'AM', 'kind':'person'}) }}<div><strong class="d-block">Alex Morgan</strong><small class="text-secondary">alex.morgan · researchers</small></div></div>
+      <span class="small text-secondary d-block px-3 mb-2">MY ACCOUNT</span>
+      <nav aria-label="Settings sections">
+        <button type="button" class="account-nav overview-nav" data-section="home"><span>Overview</span><span aria-hidden="true">↗</span></button>
+        {% for key, title, description, number in sections %}<button type="button" class="account-nav" data-section="{{ key }}" aria-pressed="{{ 'true' if key == 'account' else 'false' }}" aria-controls="panel-{{ key }}"><span class="account-nav-number" aria-hidden="true">{{ number }}</span><span>{{ title }}</span><span class="draft-dot" data-draft-for="{{ key }}" aria-label="Unsaved changes" hidden></span></button>{% endfor %}
+      </nav>
+      <div class="rail-footer small text-secondary">Personal settings only.<br>Access is managed by your administrator.</div>
+    </aside>
+    <main class="account-main" id="account-main" tabindex="-1">
+      <div class="account-heading">{{ page_header('My account') }}<p class="text-secondary mb-0" id="page-subtitle">Your identity, preferences and activity in one place.</p></div>
+      {% call alert('success', attrs={'id': 'feedback', 'hidden': '', 'aria-live': 'polite'}) %}{% endcall %}
+      <section class="overview-home" id="overview-home" hidden aria-label="Personal overview">
+        <div class="welcome-panel"><div><span class="small text-secondary">YOUR WORKSPACE</span>{{ section_title('Make yourself at home') }}<p class="text-secondary mb-0">A few useful defaults. Your own way to work.</p></div><span class="badge bg-green-lt">Authenticator enabled</span></div>
+        <div class="overview-grid">
+          {% for key, title, description, number in sections %}
+          {% set action %}<span class="text-secondary" aria-hidden="true">{{ number }}</span>{% endset %}
+          {% call card(title, actions=action, class_='overview-tile') %}<p class="text-secondary small">{{ description }}</p><strong class="d-block mb-3" data-overview="{{ key }}">{{ {'account':'2 active sign-ins', 'keys':'2 application keys', 'appearance':'Slate · light', 'audio':'WAV · page defaults', 'workspace':'Start on Status', 'privacy':'Personal controls', 'logs':'284 requests in 28 days'}[key] }}</strong><button type="button" class="btn btn-outline-secondary btn-sm" data-section="{{ key }}">{{ 'View activity' if key == 'logs' else 'Manage ' ~ title|lower }} <span aria-hidden="true">→</span></button>{% endcall %}
+          {% endfor %}
+        </div>
+      </section>
+      <div class="editor-topline"><button type="button" class="btn btn-link btn-sm p-0 overview-back" data-section="home">← Overview</button><span class="small text-secondary">MY ACCOUNT <span aria-hidden="true">/</span> <span id="breadcrumb">Account</span></span></div>
+      <div class="editor-grid"><div class="account-panels">
+        {% for key, title, description, number in sections %}
+        {% call card(title, open=(key == 'account'), id='panel-' ~ key, class_='account-panel', hint=description, attrs={'data-panel':key}) %}
+        {% if key == 'account' %}{{ account.account_content() }}{% elif key == 'keys' %}{{ account.keys_content() }}{% elif key == 'appearance' %}{{ account.appearance_content() }}{% elif key == 'audio' %}{{ account.audio_content() }}{% elif key == 'workspace' %}{{ account.workspace_content() }}{% elif key == 'privacy' %}{{ account.privacy_content() }}{% else %}{{ account.logs_content() }}{% endif %}
+        {% endcall %}
+        {% endfor %}
+      </div>
+      <aside class="account-context" aria-label="Setting guidance">
+        {% call card('At a glance') %}<dl class="context-facts"><dt>Account</dt><dd>alex.morgan</dd><dt>Group</dt><dd>researchers</dd><dt>Authenticator</dt><dd>Enabled</dd><dt>Application keys</dt><dd data-key-count>2</dd></dl>{% endcall %}
+        <div class="context-note">{{ section_title('A useful boundary') }}<p class="small text-secondary" id="context-copy">Your password and keys belong here. Group membership and permissions stay with your administrator.</p><span class="small text-secondary">Blue <strong>Proposed</strong> labels identify additions to the current app.</span></div>
+      </aside></div>
+      <noscript>{{ alert('warning', 'Enable JavaScript to switch proposals and try sample interactions. The first design remains readable.') }}</noscript>
+      <footer class="account-footer"><span>My account · Design proposal</span><span>Illustrative account · no live service connections</span></footer>
+    </main>
+  </div>
+</div>
+<details class="review-notes"><summary>Design rationale & suggested personal settings</summary><div class="review-notes-body">
+{{ section_title('Three ways to organize the same settings') }}
+<p><strong>01 · Settings desk — recommended.</strong> Stable category navigation and a focused editor fit the console’s established pattern. Context stays visible on wide screens; navigation becomes a wrapping button group on mobile.</p>
+<p><strong>02 · Personal overview.</strong> A calm account home makes security, preferences and activity easy to discover. Best for occasional users; reaching a form takes one additional step.</p>
+<p><strong>03 · Preferences notebook.</strong> All sections stay on one page as native disclosures with an index. Best for reviewing several preferences together; the page grows as sections open.</p>
+{{ section_title('What to add, and why') }}
+<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Priority</th><th>Suggested addition</th><th>Reason & implementation boundary</th></tr></thead><tbody>
+<tr><td>High</td><td>Session list & sign-out</td><td>Make the existing session count actionable. Requires device metadata and owner-scoped revocation.</td></tr>
+<tr><td>High</td><td>Text size & reduced motion</td><td>Improve reading comfort and respect device accessibility preferences.</td></tr>
+<tr><td>High</td><td>Time zone, date & clock</td><td>Remove ambiguity when reviewing requests and account activity.</td></tr>
+<tr><td>Medium</td><td>Starting page & chat default</td><td>Shorten repeated setup. Limit choices to permitted routes, models and roles.</td></tr>
+<tr><td>Medium</td><td>Audio autoplay</td><td>Give playback an explicit personal default, subject to browser restrictions.</td></tr>
+<tr><td>Medium</td><td>Personal alerts</td><td>Propose in-app security, spending and completion notices. Delivery needs implementation.</td></tr>
+<tr><td>Later</td><td>Preference portability</td><td>Export preferences separately from credentials and personal content.</td></tr>
+</tbody></table></div>
+<p class="small text-secondary">Keep existing password, API key, theme, telemetry, audio and usage behavior. Themes remain account-scoped within each browser; preserve all 17 palettes. Authenticator enrollment/recovery, email, passkeys, account deletion and retention changes need product and backend decisions before adding actionable controls. Model/service availability must filter audio and workspace options.</p>
+<p class="small mb-0">Accessibility references: <a href="https://www.w3.org/WAI/tutorials/forms/labels/">W3C form labels</a> and <a href="https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html">supporting motion preferences</a>. Existing behavior was checked against the Account, Appearance, Audio and Logs templates and their handlers.</p>
+</div></details>
+{{ danger_confirmation() }}
+<template id="key-template">{{ account.key_row() }}</template>
+<script>{{ javascript|safe }}</script>
+</body></html>

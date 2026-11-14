@@ -1,7 +1,7 @@
 {% from "icons.html" import icon %}
 {% from "parts.html" import danger_confirmation, empty_row, alert %}
 <!doctype html>
-<html lang="en" data-theme-user="{{ person.me.get('identity', person.name) if person else '' }}">
+<html lang="en" data-theme-user="{{ person.me.get('identity', person.name) if person else '' }}"{% if person %} data-personal-preferences="{{ person.me.get('choices', {})|tojson|forceescape }}" data-text-size="{{ person.me.get('choices', {}).get('text_size', 'standard') }}" data-motion="{{ person.me.get('choices', {}).get('motion', 'system') }}"{% endif %}>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
@@ -11,7 +11,7 @@
 <title>{% block title %}openWeightGym{% endblock %}</title>
 {# Light or dark, as the device is set. Done before anything is drawn, so the page never flashes the wrong one. #}
 <script>document.documentElement.dataset.bsTheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";</script>
-<script src="/static/themes.js?v=6"></script>
+<script src="/static/themes.js?v=7"></script>
 <script>
 // Remember the desktop rail without briefly drawing it at the wrong width. Phones start closed.
 try { document.documentElement.dataset.sidebar = matchMedia("(max-width: 767.98px)").matches ? "closed" : (localStorage.getItem("weightroom-sidebar") || localStorage.getItem("frontdesk-sidebar") || "open"); }
@@ -20,6 +20,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 <link rel="stylesheet" href="/static/tabler.min.css">
 <link rel="stylesheet" href="/static/style.css?v=54">
 <link rel="stylesheet" href="/static/themes.css?v=7">
+<link rel="stylesheet" href="/static/preferences.css?v=1">
 {# htmx keeps no copy of a page for the Back button: going back loads the page again, so nothing that was shown is kept in the browser. #}
 <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
 <script src="/static/htmx.min.js" defer></script>
@@ -28,7 +29,8 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 <script src="/static/telemetry.js?v=4" defer></script>
 <script src="/static/sort.js?v=6" defer></script>
 <script src="/static/navigation.js?v=5" defer></script>
-<script src="/static/console.js?v=11" defer></script>
+<script src="/static/console.js?v=12" defer></script>
+{% if person %}<script src="/static/personal-notices.js?v=1" defer></script>{% endif %}
 <script src="/static/user-picker.js?v=1" defer></script>
 {% if person and nav.active == '/chat' %}<script src="/static/chat_sidebar.js?v=3" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
@@ -49,6 +51,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
     <summary class="btn {{ 'btn-primary' if nav.section == 'My account' else 'btn-outline-secondary' }} btn-sm"{% if nav.section == 'My account' %} aria-current="page"{% endif %}>{{ icon("user") }}{{ person.name }}</summary>
     <div class="dropdown-menu show">
       <a class="dropdown-item" href="/account">My account</a>
+      <a class="dropdown-item" href="/account/privacy" data-personal-notices>Notices <span class="badge bg-azure-lt ms-2" data-notice-count hidden></span></a>
       <form method="post" action="/sign-out" class="m-0"><button class="dropdown-item">Sign out</button></form>
     </div>
   </details>

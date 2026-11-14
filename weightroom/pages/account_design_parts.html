@@ -1,0 +1,108 @@
+{# Shared preview-only controls; all designs use the same forms and sample rows. #}
+{% from 'parts.html' import card, section_title, alert, empty_row %}
+{% from 'navigation_parts.html' import pill_button %}
+
+{% from 'account_parts.html' import proposed, select_field, toggle, save_actions, api_key_row %}
+
+{% macro account_content() %}
+<div class="account-identity mb-4">
+  <dl class="identity-facts mb-0"><div><dt>Account name</dt><dd>alex.morgan</dd></div><div><dt>Group</dt><dd>researchers <span class="text-secondary small">· managed by admin</span></dd></div><div><dt>This sign-in ends</dt><dd>15 Nov 2026, 09:00</dd></div><div><dt>Signed in now</dt><dd><span data-session-count>2</span> places</dd></div></dl>
+</div>
+{{ section_title('Password') }}
+<form id="password-form" data-password-form>
+  <label for="current_password" class="form-label">Current password</label><input id="current_password" name="current_password" type="password" class="form-control mb-3" autocomplete="current-password" required>
+  <div class="row g-3"><div class="col-sm-6"><label for="new_password" class="form-label">New password</label><input id="new_password" name="new_password" type="password" class="form-control" autocomplete="new-password" minlength="8" required></div><div class="col-sm-6"><label for="new_again" class="form-label">Confirm new password</label><input id="new_again" name="new_again" type="password" class="form-control" autocomplete="new-password" minlength="8" required></div></div>
+  <p class="form-hint mt-2">At least 8 characters. Changing your password ends your other sign-ins.</p>
+  <button class="btn btn-primary" type="submit">Change password</button><span class="small text-danger ms-2" id="password-error" role="alert"></span>
+</form>
+<div class="border-top mt-4 pt-4">
+  {{ section_title('Sign-in security') }}
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><div><strong class="d-block">Authenticator code</strong><span class="text-secondary small">Set up · code required when signing in</span></div><span class="badge bg-green-lt">Enabled</span></div>
+  <p class="form-hint mt-2 mb-0">Use your authenticator app when signing in. Contact your administrator if you lose access.</p>
+</div>
+<div class="border-top mt-4 pt-4">
+  {{ section_title('Your sign-ins', scope='Proposed') }}
+  <p class="text-secondary small">Review where you’re signed in and end a sign-in you no longer use.</p>
+  <div class="session-line"><span><strong class="d-block">Chrome · Linux</strong><small class="text-secondary">This browser · active now</small></span><span class="badge bg-green-lt">Current</span></div>
+  <div class="session-line" id="other-session"><span><strong class="d-block">Firefox · Laptop</strong><small class="text-secondary">Last active 13 Nov, 18:42</small></span><button class="btn btn-outline-danger btn-sm" type="button" data-revoke-session>Sign out…</button></div>
+  <p class="form-hint mb-0" id="session-empty" hidden>No other sign-ins.</p>
+</div>
+{% endmacro %}
+
+{% macro keys_content() %}
+<p class="text-secondary">For programs using models in your name. Each key has your account’s access and is shown only when created.</p>
+{% call alert('info', attrs={'id': 'secret-panel', 'hidden': ''}) %}<strong>Copy this sample key now</strong><p class="small mb-2">It is dismissed when you leave this section.</p><code id="sample-secret" class="d-block mb-2"></code><button type="button" class="btn btn-outline-secondary btn-sm" id="dismiss-secret">I’ve saved it</button>{% endcall %}
+<div class="table-responsive"><table class="table table-sm align-middle" id="keys"><thead><tr><th>Label</th><th>Made</th><th>Id</th><th><span class="visually-hidden">Actions</span></th></tr></thead><tbody id="key-rows">
+{{ key_row('Research notebook', '02 Nov 2026', 'demo-19b0c4') }}{{ key_row('Local CLI', '21 Oct 2026', 'demo-72a83e') }}
+{% call empty_row(4, attrs={'id':'keys-empty', 'hidden':''}) %}No keys. Create one to connect an application.{% endcall %}
+</tbody></table></div>
+<form id="key-form" class="row g-2 align-items-end mt-2"><div class="col-sm-8"><label for="label" class="form-label">Label for a new key</label><input id="label" name="label" class="form-control" maxlength="60" placeholder="e.g. Research notebook" required></div><div class="col-sm-4"><button class="btn btn-primary" type="submit">Make a key</button></div></form>
+<p class="form-hint mt-3 mb-0">Remove unused keys individually. Rotation means making a replacement before removing the old key.</p>
+{% endmacro %}
+
+{% macro key_row(label='', made='', id='') %}{{ api_key_row(label, made, id, preview=true) }}{% endmacro %}
+
+{% macro appearance_content() %}
+<form id="appearance-form" data-preferences data-theme-form>
+  <label for="appearance-mode" class="form-label">Appearance</label><select id="appearance-mode" name="mode" class="form-select"><option value="system">Follow my device</option><option value="light">Always light</option><option value="dark">Always dark</option></select>
+  <p class="form-hint mb-4">In the live app, theme choices belong to this account in this browser.</p>
+  <fieldset class="mb-4"><legend class="form-label">Color theme</legend><div class="theme-options" data-theme-options></div><p class="form-hint mt-2 mb-0">All 17 existing palettes, using the shared theme picker.</p></fieldset>
+  {{ section_title('Display & accessibility') }}
+  {{ toggle('show_telemetry', 'Machine meters in the top navigation', 'An existing account display preference.', true) }}
+  {{ select_field('text-size', 'Text size', [('standard','Standard'),('large','Large')], 'Preview the editor at a comfortable reading size.', new=true) }}
+  {{ select_field('motion', 'Motion', [('system','Follow my device'),('reduce','Reduce motion')], 'Respect your operating system preference by default.', new=true) }}
+  {{ save_actions('Save appearance') }}
+</form>
+{% endmacro %}
+
+{% macro audio_content() %}
+<p class="text-secondary">Your starting choices for Music, Sounds, Voice generation and Transcribe.</p>
+<form id="audio-form" data-preferences>
+  {{ select_field('ap-format', 'Download format', [('wav','WAV · uncompressed'),('flac','FLAC · lossless'),('mp3','MP3 · widely compatible'),('opus','Opus · smaller files')]) }}
+  <div class="row g-3"><div class="col-sm-6">{{ select_field('ap-speech', 'Speech model', [('', 'Page default'),('kokoro','Kokoro 82M'),('qwen-tts','Qwen3 TTS')], 'Sample permitted models; production uses your available models.') }}</div><div class="col-sm-6">{{ select_field('ap-transcription', 'Transcription model', [('', 'Page default'),('whisper','Whisper large v3'),('parakeet','Parakeet TDT')]) }}</div></div>
+  {{ select_field('ap-voice', 'Voice', [('', 'Page default'),('af-heart','Heart'),('saved-alex','Alex · saved voice')], 'Keep unavailable saved choices visible with an explanation.') }}
+  {{ toggle('autoplay', 'Play generated audio automatically', 'Off by default; playback still follows browser restrictions.', new=true) }}
+  {{ save_actions('Save audio preferences') }}
+</form>
+{% endmacro %}
+
+{% macro workspace_content() %}
+<p class="text-secondary">Proposed defaults for how you enter and read your workspace.</p>
+<form id="workspace-form" data-preferences>
+  {{ select_field('start-page', 'Open after sign-in', [('status','Status · current default'),('chat','Text chat'),('requests','My model requests')], 'Only show destinations your account can open.', new=true) }}
+  {{ select_field('chat-default', 'Default chat model or role', [('', 'Page default'),('chat:available','chat:available'),('chat:best','chat:best'),('qwen3','qwen3-32b · sample model')], 'Choose only from permitted models and roles; this does not change routing policy.', new=true) }}
+  <div class="row g-3"><div class="col-sm-6">{{ select_field('timezone', 'Time zone', [('device','Follow my device'),('America/Vancouver','America/Vancouver'),('UTC','UTC'),('Europe/London','Europe/London')], 'Show the zone beside activity timestamps.', new=true) }}</div><div class="col-sm-6">{{ select_field('date-format', 'Date format', [('readable','14 Nov 2026'),('iso','2026-11-14'),('local','Device format')], new=true) }}</div></div>
+  {{ select_field('clock', 'Clock', [('24','24 hour · 16:30'),('12','12 hour · 4:30 PM')], new=true) }}
+  <div class="preview-inline"><span class="text-secondary small">Timestamp preview</span><strong class="d-block" id="timestamp-preview">14 Nov 2026, 16:30 · device time</strong></div>
+  {{ save_actions('Save workspace defaults') }}
+</form>
+{% endmacro %}
+
+{% macro privacy_content() %}
+<form id="privacy-form" data-preferences>
+  {{ section_title('Personal alerts', scope='Proposed') }}
+  <p class="text-secondary small">Choose which updates appear in your account.</p>
+  {{ toggle('security-alert', 'Sign-in and credential changes', 'Recommended on for security-related activity.', true, true) }}
+  {{ toggle('spend-alert', 'Approaching my spending allowance', 'Proposed warning at 80%; limits remain administrator-controlled.', true, true) }}
+  {{ toggle('job-alert', 'My long-running work is complete', 'Batches, workflows and media jobs.', false, true) }}
+  {{ save_actions('Save alert preferences') }}
+</form>
+<div class="border-top pt-4 mt-4">
+  {{ section_title('Data & access') }}
+  <dl class="identity-facts"><div><dt>Access group</dt><dd>researchers</dd></div><div><dt>History retention</dt><dd>Set by this deployment</dd></div></dl>
+  <p class="form-hint">Personal preferences cannot grant permissions, change service logging or delete retained records.</p>
+  <button class="btn btn-outline-secondary" type="button" id="export-preferences">Export sample preferences</button>
+  <p class="form-hint mt-2 mb-0">Proposed preference portability. Excludes credentials, requests and conversation content.</p>
+</div>
+{% endmacro %}
+
+{% macro logs_content() %}
+<p class="text-secondary">Your usage and retained account activity. Counts below describe sample data.</p>
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% call kpi_row('My sample usage', class_='mb-4') %}{{ kpi('Requests · 28 days', '284') }}{{ kpi('Tokens · 28 days', '1.8M') }}{{ kpi('Hosted · 24 hours', '$0.42') }}{% endcall %}
+<div class="row g-2 mb-3"><div class="col-sm-7"><label for="activity-search" class="form-label">Search activity</label><input type="search" id="activity-search" class="form-control" placeholder="Model, event or status"></div><div class="col-sm-5"><label for="activity-kind" class="form-label">Event type</label><select id="activity-kind" class="form-select"><option value="all">All activity</option><option value="request">Model requests</option><option value="security">Account security</option></select></div></div>
+<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>When · sample UTC</th><th>What</th><th>Model</th><th>Status</th></tr></thead><tbody id="activity-rows">
+{% for time, what, model, status, kind in [('14 Nov, 16:30','Chat request','qwen3-32b','200','request'),('14 Nov, 16:12','Transcription','whisper-large-v3','200','request'),('14 Nov, 15:48','API key created','—','Recorded','security'),('13 Nov, 18:42','Signed in','—','Recorded','security'),('13 Nov, 17:06','Chat request','qwen3-32b','503','request')] %}<tr data-event-kind="{{ kind }}"><td class="text-nowrap">{{ time }}</td><td>{{ what }}</td><td>{{ model }}</td><td>{{ status }}</td></tr>{% endfor %}
+{% call empty_row(4, attrs={'id': 'activity-empty', 'hidden': ''}) %}No activity matches these filters.{% endcall %}
+</tbody></table></div><span class="small text-secondary" id="activity-count">5 sample records</span>
+{% endmacro %}

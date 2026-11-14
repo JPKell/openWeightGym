@@ -32,7 +32,7 @@ PAGES = (
     '/telemetry', '/alerts', '/schedules', '/compute-nodes', '/users', '/groups',
     '/tools', '/plugins', '/backups', '/databases', '/settings', '/docs',
     *(url for section in SECTIONS for url in (section['url'], *(topic['url'] for topic in section['topics'])) if url != '/docs'),
-    '/account', '/account/appearance', '/account/audio', '/account/logs', '/sign-in',
+    '/account', '/account/keys', '/account/appearance', '/account/audio', '/account/workspace', '/account/privacy', '/account/logs', '/sign-in',
     '/docs/modules/weightroom?module=weightroom%2Fapp.py', '/groups/admin',
     '/models/sample', '/plugins/hermes', f'/telemetry/{HOST}', '/users/pat',
     '/users/jordan', '/plugins/hermes/instances/jeeves',
