@@ -54,6 +54,8 @@ def test_desktop_and_mobile_render_the_same_menus(desk):
                 assert sidebar.locator('.section-label').last.evaluate('el=>el.nextElementSibling.getAttribute("href")') == '/hub'
             page.set_viewport_size({'width':390, 'height':844})
             page.locator('#mobile-menu-toggle').click()
+            if path == '/chat':
+                page.get_by_role('button', name='Show main menu', exact=True).click()
             mobile = page.locator('#mobile-navigation .mobile-category').filter(has=page.locator('summary').filter(has_text=section))
             assert mobile.locator(':scope > a').all_text_contents() == links, section
             assert mobile.locator(':scope > .section-label').all_text_contents() == headings, section

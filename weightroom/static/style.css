@@ -199,8 +199,15 @@ html { scroll-padding-top: var(--top, 6rem); }
 .flags td:nth-child(2) { max-width: 13rem; overflow-wrap: anywhere; }
 .flags td:nth-child(3) { min-width: 16rem; }
 
-/* Conversations fill the section rail below its navigation; only a full list scrolls. */
-[data-desktop-conversations] { display: flex; flex: 1; min-height: 0; }
+/* Equal side tracks keep the chat centered independently of its conversation rail. */
+.chat-workspace { --chat-width: 50rem; display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(0, var(--chat-width)) minmax(10rem, 1fr); gap: 1rem; align-items: start; }
+.chat-workspace.compare { --chat-width: 95rem; }
+.chat-conversation-rail { position: sticky; top: calc(var(--top, 6rem) + 1rem); height: calc(100dvh - var(--top, 6rem) - 2rem); display: flex; min-width: 0; padding-right: .75rem; border-right: 1px solid var(--bs-border-color); }
+@media (max-width: 1199.98px) {
+  .chat-workspace { display: block; }
+  .chat-conversation-rail { display: none; }
+}
+/* Only a full conversation list scrolls; its actions remain in view. */
 .chat-sidebar { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; margin: .4rem 0 .7rem; }
 .chat-sidebar > :not(.chat-conversations-scroll) { flex-shrink: 0; }
 .chat-conversations-scroll { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; }
@@ -527,7 +534,9 @@ form[aria-busy="true"] button:disabled { cursor: progress; opacity: .7; }
 .mobile-navigation::backdrop { background: #0008; }
 .mobile-category { border-bottom: 1px solid var(--bs-border-color); }
 .mobile-category > summary { cursor: pointer; }
-.mobile-navigation .chat-sidebar { min-height: 10rem; max-height: 50dvh; }
+.mobile-navigation[open]:has([data-mobile-conversations]) { display: flex; flex-direction: column; }
+.mobile-navigation > :not([data-mobile-conversations]) { flex-shrink: 0; }
+[data-mobile-conversations]:not([hidden]) { display: flex; flex: 1; min-height: 0; }
 @media (max-width: 767.98px) {
   #sidebar-toggle, .site-sidebar { display: none !important; }
   .suite-top { flex-wrap: nowrap; }
