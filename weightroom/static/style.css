@@ -202,7 +202,7 @@ html { scroll-padding-top: var(--top, 6rem); }
 /* Equal side tracks keep the chat centered independently of its conversation rail. */
 .chat-workspace { --chat-width: 50rem; display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(0, var(--chat-width)) minmax(10rem, 1fr); gap: 1rem; align-items: start; }
 .chat-workspace.compare { --chat-width: 95rem; }
-.chat-conversation-rail { position: sticky; top: calc(var(--top, 6rem) + 1rem); height: calc(100dvh - var(--top, 6rem) - 2rem); display: flex; min-width: 0; padding-right: .75rem; border-right: 1px solid var(--bs-border-color); }
+.chat-conversation-rail { position: sticky; top: calc(var(--top, 6rem) + 1rem); height: calc(100dvh - var(--top, 6rem) - 2rem); display: flex; width: 50%; justify-self: end; min-width: 0; padding-right: .75rem; border-right: 1px solid var(--bs-border-color); }
 @media (max-width: 1199.98px) {
   .chat-workspace { display: block; }
   .chat-conversation-rail { display: none; }

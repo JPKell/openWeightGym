@@ -61,6 +61,8 @@ def test_briefing_filters_and_evidence_are_readable_on_desktop_and_mobile(record
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/benchmarks/run/' + current)
         playwright.expect(page.get_by_role('heading', name='briefing-model', exact=True)).to_be_visible()
+        playwright.expect(page.locator('#benchmark-top .eyebrow')).to_have_count(0)
+        playwright.expect(page.locator('#benchmark-top .page-actions')).to_have_count(0)
         playwright.expect(page.locator('#visible-count')).to_have_text('6 of 6 samples')
         page.locator('[data-inspect="fail"]').click()
         playwright.expect(page.locator('#visible-count')).to_have_text('2 of 6 samples')
@@ -101,13 +103,8 @@ def test_briefing_filters_and_evidence_are_readable_on_desktop_and_mobile(record
         browser.close()
 
 
-def test_real_baseline_comparison_and_exports_keep_scoring_and_precision(recorded_runs, tmp_path):
+def test_real_baseline_comparison_and_csv_export_keep_precision(recorded_runs, tmp_path):
     server, current, baseline, _, _ = recorded_runs
-    saved = server.app.state.benchmarks.state.store.get(current, detail=True)
-    exported = server.get(f'/benchmarks/run/{current}?export=json')
-    assert exported.status_code == 200 and 'attachment' in exported.headers['content-disposition']
-    assert exported.json()['score'] == saved['score']
-    assert exported.json()['samples'][0]['evidence']['prompt'].startswith('Exact <script>')
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         errors = []
@@ -149,15 +146,7 @@ def test_partial_empty_and_direct_sample_links_keep_evidence_and_no_final_score(
         playwright.expect(page.locator('#export-samples')).to_be_disabled()
         browser.close()
     server.post('/sign-out')
-    assert server.get(f'/benchmarks/run/{current}?export=json', follow_redirects=False).status_code in (303, 401, 403)
-
-
-def test_run_export_follows_model_authorization(recorded_runs, desk):
-    server, current, _, _, _ = recorded_runs
-    _, _, users = desk
-    users.change('pat', own={'models': ['another-model']})
-    sign_in(server, 'pat')
-    assert server.get(f'/benchmarks/run/{current}?export=json').status_code == 404
+    assert server.get(f'/benchmarks/run/{current}', follow_redirects=False).status_code in (303, 401, 403)
 
 
 def test_native_sample_disclosures_work_without_the_enhancement(recorded_runs):

@@ -1701,8 +1701,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return detail
             recorded = next((run for run in runs if run['id'] == number), {})
             detail.update({key: recorded[key] for key in ('current_fingerprint', 'rerun') if key in recorded})
-            if request.query_params.get('export') == 'json':
-                return JSONResponse(detail, headers={'Content-Disposition': 'attachment; filename="benchmark-run.json"'})
             if request.query_params.get('baseline'):
                 compared = await ask('GET', '/benchmarks/regressions', person.key,
                                      params={'run':number, 'baseline':request.query_params['baseline']})
