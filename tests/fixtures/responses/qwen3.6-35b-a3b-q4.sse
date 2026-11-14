@@ -1,0 +1,500 @@
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"role":"assistant","content":null}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"Here"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"'s"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" a"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" thinking"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" process"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":":"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n1"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" **"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"An"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"alyze"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" User"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" Input"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":":**"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" -"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" Question"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":":"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" \""}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"What"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" is"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"7"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" times"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"8"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"?\""}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" -"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" Instruction"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":":"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" \""}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"Think"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" briefly"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":","}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" then"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" give"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" number"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":".\""}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" -"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" Expected"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" output"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":":"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" A"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" brief"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" thought"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" process"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" ("}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"optional"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"/internal"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":","}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" but"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" I"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"'ll"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" keep"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" it"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" minimal"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" as"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" requested"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":")"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" followed"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" by"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" just"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" number"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n2"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" **"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"Calculate"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":":**"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" -"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"7"}}],"created":1794640999,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" ×"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"8"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" ="}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"5"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"6"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n3"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" **"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"Format"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" Output"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":":**"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" -"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" The"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" user"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" wants"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" me"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" to"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" \""}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"think"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" briefly"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":","}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" then"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" give"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" number"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":".\""}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" -"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" I"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"'ll"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" provide"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" a"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" very"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" short"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" reasoning"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"/st"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"atement"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":","}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" then"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" number"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" -"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" Example"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":":"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" \""}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"7"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" times"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"8"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" is"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"5"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"6"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":".\""}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" or"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" just"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" \""}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"5"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"6"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\""}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" after"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" a"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" brief"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" thought"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" -"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" Since"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" they"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" said"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" \""}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"Think"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" briefly"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":","}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" then"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" give"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" number"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":",\""}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" I"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"'ll"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" keep"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" it"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" to"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" point"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n4"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" **"}}],"created":1794641000,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"Draft"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" Response"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":":**"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"7"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" ×"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"8"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" ="}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"5"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"6"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" "}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"5"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"6"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"\n  "}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" Actually"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":","}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" to"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" strictly"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" follow"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" \""}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"Think"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" briefly"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":","}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" then"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" give"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" number"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":",\""}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" I"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"'ll"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" just"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" output"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" number"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" after"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" a"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" very"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" short"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" acknowledgment"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":","}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" or"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" just"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" number"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" itself"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"."}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" The"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" prompt"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" says"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" \""}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"Think"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" briefly"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":","}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" then"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" give"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" the"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" number"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":".\""}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":" I"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":null,"index":0,"delta":{"reasoning_content":"'ll"}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[{"finish_reason":"length","index":0,"delta":{}}],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk"}
+
+data: {"choices":[],"created":1794641001,"id":"chatcmpl-RwiiL1JjE8IsRg55BixkpTrg0NwtTuZm","model":"/home/jpk/openWeightGym/models/llm/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf","system_fingerprint":"b12008-344846b4f","object":"chat.completion.chunk","usage":{"completion_tokens":256,"prompt_tokens":26,"total_tokens":282,"prompt_tokens_details":{"cached_tokens":0}},"timings":{"cache_n":0,"prompt_n":26,"prompt_ms":270.853,"prompt_per_token_ms":10.417423076923077,"prompt_per_second":95.9930294292476,"predicted_n":256,"predicted_ms":2493.106,"predicted_per_token_ms":9.776886274509804,"predicted_per_second":102.28205298932335}}
+
+data: [DONE]
+

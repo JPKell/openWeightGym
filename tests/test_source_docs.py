@@ -174,7 +174,7 @@ def test_api_page_lists_compatibility_gaps_custom_routes_and_scoped_headers(desk
                  '/v1/responses', 'backend-dependent passthrough', 'purpose=batch',
                  '/v1/audio/generations', '/v1/audio/diarizations', '/turnstile/models/install',
                  '/turnstile/artifacts/files/cleanup-nodes', '/loadcoach/services/{name}/key',
-                 '/owg/extractions', '/owg/extraction-assets', 'Stateless non-streaming creation',
+                 '/owg/extractions', '/owg/extraction-assets', 'Supports stream:true',
                  'X-LoadCoach-Require-Model-ID', 'X-LoadCoach-Task', 'X-ToolLocker-Sets', 'X-Twilio-Signature',
                  'X-Suite-Application', 'X-Suite-Session-Mode', 'Idempotency-Key'):
         assert text in response.text, text
