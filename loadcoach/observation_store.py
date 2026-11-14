@@ -15,6 +15,8 @@ from collections import Counter, deque
 
 from loadcoach.observability import FIELDS, ID, LABEL, POLLS, PROCESS, SPAN
 
+SOURCE_FRESH_SECONDS = 60
+
 BUCKETS = (
     0.001,
     0.005,
@@ -837,7 +839,7 @@ def sources(connection) -> list[dict]:
         {
             "machine": machine,
             "received": at,
-            "fresh": time.time() - at < 60
+            "fresh": time.time() - at < SOURCE_FRESH_SECONDS
             and json.loads(data).get("recording") is True,
             **json.loads(data),
         }

@@ -9707,6 +9707,13 @@ review remains separate and does not establish recovery. The desk works without 
 HTMX selection retains the queue position and moves focus to the inspector on narrow screens.
 The existing collector, threshold settings, ownership and same-origin checks remain authoritative.
 
+The episode’s Investigation panel explains detection, names related services, links to permitted
+investigation pages and provides host journal commands where applicable. Retained episodes gain
+this guidance without rewriting their recorded evidence. Observation episodes also record the
+health receipt age, recording flag, backlog/loss counters or measured threshold/window. The
+Operational metrics link opens the report with health receipt times, recording flags and backlog
+ages visible; a stale observation receipt does not itself establish a service failure.
+
 ### Alerts design previews
 
 Run `.venv/bin/python scripts/preview-alert-designs.py` and open

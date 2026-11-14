@@ -1,6 +1,7 @@
 """Alert desk presentation over the existing durable episode store."""
 import json
 from urllib.parse import parse_qsl, urlencode, urlsplit
+from weightroom.alert_guidance import investigation
 
 SCOPES = (('open', 'Open episodes'), ('history', 'Closed history'), ('all', 'All episodes'),
           ('unseen', 'Unacknowledged open'), ('review', 'Needs manual review'), ('unknown', 'Recovery unknown'))
@@ -50,6 +51,7 @@ def workspace(store, asked):
     context = filters | {'page': number}
     for row in rows:
         row['href'] = link(context, selected=row['id'])
+        row['guide'] = investigation(row)
     sources = store.sources()
     return dict(filters=filters, scopes=SCOPES, rows=rows, selected=selected,
                 timeline=timeline(selected) if selected else [], summary=store.summary(), total=total,
@@ -68,6 +70,7 @@ def export_json(store, view):
     yield '{"filters":' + json.dumps(view['filters']) + ',"sources":' + json.dumps(view['sources']) + ',"episodes":['
     separator = ''
     for row in store.matching(view['filters']):
+        row['guide'] = investigation(row)
         yield separator + json.dumps(row, ensure_ascii=True)
         separator = ','
     yield ']}'

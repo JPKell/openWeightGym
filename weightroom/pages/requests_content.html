@@ -10,12 +10,12 @@
 {% include "observation_trace.html" %}
 {% if not observation_report %}<p class="small text-secondary mb-0">Search to load trace metadata and operational metrics.</p>{% endif %}
 {% endcall %}
-{% if operation_report %}{% call card("Operational metrics", false, 'observation-metrics') %}
+{% if operation_report %}{% call card("Operational metrics", request.query_params.get('observe') == '1', 'observation-metrics', id='observation-metrics') %}
 <p class="small text-secondary">{{ operation_report.basis }} Window {{ operation_report.since }}–{{ operation_report.until }} (Unix seconds). Benchmarks excluded. Ingress calls and internal operations have separate denominators.</p>
 <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Service</th><th>Operation</th><th>Measurement</th><th>Count</th><th>Total</th><th>p50</th><th>p95</th><th>Per second</th><th>Errors / cancelled</th></tr></thead><tbody>
 {% for group in operation_report.groups %}<tr><td>{{ group.service }}</td><td>{{ group.operation }}</td><td>{{ group.metric }}</td><td>{{ group.count }}</td><td>{{ '%.3f'|format(group.total) }}</td><td>{{ group.p50 if group.p50 is not none else 'Unavailable' }}</td><td>{{ group.p95 if group.p95 is not none else 'Unavailable' }}</td><td>{{ '%.3f'|format(group.per_second|default(0)) }}</td><td>{{ '%.1f'|format(group.error_percent|default(0)) }}% / {{ '%.1f'|format(group.cancelled_percent|default(0)) }}%</td></tr>{% else %}{% call empty_row(9, class_='') %}No measured operations in this window.{% endcall %}{% endfor %}</tbody></table></div>
 {% if operation_report.local %}<p class="small mb-1">Local active spans: {{ operation_report.local.active }} · queue: {{ operation_report.local.pending }} · dropped/sampled: {{ operation_report.local.dropped }}</p>{% endif %}
-{% for source in operation_report.sources|default([]) %}<p class="small mb-1">{{ source.machine }}: {{ 'Fresh' if source.fresh else 'Stale / unknown' }} · forwarding backlog {{ source.backlog_count|default('Unavailable') }} · dropped/sampled {{ source.dropped|default({}) }}</p>{% endfor %}
+{% for source in operation_report.sources|default([]) %}<p class="small mb-1" data-observation-source="{{ source.machine }}"><strong>{{ source.machine }}</strong>: {{ 'Fresh' if source.fresh else 'Stale / unknown' }} · last health received {{ source.get('received')|timestamp }} · recording {{ 'On' if source.recording is sameas true else 'Off' if source.recording is sameas false else 'Unavailable' }} · forwarding backlog {{ source.backlog_count|default('Unavailable') }} · oldest unforwarded age {{ source.backlog_age_seconds|default('Unavailable') }} s · dropped/sampled {{ source.dropped|default({}) }}</p>{% endfor %}
 {% endcall %}{% endif %}
 {% call card("Client access", false, 'client-access') %}
 <div class="table-responsive"><table class="table table-sm align-middle mb-0">

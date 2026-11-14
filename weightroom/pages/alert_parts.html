@@ -1,5 +1,5 @@
 {# Episode facts and actions shared by the live page and its sample proposals. #}
-{% from 'parts.html' import section_title, swaps %}
+{% from 'parts.html' import section_title, swaps, more %}
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% from 'icons.html' import icon %}
 
@@ -7,7 +7,7 @@
 
 {% macro acknowledgement(alert={}, preview=false) %}{% if preview %}<div class="small mt-2" data-acknowledgement hidden>Acknowledged by <span data-acknowledged-by></span> at <span data-acknowledged-at></span>.</div>{% elif alert.acknowledged_at %}<div class="small mt-2">Acknowledged by {{ alert.acknowledged_by }} at {{ alert.acknowledged_at|timestamp }}.</div>{% endif %}{% endmacro %}
 
-{% macro episode(alert={}, history=false, preview=false, return_to='') %}
+{% macro episode(alert={}, history=false, preview=false, return_to='', abilities=none) %}
 <article class="border-bottom py-3" data-episode>
   <div class="d-flex flex-wrap gap-2 align-items-center">{{ section_title(alert.title or '', attrs={'data-title':''}) }}{{ state_badge(alert) }}</div>
   <p class="my-2 text-break" data-explanation>{{ alert.explanation or '' }}</p>
@@ -22,7 +22,17 @@
     {% if preview or alert.manual %}<button name="do" value="review" class="btn btn-outline-secondary btn-sm">Mark incident reviewed</button>{% endif %}
   </form>
   {% endif %}
+  {% if alert.guide %}{{ investigation(alert.guide, abilities) }}{% endif %}
 </article>
+{% endmacro %}
+
+{% macro investigation(guide, abilities=none) %}
+<section class="mt-4" data-investigation aria-label="Alert investigation">
+{{ section_title('Investigation', level=3) }}
+<dl class="small mb-3"><dt>How detected</dt><dd data-detection>{{ guide.detection }}</dd><dt>Related services</dt><dd data-related-services>{{ guide.services }}</dd></dl>
+<ol class="small ps-3 mb-0">{% for step in guide.steps %}<li class="mb-2">{% if not step.ability or abilities is none or step.ability in abilities %}<a href="{{ step.href }}">{{ step.label }}</a>{% else %}<strong>{{ step.label }}</strong> <span class="text-secondary">(requires {{ step.ability }})</span>{% endif %} — {{ step.text }}</li>{% endfor %}</ol>
+{% if guide.commands %}{% call more('Host journal commands') %}<p>Run as the account that runs openWeightGym on the named host. These use the default user-service names; use your configured units if customized.</p>{% for entry in guide.commands %}<p class="mb-1">{{ entry.host }}</p><pre class="mb-2"><code>{{ entry.command }}</code></pre>{% endfor %}{% endcall %}{% endif %}
+</section>
 {% endmacro %}
 
 {% macro source_entry(source={}) %}

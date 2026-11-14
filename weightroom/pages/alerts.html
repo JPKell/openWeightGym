@@ -27,7 +27,7 @@
 {% endcall %}
 {% call card('Episode details', id='inspector', body_class='p-4', attrs={'tabindex':'-1', 'aria-label':'Selected episode details'}) %}
 {% if view.selected %}
-{{ episode(view.selected, history=view.selected.resolved_at is not none, return_to=view.refresh_url) }}
+{{ episode(view.selected, history=view.selected.resolved_at is not none, return_to=view.refresh_url, abilities=person.can) }}
 <div class="al-context-note small mt-3">{% if view.selected.manual %}Memory-kill incidents close only after explicit review. Review records investigation; it does not prove memory recovery.{% elif view.selected.state == 'unknown' %}Missing or stale evidence cannot close this episode. Wait for a fresh reading that establishes recovery.{% else %}Acknowledgement records attention for this episode. Recovery is established separately by source evidence.{% endif %}</div>
 {{ section_title('Episode timeline', level=3, wrapper_class='mt-4') }}<ol class="al-timeline">{% for title, at in view.timeline %}{{ timeline_entry(title, at) }}{% endfor %}</ol>
 <p class="small text-secondary mb-0 mt-4">Only recorded observations are shown. Transient states between collection intervals may be missed.</p>
