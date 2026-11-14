@@ -1606,7 +1606,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if not answer.is_success:
             return page(request,'refused.html',person,status=answer.status_code,why=answer.json()['error']['message'])
         kind=request.query_params.get('kind','all')
-        if kind not in ('llm','image','audio','all'):kind='all'
+        if kind not in ('llm','rerank','image','audio','classifier','all'):kind='all'
         return go('/models?'+urlencode({'kind':kind,'install':answer.json()['id']}))
 
     def settings_from(form: dict[str, list[str]]) -> dict:

@@ -36,5 +36,8 @@ def test_reranker_matrix_control_roundtrip_and_type_filter(setup_desk,tmp_path,w
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         page.goto('http://console.test/models?kind=rerank')
         playwright.expect(page.get_by_role('link',name='Reranker',exact=True)).to_be_visible()
+        page.goto('http://console.test/hub?kind=rerank&q=acme')
+        playwright.expect(page.locator('#hub-kind')).to_have_value('rerank')
+        playwright.expect(page.locator('#hub-results a.discovery-repository').first).to_have_attribute('href', '/hub?repository=acme/tiny-GGUF&kind=rerank')
         browser.close()
     library.db.close()

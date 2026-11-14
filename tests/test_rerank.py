@@ -68,3 +68,25 @@ def test_rerank_batch_uses_existing_worker(fake_llama_server):
         assert done['request_counts']=={'total':1,'completed':1,'failed':0}, answers(client,who,done['error_file_id']) if done.get('error_file_id') else done
         output=answers(client,who,done['output_file_id'])[0]['response']['body']
         assert output['path']=='/v1/rerank' and json.loads(output['body'])==body
+
+
+
+def test_hub_reranker_search_uses_native_task_filter_and_keeps_cursor():
+    """Discovery narrows GGUFs by the provider's ranking task without changing pagination."""
+    import asyncio
+    import httpx
+    from loadcoach.hub import search_page
+    seen=[]
+    def wire(request):
+        seen.append(dict(request.url.params))
+        return httpx.Response(200,json=[{'id':'owner/ranker-GGUF'}],headers={'link':'<https://huggingface.co/api/models?cursor=next>; rel="next"'})
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(wire)) as http:
+            first=await search_page(http,'rank',kind='rerank')
+            second=await search_page(http,'rank',cursor=first['next_cursor'],kind='rerank')
+            assert first['found']==second['found'] and first['next_cursor']=='next'
+            await search_page(http,'rank')
+    asyncio.run(check())
+    assert seen[0]['filter']=='gguf' and seen[0]['pipeline_tag']=='text-ranking'
+    assert seen[1]['cursor']=='next' and seen[1]['pipeline_tag']=='text-ranking'
+    assert 'pipeline_tag' not in seen[2]
