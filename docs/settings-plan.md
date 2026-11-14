@@ -415,7 +415,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 0.1 Catalogue entries and typed contracts (221 catalogue tests pass).
 - [x] 0.2 Derive tiers, labels and section order (235 focused tests pass; broader console failures under baseline review).
 - [x] 0.3 Shared validation in APIs and loaders (323 focused checks pass; secret reports are filtered at storage).
-- [ ] 0.4 Common live getter and generic live application.
+- [x] 0.4 Common live getter and generic live application (374 focused checks pass; resets restore original file/default values).
 - [ ] 0.5 Catalogue, validation, live and secret tests; Phase 0 deployed and verified.
 - [ ] 1a Event retention and conditional node retirement.
 - [ ] 1b Live observation policy.

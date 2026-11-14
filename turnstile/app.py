@@ -58,7 +58,7 @@ from loadcoach.config import CLI, read_settings, model_places
 from loadcoach.groups import read_group
 from loadcoach.log import FRONT, Log, machine_slot, public_number, origin_number
 from loadcoach.files import PIECE, SPARE, sha256_of
-from loadcoach.setting_catalog import validate_values
+from loadcoach.setting_catalog import entries as catalog_entries, validate_values
 from loadcoach.settings import FRONT_PROGRAMS, comments, copy_of, laid_over, said
 from loadcoach.setting_names import current_names
 from loadcoach.users import ANONYMOUS, User, Users
@@ -948,7 +948,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     routing.prepare_candidates = overflow_candidates
     routing.resolve_node = node
-    routing.destination_allowed = lambda: console_settings.changes.of('turnstile').get(
+    routing.destination_allowed = lambda: live('turnstile',
         'allow_caller_to_specify_destination', settings.allow_caller_to_specify_destination) is True
 
     async def local_names(user: User) -> set[str]:
@@ -1028,14 +1028,26 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     task_records = TaskRecords(batch_work.store, users, log, routing.evidence, ask_compute,
                                dispatch_probe, list(settings.machines), scheduled_node_ready,
-                               destination_allowed=lambda: console_settings.changes.of('turnstile').get(
+                               destination_allowed=lambda: live('turnstile',
                                    'allow_caller_to_specify_destination', settings.allow_caller_to_specify_destination) is True)
     task_records.locations = model_locations
     from mirrorwall.store import Store as ImageStore
     from mirrorwall.front import Front as ImageFront
+    # Saved overrides at startup never become the fallback after a live reset.
+    configured_defaults = {}
+    if settings.path and Path(settings.path).is_file():
+        from dataclasses import MISSING, fields
+        file_values = read_settings(Path(settings.path)).get('turnstile', {})
+        definitions = {field.name: field for field in fields(Settings)}
+        for entry in catalog_entries('turnstile'):
+            if entry.name in definitions:
+                definition = definitions[entry.name]
+                default = definition.default_factory() if definition.default_factory is not MISSING else definition.default
+                configured_defaults[entry.name] = file_values.get(entry.name, default)
     console_settings = ConsoleSettings(stores.database('weightroom.accounts'), log, ask_all, True,
                                    programs=FRONT_PROGRAMS | {'toollocker'},
-                                   voice_nodes=lambda: voice_order())
+                                   voice_nodes=lambda: voice_order(), defaults={'turnstile': configured_defaults})
+    live = console_settings.live
     from turnstile.telephone import TelephoneAdmin
     telephone_admin = TelephoneAdmin(users, log, console_settings.changes,
         (Path(settings.path).parent / '../keys').resolve() if settings.path else
@@ -1048,14 +1060,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     from weightroom.response_store import Responses
     response_store = Responses(stores.database('weightroom.accounts'),
-        lambda: console_settings.changes.of('turnstile').get('response_keep_days', settings.response_keep_days))
+        lambda: live('turnstile', 'response_keep_days', settings.response_keep_days))
     extractions.responses = response_store
     extractions.tool_url = 'http://turnstile.internal:8443/mcp'
     extractions.tool_level = lambda user, trace: log.trace_level(user.name, trace)
     extractions.hosted_models = hosted.models
     extractions.tool_limits = lambda: (
-        console_settings.changes.of('turnstile').get('response_max_tool_calls', settings.response_max_tool_calls),
-        console_settings.changes.of('turnstile').get('response_max_tool_seconds', settings.response_max_tool_seconds))
+        live('turnstile', 'response_max_tool_calls', settings.response_max_tool_calls),
+        live('turnstile', 'response_max_tool_seconds', settings.response_max_tool_seconds))
 
     async def forget_responses(owner):
         """Erase stored Responses through the existing account-deletion lifecycle."""
@@ -1070,16 +1082,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     def front_file_roots():
         """Read current control node storage settings without depending on any compute node."""
-        changed = console_settings.changes.of('turnstile')
-        return {name: changed.get(name, value) for name, value in configured_file_roots.items()}
+        return {name: live('turnstile', name, value) for name, value in configured_file_roots.items()}
 
     def versions_every() -> float:
         """Read Control node's live interval, restoring the file default after a reset."""
-        return console_settings.changes.of('turnstile').get('component_versions_every', configured_versions_every)
+        return live('turnstile', 'component_versions_every', configured_versions_every)
 
     def front_files_every() -> float:
         """Seconds between looks through the control node's own folders, as saved on the site now."""
-        minutes = console_settings.changes.of('turnstile').get('files_every', settings.files_every)
+        minutes = live('turnstile', 'files_every', settings.files_every)
         return float(minutes) * 60 if type(minutes) in (int, float) and minutes >= 0 else settings.files_every * 60
 
     front_files = FrontFiles(front_file_roots, log, index=Path(settings.data) / FRONT_INDEX, every=front_files_every)
@@ -1088,7 +1099,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Prefer an explicitly selected store, then optional control node storage, then legacy workers."""
         return settings.artifact_machine or ('front' if any(front_file_roots().values()) else artifact_machine)
     image_work=ImageFront(ImageStore(batch_work.store.db,settings.data),batch_work,users,
-                         adult_previews_allowed=lambda: console_settings.changes.of('turnstile').get(
+                         adult_previews_allowed=lambda: live('turnstile',
                              'image_adult_previews', settings.image_adult_previews) is True)
     batch_work.image_work=image_work
     from soundroom.store import Store as AudioStore
@@ -1352,7 +1363,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     def voice_order() -> list[str]:
         """The nodes voice sessions are tried on: the preferred node, then every other active node in the configured order."""
-        preferred = node(console_settings.changes.of('turnstile').get('preferred_voice_node', settings.preferred_voice_node) or "")
+        preferred = node(live('turnstile', 'preferred_voice_node', settings.preferred_voice_node) or "")
         names = [name for name in machines.active_names if any(
             one.get('name') == 'voice' and one.get('installed') is not False
             for one in machines.seen.get(name, {}).get('telemetry', {}).get('services', []))]
@@ -3421,6 +3432,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     app.state.responses = response_store
     app.state.extractions = extractions
     app.state.console_settings = console_settings
+    app.state.live_settings = live
     app.state.fallthrough = fallthrough
     app.state.front_files = front_files
     app.state.publish_file_settings = publish_file_settings

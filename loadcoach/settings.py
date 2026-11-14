@@ -20,7 +20,7 @@ import json
 import re
 import time
 import tomllib
-from dataclasses import replace
+from dataclasses import MISSING, fields, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -62,6 +62,43 @@ from loadcoach.setting_catalog import changeable, get as catalog_entry, validate
 
 CHANGEABLE: dict[str, dict[str, str]] = changeable()
 SECRET = re.compile(r"(^|_)(key|token|secret|password)$")  # a setting with such a name is never handed out
+
+
+def live(program: str, name: str, fallback, *, changes=None):
+    """Read a validated live override; reset, invalid and restart values use the fallback.
+
+    Control node callers bind their ConsoleSettings.changes. Dict services can pass
+    their followed mapping; node dataclasses use the same catalogue via taken().
+    """
+    entry = catalog_entry(program, name)
+    if not entry or entry.tier != NOW or entry.retired or entry.derived:
+        return fallback
+    values = changes.of(program) if hasattr(changes, 'of') else changes or {}
+    if name not in values:
+        return fallback
+    try:
+        return validate(program, name, values[name])
+    except ValueError:
+        return fallback
+
+
+def apply_live(program: str, settings, changed: dict):
+    """Copy all valid live dataclass fields, restoring file/default values on reset."""
+    definitions = {field.name: field for field in fields(settings)}
+    wanted, refused = {}, {}
+    for name, tier in CHANGEABLE.get(program, {}).items():
+        if tier != NOW or name not in definitions:
+            continue
+        field = definitions[name]
+        fallback = (field.default_factory() if field.default_factory is not MISSING else
+                    field.default if field.default is not MISSING else getattr(settings, name))
+        value = changed.get(name, settings.file.get(name, fallback))
+        try:
+            value = validate(program, name, value)
+            wanted[name] = tuple(value) if isinstance(getattr(settings, name), tuple) else value
+        except ValueError as problem:
+            refused[name] = str(problem)
+    return replace(settings, **wanted), refused
 
 
 def laid_over(told: dict, changed: dict, program: str) -> dict:
