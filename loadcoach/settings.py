@@ -73,7 +73,8 @@ CHANGEABLE: dict[str, dict[str, str]] = {
               "hold_every": NOW, "hold_after_last_call": NOW, "speech_threshold": NOW, "profiles": NOW, "greetings": NOW, "model_parallel": RESTART},  # fmt: skip
     "voice-gateway": {"modes": NOW, "profile": NOW, "soundroom_profile": NOW, "startup_seconds": NOW, "max_active_sessions": NOW, "max_starting_sessions": NOW,
                       "hermes_model": NOW, "hermes_system_prompt": NOW, "hermes_max_turns": NOW, "hermes_context_tokens": NOW,
-                      "hermes_max_output_tokens": NOW, "hermes_reasoning_effort": NOW},
+                      "hermes_max_output_tokens": NOW, "hermes_reasoning_effort": NOW,
+                      "telephone": NOW, "public_port": RESTART, "public_host": RESTART},
     "weightroom": {**dict.fromkeys(SERVICE_SETTINGS, NOW), "timezone": RESTART, "mock_input_rate": RESTART, "mock_output_rate": RESTART, "third_party_services": NOW, "backup_retention": NOW, "alert_gpu_temperature": NOW,
                    "observation_error_percent": NOW, "observation_p95_seconds": NOW, "observation_min_samples": NOW,
                    "observation_window_seconds": NOW, "observation_alert_hold_seconds": NOW,

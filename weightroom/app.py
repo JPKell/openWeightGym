@@ -3086,6 +3086,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if 'manage-settings' not in person.can:
             return Response('Your account may not manage voice.', status_code=403)
         status, problem, programs, models = {}, '', [], []
+        selected_machine = request.query_params.get('machine') or first_node(person)
         try:
             reply = await voice_admin_request(person, 'status', timeout=10)
             if reply.is_success:
@@ -3096,6 +3097,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             problem = 'Voice gateway is not answering. Check voice-gateway.service on front and its private address in Settings.'
         try:
             found = await ask('GET', '/loadcoach/settings', person.key)
+            if selected_machine:
+                node_settings = await ask('GET', '/turnstile/machines/' + quote(selected_machine, safe='') + '/settings', person.key)
+                if node_settings.is_success and not node_settings.json().get('unavailable'):
+                    found_body = found.json() if found.is_success else {'programs': []}
+                    found = httpx.Response(200, json={'programs': [*found_body['programs'],
+                        *(program for program in node_settings.json()['programs'] if program['program'] == 'voice')]})
+                else:
+                    problem += ' Node unavailable: ' + selected_machine
             if found.is_success:
                 catalog = await ask('GET', '/v1/models', person.key)
                 models = [row['id'] for row in catalog.json().get('data', [])] if catalog.is_success else []
@@ -3112,6 +3121,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, 'voice_status.html' if request.url.path == '/system/voice/status' else 'voice_admin.html', person, status=400 if failed else 200,
             voice_admin=True, voice_status=status, voice_problem=problem, speakers=voice_settings.speaker_choices(synthesis),
             programs=programs, said=said or request.query_params.get('said', ''), failed=failed,
+            selected_machine=selected_machine,
             typed_in=typed_in or {}, opened=opened or request.query_params.get('open', 'voice'),
             greeting_names=list(voice_settings.TEXTS))
 
@@ -3125,7 +3135,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         form = await typed(request) if request.method == 'POST' else {}
         if action == 'regenerate':
             try:
-                configured = await ask('GET', '/loadcoach/settings', person.key)
+                machine = request.query_params.get('machine') or first_node(person)
+                configured = await ask('GET', '/turnstile/machines/' + quote(machine, safe='') + '/settings', person.key)
                 if not configured.is_success:
                     return await voice_admin_page(request, person, 'Voice configuration cannot be checked. Try again when compute is ready.', failed=True)
                 pending = [setting for program in configured.json()['programs'] if program['program'] == 'voice'
@@ -3569,11 +3580,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         program, submitted = request.path_params["program"], await typed_lists(request)
         form = {name: values[-1] for name, values in submitted.items()}
         voice_return = program in ('voice', 'voice-gateway')
-        selected_machine = form.get("machine", "")
+        selected_machine = form.get("machine", "") or (first_node(person) if program == 'voice' else '')
         node_return = bool(selected_machine) or program in ("loadcoach", "spotter")
         render_settings = voice_admin_page if voice_return else compute_nodes_page if node_return else settings_page
         destination = '/system/voice' if voice_return else '/compute-nodes' if node_return else '/settings'
-        if selected_machine and program not in ("loadcoach", "spotter"):
+        if selected_machine and program not in ("loadcoach", "spotter", 'voice'):
             return Response("Only LoadCoach and Spotter use a host selection.", status_code=400)
         settings_path = ("/turnstile/machines/" + quote(selected_machine, safe="") + "/settings"
                          if selected_machine else "/loadcoach/settings")
@@ -3624,6 +3635,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return await render_settings(request, person, f"{setting['name']}: {why}", failed=True, typed_in=form, opened=program)
         if not asked:
             return go(f"{destination}?{destination_query}open={quote(program)}&said=" + quote("Nothing was changed."))
+        if program == 'voice-gateway' and asked.get('telephone') is not None:
+            try:
+                voice_settings.validate_telephone(asked['telephone'])
+            except ValueError as why:
+                return await render_settings(request, person, str(why), failed=True, typed_in=form, opened=program)
         target = settings_path + "/" + quote(program, safe="")
         answer = await ask("POST", target, person.key, json=asked)
         if answer.status_code not in (200, 202):

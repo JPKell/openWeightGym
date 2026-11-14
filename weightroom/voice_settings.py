@@ -7,6 +7,7 @@ from plugins.hermes.reasoning import reasoning_levels
 
 from voice.speakers import choices as available_speakers
 from voice.prompt_recordings import TEXTS, texts
+from voice.telephone_settings import validate as validate_telephone
 
 DESCRIPTIONS = {
     "model": "Direct-mode model, requested with the caller's API key (voice-phone for telephone calls). Hermes has separate settings under voice-gateway.",
