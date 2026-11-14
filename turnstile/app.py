@@ -2096,6 +2096,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return JSONResponse({"jobs": jobs} if several else jobs[0], status_code=202)
 
     async def retry_installation(request):
+        """Retry an authorized failed model installation after current node and file checks."""
         user=caller(key_of(request))
         if user is None:return error(401,'Missing or wrong API key.')
         if not user.can('manage-models'):return error(403,'Model management is required.')

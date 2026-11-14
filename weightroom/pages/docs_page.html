@@ -11,6 +11,7 @@
   <div id="docs-reading"{% if searching %} hidden{% endif %}>
     {% if home %}
       {{ library.shortcuts(sections) }}
+      {{ library.page_guide_map(page_guides) }}
       <div class="browse-heading">{{ section_title('Browse documentation') }}<span class="small text-secondary">{{ sections|length }} {{ 'section' if sections|length == 1 else 'sections' }} · {{ page_count }} pages</span></div>
       <div class="library-categories">{% for one in sections %}{{ library.category(one, '%02d'|format(loop.index)) }}{% endfor %}</div>
     {% else %}

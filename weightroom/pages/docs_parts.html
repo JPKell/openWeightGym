@@ -63,7 +63,7 @@
         {% if reference.module.doc %}<pre class="text-wrap text-break">{{ reference.module.doc }}</pre>{% endif %}
         {% for definition in reference.module.definitions %}
         {% set depth = definition.name.count('.') %}
-        <details class="docs-definition border-bottom py-1" style="margin-left: {{ [depth, 3]|min * 1.25 }}rem">
+        <details id="symbol-{{ definition.line }}" class="docs-definition border-bottom py-1" style="margin-left: {{ [depth, 3]|min * 1.25 }}rem">
           <summary class="text-break"><code>{{ definition.kind }} {{ definition.name.rpartition('.')[2] if depth else definition.name }}</code>
             <span class="text-secondary small">· {{ definition.doc.split('\n', 1)[0] }}</span></summary>
           <code class="d-block text-break my-2">{{ definition.name }}{{ definition.signature }}</code>

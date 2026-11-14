@@ -8,12 +8,12 @@ from weightroom import docs_reference, system_docs
 def report():
     """List uncovered navigation pages and source descriptions, using stable gap identities."""
     from weightroom.navigation import NAV_SECTIONS
-    paths = {path for category, groups in NAV_SECTIONS.items() if category != 'Docs'
+    paths = {path for category, groups in NAV_SECTIONS.items()
              for _, routes in groups for path in routes}
     covered = {path for section in system_docs.SECTIONS for topic in (section, *section['topics'])
                for path in topic.get('covers', ())}
     gaps = {'page:' + path for path in paths - covered}
-    emitted = {(group['path'], row['method'], row['path'])
+    emitted = {(group['path'], row['method'], row['path']): row
                for group in system_docs.api_reference(system_docs.source_files('api')) for row in group['rows']}
     endpoints = set()
     for relative in system_docs.source_files('api'):
@@ -25,7 +25,7 @@ def report():
                 endpoints.add(identity)
                 if identity not in emitted:
                     gaps.add('endpoint:' + ':'.join(identity) + ':inventory')
-                if not row['summary']:
+                if not emitted.get(identity, row)['summary']:
                     gaps.add('endpoint:' + ':'.join(identity) + ':summary')
     # Inspect literal declarations independently: a reader bug cannot silently remove a route.
     for folder in ('loadcoach', 'turnstile', 'weightroom', 'mirrorwall', 'soundroom', 'toollocker', 'voice', 'plugins'):

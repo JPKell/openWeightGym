@@ -3119,6 +3119,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         lambda event, owner, **detail: log.add('database', event, owner, machine=config.machine_name, **detail), machine=config.machine_name)
 
     async def database_operation(request: Request, user: User) -> Response:
+        """Inspect or run owner-scoped database maintenance with manage-settings access."""
         if denied := lacks(user, 'manage-settings'):
             return denied
         return await database_operations.handle(request, user.identity or user.name)

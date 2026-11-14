@@ -1,5 +1,15 @@
 {# Shared library navigation for live documentation and its standalone design proposals. #}
 {% from 'parts.html' import section_title %}
+{% from 'parts.html' import more %}
+{% from 'docs_parts.html' import doc_table %}
+{% macro page_guide_map(rows) %}
+{% call more('Find the guide for a page') %}
+{% call doc_table('Pages and their guides') %}
+<thead><tr><th scope="col">Page</th><th scope="col">Guide</th></tr></thead>
+<tbody>{% for row in rows %}<tr><td>{{ row.category }} · {{ row.title }}</td><td>{% for guide in row.guides %}<a href="{{ guide.url }}">{{ guide.title }}</a>{% if not loop.last %}, {% endif %}{% else %}<span class="text-secondary">Ask an administrator</span>{% endfor %}</td></tr>{% endfor %}</tbody>
+{% endcall %}
+{% endcall %}
+{% endmacro %}
 {% macro topic_link(url, title, summary='') %}
 <a href="{{ url }}" class="library-link"><span><strong>{{ title }}</strong>{% if summary %}<small>{{ summary }}</small>{% endif %}</span><span aria-hidden="true">↗</span></a>
 {% endmacro %}

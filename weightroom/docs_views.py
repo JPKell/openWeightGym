@@ -1,6 +1,7 @@
 """Permission-scoped documentation reading and full-text search over current rendered articles."""
 
 import asyncio
+from html import escape
 from html.parser import HTMLParser
 
 from markupsafe import Markup
@@ -44,10 +45,18 @@ def article(environment, section, topic, person, api_base, source_reader, api_re
     """Render one authorized page through the shared body and existing allowlisted source readers."""
     reference = source_reader(topic['source'], selected) if topic and topic['source'] else None
     api = api_reader(system_docs.source_files('api')) if topic and (section['slug'], topic['slug']) == ('api', 'custom') else None
+    from weightroom import docs_reference
+    generated = (docs_reference.settings() if topic and topic.get('generated') == 'settings' else
+                 docs_reference.abilities() if topic and topic.get('generated') == 'abilities' else None)
     html = environment.get_template('docs_article.html').render(
         section=section, topic=topic, sections=system_docs.visible(person.can), person=person,
-        document=system_docs.written(topic or section, admin='manage-settings' in person.can), reference=reference, api=api, api_base=api_base,
+        document=system_docs.written(topic or section, admin='manage-settings' in person.can), reference=reference, api=api, api_base=api_base, generated=generated,
     )
+    # These two published address placeholders retain the former guide templates'
+    # request-host convenience; guide prose itself is never executed as Jinja.
+    if section['slug'] == 'web-app':
+        html = html.replace('http://CONTROL_NODE:8442/v1', escape(api_base)).replace(
+            'http://CONTROL_NODE:8443/mcp', escape(api_base.replace(':8442/v1', ':8443/mcp')))
     parsed = ArticleText()
     parsed.feed(html)
     return Markup(html), ' '.join(' '.join(parsed.text).split()), parsed.contents
@@ -141,6 +150,9 @@ async def documentation_page(request, person, page, environment, source_reader, 
     context = dict(section=section, topic=topic, sections=sections, q=query, scope=scope, searching=searching,
                    home=section is None, results=[], search_error='', article_html='', contents=[], previous=None, following=None,
                    page_count=sum(1 + len(item['topics']) for item in sections))
+    if section is None:
+        from weightroom.docs_reference import page_map
+        context['page_guides'] = page_map(person.can)
     try:
         if searching:
             context['results'] = await asyncio.to_thread(search, environment, sections, person, api_base, query, scope, source_reader, api_reader, cache)

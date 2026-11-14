@@ -100,6 +100,7 @@ class RemoteSettings:
                 'file_names':sorted(self.files()),'available':True}
 
     async def handle(self,request):
+        """Inspect and change remote MCP servers using a signed superuser caller."""
         said=getattr(request.state,'said',None)
         user=user_of(said['caller']) if said and said.get('caller') else None
         if not user or not user.can('superuser'):

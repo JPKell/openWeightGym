@@ -39,7 +39,7 @@ def test_toollocker_setup_guide_is_available_without_compute_and_stays_private(d
         assert instruction in response.text
     sign_in(browser, 'pat')
     guide = browser.get('/docs/web-app/tools').text
-    assert 'id="tools"' in guide and 'http://CONTROL_NODE:8443/mcp' in guide
+    assert 'id="tools"' in guide and 'http://testserver:8443/mcp' in guide
     assert 'href="/docs/modules/toollocker"' not in guide
     assert browser.get('/docs/modules/toollocker').status_code == 403
 
@@ -154,7 +154,7 @@ routes = [Route("/turnstile/sample", sample),
     rows = groups[0]['rows']
     assert {(row['method'], row['path']) for row in rows} == {
         ('GET', '/turnstile/sample'), ('POST', '/turnstile/listed'),
-        ('POST', '/turnstile/actions/clear'), ('POST', '/turnstile/actions/copy')}
+        ('POST', '/turnstile/actions/clear'), ('POST', '/turnstile/actions/copy'), ('GET', '/v1/files'), ('POST', '/v1/files')}
     assert all(row['summary'] == 'Read an <escaped> sample.' for row in rows)
     source.write_text(source.read_text().replace('/turnstile/sample', '/turnstile/updated'))
     assert any(row['path'] == '/turnstile/updated' for row in system_docs.api_reference(('turnstile/app.py',))[0]['rows'])

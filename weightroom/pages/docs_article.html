@@ -3,6 +3,7 @@
 {% if topic %}
   {{ doc_header(topic.title, back=(section.title, section.url), lead=topic.summary) }}
   {% if topic.generated == 'endpoints' %}{% include "docs/api/custom.html" %}{% endif %}
+  {% if topic.generated in ('settings', 'abilities') %}{% include 'docs_reference.html' %}{% endif %}
   {% if document %}{{ doc_document(document) }}{% endif %}
   {% if topic.source %}{{ doc_source(reference, topic.title) }}{% endif %}
   {% if topic.code_url %}<p class="docs-code-reference"><a href="{{ topic.code_url }}">Code reference for {{ topic.title }} →</a></p>{% endif %}

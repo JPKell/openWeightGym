@@ -256,7 +256,9 @@ default_appearance = "system"
 default_chat_model = ""
 
 [groups.superuser]
+# Initial permissions, expanded from the ability definitions.
 can = ["use-tools", "superuser"]
+# Hours before a password sign-in for this initial group expires.
 session_hours = 12
 # second_step = true      # turn on when you are ready to use an authenticator app
 
@@ -265,6 +267,7 @@ session_hours = 12
 [groups.admin]
 can = ["use-tools", "load", "benchmark", "lock", "break-lock", "unload", "high", "see-all", "clear-line", "stop", "see-log", "see-capture", "manage-users", "manage-groups", "manage-models", "hosted", "restart-services", "drain"]
 max_sensitivity = "restricted"
+# Hours before a password sign-in for this initial group expires.
 session_hours = 12
 
 # People and tools that use models.

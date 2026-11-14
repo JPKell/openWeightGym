@@ -198,10 +198,10 @@ def written(topic: dict, *, admin: bool = False) -> dict | None:
 SOURCES = {
     "api": ("loadcoach/app.py", "loadcoach/tasks.py", "soundroom/packages.py", "turnstile/app.py",
             "turnstile/accounts.py", "turnstile/events.py", "turnstile/roles.py", "turnstile/observations.py",
-            "turnstile/extractions.py", "turnstile/responses.py",
+            "turnstile/extractions.py", "turnstile/responses.py", "turnstile/classifier.py", "turnstile/batches.py",
             "turnstile/allowances.py", "turnstile/tasks.py", "turnstile/settings.py", "turnstile/hosted.py",
-            "soundroom/front.py", "mirrorwall/front.py", "plugins/_turnstile.py", "plugins/_runtime.py",
-            "voice/gateway.py", "voice/service.py", "spotter/app.py", "toollocker/door.py"),
+            "soundroom/front.py", "soundroom/runtime.py", "mirrorwall/front.py", "mirrorwall/runtime.py", "plugins/_turnstile.py", "plugins/_runtime.py",
+            "voice/gateway.py", "voice/service.py", "spotter/app.py", "toollocker/door.py", "toollocker/remote_settings.py"),
     "weightroom": ("weightroom",), "turnstile": ("turnstile",), "soundroom": ("soundroom",),
     "loadcoach": ("loadcoach",), "toollocker": ("toollocker",),
     "voice": ("voice",), "spotter": ("spotter",), "plugins": ("plugins",),
@@ -354,6 +354,9 @@ def _api_source(relative: str, modified: int, size: int) -> tuple[dict, ...]:
     tree = ast.parse((ROOT / relative).read_text(encoding='utf-8'), filename=relative)
     descriptions = {node.name: ast.get_docstring(node) or '' for node in ast.walk(tree)
                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    constructors = {target.id: node.value.func.id for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                    and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)
+                    for target in node.targets if isinstance(target, ast.Name)}
     rows = []
 
     def resolve(node, bindings):
@@ -406,10 +409,12 @@ def _api_source(relative: str, modified: int, size: int) -> tuple[dict, ...]:
                 if isinstance(handler, ast.Call) and handler.args:
                     handler = resolve(handler.args[-1], bindings)
                 name = handler.id if isinstance(handler, ast.Name) else handler.attr if isinstance(handler, ast.Attribute) else ''
+                qualified = (constructors[handler.value.id] + '.' + name if isinstance(handler, ast.Attribute)
+                             and isinstance(handler.value, ast.Name) and handler.value.id in constructors else name)
                 summary = descriptions.get(name, '').split('\n', 1)[0]
                 for method in methods or ():
                     if method in ('GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'WS'):
-                        rows.append({'method': method, 'path': path, 'summary': summary, 'line': node.lineno,
+                        rows.append({'method': method, 'path': path, 'summary': summary, 'line': node.lineno, 'handler': qualified,
                                      'headers': api_headers(relative, path, method)})
         for child in ast.iter_child_nodes(node):
             visit(child, bindings)
@@ -419,13 +424,23 @@ def _api_source(relative: str, modified: int, size: int) -> tuple[dict, ...]:
 
 
 def api_reference(files: tuple[str, ...]) -> list[dict]:
-    """Inventory allowlisted custom HTTP/WebSocket APIs; compatibility is documented separately."""
+    """Inventory declared APIs, including public v1 routes, using their handler documentation."""
+    from weightroom.docs_reference import handler_descriptions
+    descriptions = handler_descriptions()
     groups = []
     for relative in files:
         if relative not in SOURCES['api']:
             continue
         stat = (ROOT / relative).stat()
-        rows = [row for row in _api_source(relative, stat.st_mtime_ns, stat.st_size) if not row['path'].startswith('/v1/')]
+        rows = []
+        for original in _api_source(relative, stat.st_mtime_ns, stat.st_size):
+            row = dict(original)
+            described = descriptions.get((relative, row['handler'])) or descriptions.get(('', row['handler']), {})
+            row['summary'] = row['summary'] or described.get('summary', '')
+            row['abilities'] = described.get('abilities', [])
+            row['id'] = 'endpoint-' + doc_markdown.slug(relative + '-' + row['method'] + '-' + row['path'])
+            row['url'] = '/docs/api/custom#' + row['id']
+            rows.append(row)
         if rows:
             groups.append({'path': relative, 'rows': rows})
     return groups

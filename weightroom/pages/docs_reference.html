@@ -1,0 +1,18 @@
+{# Generated settings and abilities share the documentation's table and section components. #}
+{% from 'docs_parts.html' import doc_section, doc_table %}
+{% if topic.generated == 'settings' %}
+{% call doc_section('Shipped defaults', 'settings-reference') %}
+<p>Keys and defaults below come only from shipped <code>settings/defaults/*.toml</code>. Your installation's current values and credentials are not read. Meanings come from source comments and catalogue labels.</p>
+{% call doc_table('Settings reference') %}
+<thead><tr><th scope="col">Program / key</th><th scope="col">Default</th><th scope="col">Meaning</th></tr></thead>
+<tbody>{% for entry in generated %}<tr id="{{ entry.id }}"><td><small>{{ entry.program }}</small><br><code class="text-break">{{ entry.key }}</code></td><td><code class="text-break">{{ entry.display_default }}</code></td><td>{{ entry.meaning }}</td></tr>{% endfor %}</tbody>
+{% endcall %}
+{% endcall %}
+{% elif topic.generated == 'abilities' %}
+{% call doc_section('Abilities', 'abilities') %}
+{% call doc_table('Abilities and what they allow') %}
+<thead><tr><th scope="col">Ability</th><th scope="col">What it allows</th></tr></thead>
+<tbody>{% for entry in generated %}<tr id="{{ entry.id }}"><td><code>{{ entry.name }}</code></td><td>{{ entry.description }}</td></tr>{% endfor %}</tbody>
+{% endcall %}
+{% endcall %}
+{% endif %}
