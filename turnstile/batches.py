@@ -68,8 +68,27 @@ class FrontBatches:
 
     # ---- the work --------------------------------------------------------------------------------
 
+    def line_outcome(self, batch, line, status, request_id, result, *, duration=None):
+        """Record request metadata and failures, without prompts or generated output."""
+        details = dict(batch=batch['id'], line=line['line'] + 1, custom_id=line['custom_id'],
+                       endpoint=batch['endpoint'], status=status, inference_request_id=request_id)
+        if duration is not None:
+            details['duration'] = duration
+        failure = result.get('error') if isinstance(result, dict) else None
+        if status >= 400 and failure:
+            if isinstance(failure, dict):
+                details.update(error=str(failure.get('message') or failure.get('code') or 'Request failed.'),
+                               code=str(failure.get('code') or ''))
+            else:
+                details['error'] = str(failure)
+        self.log.add('batch_request', 'failed' if status >= 400 else 'done', batch['user'],
+                     model=line['body'].get('model'), trace=batch['id'], **details)
+
     def work(self, number: str, user_for) -> None:
         """Execute queued batch lines and persist their durable outcomes."""
+        batch = self.store.get(number)
+        self.log.add('batch', 'running', batch['user'], trace=number, batch=number,
+                     endpoint=batch['endpoint'], **batch['request_counts'])
         task = self.working[number] = asyncio.create_task(self.work_through(number, user_for))
         self.carrying.add(task)
         task.add_done_callback(self.carrying.discard)
@@ -79,14 +98,27 @@ class FrontBatches:
         store = self.store
         batch = store.get(number)
         headers = {"authorization": "Bearer " + self.internal_key(batch["user"]), "x-loadcoach-priority": "low", "x-loadcoach-trace": number}
+        waiting = None
+        def deferred(line, reason, **details):
+            """Record one transition into a wait, rather than every polling attempt."""
+            nonlocal waiting
+            key = (line['line'], reason)
+            if waiting != key:
+                self.log.add('batch', 'deferred', batch['user'], model=line['body'].get('model'),
+                             trace=number, batch=number, line=line['line'] + 1, custom_id=line['custom_id'],
+                             reason=reason, **details)
+                waiting = key
+        def keep(line, status, request_id, result, **details):
+            store.keep(number, line['line'], status, request_id, result)
+            self.line_outcome(batch, line, status, request_id, result, **details)
         try:
             while store.get(number)["status"] == "in_progress":
-                if not (line := store.next_line(number)):
+                if not (line := store.next_line(number, on_failure=lambda *args: self.line_outcome(batch, *args))):
                     break
                 body = {**line["body"], "stream": False}
                 current_user=user_for(batch["user"])
                 if current_user is None or self.task_owner and not self.task_owner(current_user,batch):
-                    store.keep(number, line["line"], 401, "", {"error": {"message": "The account this was handed in by is gone or disabled."}})
+                    keep(line, 401, "", {"error": {"message": "The account this was handed in by is gone or disabled."}})
                     continue
                 if line.get("model_id"):  # pinned when it was handed in: asked of the model that was meant, under whatever it is called now
                     models, complete = await self.model_catalogue(current_user)
@@ -94,13 +126,15 @@ class FrontBatches:
                                     (one.get("model_id"), "sha256:" + one["content_sha256"] if one.get("content_sha256") else None)), None)
                     if current is None:
                         if not complete:  # A partial inventory cannot establish that the pinned model was deleted.
+                            deferred(line, 'Waiting for a complete model inventory before retrying.')
                             store.not_begun(number, line["line"])
                             await asyncio.sleep(rules.AGAIN_AFTER)
                             continue
-                        store.keep(number, line["line"], 404, "", {"error": {"message": "The recorded model was removed.", "code": "model_not_found"}})
+                        keep(line, 404, "", {"error": {"message": "The recorded model was removed.", "code": "model_not_found"}})
                         continue
                     body["model"] = current
                 self.in_flight[number] = {"line": line["line"], "model": body["model"], "since": time.monotonic()}
+                began = time.monotonic()
                 try:
                     with observation.job("batch_line", number+":"+str(line["line"]), user_for(batch["user"]), getattr(self.log, "observations", None)):
                         observation.annotate(benchmark=bool(batch.get('metadata', {}).get('benchmark')))
@@ -110,7 +144,8 @@ class FrontBatches:
                             answer = await self.audio_work.execute_line(number, line, body, current_user, headers)
                         else:
                             answer = await self.door.post(batch["endpoint"], json=body, headers=headers, timeout=None)
-                except httpx.HTTPError:
+                except httpx.HTTPError as problem:
+                    deferred(line, 'Inference connection unavailable; waiting to retry.', error_type=type(problem).__name__)
                     store.not_begun(number, line["line"])
                     await asyncio.sleep(rules.AGAIN_AFTER)
                     continue
@@ -118,6 +153,7 @@ class FrontBatches:
                     self.in_flight.pop(number, None)
                 if answer.headers.get("x-turnstile") in ("compute-off", "busy") or answer.status_code == 504 or answer.status_code in (429, 503) and "retry-after" in answer.headers:
                     # Not now: compute is off or waking, turnstile is full, it waited too long, or the account has too much under way. Not a try, and not an answer.
+                    deferred(line, 'Waiting for inference capacity before retrying.', status=answer.status_code)
                     store.not_begun(number, line["line"])
                     await asyncio.sleep(rules.AGAIN_AFTER)
                     continue
@@ -125,19 +161,31 @@ class FrontBatches:
                     said = answer.json()
                 except ValueError:
                     said = {"text": answer.text}
-                store.keep(number, line["line"], answer.status_code, answer.headers.get("x-loadcoach-request-id", ""), said)
+                keep(line, answer.status_code, answer.headers.get("x-loadcoach-request-id", ""), said,
+                     duration=time.monotonic() - began)
+                waiting = None
         except asyncio.CancelledError:
             if store.get(number)["status"] != "cancelling":
+                self.log.add('batch', 'interrupted', batch['user'], trace=number, batch=number,
+                             reason='Front stopped during execution. Unanswered requests will resume after restart.')
                 raise  # turnstile is stopping. Nothing is ended: the batch is gone on with at the next start
+        except Exception as problem:
+            self.log.add('batch', 'failed', batch['user'], trace=number, batch=number,
+                         error=f'Batch worker stopped unexpectedly ({type(problem).__name__}). Unanswered requests remain saved for restart.',
+                         error_type=type(problem).__name__)
+            raise
         if store.get(number)["status"]=='paused':
             return
         ended = store.finish(number)
-        self.log.add("batch", ended["status"], batch["user"], "", batch=number, **ended["request_counts"])
+        self.log.add("batch", ended["status"], batch["user"], "", trace=number, batch=number, **ended["request_counts"])
 
     def resume(self, user_for) -> None:
         """At start: go on with every batch that had not ended."""
         for number in self.store.unfinished():
             if self.store.get(number)["endpoint"] in ENDPOINTS:
+                batch = self.store.get(number)
+                self.log.add('batch', 'resumed', batch['user'], trace=number, batch=number,
+                             reason='Continuing retained batch work after restart.', **batch['request_counts'])
                 self.work(number, user_for)
 
     def status(self, running: list[dict]) -> dict:
@@ -223,7 +271,7 @@ class FrontBatches:
             self.image_work.store.bind_job(batch['id'],user.identity,'',lines[0]['body']['model'],{'request':lines[0]['body']})
         if self.audio_work and endpoint.startswith('/v1/audio/'):
             self.audio_work.store.bind_job(batch['id'], user.identity, '', lines[0]['body']['model'], {'request': lines[0]['body']})
-        self.log.add("batch", "started", user.name, address(request), batch=batch["id"], requests=len(lines), endpoint=endpoint)
+        self.log.add("batch", "started", user.name, address(request), trace=batch['id'], batch=batch["id"], requests=len(lines), endpoint=endpoint)
         self.work(batch["id"], user_for)
         return JSONResponse(self.as_openai(batch))
 
@@ -243,12 +291,15 @@ class FrontBatches:
         if isinstance(found, Response):
             return found
         if request.method == "POST" and found["status"] == "in_progress":
+            owner = self.store.get(found['id'])['user']
+            self.log.add("batch", "cancelling", owner, address(request), trace=found['id'], batch=found["id"], actor=user.name)
             self.store.cancelling(found["id"])
             if found["id"] in self.working and not self.working[found["id"]].done():
                 self.working[found["id"]].cancel()  # the request it is waiting for is given up, and the task ends the batch
             else:
-                self.store.finish(found["id"])
-            self.log.add("batch", "cancelling", user.name, address(request), batch=found["id"])
+                ended = self.store.finish(found["id"])
+                self.log.add('batch', ended['status'], owner, address(request), trace=found['id'],
+                             batch=found['id'], actor=user.name, **ended['request_counts'])
         return JSONResponse(self.as_openai(self.store.get(found["id"])))
 
     # ---- accounts --------------------------------------------------------------------------------

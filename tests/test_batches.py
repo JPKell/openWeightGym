@@ -102,7 +102,7 @@ def test_a_batch_is_handed_in_answered_behind_everyone_and_its_answers_fetched(f
     # Each request went through the line as pat's own, behind everyone, as part of the batch.
     assert asked == [("pat", begun["id"], "low"), ("pat", begun["id"], "low")]
     assert listed == ([begun["id"]], []) and for_the_site == ([(begun["id"], "pat")], 1) and not_theirs == [404, 404]
-    assert whats == ["started", "completed"] and removed == ({"id": file["id"], "object": "file", "deleted": True}, 404)
+    assert whats == ["started", "running", "completed"] and removed == ({"id": file["id"], "object": "file", "deleted": True}, 404)
 
 
 def test_a_batch_goes_on_where_it_was_when_loadcoach_comes_back(fake_llama_server, tmp_path):

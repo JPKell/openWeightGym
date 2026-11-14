@@ -3991,9 +3991,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response(content, media_type=media,
                             headers={'Content-Disposition': f'attachment; filename="{filename}"', 'Cache-Control': 'no-store'})
         context, context_error = None, False
-        if layout == 'traces' and selected and selected.get('trace'):
+        if layout == 'traces' and selected and log_views.context_trace(selected):
             trace = await fetch(request, person, '/loadcoach/events',
-                                params={'trace': selected['trace'], 'limit': 1000})
+                                params={'trace': log_views.context_trace(selected), 'limit': 1000})
             if isinstance(trace, Response):
                 context_error = True
             else:
@@ -4010,7 +4010,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             template = 'log_list.html'
         elif asked.get('part') == 'page' and asked.get('complete') != '1':
             template = 'log_content.html'
+        batch_record = None
+        if (not events and not selected and set(wanted) == {'trace'} and not period and not going_back
+                and wanted['trace'].startswith(('batch_', 'task_'))):
+            retained = await fetch(request, person, '/loadcoach/batches')
+            if not isinstance(retained, Response):
+                batch_record = next((batch for batch in retained['batches'] if batch['id'] == wanted['trace']), None)
         response = page(request, template, person, events=events, log_view=view, wanted=wanted,
+                        batch_record=batch_record,
                         log_layout=layout, log_search_fields=log_views.SEARCH_FIELDS,
                         log_reset='/log?view=table' if layout == 'table' else '/log',
                         log_view_links={value: '/log?' + urlencode({**selection_query, 'view': value}) for value in ('table', 'traces')},

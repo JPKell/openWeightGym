@@ -39,7 +39,7 @@
   {{ progress(batch) }}
   <p class="small text-secondary mt-3" id="detail-outcome">{% if batch %}{{ 'Cancelled. Completed answers are kept; unprocessed requests will not run.' if batch.status == 'cancelled' else 'Live requests take priority. Progress survives restarts.' }}{% endif %}</p>
   <dl class="bt-facts"><dt>Submitted</dt><dd data-created>{{ batch.created_at|timestamp if batch else '' }}</dd><dt>Endpoint</dt><dd><code data-endpoint>{{ batch.endpoint if batch else '' }}</code></dd><dt>Input file</dt><dd><code data-input-file>{{ batch.input_file_id if batch else '' }}</code></dd><dt>Finished</dt><dd data-finished>{{ (batch.completed_at or batch.cancelled_at)|timestamp if batch else '' }}</dd><dt>Unprocessed</dt><dd data-remaining>{{ '{:,}'.format(batch.request_counts.total - batch.request_counts.completed - batch.request_counts.failed) if batch else '' }}</dd></dl>
-  <div class="border-top pt-3 mt-3">{{ section_title('Results & actions', level=3) }}{{ actions(batch,person,return_to) }}{% if batch and ('see-log' in person.can or batch.user == person.name) %}<a class="d-inline-block mt-3" href="/log?trace={{ batch.id|urlencode }}">View requests →</a>{% endif %}<p class="small text-secondary mt-3 mb-0">Answers and errors are downloadable by the batch owner. Files remain available until the configured retention period ends.</p></div>
+  <div class="border-top pt-3 mt-3">{{ section_title('Results & actions', level=3) }}{{ actions(batch,person,return_to) }}{% if batch and ('see-log' in person.can or batch.user == person.name) %}<a class="d-inline-block mt-3" href="/log?trace={{ batch.id|urlencode }}">View history →</a>{% endif %}<p class="small text-secondary mt-3 mb-0">Answers and errors are downloadable by the batch owner. Files remain available until the configured retention period ends.</p></div>
   {% call more('Batch API record') %}<pre class="small mb-0" id="batch-record">{{ batch|tojson(indent=2) if batch else '' }}</pre>{% endcall %}
 </div>
 <p id="inspector-empty" class="text-secondary mb-0" hidden>Select a batch to see its progress, files and submission details.</p>
@@ -47,7 +47,7 @@
 {% endmacro %}
 
 {% macro table_row(batch=none, person=none, index='', return_to='/batches') %}
-<tr{% if batch %} data-batch="{{ batch.id }}"{% endif %}><td>{{ identity(batch,index) }}{% if batch and ('see-log' in person.can or batch.user == person.name) %}<a class="small d-inline-block mt-1" href="/log?trace={{ batch.id|urlencode }}">View requests</a>{% endif %}</td><td>{{ state(batch) }}</td><td>{{ progress(batch) }}</td><td><span data-owner>{{ batch.user if batch else '' }}</span><div class="small text-secondary mt-1" data-created>{{ batch.created_at|timestamp if batch else '' }}</div></td><td><code class="bt-endpoint" data-endpoint>{{ batch.endpoint if batch else '' }}</code></td><td>{{ actions(batch,person,return_to) }}</td></tr>
+<tr{% if batch %} data-batch="{{ batch.id }}"{% endif %}><td>{{ identity(batch,index) }}{% if batch and ('see-log' in person.can or batch.user == person.name) %}<a class="small d-inline-block mt-1" href="/log?trace={{ batch.id|urlencode }}">View history</a>{% endif %}</td><td>{{ state(batch) }}</td><td>{{ progress(batch) }}</td><td><span data-owner>{{ batch.user if batch else '' }}</span><div class="small text-secondary mt-1" data-created>{{ batch.created_at|timestamp if batch else '' }}</div></td><td><code class="bt-endpoint" data-endpoint>{{ batch.endpoint if batch else '' }}</code></td><td>{{ actions(batch,person,return_to) }}</td></tr>
 {% endmacro %}
 
 {% macro overview(data=none) %}
@@ -56,6 +56,16 @@
 {{ kpi('Requests processed', '{:,}'.format(data.processed) if data else '—', ('of ' ~ '{:,}'.format(data.total) ~ ' submitted requests') if data else 'Successful answers + errors', value_attrs={'id':'processed-count'}, note_attrs={'id':'processed-note'}) }}
 {{ kpi('Batches with errors', data.errors if data else '—', 'Review the error count below', value_attrs={'id':'error-count'}) }}
 {{ kpi('Your result files', data.ready if data else '—', 'Batches with answers to download', value_attrs={'id':'ready-count'}) }}
+{% endcall %}
+{% endmacro %}
+
+{% macro history_record(batch, person) %}
+{% call card('Retained batch record', id='batch-history-record') %}
+<p class="small text-secondary">No event history is retained for this batch. Its saved state and available results are shown below.</p>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3"><strong>{{ (batch.get('metadata') or {}).get('name') or batch.id }}</strong>{{ state(batch) }}</div>
+<code class="d-block text-break mb-3">{{ batch.id }}</code>
+<div class="row g-3"><div class="col-md-6">{{ progress(batch) }}</div><div class="col-md-6 small"><div>Submitted: {{ batch.created_at|timestamp }}</div><div>Finished: {{ (batch.completed_at or batch.cancelled_at)|timestamp }}</div></div></div>
+<div class="mt-3">{{ actions(batch,person) }}</div>
 {% endcall %}
 {% endmacro %}
 

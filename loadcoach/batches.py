@@ -181,11 +181,12 @@ class Batches:
         marks = ", ".join("?" for _ in OPEN)
         return [number for (number,) in self.db.execute(f"SELECT id FROM batches WHERE status IN ({marks}) ORDER BY created", OPEN)]
 
-    def next_line(self, number: str) -> dict | None:
+    def next_line(self, number: str, *, on_failure=None) -> dict | None:
         """The next request of a batch that has no answer, counted as begun once more. None when every request has one.
 
         A request that was begun TRIES times and never answered is given an answer here, which
         says so. It was cut off each time, by LoadCoach going down, and is not begun again.
+        ``on_failure`` receives that saved failure for the worker's metadata history.
         """
         while True:
             row = self.db.execute("SELECT line, custom_id, body, tries, model_id FROM batch_lines WHERE batch = ? AND result IS NULL ORDER BY line LIMIT 1", (number,)).fetchone()
@@ -193,7 +194,10 @@ class Batches:
                 return None
             line, custom_id, body, tries, identity = row
             if tries >= TRIES:
-                self.keep(number, line, 500, "", {"error": {"message": f"This request was begun {tries} times and cut off each time, by LoadCoach stopping. It was not begun again.", "code": "cut_off"}})
+                result = {"error": {"message": f"This request was begun {tries} times and cut off each time, by LoadCoach stopping. It was not begun again.", "code": "cut_off"}}
+                self.keep(number, line, 500, "", result)
+                if on_failure:
+                    on_failure({'line': line, 'custom_id': custom_id, 'body': json.loads(body)}, 500, '', result)
                 continue
             with self.db:
                 self.db.execute("UPDATE batch_lines SET tries = tries + 1 WHERE batch = ? AND line = ?", (number, line))
