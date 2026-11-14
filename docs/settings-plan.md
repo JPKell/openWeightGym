@@ -445,7 +445,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 2.3 Pending restart status and authorized restart action (475 settings checks; 24 restart/Components checks including narrow layouts and failure states).
 - [x] 2.4 Machine configuration page (470 catalogue/service/page checks; source/default evidence, retired values, scoped read-only inspection and narrow filters).
 - [x] 2.5 History, revert and validated export/import (511 focused checks; 29 transfer/filter/browser checks, including polling drafts and rejected secret input).
-- [ ] 2.6 UI checks and documentation; Phase 2 deployed and verified.
+- [ ] 2.6 UI checks and documentation ready; awaiting clean-commit full suite, Phase 2 deployment and live verification.
 - [ ] 3.1 Security and sign-in.
 - [ ] 3.2 Requests, admission, placement, routing and batches.
 - [ ] 3.3 Notifications, personal channels and thresholds.

@@ -125,7 +125,7 @@ field to install or replace the key; the stored value is never displayed. Only a
 
 **Chat → Image generation** provides image settings, ordered references, live previews and a
 thumbnail browser with a larger selected view. Save reusable settings as a workflow; **Models → Image workflows** selects a named workflow and edits ordinary family-specific fields, preserving every saved version. SDXL workflows include negative prompts; Flux rejects them. The installed **SDXL Base 1.0 · 512 px** workflow uses a bounded, qualified 512×512 profile. Administrators may publish workflows. Generated images and original references are private to the current account
-on front until deleted. Downloads contain pixels without embedded prompts or reference metadata.
+on the control node until deleted. Downloads contain pixels without embedded prompts or reference metadata.
 Authorized temporary/no-log jobs retain assets only in bounded memory for up to one hour.
 
 Under **Models → Images**, configure diffusion weights, encoder, VAE, named LoRAs, upscaler,
@@ -243,38 +243,65 @@ after documentation edits.
 
 ## Where things run
 
+The **control node** runs the web console, authentication, routing and shared services; **compute nodes** run inference. Existing machine IDs, configuration keys, permissions and installer options retain `front` for compatibility.
+
 | Component | Responsibility |
 |---|---|
-| WeightRoom | Front web console, chat, collections/workflows and benchmark worker. |
-| Turnstile | Front authentication, model/role placement, hosted calls and signed routing to workers. |
-| ToolLocker | Front MCP gateway; file tools execute on their owning hosts. |
-| Voice gateway | Front browser/desktop/telephone connections and Hermes integration. |
+| WeightRoom | Control node web console, chat, collections/workflows and benchmark worker. |
+| Turnstile | Control node authentication, model/role placement, hosted calls and signed routing to workers. |
+| ToolLocker | Control node MCP gateway; file tools execute on their owning hosts. |
+| Voice gateway | Control node browser/desktop/telephone connections and Hermes integration. |
 | LoadCoach | Each worker's model processes, measured admission, inference and scheduling. |
 | Spotter | Each host's telemetry and allowed service/power controls. |
 | Voice service | Compute-side CPU speech recognition and synthesis. |
 
-The console machine (front) runs WeightRoom, Turnstile, ToolLocker and optionally the voice gateway;
+The console machine (control node) runs WeightRoom, Turnstile, ToolLocker and optionally the voice gateway;
 each GPU or CPU worker runs LoadCoach and Spotter. On one machine they run side by side.
 Workers appear in **Compute nodes**.
-Front owns accounts and retained application history. Workers own model files and local runtime
-state. Pages and saved records on the front remain usable when inference workers are unavailable.
+Control node owns accounts and retained application history. Workers own model files and local runtime
+state. Pages and saved records on the control node remain usable when inference workers are unavailable.
 **Telemetry** offers **Wake** on the overview and host detail for nodes with Wake-on-LAN configured
 (`wake_mac` and optional `wake_address`, at top level for compute or under `[machines.NAME]`).
 Manual wake requires `front-wake`. Previously discovered, permitted deployed models remain selectable
-in Chat, Mirror Wall and SoundRoom while a node is unavailable, including after a front restart.
+in Chat, Mirror Wall and SoundRoom while a node is unavailable, including after a control node restart.
 Using a model requests wake on its owning node; `[turnstile].wait` bounds the wake wait (180 seconds
 by default), followed by a timeout error if it still does not answer. Wake-on-LAN must also be enabled
-on the host and reachable from front. Offline alerts identify unavailable nodes; live management
-submissions for those nodes are disabled while records kept on the front and retained configuration stay readable.
+on the host and reachable from the control node. Offline alerts identify unavailable nodes; live management
+submissions for those nodes are disabled while records kept on the control node and retained configuration stay readable.
 
-Model servers use private loopback ports; clients connect through the front addresses above.
+Model servers use private loopback ports; clients connect through the control node addresses above.
 
 ## Settings, data and privacy
 
 Settings apply in this order: committed `settings/defaults/NAME.toml`, host-local
-`settings/NAME.toml`, then saved web changes. Use **Settings** for front programs and file roots,
-and **Compute nodes** for a selected worker's LoadCoach/Spotter policy. Forms indicate restart
-requirements. Model cache/storage roots contain `llm`, `encoders`, `adapters`, `projectors`, `image` and `audio`; promotion
+`settings/NAME.toml`, then saved web changes. Use **Settings** for the control node programs and file roots,
+and **Compute nodes** for a selected worker's LoadCoach/Spotter/Voice policy. General, Requests
+and queue, Retention and privacy, Alerts and notifications, Security and sign-in, Uploads and
+limits, Downloads and credentials, Machine configuration and History share one settings workspace.
+Search labels or keys, use **Changed only** to find overrides and unsent edits, and follow section
+links. Filters stay in this browser tab; native forms also work without JavaScript.
+
+**Live** values apply without restarting. Restart-only changes show **Waiting for restart since**
+until the owning service starts again. Holders of `restart-services` can use the shared restart
+action here or in Components. Restarts can interrupt active work. Compute actions still obey
+Spotter's machine-file service allowlist; control node actions use the installed `owg restart` route.
+
+**Machine configuration** selects one node and shows read-only file values, their reported source,
+defaults, differences, retired/derived/deprecated flags and service restart commands. Old services
+may not report source/default evidence yet. Retired overrides remain stored and are ignored.
+Security and sign-in also shows the file-controlled cookie and browser-origin settings.
+
+**Settings history** records who changed each setting and its old/new override. Revert restores
+one prior override, including returning to the file value. Older events without prior values
+remain readable. **Export JSON** downloads non-secret overrides across configured nodes; all
+nodes must answer. Paste that JSON into **Import JSON**, preview the validated changes, then
+confirm. Import preserves unlisted overrides and ignores retired settings. It validates every
+affected authority before writing, then each service validates again. If a service fails during
+application, remaining writes stop and the page reports the number already applied. Check current
+overrides before retrying. Credentials and machine-file values use their own controls and are
+excluded from transfer.
+
+Model cache/storage roots contain `llm`, `encoders`, `adapters`, `projectors`, `image` and `audio`; promotion
 copies storage into cache while retaining the library original.
 
 The current deployment uses SQLite; PostgreSQL is supported through the shared storage layer.
@@ -286,7 +313,7 @@ Usage distinguishes recorded costs from estimates; advisory allowances are not h
 ## Install, maintain or diagnose
 
 - [Installation](installation.md): the installer, one machine or several, system installations, pairing GPU nodes, `owg`, updating and uninstalling.
-- [Operations and release log](operations.md): runtime source overrides, host/service selection, remote tools, identity portability and every release's delivery notes. Editing the checkout alone may not update a running release.
+- [Operations and release log](operations.md): the installed checkout and normal `owg update; owg restart` route, host/service selection, remote tools, identity portability and release delivery notes. Verify the running source and live behavior after updates.
 - [Database operations](database-storage.md): store inventory, backups, exports, restore and offline engine migration. Restore requires a maintenance window; raw credentials need separate recovery.
 - [Voice](../voice/README.md): clients, modes, addresses and supported capacity; [full specification](voice.md); [telephone setup](telephone.md).
 - [Benchmarks](../benchmarks/README.md): protocols, scoring, evidence and resource limits.
