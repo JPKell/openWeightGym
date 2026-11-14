@@ -78,6 +78,7 @@ use them as written.
 ### Decisions made during implementation
 
 - Catalogue entries describe top-level settings; tables retain their existing whole-table POST contract. Nested tuning entries will validate the editable subset without exposing model paths.
+- Baseline checks at `b040cbc` reproduce eight console failures and 109 failures across legacy service tests; these must be resolved or accounted for in the clean-commit suite before pushing. Machine-readable logs are under `/tmp/owg-settings-*` on the implementation workstation.
 - No exact commit attribution line was supplied in this session; commits use `Co-authored-by: Codex <noreply@openai.com>`.
 
 ## 1. Summary
@@ -413,7 +414,7 @@ no design-proposal round: build one new settings design across all settings page
 
 - [x] 0.1 Catalogue entries and typed contracts (221 catalogue tests pass).
 - [x] 0.2 Derive tiers, labels and section order (235 focused tests pass; broader console failures under baseline review).
-- [ ] 0.3 Shared validation in APIs and loaders.
+- [x] 0.3 Shared validation in APIs and loaders (323 focused checks pass; secret reports are filtered at storage).
 - [ ] 0.4 Common live getter and generic live application.
 - [ ] 0.5 Catalogue, validation, live and secret tests; Phase 0 deployed and verified.
 - [ ] 1a Event retention and conditional node retirement.

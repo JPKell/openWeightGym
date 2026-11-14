@@ -68,7 +68,8 @@ from db.health import stores_health, async_stores_health
 from loadcoach.tasks import Tasks
 from loadcoach.capture import answer_text, request_text, said_wrong
 from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings, shared_places, storage_places
-from loadcoach.settings import CHANGEABLE, NOW, Changes, front_programs, program_name, said, wrong_kind
+from loadcoach.setting_catalog import validate_patch
+from loadcoach.settings import CHANGEABLE, NOW, Changes, front_programs, program_name, said
 from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
 from loadcoach.file_index import NODE_INDEX, FileIndex, tier_of
 from loadcoach.gguf import facts, goes_with, read_metadata
@@ -172,25 +173,25 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     from loadcoach.component_versions import Versions
     component_versions = Versions(core)
     # A store retired after the DB1 cutover keeps no task, batch, schedule or console-settings
-    # records: the front keeps them. Any other store still serves its older records.
+    # records: the control node keeps them. Any other store still serves its older records.
     with core.connection() as connection:
         retired = bool(schema_version(connection, "loadcoach.retirement"))
     gate = Gate(config.path)
     # No read timeout: a model can think for minutes before its first token.
     client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5.0))
-    # With a front machine, the log that is kept is front's: entries go there (see front.py), and the chain is made there.
+    # With a control node, the log that is kept is the control node's: entries go there (see front.py), and the chain is made there.
     log = Log(":memory:" if emergency else core, config.keep_days, config.keep_text, chained=not config.front or emergency)
     library = Models(core, config.model_defaults, config.models)  # the models there are, read live
     runner = Runner(config, client, log.add, library)
     loadouts = Loadouts(library, runner)
-    # The accounts are front's. These are fetched from it only for work done later in someone's name: see front.py.
+    # The accounts are the control node's. These are fetched from it only for work done later in someone's name: see front.py.
     users = Accounts(config.front, config.machine_key_file, front, machine_name=config.machine_name)
     schedule_grants = ScheduleGrants(core.connect(check_same_thread=False), users)
 
     def reliability_key(name, role=''):
-        """The identity a model's reliability is kept under on the front machine: its model ID and the fingerprint of its settings."""
+        """The identity a model's reliability is kept under on the control node: its model ID and the fingerprint of its settings."""
         return (library.identity(name) or '', library.fingerprint(library.get(name), name) or '', role)
-    pace = {"at": 0.0, "of": {"speed": {}, "load": {}, "last_used": {}}}  # how fast each model answers and loads, and when it was last used, from front's log
+    pace = {"at": 0.0, "of": {"speed": {}, "load": {}, "last_used": {}}}  # how fast each model answers and loads, and when it was last used, from the control node's log
     runner.paces = lambda: pace['of']
 
     # What model files said about themselves when last read, by path. A file is read again only
@@ -249,7 +250,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     async def who(request: Request) -> User | Response:
         """The user making this request, or the response that turns them away.
 
-        Who a caller is, is turnstile's to say, on the front machine: it checks their key and sends
+        Who a caller is, is turnstile's to say, on the control node: it checks their key and sends
         a signed statement in its place (see statement.py). Besides that, only the `loadcoach`
         command on this machine, and LoadCoach itself for a batch, are known here.
         """
@@ -260,15 +261,15 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if said and said.get("caller"):
             trace = request.headers.get("x-loadcoach-trace", "")
             if trace.startswith("batch_"):
-                request.state.batch_id = trace  # front's batch worker sends its request with this trace
+                request.state.batch_id = trace  # the control node's batch worker sends its request with this trace
             return user_of(said["caller"])
         if not config.machine_key_file and config.host in LOOPBACK:
-            return ANONYMOUS  # no front to say who anyone is: this machine only, everything allowed
+            return ANONYMOUS  # no control node to say who anyone is: this machine only, everything allowed
         if secrets.compare_digest(key.encode(), inner_token.encode()):  # LoadCoach itself, for the account named. It may do what that account may, as it is now
             request.state.batch_id = request.headers.get('x-loadcoach-trace')
             await users.fresh()
             return users.by_name(request.headers.get("x-loadcoach-for", "")) or error(401, "The account this was handed in by is gone or disabled.")
-        return error(401, "Ask through turnstile, on the front machine. It checks your key and says here who you are.")
+        return error(401, "Ask through turnstile, on the control node. It checks your key and says here who you are.")
 
     def signed_in(handler):
         """Wrap a handler so it is only called for a known user, who is handed to it."""
@@ -316,7 +317,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         return error(400, f"The body may set {sorted(allowed)}, nothing else.") if unknown else asked
 
     def offered(user: User) -> list[str]:
-        """The models this user may name: the local ones their group may use. Outside models are front's."""
+        """The models this user may name: the local ones their group may use. Outside models are the control node's."""
         return [name for name in library.names() if user.group.may_use(name)
                 and engine_for(library.get(name)).installation(config).enabled]
 
@@ -377,12 +378,12 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     # ---- what turnstile picks a role's model with --------------------------------------------
     #
-    # Roles, their evidence and reliability are kept on the front machine, and turnstile picks a
+    # Roles, their evidence and reliability are kept on the control node, and turnstile picks a
     # role's model there (see turnstile/roles.py). Compute is sent a plain model name. What only
     # compute knows of each model at this moment is asked for here.
 
     async def paced() -> None:
-        """How fast each model answers, how long it takes to load and when it was last used: from front's log, once a minute at most. From the day kept here if front does not answer."""
+        """How fast each model answers, how long it takes to load and when it was last used: from the control node's log, once a minute at most. From the day kept here if control node does not answer."""
         if time.monotonic() - pace["at"] > 60:
             pace.update(at=time.monotonic(), of=await users.log_facts() or {**log.paces(), "last_used": log.last_used()})
 
@@ -405,7 +406,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         one request needs, turnstile checks itself: `sees` for pictures, `tools`, `room` for the
         length of what was sent, and `context` for what the measured fit leaves. `warm` is true
         for one that is loaded with room for a request. `speed` and `load` are from the log.
-        Outside models are front's: turnstile adds them.
+        Outside models are the control node's: turnstile adds them.
         """
         await paced()
         found = {}
@@ -445,7 +446,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                            "cards": list(server.cards) if warm and server else list(placement[1]) if placement else [],
                            "evictions": [one.model for one in placement[2]] if placement else [],
                            "model_id": model_id, "fingerprint": fingerprint,
-                           # Answered at once, with no wait at all: loaded, room to spare, nobody in line, no one else's lock. Front's offload goes by it.
+                           # Answered at once, with no wait at all: loaded, room to spare, nobody in line, no one else's lock. Control node's offload goes by it.
                            "free_now": not why_not and runner.free_now(name, request.headers.get("x-loadcoach-lock"))}
             if settings:
                 found[name]['wait'] = ({'seconds': None, 'unknown': [why_not], 'basis': 'model unavailable'} if why_not else
@@ -678,9 +679,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 request.state.outcome = 'refused'
                 return error(409, message, code='local_model_guard_mismatch')
 
-        # Outside models, and the choice of one to answer in place of a local one that would have to wait, are front's.
+        # Outside models, and the choice of one to answer in place of a local one that would have to wait, are the control node's.
         if "x-loadcoach-offload" in request.headers:
-            return error(400, "X-LoadCoach-Offload is decided on the front machine. Ask through turnstile.")
+            return error(400, "X-LoadCoach-Offload is decided on the control node. Ask through turnstile.")
         going = {}
         going |= chose
         reliability_identity = reliability_key(name)
@@ -973,7 +974,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     def status_for(user: User) -> dict:
         """The status as this user may see it: everyone's requests, or only their own and a count."""
         status, now = runner.status(), time.monotonic()
-        status["hosted"] = []  # front adds the requests under way at outside services
+        status["hosted"] = []  # control node adds the requests under way at outside services
         for part in ('running', 'waiting'):
             for entry in status[part]:
                 flight = under_way.get(entry['id'])
@@ -1177,24 +1178,24 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         return JSONResponse(status_for(user))
 
     async def send_log(request: Request, user: User) -> Response:
-        """Turnstile is about to show the log: send it what it does not have yet, now. Any caller may ask; it only sends what front would have in a moment."""
+        """Turnstile is about to show the log: send it what it does not have yet, now. Any caller may ask; it only sends what control node would have in a moment."""
         if log.chained:
             return JSONResponse({"sent": False})
         try:
             await users.send_now(log, config.keep_text, dict, always=True)
         except (httpx.HTTPError, ValueError):
-            return error(503, "The log could not be sent to the front machine just now.")
+            return error(503, "The log could not be sent to the control node just now.")
         return JSONResponse({"sent": True})
 
     async def alert_evidence(request: Request, user: User) -> Response:
-        """Sanitized operational facts for operators and the trusted front collector: spending. Turnstile adds the model failures, which it keeps.
+        """Sanitized operational facts for operators and the trusted control node collector: spending. Turnstile adds the model failures, which it keeps.
 
         No prompt, output, credential, request owner or raw exception is exported.
         Spending uses the existing retained-cost checks, not in-flight reservations.
         """
         if not user.can('manage-settings') and not user.can('mirror-users'):
             return error(403, 'Operational alert evidence requires manage-settings or mirror-users.')
-        return JSONResponse({'spending': []})  # what may be spent is front's: the outside services and their keys are there
+        return JSONResponse({'spending': []})  # what may be spent is the control node's: the outside services and their keys are there
 
     async def lock(request: Request, user: User) -> Response:
         """Take the GPUs for this caller alone, or with a token, extend the lock it already holds.
@@ -2394,7 +2395,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             library.rename(name, new)
         except ValueError as problem:
             return error(400, str(problem))
-        followed = []  # the groups, accounts and roles that list it are front's: turnstile has them follow
+        followed = []  # the groups, accounts and roles that list it are the control node's: turnstile has them follow
         log.add("model", "renamed", user.name, address(request), new, was=name, followed=followed)
         runner.wake.set()
         using = sum(ticket.model == name for ticket in runner.running + runner.waiting)
@@ -2419,7 +2420,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     # ---- accounts ---------------------------------------------------------------------------
     #
-    # The accounts are kept on the front machine, and turnstile answers for them. Compute is asked
+    # The accounts are kept on the control node, and turnstile answers for them. Compute is asked
     # only for what it alone knows about one: how much it has asked for, and whether it has work
     # under way here before it is renamed.
 
@@ -2472,7 +2473,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         return JSONResponse({"replaced": True})
 
     async def plugin_mirror(request: Request, user: User) -> Response:
-        """For turnstile's plugin path: the models there are, for when compute is not answering. Who may use them is front's to say."""
+        """For turnstile's plugin path: the models there are, for when compute is not answering. Who may use them is the control node's to say."""
         if denied := lacks(user, "mirror-users"):
             return denied
         inventory = [described(name) for name in library.names()]
@@ -2491,12 +2492,12 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             await gate.wait()
             log.prune()
             from loadcoach.observation_store import prune
-            prune(log.db, forwarded=not log.chained)  # compute keeps only what front has not acknowledged
+            prune(log.db, forwarded=not log.chained)  # compute keeps only what control node has not acknowledged
             batches.prune(config.batch_keep_days)
             await asyncio.sleep(86400)
 
     def publish_task_result(task, snapshot):
-        """The evidence a finished benchmark task may publish, checked against the task. Turnstile keeps it, on the front machine. None if its submitter may no longer."""
+        """The evidence a finished benchmark task may publish, checked against the task. Turnstile keeps it, on the control node. None if its submitter may no longer."""
         user = users.by_name(task['user'])
         if not user or not user.can('benchmark') or not task['model'] or not user.group.may_use(task['model']):
             return None  # revoked access may close its batch, but cannot influence future routing
@@ -2517,9 +2518,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         rename_stored('loadcoach.core', log.db, log.former,
                       verified_backup(config.data, machine=config.machine_name))
 
-    # ---- batches are front's ---------------------------------------------------------------------
+    # ---- batches are the control node's ---------------------------------------------------------------------
     #
-    # Files and batches (OpenAI's Batch API) are kept and worked through on the front machine since
+    # Files and batches (OpenAI's Batch API) are kept and worked through on the control node since
     # milestone 115: see turnstile/batches.py. Each request of one reaches compute as an ordinary
     # request. What is kept here is only what the external tasks (benchmarks) use: loadcoach/batches.py.
 
@@ -2547,7 +2548,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return found
         if request.method == "POST" and found["status"] == "in_progress":
             batches.cancelling(found["id"])
-            batches.finish(found["id"])  # an external task's: the batches of programs are front's
+            batches.finish(found["id"])  # an external task's: the batches of programs are the control node's
             log.add("batch", "cancelling", user.name, address(request), batch=found["id"])
         return JSONResponse(as_openai(batches.get(found["id"])))
 
@@ -2575,7 +2576,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         dispatcher = asyncio.create_task(runner.dispatch())
         housekeeping = asyncio.create_task(forget_old_entries())
         if not log.chained:
-            carrying.add(asyncio.create_task(users.send_log(log, config.keep_text, dict)))  # the log entries, to front
+            carrying.add(asyncio.create_task(users.send_log(log, config.keep_text, dict)))  # the log entries, to the control node
         reading = asyncio.create_task(read_files())
         hashing.set()
         await runner.version()  # asked once now, so that it is at hand for every answer
@@ -2672,7 +2673,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if denied := lacks(user, "manage-settings"):
             return denied
         if config.toollocker_runs_on_front:
-            return error(410, 'The front keeps ToolLocker\'s records; use the Tools page on the front.')
+            return error(410, 'The control node keeps ToolLocker\'s records; use the Tools page on the control node.')
         program = next((one for one in changes.everything() if one['program'] == 'toollocker'), None)
         exists = "tool_schemas" in log.db.database.tables(log.db)
         schemas = [{"name": name, "schema": json.loads(schema)} for name, schema in
@@ -2707,7 +2708,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return denied
         program = program_name(request.path_params.get("program", "loadcoach"))
         if program in front_programs(config, retired):
-            return error(410, 'The front keeps this program\'s settings; use the Settings page on the front.')
+            return error(410, 'The control node keeps this program\'s settings; use the Settings page on the control node.')
         if request.url.path == "/loadcoach/cards":
             report()
         known = next((one for one in changes.everything() if one["program"] == program), None)
@@ -2718,27 +2719,13 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if isinstance(asked, Response):
             return asked
         now = {setting["name"]: setting["value"] for setting in known["settings"]}
-        if asked.get('component_versions_every') is not None:
-            from loadcoach.component_versions import interval_seconds
-            try:
-                interval_seconds(asked['component_versions_every'])
-            except ValueError as problem:
-                return error(400, str(problem))
-        if program == 'voice' and asked.get('greetings') is not None:
-            from voice.prompt_recordings import texts
-            try:
-                texts({'greetings': asked['greetings']})
-            except ValueError as problem:
-                return error(400, str(problem))
-        if program == 'weightroom' and asked.get('alert_gpu_temperature') is not None:
-            heat = asked['alert_gpu_temperature']
-            if type(heat) not in (int, float) or not 50 <= heat <= 110:
-                return error(400, 'alert_gpu_temperature must be from 50 through 110 degrees Celsius.')
-        for name, value in asked.items():
+        for name in asked:
             if name not in CHANGEABLE[program]:
                 return error(403, f"{name} is not changed from here. It is changed in {program}'s file, on its machine.")
-            if value is not None and name in now and (why := wrong_kind(value, now[name])):
-                return error(400, f"{name}: {why}")
+        try:
+            validate_patch(program, now, asked)
+        except ValueError as problem:
+            return error(400, str(problem))
         if program == "loadcoach":  # its own: checked whole before anything is kept, and taken on at once where that is safe
             # Validate the entire next-start configuration, including pending engine aliases.
             # Looking only at this POST wrongly conflicts with another engine's saved path.
@@ -2776,7 +2763,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if not user.can("manage-settings") and (denied := lacks(user, "follow-settings")):
             return denied
         if program_name(request.path_params['program']) in front_programs(config, retired):
-            return error(410, 'This program follows settings on front.')
+            return error(410, 'This program follows settings on the control node.')
         return JSONResponse(changes.of(request.path_params["program"]))
 
     async def settings_seen(request: Request, user: User) -> Response:
@@ -2784,7 +2771,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if denied := lacks(user, "follow-settings"):
             return denied
         if program_name(request.path_params['program']) in front_programs(config, retired):
-            return error(410, 'This program reports settings on front.')
+            return error(410, 'This program reports settings on the control node.')
         asked = await read_json(request, {"told", "refused"})
         if isinstance(asked, Response):
             return asked
@@ -2949,7 +2936,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     async def schedule_register(request: Request, user: User) -> Response:
         """Register a hashed schedule grant when compute retains schedule authority."""
         if retired:
-            return error(410, 'The front keeps schedules for this node; use turnstile.')
+            return error(410, 'The control node keeps schedules for this node; use turnstile.')
         asked = await read_json(request, {'id', 'token', 'spec'})
         if isinstance(asked, Response):
             return asked
@@ -2966,7 +2953,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     async def schedule_edit(request: Request, user: User) -> Response:
         """Replace a compute-owned schedule grant after current permission checks."""
         if retired:
-            return error(410, 'The front keeps schedules for this node; use turnstile.')
+            return error(410, 'The control node keeps schedules for this node; use turnstile.')
         asked = await read_json(request, {'token', 'spec', 'enabled'})
         if isinstance(asked, Response):
             return asked
@@ -2984,7 +2971,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     async def schedule_control(request: Request, user: User) -> Response:
         """Enable or disable a compute-owned schedule grant."""
         if retired:
-            return error(410, 'The front keeps schedules for this node; use turnstile.')
+            return error(410, 'The control node keeps schedules for this node; use turnstile.')
         if denied := lacks(user, 'manage-settings'):
             return denied
         asked = await read_json(request, {'enabled'})
@@ -2992,7 +2979,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return asked
         if type(asked.get('enabled')) is not bool:
             return error(400, 'enabled must be true or false.')
-        await users.fresh()  # the owner as front says they are now: whether they may still have a schedule resumed
+        await users.fresh()  # the owner as control node says they are now: whether they may still have a schedule resumed
         try:
             schedule_grants.enable(request.path_params['identifier'], asked['enabled'])
             log.add('schedule', 'resumed' if asked['enabled'] else 'paused', user.name, address(request), schedule=request.path_params['identifier'])
@@ -3005,10 +2992,10 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     async def schedule_dispatch(request: Request) -> Response:
         """Only the saved job, under its live owner; no general impersonation or wake path."""
         if retired:
-            return error(410, 'The front keeps schedules for this node; dispatch through turnstile.')
+            return error(410, 'The control node keeps schedules for this node; dispatch through turnstile.')
         try:
             identifier = request.path_params['identifier']
-            await users.fresh()  # the owner as front says they are now
+            await users.fresh()  # the owner as control node says they are now
             owner, spec = schedule_grants.authorized(identifier, request.headers.get('x-suite-schedule', ''))
             asked = await read_json(request, {'due_at', 'task_token'})
             if isinstance(asked, Response):

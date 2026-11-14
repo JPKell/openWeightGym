@@ -55,6 +55,7 @@ from loadcoach.log import Log
 from loadcoach import statement, observability as observation
 from loadcoach.groups import ABILITIES
 from loadcoach.statement import Statements, user_of
+from loadcoach.setting_catalog import validate_values
 from loadcoach.settings import Changes, changed_for, laid_over, said, taken
 from loadcoach.users import User
 from spotter.screen import at_the_screen
@@ -130,6 +131,7 @@ def settings_from(path: Path, told: dict, file: dict | None = None) -> Settings:
     main = laid_over(main, changed_for("loadcoach", database), "loadcoach")
     here = main.get("host", "127.0.0.1")
     try:
+        validate_values('spotter', told)
         settings = Settings(
             **{
                 "services": {},
@@ -148,11 +150,9 @@ def settings_from(path: Path, told: dict, file: dict | None = None) -> Settings:
                 "says": said_in(path),
             }
         )
-        interval_seconds(settings.component_versions_every)
+        validate_values('spotter', vars(settings))
     except (TypeError, ValueError) as problem:
         raise SystemExit(f"{path}: {problem}") from None
-    if settings.sample_every < 1 or min(settings.keep_days, settings.sleep_after, settings.busy_gpu, settings.busy_processor, settings.files_every) < 0:
-        raise SystemExit(f"{path}: sample_every is a second or more, and no number is less than nothing")
     for name, unit in [*settings.services.items(), *settings.system_services.items()]:
         if not isinstance(unit, str) or not unit.endswith(".service") or "/" in unit or " " in unit:
             raise SystemExit(f"{path}: service {name!r} must name a unit, such as loadcoach.service")

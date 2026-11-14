@@ -1,7 +1,7 @@
-"""weightroom: the app on the front machine. People sign in here and use everything from a browser.
+"""weightroom: the app on the control node. People sign in here and use everything from a browser.
 
 The users, their keys and the groups are kept on this machine, in the accounts store weightroom
-shares with turnstile. Models live on compute; retained request history lives on front.
+shares with turnstile. Models live on compute; retained request history lives on the control node.
 Compute-dependent pages ask through turnstile with the signed-in person's key. It is a session key: when someone
 signs in, weightroom passes what they typed to turnstile, which checks it and hands back a key
 that ends after some hours. The browser keeps it in a cookie. weightroom keeps no list of who is
@@ -102,6 +102,7 @@ from plugins._controller import Controller as PluginController
 from loadcoach.groups import NAME
 from loadcoach.roles import STRENGTHS, benchmark_shares, check_loaded_bonuses, check_weights, loaded_factors, pick
 from loadcoach.waiting import completion
+from loadcoach.setting_catalog import validate_values
 from loadcoach.settings import copy_of, laid_over, read_value, said, written
 from benchmarks.app import Settings as BenchmarkSettings, build_app as build_benchmarks
 from benchmarks.store import Benchmarks
@@ -133,12 +134,12 @@ from turnstile.app import NO_WAKE, front_stores, wake
 HERE = Path(__file__).parent
 COOKIE = "weightroom"
 LEGACY_COOKIE = "frontdesk"
-# What the front machine itself lets people do, in the words LoadCoach uses for its own. Someone who can do everything can do these.
+# What the control node itself lets people do, in the words LoadCoach uses for its own. Someone who can do everything can do these.
 FRONT_ABILITIES = {"front-wake": "wake an unavailable compute node from the site", "front-voice": "use voice conversations",
                    "front-phone": "call in by telephone as yourself"}
 LOOK_EVERY = 15  # seconds between looks at compute
 # The addresses turnstile answers itself, from the accounts. Their answers say nothing about whether compute is up.
-# Answered by turnstile from what is kept on front, so an answer to them says nothing about compute: the accounts, and the log (milestone 91).
+# Answered by turnstile from what is kept on the control node, so an answer to them says nothing about compute: the accounts, and the log (milestone 91).
 ACCOUNTS = ("/loadcoach/me", "/loadcoach/users", "/loadcoach/groups", "/loadcoach/sign-", "/turnstile/",
             "/loadcoach/observation",
             "/loadcoach/requests", "/loadcoach/events", "/loadcoach/event-choices", "/loadcoach/usage", "/loadcoach/account-events", "/loadcoach/allowances", "/loadcoach/sessions", "/loadcoach/account-notices")
@@ -180,7 +181,7 @@ class Settings:
     observation_min_samples: int = 100  # suppress rate/latency alerts below this sample count
     observation_window_seconds: int = 300  # fixed metric window for configured application alerts
     observation_alert_hold_seconds: int = 60  # sustained condition and positive recovery window
-    observation_keep_days: int = 7  # days of spans kept on front
+    observation_keep_days: int = 7  # days of spans kept on the control node
     observation_success_percent: int = 100  # share of all-successful traces whose spans are kept; others always are
     observation_max_spans: int = 0  # cap on stored spans; 0 is none
     observation_quiet_routes: tuple[str, ...] = observation.POLLS  # a successful trace that starts at one of these is not kept
@@ -223,24 +224,8 @@ def load_settings(path: Path) -> Settings:
             rest = {name: value for name, value in some.items() if name != "key_file"}
             loaded = Settings(**{**rest, "key": key, "data": str(data), "file": told, "says": said_in(path), "path": str(path),
                                  "toollocker_runs_on_front": bool(turnstile.get('toollocker_url'))})
-            if any(type(rate) not in (int, float) or not 0 <= rate <= 1_000_000
-                   for rate in (loaded.mock_input_rate, loaded.mock_output_rate)):
-                raise ValueError("mock token rates must be numbers from 0 to 1,000,000 USD per million tokens")
+            validate_values('weightroom', vars(loaded))
             selected = loaded.third_party_services
-            if any(type(getattr(loaded, name)) is not bool for name in SERVICE_SETTINGS):
-                raise ValueError('Platform services must be true or false')
-            if (not isinstance(selected, (list, tuple)) or any(not isinstance(name, str) for name in selected)
-                    or len(selected) != len(set(selected)) or set(selected) - THIRD_PARTY_NAMES):
-                raise ValueError("third_party_services may contain ollama, docker, apache and nginx once each")
-            if type(loaded.backup_retention) is not int or not 0 <= loaded.backup_retention <= 100:
-                raise ValueError("backup_retention must be a whole number from 0 through 100")
-            if type(loaded.alert_gpu_temperature) not in (int, float) or not 50 <= loaded.alert_gpu_temperature <= 110:
-                raise ValueError("alert_gpu_temperature must be from 50 through 110 degrees Celsius")
-            for name in observation.ALERT_LIMITS:
-                observation.alert_value(name, getattr(loaded, name))
-            from loadcoach.observation_store import check_policy
-            check_policy(loaded.observation_keep_days, loaded.observation_success_percent, loaded.observation_max_spans,
-                         loaded.observation_quiet_routes)
             return replace(loaded, third_party_services=tuple(selected))
         except (KeyError, OSError, TypeError, ValueError) as problem:
             why = problem
@@ -248,7 +233,7 @@ def load_settings(path: Path) -> Settings:
 
 
 class ServiceUnavailable(Exception):
-    """The front or the explicitly selected node did not answer."""
+    """The control node or the explicitly selected node did not answer."""
 
 
 class MachineOff(Exception):
@@ -257,7 +242,7 @@ class MachineOff(Exception):
 
 @dataclass
 class FrontState:
-    """Front connection state and the latest combined fleet snapshot."""
+    """Control node connection state and the latest combined fleet snapshot."""
 
     up: bool | None = None  # None until the first look
     since: float = field(default_factory=time.time)  # when `up` last changed
@@ -275,8 +260,8 @@ class Person:
     me: dict = field(default_factory=dict)  # what LoadCoach says about them
 
     def __post_init__(self) -> None:
-        # LoadCoach spells "superuser" out into its own abilities. The front machine's are spelled out here.
-        """Expand superuser access to include front-only operator abilities."""
+        # LoadCoach spells "superuser" out into its own abilities. The control node's are spelled out here.
+        """Expand superuser access to include control-node-only operator abilities."""
         if "superuser" in self.can:
             self.can = [*self.can, *FRONT_ABILITIES]
 
@@ -569,7 +554,7 @@ def measure_button(models: list[dict], nodes: dict[str, dict], node: str = "") -
 
 
 def covered(known: dict) -> set[str]:
-    """Every ability that "superuser" stands for: LoadCoach's and the front machine's, but not those meant for a program's own key."""
+    """Every ability that "superuser" stands for: LoadCoach's and the control node's, but not those meant for a program's own key."""
     return (set(known["abilities"]) | set(FRONT_ABILITIES)) - set(known["own_key"]) - {"superuser"}
 
 
@@ -600,7 +585,7 @@ def of_its_own(ticked, group_can, known: dict) -> dict:
     if "superuser" in add:
         add -= covered(known)  # the one word says them all
     if "superuser" in remove:
-        # Its group can do everything and it is to do less. The front machine read its own
+        # Its group can do everything and it is to do less. The control node read its own
         # abilities into that word, and they go with it: the ones still wanted must now be
         # given by name, and the others need no taking away.
         implied = set(FRONT_ABILITIES) - set(group_can)
@@ -634,7 +619,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                              server_timezone=settings.timezone or display.server_zone(),
                              log_timezone=settings.timezone or "UTC", input_utc=display.input_utc)
     pages.env.filters["clock"] = clock
-    pages.env.filters.update(display=display.value, count=display.count, timestamp=display.timestamp, log_line=display.log_line)
+    pages.env.filters.update(display=display.value, node_label=display.node_label, count=display.count, timestamp=display.timestamp, log_line=display.log_line)
     pages.env.filters["worded"] = lambda value, name: "\u2014" if value is None else worded(name, value)  # a dash for a reading that was not given
     pages.env.filters["size"] = size
     pages.env.filters["disk_size"] = disk_size
@@ -697,7 +682,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                       if settings.chat_model_url and client is None else loadcoach)
 
     async def carry_origin(request: httpx.Request) -> None:
-        """Authenticate this browser's IP across local front HTTP hops without sharing context between users."""
+        """Authenticate this browser's IP across local control node HTTP hops without sharing context between users."""
         await forward_origin(request, settings.key)
 
     origin_clients = (loadcoach, tool_http, spotter, chat_inference)
@@ -766,7 +751,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             noted(False)
             raise ServiceUnavailable from None
         if target is loadcoach:
-            noted(True)  # A node refusal still proves that the front is answering.
+            noted(True)  # A node refusal still proves that the control node is answering.
         if answer.headers.get("x-turnstile") == "compute-off":
             raise ServiceUnavailable
         return answer
@@ -786,7 +771,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     said_last: dict = {}  # what LoadCoach was last told that each program here runs with
 
     async def in_step() -> None:
-        """Fetch what was changed in the settings of the front machine's programs, keep a copy for their next start, and say what they run with.
+        """Fetch what was changed in the settings of the control node's programs, keep a copy for their next start, and say what they run with.
 
         weightroom does this for itself and for turnstile, which has no key of its own. Each takes a
         change on when it next starts. See loadcoach/settings.py.
@@ -845,7 +830,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             except ServiceUnavailable:
                 pass
             try:
-                await in_step()  # Front settings remain available while compute is offline.
+                await in_step()  # Control node settings remain available while compute is offline.
             except ServiceUnavailable:
                 pass
             await asyncio.sleep(LOOK_EVERY)
@@ -1161,7 +1146,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "sign_in.html", back="back" in request.query_params, next=sign_in_next(request.query_params['next']) if 'next' in request.query_params else '')
 
     async def sign_in(request: Request) -> Response:
-        """Validate the browser form and request a session from the front account authority."""
+        """Validate the browser form and request a session from the control node account authority."""
         if not ours(request):
             return Response("This form was not sent from weightroom's own page.", status_code=403)
         form = await typed(request)
@@ -1469,7 +1454,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             session['device'] = device_name(session['agent'])
         is_keys = opened == 'keys' or bool(new_key)
         phone_numbers = None
-        if 'front-phone' in person.can:
+        if 'front-phone' in person.can and not is_keys:
             phone_reply = await ask('GET', '/loadcoach/phone-numbers', person.key, timeout=15)
             phone_numbers = phone_reply.json() if phone_reply.is_success else {'numbers': [], 'pending': [], 'available': False,
                 'reason': 'Phone numbers are unavailable. Try again later.'}
@@ -1551,7 +1536,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return "/models/" + quote(name, safe="/:")  # a name may hold a slash or a colon, and little else
 
     def first_node(person: Person | None) -> str:
-        """The node a page shows when none is chosen: the first active node the front lists. Empty when it lists none."""
+        """The node a page shows when none is chosen: the first active node the control node lists. Empty when it lists none."""
         return next(iter((person.me if person else {}).get("machines") or []), "")
 
     def node_named(person: Person | None, name: str) -> str:
@@ -2041,7 +2026,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def measure_on_nodes(person: Person, nodes: dict[str, dict], stop: bool, copies: set[tuple[str, str]] | None = None,
                                merged: bool = True) -> str | None:
         """Start measuring on every node in `nodes` (see node_measuring) with a model to measure, or stop the runs under way.
-        `copies` keeps one model's copies. `merged` is false for a front too old to merge nodes, which knows compute alone.
+        `copies` keeps one model's copies. `merged` is false for a control node too old to merge nodes, which knows compute alone.
 
         Each node measures its own copies, one after another, and gives way to any request.
         Says why nothing could be started, or None when every node that was asked agreed."""
@@ -2770,7 +2755,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     # ---- backup and recovery ---------------------------------------------------------------
 
     def front_recovery_stores() -> list[RecoveryStore]:
-        """Enumerate the configured stores the front keeps, for paired recovery sets."""
+        """Enumerate the configured stores the control node keeps, for paired recovery sets."""
         stores = []
         for bound in database_registry.bound_stores():
             if not bound.bindings:
@@ -2785,7 +2770,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return stores
 
     def front_backup_context() -> tuple[Path, list, list[dict], list[dict], list[RecoveryStore]]:
-        """Assemble front backup inputs, exclusions and service ownership."""
+        """Assemble control node backup inputs, exclusions and service ownership."""
         stores = front_recovery_stores()
         paths = [store.database.path for store in stores if store.database.path is not None]
         files, excluded = front_plan(settings.data, settings.path, settings.plugins_dir, paths)
@@ -2795,7 +2780,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def backup_nodes(person):
         """Read each node's backup inventory independently, without waking it."""
         root, _, excluded, inventory, _ = await asyncio.to_thread(front_backup_context)
-        result = [{'name': 'front', 'label': 'Front', 'inventory': inventory,
+        result = [{'name': 'front', 'label': 'Control node', 'inventory': inventory,
                    'archive_root': str(root), 'excluded': excluded,
                    'backups': backup_manifests(root),
                    'protection': await asyncio.to_thread(encryption_status, root), 'error': ''}]
@@ -2899,7 +2884,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     # ---- database inventory and exports -----------------------------------------------------
 
     def front_database_sources():
-        """Bound front database IDs to configured stores and discovered SQLite files."""
+        """Bound control node database IDs to configured stores and discovered SQLite files."""
         return configured_sources(
             database_registry,
             data,
@@ -2948,7 +2933,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return go("/databases?said=" + quote(f"Migration {job} started. The console will close during maintenance; return here after services restart."))
 
     async def front_store_health():
-        """Probe front stores independently of compute and reuse recorded recovery evidence."""
+        """Probe control node stores independently of compute and reuse recorded recovery evidence."""
         return await async_stores_health(front_recovery_stores(), 'front', backup_manifests(backup_root(settings.data)))
 
     database_operations = DatabaseOperations(front_database_sources, data / 'database-maintenance', machine='front', recovery_prefix='weightroom.')
@@ -3007,7 +2992,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if machine == 'front':
             source = front_database_sources().get(identifier)
             if source is None:
-                return Response('There is no such front database.', status_code=404)
+                return Response('There is no such control node database.', status_code=404)
             try:
                 path, method = await asyncio.to_thread(make_sql_dump, source, table)
             except KeyError:
@@ -3094,7 +3079,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def voice_stream(socket: WebSocket) -> None:
         """Carry one reserved call's audio and events between the browser and the gateway."""
-        import websockets  # installed with voice-gateway, which front always has
+        import websockets  # installed with voice-gateway, which control node always has
 
         sid = socket.path_params['sid']
         try:
@@ -3155,7 +3140,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             else:
                 problem = 'Telephone administration is unavailable. Check the gateway and your permissions.'
         except (httpx.HTTPError, ValueError, KeyError):
-            problem = 'Voice gateway is not answering. Check voice-gateway.service on front.'
+            problem = 'Voice gateway is not answering. Check voice-gateway.service on the control node.'
         from voice.telephone_admin import verdict
         from voice.telephone_settings import urls
         return page(request, 'voice_telephone.html', person, status=400 if failed else 200,
@@ -3182,7 +3167,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if action == 'save_access':
             payload.update({name: form.get(name) == 'yes' for name in ('accept_user_numbers', 'require_attested_caller_id')})
         try:
-            reply = await voice_admin_request(person, 'telephone', 'POST', json={'action': action, **payload}, timeout=60 if action == 'simulate' else 15)
+            reply = await voice_admin_request(person, 'telephone', 'POST', json={'action': action, **payload}, timeout=60 if action == 'simulate' else 20)
             if not reply.is_success:
                 message = reply.json().get('error', {}).get('message', 'Telephone settings could not be saved. Check the submitted fields and gateway.')
                 return await voice_telephone_page(request, person, message, failed=True,
@@ -3211,7 +3196,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             else:
                 problem = f'Voice gateway administration is unavailable (HTTP {reply.status_code}).'
         except (httpx.HTTPError, ValueError):
-            problem = 'Voice gateway is not answering. Check voice-gateway.service on front and its private address in Settings.'
+            problem = 'Voice gateway is not answering. Check voice-gateway.service on the control node and its private address in Settings.'
         if request.url.path == '/system/voice/status' or request.url.path.startswith('/system/voice/calls/'):
             from weightroom.voice_status_views import normalized, workspace
             status = normalized(status)
@@ -3284,7 +3269,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 if pending:
                     return await voice_admin_page(request, person, 'Voice has not reported the saved speaker or greeting changes yet. Wait, refresh status, then regenerate.', failed=True)
             except ServiceUnavailable:
-                return await voice_admin_page(request, person, 'Compute is unavailable. Previous recordings remain on front.', failed=True)
+                return await voice_admin_page(request, person, 'Compute is unavailable. Previous recordings remain on the control node.', failed=True)
         try:
             more = {}
             if action == 'preview':
@@ -3302,7 +3287,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await voice_admin_page(request, person, 'Greeting regeneration did not finish. The previous recordings remain available; refresh status before retrying.', failed=True)
         if result.is_success:
             if action == 'regenerate':
-                return go('/system/voice?said=' + quote('Regenerated all greetings and saved the complete set on front.'))
+                return go('/system/voice?said=' + quote('Regenerated all greetings and saved the complete set on the control node.'))
             return Response(result.content, media_type='audio/wav', headers={'cache-control': 'no-store'})
         message = 'Voice could not complete that action (HTTP ' + str(result.status_code) + ').'
         try:
@@ -3346,7 +3331,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if location_answer.is_success:
                 file_locations = location_answer.json()['locations']
             else:
-                location_error = 'Front file locations could not be read. Refresh this page to try again.'
+                location_error = 'Control node file locations could not be read. Refresh this page to try again.'
         else:
             location_answer = await ask("GET", "/turnstile/machines/" + quote(selected_machine, safe="") + "/settings", person.key)
             if location_answer.status_code == 200:
@@ -3366,7 +3351,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     file_pending=file_pending, file_offline=file_offline, file_delivery_error=file_delivery_error)  # fmt: skip
 
     async def image_settings_page(request: Request, person: Person) -> Response:
-        """Edit the existing front-wide image policy without changing personal consent."""
+        """Edit the existing platform image policy without changing personal consent."""
         if 'manage-settings' not in person.can:
             return Response('You may not manage image settings.', status_code=403)
         if request.method == 'POST':
@@ -3395,8 +3380,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                            json={"models_folder": cache, "models_storage_folder": storage})
         if answer.status_code not in (200, 202):
             return await settings_page(request, person, answer.json()["error"]["message"], True, typed_in=form)
-        message = ('Saved. Front file locations are available now.' if machine == 'front' else
-                   'Saved on front. The node will receive these paths when it reconnects; restart its compute service to apply them.' if answer.status_code == 202 else
+        message = ('Saved. Control node file locations are available now.' if machine == 'front' else
+                   'Saved on the control node. The node will receive these paths when it reconnects; restart its compute service to apply them.' if answer.status_code == 202 else
                    'Saved. Restart LoadCoach on that machine to apply the file paths.')
         return go("/settings?file_machine=" + quote(machine, safe="") + "&said=" + quote(message))
 
@@ -3487,7 +3472,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     engine_choices=engine_choices, engine_error="" if engine_answer.is_success else "Engine controls require a matching LoadCoach update.")  # fmt: skip
 
     async def change_node_lifecycle(request: Request, person: Person) -> Response:
-        """Save lifecycle on front without requiring the selected compute node to answer."""
+        """Save lifecycle on the control node without requiring the selected compute node to answer."""
         form = await typed(request)
         machine = form.get("machine", "")
         state = form.get("state", "")
@@ -3601,7 +3586,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await compute_nodes_page(request, person, answer.json()["error"]["message"], failed=True,
                                             typed_in={"machine": machine}, opened="machine-key")
         return go("/compute-nodes?machine=" + quote(machine, safe="") + "&said=" + quote(
-            "A new machine key is in use on front and " + machine + ". The old one counts for ten more minutes."))
+            "A new machine key is in use on the control node and " + machine + ". The old one counts for ten more minutes."))
 
     async def schedule_machine_key(request: Request, person: Person) -> Response:
         """Validate and save the selected node's key-rotation schedule."""
@@ -3785,7 +3770,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await render_settings(request, person, answer.json()["error"]["message"], failed=True, typed_in=form, opened=program)
         if program == 'weightroom' and set(asked) & SERVICE_SETTINGS.keys():
             await in_step()
-        message = 'Saved on front. The node will receive these locations when it reconnects.' if answer.status_code == 202 else 'Saved.'
+        message = 'Saved on the control node. The node will receive these locations when it reconnects.' if answer.status_code == 202 else 'Saved.'
         return go(f"{destination}?{destination_query}open={quote(program)}&said=" + quote(message))
 
     # ---- chat -------------------------------------------------------------------------------
@@ -3874,9 +3859,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if catalogue.is_success:
                 models=[m for m in catalogue.json()['data'] if m.get('owned_by')=='loadcoach']
             else:
-                unavailable='The model catalogue is unavailable. Saved sources remain on front.'
+                unavailable='The model catalogue is unavailable. Saved sources remain on the control node.'
         except ServiceUnavailable:
-            unavailable='Compute is unavailable. Saved sources remain on front; indexing and queries need compute.'
+            unavailable='Compute is unavailable. Saved sources remain on the control node; indexing and queries need compute.'
         maximum=person.me.get('max_sensitivity','normal')
         levels=['normal','sensitive','restricted']
         levels=levels[:levels.index(maximum)+1] if maximum in levels else []
@@ -3995,9 +3980,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if catalog.is_success:
                 models=[m for m in catalog.json()['data'] if m.get('owned_by')=='loadcoach' and not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier') and not m.get('rerank') and not m.get('capabilities', {}).get('rerank') and m.get('local_model_guard')]
             else:
-                unavailable='The model catalogue is unavailable. Saved prompts and outputs remain on front.'
+                unavailable='The model catalogue is unavailable. Saved prompts and outputs remain on the control node.'
         except ServiceUnavailable:
-            unavailable='Compute is unavailable. Saved prompts and outputs remain on front; generation needs compute.'
+            unavailable='Compute is unavailable. Saved prompts and outputs remain on the control node; generation needs compute.'
         response=page(request,'workflows.html',person,status=400 if failed else 200,workflows=listed['workflows'],
             workflow=run,prompts=listed['prompts'],builtins=listed['builtins'],collections=collections['collections'],
             workflow_models=models,unavailable=unavailable,said=said,failed=failed,form=workflow_form,
@@ -4675,7 +4660,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return "/file?path=" + quote(path, safe="/")
 
     async def all_files(request: Request, person: Person) -> dict | Response:
-        """Front-cached files and the storage available at every node."""
+        """Files cached on the control node and the storage available at every node."""
         return await fetch(request, person, "/turnstile/artifacts/files")
 
     def files_view(found: dict) -> dict:
@@ -4826,7 +4811,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         elif action == "consolidate-cache":
             message = "Cache consolidation started. Progress is shown on Files."
             if result.get("absent"):
-                message += " Front has no copy of: " + ", ".join(result["absent"]) + "."
+                message += " Control node has no copy of: " + ", ".join(result["absent"]) + "."
         else:
             message = "Compute-node cleanup started. Progress is shown on Files."
             if result.get("unavailable"):
@@ -4865,7 +4850,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return go(back + "&said=" + quote(said))
 
     async def refresh_files(person: Person, back: str) -> Response:
-        """Have front and every node look through their model folders again now, then show the view Refresh was pressed on."""
+        """Have control node and every node look through their model folders again now, then show the view Refresh was pressed on."""
         back = back if back.startswith("/files?") and "//" not in back and "said=" not in back else "/files?"
         # Each node has thirty seconds to look through its folders; the page waits for the slowest.
         answer = await ask("GET", "/turnstile/artifacts/files", person.key, params={"refresh": "1"}, timeout=httpx.Timeout(75, connect=2))
@@ -5129,14 +5114,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         history_error = None
         if identity and host is None:
             if not re.fullmatch(r'[0-9a-f]{64}', identity):
-                return page(request, 'refused.html', person, status=404, why='That machine fingerprint is not known to front.')
+                return page(request, 'refused.html', person, status=404, why='That machine fingerprint is not known to the control node.')
             retained = await fetch(request, person, f'/turnstile/telemetry/{identity}/history',
                                    params={'end': until, 'seconds': hours * 3600, 'points': 240})
             if isinstance(retained, Response):
                 return retained
             reference = retained.get('host')
             if not reference or reference.get('fingerprint') != identity:
-                return page(request, 'refused.html', person, status=404, why='That machine fingerprint is not known to front.')
+                return page(request, 'refused.html', person, status=404, why='That machine fingerprint is not known to the control node.')
             host = hosts_view([reference], source_poll)[0]
             hosts.append(host)
             past = retained
@@ -5206,7 +5191,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         for node in found["nodes"]:
             # Keep reports from older nodes in the console's current service order.
             node.get("services", []).sort(key=lambda row: service_order.get(row["id"], len(service_order)))
-            # The console showing this page is running, on front's machine when it is the one that answered, unit or not.
+            # The console showing this page is running, on the control node's machine when it is the one that answered, unit or not.
             if node["name"] == "front" and node.get("hostname") == socket.gethostname():
                 for row in node["services"]:
                     if row["id"] == "weightroom" and not row["installed"]:
@@ -5214,7 +5199,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return found, None
 
     async def components_page(request: Request, person: Person) -> Response:
-        """Every service and engine on front and on each compute node, installed or not. Changes nothing and wakes nothing."""
+        """Every service and engine on the control node and on each compute node, installed or not. Changes nothing and wakes nothing."""
         if "manage-settings" not in person.can:
             return page(request, "refused.html", person, status=403, why="Seeing what each machine has installed requires manage-settings.")
         if initial_page(request):
@@ -5279,7 +5264,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "pulse.html")
 
     async def scheduled_front_backup(identifier, retention):
-        """Create the front's independent scheduled backup."""
+        """Create the control node's independent scheduled backup."""
         root, files, excluded, rows, stores = front_backup_context()
         existing = backup_manifest(root, identifier)
         if existing and existing.get('verification', {}).get('state') == 'verified':
@@ -5402,7 +5387,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 raise ValueError(answer.json()['error']['message'])
             schedules.create(identifier, name, person.me['identity'], person.name, spec, token, model_name=answer.json().get('model_name', ''))
         except (ValueError, TypeError, KeyError, ServiceUnavailable) as problem:
-            return await schedules_page(request, person, 'The front is unavailable.' if isinstance(problem, ServiceUnavailable) else str(problem), failed=True, new_form=True)
+            return await schedules_page(request, person, 'The control node is unavailable.' if isinstance(problem, ServiceUnavailable) else str(problem), failed=True, new_form=True)
         return go('/schedules?edit='+identifier+'&said=Schedule+created.')
 
     async def schedule_edit(request: Request, person: Person):
@@ -5430,7 +5415,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     raise ValueError(answer.json()['error']['message'])
                 schedules.update(identifier, name, spec, token, model_name=answer.json().get('model_name', ''))
         except (ValueError, TypeError, KeyError, ServiceUnavailable) as problem:
-            return await schedules_page(request, person, 'The front is unavailable; the edit was not saved.' if isinstance(problem, ServiceUnavailable) else str(problem), failed=True, editing_id=identifier)
+            return await schedules_page(request, person, 'The control node is unavailable; the edit was not saved.' if isinstance(problem, ServiceUnavailable) else str(problem), failed=True, editing_id=identifier)
         return go('/schedules?edit='+identifier+'&said=Schedule+saved.')
 
     async def schedule_action(request: Request, person: Person):
@@ -5461,7 +5446,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         raise ValueError(answer.json()['error']['message'])
                 schedules.enable(identifier, action == 'resume')
         except (ValueError, ServiceUnavailable) as problem:
-            return await schedules_page(request, person, 'The front is unavailable.' if isinstance(problem, ServiceUnavailable) else str(problem), failed=True, selected_id=identifier)
+            return await schedules_page(request, person, 'The control node is unavailable.' if isinstance(problem, ServiceUnavailable) else str(problem), failed=True, selected_id=identifier)
         return go('/schedules?view='+identifier)
 
     async def alert_page(request: Request, person: Person) -> Response:
@@ -5730,7 +5715,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     observation_log = Log(database_registry.database("weightroom.accounts"))
     database_operations.audit = lambda event, owner, **detail: observation_log.add('database', event, owner, machine='front', **detail)
     from loadcoach.observation_store import set_policy
-    with observation_log.db:  # front's span policy, which every writer and pruner of this store follows
+    with observation_log.db:  # the control node's span policy, which every writer and pruner of this store follows
         set_policy(observation_log.db, settings.observation_keep_days, settings.observation_success_percent,
                    settings.observation_max_spans, tuple(settings.observation_quiet_routes))
     # Handle console failures before observation's generic JSON fallback, retaining its request ID.
@@ -5748,9 +5733,9 @@ cli.add_typer(log_cli, name="log", help="Read what was done to the accounts. `lo
 @cli.callback(invoke_without_command=True)
 def root(ctx: typer.Context, config: Annotated[Path, typer.Option(metavar="FILE", help="The settings file.")] = Path("settings/weightroom.toml")) -> None:
     # Each paragraph is one line here, because Typer keeps the line breaks it is given.
-    """weightroom: the pages people use, on the front machine, and the accounts behind them.
+    """weightroom: the pages people use, on the control node, and the accounts behind them.
 
-    With no command it runs the site, which is what its service does: signing in, the first page with what compute is doing, Models, Files, Machine and My account. It keeps web chat, benchmark evidence and plugin settings on front. Pages ask compute through turnstile, with the key of whoever is signed in.
+    With no command it runs the site, which is what its service does: signing in, the first page with what compute is doing, Models, Files, Machine and My account. It keeps web chat, benchmark evidence and plugin settings on the control node. Pages ask compute through turnstile, with the key of whoever is signed in.
 
     The users, their keys and the groups are kept on this machine, in the store weightroom shares with turnstile. The `user` and `group` commands read and write it themselves. They need no key and work whether or not anything is running, which makes them the way back in if every key is lost. Unlike the site, they are held to no rules about who may raise whom: whoever can run them owns the file.
 
@@ -5773,7 +5758,7 @@ def root(ctx: typer.Context, config: Annotated[Path, typer.Option(metavar="FILE"
 
     ctx.obj = accounts
     told = read_settings(config) if config.is_file() else {}
-    ctx.meta["stores"] = lambda: DatabaseRegistry.from_config(  # the front machine's stores, for roles-from
+    ctx.meta["stores"] = lambda: DatabaseRegistry.from_config(  # the control node's stores, for roles-from
         told.get("databases", {}), config.parent,
         {"weightroom.roles": config.parent / told.get("data", ".") / "roles.db", "weightroom.benchmarks": config.parent / told.get("data", ".") / "benchmarks.db",
          "weightroom.accounts": config.parent / told.get("data", ".") / "accounts.db"})
@@ -5800,7 +5785,7 @@ def pair(ctx: typer.Context, minutes: Annotated[int, typer.Option(help="How long
 def accounts_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metavar="FILE", help="A copy of compute's LoadCoach database, such as data/loadcoach.db.")]) -> None:
     """Take the users, their keys and passwords, and the groups from compute's database, once.
 
-    For the move to the front machine in milestone 76. Only hashes are kept, so every key and password goes on working. It refuses if there are users here already. The file is only read: compute's own copy stays as it was, which is the way back.
+    For the move to the control node in milestone 76. Only hashes are kept, so every key and password goes on working. It refuses if there are users here already. The file is only read: compute's own copy stays as it was, which is the way back.
     """
     _, users, log = ctx.obj()
     if users.any():
@@ -5824,7 +5809,7 @@ def accounts_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metav
 def roles_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metavar="FILE", help="A copy of compute's LoadCoach database, such as data/loadcoach.db.")]) -> None:
     """Take the roles and the last seven days of reliability from compute's database, once, and publish the benchmark evidence kept here.
 
-    For the move to the front machine in milestone 83. It refuses if there are roles here already. The file is only read: compute's own copy stays as it was, which is the way back. Run it with turnstile stopped.
+    For the move to the control node in milestone 83. It refuses if there are roles here already. The file is only read: compute's own copy stays as it was, which is the way back. Run it with turnstile stopped.
     """
     stores, (_, _, log) = ctx.meta["stores"](), ctx.obj()
     roles = Roles(stores.database("weightroom.roles"))
@@ -5849,7 +5834,7 @@ def roles_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metavar=
 def outside_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metavar="FILE", help="A copy of compute's LoadCoach database, such as data/loadcoach.db.")]) -> None:
     """Take the outside services and the models they offer from compute's database, once.
 
-    For the move of hosted models to the front machine (milestone 114). It refuses if there are services here already. The file is only read: compute's own copy stays as it was, which is the way back. The keys are not in a database: copy each NAME.key file by hand into the folder beside this machine's machine key, readable by you alone.
+    For the move of hosted models to the control node (milestone 114). It refuses if there are services here already. The file is only read: compute's own copy stays as it was, which is the way back. The keys are not in a database: copy each NAME.key file by hand into the folder beside this machine's machine key, readable by you alone.
     """
     stores, (_, _, log) = ctx.meta["stores"](), ctx.obj()
     kept = Services(stores.database("weightroom.accounts"), ctx.meta["keys"])
@@ -5867,7 +5852,7 @@ def outside_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metava
 def batches_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metavar="FILE", help="A copy of compute's LoadCoach database, such as data/loadcoach.db.")]) -> None:
     """Take the uploaded files, the batches and their requests from compute's database, once. Batches still under way go on here.
 
-    For the move of batches to the front machine (milestone 115). External tasks (benchmarks) stay where they are. It refuses if there are batches here already. The file is only read: compute's own copy stays as it was, which is the way back. Run it with turnstile stopped.
+    For the move of batches to the control node (milestone 115). External tasks (benchmarks) stay where they are. It refuses if there are batches here already. The file is only read: compute's own copy stays as it was, which is the way back. Run it with turnstile stopped.
     """
     stores, (_, _, log) = ctx.meta["stores"](), ctx.obj()
     kept = Batches(stores.database("weightroom.accounts"))
@@ -5900,7 +5885,7 @@ def batches_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metava
 def log_from(ctx: typer.Context, file: Annotated[Path, typer.Argument(metavar="FILE", help="A copy of compute's LoadCoach database, such as data/loadcoach.db.")]) -> None:
     """Take compute's event log and the requests it keeps in full, once, into the log kept here, chained here as they come.
 
-    For the move to the front machine in milestone 91. Each entry keeps its time and compute's number for it. It refuses if entries from compute are here already. The file is only read: compute's own copy stays as it was, which is the way back. Run it with turnstile stopped, before compute's LoadCoach starts sending its entries.
+    For the move to the control node in milestone 91. Each entry keeps its time and compute's number for it. It refuses if entries from compute are here already. The file is only read: compute's own copy stays as it was, which is the way back. Run it with turnstile stopped, before compute's LoadCoach starts sending its entries.
     """
     _, _, log = ctx.obj()
     if log.db.execute("SELECT 1 FROM events WHERE kind = 'log' AND what = 'moved-here' LIMIT 1").fetchone():
