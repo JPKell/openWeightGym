@@ -4,19 +4,21 @@
 {% macro event_row(event=none) %}
 <tr data-event-row{% if event %} data-log-table-row data-event-id="{{ event.id }}" tabindex="0"{% endif %}>
   <td>{% if event %}{{ event.at|timestamp }}{% else %}<time data-field="time"></time><small class="text-secondary d-block" data-field="date"></small>{% endif %}</td>
-  <td>{% if event %}<a href="{{ event.href }}" class="al-event-link" data-log-select data-log-table-open {{ swaps('log', true) }}>{{ event.title }} <span class="text-secondary al-mono">#{{ event.id }}</span><span class="visually-hidden"> · Open in Trace workspace</span></a>{% else %}<button type="button" class="al-event-link" data-open><span data-field="title"></span></button>{% endif %}{% if event %}{{ record_link(event, 'small ms-2 text-nowrap') }}{% endif %}<small class="text-secondary d-block al-summary" data-field="summary"{% if event %} title="{{ event.summary }}"{% endif %}>{{ event.summary if event }}</small></td>
+  <td>{% if event %}<a href="{{ event.href }}" class="al-event-link" data-log-select data-log-table-open {{ swaps('log', true) }}>{{ event.title }} <span class="text-secondary al-mono">#{{ event.id }}</span><span class="visually-hidden"> · Open in Trace workspace</span></a>{{ record_link(event, 'small ms-2 text-nowrap') }}{% else %}<button type="button" class="al-event-link" data-open><span data-field="title"></span></button><small class="text-secondary d-block al-summary" data-field="summary"></small>{% endif %}</td>
   <td><span class="badge{{ ' bg-' ~ event.badge ~ '-lt' if event }}" data-field="outcome">{{ event.outcome if event }}</span></td>
-  <td><span data-field="model">{{ event.model or 'No model' if event }}</span><small class="text-secondary d-block" data-field="node">{{ event.get('machine') or 'front' if event }}</small></td>
+  <td><span data-field="model"{% if event %} class="d-block text-truncate al-table-model" title="{{ event.model or 'No model' }}"{% endif %}>{{ event.model or 'No model' if event }}</span>{% if not event %}<small class="text-secondary d-block" data-field="node"></small>{% endif %}</td>
+  {% if event %}<td>{{ event.get('machine') or 'front' }}</td>{% endif %}
   <td data-field="user">{{ event.user if event }}</td>
-  <td>{% if event %}<span class="al-mono small">{{ event.trace or '—' }}</span>{% else %}<button type="button" class="btn btn-link p-0 al-mono small" data-trace></button><span class="text-secondary" data-no-trace hidden>—</span>{% endif %}</td>
+  {% if event %}<td><span class="d-block al-summary" data-field="summary" title="{{ event.summary }}">{{ event.summary }}</span></td>{% endif %}
+  <td>{% if event %}<span class="al-mono small d-block text-truncate al-table-trace" title="{{ event.trace or '—' }}">{{ event.trace or '—' }}</span>{% else %}<button type="button" class="btn btn-link p-0 al-mono small" data-trace></button><span class="text-secondary" data-no-trace hidden>—</span>{% endif %}</td>
 </tr>
 {% endmacro %}
 {% macro event_table(events) %}
 <div class="table-responsive al-table-scroll" id="log-table-scroll" tabindex="0" role="region" aria-label="AI event table">
-<table class="table table-hover align-middle mb-0 al-table" id="log-table">
+<table class="table table-sm table-hover align-middle mb-0 al-table" id="log-table">
   <caption class="visually-hidden">All events in the current result window, newest first. Double-click a row, press Enter on a focused row, or follow its event link to open the Trace workspace.</caption>
-  <thead><tr>{% for label in ['Time ↓', 'Event / details', 'Outcome', 'Model / node', 'User', 'Trace'] %}<th scope="col"{% if loop.first %} aria-sort="descending"{% endif %}>{{ label }}</th>{% endfor %}</tr></thead>
-  <tbody>{% for event in events %}{{ event_row(event) }}{% else %}{% call empty_row(6) %}No events match these filters. Try a wider time range or reset the filters.{% endcall %}{% endfor %}</tbody>
+  <thead><tr>{% for label in ['Time ↓', 'Event', 'Outcome', 'Model', 'Node', 'User', 'Details', 'Trace'] %}<th scope="col"{% if loop.first %} aria-sort="descending"{% endif %}>{{ label }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for event in events %}{{ event_row(event) }}{% else %}{% call empty_row(8) %}No events match these filters. Try a wider time range or reset the filters.{% endcall %}{% endfor %}</tbody>
 </table></div>
 {% endmacro %}
 {% macro timeline_event(event=none, selected=none) %}
