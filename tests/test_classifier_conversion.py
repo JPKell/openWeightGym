@@ -47,6 +47,32 @@ def test_parity_requires_every_item_and_both_thresholds():
     assert result['argmax_agreement'] == 1 and not result['verified']
 
 
+@pytest.mark.parametrize('verified', [True, False])
+def test_worker_manifest_records_source_hashes_and_actual_parity(tmp_path, monkeypatch, verified):
+    """A successful tool exit cannot turn a failed parity comparison into a verified artifact."""
+    import hashlib
+    from loadcoach import classifier_convert as worker
+    source = tmp_path / 'source'
+    source.mkdir()
+    weights = source / 'TinyJev-4B-Q4_K_M.gguf'
+    weights.write_bytes(b'original quantized tensor bytes')
+    (source / 'Modelfile').write_text('FROM ./TinyJev-4B-Q4_K_M.gguf\n')
+    original, candidate = responses(), responses()
+    if not verified:
+        candidate[0]['answers']['check']['probabilities'].update(billing=.1, delivery=.7666666666666667)
+    monkeypatch.setattr(worker, 'rewrite', lambda old, new, *args, **kwargs: new.write_bytes(old.read_bytes()))
+    monkeypatch.setattr(worker, 'reference_answers', lambda *args: original)
+    monkeypatch.setattr(worker, 'native_answers', lambda *args: candidate)
+    output = tmp_path / 'source-decision'
+    manifest = worker.convert(source, output, tmp_path / 'converter', 'server', 'abc123')
+    assert manifest['state'] == ('verified' if verified else 'unverified')
+    assert manifest['parity']['verified'] is verified
+    assert manifest['converter_commit'] == 'abc123'
+    assert manifest['sources'][weights.name] == hashlib.sha256(weights.read_bytes()).hexdigest()
+    assert (output / 'model.gguf').read_bytes() == weights.read_bytes()
+    assert json.loads((output / 'manifest.json').read_text()) == manifest
+
+
 @pytest.mark.anyio
 async def test_conversion_refuses_code_and_paths_outside_classifier(tmp_path):
     """An installed tool receipt never grants repository-code execution or arbitrary paths."""

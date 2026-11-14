@@ -132,7 +132,7 @@ def test_benchmark_follows_multiple_renames_and_never_reused_name(desk,tmp_path)
     store.finish(number,'completed');store.synced(number)
     before=store.db.execute('SELECT * FROM benchmark_samples').fetchall()
     assert browser.post('/models/old-model',data={'do':'rename','to':'new-model'}).status_code==200
-    result=browser.get('/benchmarks/results?benchmark=load&model=new-model')
+    result=browser.get('/benchmarks/node-measurements?benchmark=load&display=scores&model=new-model')
     assert result.status_code==200 and number in result.text and '>0.5' in result.text
     assert store.get(number)['model_id']==identity
     assert store.get(number)['model']=='old-model'  # recorded label/evidence is immutable
