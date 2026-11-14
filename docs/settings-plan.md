@@ -83,6 +83,7 @@ use them as written.
 - Live template time zones use a per-render context function to preserve existing template callers; Audio routes receive a settings getter so replaced immutable settings are visible to new requests.
 - Conditional retirement uses catalogue context (`front`) so the shared compatibility map still supports standalone nodes; node admission and startup filter retired overrides without deleting them.
 - Clean-worktree verification exposed the rename’s uncommitted `weightroom/display.py::node_label` dependency; include it with the shared configured-timezone fallback before deployment.
+- CPU recognition endpoint limits use the existing voiced-sample evidence per stream, captured at session creation, so live endpoint changes share loaded weights and leave active sessions intact.
 - No exact commit attribution line was supplied in this session; commits use `Co-authored-by: Codex <noreply@openai.com>`.
 
 ## 1. Summary
@@ -428,7 +429,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 1d Live control node request settings (447 focused checks pass; connection pool size stays restart-only).
 - [x] 1e Live disk monitoring paths (427 focused checks pass; cached readings invalidate on selection changes).
 - [x] 1f Per-node Wake overrides (445 focused checks pass; offline edits preserve node files, listeners and keys).
-- [ ] 1g Voice recognition and synthesis tuning.
+- [x] 1g Voice recognition and synthesis tuning (498 checks pass; nested overrides preserve paths and freeze restart fields).
 - [ ] 1h Hermes tools for new calls.
 - [ ] 1i Retired, derived and deprecated machine values.
 - [ ] 1j Responses limits dependencies; Phase 1 deployed and verified.

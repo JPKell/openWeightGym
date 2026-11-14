@@ -445,7 +445,7 @@ def test_delayed_recognition_from_silence_cannot_borrow_new_speech():
     try:
         stream = speech.stream()
         assert speech.feed(stream, bytes(16000 * 2 * 6), False) == ("", "")
-        assert speech.feed(stream, b"\x10\x27" * 320, False) == ("", "")
+        assert speech.feed(stream, b"\x10\x27" * 320, False) == ("", None)
         speech.recognizer.result = SimpleNamespace(text="Hello", start_time=6.08, timestamps=[.1])
         assert speech.feed(stream, b"", True) == ("Hello", "Hello")
         assert stream.samples == 96000 + 320 + 9600

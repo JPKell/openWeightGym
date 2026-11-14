@@ -159,7 +159,7 @@ def test_live_reader_uses_current_store_and_original_file_after_reset(tmp_path):
 def live_examples(entry):
     """Two valid, different values, preserving domain-specific table contracts."""
     values = {(program, name): value for path in FILES for program, name, value in configured(path)}
-    base = deepcopy(values.get((entry.program, entry.name)))
+    base = deepcopy(values.get((entry.program, entry.name), entry.default))
     special = {
         'engine_gpus': ({}, {'llama_cpp': []}),
         'model_defaults': ({}, {'ctx-size': 1024}),
@@ -212,7 +212,10 @@ def test_every_live_setting_changes_through_its_service_getter_without_restart(e
     assert base != changed
     (tmp_path / 'loadcoach.toml').write_text('')
     path = tmp_path / (entry.program + '.toml')
-    path.write_text(written({entry.name: base}))
+    from loadcoach.settings import set_nested, nested_value
+    original = {}
+    set_nested(original, entry.name, base)
+    path.write_text(written(original))
     if entry.program in ('voice', 'voice-gateway'):
         settings, following = with_changes(entry.program, path)
 
@@ -227,7 +230,7 @@ def test_every_live_setting_changes_through_its_service_getter_without_restart(e
                     pass
 
         asyncio.run(once())
-        assert settings[entry.name] == changed
+        assert nested_value(settings, entry.name) == changed
     elif entry.program == 'machines':
         from turnstile.nodes import wake_policy
         from loadcoach.settings import Changes

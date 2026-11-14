@@ -42,3 +42,18 @@ waiting = "I'm still getting things ready. Thanks for waiting."
 ready = "I'm ready. What can I help you with?"
 busy = "The voice system is busy right now. Please try again shortly."
 unavailable = "I couldn't start the voice system. Please try again later."
+
+# CPU recognition tuning. Threads, decoding method and active paths need a service restart.
+[recognition]
+threads = 2
+decoding_method = "modified_beam_search"
+max_active_paths = 8
+# Endpoint limits apply to new sessions without reloading the speech weights.
+trailing_silence_ms = 800
+max_utterance_seconds = 30
+
+# CPU synthesis tuning applies after the voice service restarts. Model paths stay in its file.
+[synthesis]
+speaker = 0
+threads = 2
+workers = 2

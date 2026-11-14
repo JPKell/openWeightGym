@@ -48,6 +48,7 @@ class Setting:
     exclusive_min: bool = False
     exclusive_max: bool = False
     ceiling: float | None = None
+    default: object = None
 
     def check(self, value, *, context=None):
         """Return a valid value, or raise ValueError without echoing its contents."""
@@ -226,6 +227,15 @@ def validate_values(program, values, *, context=None):
     for name, value in values.items():
         if get(program, name):
             validate(program, name, value, context=context)
+    for entry in entries(program):
+        if '.' in entry.name:
+            value = values
+            for part in entry.name.split('.'):
+                if not isinstance(value, dict) or part not in value:
+                    break
+                value = value[part]
+            else:
+                entry.check(value, context=context)
     return values
 
 
@@ -474,3 +484,12 @@ _add("voice", 'profiles.default.speaker', 'text', section='Speech', label='Speak
 
 _add('machines', 'wake_mac', 'text', tier=NOW, scope='front', page='nodes', section='Wake', label='Wake MAC address', control='text', rule=_wake_mac, help='This node’s hardware address. Empty disables Wake. Applies immediately.')
 _add('machines', 'wake_address', 'text', tier=NOW, scope='front', page='nodes', section='Wake', label='Wake broadcast address', control='text', rule=_wake_address, help='IPv4 destination for Wake packets. Applies immediately; the file value is used after reset.')
+
+_add('voice', 'recognition.threads', 'int', tier=RESTART, page='voice', section='Recognition', label='Recognition threads', control='number', min=1, max=64, default=2)
+_add('voice', 'recognition.decoding_method', 'choice', tier=RESTART, page='voice', section='Recognition', label='Decoding method', choices=('greedy_search', 'modified_beam_search'), default='modified_beam_search')
+_add('voice', 'recognition.max_active_paths', 'int', tier=RESTART, page='voice', section='Recognition', label='Active recognition paths', control='number', min=1, max=64, default=8)
+_add('voice', 'recognition.trailing_silence_ms', 'int', tier=NOW, page='voice', section='Recognition', label='End-of-turn silence', control='number', min=100, max=10000, unit='ms', default=800, help='Applies to new voice sessions; existing sessions keep their endpoint settings.')
+_add('voice', 'recognition.max_utterance_seconds', 'float', tier=NOW, page='voice', section='Recognition', label='Maximum utterance', control='number', min=1, max=300, unit='s', default=30, help='Applies to new voice sessions.')
+_add('voice', 'synthesis.speaker', 'int', tier=RESTART, page='voice', section='Synthesis', label='Default synthesis speaker', control='number', min=0, max=1023, default=0)
+_add('voice', 'synthesis.threads', 'int', tier=RESTART, page='voice', section='Synthesis', label='Synthesis threads', control='number', min=1, max=64, default=2)
+_add('voice', 'synthesis.workers', 'int', tier=RESTART, page='voice', section='Synthesis', label='Synthesis workers', control='number', min=1, max=16, default=2)

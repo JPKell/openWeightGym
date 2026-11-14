@@ -215,7 +215,9 @@ def workspace(programs):
             else:
                 bucket = None
                 title = ('Voice and greetings' if name.startswith('greetings.') else
-                         'Hermes' if name in HERMES_FIELDS else 'Capacity')
+                         'Recognition' if name.startswith('recognition.') else
+                         'Synthesis' if name.startswith('synthesis.') else
+                         'Hermes' if name in HERMES_FIELDS or name.startswith('hermes.') else 'Capacity')
             target = bucket.setdefault(title, []) if bucket is not None else shared
             target.append((title, program, row))
     # Greetings are global; keep their single editor alongside the default profile's speaker.
@@ -226,7 +228,7 @@ def workspace(programs):
         shared = [entry for entry in shared if entry not in greetings]
     def groups(rows, profile=None):
         result = []
-        for title in ('Conversation', 'Voice and greetings', 'Hermes', 'Capacity'):
+        for title in ('Conversation', 'Voice and greetings', 'Recognition', 'Synthesis', 'Hermes', 'Capacity'):
             entries = []
             for program in programs:
                 settings = [row for heading, owner, row in rows if heading == title and owner is program]

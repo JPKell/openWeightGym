@@ -27,6 +27,7 @@ machine_key_file = "/home/you/openWeightGym/keys/machine.key"
 # The folder the copy of what was changed on the site is kept in, counted from this file.
 data = "../data"
 
+# Tuning is editable on Voice. Model paths remain file-only. Endpoint limits apply to new sessions; other tuning needs restart.
 [recognition]
 encoder = "/home/you/openWeightGym/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx"
 decoder = "/home/you/openWeightGym/models/voice/sherpa-onnx-streaming-zipformer-en-2023-06-26/decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx"
@@ -39,6 +40,7 @@ max_active_paths = 8
 trailing_silence_ms = 800
 max_utterance_seconds = 30
 
+# Synthesis tuning is editable on Voice and needs restart; model paths remain file-only.
 [synthesis]
 model = "/home/you/openWeightGym/models/voice/kokoro-multi-lang-v1_0/model.onnx"
 voices = "/home/you/openWeightGym/models/voice/kokoro-multi-lang-v1_0/voices.bin"

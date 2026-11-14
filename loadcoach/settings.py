@@ -101,6 +101,21 @@ def apply_live(program: str, settings, changed: dict):
     return replace(settings, **wanted), refused
 
 
+def nested_value(values, name, fallback=None):
+    for part in name.split('.'):
+        if not isinstance(values, dict) or part not in values:
+            return fallback
+        values = values[part]
+    return values
+
+
+def set_nested(values, name, value):
+    parts = name.split('.')
+    for part in parts[:-1]:
+        values = values.setdefault(part, {})
+    values[parts[-1]] = value
+
+
 def laid_over(told: dict, changed: dict, program: str) -> dict:
     """What a file says, with what was changed on the site laid over it. A change to a setting that may not be changed is left out."""
     selected={name:value for name,value in changed.items() if name in changeable_for(program, told)}
@@ -109,7 +124,12 @@ def laid_over(told: dict, changed: dict, program: str) -> dict:
         # A new optional engine or voice profile in the file must not be hidden by an older
         # web edit to another one. Explicit overrides of the same entry still win.
         selected[table]={**told[table],**selected[table]}
-    return {**told,**selected}
+    from copy import deepcopy
+    result = deepcopy({**told, **{name: value for name, value in selected.items() if '.' not in name}})
+    for name, value in selected.items():
+        if '.' in name:
+            set_nested(result, name, deepcopy(value))
+    return result
 
 
 def comments(text: str) -> dict[str, str]:
@@ -147,6 +167,14 @@ def said(running: dict, file: dict, says: dict, program='') -> dict:
     whose name says it is a secret.
     """
 
+    from loadcoach.setting_catalog import entries
+    running, file = dict(running), dict(file)
+    for definition in entries(program):
+        if '.' in definition.name and definition.name.split('.')[0] in running:
+            value = nested_value(running, definition.name, definition.default)
+            if value is not None:
+                running[definition.name] = value
+                file[definition.name] = nested_value(file, definition.name, definition.default)
     told = {}
     for name, value in running.items():
         if (entry := catalog_entry(program, name)) and entry.kind == 'secret':
@@ -358,8 +386,13 @@ def with_changes(program: str, path: Path):
             except ValueError:
                 pass  # A bad persisted override must not stop a service starting.
     settings = laid_over(told, valid, program)
+    from copy import deepcopy
+    from loadcoach.setting_catalog import entries
+    for entry in entries(program):
+        if '.' in entry.name and entry.name.split('.')[0] in settings and nested_value(settings, entry.name) is None and entry.default is not None:
+            set_nested(settings, entry.name, deepcopy(entry.default))
     # What holds from the next start is not in force until then, whatever the dict says meanwhile.
-    at_start = {name: settings[name] for name, when in CHANGEABLE[program].items() if when == RESTART and name in settings}
+    at_start = {name: deepcopy(nested_value(settings, name)) for name, when in CHANGEABLE[program].items() if when == RESTART and nested_value(settings, name) is not None}
 
     def take(changed: dict):
         """Read a running setting with saved overrides applied."""
@@ -373,7 +406,11 @@ def with_changes(program: str, path: Path):
         merged = laid_over(told, {name: value for name, value in changed.items() if name not in refused}, program)
         settings.clear()
         settings.update({name: value for name, value in merged.items() if CHANGEABLE[program].get(name) != RESTART})
-        settings.update(at_start)
+        for name, value in at_start.items():
+            set_nested(settings, name, deepcopy(value))
+        for entry in entries(program):
+            if '.' in entry.name and entry.name.split('.')[0] in settings and nested_value(settings, entry.name) is None and entry.default is not None:
+                set_nested(settings, entry.name, deepcopy(entry.default))
         return said(settings, told, says, program), refused
 
     return settings, lambda http, base, key: follow(program, asker(http, base, key), copy, take)
