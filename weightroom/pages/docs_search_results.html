@@ -1,0 +1,8 @@
+{% from 'parts.html' import page_header, alert %}
+{% from 'docs_library_parts.html' import search_result %}
+<section id="docs-search-results" aria-labelledby="docs-results-title"{% if not searching %} hidden{% endif %}>
+  <div class="results-heading">{% if searching %}{{ page_header('Search results', id='docs-results-title') }}{% endif %}<span id="docs-result-count" class="small text-secondary" role="status" aria-live="polite">{{ results|length }} {{ 'page' if results|length == 1 else 'pages' }}</span></div>
+  {% if search_error %}{% call alert('warning') %}{{ search_error }} <a href="/docs">Browse documentation</a>{% endcall %}{% endif %}
+  <div id="docs-results-list">{% for result in results %}{{ search_result(result) }}{% endfor %}</div>
+  {% if searching and not results and not search_error %}<div id="docs-search-empty"><p>No matching documentation.</p><p class="text-secondary">Try a shorter phrase, a command such as “owg”, or search all sections.</p><a href="/docs" class="btn btn-outline-secondary" data-docs-clear>Clear search & filters</a></div>{% endif %}
+</section>

@@ -1,9 +1,9 @@
 """The documentation's sections and topics, and a cached source reference, read without importing services.
 
-The docs are seven sections, each with an overview and topics of its own. A topic's page shows what is
+The docs have a searchable home and sections, each with an overview and topics of its own. A topic shows what is
 written for it, as a template in pages/docs/SECTION/TOPIC.html, sections of a Markdown file in the
-repository (so that the web and the repository say the same thing), or both, and then the code
-reference for its modules when it has some. Only the Web app section is open to every account.
+repository (so that the web and the repository say the same thing), or both. Code references live in
+their own section. Only the home and Web app section are open to every account.
 """
 
 import ast
@@ -26,8 +26,8 @@ def _topic(slug: str, title: str, summary: str, source: str | None = None, doc: 
 
 
 def _section(slug: str, title: str, summary: str, topics: tuple[dict, ...], public: bool = False) -> dict:
-    """One section and its topics, each given its address. System reference is the docs' front page, at /docs."""
-    url = "/docs" if slug == "system" else "/docs/" + slug
+    """One section and its topics, each given its canonical address beneath the docs home."""
+    url = "/docs/" + slug
     topics = tuple(topic | {"url": f"/docs/{slug}/{topic['slug']}"} for topic in topics)
     return {"slug": slug, "title": title, "summary": summary, "url": url, "public": public,
             "topics": topics, "by_slug": {topic["slug"]: topic for topic in topics}}
@@ -93,6 +93,31 @@ SECTIONS = (
         _topic("source", "Code reference", "Install and deploy scripts, and the settings code.", source="operations"),
     )),
 )
+
+
+def _separate_code(sections):
+    """Keep written guides intact while collecting their source inventories in one section."""
+    guides, code, aliases, source_pages = [], {}, {}, {}
+    for section in sections:
+        topics = []
+        for topic in section['topics']:
+            source = topic['source']
+            if source:
+                title = section['title'] if topic['slug'] == 'source' else topic['title']
+                code.setdefault(source, _topic(source, title, f'Source modules, classes and functions behind {title}.', source=source))
+                source_pages[topic['url']] = '/docs/code/' + source
+                if topic['slug'] == 'source':
+                    aliases[topic['url']] = source_pages[topic['url']]
+            if topic['slug'] != 'source':
+                topics.append(topic | {'source': None, 'code_url': source_pages.get(topic['url'])})
+        guide = section | {'topics': tuple(topics), 'by_slug': {topic['slug']: topic for topic in topics},
+                           'code_url': source_pages.get(section['url'] + '/source')}
+        guides.append(guide)
+    guides.append(_section('code', 'Code references', 'Source modules, classes and functions, grouped by component.', tuple(code.values())))
+    return tuple(guides), aliases, source_pages
+
+
+SECTIONS, CODE_ALIASES, SOURCE_PAGES = _separate_code(SECTIONS)
 BY_SLUG = {section["slug"]: section for section in SECTIONS}
 # Where each topic lived before the docs had sections, so that old links and bookmarks still arrive.
 MOVED = {"weightroom": "/docs/modules/weightroom", "turnstile": "/docs/modules/turnstile", "loadcoach": "/docs/modules/loadcoach",

@@ -101,7 +101,7 @@ python -m loadcoach.backup_restore /recovery/front/archive.tar.gz.age \
 
 {% call doc_section('Planned reinstall', 'identities') %}
 <p><code>suite-identity</code> creates a separate bundle of accounts, permissions, password verifiers, authenticator seeds, service credentials and configuration, excluding request/conversation history. It uses AES-256-GCM with a scrypt-derived key. Treat it as a master credential backup: use a unique randomly generated passphrase, store that separately, and keep the bundle offline or in immutable private storage.</p>
-<p>Stop participating services, adapters, schedules and automatic restarts before export or applying an import. Imports preview first and refuse different existing accounts. This tool currently requires SQLite accounts and original installation paths. Test an isolated import before reinstalling. Use it for planned continuity; replace credentials after a compromise. See the <a href="/docs/system/accounts?module=loadcoach/identity_bundle.py#source-title">identity export/import reference</a> for commands and constraints.</p>
+<p>Stop participating services, adapters, schedules and automatic restarts before export or applying an import. Imports preview first and refuse different existing accounts. This tool currently requires SQLite accounts and original installation paths. Test an isolated import before reinstalling. Use it for planned continuity; replace credentials after a compromise. See the <a href="/docs/code/accounts?module=loadcoach/identity_bundle.py#source-title">identity export/import reference</a> for commands and constraints.</p>
 {% endcall %}
 
 {% call doc_section('Older archives and key rotation', 'legacy') %}

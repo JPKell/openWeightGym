@@ -1,0 +1,14 @@
+{# Canonical article body, shared by live Docs, search indexing and the three portable proposals. #}
+{% from "docs_parts.html" import doc_header, doc_document, doc_section, doc_directory, doc_source %}
+{% if topic %}
+  {{ doc_header(topic.title, back=(section.title, section.url), lead=topic.summary) }}
+  {% include "docs/" ~ section.slug ~ "/" ~ topic.slug ~ ".html" ignore missing %}
+  {% if document %}{{ doc_document(document) }}{% endif %}
+  {% if topic.source %}{{ doc_source(reference, topic.title) }}{% endif %}
+  {% if topic.code_url %}<p class="docs-code-reference"><a href="{{ topic.code_url }}">Code reference for {{ topic.title }} →</a></p>{% endif %}
+{% else %}
+  {{ doc_header(section.title, lead=section.summary) }}
+  {% include "docs/" ~ section.slug ~ ".html" ignore missing %}
+  {% if section.code_url %}<p class="docs-code-reference"><a href="{{ section.code_url }}">{{ section.title }} code reference →</a></p>{% endif %}
+  {% call doc_section("In this section", "topics") %}{{ doc_directory(section.topics) }}{% endcall %}
+{% endif %}
