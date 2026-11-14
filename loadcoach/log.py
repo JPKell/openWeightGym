@@ -216,6 +216,7 @@ class Log:
         until: float | None = None,
         members: list[str] | None = None,
         node: str | None = None,
+        q: str | None = None,
     ) -> list[dict]:
         """Entries in the order they happened.
 
@@ -246,6 +247,11 @@ class Log:
                 where.append(f"{column} = ?")
                 values.append(wanted)
         order = "ASC" if after else "DESC"
+        if q:
+            query = '%' + q.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+            fields = ('CAST(id AS TEXT)', 'CAST(source AS TEXT)', 'kind', 'what', 'user', 'caller', 'model', 'trace', 'detail')
+            where.append('(' + ' OR '.join(f"LOWER({field}) LIKE LOWER(?) ESCAPE '!'" for field in fields) + ')')
+            values.extend([query] * len(fields))
         rows = self.db.execute(
             f"SELECT {COLUMNS}, source, machine FROM events WHERE {' AND '.join(where)} ORDER BY id {order} LIMIT ?", (*values, limit)
         ).fetchall()

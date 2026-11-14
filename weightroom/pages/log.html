@@ -3,8 +3,9 @@
 {% from "filter_parts.html" import users_groups %}
 {% block title %}AI Logs · openWeightGym{% endblock %}
 {% block page_class %}console-page{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/log.css?v=1"><script src="/static/log.js?v=1" defer></script>{% endblock %}
 {% block main %}
-{{ page_header("AI Logs", lead="Find recorded AI activity and inspect its details.") }}
+{{ page_header("AI Logs") }}
 {{ said_box(said, failed) }}
 {% if deferred %}{% from "deferred.html" import loading %}
 {{ loading('log-view', fragment_url, 'Loading AI logs…') }}
