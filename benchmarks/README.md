@@ -686,44 +686,16 @@ To add a code-defined benchmark, create a module in `suites/` exposing `DEFINITI
 `worker.evaluate(...)` for prompted probes and local grading. A new plan using the
 existing probe capabilities requires no benchmark-specific code in LoadCoach.
 
-For data-only checks, **Benchmark → Manage → Reusable case sets** now imports JSON without
-Python changes (C04 / milestone 94, implemented locally **2026-10-15**). Choose a file or paste
-it, then import. The page provides an example and exports the selected immutable version.
-The format is `suite-cases/v1`, with `id`, `name`, positive `version` and `cases`. Each case has
-stable `id`, `question` and `assertions`, plus optional `category` and `outputs` (default 512).
-An assertion has `id`, `type` and `expected`: `exact` compares the graded final text, `json`
-compares a strict JSON value (booleans stay distinct from numbers), and `schema` validates one
-strict JSON value with the supported structural Draft 2020-12 subset. See the packaged
-[example](../weightroom/static/benchmark-cases-example.json).
-
-Limits: 1 MiB UTF-8 JSON, 64 named sets, 128 cases/set, 32 assertions/case, 65536 UTF-8 bytes per
-question, 8192 output tokens, 20 JSON levels and 1000 entries/container. IDs are lowercase
-letters/digits/underscore/dash, start with a letter and have at most 48 characters. Names have
-at most 100 characters. Schemas allow type/enum/const, properties/required/additionalProperties,
-items, item/string length and numeric bounds, title and description. References, patterns,
-combinators, external imports, code and tool calls are rejected. Duplicate keys and nonfinite
-JSON numbers are rejected. Cases are questions plus deterministic answer keys; only the question
-is sent to the native engine. No imported content is executed. Use non-secret benchmark data;
-benchmark users with access to a tested model retain the existing run-evidence access policy.
-
-Versions are immutable and increase monotonically per ID. Retrying identical content at the
-same version is idempotent; changed content needs a new version. Submission freezes that
-version before remote task creation; activation, pause/resume, restart and lost replies keep it.
-Old versions stay in the front-owned benchmark database and participate in backup/restore and
-verified transfer. They never change built-in/global registries. Disable a set through its
-ordinary definition checkbox; its historical runs remain readable. The stored checksum is
-verified when an immutable version is loaded.
-
-Run details now offer **Case regressions** with a baseline selector, for imported and built-in
-quality suites including pinned full IFEval. The same benchmark, protocol/dataset/implementation
+Run details now offer **Case regressions** with a baseline selector, for built-in quality
+suites including pinned full IFEval. The same benchmark, protocol/dataset/implementation
 and grader are required. Matching case contents and output/input budgets are checked; different
 model fingerprints are allowed. New failures and improvements are counted separately from
 missing, unavailable, unsupported or changed cases. Engine/machine differences or missing
 identities and incomplete runs are labeled. Newly failing assertions are listed, without
 rerunning inference or changing either run. This is a deterministic comparison, not a statistical
 significance claim. The existing worker still owns cancellation, isolation, retries and
-foreground preemption. Milestone 94 is deployed, with retained imported-case execution
-verified; the three example cases do not establish a broader quality spread.
+foreground preemption. Imported case sets (milestone 94) were removed on **2026-11-13**; add a
+new benchmark as a code-defined suite as described above.
 
 See the [full implementation guide](../docs/loadcoach.md#33-categories-and-benchmarks)
 for protocol details, migration history and verification evidence.

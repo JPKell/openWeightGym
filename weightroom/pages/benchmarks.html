@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
 {% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}{% if section == 'detail' %}<link rel="stylesheet" href="/static/benchmark-run.css?v=1"><script src="/static/benchmark-run.js?v=1" defer></script>{% endif %}{% if section == 'results' %}<link rel="stylesheet" href="/static/benchmark-results.css?v=1"><script src="/static/benchmark-results.js?v=1" defer></script><script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=6" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=4" defer></script>{% endif %}{% if section in ('runs', 'node-measurements') %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=8" defer></script>{% if section == 'manage' %}<script src="/static/benchmark-import.js" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if section == 'detail' %}<link rel="stylesheet" href="/static/benchmark-run.css?v=1"><script src="/static/benchmark-run.js?v=1" defer></script>{% endif %}{% if section == 'results' %}<link rel="stylesheet" href="/static/benchmark-results.css?v=1"><script src="/static/benchmark-results.js?v=1" defer></script><script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=6" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=4" defer></script>{% endif %}{% if section in ('runs', 'node-measurements') %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=8" defer></script>{% endblock %}
 {% block page_class %}benchmark-page{{ ' results-shell' if section == 'results' }}{% endblock %}
 {% from "parts.html" import card, said_box, page_header, alert %}
 {% from "navigation_parts.html" import pills, pill_link, model_type_choices %}
@@ -29,7 +29,6 @@
 {% elif section == 'compare' %}
 {% include "benchmark_compare.html" %}
 {% elif section == 'manage' %}
-{% include "benchmark_import.html" %}
 {% include "benchmark_manage.html" %}
 {% call card("Keeping results useful", attrs={"aria-labelledby": "freshness-heading"}, header_id="freshness-heading", body=false) %}
 

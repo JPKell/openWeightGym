@@ -49,7 +49,8 @@ Local **2026-10-15**, C04 / milestone 94: `weightroom.benchmarks` migration 4 ad
 canonical data, SHA-256, display name, timestamp and author. Runs freeze their chosen version
 before remote task creation; old versions remain available for history and restart. Existing
 full-store backup/restore, SQL exports and verified transfer discover this table automatically.
-No store move or additional database is introduced.
+No store move or additional database is introduced. The import was removed on **2026-11-13**;
+the table remains, unused.
 
 Local **2026-10-15**, C05 / milestone 93: `loadcoach.models` migration 4 adds model-specific
 `model_presets` and one `model_setup_undo` receipt per model to the existing compute-owned core
@@ -110,7 +111,7 @@ front receipts are under `~/.local/share/suite-pg18-qualification/evidence/`.
 | Front | `accounts.db` | WeightRoom, Turnstile and ToolLocker: accounts, client access, events, tasks, front-program/ToolLocker settings, tool schemas and schedule grants |
 | Front | `roles.db` | WeightRoom and Turnstile: roles, benchmark evidence, reliability and per-node model placement enablement |
 | Front | `chat.db` | WeightRoom: chats, collections, prompt versions and workflows |
-| Front | `benchmarks.db` | WeightRoom benchmark worker: plans, samples, frozen datasets and evidence |
+| Front | `benchmarks.db` | WeightRoom benchmark worker: plans, samples and evidence |
 | Front | `plugins.db` | WeightRoom and Turnstile: plugin-use records |
 | Front | `alerts.db` | WeightRoom alert collector and acknowledgement controls |
 | Front | `schedules.db` | WeightRoom recurring scheduler and occurrence controls |

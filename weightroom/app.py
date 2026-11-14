@@ -1642,10 +1642,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                                  resource_benchmarks[0] if resource_benchmarks else {})
         measurement = resource_selected.get('id', 'context').removeprefix('embedding_')
         type_benchmarks = {'llm': measurement, 'embedding': 'embedding_' + measurement, 'image': 'load', 'audio': 'load', 'classifier': 'classifier_speed'}
-        if section == 'manage' and request.query_params.get('export') and selected.get('custom'):
-            answer = await ask('GET', f"/benchmarks/datasets/{selected['id']}/{selected['version']}", person.key)
-            return Response(answer.content, status_code=answer.status_code, media_type='application/json',
-                            headers={'content-disposition': f'attachment; filename="{selected["id"]}-v{selected["version"]}.json"'})
         latest = latest_results(runs)
         location_latest = {}
         for run in runs:  # performance evidence is never collapsed across compute locations
@@ -1802,16 +1798,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return go('/benchmarks/' + ('node-measurements' if measurement_setup else 'runs') + '?' + urlencode(query)
                       + ('#measurement-runs' if measurement_setup else ''))
 
-        if section == 'manage' and one('action') == 'import':
-            answer = await ask('POST', '/benchmarks/datasets', person.key, content=one('dataset').encode('utf-8'))
-            if not answer.is_success:
-                return go('/benchmarks/manage?failed=1&said=' + quote(answer.json()['error']['message']))
-            return go('/benchmarks/manage?benchmark=' + quote(answer.json()['benchmark']) + '&said=' + quote('Imported immutable case-set version.'))
-        if section == 'manage' and one('action') == 'delete-dataset':
-            answer = await ask('DELETE', '/benchmarks/datasets/' + quote(one('benchmark'), safe=''), person.key)
-            if not answer.is_success:
-                return go('/benchmarks/manage?failed=1&benchmark=' + quote(one('benchmark')) + '&said=' + quote(answer.json()['error']['message']))
-            return go('/benchmarks/manage?said=' + quote('Deleted the case set.'))
         if section in ('runs', 'node-measurements'):
             if section == 'runs' and one('action') == 'outstanding':
                 path, body, back = '/benchmarks/outstanding', {'model': one('model')}, 'runs'

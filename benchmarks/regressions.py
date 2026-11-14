@@ -1,6 +1,12 @@
 """Compare frozen quality cases, separating failures from missing/unavailable evidence."""
 
-from .custom import digest
+import hashlib
+import json
+
+
+def digest(value):
+    """Return the SHA-256 digest of a case's canonical JSON."""
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 
 
 def compare(current, baseline):

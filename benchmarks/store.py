@@ -13,7 +13,6 @@ from db.text_codec import pack_text, unpack_text
 
 from . import BENCHMARKS, MODULES, TEXT, quality
 from .scoring import MODEL_VALUES, calculate, formula_tree
-from . import custom
 
 TERMINAL = {"completed", "failed", "cancelled"}
 RUN_COLUMNS = 'model,benchmark,fingerprint,subject,environment,state,created,started,ended,reason,messages,user,location,model_id'
@@ -29,68 +28,20 @@ class Benchmarks:
             os.chmod(file, 0o600)  # task-scoped credentials live here, never the user's session key
         migrate(source, self.db, "weightroom.benchmarks", BENCHMARK_MIGRATIONS)
         self.node_aliases = {}
-        self._datasets = {}
         with self.db:
             self.db.execute('INSERT INTO benchmark_state(id,paused) VALUES(1,0) ON CONFLICT(id) DO NOTHING')
             self.db.executemany('INSERT INTO benchmark_definitions(id,enabled,formula) VALUES(?,1,?) ON CONFLICT(id) DO NOTHING', [(b['id'], b['formula']) for b in BENCHMARKS])
             self.db.execute("UPDATE benchmark_runs SET state='queued', reason='Service restarted; incomplete sample will be retried.' WHERE state='running'")
+            # Imported case sets were removed; an unfinished run of one can no longer be measured.
+            self.db.execute("UPDATE benchmark_runs SET state='cancelled', reason='Imported case sets are no longer supported.' "
+                            f"WHERE state NOT IN ('completed','failed','cancelled') AND benchmark NOT IN ({','.join('?' * len(MODULES))})", tuple(MODULES))
         self.regrade()
 
-    def module(self, kind: str, protocol: dict | None = None):
-        """Resolve an imported version within this store; never mutate the global registry."""
-        if kind in MODULES:
-            return MODULES[kind]
-        version = (protocol or {}).get('version') or self.db.execute('SELECT MAX(version) FROM benchmark_datasets WHERE suite=?', (kind,)).fetchone()[0]
-        if (kind, version) in self._datasets:
-            return self._datasets[(kind, version)]
-        row = self.db.execute('SELECT dataset,sha256 FROM benchmark_datasets WHERE suite=? AND version=?', (kind,version)).fetchone()
-        if row is None:
-            raise ValueError('Unknown benchmark or dataset version.')
-        if len(self._datasets) >= 32:
-            self._datasets.pop(next(iter(self._datasets)))
-        dataset = json.loads(row[0])
-        if custom.digest(dataset) != row[1]:
-            raise ValueError('Stored dataset checksum changed. Restore the immutable version from a verified recovery set.')
-        self._datasets[(kind,version)] = module = custom.Dataset(dataset, row[1])
-        return module
-
-    def import_dataset(self, dataset: dict, by: str) -> dict:
-        """Validate and persist an immutable benchmark dataset version."""
-        dataset = custom.validate(dataset)
-        kind, version, sha256 = 'custom_' + dataset['id'], dataset['version'], custom.digest(dataset)
-        with self.db:
-            existing = self.db.execute('SELECT sha256 FROM benchmark_datasets WHERE suite=? AND version=?', (kind, version)).fetchone()
-            if existing:
-                if existing[0] != sha256:
-                    raise ValueError('This dataset version already exists with different content. Increase version.')
-                return {'benchmark': kind, 'version': version, 'sha256': sha256, 'created': False}
-            latest = self.db.execute('SELECT MAX(version) FROM benchmark_datasets WHERE suite=?', (kind,)).fetchone()[0]
-            if latest is not None and version <= latest:
-                raise ValueError('New dataset versions must increase monotonically.')
-            if latest is None and self.db.execute('SELECT COUNT(DISTINCT suite) FROM benchmark_datasets').fetchone()[0] >= 64:
-                raise ValueError('At most 64 imported benchmark names are supported.')
-            self.db.execute('INSERT INTO benchmark_datasets VALUES(?,?,?,?,?,?,?) ON CONFLICT(suite,version) DO NOTHING', (kind,version,custom.encoded(dataset),sha256,time.time(),by,dataset['name']))
-            if self.db.execute('SELECT sha256 FROM benchmark_datasets WHERE suite=? AND version=?', (kind,version)).fetchone()[0] != sha256:
-                raise ValueError('That version was imported concurrently with different content. Increase version.')
-            self.db.execute("INSERT INTO benchmark_definitions(id,enabled,formula,green) VALUES(?,1,'accuracy','high') ON CONFLICT(id) DO NOTHING", (kind,))
-        return {'benchmark': kind, 'version': version, 'sha256': sha256, 'created': True}
-
-    def delete_dataset(self, kind: str) -> int:
-        """Remove every version of an imported case set that no run uses. Returns how many versions went.
-
-        A run keeps only the dataset's name and version, and is scored again from it, so a set
-        that any run used stays.
-        """
-        with self.db:
-            if not kind.startswith('custom_') or not self.db.execute('SELECT 1 FROM benchmark_datasets WHERE suite=?', (kind,)).fetchone():
-                raise ValueError('Choose an imported dataset.')
-            used = self.db.execute('SELECT COUNT(*) FROM benchmark_runs WHERE benchmark=?', (kind,)).fetchone()[0]
-            if used:
-                raise ValueError(f'{used} benchmark run{"" if used == 1 else "s"} used this case set, so it is kept for their results.')
-            gone = self.db.execute('DELETE FROM benchmark_datasets WHERE suite=?', (kind,)).rowcount
-            self.db.execute('DELETE FROM benchmark_definitions WHERE id=?', (kind,))
-        self._datasets = {key: module for key, module in self._datasets.items() if key[0] != kind}
-        return gone
+    def module(self, kind: str):
+        """Resolve a built-in benchmark module."""
+        if kind not in MODULES:
+            raise ValueError('Unknown benchmark.')
+        return MODULES[kind]
 
     def regrade(self) -> int:
         """Score saved answers again where the grader has moved on since they were scored. Returns how many runs it did.
@@ -102,8 +53,10 @@ class Benchmarks:
         """
         done = 0
         for number, kind, subject in self.db.execute("SELECT id,benchmark,subject FROM benchmark_runs WHERE state IN ('completed','failed','cancelled')").fetchall():
+            if kind not in MODULES:
+                continue
             subject = json.loads(subject)
-            module = self.module(kind, subject.get('protocol'))
+            module = self.module(kind)
             grader = module.PROTOCOL.get('grader_version')
             if grader is None or subject.get('protocol', {}).get('grader_version') == grader:
                 continue
@@ -126,14 +79,11 @@ class Benchmarks:
         return done
 
     def definitions(self) -> list[dict]:
-        """List built-in and custom benchmark definitions with saved overrides."""
+        """List built-in benchmark definitions with saved overrides."""
         saved = {key: (bool(on), formula, green, server) for key, on, formula, green, server in self.db.execute('SELECT id,enabled,formula,green,server FROM benchmark_definitions')}
-        imported = [custom.definition({'id':kind.removeprefix('custom_'), 'name':name, 'version':version}, sha256)
-                    for kind, version, name, sha256 in self.db.execute('SELECT b.suite,b.version,b.name,b.sha256 FROM benchmark_datasets b '
-                        'WHERE b.version=(SELECT MAX(d.version) FROM benchmark_datasets d WHERE d.suite=b.suite) ORDER BY b.suite')]
         # A quality benchmark keeps one model server for its cases unless told otherwise; a measurement loads one for each sample.
         return [dict(bench, enabled=saved[bench['id']][0], formula=saved[bench['id']][1], green=saved[bench['id']][2],
-                     server=saved[bench['id']][3] or ('reuse' if bench.get('quality') else 'fresh')) for bench in [*BENCHMARKS, *imported]]
+                     server=saved[bench['id']][3] or ('reuse' if bench.get('quality') else 'fresh')) for bench in BENCHMARKS]
 
     def configure(self, key: str, enabled: bool, formula: str, green: str | None = None, server: str | None = None) -> None:
         """Save selection, score formula, which end of the heatmap is green and whether cases share a model server."""
@@ -165,7 +115,8 @@ class Benchmarks:
                 self.db.execute("DELETE FROM benchmark_reservations WHERE key=? AND run IN (SELECT id FROM benchmark_runs WHERE state IN ('completed','failed','cancelled'))", (key,))
                 if not self.db.execute('INSERT INTO benchmark_reservations(key,run) VALUES(?,?) ON CONFLICT(key) DO NOTHING', (key, number)).rowcount:
                     return None
-            subject = {'protocol': self.module(kind).PROTOCOL} if kind not in MODULES else {}
+            self.module(kind)
+            subject = {}
             self.db.execute('INSERT INTO benchmark_runs(id,model,model_id,benchmark,fingerprint,subject,environment,state,created,user,token,location) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
                             (number, model, model_id, kind, '', json.dumps(subject), '{}', 'creating', time.time(), user, token, location))
         return number
@@ -229,7 +180,7 @@ class Benchmarks:
     def get(self, number: str, detail: bool = False) -> dict | None:
         """Return one retained run with its configuration and current execution state."""
         row = self.db.execute(f'SELECT {RUN_COLUMNS} FROM benchmark_runs WHERE id=?', (number,)).fetchone()
-        if row is None:
+        if row is None or row[1] not in MODULES:  # runs of removed imported case sets are not shown
             return None
         definitions = {one['id']: one for one in self.definitions()}
         return self._run(number, row, detail, definitions)
@@ -240,7 +191,7 @@ class Benchmarks:
         location = self.node_aliases.get(location or LEGACY, location)
         samples = self.samples(number, detail) if samples is None else samples
         subject = json.loads(subject)
-        module = self.module(kind, subject.get('protocol'))
+        module = self.module(kind)
         metrics = module.summarize(samples)
         gpu = [sample['values']['peak_gpu_mib'] for sample in samples if sample['values'].get('success')
                and type(sample['values'].get('peak_gpu_mib')) in (int, float)]
@@ -279,7 +230,7 @@ class Benchmarks:
         ):
             samples.setdefault(number, []).append({'id': sample, 'at': at, 'values': json.loads(measurements)})
         return [self._run(row[0], row[1:], False, definitions, samples.get(row[0], []))
-                for row in self.db.execute(f'SELECT id,{RUN_COLUMNS} FROM benchmark_runs ORDER BY created DESC')]
+                for row in self.db.execute(f'SELECT id,{RUN_COLUMNS} FROM benchmark_runs ORDER BY created DESC') if row[2] in MODULES]
 
     def role_snapshot(self, model_ids=None, number=None, *, runs=None) -> dict:
         """Publish compact completed evidence, never prompts, outputs or task credentials."""
@@ -397,7 +348,8 @@ class Benchmarks:
 
     def unsynced(self) -> list[dict]:
         """Terminal runs needing their batch closed; retry after either service restarts."""
-        return [self.get(row[0]) for row in self.db.execute("SELECT id FROM benchmark_runs WHERE state IN ('completed','failed','cancelled') AND synced=0")]
+        return [run for row in self.db.execute("SELECT id FROM benchmark_runs WHERE state IN ('completed','failed','cancelled') AND synced=0").fetchall()
+                if (run := self.get(row[0]))]
 
     def synced(self, number: str) -> None:
         """Mark the run's role evidence as successfully published."""

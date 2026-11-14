@@ -20,7 +20,7 @@ from loadcoach.log import LEGACY
 from turnstile.reporting import ReportTimeout, run as run_report
 from .store import Benchmarks, TERMINAL
 from .worker import BenchmarkWorker, Retry
-from . import custom, quality, regressions
+from . import regressions
 
 
 @dataclass(frozen=True)
@@ -54,14 +54,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
         response.raise_for_status()
         return response.json()
 
-    async def body(request, maximum=65536, strict=False):
+    async def body(request, maximum=65536):
         """Read and validate the benchmark operation's JSON object."""
         raw = bytearray()
         async for chunk in request.stream():
             raw.extend(chunk)
             if len(raw) > maximum:
                 raise ValueError(f'Requests may be at most {maximum} bytes.')
-        value = quality.strict_json(raw.decode('utf-8')) if strict else json.loads(raw or b'{}')
+        value = json.loads(raw or b'{}')
         if not isinstance(value, dict):
             raise ValueError('Send a JSON object.')
         return value
@@ -460,36 +460,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             publication_warning = await refresh_snapshot(request, user)
         return JSONResponse({'ok':True, 'role_evidence_warning':publication_warning})
 
-    async def dataset_import(request, user):
-        """Validate and retain an immutable custom benchmark dataset."""
-        if not may(user, 'manage-settings'):
-            return error(403, 'Importing case sets requires manage-settings.')
-        dataset = await body(request, custom.MAX_BYTES, strict=True)
-        result = store.import_dataset(dataset, user['name'])
-        warning = await refresh_snapshot(request, user) if may(user, 'manage-models') else ''
-        worker.wake.set()
-        return JSONResponse({**result, 'role_evidence_warning':warning}, status_code=201 if result['created'] else 200)
-
-    async def dataset_export(request, user):
-        """Export the selected immutable custom benchmark dataset."""
-        if not may(user, 'manage-settings'):
-            return error(403, 'Exporting case sets requires manage-settings.')
-        module = store.module(request.path_params['suite'], {'version': int(request.path_params['version'])})
-        if not module.DEFINITION.get('custom'):
-            return error(400, 'Choose an imported dataset.')
-        return JSONResponse(module.dataset)
-
-    async def dataset_delete(request, user):
-        """Retire the selected custom dataset without rewriting retained results."""
-        if not may(user, 'manage-settings'):
-            return error(403, 'Deleting case sets requires manage-settings.')
-        try:
-            gone = store.delete_dataset(request.path_params['suite'])
-        except ValueError as why:
-            return error(409, str(why))
-        warning = await refresh_snapshot(request, user) if may(user, 'manage-models') else ''
-        return JSONResponse({'deleted': gone, 'role_evidence_warning': warning})
-
     async def regression_comparison(request, user):
         """Compare compatible retained benchmark runs by case and check."""
         catalogue = (await ask(request, 'GET', '/v1/models'))['data']
@@ -562,7 +532,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
     app = Starlette(lifespan=lifespan,routes=[route('/benchmarks',listing),route('/benchmarks',start,'POST'),
         route('/benchmarks/outstanding',outstanding,'POST'),
         route('/benchmarks/control',control,'POST'),route('/benchmarks/definitions',configure,'POST'),
-        route('/benchmarks/datasets',dataset_import,'POST'),route('/benchmarks/datasets/{suite}/{version}',dataset_export),route('/benchmarks/datasets/{suite}',dataset_delete,'DELETE'),
+        
         route('/benchmarks/regressions',regression_comparison),
         route('/benchmarks/publish',publish_snapshot,'POST'),route('/benchmarks/{number}',detail)])
     app.state.store, app.state.worker = store, worker

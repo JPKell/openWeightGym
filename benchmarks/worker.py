@@ -143,7 +143,7 @@ class BenchmarkWorker:
         """Dispatch one run to its benchmark protocol and persist completed samples."""
         run = await self.check(number)
         settings = run['subject']['settings']
-        module = self.store.module(run['benchmark'], run['subject'].get('protocol'))
+        module = self.store.module(run['benchmark'])
         multimedia = settings.get('engine') in ('sdcpp', 'audiocpp')
         classifier = bool(run['subject'].get('metadata', {}).get('decision_type'))
         if run['benchmark'] != 'load' and bool(module.DEFINITION.get('classifier')) != classifier:

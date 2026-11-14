@@ -209,16 +209,10 @@ optional control. Disable/reset the setting to restore timeout-only admission; t
 require reverting model settings or stored evidence. The live limit remains off; selected-model
 calibration is required before enabling it.
 
-C04 reusable case sets (milestone 94, deployed **2026-10-16**) runs on the front. On another
-installation, deliver WeightRoom, the benchmark package, templates and static example/import
-script together. Restart WeightRoom through the existing deployment workflow.
-`weightroom.benchmarks` migration 4 automatically
-adds `benchmark_datasets` in the existing benchmark store on SQLite/PostgreSQL. Include that
-store in the normal verified recovery set. Existing compute task/evaluation APIs are reused;
-no new dependency or listener is required. Frozen imported versions survive restart and newer
-imports; source/worker changes can reject unfinished runs under the existing implementation
-identity rule. Imported-case execution is verified on the retained A2 sample; its three cases
-do not establish broader model separation. See the [case-import contract](loadcoach.md#reusable-benchmark-cases-and-regressions-c04-milestone-94).
+C04 reusable case sets (milestone 94) were removed on **2026-11-13**. Migration 4's
+`benchmark_datasets` table stays in the benchmark store, unused, so existing data and backups are
+unchanged. Unfinished runs of an imported set are cancelled at startup; finished ones are no longer
+listed. Add new benchmarks as code-defined suites ([benchmark brief](../benchmarks/README.md)).
 
 C05 model setup (milestone 93, deployed **2026-10-16**) requires matching LoadCoach and WeightRoom
 code/templates. Deploy and restart through the existing scripts; no new service, port or Python

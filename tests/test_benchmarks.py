@@ -728,3 +728,22 @@ def test_gpu_formula_uses_successful_summed_vram_and_preserves_samples(tmp_path)
     assert store.get(number)['score'] == 4
     store.configure('load', True, 'gpu_vram_mib * parameter_count')
     assert store.get(number)['score'] is None and store.samples(number) == saved
+
+
+def test_runs_of_removed_imported_case_sets_are_cancelled_and_hidden(tmp_path):
+    path = tmp_path / 'benchmarks.db'
+    store = Benchmarks(path)
+    kept = store.create('owner', 'model-a', 'ifeval')
+    with store.db:
+        for number, state in (('batch_old_done', 'completed'), ('batch_old_queued', 'queued')):
+            store.db.execute("INSERT INTO benchmark_runs(id,model,benchmark,fingerprint,subject,environment,state,created,user,token,location) "
+                             "VALUES(?,?,?,?,?,?,?,?,?,?,?)", (number, 'model-a', 'custom_my-checks', '', '{}', '{}', state, time.time(), 'owner', 't', ''))
+    store.db.close()
+    store = Benchmarks(path)
+    states = dict(store.db.execute("SELECT id,state FROM benchmark_runs WHERE benchmark='custom_my-checks'").fetchall())
+    assert states == {'batch_old_done': 'completed', 'batch_old_queued': 'cancelled'}
+    assert [run['id'] for run in store.listing()] == [kept]
+    assert store.get('batch_old_done') is None and store.unsynced() == []
+    assert not any(bench['id'].startswith('custom_') for bench in store.definitions())
+    with pytest.raises(ValueError, match='Unknown benchmark'):
+        store.create('owner', 'model-a', 'custom_my-checks')
