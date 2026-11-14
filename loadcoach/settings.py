@@ -58,7 +58,7 @@ def program_name(program: str) -> str:
     return LEGACY_PROGRAMS.get(program, program)
 
 # Compatibility shape for existing followers; the catalogue is the authority.
-from loadcoach.setting_catalog import changeable, get as catalog_entry, validate, validate_values
+from loadcoach.setting_catalog import changeable, changeable_for, get as catalog_entry, validate, validate_values
 
 CHANGEABLE: dict[str, dict[str, str]] = changeable()
 SECRET = re.compile(r"(^|_)(key|token|secret|password)$")  # a setting with such a name is never handed out
@@ -103,7 +103,7 @@ def apply_live(program: str, settings, changed: dict):
 
 def laid_over(told: dict, changed: dict, program: str) -> dict:
     """What a file says, with what was changed on the site laid over it. A change to a setting that may not be changed is left out."""
-    selected={name:value for name,value in changed.items() if name in CHANGEABLE.get(program,{})}
+    selected={name:value for name,value in changed.items() if name in changeable_for(program, told)}
     table={'loadcoach':'engines','voice':'profiles'}.get(program)
     if table and isinstance(selected.get(table),dict) and isinstance(told.get(table),dict):
         # A new optional engine or voice profile in the file must not be hidden by an older
@@ -258,7 +258,7 @@ class Changes:
         with self.db:
             self.db.execute("INSERT INTO settings_seen (program, at, told, refused) VALUES (?, ?, ?, ?) ON CONFLICT(program) DO UPDATE SET at=excluded.at,told=excluded.told,refused=excluded.refused", (program, time.time(), json.dumps(safe), json.dumps(redacted(safe_refused))))
 
-    def everything(self) -> list[dict]:
+    def everything(self, *, include_retired=False) -> list[dict]:
         """Every program that has said what it runs with, and each of its settings as the page shows it."""
         changed: dict[str, dict] = {}
         for program, name, value, by, at in self.db.execute("SELECT program, name, value, by, at FROM settings_changed"):
@@ -268,7 +268,7 @@ class Changes:
             refusals = json.loads(refused)
             settings = [
                 {"name": name, **entry, "when": CHANGEABLE.get(program, {}).get(name, "file"), "changed": changed.get(program, {}).get(name), "refused": refusals.get(name)}
-                for name, entry in json.loads(told).items()
+                for name, entry in json.loads(told).items() if include_retired or not entry.get("retired")
             ]
             programs.append({"program": program, "seen": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "settings": settings})
         return programs
