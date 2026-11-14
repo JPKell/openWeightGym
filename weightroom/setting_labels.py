@@ -20,7 +20,7 @@ def describe(setting):
     if name.startswith('greetings.'):
         fallback = (setting.get('label', name), 'Speech', '', 'text')
     label, section, unit, control = LABELS.get(name, fallback)
-    editor = 'text' if control == 'text' or name in ('models_folder', 'models_storage_folder') else setting.get('editor', '')
+    editor = 'text' if control == 'plain-text' or name in ('models_folder', 'models_storage_folder') else setting.get('editor', '')
     return {'label': label, 'section': section, 'unit': unit, 'control': control, 'editor': editor,
             **({'choices': TIMEZONES} if name == 'timezone' else {}),
             **({'choices': [(written(value), value) for entry in entries() if entry.name == name for value in entry.choices]} if any(entry.name == name and entry.choices for entry in entries()) else {})}

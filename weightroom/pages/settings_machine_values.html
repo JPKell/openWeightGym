@@ -3,8 +3,8 @@
 <p class="form-hint">These values come from each service's TOML file.</p>
 <div class="table-responsive"><table class="table table-sm sortable" aria-label="Read-only machine values" data-empty-message="No read-only values reported by this node."><thead><tr><th>Service</th><th>Setting</th><th>Value</th></tr></thead><tbody>
 {% set reported = namespace(count=0) %}
-{% for program in programs|sort(attribute='program') %}{% for setting in program.settings|sort(attribute='name') if setting.when == 'file' %}
-{% set reported.count = reported.count + 1 %}<tr><td>{{ program.program }}</td><th class="fw-normal"><code>{{ setting.name }}</code></th><td class="wrap">{% set text = setting.value|written %}{% if text|length > 90 %}{% call more((text|truncate(90, true)) ~ ' · show') %}<pre class="setting-value mb-0">{{ text }}</pre>{% endcall %}{% else %}<code>{{ text }}</code>{% endif %}</td></tr>
+{% for program in programs|sort(attribute='program') %}{% for setting in program.settings|sort(attribute='name') if setting.when == 'file' and not setting.retired|default(false) and not setting.derived|default(false) %}
+{% set reported.count = reported.count + 1 %}<tr><td>{{ program.program }}</td><th class="fw-normal"><code>{{ setting.name }}</code>{% if setting.deprecated|default(false) %}<span class="badge bg-orange-lt ms-2">Deprecated</span>{% if setting.name in ('wake_mac', 'wake_address') %}<small class="d-block text-secondary">Move this value to the node’s Wake settings in Compute nodes.</small>{% endif %}{% endif %}</th><td class="wrap">{% set text = setting.value|written %}{% if text|length > 90 %}{% call more((text|truncate(90, true)) ~ ' · show') %}<pre class="setting-value mb-0">{{ text }}</pre>{% endcall %}{% else %}<code>{{ text }}</code>{% endif %}</td></tr>
 {% endfor %}{% endfor %}
 {% if not reported.count %}{{ empty_row(3, "No read-only values reported by this node.") }}{% endif %}
 </tbody></table></div>

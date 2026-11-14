@@ -294,10 +294,19 @@ class Changes:
         programs = []
         for program, at, told, refused in self.db.execute("SELECT program, at, told, refused FROM settings_seen ORDER BY program"):
             refusals = json.loads(refused)
-            settings = [
-                {"name": name, **entry, "when": CHANGEABLE.get("machines" if program.startswith("machines:") else program, {}).get(name, "file"), "changed": changed.get(program, {}).get(name), "refused": refusals.get(name)}
-                for name, entry in json.loads(told).items() if include_retired or not entry.get("retired")
-            ]
+            settings = []
+            for name, entry in json.loads(told).items():
+                definition = catalog_entry(program, name)
+                hidden = entry.get('retired') or definition and (definition.retired or definition.derived or
+                    definition.deprecated and (name == 'keep_console_settings_on_front' or not entry.get('value')))
+                if hidden and not include_retired:
+                    continue
+                settings.append({"name": name, **entry,
+                    "when": definition.tier if definition else "file",
+                    "changed": changed.get(program, {}).get(name), "refused": refusals.get(name),
+                    "retired": bool(entry.get('retired') or definition and definition.retired),
+                    "derived": bool(definition and definition.derived),
+                    "deprecated": bool(definition and definition.deprecated)})
             programs.append({"program": program, "seen": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "settings": settings})
         return programs
 
