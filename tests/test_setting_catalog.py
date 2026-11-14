@@ -48,7 +48,7 @@ def test_catalogue_contracts_reject_wrong_types_and_nonfinite_numbers(entry):
 def test_file_values_never_become_changeable_by_inference():
     editable = changeable()
     for entry in CATALOG.values():
-        assert (entry.name in editable.get(entry.program, {})) == (entry.tier != 'file' and not entry.retired and not entry.derived)
+        assert (entry.name in editable.get(entry.program, {})) == (entry.tier != 'file' and entry.scope in ('node', 'front') and not entry.retired and not entry.derived)
     assert 'host' not in editable['weightroom']
     with pytest.raises(ValueError, match='Unknown setting'):
         validate('weightroom', 'invented', 'ignored')
@@ -68,7 +68,7 @@ def test_compatibility_metadata_is_derived_from_the_catalogue():
     assert [group['title'] for group in grouped] == ['Sessions and limits', 'Additional settings']
 
 
-EDITABLE = [entry for entry in CATALOG.values() if entry.tier != 'file']
+EDITABLE = [entry for entry in CATALOG.values() if entry.tier != 'file' and entry.scope in ('node','front')]
 
 
 @pytest.mark.parametrize('entry', EDITABLE, ids=lambda entry: f'{entry.program}.{entry.name}')
@@ -167,6 +167,13 @@ def live_examples(entry):
         'tool_levels': ({}, {'catalogue': 'normal'}),
         'third_party_services': (['ollama'], ['docker']),
         'timezone': ('UTC', 'America/Vancouver'),
+        'notify_quiet_hours': ('', '22:00-07:00'),
+        'notify_webhook_url': ('', 'http://127.0.0.1:9991/hook'),
+        'notify_ntfy_url': ('', 'http://127.0.0.1:9991'),
+        'notify_site_url': ('', 'http://127.0.0.1:9992'),
+        'notify_smtp_from': ('', 'sender@example.test'),
+        'notify_smtp_to': ('', 'receiver@example.test'),
+        'notify_email': ('', 'receiver@example.test'),
         'observation_quiet_routes': (['/one'], ['/two']),
         'disabled_gpus': ([], ['unavailable-test-card']),
         'disks': (['/'], ['/tmp']),
@@ -182,6 +189,8 @@ def live_examples(entry):
     }
     if entry.name in special:
         return special[entry.name]
+    if entry.kind == 'secret':
+        return '', 'fake-test-credential'
     if entry.kind == 'bool':
         return False, True
     if entry.kind in ('int', 'float'):
@@ -218,7 +227,29 @@ def test_every_live_setting_changes_through_its_service_getter_without_restart(e
     original = {}
     set_nested(original, entry.name, base)
     path.write_text(written(original))
-    if entry.program in ('voice', 'voice-gateway'):
+    if entry.kind == 'secret':
+        from weightroom.notify import NotificationKeys
+        keys = NotificationKeys(tmp_path/'keys')
+        owner = 'test-owner' if entry.scope == 'account' else 'system'
+        assert keys.read(entry.name,owner) == base
+        keys.save(entry.name,changed,owner)
+        assert keys.read(entry.name,owner) == changed
+        assert changed not in str(keys.status(entry.name,owner))
+        keys.remove(entry.name,owner)
+        assert keys.read(entry.name,owner) == base
+    elif entry.scope == 'account':
+        from loadcoach.users import Users
+        users = Users(':memory:',{})
+        try:
+            users.groups.put('plain',{})
+            users.add('owner','plain')
+            users.choose('owner',{entry.name:base})
+            assert users.choices('owner')[entry.name] == base
+            users.choose('owner',{entry.name:changed})
+            assert users.choices('owner')[entry.name] == changed
+        finally:
+            users.db.close()
+    elif entry.program in ('voice', 'voice-gateway'):
         settings, following = with_changes(entry.program, path)
 
         def authority(request):

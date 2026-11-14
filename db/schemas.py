@@ -114,7 +114,20 @@ ALERTS = (Migration(1, "operational alert episodes and source freshness", """
     CREATE TABLE IF NOT EXISTS alert_sources (
         source TEXT PRIMARY KEY, checked_at DOUBLE PRECISION NOT NULL,
         available INTEGER NOT NULL);
-"""),)
+"""), Migration(2, "bounded notification deliveries and passive node silence", """
+    CREATE TABLE notification_deliveries (
+        id TEXT PRIMARY KEY, episode TEXT NOT NULL, owner TEXT NOT NULL,
+        channel TEXT NOT NULL, phase TEXT NOT NULL, payload TEXT NOT NULL,
+        created DOUBLE PRECISION NOT NULL, next_at DOUBLE PRECISION NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT 'pending',
+        last_at DOUBLE PRECISION, last_error TEXT NOT NULL DEFAULT '');
+    CREATE INDEX operational_alert_resolved ON operational_alerts(resolved_at);
+    CREATE INDEX notification_deliveries_due ON notification_deliveries(state,next_at);
+    CREATE INDEX notification_deliveries_episode ON notification_deliveries(episode,owner,channel);
+    CREATE TABLE notification_cursors (
+        owner TEXT PRIMARY KEY, since DOUBLE PRECISION NOT NULL, last_planned DOUBLE PRECISION NOT NULL, configuration TEXT NOT NULL);
+    CREATE TABLE alert_node_silence (node TEXT PRIMARY KEY, since DOUBLE PRECISION NOT NULL);
+"""))
 
 SETTINGS = (
     Migration(1, "settings tables", """
@@ -233,6 +246,9 @@ USERS = (
             PRIMARY KEY(account,address));
         CREATE INDEX sign_in_failures_updated ON sign_in_failures(updated);
     '''),
+    Migration(9, 'personal delivery opt-in timestamp', """
+        ALTER TABLE users ADD COLUMN notification_started DOUBLE PRECISION;
+    """),
 )
 
 

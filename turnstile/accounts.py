@@ -20,7 +20,7 @@ from starlette.routing import Route
 
 from loadcoach.groups import ABILITIES, LEVELS, NOTHING, OWN_KEY, OWN_SETTINGS, adjusted, beyond, read_group, section_of
 from loadcoach.log import Log
-from loadcoach.users import SignInRefused, User, Users, check_password
+from loadcoach.users import ANONYMOUS, SignInRefused, User, Users, check_password
 
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
@@ -75,7 +75,7 @@ def signed_in(caller, log: Log, handler):
     return checked
 
 
-def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None, *, hosted_models=lambda: {}, forget_extractions=None, forget_responses=None, phone_numbers=lambda owner: [], forget_phone=lambda name: None) -> list[Route]:
+def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None, *, hosted_models=lambda: {}, forget_extractions=None, forget_responses=None, phone_numbers=lambda owner: [], forget_phone=lambda name: None, notification_threshold=lambda: 0) -> list[Route]:
     """The account addresses. `caller(key)` is who a key belongs to, as turnstile says.
     `ask_compute(user, method, path, body)` asks compute as that user, or gives None if it is not answering.
     `roles_for(models)` are the roles someone who may use those models may ask for.
@@ -220,6 +220,8 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         chosen = await read_json(request, set(users.choices(user.name)))
         if isinstance(chosen, Response):
             return chosen
+        if chosen.get('notify_operational') is True and not user.can('manage-settings'):
+            return error(403,'Operational notification subscriptions require manage-settings.')
         # Model references may be offline or plugin-owned. The browser form validates its
         # current catalogue; every consumer still checks availability and authorization.
         try:
@@ -246,6 +248,44 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         """Deliver only the current account's opted-in notices."""
         from .personal import notices
         return JSONResponse(notices(users, log, user), headers={'cache-control': 'private, no-store'})
+
+    async def notification_feed(request: Request,user: User) -> Response:
+        """Only the console's account-mirroring key may fetch opted-in delivery metadata."""
+        if not user.can('mirror-users'):
+            return error(403,'Notification delivery requires the control node account-mirroring key.')
+        from .personal import notices
+        from loadcoach.preferences import DEFAULTS as safe_choices
+        targets = []
+        identity = request.query_params.get('identity','')
+        if identity and (len(identity)>256 or any(ord(char)<32 for char in identity)):
+            return error(400,'Choose an account identity.')
+        metadata_only = request.query_params.get('metadata') == '1'
+        with users.db,log.db:
+            names = users.db.execute('SELECT name,notification_started FROM users WHERE enabled<>0 AND choices IS NOT NULL' +
+                                     (' AND identity=?' if identity else ''),(identity,) if identity else ()).fetchall()
+            for name,started in names:
+                choices = users.choices(name)
+                if not (choices.get('notify_ntfy_enabled') or choices.get('notify_email_enabled')):
+                    continue
+                account = users.by_name(name)
+                if not account:
+                    continue
+                effective = {key:choices[key] for key in safe_choices if key.startswith(('notify_','alert_'))}
+                effective['notify_operational'] = bool(choices.get('notify_operational') and account.can('manage-settings'))
+                targets.append({'identity':account.identity,'name':name,'max_sensitivity':account.group.max_sensitivity,
+                                'choices':effective,'since':started or 0,'notices':{'items':[]} if metadata_only else notices(users,log,account)})
+            conditions = []
+            threshold = notification_threshold()
+            if not metadata_only and threshold and users.db.execute('SELECT 1 FROM spending_allowances WHERE amount>0 LIMIT 1').fetchone():
+                from .allowances import Allowances
+                for row in Allowances(users,log).report(ANONYMOUS)['rows']:
+                    if not row['allowance']:
+                        continue
+                    percent = row['recorded']/row['allowance']*100
+                    conditions.append({'key':'allowance:'+row['scope']+':'+row['subject'],'active':percent>=threshold,
+                                       'title':row['name']+' recorded allowance','explanation':f'{percent:g}% recorded; threshold {threshold:g}%. Unknown and in-flight costs are excluded.',
+                                       'recovery':'Recorded spending is below the configured allowance alert threshold.'})
+        return JSONResponse({'targets':targets,'allowance_conditions':conditions},headers={'cache-control':'private, no-store'})
 
     # ---- users ------------------------------------------------------------------------------
 
@@ -557,6 +597,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         route('/loadcoach/sessions/end-others', sessions, 'POST'),
         route('/loadcoach/sessions/{identifier}', sessions, 'DELETE'),
         route('/loadcoach/account-notices', personal_notices),
+        route('/turnstile/notification-feed', notification_feed),
         route("/loadcoach/users", user_list),
         route("/loadcoach/users", user_add, "POST"),
         route("/loadcoach/users/{name}", user_one),

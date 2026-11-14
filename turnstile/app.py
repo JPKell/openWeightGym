@@ -1051,9 +1051,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     from mirrorwall.front import Front as ImageFront
     # Saved overrides at startup never become the fallback after a live reset.
     configured_defaults = {}
+    weightroom_defaults = {entry.name:default_for('weightroom',entry.name) for entry in catalog_entries('weightroom')
+                           if entry.default is not None and entry.kind!='secret'}
     if settings.path and Path(settings.path).is_file():
         from dataclasses import MISSING, fields
-        file_values = read_settings(Path(settings.path)).get('turnstile', {})
+        control_file = read_settings(Path(settings.path))
+        file_values = control_file.get('turnstile', {})
+        for entry in catalog_entries('weightroom'):
+            if entry.name in control_file and entry.kind!='secret':
+                try:
+                    weightroom_defaults[entry.name] = entry.check(control_file[entry.name])
+                except ValueError:
+                    pass  # WeightRoom reports its own invalid file; never ingest an invalid monitor policy.
         definitions = {field.name: field for field in fields(Settings)}
         for entry in catalog_entries('turnstile'):
             if entry.name in definitions:
@@ -1062,7 +1071,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 configured_defaults[entry.name] = file_values.get(entry.name, default)
     console_settings = ConsoleSettings(stores.database('weightroom.accounts'), log, ask_all, True,
                                    programs=FRONT_PROGRAMS | {'toollocker'},
-                                   voice_nodes=lambda: voice_order(), defaults={'turnstile': configured_defaults})
+                                   voice_nodes=lambda: voice_order(), defaults={'turnstile': configured_defaults,'weightroom':weightroom_defaults})
     live = console_settings.live
     users.policy_getter = lambda name: live('turnstile',name,getattr(settings,name))
 
@@ -3481,7 +3490,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             *accounts.routes(users, log, caller, ask_all, routing.roles_for, hosted.offered, batch_work,
                                              hosted_models=hosted.models, forget_extractions=extractions.forget, forget_responses=forget_responses,
                                              phone_numbers=lambda owner: telephone_admin.store.own(owner, mask=True),
-                                             forget_phone=telephone_admin.forget_account),
+                                             forget_phone=telephone_admin.forget_account,
+                                             notification_threshold=lambda:live('weightroom','alert_allowance_percent',default_for('weightroom','alert_allowance_percent'))),
                             *allowances.routes(users, log, caller, ask_all),
                             *routing.routes(),
                             Route("/{path:path}", pass_on, methods=methods)])

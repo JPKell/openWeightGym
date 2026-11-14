@@ -11,8 +11,8 @@
     try { sessionStorage.setItem(filterKey(), JSON.stringify(filters)); } catch {}
   }
   function dirty(row) {
-    return [...row.querySelectorAll('input, select, textarea')].filter(editable).some(field =>
-      ['checkbox', 'radio'].includes(field.type) ? field.checked !== field.defaultChecked :
+    return [...row.querySelectorAll('input, select, textarea')].filter(field => editable(field) || privateField(field)).some(field =>
+      privateField(field) ? field.value.length > 0 : ['checkbox', 'radio'].includes(field.type) ? field.checked !== field.defaultChecked :
       field.tagName === 'SELECT' ? [...field.options].some(option => option.selected !== option.defaultSelected) : field.value !== field.defaultValue);
   }
   function rowsIn(content) {

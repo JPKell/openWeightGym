@@ -23,6 +23,7 @@ def describe(setting, program=None):
     label, section, unit, control = ((definition.label, definition.section, definition.unit, definition.control) if definition else LABELS.get(name, fallback))
     editor = 'text' if control == 'plain-text' or name in ('models_folder', 'models_storage_folder') else setting.get('editor', '')
     return {'label': setting.get('label', label), 'section': section, 'unit': unit, 'control': control, 'editor': editor,
+            'kind': definition.kind if definition else '',
             'min': definition.min if definition else None, 'max': definition.max if definition else None,
             'ceiling': definition.ceiling if definition else None,
             'help': setting.get('says') or setting.get('help') or (definition.help if definition else ''),

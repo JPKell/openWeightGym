@@ -34,7 +34,7 @@ def timeline(row):
     return sorted(events, key=lambda event: event[1])
 
 
-def workspace(store, asked):
+def workspace(store, asked,owner="system"):
     scope = asked.get('scope', 'open')
     if scope not in dict(SCOPES):
         raise ValueError('Choose a supported episode scope.')
@@ -47,9 +47,14 @@ def workspace(store, asked):
     number = min(number, max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE))
     offset = (number - 1) * PAGE_SIZE
     rows = list(store.matching(filters, PAGE_SIZE, offset))
-    selected = next((row for row in rows if row['id'] == asked.get('selected')), rows[0] if rows else None)
+    selected = next((row for row in rows if row['id'] == asked.get('selected')), None)
+    if selected is None and asked.get('selected'):
+        selected = store.one(asked['selected'])
+    if selected is None:
+        selected = rows[0] if rows else None
     context = filters | {'page': number}
-    for row in rows:
+    for row in [*rows,*([selected] if selected and selected not in rows else [])]:
+        row['notifications'] = store.notification_status(row['id'],owner)
         row['href'] = link(context, selected=row['id'])
         row['guide'] = investigation(row)
     sources = store.sources()

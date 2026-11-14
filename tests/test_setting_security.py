@@ -313,7 +313,7 @@ def test_old_keys_migrate_without_replacing_credentials_or_expiry(tmp_path):
     from db.schemas import USERS
     source = Database.sqlite(tmp_path/'legacy.db')
     connection = source.connect()
-    migrate(source,connection,'loadcoach.users',USERS[:-1])
+    migrate(source,connection,'loadcoach.users',tuple(step for step in USERS if step.version<8))
     with connection:
         connection.execute('INSERT INTO users(name,grp) VALUES(?,?)',('pat','plain'))
         for key,expiry in [('old-api',None),('old-session',time.time()+3600)]:

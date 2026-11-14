@@ -1,5 +1,5 @@
 {% from 'navigation_parts.html' import pill_link, pills %}
-{% from 'parts.html' import card, confirm_two, form_section, more, alert, page_header %}
+{% from 'parts.html' import card, confirm_two, form_section, more, alert, page_header, credential_input %}
 
 {% macro voice_tabs(selected) %}
 {% call pills('Voice administration') %}
@@ -108,22 +108,13 @@
 {% endcall %}
 {% endmacro %}
 
-{% macro credential_state(credential) %}
-{% if credential.saved|default(false) %}<span class="badge bg-green-lt">Saved</span> <span class="small text-secondary">Last changed {{ credential.changed }}</span>{% else %}<span class="badge bg-orange-lt">Not saved</span>{% endif %}
-{% endmacro %}
-
 {% macro telephone_credentials(credentials) %}
 {% call card('Twilio credentials', open=not credentials.token.saved|default(false), key='voice-phone-credentials') %}
 <form method="post" action="/system/voice/telephone/save_credentials" data-hold-refresh>
 <div class="row g-3">
-<div class="col-12"><label for="telephone-token" class="form-label">Auth token</label>
-<input id="telephone-token" name="token" type="password" class="form-control" autocomplete="new-password" maxlength="8192">
-{{ credential_state(credentials.token|default({})) }}</div>
-<div class="col-md-6"><label for="telephone-api-sid" class="form-label">API key SID (recommended)</label>
-<input id="telephone-api-sid" name="api_sid" type="password" class="form-control" autocomplete="new-password" maxlength="34"></div>
-<div class="col-md-6"><label for="telephone-api-secret" class="form-label">API key secret</label>
-<input id="telephone-api-secret" name="api_secret" type="password" class="form-control" autocomplete="new-password" maxlength="8192">
-{{ credential_state(credentials.api|default({})) }}</div>
+<div class="col-12">{{ credential_input('telephone-token','token','Auth token',credentials.token|default({})) }}</div>
+<div class="col-md-6">{{ credential_input('telephone-api-sid','api_sid','API key SID (recommended)',maxlength=34) }}</div>
+<div class="col-md-6">{{ credential_input('telephone-api-secret','api_secret','API key secret',credentials.api|default({})) }}</div>
 </div><p class="small text-secondary mt-2">Empty fields keep saved credentials. The auth token verifies signed calls; the optional API key handles Twilio API requests.</p>
 <button class="btn btn-primary">Save credentials</button>
 </form>

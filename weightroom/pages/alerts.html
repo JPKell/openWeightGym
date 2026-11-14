@@ -7,7 +7,7 @@
 {% block scripts %}<link rel="stylesheet" href="/static/alerts.css?v=1"><script src="/static/alerts.js?v=1" defer></script>{% endblock %}
 {% block main %}
 <div id="alert-workspace" data-layout="desk">
-{% call page_header('Operational alerts') %}<a href="{{ view.export_url }}" class="btn btn-outline-secondary btn-sm" download>Export JSON</a><a href="{{ view.refresh_url }}" class="btn btn-primary btn-sm" {{ swaps('alert-workspace', true) }}>Refresh</a>{% endcall %}
+{% call page_header('Operational alerts') %}{% if 'manage-settings' in person.can %}<a href="/settings/alerts" class="btn btn-outline-secondary btn-sm">Notification settings</a>{% endif %}<a href="{{ view.export_url }}" class="btn btn-outline-secondary btn-sm" download>Export JSON</a><a href="{{ view.refresh_url }}" class="btn btn-primary btn-sm" {{ swaps('alert-workspace', true) }}>Refresh</a>{% endcall %}
 {{ said_box(said) }}
 <div class="al-briefing mb-4"><div><span class="al-signal" aria-hidden="true"></span><strong>{{ 'Open episodes need attention.' if view.summary.open else 'No open episodes.' }}</strong><p class="text-secondary small mb-0 mt-1">Inspect the evidence, acknowledge the episode, follow its recovery.</p></div><div class="small text-secondary al-snapshot">{% if view.checked_at %}Last collection<br>{{ view.checked_at|timestamp }}{% else %}No readings yet{% endif %}</div></div>
 {{ overview(view.summary) }}

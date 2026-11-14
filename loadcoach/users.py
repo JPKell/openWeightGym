@@ -314,8 +314,11 @@ class Users:
     def choose(self, name: str, chosen: dict) -> None:
         """Keep a user's own choices. Only the ones in CHOICES, each of the kind it is there."""
         validate_choices(chosen)
+        previous = self.choices(name)
+        since = time.time() if any(key.startswith(('notify_','alert_')) and previous.get(key) != value for key,value in chosen.items()) else None
         with self.db:
-            self.db.execute("UPDATE users SET choices = ? WHERE name = ?", (json.dumps({**self.choices(name), **chosen}), name))
+            self.db.execute("UPDATE users SET choices = ?,notification_started=COALESCE(?,notification_started) WHERE name = ?",
+                            (json.dumps({**previous,**chosen}),since,name))
 
     def password_hash(self, name: str) -> str | None:
         """The stored hash of a user's password, or None if they have none."""

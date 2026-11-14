@@ -124,10 +124,16 @@ def test_investigation_markup_escapes_labels_and_does_not_offer_forbidden_links(
 
 
 @pytest.mark.parametrize('width', [1440, 390])
-def test_live_stale_alert_links_to_open_metrics_and_shows_recorded_health(desk, width):
+def test_live_stale_alert_links_to_open_metrics_and_shows_recorded_health(desk, width, monkeypatch):
     from test_console_browser import browser_context, playwright
     server, switch, _ = desk
     switch.off = True
+    # Keep this deliberately stale fixture from being replaced by the live test node's health sender.
+    import loadcoach.observation_store as observations
+    original_receive = observations.receive
+    def preserve_stale(source,records,machine,health=None):
+        return original_receive(source,records,machine,None if machine=='compute' else health)
+    monkeypatch.setattr(observations,'receive',preserve_stale)
     received = time.time() - 600
     with switch.front.state.log.db:
         switch.front.state.log.db.execute('INSERT INTO observation_sources(machine,at,data) VALUES(?,?,?) '

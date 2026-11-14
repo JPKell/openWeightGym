@@ -2,6 +2,7 @@
 {% from 'parts.html' import section_title, swaps, more %}
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% from 'icons.html' import icon %}
+{% from 'notification_parts.html' import delivery_table %}
 
 {% macro state_badge(alert={}) %}<span data-state class="badge {{ 'text-bg-danger' if alert.state == 'active' else 'text-bg-warning' if alert.state == 'unknown' else 'text-bg-secondary' }}">{{ 'Review required' if alert.manual and not alert.resolved_at else alert.state }}</span>{% endmacro %}
 
@@ -14,6 +15,7 @@
   <div class="small text-secondary text-break">Source: <span data-source>{{ alert.source or '' }}</span> · first <span data-first-at>{{ alert.first_at|timestamp }}</span> · last observed <span data-last-at>{{ alert.last_at|timestamp }}</span> · checked <span data-checked-at>{{ alert.checked_at|timestamp }}</span></div>
   <div class="small fw-semibold" data-unknown{% if alert.state != 'unknown' %} hidden{% endif %}>Current condition unavailable. Last observed alert remains open.</div>
   {{ acknowledgement(alert, preview) }}
+  {% if alert.notifications|default([]) %}{% call more('Notification delivery') %}{{ delivery_table(alert.notifications) }}{% endcall %}{% endif %}
   {% if history or preview %}<div data-closure{% if not history %} hidden{% endif %}><div class="small text-secondary mt-2">Closed <span data-resolved-at>{{ alert.resolved_at|timestamp }}</span></div><p class="small mb-0 text-break" data-recovery>{{ alert.recovery or '' }}</p></div>{% endif %}
   {% if not history %}
   <form method="post" action="{{ '#' if preview else '/alerts/' ~ alert.id }}" class="d-flex flex-wrap gap-2 mt-2"{% if preview %} data-demo-actions{% elif return_to %} {{ swaps('alert-workspace', true) }}{% endif %}>
@@ -58,5 +60,5 @@
 {% macro empty_state(title, message='', clear=false, checked=false) %}<div class="al-empty">{% if checked %}{{ icon('check') }}{% endif %}{{ section_title(title, wrapper_class='justify-content-center mt-3' if checked else 'justify-content-center') }}<p class="small text-secondary mb-0" data-empty-message>{{ message }}</p>{% if clear %}<button type="button" class="btn btn-outline-secondary btn-sm mt-3" data-clear>Clear filters</button>{% endif %}</div>{% endmacro %}
 
 {% macro source_notes(threshold=85, preview=false) %}
-<p class="small text-secondary mt-2 mb-0">Missing readings can mean compute is asleep, stopped or disconnected. They do not establish a service failure or recovery. Spending alerts use recorded 24-hour costs; in-flight and unknown costs are excluded. GPU threshold: {{ threshold }}°C; {% if preview %}configured in Settings{% else %}change it in <a href="/settings?open=weightroom">Settings</a>{% endif %}.</p>
+<p class="small text-secondary mt-2 mb-0">Missing readings can mean compute is asleep, stopped or disconnected. They do not establish a service failure or recovery. Spending alerts use recorded 24-hour costs; in-flight and unknown costs are excluded. GPU threshold: {{ threshold }}°C; {% if preview %}configured in Settings{% else %}change it in <a href="/settings/alerts">Settings</a>{% endif %}.</p>
 {% endmacro %}

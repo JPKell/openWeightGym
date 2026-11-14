@@ -281,7 +281,7 @@ def validate_values(program, values, *, context=None):
 def changeable():
     result = {}
     for setting in CATALOG.values():
-        if setting.tier != FILE and not (setting.retired or setting.derived):
+        if setting.scope in ('node','front') and setting.tier != FILE and not (setting.retired or setting.derived):
             result.setdefault(setting.program, {})[setting.name] = setting.tier
     return result
 
@@ -294,7 +294,7 @@ def retired_for(program, name, context=None):
 
 def changeable_for(program, context=None):
     return {entry.name: entry.tier for entry in entries(program)
-            if entry.tier != FILE and not entry.derived and not retired_for(program, entry.name, context)}
+            if entry.scope in ('node','front') and entry.tier != FILE and not entry.derived and not retired_for(program, entry.name, context)}
 
 
 # Existing service settings.
@@ -571,3 +571,109 @@ for name, kind, default, minimum, maximum, label, unit, help_text in (
 ):
     _add('turnstile',name,kind,tier=NOW,scope='front',page='requests',section='Advanced',
          label=label,min=minimum,max=maximum,default=default,unit=unit,control='number',help=help_text)
+
+
+
+def _notification_url(value):
+    from urllib.parse import urlsplit
+    if not value:
+        return
+    try:
+        parts = urlsplit(value)
+        valid = parts.scheme in ('http','https') and parts.hostname and not (parts.username or parts.password or parts.query or parts.fragment)
+        parts.port
+    except ValueError:
+        valid = False
+    if not valid or len(value)>2048 or any(ord(char)<=32 for char in value):
+        raise ValueError('Use an HTTP or HTTPS URL without credentials, query parameters or fragments; save tokens separately.')
+
+
+def _mailboxes(value):
+    from email.utils import parseaddr
+    if not value:
+        return
+    addresses = [address.strip() for address in value.split(',')]
+    if len(value)>4096 or len(addresses)>20 or any(not address or '@' not in address or
+            parseaddr(address)[1] != address or any(ord(char)<=32 or ord(char)>126 for char in address) for address in addresses):
+        raise ValueError('Use up to 20 plain email addresses, separated by commas.')
+
+
+def _notification_text(value):
+    if len(value)>1024 or any(ord(char)<32 or ord(char)==127 for char in value):
+        raise ValueError('Use at most 1024 characters without control characters.')
+
+
+def _quiet_hours(value):
+    if value and not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]-(?:[01][0-9]|2[0-3]):[0-5][0-9]',value):
+        raise ValueError('Quiet hours use HH:MM-HH:MM in the control node time zone, or are empty.')
+    if value and value[:5] == value[6:]:
+        raise ValueError('Quiet hours must have different start and end times.')
+
+
+def _ntfy_topic(value):
+    if value and not re.fullmatch(r'[-_A-Za-z0-9]{1,64}',value):
+        raise ValueError('An ntfy topic uses 1–64 letters, numbers, underscores or dashes.')
+
+
+def _mailbox(value):
+    _mailboxes(value)
+    if ',' in value:
+        raise ValueError('Use one plain email address.')
+
+
+def _smtp_host(value):
+    if len(value)>253 or any(ord(char)<=32 or char in '/\\@?#' for char in value):
+        raise ValueError('Use an SMTP server name or IP address without a port or path.')
+
+
+def _notification_secret(value):
+    if len(value)>8192 or any(ord(char)<32 or ord(char)==127 for char in value):
+        raise ValueError('Use a credential of at most 8192 characters without control characters.')
+
+
+for name, kind, default, minimum, maximum, label, unit, choices, rule, help_text in (
+    ('notify_webhook_url','text','',None,None,'Webhook URL','',(),_notification_url,'JSON episode notifications with an HMAC signature. Credentials belong in the write-only signing secret.'),
+    ('notify_ntfy_url','text','',None,None,'ntfy server URL','',(),_notification_url,'Server base URL; leave empty to disable this system-wide channel.'),
+    ('notify_ntfy_topic','text','',None,None,'ntfy topic','',(),_ntfy_topic,'Topic for system-wide operational alerts. Optional bearer token is write-only.'),
+    ('notify_smtp_host','text','',None,None,'SMTP host','',(),_smtp_host,'Mail server name or IP; leave empty to disable email delivery.'),
+    ('notify_smtp_port','int',587,1,65535,'SMTP port','',(),None,'Port 587 uses STARTTLS by default; port 465 uses TLS.'),
+    ('notify_smtp_security','choice','auto',None,None,'SMTP security','',('auto','starttls','tls'),None,'Automatic uses TLS on port 465 and STARTTLS elsewhere. Plaintext SMTP is not used.'),
+    ('notify_smtp_from','text','',None,None,'Email sender','',(),_mailbox,'Plain sender email address.'),
+    ('notify_smtp_to','text','',None,None,'Operational email recipients','',(),_mailboxes,'Plain email addresses, separated by commas.'),
+    ('notify_smtp_username','text','',None,None,'SMTP username','',(),_notification_text,'Optional login name. The password is write-only; empty username uses no SMTP authentication.'),
+    ('notify_site_url','text','',None,None,'Notification site URL','',(),_notification_url,'Optional public address of this console for absolute links. Empty uses relative links.'),
+    ('notify_min_state','choice','opened',None,None,'Notify when','',('opened','unacknowledged'),None,'Send when an episode opens, or only when it remains unacknowledged for the configured delay. Resolutions are delivered too.'),
+    ('notify_after_minutes','int',15,1,10080,'Unacknowledged delay','min',(),None,'Used only for unacknowledged delivery; acknowledgement suppresses the opening notification.'),
+    ('notify_repeat_minutes','int',0,0,10080,'Repeat open episodes','min',(),None,'Zero disables repeats. Retries are limited to three attempts with backoff.'),
+    ('notify_quiet_hours','text','',None,None,'Quiet hours','',(),_quiet_hours,'Empty disables quiet hours. HH:MM-HH:MM uses the control node time zone and delays pending deliveries.'),
+    ('alert_disk_free_percent','float',10,0,100,'Disk free below','%',(),None,'Zero disables disk space alerts. Missing or stale readings never establish recovery.'),
+    ('alert_node_offline_minutes','float',10,0,10080,'Node silent for','min',(),None,'Zero disables silence alerts. A silent node may be asleep, stopped or disconnected; this does not prove service failure.'),
+    ('alert_gpu_memory_percent','float',0,0,100,'GPU memory above','%',(),None,'Zero disables GPU memory alerts. Uses fresh Spotter telemetry.'),
+    ('alert_host_ram_percent','float',0,0,100,'Host RAM above','%',(),None,'Zero disables host RAM alerts. Uses fresh Spotter telemetry.'),
+    ('alert_allowance_percent','float',0,0,100,'Recorded allowance above','%',(),None,'Zero disables operational allowance alerts. Unknown and in-flight costs are excluded.'),
+):
+    _add('weightroom',name,kind,tier=NOW,scope='front',page='alerts',section='Notification delivery' if name.startswith('notify_') else 'Alerts and monitoring',
+         label=label,min=minimum,max=maximum,default=default,unit=unit,choices=choices,rule=rule,
+         control='plain-text' if kind=='text' else 'number' if kind in ('int','float') else '',help=help_text)
+
+def _bearer_secret(value):
+    _notification_secret(value)
+    if any(not 33 <= ord(char) <= 126 for char in value):
+        raise ValueError('A bearer token must use printable ASCII without spaces.')
+
+
+for name,label in (('notify_webhook_secret','Webhook signing secret'),('notify_ntfy_token','ntfy bearer token'),('notify_smtp_password','SMTP password')):
+    _add('weightroom',name,'secret',tier=NOW,scope='front',page='alerts',section='Notification credentials',
+         label=label,default='',rule=_bearer_secret if name=='notify_ntfy_token' else _notification_secret,help='Write-only credential kept in an owner-only file under the keys folder. Blank keeps the saved value.')
+
+for name,kind,default,label,rule in (
+    ('notify_ntfy_enabled','bool',False,'Send my notices to ntfy',None),
+    ('notify_ntfy_url','text','','My ntfy server',_notification_url),
+    ('notify_ntfy_topic','text','','My ntfy topic',_ntfy_topic),
+    ('notify_email_enabled','bool',False,'Email my notices',None),
+    ('notify_email','text','','My notification email',_mailbox),
+    ('notify_operational','bool',False,'Include operational alerts',None),
+):
+    _add('account',name,kind,tier=NOW,scope='account',page='account',section='Notifications',label=label,default=default,rule=rule)
+_add('account','notify_ntfy_token','secret',tier=NOW,scope='account',page='account',section='Notification credentials',
+     label='My ntfy token',default='',rule=_bearer_secret)

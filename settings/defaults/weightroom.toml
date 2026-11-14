@@ -76,6 +76,41 @@ observation_quiet_routes = ["/loadcoach/status", "/v1/models", "/loadcoach/facts
                             "/loadcoach/downloads", "/spotter/now", "/spotter/alert-evidence",
                             "/voice/ready", "/turnstile/ready"]
 
+# Notification channels are live. Endpoints stay empty until the owner configures them.
+# Webhook JSON uses an HMAC signing secret saved through Settings → Alerts and notifications.
+notify_webhook_url = ""
+# ntfy uses a server base URL and topic; its optional token is write-only on the site.
+notify_ntfy_url = ""
+notify_ntfy_topic = ""
+# SMTP uses STARTTLS by default; automatic mode uses TLS on port 465. No plaintext mode.
+notify_smtp_host = ""
+notify_smtp_port = 587
+notify_smtp_security = "auto"
+notify_smtp_from = ""
+notify_smtp_to = ""
+notify_smtp_username = ""
+# Optional console base URL for absolute notification links. Never embed credentials in URLs.
+notify_site_url = ""
+# opened sends immediately; unacknowledged waits for the delay unless someone acknowledges.
+notify_min_state = "opened"
+notify_after_minutes = 15
+# Zero disables repeats. Delivery failures retry at most three times with bounded backoff.
+notify_repeat_minutes = 0
+# Empty disables quiet hours; otherwise HH:MM-HH:MM in the control node time zone.
+notify_quiet_hours = ""
+# Fresh Spotter readings only. Zero disables each resource threshold.
+alert_disk_free_percent = 10
+alert_gpu_memory_percent = 0
+alert_host_ram_percent = 0
+# Silence is a missing status response, not proof of a crash; zero disables this alert.
+alert_node_offline_minutes = 10
+# Recorded allowances only; unknown and in-flight costs are excluded. Zero disables.
+alert_allowance_percent = 0
+
+# Trusted reverse proxy socket peers, as IP addresses or CIDR networks. File only.
+# Empty ignores X-Forwarded-For. Trust only your proxies; the last untrusted hop is the client.
+trusted_proxies = []
+
 # Groups: what the members of each group may do. The groups here are only the first set: they are
 # taken into the accounts store on this machine the first time turnstile or the weightroom command
 # opens it. From then on they are looked after on the site, or with `weightroom group`, and
@@ -137,10 +172,6 @@ observation_quiet_routes = ["/loadcoach/status", "/v1/models", "/loadcoach/facts
 #                 is added later: every ability above except sign-in, app-sign-in and
 #                 mirror-users, which are for a program's own key. It also lifts max_sensitivity
 #                 to the highest, unless the group sets one.
-
-# Trusted reverse proxy socket peers, as IP addresses or CIDR networks. File only.
-# Empty ignores X-Forwarded-For. Trust only your proxies; the last untrusted hop is the client.
-trusted_proxies = []
 
 # Whoever owns the machine. The first account should be in this group:
 #   weightroom user add NAME superuser

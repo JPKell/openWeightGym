@@ -7,6 +7,10 @@
 {{ said_box(said, failed) }}
 {% with settings_readonly=false %}{% include 'settings_sections.html' %}{% endwith %}
 {% if node_settings or unavailable_nodes %}{{ settings_node_summary(node_settings, unavailable_nodes) }}{% endif %}
+{% if settings_section == 'alerts' %}{% from 'notification_parts.html' import credentials, tests, delivery_table %}
+{{ credentials(notification_credentials, notification_key_status, '/settings/alerts') }}
+{% call card('Test and delivery status', id='notification-delivery') %}<p class="small text-secondary">Send a test after saving a channel. Episodes are delivered when they open or resolve; automatic retries stop after three attempts.</p>{{ tests('/settings/alerts') }}{{ delivery_table(notification_deliveries) }}{% endcall %}
+{% endif %}
 {% if settings_section == 'security' %}{% if proxy_warning %}{% call alert('warning') %}Sign-ins are arriving through loopback or a proxy while trusted proxies is empty. Per-address locks may affect everyone behind that address. Set <code>trusted_proxies</code> in the control node’s <code>settings/weightroom.toml</code> to the actual proxy addresses, then restart WeightRoom. Trust only proxies you operate.{% endcall %}{% endif %}{% call card('Connection security', open=false, key='settings:connection-security') %}<p class="mb-0">Cookie security and browser origins are controlled by the machine files. <a href="/settings/machine">Inspect machine configuration</a> before changing listeners or proxy settings.</p>{% endcall %}{% with programs=security_programs, machine_inspection=true, selected_machine='front' %}{% include 'settings_machine_values.html' %}{% endwith %}{% endif %}
 </div>
 {% endblock %}

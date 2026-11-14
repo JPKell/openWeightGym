@@ -11,6 +11,9 @@ DEFAULTS = {
     'alert_security': True, 'alert_spending': True, 'alert_jobs': False,
     'notices_read_at': 0.0,
 }
+from loadcoach.setting_catalog import entries as setting_entries, get as setting_contract
+DEFAULTS.update({entry.name:entry.default for entry in setting_entries("account") if entry.kind != "secret"})
+
 OPTIONS = {
     'text_size': ('standard', 'large'), 'motion': ('system', 'reduce'),
     'date_format': ('readable', 'iso', 'device'), 'clock': ('24', '12'),
@@ -23,8 +26,12 @@ def validate(chosen):
     if not isinstance(chosen, dict):
         raise ValueError('Preferences must be an object.')
     for key, value in chosen.items():
-        if key not in DEFAULTS or type(value) is not type(DEFAULTS[key]):
-            raise ValueError(f'Unknown preference or incorrect value type: {key}.')
+        if key not in DEFAULTS:
+            raise ValueError(f'Unknown preference: {key}.')
+        if contract := setting_contract('account',key):
+            contract.check(value)
+        elif type(value) is not type(DEFAULTS[key]):
+            raise ValueError(f'Incorrect preference value type: {key}.')
         if key in OPTIONS and value not in OPTIONS[key]:
             raise ValueError(f'Choose a supported {key.replace("_", " ")}.')
         if key == 'timezone' and value != 'device':

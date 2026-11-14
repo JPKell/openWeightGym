@@ -1238,6 +1238,41 @@ Older `[deploy]` settings are ignored and can be removed. The manual maintenance
 `scripts/deploy-front.sh` and `scripts/deploy.sh` remain available for developer updates and
 the one-time data moves `deploy.sh` performs.
 
+## Notification delivery
+
+Configure system channels in **Settings → Platform → Alerts and notifications**. Endpoints default
+to empty. Save a webhook signing secret, optional ntfy token or SMTP password in the write-only
+credential forms, then use the channel’s **Send test** button. Credentials are stored as atomic
+0600 files named `notifications-system-notify_*.key` under the folder containing WeightRoom’s
+`key_file`; personal ntfy keys use a hash of the immutable account identity in their filename.
+They are absent from settings reports, history transfers and personal preference exports.
+
+Webhook bodies contain `episode_id`, `condition`, `source`, `title`, `state`, `first_at`, `last_at`,
+`resolved_at` and `link`. Verify `X-Suite-Signature: sha256=…` against the exact request bytes using
+HMAC-SHA256 and the saved secret. ntfy uses its [JSON publishing API](https://docs.ntfy.sh/publish/#publish-as-json)
+with an optional bearer token. SMTP uses STARTTLS on port 587 by default; automatic mode uses TLS
+on port 465. Set `notify_site_url` for absolute console links. URLs reject embedded credentials and
+query parameters; save credentials separately.
+
+The existing alert collector queues opening and resolution metadata; delivery does not invoke
+models or wake nodes. `notify_min_state = "unacknowledged"` delays openings by
+`notify_after_minutes` (15 by default). Repeats are off at zero. Quiet hours use
+`HH:MM-HH:MM` in the control node’s time zone and delay pending delivery. Each queued message gets
+at most three automatic attempts, with one-minute then five-minute backoff. Interrupted attempts
+remain durable. Delivery status and sanitized failures appear on the settings page and the episode.
+Personal delivery history remains visible only to its owner.
+
+**My account → Alerts & privacy** offers ntfy and email for selected personal notice categories;
+email uses the system SMTP channel. Subscriptions start at the saved opt-in time. Only settings
+administrators can add operational episodes. The worker rechecks the current owner, destination
+and permission before each personal send. Disable an account’s channel to stop its pending sends.
+
+Disk-free alerts default to below 10%; node silence defaults to 10 minutes. GPU memory, host RAM
+and recorded-allowance percentages default to off. Hardware conditions require fresh Spotter
+readings. Silence means a missing successful node status, including possible sleep or disconnect;
+it is not proof of a crash. Missing readings never establish resource recovery. Existing settings,
+keys and alert history are retained; overrides use the normal live settings path.
+
 ## Console over HTTPS on the LAN
 
 Browsers give a page the microphone only over HTTPS. `scripts/front-https.sh`, run from compute,

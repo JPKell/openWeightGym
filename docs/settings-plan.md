@@ -77,6 +77,8 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Notification URLs reject embedded credentials and query parameters; write-only key files hold credentials. Optional `notify_site_url` supplies absolute console links. Unacknowledged delivery waits 15 minutes by default, SMTP requires TLS or STARTTLS, and quiet hours use the control node time zone. Personal subscriptions begin at their saved opt-in timestamp; current permissions and destinations are checked again before each personal delivery.
+
 - WeightRoom disables Uvicorn’s implicit forwarding-header rewrite and applies `trusted_proxies` before capturing client attribution. This preserves the real socket peer for sign-in policy checks and uses the same trusted client address for signed downstream attribution.
 
 - Routing and batch tunables belong to Turnstile: the control node owns both routing and durable batch execution. Queue and resident caps remain per LoadCoach node. A lower resident cap affects new placements and preserves active work, holds, locks and the existing minimum idle interval.
@@ -456,7 +458,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 2.6 UI checks, docs and Phase 2 deployed/verified (09fa66b; all 39 UI cases, five checkouts, 21 live pages, 23 controls, restored changes and stable PIDs).
 - [x] 3.1 Security and sign-in; 587 focused checks, 87 browser/UI checks and the separate PostgreSQL counter contract pass.
 - [x] 3.2 Requests, admission, placement, routing and batches; 584 feature/UI checks pass, including real 503/Retry-After and live resident reclamation.
-- [ ] 3.3 Notifications, personal channels and thresholds.
+- [x] 3.3 Notifications, personal channels and thresholds; 624 catalogue/service checks, all 39 UI cases and the separate PostgreSQL delivery contract pass.
 - [ ] 3.4 Global limits and per-group overrides.
 - [ ] 3.5 Spending policy.
 - [ ] 3.6 Download credentials and concurrency.

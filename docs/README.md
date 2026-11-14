@@ -202,7 +202,9 @@ Alerts & privacy delivers up to 50 owner-scoped notices from the last seven days
 sign-ins/credential changes, batch/workflow/audio completion and recorded spending at
 80% of an applicable 24-hour advisory allowance. The account menu refreshes unread counts
 once a minute while visible. Mark all read without deleting audit records. Log retention
-is displayed from the deployment policy; other stores retain their own policies.
+is displayed from the deployment policy; other stores retain their own policies. Optional ntfy/email
+delivery starts at opt-in; settings administrators can include operational episodes. See
+[Notification delivery](operations.md#notification-delivery) for channel setup and retry behavior.
 Export account/audio preferences as JSON, optionally including this browser's saved theme;
 exports contain no credentials or conversation/request content. These settings remain on
 the control node when inference nodes are offline. No deployment/restart method changes are required.
@@ -289,7 +291,8 @@ Spotter's machine-file service allowlist; control node actions use the installed
 **Machine configuration** selects one node and shows read-only file values, their reported source,
 defaults, differences, retired/derived/deprecated flags and service restart commands. Old services
 may not report source/default evidence yet. Retired overrides remain stored and are ignored.
-Security and sign-in also shows the file-controlled cookie and browser-origin settings.
+Security and sign-in also shows the file-controlled cookie, browser-origin and trusted-proxy settings.
+Alerts and notifications contains live thresholds, channel setup, write-only credentials and test delivery.
 
 **Settings history** records who changed each setting and its old/new override. Revert restores
 one prior override, including returning to the file value. Older events without prior values

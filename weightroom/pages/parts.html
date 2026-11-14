@@ -28,6 +28,14 @@
 <{{ tag }} class="alert{{ ' alert-' ~ kind if kind }}{{ ' d-block' if 'd-flex' not in class_ and 'd-inline-flex' not in class_ }}{{ ' ' ~ class_ if class_ }}" role="{{ role or ('alert' if kind in ('danger', 'warning') else 'status') }}"{{ attrs|xmlattr }}>{{ message }}{% if caller is defined %}{{ caller() }}{% endif %}</{{ tag }}>
 {%- endmacro %}
 
+{# Shared write-only credentials keep values empty in every rendered response. #}
+{% macro credential_state(credential={}) %}
+{% if credential.saved|default(false) %}<span class="badge bg-green-lt">Saved</span> <span class="small text-secondary">Last changed {{ credential.changed }}</span>{% else %}<span class="badge bg-orange-lt">Not saved</span>{% endif %}
+{% endmacro %}
+{% macro credential_input(id, name, label, status=none, maxlength=8192) %}
+<label for="{{ id }}" class="form-label">{{ label }}</label><input id="{{ id }}" name="{{ name }}" type="password" class="form-control" autocomplete="new-password" maxlength="{{ maxlength }}">{% if status is not none %}{{ credential_state(status) }}{% endif %}
+{% endmacro %}
+
 {# What the last action said. It stays under the top bar and is removed after 7 seconds by static/pieces.js. #}
 {% macro said_box(said, failed=false, warning=false) %}
 {% if said %}{{ alert('danger' if failed else 'warning' if warning else 'success', said, class_='said said-box') }}{% endif %}

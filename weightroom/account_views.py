@@ -9,11 +9,13 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from loadcoach.preferences import DEFAULTS
+from loadcoach.setting_catalog import entries as setting_entries
 
 FIELDS = {
     'appearance': ('show_telemetry', 'text_size', 'motion'),
     'workspace': ('start_page', 'chat_model', 'timezone', 'date_format', 'clock'),
     'privacy': ('alert_security', 'alert_spending', 'alert_jobs'),
+    'notifications': tuple(entry.name for entry in setting_entries('account') if entry.kind!='secret'),
 }
 
 
@@ -35,10 +37,31 @@ def device_name(agent):
     return browser + (' · ' + system if system else '')
 
 
-def routes(for_people, page, ask, typed, go, platform, workflows):
+def workflow_notices(data, choices, identity, clearance, workflows):
+    """Share owner-scoped workflow notices between the account desk and delivery worker."""
+    if choices.get('alert_jobs'):
+        rows = workflows.store.db.execute("SELECT id,title,state,updated,level FROM workflows WHERE owner=? "
+                                          "AND state IN ('completed','review_research','review_draft','failed_research','failed_draft') "
+                                          "AND updated>=? ORDER BY updated DESC LIMIT 25",
+                                          (identity, data['since'])).fetchall()
+        for identifier, title, state, updated, level in rows:
+            if workflows.knowledge.permitted(clearance, level):
+                label = {'completed':'Completed', 'review_research':'Research ready for review', 'review_draft':'Draft ready for review',
+                         'failed_research':'Research failed', 'failed_draft':'Draft failed'}[state]
+                data['items'].append(dict(id='workflow-' + identifier, title=title + ' · ' + label, at=updated,
+                                          category='Work', href='/workflows/' + quote(identifier, safe=''),
+                                          unread=updated > choices.get('notices_read_at', 0)))
+    data['items'].sort(key=lambda item: item['at'] or time.time(), reverse=True)
+    data['items'] = data['items'][:50]
+    data['unread'] = sum(item['unread'] for item in data['items'])
+    return data
+
+
+def routes(for_people, page, ask, typed, go, platform, workflows, *, notifications=None, notification_note=None):
     """Reuse authenticated account APIs and the established origin-checked form wrapper."""
     async def render(request, person, section=None, said='', failed=False):
         section = section or request.url.path.rsplit('/', 1)[-1]
+        section = 'privacy' if section=='notifications' else section
         context = dict(me=person.me, said=said or request.query_params.get('said', ''), failed=failed)
         if section == 'workspace':
             context.update(zones=sorted(available_timezones()), default_models=chat_models(person),
@@ -48,6 +71,9 @@ def routes(for_people, page, ask, typed, go, platform, workflows):
             if stored not in {path for path, _ in context['destinations']}:
                 context['destinations'].append((stored, stored + ' · currently unavailable'))
         elif section == 'privacy':
+            if notifications is not None:
+                from weightroom.notification_views import context as notification_context
+                context.update(notification_context(notifications,'account',person.me['identity'],person.me.get('choices',{}),'manage-settings' in person.can,getattr(request.state,'notification_refused','')))
             response = await feed(request, person)
             if response.status_code == 200:
                 context['notices'] = json.loads(response.body)
@@ -59,9 +85,12 @@ def routes(for_people, page, ask, typed, go, platform, workflows):
         section = request.path_params['section']
         if section not in FIELDS:
             return Response('Unknown preference section.', status_code=404)
+        if section=='notifications' and not person.me.get('identity'):
+            return await render(request,person,'privacy','Sign in to an account before configuring delivery.',True)
         form = await typed(request)
-        chosen = {key: (key in form if type(DEFAULTS[key]) is bool else form.get(key, DEFAULTS[key]))
-                  for key in FIELDS[section]}
+        chosen = {key: (form.get('value-'+key,'false') == 'true' if type(DEFAULTS[key]) is bool else form.get('value-'+key,DEFAULTS[key]))
+                  for key in FIELDS[section]} if section=='notifications' else {
+                      key:(key in form if type(DEFAULTS[key]) is bool else form.get(key,DEFAULTS[key])) for key in FIELDS[section]}
         if chosen.get('start_page') and not platform().path_enabled(chosen['start_page']):
             if chosen['start_page'] != person.me.get('choices', {}).get('start_page'):
                 return await render(request, person, section, 'That starting page is disabled.', True)
@@ -75,7 +104,7 @@ def routes(for_people, page, ask, typed, go, platform, workflows):
         answer = await ask('POST', '/loadcoach/me', person.key, json=chosen)
         if answer.status_code != 200:
             return await render(request, person, section, answer.json()['error']['message'], True)
-        return go('/account/' + section + '?said=Preferences+saved.')
+        return go('/account/' + ('privacy' if section=='notifications' else section) + '?said=Preferences+saved.')
 
     async def end_session(request, person):
         identifier = request.path_params.get('identifier')
@@ -92,21 +121,7 @@ def routes(for_people, page, ask, typed, go, platform, workflows):
             return JSONResponse({'error': {'message': 'Notices are unavailable.'}}, status_code=503)
         data = answer.json()
         choices = person.me.get('choices', DEFAULTS)
-        if choices.get('alert_jobs'):
-            rows = workflows.store.db.execute("SELECT id,title,state,updated,level FROM workflows WHERE owner=? "
-                                              "AND state IN ('completed','review_research','review_draft','failed_research','failed_draft') "
-                                              "AND updated>=? ORDER BY updated DESC LIMIT 25",
-                                              (person.me.get('identity', person.name), data['since'])).fetchall()
-            for identifier, title, state, updated, level in rows:
-                if workflows.knowledge.permitted(person.me, level):
-                    label = {'completed':'Completed', 'review_research':'Research ready for review', 'review_draft':'Draft ready for review',
-                             'failed_research':'Research failed', 'failed_draft':'Draft failed'}[state]
-                    data['items'].append(dict(id='workflow-' + identifier, title=title + ' · ' + label, at=updated,
-                                              category='Work', href='/workflows/' + quote(identifier, safe=''),
-                                              unread=updated > choices.get('notices_read_at', 0)))
-        data['items'].sort(key=lambda item: item['at'] or time.time(), reverse=True)
-        data['items'] = data['items'][:50]
-        data['unread'] = sum(item['unread'] for item in data['items'])
+        workflow_notices(data,choices,person.me.get('identity',person.name),person.me,workflows)
         return JSONResponse(data, headers={'cache-control': 'private, no-store'})
 
     async def read_notices(request, person):
@@ -124,7 +139,13 @@ def routes(for_people, page, ask, typed, go, platform, workflows):
                              'audio': audio.json()}, headers={'content-disposition': 'attachment; filename="my-preferences.json"',
                                                              'cache-control': 'private, no-store'})
 
-    return [Route('/account/' + section, for_people(render)) for section in ('keys', 'workspace', 'privacy')] + [
+    extra = []
+    if notifications is not None:
+        from weightroom.notification_views import routes as notification_routes
+        async def notify_render(request,person,said,failed):
+            return await render(request,person,'privacy',said,failed)
+        extra = notification_routes('/account/notifications',for_people,typed,go,notifications,notify_render,notification_note,personal=True)
+    return extra + [Route('/account/' + section, for_people(render)) for section in ('keys', 'workspace', 'privacy')] + [
         Route('/account/preferences/{section}', for_people(save), methods=['POST']),
         Route('/account/sessions/{identifier}/remove', for_people(end_session), methods=['POST']),
         Route('/account/sessions/end-others', for_people(end_session), methods=['POST']),

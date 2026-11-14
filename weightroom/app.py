@@ -116,6 +116,8 @@ from weightroom.navigation import navigation
 from weightroom.system_docs import BY_SLUG as DOC_SECTIONS, MOVED as MOVED_DOCS, api_reference, source_files, source_reference, visible as visible_docs, written as written_doc
 from weightroom import doc_markdown
 from weightroom.alerts import Alerts, machine_conditions
+from weightroom.notify import NotificationKeys, Notifications, account_owner
+from weightroom.notification_views import context as notification_context, routes as notification_routes
 from weightroom.schedules import Schedules, ScheduleWorker
 from weightroom import schedule_views
 from loadcoach.schedule_time import validate as validate_schedule
@@ -177,6 +179,25 @@ class Settings:
     backup_retention: int = 10  # verified recovery sets kept on each machine; zero keeps all
     databases: dict = field(default_factory=dict)  # named local/server stores and service bindings
     alert_gpu_temperature: float = 85  # degrees Celsius; live threshold for operational alerts
+    notify_webhook_url: str = default_for("weightroom","notify_webhook_url")
+    notify_ntfy_url: str = default_for("weightroom","notify_ntfy_url")
+    notify_ntfy_topic: str = default_for("weightroom","notify_ntfy_topic")
+    notify_smtp_host: str = default_for("weightroom","notify_smtp_host")
+    notify_smtp_port: int = default_for("weightroom","notify_smtp_port")
+    notify_smtp_security: str = default_for("weightroom","notify_smtp_security")
+    notify_smtp_from: str = default_for("weightroom","notify_smtp_from")
+    notify_smtp_to: str = default_for("weightroom","notify_smtp_to")
+    notify_smtp_username: str = default_for("weightroom","notify_smtp_username")
+    notify_site_url: str = default_for("weightroom","notify_site_url")
+    notify_min_state: str = default_for("weightroom","notify_min_state")
+    notify_after_minutes: int = default_for("weightroom","notify_after_minutes")
+    notify_repeat_minutes: int = default_for("weightroom","notify_repeat_minutes")
+    notify_quiet_hours: str = default_for("weightroom","notify_quiet_hours")
+    alert_disk_free_percent: float = default_for("weightroom","alert_disk_free_percent")
+    alert_node_offline_minutes: float = default_for("weightroom","alert_node_offline_minutes")
+    alert_gpu_memory_percent: float = default_for("weightroom","alert_gpu_memory_percent")
+    alert_host_ram_percent: float = default_for("weightroom","alert_host_ram_percent")
+    alert_allowance_percent: float = default_for("weightroom","alert_allowance_percent")
     observation_error_percent: float = 0.0  # zero disables the measured-window error-rate alert
     observation_p95_seconds: float = 0.0  # zero disables the approximate histogram latency alert
     observation_min_samples: int = 100  # suppress rate/latency alerts below this sample count
@@ -720,6 +741,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     benchmarks.state.worker.maintenance = gate
     conversations.state.knowledge.maintenance = gate
     alerts = Alerts(database_registry.database("weightroom.alerts"))
+    notification_folder = ((Path(settings.path).parent / settings.file.get('key_file','../keys/weightroom.key')).resolve().parent
+                           if settings.path else Path(settings.data).parent/'keys')
+    notifications = Notifications(alerts,lambda:settings,NotificationKeys(notification_folder))
+    notification_targets = None
+
     schedules = Schedules(database_registry.database('weightroom.schedules'))
     alert_lock = asyncio.Lock()
     observation_alert_previous = {}
@@ -838,9 +864,36 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 pass
             await asyncio.sleep(LOOK_EVERY)
 
+    async def notification_feed(identity=''):
+        try:
+            answer = await ask('GET','/turnstile/notification-feed',settings.key,
+                               params={'identity':identity,'metadata':'1'} if identity else {},headers={NO_WAKE:'1'},timeout=10)
+            if not answer.is_success:
+                return None
+            body = answer.json()
+            if not identity:
+                from weightroom.account_views import workflow_notices
+                for target in body.get('targets',[]):
+                    workflow_notices(target['notices'],target['choices'],target['identity'],target,conversations.state.workflows)
+            return body
+        except (ServiceUnavailable,httpx.HTTPError,ValueError):
+            return None
+
+    async def notification_recipient(identity):
+        body = await notification_feed(identity.removeprefix('account:'))
+        return next(iter(body.get('targets',[])),{}) if body is not None else None
+
+    notifications.recipient_lookup = notification_recipient
+
+    def notification_note(what,person,**detail):
+        observation_log.add('settings',what,person.name,**detail)
+
+    async def notification_render(request,person,said,failed):
+        return await settings_page(request,person,said,failed,settings_section='alerts')
+
     async def collect_alerts(key):
         """Observe existing APIs without inference, service actions or waking compute."""
-        nonlocal observation_alert_previous
+        nonlocal observation_alert_previous, notification_targets
         async with alert_lock:
             if gate.token():
                 return
@@ -855,10 +908,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         return answer.json() if answer.status_code == 200 else None
                     except (httpx.HTTPError, ValueError):
                         return None
-                coach, machine, operation_health = await asyncio.gather(
+                coach, machine, operation_health, fleet, delivery_feed = await asyncio.gather(
                     evidence(loadcoach, '/loadcoach/alert-evidence'),
                     evidence(spotter, '/spotter/alert-evidence', {'system_services': ','.join(settings.third_party_services)}),
-                    evidence(loadcoach, '/loadcoach/observation-metrics', {'seconds':settings.observation_window_seconds}))
+                    evidence(loadcoach, '/loadcoach/observation-metrics', {'seconds':settings.observation_window_seconds}),
+                    evidence(loadcoach, '/turnstile/machines'), notification_feed())
                 if gate.token():
                     return  # discard reads taken across a maintenance boundary
                 now = time.time()
@@ -867,6 +921,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     settings.observation_error_percent, settings.observation_p95_seconds,
                     settings.observation_min_samples, settings.observation_alert_hold_seconds)
                 alerts.observe('observability', observation_readings, now, missing_recovers=False)
+                for source,readings in alerts.resource_conditions(fleet,settings,now).items():
+                    alerts.observe(source,readings,now,missing_recovers=False)
+                alerts.observe('Allowances',delivery_feed.get('allowance_conditions',[]) if delivery_feed is not None else None,now)
+                notification_targets = delivery_feed.get('targets',[]) if delivery_feed is not None else None
                 for source in ('model failures', 'spending'):
                     alerts.observe(source, coach.get(source) if coach else None, now)
                 if machine:
@@ -880,6 +938,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 else:
                     for source in ('services', 'GPU temperature', 'memory kills', 'kernel journal'):
                         alerts.observe(source, None, now)
+                notifications.plan(notification_targets or (),now)
             finally:
                 gate.active -= 1
 
@@ -889,6 +948,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             await gate.wait()
             try:
                 await collect_alerts(settings.key)
+                await notifications.process(notification_targets)
             except Exception:
                 # An optional monitoring failure must not kill the console or its
                 # settings follower. Never print driver exceptions or credentials.
@@ -3472,7 +3532,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                         security_programs=security_programs,
                         proxy_warning=not settings.trusted_proxies and found.get('security_status',{}).get('proxy_warning',False),
                         said=said or request.query_params.get('said', ''), failed=failed,
-                        typed_in=typed_in or {}, opened=opened or request.query_params.get('open', ''))
+                        typed_in=typed_in or {}, opened=opened or request.query_params.get('open', ''),
+                        **(notification_context(notifications,refused=getattr(request.state,'notification_refused','')) if section=='alerts' else {}))
         asked = request.query_params
         machines_answer = await ask("GET", "/turnstile/machines", person.key)
         machine_report = machines_answer.json() if machines_answer.status_code == 200 else {}
@@ -5645,7 +5706,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         await collect_alerts(person.key)
         from weightroom.alert_views import workspace, export_json
         try:
-            view = workspace(alerts, request.query_params)
+            view = workspace(alerts, request.query_params,account_owner(person.me["identity"]) if person.me.get("identity") else "system")
         except ValueError as problem:
             return Response(str(problem), status_code=400)
         if request.query_params.get('format') == 'json':
@@ -5728,7 +5789,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             *extraction_routes(for_people, page, ask),
             *response_routes(for_people, page, response_store),
             *classifier_routes(for_people, page, ask, platform),
-            *account_routes(for_people, page, ask, typed, go, platform, conversations.state.workflows),
+            *account_routes(for_people, page, ask, typed, go, platform, conversations.state.workflows,
+                            notifications=notifications, notification_note=notification_note),
+            *notification_routes('/settings/alerts',for_people,typed,go,notifications,notification_render,notification_note),
             *plugin_routes(plugins, plugin_controller, for_people, page, go, typed),
             *conversations.routes,
             route('/chat/tools', tool_chat_page),
@@ -5897,6 +5960,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     app.state.plugin_controller = plugin_controller
     app.state.benchmarks = benchmarks
     app.state.databases = database_registry
+    app.state.notifications = notifications
+    app.state.collect_alerts = collect_alerts
     app.state.alerts = alerts
     app.state.schedules, app.state.schedule_worker = schedules, schedule_worker
     app.add_middleware(ClientOrigin)

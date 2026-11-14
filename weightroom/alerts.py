@@ -71,6 +71,83 @@ class Alerts:
                 else:
                     self.db.execute("UPDATE operational_alerts SET state='unknown', checked_at=? WHERE id=?", (now, old['id']))
 
+    def resource_conditions(self,report,settings,now=None):
+        """Use fresh per-host readings and persistent node silence, never wake a node."""
+        now = time.time() if now is None else now
+        report = report if isinstance(report,dict) else None
+        thresholds = {'Disk space':settings.alert_disk_free_percent,'GPU memory':settings.alert_gpu_memory_percent,
+                      'Host RAM':settings.alert_host_ram_percent,'Node silence':settings.alert_node_offline_minutes}
+        result = {source:[] for source in thresholds}
+        known = {source:{row['condition']:row for row in self.rows(open_only=True) if row['source']==source} for source in thresholds}
+        def append(source,key,title,value):
+            threshold = thresholds[source]
+            active = False if not threshold else None if value is None else value < threshold if source=='Disk space' else value >= threshold
+            result[source].append({'key':key,'active':active,'title':title,
+                                   'explanation':f'{value:g}% observed; threshold {threshold:g}%.' if value is not None else 'A fresh complete reading is unavailable.',
+                                   'recovery':'The configured threshold is disabled.' if not threshold else 'A fresh reading no longer meets the threshold.'})
+            known[source].pop(key,None)
+        if report is not None:
+            freshness = max(2,report.get('poll_seconds',10))*3
+            for host in report.get('hosts',[]):
+                if not host.get('telemetry') or host.get('age') is None or host['age']>freshness:
+                    continue
+                reading = host['telemetry']
+                identity = host.get('fingerprint') or host.get('hostname','host')
+                name = host.get('hostname') or identity
+                def percent(numerator,denominator):
+                    if all(type(value) in (int,float) and math.isfinite(value) for value in (numerator,denominator)) and denominator>0 and 0<=numerator<=denominator:
+                        return numerator/denominator*100
+                    return None
+                memory = reading.get('memory') or {}
+                append('Host RAM','ram:'+identity,name+' host RAM',percent(memory.get('used'),memory.get('total')))
+                for disk in reading.get('disks',[]):
+                    append('Disk space','disk:'+identity+':'+disk['path'],name+' free space on '+disk['path'],percent(disk.get('free'),disk.get('total')))
+                for card in reading.get('cards',[]):
+                    memory = card.get('memory') or {}
+                    append('GPU memory','gpu-memory:'+identity+':'+str(card['card']),name+' '+str(card['card'])+' GPU memory',percent(card.get('memory_used',memory.get('used')),card.get('memory_total',memory.get('total'))))
+            with self.db:
+                for node in report.get('machines',[]):
+                    name = node['name']
+                    key = 'node-silence:'+name
+                    threshold = thresholds['Node silence']
+                    healthy = node.get('status_live') is True and node.get('age') is not None and node['age']<=freshness
+                    disabled = node.get('accepting_work') is False
+                    since = None
+                    if healthy or disabled or not threshold:
+                        self.db.execute('DELETE FROM alert_node_silence WHERE node=?',(name,))
+                    else:
+                        age = node.get('age')
+                        began = now-age if type(age) in (int,float) and age>=0 else now
+                        self.db.execute('INSERT INTO alert_node_silence(node,since) VALUES(?,?) ON CONFLICT(node) DO NOTHING',(name,began))
+                        since = self.db.execute('SELECT since FROM alert_node_silence WHERE node=?',(name,)).fetchone()[0]
+                    elapsed = max(0,now-since) if since is not None else 0
+                    result['Node silence'].append({'key':key,'active':bool(threshold and not disabled and not healthy and elapsed>=threshold*60),
+                        'title':name+' has not answered','explanation':f'No successful node status for {elapsed/60:g} minutes. The node may be asleep, stopped or disconnected.',
+                        'recovery':'The node answered again or its silence alert was disabled.'})
+                    known['Node silence'].pop(key,None)
+        for source,missing in known.items():
+            for key,row in missing.items():
+                retired = source=='Node silence' and report is not None and isinstance(report.get('machines'),list)
+                result[source].append({'key':key,'active':False if retired or not thresholds[source] else None,'title':row['title'],
+                                       'explanation':'A fresh complete reading is unavailable.','recovery':'The node is no longer configured.' if retired else 'The configured threshold is disabled.'})
+            if thresholds[source] and not result[source] and (report is None or source!='Node silence'):
+                result[source] = None
+        return result
+
+    def one(self,identifier):
+        row = self.db.execute('SELECT '+','.join(COLUMNS)+' FROM operational_alerts WHERE id=?',(identifier,)).fetchone()
+        return dict(zip(COLUMNS,row)) if row else None
+
+    def resolved_since(self,since):
+        return [dict(zip(COLUMNS,row)) for row in self.db.execute('SELECT '+','.join(COLUMNS)+
+                ' FROM operational_alerts WHERE resolved_at>=? ORDER BY resolved_at,id',(since,)).fetchall()]
+
+    def notification_status(self,episode,owner="system"):
+        with self.db:
+            rows = self.db.execute('SELECT channel,phase,state,attempts,last_at,last_error,owner FROM notification_deliveries '
+                                   'WHERE episode=? AND owner IN (?,?) ORDER BY created DESC LIMIT 20',(episode,'system',owner)).fetchall()
+        return [{**dict(zip(('channel','phase','state','attempts','at','error'),row)),'episode':episode,'personal':row[6]!='system'} for row in rows]
+
     def rows(self, open_only=False, limit=100, offset=0):
         """List retained alert episodes and their current acknowledgement state."""
         where = ' WHERE resolved_at IS NULL' if open_only else ' WHERE resolved_at IS NOT NULL'
