@@ -9695,6 +9695,18 @@ forms, missing fingerprints/readings, source outages and both maintenance bounda
 1440×1000 and mobile 390×844 Chromium checks passed acknowledgement, explicit incident review
 and history with no overflow or JavaScript errors. The existing Starlette/httpx warning remains.
 
+### Alert desk
+
+The live `/alerts` page uses **01 Alert desk**: an episode queue beside the selected evidence
+and source coverage. Native GET search/source/scope filters and 25-episode pagination are
+bookmarkable; counts cover all open episodes. Selection, acknowledgement and review preserve
+the active filter context. Closed episodes are available through Closed history. JSON export
+includes every matching retained episode, independently of pagination, and requires the same
+`manage-settings` ability as the page. Acknowledgement never clears an episode; memory-kill
+review remains separate and does not establish recovery. The desk works without JavaScript;
+HTMX selection retains the queue position and moves focus to the inspector on narrow screens.
+The existing collector, threshold settings, ownership and same-origin checks remain authoritative.
+
 ### Alerts design previews
 
 Run `.venv/bin/python scripts/preview-alert-designs.py` and open
@@ -9704,7 +9716,8 @@ pagination, episode timelines, acknowledgement, explicit memory-kill review, sco
 light/dark appearances and first-visit/no-open/unavailable-source states. Actions stay in tab
 memory; reload or Reset demo restores the fixtures. No live service is contacted. The live page
 and proposals share episode facts/actions and source presentation in `alert_parts.html`;
-the three proposals share row and DOM templates in `alert_design_parts.html`.
+queue identities, KPIs and timeline entries also use `alert_parts.html`; layout-only DOM
+templates remain in `alert_design_parts.html`, with workspace styling shared in `alerts.css`.
 
 ## Recurring schedules, milestone 71
 

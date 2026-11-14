@@ -5350,13 +5350,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if 'manage-settings' not in person.can:
             return Response('You may not read operational alerts.', status_code=403)
         await collect_alerts(person.key)
+        from weightroom.alert_views import workspace, export_json
         try:
-            number = min(max(int(request.query_params.get('page', 1)), 1), 1_000_000)
-        except ValueError:
-            return Response('Page must be a whole number.', status_code=400)
-        history = alerts.rows(limit=26, offset=(number-1)*25)
-        return page(request, 'alerts.html', person, active=alerts.rows(open_only=True), history=history[:25],
-                    sources=alerts.sources(), history_page=number, more_history=len(history)>25,
+            view = workspace(alerts, request.query_params)
+        except ValueError as problem:
+            return Response(str(problem), status_code=400)
+        if request.query_params.get('format') == 'json':
+            return StreamingResponse(export_json(alerts, view), media_type='application/json',
+                                     headers={'content-disposition': 'attachment; filename="alerts.json"',
+                                              'cache-control': 'no-store', 'x-content-type-options': 'nosniff'})
+        return page(request, 'alerts.html', person, view=view, said=request.query_params.get('said', ''),
                     threshold=settings.alert_gpu_temperature)
 
     async def alert_action(request: Request, person: Person) -> Response:
@@ -5372,7 +5375,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return Response('Only an open memory-kill incident can be reviewed.', status_code=409)
         else:
             return Response('Choose acknowledge or review.', status_code=400)
-        return go('/alerts')
+        from weightroom.alert_views import return_url
+        destination = return_url(form.get('return_to'))
+        message = ('Acknowledgement recorded. The condition remains open until recovery.'
+                   if form.get('do') == 'acknowledge' else
+                   'Incident reviewed and retained in Closed history. Review does not prove memory recovery.')
+        return go(destination + ('&' if '?' in destination else '?') + urlencode({'said': message}))
 
     @asynccontextmanager
     async def lifespan(_: Starlette):

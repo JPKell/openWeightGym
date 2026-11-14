@@ -72,7 +72,7 @@ def render():
     static = ROOT / 'weightroom/static'
     return pages.get_template('alert_designs.html').render(
         css='\n'.join((static / name).read_text() for name in
-                      ('tabler.min.css', 'style.css', 'themes.css', 'alert-designs.css')),
+                      ('tabler.min.css', 'style.css', 'themes.css', 'alerts.css', 'alert-designs.css')),
         javascript=(static / 'alert-designs.js').read_text(),
         theme_javascript=(static / 'themes.js').read_text(), data=sample_data(),
         icons_svg=re.sub(r'\bid="([^"]+)"', r'id="alert-icon-\1"', (static / 'icons.svg').read_text()),
