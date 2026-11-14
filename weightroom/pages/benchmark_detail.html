@@ -67,5 +67,5 @@
 <p id="run-feedback" class="br-feedback" role="status" aria-live="polite" hidden></p>
 <template id="run-sort-button"><button type="button"></button></template>
 <template id="run-evidence-tab">{{ pill_button('', attrs={'data-evidence-tab':''}) }}</template>
-<script type="application/json" id="benchmark-run-data">{{ {'id':detail.id, 'model':detail.model, 'name':briefing.name, 'score':detail.score, 'unit':briefing.unit, 'formula':detail.formula, 'fingerprint':detail.fingerprint, 'chart':briefing.chart, 'chart_label':briefing.chart_label, 'chart_unit':briefing.chart_unit, 'quality':briefing.quality, 'embedding':embedding, 'rows':briefing.rows, 'values':detail.samples|map(attribute='values')|list, 'regression':regression}|tojson }}</script>
+<script type="application/json" id="benchmark-run-data">{{ {'id':detail.id, 'fingerprint':detail.fingerprint, 'chart':briefing.chart, 'chart_label':briefing.chart_label, 'chart_unit':briefing.chart_unit, 'quality':briefing.quality, 'embedding':embedding, 'rows':briefing.rows, 'values':detail.samples|map(attribute='values')|list, 'regression':regression}|tojson }}</script>
 </div>

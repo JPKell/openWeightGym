@@ -33,7 +33,7 @@
     }
     async function copy(value) {
       try { await navigator.clipboard.writeText(value); notify('Copied.'); }
-      catch { notify('Clipboard unavailable. Select the evidence to copy it, or use Export JSON.'); }
+      catch { notify('Clipboard unavailable. Select the evidence to copy it.'); }
     }
     function value(record, field) {
       if (field === 'id' || field === 'state') return record[field];
@@ -115,7 +115,6 @@
     });
     $('[data-sample-controls]').hidden = false;
     $$('[data-inspect], [data-copy-fingerprint]').forEach(control => { control.hidden = false; });
-    document.querySelector('[data-copy-run]').hidden = false;
     root.addEventListener('input', event => { if (event.target.id === 'sample-search') render(); });
     root.addEventListener('change', event => { if (['outcome', 'budget'].includes(event.target.id)) render(); });
     root.addEventListener('click', event => {
@@ -147,7 +146,6 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000); notify(`${filtered.length} filtered samples exported.`);
       }
     });
-    document.querySelector('[data-copy-run]').addEventListener('click', () => copy(`${data.model} · ${data.name}\nRun ${data.id}\nScore: ${data.score ?? 'unavailable'} ${data.unit}\nFormula: ${data.formula}\nFingerprint: ${data.fingerprint || 'not recorded'}`));
     window.addEventListener('hashchange', () => { if (root.isConnected) anchor(); });
     root.drawRunChart = () => drawChart(root, data);
     const observer = new ResizeObserver(() => { if (root.isConnected) root.drawRunChart(); else observer.disconnect(); });

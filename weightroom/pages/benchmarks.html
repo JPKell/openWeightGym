@@ -1,12 +1,13 @@
 {% extends "frame.html" %}
 {% set section_label = 'Node measurements' if section == 'node-measurements' else section|title %}
 {% block title %}{{ 'Run details' if section == 'detail' else section_label }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}{% if section == 'manage' %}<link rel="stylesheet" href="/static/benchmark-manage.css?v=1"><script src="/static/benchmark-manage.js?v=1" defer></script>{% endif %}{% if section == 'detail' %}<link rel="stylesheet" href="/static/benchmark-run.css?v=1"><script src="/static/benchmark-run.js?v=1" defer></script>{% endif %}{% if section == 'results' %}<link rel="stylesheet" href="/static/benchmark-results.css?v=1"><script src="/static/benchmark-results.js?v=1" defer></script><script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=6" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=4" defer></script>{% endif %}{% if section in ('runs', 'node-measurements') %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=8" defer></script>{% endblock %}
+{% block scripts %}{% if section == 'manage' %}<link rel="stylesheet" href="/static/benchmark-manage.css?v=1"><script src="/static/benchmark-manage.js?v=1" defer></script>{% endif %}{% if section == 'detail' %}<link rel="stylesheet" href="/static/benchmark-run.css?v=1"><script src="/static/benchmark-run.js?v=2" defer></script>{% endif %}{% if section == 'results' %}<link rel="stylesheet" href="/static/benchmark-results.css?v=1"><script src="/static/benchmark-results.js?v=1" defer></script><script src="/static/echarts.min.js" defer></script><script src="/static/benchmark-heatmap.js?v=6" defer></script>{% endif %}{% if section == 'node-measurements' %}<link rel="stylesheet" href="/static/node-measurements.css?v=2"><script src="/static/node-measurements.js?v=4" defer></script>{% endif %}{% if section in ('runs', 'node-measurements') %}<link rel="stylesheet" href="/static/benchmark-runs.css?v=2">{% endif %}<script src="/static/benchmarks.js?v=8" defer></script>{% endblock %}
 {% block page_class %}benchmark-page{{ ' results-shell' if section == 'results' }}{{ ' benchmark-manage' if section == 'manage' }}{% endblock %}
 {% from "parts.html" import card, said_box, page_header, alert %}
 {% from "navigation_parts.html" import pills, pill_link, model_type_choices %}
 {% block main %}
-{% call page_header(detail.model if section == 'detail' else 'Manage benchmarks' if section == 'manage' else section_label, pretitle='Benchmark / saved run' if section == 'detail' else none if section in ('results', 'node-measurements', 'runs', 'compare', 'manage') else 'Benchmark', id='benchmark-top', lead='Run benchmarks and inspect retained measurements and scores.') %}{% if section == 'node-measurements' %}<a href="#measurement-runs" class="btn btn-outline-primary btn-sm">Set up runs</a>{% elif section == 'detail' %}<a href="/benchmarks/runs" class="btn btn-outline-secondary btn-sm">Runs</a><a href="/benchmarks/run/{{ detail.id }}?export=json" class="btn btn-outline-secondary btn-sm" download>Export JSON ↓</a><button type="button" class="btn btn-primary btn-sm" data-copy-run hidden>Copy summary</button>{% endif %}{% endcall %}
+{% set heading_actions %}{% if section == 'node-measurements' %}<a href="#measurement-runs" class="btn btn-outline-primary btn-sm">Set up runs</a>{% endif %}{% endset %}
+{{ page_header(detail.model if section == 'detail' else 'Manage benchmarks' if section == 'manage' else section_label, pretitle=none if section in ('detail', 'results', 'node-measurements', 'runs', 'compare', 'manage') else 'Benchmark', id='benchmark-top', actions=heading_actions) }}
 {% if section != 'manage' %}{{ said_box(said, failed, partial) }}{% endif %}
 {% if catalogue_warning %}{% call alert('warning', tag='p', role='status') %}{{ catalogue_warning }}{% endcall %}{% endif %}
 {% if section == 'node-measurements' %}{% from 'node_measurement_parts.html' import overview %}{{ overview(matrix.nodes|length, matrix.rows|length, matrix.coverage, matrix.current, matrix.total) }}{% endif %}
@@ -30,6 +31,5 @@
 {% include "benchmark_compare.html" %}
 {% elif section == 'manage' %}
 {% include "benchmark_manage.html" %}
-
 {% endif %}
 {% endblock %}
