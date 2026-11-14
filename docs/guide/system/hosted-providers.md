@@ -8,6 +8,14 @@ code = "hosted-providers"
 -->
 # Hosted providers
 
-## Related
+Model services elsewhere whose models are offered here: their configuration, credentials, routing and limits, and costs and allowances.
 
-[Read the code reference](/docs/code/hosted-providers).
+## Find the right reference
+
+| Task | Guide |
+| --- | --- |
+| Configure provider accounts | [Open reference](/docs/model-guides/cloud-apis) |
+| Set routing policy | [Open reference](/docs/model-guides/roles) |
+| Manage spending | [Open reference](/docs/administration/allowances) |
+| Interpret recorded costs | [Open reference](/docs/monitoring/usage) |
+| Inspect forwarding contracts | [Open reference](/docs/code/hosted-providers) |

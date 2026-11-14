@@ -172,7 +172,7 @@ compute-local stdio paths with a fixed SSH command or a remote MCP host so tools
 where their files and dependencies live; see [Remote tool hosts](#remote-tool-hosts).
 
 Settings changed through the console and recorded tool schemas live in the owning database,
-separately from `toollocker.toml`. Follow **Control node ToolLocker relocation (milestone 128)** in
+separately from `toollocker.toml`. Follow the control-node ToolLocker setup contract in
 `docs/operations.md` for the verified store transfer, cutover and rollback procedure. Verify the
 control node gateway's tool list, permissions and calls before retiring the old service. The installer
 does not disable a legacy compute gateway automatically.

@@ -1,17 +1,12 @@
 # Hermes adapter
 
-Deployment status reviewed **2026-10-16**: the control node's `jeeves` instance is configured and its
-adapter service is running. It discovered ten profiles, synchronized its settings and enabled
-`hermes:gandalf`. Adapter heartbeat passes; the Hermes messaging gateway reports stopped.
-Live inference through the alias remains to be checked after the compute benchmark sweep.
-
 This plugin wraps an existing Hermes Agent CLI on the adapter's machine. An exposed model
 such as `hermes:gandalf` selects `hermes -p gandalf`; the suffix is a Hermes profile. The
 profile's own underlying provider/model is preserved unless its adapter settings override it.
 
 ## Configure an instance
 
-In **System → Plugins → Hermes Agent**, add a named instance with its HTTP URL. Configure
+In **Settings → Plugins → Hermes Agent**, add a named instance with its HTTP URL. Configure
 the existing Hermes `venv` and `repository`, or a `cli` executable. A configured venv takes
 precedence and runs `venv/bin/python -m hermes_cli.main` directly. No activation shell is used.
 Optionally set `hermes_home` and a workspace. `--in` scopes native sessions to that workspace.

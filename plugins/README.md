@@ -1,10 +1,5 @@
 # openWeightGym plugins
 
-Deployment status reviewed **2026-10-16**: the framework is loaded in WeightRoom and turnstile.
-The control node Hermes `jeeves` adapter service is running and `hermes:gandalf` is enabled. A real
-alias request and an adapter restart were qualified live on 2026-10-16. The Hermes messaging
-gateway on the control node is stopped; plugin routing does not need it.
-
 Plugins expose external agents and services as models at turnstile's existing `/v1` door.
 The first plugin wraps an existing Hermes installation using its CLI. Plugin requests work
 without compute; a model request made by the external agent can independently wake compute.
