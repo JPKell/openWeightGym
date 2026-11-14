@@ -92,7 +92,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         memberships = users.memberships(None if user.can('see-log') else user.name)
         members = [name for name, group in memberships.items() if group == asked['group']] if asked.get('group') else None
         entries = await report(lambda view: view.read(after, limit, whose, asked.get("kind"), asked.get("trace"), with_text,
-                                                      asked.get("what"), asked.get("model"), before, since=since, until=until, members=members, node=asked.get('node')))
+                                                      asked.get("what"), asked.get("model"), before, since=since, until=until, members=members, node=asked.get('node'), q=asked.get('q')))
         if isinstance(entries, Response):
             return entries
         return JSONResponse({"events": [{**entry, "machine": log.former.get(entry.get("machine"), entry.get("machine")) or "front"} for entry in resolve(entries)]})

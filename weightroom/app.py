@@ -3937,32 +3937,82 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return response
 
     async def log_page(request: Request, person: Person) -> Response:
-        """The event log, newest first: one's own entries, or everyone's for someone who may read them.
+        """Browse authorized events and exact trace context with stable selected evidence."""
+        from weightroom import log_views
 
-        What is typed into the boxes above the table is in the address, so a view can be kept
-        as a link. `before` goes back from an entry; without it the table is the latest, and
-        asks for itself again every few seconds.
-        """
         asked = request.query_params
-        if initial_page(request):
+        exporting = asked.get('export') in ('csv', 'json')
+        if initial_page(request) and not exporting:
             return page(request, 'log.html', person, deferred=True, fragment_url=fragment_url(request, 'page'),
                         said=asked.get('said', ''), failed=asked.get('failed') == '1')
-        wanted = {key: asked[key].strip() for key in ("kind", "what", "user", "group", "model", "trace", "start", "end", "node") if asked.get(key, "").strip()}
+        wanted = {key: asked[key].strip() for key in log_views.FILTERS if asked.get(key, '').strip()}
         limit, _ = controls(asked, 100)
-        going_back = {"before": asked["before"]} if asked.get("before") else {}
-        found = await fetch(request, person, "/loadcoach/events", params={**wanted, **going_back, 'timezone': settings.timezone or 'UTC', "limit": limit})
+        going_back = {'before': asked['before']} if asked.get('before') else {}
+        params = {**wanted, **going_back, 'timezone': settings.timezone or 'UTC', 'limit': limit}
+        period = asked.get('period', '') if asked.get('period') in ('15', '60', '1440') else ''
+        if period and not wanted.get('start') and not wanted.get('end'):
+            params['start'] = datetime.fromtimestamp(time.time() - int(period) * 60).astimezone().isoformat()
+        found = await fetch(request, person, '/loadcoach/events', params=params)
         if isinstance(found, Response):
-            return fragment_error(request, person, 'log-view', 'page', found) if asked.get('part') == 'page' else found
-        template = "log_list.html" if asked.get("part") == "list" else "log.html"  # the table asking for itself again
-        choices = await fetch(request, person, '/loadcoach/event-choices') if template == 'log.html' else {}
+            if asked.get('part') in ('page', 'list'):
+                return fragment_error(request, person, 'log' if asked['part'] == 'list' else 'log-view', asked['part'], found)
+            return found
+        events = found['events'][::-1]
+        query = {**wanted, 'limit': limit, **going_back}
+        if period:
+            query['period'] = period
+        selected = next((event for event in events if str(event['id']) == asked.get('selected')), None)
+        if asked.get('selected') and selected is None:
+            try:
+                number = int(asked['selected'])
+            except ValueError:
+                return page(request, 'refused.html', person, status=400, why='Choose a valid event number.')
+            record = await fetch(request, person, f'/loadcoach/events/{number}')
+            if isinstance(record, Response):
+                return record
+            selected = record['entry']
+        selected = selected or next((event for event in events if event.get('what') == 'failed'), events[0] if events else None)
+        if exporting:
+            if asked['export'] == 'csv':
+                content, media, filename = log_views.export_csv(events), 'text/csv', 'ai-logs.csv'
+            else:
+                content = json.dumps(log_views.metadata(selected), ensure_ascii=False, indent=2) if selected else '{}'
+                media, filename = 'application/json', 'ai-event.json'
+            return Response(content, media_type=media,
+                            headers={'Content-Disposition': f'attachment; filename="{filename}"', 'Cache-Control': 'no-store'})
+        context, context_error = None, False
+        if selected and selected.get('trace'):
+            trace = await fetch(request, person, '/loadcoach/events',
+                                params={'trace': selected['trace'], 'limit': 1000})
+            if isinstance(trace, Response):
+                context_error = True
+            else:
+                context = trace['events']
+                if not any(event['id'] == selected['id'] for event in context):
+                    context = [selected, *context[-999:]]
+        view = log_views.workspace(events, query, selected, context, context_error)
+        choices = await fetch(request, person, '/loadcoach/event-choices') if asked.get('part') != 'list' else {}
         if isinstance(choices, Response):
             return fragment_error(request, person, 'log-view', 'page', choices) if asked.get('part') == 'page' else choices
-        if asked.get('part') == 'page' and asked.get('complete') != '1':
+        selection_query = {**query, **({'selected': selected['id']} if selected else {})}
+        template = 'log.html'
+        if asked.get('part') == 'list':
+            template = 'log_list.html'
+        elif asked.get('part') == 'page' and asked.get('complete') != '1':
             template = 'log_content.html'
-        return page(request, template, person, events=found["events"][::-1], wanted=wanted,
-                    said=asked.get('said', ''), failed=asked.get('failed') == '1',
-                    narrowed=urlencode({**wanted, 'limit': limit}), going_back=bool(going_back),
-                    limit=limit, sizes=sorted(set((10, 25, 50, 100, 250, 500, 1000, limit))), **choices)
+        response = page(request, template, person, events=events, log_view=view, wanted=wanted,
+                        log_period=period, log_advanced=any(wanted.get(key) for key in ('kind', 'what', 'user', 'group', 'trace', 'start', 'end')),
+                        said=asked.get('said', ''), failed=asked.get('failed') == '1',
+                        narrowed=urlencode({**wanted, 'limit': limit}), going_back=bool(going_back),
+                        log_poll='/log?' + urlencode({'part': 'list', **selection_query}),
+                        log_url='/log?' + urlencode(selection_query),
+                        log_export='/log?' + urlencode({**query, 'export': 'csv'}),
+                        log_json='/log?' + urlencode({**selection_query, 'export': 'json'}),
+                        log_older='/log?' + urlencode({**query, 'before': events[-1]['id']}) if len(events) == limit else None,
+                        log_latest='/log?' + urlencode({key: value for key, value in query.items() if key != 'before'}),
+                        limit=limit, sizes=sorted(set((10, 25, 50, 100, 250, 500, 1000, limit))), **choices)
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     async def reliability_page(request: Request, person: Person) -> Response:
         """Render retained reliability evidence and authorized recovery controls."""

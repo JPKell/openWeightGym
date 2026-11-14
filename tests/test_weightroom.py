@@ -927,18 +927,18 @@ def test_the_log_page_shows_what_is_on_record_and_a_request_page_what_was_said(l
     assert "temperature <code>0.2</code>" in its and "1 tool offered: <code>add</code>" in its and "Looked at" not in its
 
     # The log: one's own entries, each request leading to its one page.
-    mine = browser.get("/log?complete=1")
-    assert 'href="/log"' in mine.text and f'<a href="/requests/{number}">asked</a>' in mine.text and f'<a href="/requests/{number}">done</a>' in mine.text
-    assert 'name="user"' not in mine.text and "<td>jordan</td>" not in mine.text and "status</span> 200" in mine.text
+    mine = browser.get("/log?kind=request&complete=1")
+    assert 'href="/log"' in mine.text and f'href="/requests/{number}"' in mine.text and "Trace timeline" in mine.text and "Event inspector" in mine.text
+    assert 'name="user"' not in mine.text and ">jordan<" not in mine.text and ">status</dt>" in mine.text and ">200</dd>" in mine.text
 
     # Someone who may read everyone's: narrowed by what is typed, which is kept in the address.
     sign_in(browser, "jordan")
     everyone = browser.get("/log?complete=1").text
-    assert 'name="user"' in everyone and "<td>pat</td>" in everyone  # jordan only signed in, and sign-ins are on record at the front machine
+    assert 'name="user"' in everyone and ">pat<" in everyone  # jordan only signed in, and sign-ins are on record at the front machine
     loaded = browser.get("/log?kind=model&complete=1").text
-    assert ">loaded</a>" in loaded and "<td>request</td>" not in loaded and 'value="model"' in loaded
+    assert "model / loaded" in loaded and "request /" not in loaded and 'value="model"' in loaded
     part = browser.get("/log?part=list&kind=request&user=pat").text
-    assert "<html" not in part and 'hx-get="/log?part=list&amp;kind=request&amp;user=pat&amp;limit=100"' in part and "<td>jordan</td>" not in part
+    assert "<html" not in part and 'hx-get="/log?part=list&amp;kind=request&amp;user=pat&amp;limit=100&amp;selected=' in part and ">jordan<" not in part
     back = browser.get("/log?before=1&kind=request&complete=1").text
     assert "Nothing on record that fits." in back and "hx-get" not in back.split('id="log"')[1].split(">")[0]  # gone back, it stays as it is
 
@@ -963,17 +963,19 @@ def test_a_failure_has_a_page_with_what_was_printed_and_a_model_can_be_asked_abo
     # The request's own page says why it was turned away.
     sign_in(browser, "jordan")
     listed = browser.get("/log?kind=request&what=refused&complete=1").text
-    its = browser.get("/requests/" + re.search(r'href="/requests/(\d+)">refused', listed).group(1)).text
+    its = browser.get("/requests/" + re.search(r'href="/requests/(\d+)"', listed).group(1)).text
     assert "<dt class=\"col-4 col-md-2\">Why</dt>" in its and "cudaMalloc failed: out of memory" in its
 
     # The model's failure has a page: everything llama-server printed before it gave up, and where to look next.
-    number = re.search(r'href="/log/(\d+)">failed</a>', browser.get("/log?kind=model&complete=1").text).group(1)
+    number = re.search(r'data-event-id="(\d+)"', browser.get("/log?kind=model&what=failed&complete=1").text).group(1)
     entry = browser.get(f"/log/{number}").text
     assert "model failed" in entry and "What llama-server printed last" in entry and "exiting due to model loading error" in entry and "fake: starting with" in entry
     assert "Ask a model about this" in entry and "<option>small</option>" in entry and "<option>broken</option>" in entry and 'hx-post="/ask"' in entry
     assert "/output?at=" not in entry  # this desk has no spotter to read the lines, so no way to them is offered
     # An entry about a request leads to the request's one page. The entry has front's number; the request is known by compute's.
-    entry_id, asked_entry = re.search(r'data-value="(\d+)">(?:<time[^>]*>[^<]*</time>|[^<]*)</td>\s*<td>request</td>\s*<td><a href="/requests/(\d+)">asked', browser.get("/log?kind=request&complete=1").text).groups()
+    asked_log = browser.get("/log?kind=request&what=asked&complete=1").text
+    entry_id = re.search(r'data-event-id="(\d+)"', asked_log).group(1)
+    asked_entry = re.search(r'href="/requests/(\d+)"', asked_log).group(1)
     assert str(browser.get(f"/log/{entry_id}").url).endswith(f"/requests/{asked_entry}")
     assert browser.get("/log/99999").status_code == 404
 

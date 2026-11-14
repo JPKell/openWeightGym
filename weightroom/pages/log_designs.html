@@ -1,0 +1,70 @@
+{% from 'parts.html' import page_header, card, more, section_title, alert %}
+{% from 'kpi_parts.html' import kpi, kpi_row %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'filter_parts.html' import node_filter, users_groups %}
+{% from 'icons.html' import icon %}
+{% from 'log_parts.html' import inspector, templates %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI Logs · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}<form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to AI logs</a>
+<header class="al-review"><div class="d-flex align-items-center gap-3"><strong class="al-brand">{{ icon('barbell') }} weightRoom</strong><span class="text-secondary small">Design review / Observability</span></div><div class="d-flex gap-2 align-items-center flex-wrap"><span class="badge bg-secondary-lt">Interactive sample</span><button type="button" class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button type="button" class="btn btn-outline-secondary btn-sm" id="reset-demo">Reset demo</button></div></header>
+<main class="al-page">
+<section class="al-proposals" aria-label="Design proposals">
+{% call pills('Design options', buttons=true, class_='gap-2 mb-0') %}{{ pill_button('01 / Event explorer', true, attrs={'data-design':'explorer'}) }}{{ pill_button('02 / Incident desk', attrs={'data-design':'incidents'}) }}{{ pill_button('03 / Trace workspace', attrs={'data-design':'traces'}) }}{% endcall %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3"><p class="text-secondary small mb-0" id="design-description"></p><label class="small d-flex align-items-center gap-2">Preview state<select class="form-select form-select-sm w-auto" id="scenario"><option value="normal">Sample activity</option><option value="empty">Empty log</option><option value="failure">Loading failed</option></select></label></div>
+</section>
+<div id="workspace" data-layout="explorer">
+{% call page_header('AI Logs', pretitle=none) %}<button type="button" class="btn btn-outline-secondary btn-sm" id="copy-view">Copy view link</button><button type="button" class="btn btn-primary btn-sm" id="export">Export filtered CSV ↓</button>{% endcall %}
+<div class="al-context"><span><span class="al-status-dot" aria-hidden="true"></span> Sample snapshot <span class="text-secondary">· 13 Nov 2026, 10:42 Vancouver</span></span><span class="small text-secondary">Counts describe matching events · not request success rates</span></div>
+{% call kpi_row('Matching activity', class_='mb-4') %}
+{{ kpi('Recorded events', '—', note='in the current filters', value_attrs={'id':'metric-events'}) }}
+{{ kpi('Failed events', '—', note='what = failed', value_attrs={'id':'metric-failed'}) }}
+{{ kpi('Denied events', '—', note='what = denied', value_attrs={'id':'metric-denied'}) }}
+{{ kpi('Distinct traces', '—', note='events with a recorded trace ID', value_attrs={'id':'metric-traces'}) }}
+{% endcall %}
+<form id="filters" class="al-filters" role="search">
+<div class="al-search"><label for="search" class="form-label">Search activity</label><input type="search" class="form-control" id="search" name="q" placeholder="Event, request ID, trace, error or detail…" autocomplete="off"></div>
+<div><label class="form-label" for="time-range">Time range</label><select class="form-select" id="time-range" name="range"><option value="15">Last 15 minutes</option><option value="60" selected>Last hour</option><option value="all">All sample activity</option><option value="custom">Custom range</option></select></div>
+<div>{{ node_filter('log', nodes) }}</div>
+<div><label for="log-model" class="form-label">Model</label><select id="log-model" name="model" class="form-select form-select-sm"><option value="">All models</option></select></div>
+<button type="button" class="btn btn-outline-secondary btn-sm align-self-end" id="more-filters" aria-expanded="false" aria-controls="advanced-filters">More filters</button>
+<div id="advanced-filters" class="al-advanced" hidden>
+{% for key, label in [('kind','Kind'),('what','What happened')] %}<div><label class="form-label" for="log-{{ key }}">{{ label }}</label><select class="form-select form-select-sm" id="log-{{ key }}" name="{{ key }}"><option value="">All</option></select></div>{% endfor %}
+<div>{{ users_groups('log', groups, data.user_groups) }}</div>
+<div><label for="log-trace" class="form-label">Exact trace ID</label><input class="form-control form-control-sm" id="log-trace" name="trace" placeholder="chat-7310"></div>
+<div><label for="log-start" class="form-label">From · Vancouver</label><input type="datetime-local" class="form-control form-control-sm" step="1" id="log-start" name="start"></div>
+<div><label for="log-end" class="form-label">Through · Vancouver</label><input type="datetime-local" class="form-control form-control-sm" step="1" id="log-end" name="end"></div>
+</div>
+<div class="al-filter-bottom"><div class="d-flex gap-2 flex-wrap" role="group" aria-label="Quick views">{% for value,label in [('all','All activity'),('failed','Failures'),('denied','Denied'),('request','Requests'),('model','Model lifecycle')] %}<button type="button" class="btn btn-sm {{ 'btn-primary' if value == 'all' else 'btn-outline-secondary' }}" data-quick="{{ value }}" aria-pressed="{{ 'true' if value == 'all' else 'false' }}">{{ label }}</button>{% endfor %}</div><button type="button" class="btn btn-link btn-sm text-secondary" data-clear>Clear filters</button></div>
+<div id="active-filters" class="d-flex flex-wrap gap-2" aria-label="Active filters"></div><p id="filter-error" role="alert" class="text-danger small mb-0" hidden></p>
+</form>
+{% call alert('danger', attrs={'id':'load-error','hidden':''}) %}<strong>AI activity could not be loaded.</strong><p class="mb-3">The log service did not respond. Your filters are kept.</p><button type="button" class="btn btn-outline-danger btn-sm" id="retry">Retry sample load</button>{% endcall %}
+<div id="loaded-content">
+<section id="incident-overview" hidden aria-label="Incident overview">
+<div class="al-incident-heading"><div>{{ section_title('Where to look first', class_='h3') }}<p class="text-secondary small mb-0">Failures grouped by their recorded error code. Select a group to investigate.</p></div><button type="button" class="btn btn-outline-secondary btn-sm" id="all-failures">Show all failures</button></div>
+<div id="issue-list" class="al-issues mb-3"></div>
+<div class="al-overview-grid">
+{% call card('Activity over time', hint='Five-minute buckets · click a bar to narrow the time range.', body_class='pt-2') %}<div class="d-flex gap-3 small text-secondary mb-2"><span>■ All events</span><span class="text-danger">■ Failed</span></div><div id="activity-chart" class="al-chart" role="group" aria-label="Events per five minutes"></div><div class="d-flex justify-content-between text-secondary small mt-2" id="chart-range"></div>{% endcall %}
+{% call card('Failures by node', hint='Within the current filters') %}<div id="node-breakdown"></div>{% endcall %}
+</div>
+</section>
+<div class="al-workspace-grid">
+{% call card('Activity', id='event-list', body=false, actions='<span class="small text-secondary" id="result-count" role="status" aria-live="polite"></span>'|safe) %}
+<div class="al-list-note small text-secondary px-3 py-2 border-bottom">Select an event to inspect · select a trace ID to follow its history</div>
+<div class="table-responsive al-table-scroll" role="region" aria-label="AI activity results" tabindex="0"><table class="table table-hover align-middle mb-0 al-table"><caption class="visually-hidden">Recorded events with time, activity, outcome, model, node, user and trace.</caption><thead><tr>{% for key,label in [('at','Time'),('kind','Event / details'),('what','Outcome'),('model','Model / node'),('user','User'),('trace','Trace')] %}<th scope="col"><button type="button" class="al-sort" data-sort="{{ key }}">{{ label }} <span aria-hidden="true" data-sort-indicator>↕</span></button></th>{% endfor %}</tr></thead><tbody id="event-rows"></tbody></table></div>
+<div class="card-footer al-pagination"><span class="small text-secondary" id="page-summary"></span><label class="d-flex align-items-center gap-2 small ms-auto">Rows<select class="form-select form-select-sm w-auto" id="log-limit" name="limit" form="filters"><option value="12">12</option><option value="24">24</option><option value="100">100</option></select></label><div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" id="previous" aria-label="Previous page">←</button><button type="button" class="btn btn-outline-secondary btn-sm" id="next" aria-label="Next page">→</button></div></div>
+{% endcall %}
+{% call card('Traces & untraced events', id='trace-list', body_class='p-0') %}<div class="px-3 py-2 border-bottom small text-secondary" id="trace-count"></div><div id="trace-choices"></div>{% endcall %}
+{% call card('Trace timeline', id='trace-timeline', body_class='p-0') %}<div class="p-3 border-bottom">{{ section_title('', id='timeline-title', level=3, class_='h3 al-mono') }}<p class="small text-secondary mb-0" id="timeline-note"></p></div><ol class="al-timeline" id="timeline-events"></ol>{% endcall %}
+<aside class="al-inspector-slot" aria-label="Selected event">{{ inspector() }}</aside>
+</div>
+</div>
+<div class="al-footer"><p id="feedback" class="small text-secondary mb-0" role="status" aria-live="polite">Sample data · all interactions stay in this preview.</p>{% call more('About this evidence') %}Events use the existing AI log fields. Outcomes describe recorded actions; they are not HTTP severity levels. Related activity requires an exact trace ID. No trace does not mean no activity. Filters and counts cover this sample snapshot; exports include every matching event, across pages. Request bodies and model responses are not included.{% endcall %}</div>
+</div>
+</main>
+{{ templates() }}
+<script type="application/json" id="log-data">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>
