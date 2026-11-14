@@ -9,6 +9,7 @@ import pytest
 from loadcoach.setting_catalog import validate_values, validate
 from loadcoach.settings import nested_value, with_changes, written
 from voice.speech import Speech
+from test_app import fake_llama_server
 
 
 def test_followed_nested_tuning_freezes_restart_fields_and_keeps_paths(tmp_path):
@@ -96,3 +97,38 @@ def test_real_example_and_default_files_validate_together(tmp_path, program):
         destination.write_text(source.read_text())
     values, _ = with_changes(program, tmp_path / (program + '.toml'))
     validate_values(program, values)
+
+
+def test_voice_follower_reaches_its_named_node_through_the_real_control_node(fake_llama_server, tmp_path):
+    from loadcoach.groups import Group
+    from test_app import GROUPS, gateway, add_user
+    groups = {**GROUPS, 'follower': Group(can=frozenset({'follow-settings'}))}
+    path = tmp_path / 'voice.toml'
+    path.write_text('[recognition]\nthreads = 2\ntrailing_silence_ms = 800\n')
+    (tmp_path / 'loadcoach.toml').write_text('machine_name = "compute"\n')
+    settings, following = with_changes('voice', path)
+    with gateway(fake_llama_server, groups=groups, database=str(tmp_path / 'core.db')) as api:
+        admin = add_user(api, 'owner', 'admin')
+        api.users.add('voice-service', 'follower')
+        service_key = api.users.new_key('voice-service')
+        async def once():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.front)) as client:
+                try: await asyncio.wait_for(following(client, 'http://front:8442', service_key), .2)
+                except TimeoutError: pass
+        api.portal.call(once)
+        target = '/turnstile/machines/compute/settings'
+        report = api.get(target, headers=admin)
+        assert report.status_code == 200
+        voice = next(p for p in report.json()['programs'] if p['program'] == 'voice')
+        assert any(r['name'] == 'recognition.trailing_silence_ms' and r['when'] == 'now' for r in voice['settings'])
+        assert api.post(target + '/voice', headers=admin, json={'recognition.trailing_silence_ms': 900, 'recognition.threads': 4}).status_code == 200
+        api.portal.call(once)
+        assert settings['recognition']['trailing_silence_ms'] == 900
+        assert settings['recognition']['threads'] == 2
+        report = api.get(target, headers=admin).json()
+        fields = {r['name']: r for p in report['programs'] if p['program'] == 'voice' for r in p['settings']}
+        assert fields['recognition.trailing_silence_ms']['value'] == 900
+        assert fields['recognition.threads']['value'] == 2 and fields['recognition.threads']['changed']['value'] == 4
+        assert api.post(target + '/voice', headers=admin, json={'recognition.trailing_silence_ms': None, 'recognition.threads': None}).status_code == 200
+        api.portal.call(once)
+        assert settings['recognition']['trailing_silence_ms'] == 800

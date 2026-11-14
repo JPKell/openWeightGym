@@ -61,7 +61,7 @@ def program_name(program: str) -> str:
 from loadcoach.setting_catalog import changeable, changeable_for, get as catalog_entry, validate, validate_values
 
 CHANGEABLE: dict[str, dict[str, str]] = changeable()
-SECRET = re.compile(r"(^|_)(key|token|secret|password)$")  # a setting with such a name is never handed out
+SECRET = re.compile(r"(^|[_-])(key|apikey|token|secret|password|authorization|credentials?|dsn)$", re.IGNORECASE)  # a setting with such a name is never handed out
 
 
 def live(program: str, name: str, fallback, *, changes=None):
@@ -155,6 +155,14 @@ def redacted(value, name=''):
     """Redact nested secrets, including service reports from older followers."""
     if SECRET.search(name):
         return '(not shown)'
+    if isinstance(value, str) and '://' in value:
+        from urllib.parse import urlsplit, parse_qsl
+        try:
+            url = urlsplit(value)
+            if url.username or url.password or any(SECRET.search(key) for key, _ in parse_qsl(url.query)):
+                return '(not shown)'
+        except ValueError:
+            return '(not shown)'
     if isinstance(value, dict):
         return {key: redacted(inner, str(key)) for key, inner in value.items()}
     return [redacted(inner) for inner in value] if isinstance(value, list | tuple) else value
@@ -359,13 +367,13 @@ async def follow(program: str, ask, copy: Path, take, every: float = 10) -> None
         await asyncio.sleep(every)
 
 
-def asker(http: httpx.AsyncClient, base: str, key: str):
+def asker(http: httpx.AsyncClient, base: str, key: str, *, node: str = ""):
     """What `follow` asks LoadCoach with: a request made with a program's own key, answered with JSON, or with None if it could not be had."""
 
     async def ask(method: str, path: str, body):
         """Send a signed private request to the configured settings authority."""
         try:
-            answer = await http.request(method, base + path, json=body, headers={"authorization": f"Bearer {key}"}, timeout=5)
+            answer = await http.request(method, base + path, json=body, headers={"authorization": f"Bearer {key}"}, params={"node": node} if node else None, timeout=5)
         except httpx.HTTPError:
             return None
         return answer.json() if answer.status_code == 200 else None
@@ -422,7 +430,13 @@ def with_changes(program: str, path: Path):
                 set_nested(settings, entry.name, deepcopy(entry.default))
         return said(settings, told, says, program), refused
 
-    return settings, lambda http, base, key: follow(program, asker(http, base, key), copy, take)
+    # A node-owned follower must name its node at the control node, just as site edits do.
+    node = ''
+    machine_file = path.parent / 'loadcoach.toml'
+    if program == 'voice' and machine_file.is_file():
+        from loadcoach.log import LEGACY
+        node = read_settings(machine_file).get('machine_name', LEGACY)
+    return settings, lambda http, base, key: follow(program, asker(http, base, key, node=node), copy, take)
 
 
 def copy_of(path: Path) -> dict:
