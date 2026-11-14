@@ -19,7 +19,7 @@
   <div id="voice-workspace" data-layout="desk">
     {% set actions %}<span class="vc-sample-label"><span class="vc-dot" aria-hidden="true"></span>Browser-local demo</span>{% endset %}
     {{ page_header('Voice', pretitle='THINK OUT LOUD', actions=actions) }}
-    <div class="vc-title-line"><p id="design-tagline">A natural rhythm. A clearer connection.</p><span class="vc-overline">LISTEN / THINK / SPEAK</span></div>
+    <div class="vc-title-line"><p id="design-tagline">A natural rhythm. A clearer connection.</p></div>
     {% call alert('warning', attrs={'id':'call-notice', 'hidden':true}, class_='mb-3') %}<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 w-100"><span id="notice-text"></span><button id="recover" type="button" class="btn btn-outline-secondary btn-sm">Restore sample service</button></div>{% endcall %}
     {% call alert('warning', attrs={'id':'compatibility-notice', 'hidden':true}, class_='mb-3') %}<span id="compatibility-text"></span>{% endcall %}
     <div class="vc-workspace-grid">{{ language_panel(data.languages) }}{{ call_panel() }}{{ settings_panel() }}{{ transcript_panel() }}</div>

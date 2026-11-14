@@ -99,6 +99,7 @@ def test_live_download_retains_permissions_content_and_routes(tmp_path):
         for path in ('/static/LoadCoach-Voice.zip', '/voice', '/account'):
             assert f'href="{path}"' in response.text
         assert 'data-voice-download' in response.text
+        assert 'From download to your first conversation.' not in response.text
         assert '/static/voice-download.css?v=1' in response.text
         assert '/static/voice-download.js?v=1' in response.text
         assert 'data-download-design=' not in response.text
