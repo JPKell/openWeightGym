@@ -620,15 +620,17 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         moment = display.moment(at)
         return moment.strftime('%d %b %Y, %H:%M UTC') if moment else 'never'
 
-    pages = Jinja2Templates(directory=[HERE / "pages", HERE.parent / "mirrorwall" / "pages", HERE.parent / "soundroom" / "pages"])  # values put into a page are escaped, always
+    pages = Jinja2Templates(directory=[HERE / "pages", HERE.parent / "mirrorwall" / "pages", HERE.parent / "soundroom" / "pages"],
+                            context_processors=[lambda request: {
+                                'server_timezone': display.configured_timezone(settings.timezone),
+                                'log_timezone': settings.timezone or 'UTC'}])  # values put into a page are escaped, always
     pages.env.globals['model_catalogue'] = model_catalogue
     service_defaults = {name: settings.file.get(name, getattr(settings, name)) for name in SERVICE_SETTINGS}
     def platform():
         return PlatformServices.from_settings(settings)
     pages.env.globals['platform'] = platform
     pages.env.globals.update(setting_label=setting_labels.describe, settings_sections=setting_labels.sections,
-                             server_timezone=display.configured_timezone(settings.timezone),
-                             log_timezone=settings.timezone or "UTC", input_utc=display.input_utc)
+                             input_utc=display.input_utc)
     pages.env.filters["clock"] = clock
     pages.env.filters.update(display=display.value, node_label=display.node_label, count=display.count, timestamp=display.timestamp, log_line=display.log_line)
     pages.env.filters["worded"] = lambda value, name: "\u2014" if value is None else worded(name, value)  # a dash for a reading that was not given
@@ -788,7 +790,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         weightroom reports both services, copies catalogue live fields and publishes shared span
         policy immediately. Restart fields retain their startup values. See loadcoach/settings.py.
         """
-        nonlocal settings, applied_observation_policy
+        nonlocal settings, applied_observation_policy, zone
         copied = kept("settings.json", {})
         for program in ("weightroom", "turnstile"):
             changed = await ask("GET", f"/loadcoach/settings/{program}/changes", settings.key)
@@ -798,6 +800,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if copied != kept("settings.json", {}):
             keep("settings.json", copied)
         settings, refused = apply_live('weightroom', settings, copied.get('weightroom', {}))
+        zone = ZoneInfo(settings.timezone) if settings.timezone else None
         applied_observation_policy = apply_observation_policy(observation_log.db, settings, applied_observation_policy)
         running = {**settings.file, **{entry.name: getattr(settings, entry.name)
                     for entry in catalog_entries('weightroom') if hasattr(settings, entry.name)}}
@@ -5533,7 +5536,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         exception_handlers={HTTPException: http_error, 500: server_error},
         routes=[
             *image_routes(for_people, page, ask, model_api),
-            *audio_routes(for_people, page, ask, model_api, settings, platform),
+            *audio_routes(for_people, page, ask, model_api, lambda: settings, platform, refresh_settings=in_step),
             *extraction_routes(for_people, page, ask),
             *response_routes(for_people, page, response_store),
             *classifier_routes(for_people, page, ask, platform),

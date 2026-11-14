@@ -5,13 +5,13 @@
 {{ page_header('Audio settings', 'Choose the default models offered on music, sound and speech pages.') }}
 {{ said_box(said, failed) }}
 {% call card("") %}<form method="post" action="/system/audio" class="row g-3">
-{% call form_section('Default models', 'Needs restart', 'Personal choices remain available under My account → Audio.') %}
+{% call form_section('Default models', 'Applies immediately', 'Personal choices remain available under My account → Audio.') %}
 {% for setting in fields %}<div class="col-md-6"><label class="form-label" for="value-{{ setting.name }}">{{ setting.label }}</label><select id="value-{{ setting.name }}" name="value-{{ setting.name }}" class="form-select"{{ ' disabled' if setting.when == 'file' }}>
 <option value="">First available model</option>{% if setting.value and setting.value not in setting.choices %}<option value="{{ setting.value }}" selected>{{ setting.value }} · current, unavailable</option>{% endif %}
 {% for model in setting.choices %}<option value="{{ model }}"{{ ' selected' if model == setting.value }}>{{ model }}</option>{% endfor %}</select>
 {% call more() %}{{ setting.help }}{% if setting.when == 'file' %} Set in the settings file.{% endif %}{% endcall %}</div>{% endfor %}
 {% endcall %}
-<div class="col-12 sticky-actions"><button class="btn btn-primary" type="submit">Save audio settings</button><span class="small text-secondary">Applies after openWeightGym restarts.</span></div>
+<div class="col-12 sticky-actions"><button class="btn btn-primary" type="submit">Save audio settings</button><span class="small text-secondary">Applies immediately to new requests.</span></div>
 </form>{% endcall %}
-{% call more('Runtime availability') %}<ul>{% for node in nodes %}<li>{{ node.name }}: {{ 'audio.cpp available' if node.available else node.why }}</li>{% else %}<li>No node answered.</li>{% endfor %}</ul>{% endcall %}
+{% call more('Runtime availability') %}<ul>{% for node in nodes %}<li>{{ (node.name)|node_label }}: {{ 'audio.cpp available' if node.available else node.why }}</li>{% else %}<li>No node answered.</li>{% endfor %}</ul>{% endcall %}
 {% endblock %}
