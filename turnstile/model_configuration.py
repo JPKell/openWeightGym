@@ -19,7 +19,7 @@ GLOBAL_FLAGS = frozenset({
 SETTING_KEYS = ("engine", "flags", "strata", "sdcpp", "audiocpp", "whispercpp", "gpus", "alone",
                 "allow_split", "adapters", "min_context", "order")
 PROFILE_GLOBALS = {"sdcpp": ("defaults", "limits", "reference_megapixels"),
-                   "audiocpp": ("defaults", "limits")}
+                   "audiocpp": ("defaults", "limits"), "whispercpp": ()}
 
 
 def configuration(row):
