@@ -125,11 +125,19 @@
 
 {# One settings workspace surrounds every settings surface without owning its forms. #}
 {% macro settings_workspace() %}
+{% from 'navigation_parts.html' import pills, pill_link %}
 <div class="settings-workspace" data-settings-workspace>
+  <div class="settings-toolbar" aria-label="Filter settings">
+    <div class="settings-search-field"><label class="form-label" for="settings-search">Find a setting</label><input id="settings-search" type="search" class="form-control" placeholder="Search names, keys and help…" maxlength="256" data-settings-search disabled autocomplete="off"></div>
+    <label class="form-check form-switch mb-0"><input id="settings-changed" type="checkbox" class="form-check-input" data-settings-changed disabled><span class="form-check-label">Changed only</span></label>
+    <span class="small text-secondary" role="status" aria-live="polite" data-settings-count></span><button type="button" class="btn btn-outline-secondary btn-sm" data-settings-clear hidden>Clear filters</button>
+  </div>
   <aside class="settings-rail" aria-label="Settings workspace">
-    <nav aria-label="Settings sections" data-settings-section-links><a class="settings-section-link active" href="#settings-content">All sections</a></nav>
+    {% call pills('Settings sections', class_='mb-0', attrs={'data-settings-section-links':''}) %}{{ pill_link('All sections', '#settings-content', true, class_='settings-section-link') }}{% endcall %}
+    <template data-settings-section-link>{{ pill_link('', '#settings-content', class_='settings-section-link') }}</template>
     <div class="settings-reference-links"><a href="/settings/machine">Machine configuration</a><a href="/settings/history">Settings history</a></div>
   </aside>
+  <p class="text-secondary" role="status" data-settings-no-match hidden>No matching settings. Clear the filters to see every setting in this view.</p>
   <div id="settings-content" class="settings-content">{{ caller() }}</div>
 </div>
 {% endmacro %}
@@ -139,7 +147,7 @@
 <p class="form-hint">Each node keeps its own values. Open Compute nodes to change them.</p>
 {% if unavailable %}<p class="text-warning" role="status">Not answering: {{ unavailable|join(', ') }}. Their last reported values may be shown.</p>{% endif %}
 <div class="table-responsive"><table class="table table-sm" aria-label="Per-node settings"><thead><tr><th>Node</th><th>Setting</th><th>Value</th><th>Applies</th></tr></thead><tbody>
-{% for row in rows %}<tr><th scope="row"><a href="/compute-nodes?machine={{ row.node|urlencode }}">{{ row.node }}</a></th><td>{{ row.label }}</td><td class="wrap"><code>{{ row.value_text }}</code></td><td>{{ 'After restart' if row.setting.when == 'restart' else 'Live' }}</td></tr>{% else %}{{ empty_row(4, 'No node values reported for this section.') }}{% endfor %}
+{% for row in rows %}<tr data-setting-row data-setting-changed="{{ 'true' if row.setting.changed else 'false' }}"><th scope="row"><a href="/compute-nodes?machine={{ row.node|urlencode }}">{{ row.node }}</a></th><td>{{ row.label }}</td><td class="wrap"><code>{{ row.value_text }}</code></td><td>{{ 'After restart' if row.setting.when == 'restart' else 'Live' }}</td></tr>{% else %}{{ empty_row(4, 'No node values reported for this section.') }}{% endfor %}
 </tbody></table></div>
 {% endcall %}
 {% endmacro %}

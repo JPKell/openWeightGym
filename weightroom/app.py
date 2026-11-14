@@ -3388,7 +3388,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         preferences = await fetch(request, person, '/mirrorwall/preferences')
         if isinstance(preferences, Response):
             return preferences
-        return page(request, 'image_settings.html', person, preferences=preferences,
+        report = await ask('GET', '/loadcoach/settings', person.key)
+        policy_changed = any(row.get('changed') for program in (report.json().get('programs', []) if report.is_success else []) if program['program'] == 'turnstile' for row in program['settings'] if row['name'] == 'image_adult_previews')
+        return page(request, 'image_settings.html', person, preferences=preferences, policy_changed=policy_changed,
                     said=request.query_params.get('said', ''))
 
     async def change_file_locations(request: Request, person: Person) -> Response:
@@ -3645,7 +3647,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         programs = settings_views.filtered(reported.json().get('programs', []), 'tools') if reported.is_success else []
         for program in programs:
             program['settings'] = [row for row in program['settings'] if row['name'] not in ('toolsets', 'tool_levels')]
-        return page(request, 'tools.html', person, status=400 if failed else 200, tool_info=found, tool_config=config, programs=programs, settings_return_to='/tools', typed_in=unused.get('typed_in', {}), opened=unused.get('opened', ''),
+        return page(request, 'tools.html', person, status=400 if failed else 200, tool_info=found, tool_config=config, tool_changed={row['name']: bool(row.get('changed')) for row in (found['program'] or {}).get('settings', [])}, programs=programs, settings_return_to='/tools', typed_in=unused.get('typed_in', {}), opened=unused.get('opened', ''),
                     said=said or request.query_params.get("said", ""), failed=failed)  # fmt: skip
 
     async def change_tools(request: Request, person: Person) -> Response:

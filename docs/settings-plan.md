@@ -439,7 +439,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 1i Retired, derived and deprecated machine values (529 feature checks; all 39 UI consistency/browser cases pass).
 - [x] 1j Responses limits shipped with Phase 0; Phase 1 deployed and verified (a853683; 47 tiers, 33 restored live changes, unchanged PIDs on all five checkouts).
 - [x] 2.1 Shared design, grouped routes and navigation (native saves and drafts verified; 39 UI cases cover all eight new routes).
-- [ ] 2.2 Search and Changed only on every settings surface.
+- [x] 2.2 Search, Changed only and section navigation across settings (39 feature/browser and all 39 UI consistency cases pass).
 - [ ] 2.3 Pending restart status and authorized restart action.
 - [ ] 2.4 Machine configuration page.
 - [ ] 2.5 History, revert and validated export/import.

@@ -22,7 +22,7 @@
 {% with settings_readonly=false, settings_empty=false %}{% include 'settings_sections.html' %}{% endwith %}
 {% set servers = tool_config.get('servers', {}) %}
 {% set levels = tool_config.get('tool_levels', {}) %}
-{% call card("Tool levels", true) %}
+{% call card("Tool levels", true, attrs={'data-setting-changed': 'true' if tool_changed.get('tool_levels') else 'false'}) %}
 <p class="text-secondary">A tool's level is its server's unless one is chosen here, higher or lower. A caller sees a tool only if their group's highest level of work is at least the tool's, and from <code>sensitive</code> up each call is kept in full.</p>
 <form method="post" action="/tools">
 <div class="table-responsive"><table class="sortable table table-sm"><thead><tr><th>Tool</th><th>Level</th></tr></thead><tbody>
@@ -36,7 +36,7 @@
 <button class="btn btn-primary" name="do" value="levels">Save levels</button>
 </form>
 {% endcall %}
-{% call card("Tool sets", true) %}
+{% call card("Tool sets", true, attrs={'data-setting-changed': 'true' if tool_changed.get('toolsets') else 'false'}) %}
 <p class="text-secondary">A tool set offers only the tools it lists, one to a line; <code>*</code> stands for anything, as in <code>files__*</code>.
   A harness uses one at <code>/mcp/NAME</code>, or chooses several on any address with the header <code>X-ToolLocker-Sets: code,email</code>.
   A set only narrows: it never shows a tool the caller's group and account are not shown. Which tools a group is shown is set on its group page.</p>

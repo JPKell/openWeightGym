@@ -60,7 +60,13 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None, refre
                 return page(request, "refused.html", person, status=413, why="The form is too large.")
             form = {name: values[-1] for name, values in parse_qs(body.decode(errors="replace")).items()}
             asked = {}
+            reset = form.get('reset', '')
+            if reset and reset not in {field[0] for field in available_defaults}:
+                return page(request, 'refused.html', person, status=400, why='Choose a reported audio setting to reset.')
             for name, _, _ in available_defaults:
+                if reset:
+                    if name == reset: asked[name] = None
+                    continue
                 one = current.get(name)
                 holds = one["changed"]["value"] if one and one.get("changed") else one["value"] if one else ""
                 typed = str(form.get("value-" + name, holds)).strip()
@@ -83,6 +89,8 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None, refre
             nodes.append({"name": name, "available": any(one.get("available") for one in audio),
                           "why": '; '.join(one.get('why', '') for one in audio if one.get('why')) or 'not answering'})
         fields = [{"name": name, "label": label, "help": help, "when": current.get(name, {}).get("when", ""),
+                   "id": "value-" + name, "editor": "text", "select": True,
+                   "changed": current.get(name, {}).get("changed"), "refused": current.get(name, {}).get("refused"),
                    "value": (current[name]["changed"]["value"] if current.get(name, {}).get("changed") else current.get(name, {}).get("value", ""))}
                   for name, label, help in available_defaults]
         catalogue = None
@@ -96,6 +104,8 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None, refre
                                 if (row.get('audio_profile', {}).get('kind') in kinds
                                     if kind != 'lyrics' else not row.get('audio_profile') and not row.get('image_workflow')
                                     and not row.get('capabilities', {}).get('embedding'))]
+        for field in fields:
+            field['choices'] = [('', 'First available model'), *((model, model) for model in field['choices'])]
         return page(request, "soundroom_system.html", person, fields=fields, nodes=nodes, said=said, failed=failed)
 
     async def models(request, person):

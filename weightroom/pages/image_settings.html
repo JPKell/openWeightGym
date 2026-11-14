@@ -4,7 +4,7 @@
 {% block main %}
 {{ page_header('Image settings', 'Manage preview policy for everyone using the console.') }}
 {{ said_box(said, false) }}
-{% if platform().downloads %}{% call card("Preview policy") %}
+{% if platform().downloads %}{% call card("Preview policy", attrs={'data-setting-changed': 'true' if policy_changed else 'false'}) %}
 <form method="post" action="/settings/image">
 <div class="form-check form-switch mb-2"><input id="adult-previews" name="adult_previews" value="yes" type="checkbox" class="form-check-input" role="switch"{% if preferences.adult_previews_allowed %} checked{% endif %}><label for="adult-previews" class="form-check-label">Allow personal adult-preview opt-in</label></div>
 <p class="text-secondary small">Applies immediately to Civitai previews. Each user must also enable their own preference on <a href="/civitai">Civitai</a>; both controls default off.</p>
