@@ -107,7 +107,7 @@ def test_docs_search_and_reading_work_without_javascript(desk):
         session = page.context.new_cdp_session(page)
         session.send('Emulation.setScriptExecutionDisabled', {'value': True})
         page.goto('http://console.test/docs')
-        expect(page.locator('.library-category')).to_have_count(1)
+        expect(page.locator('.library-category')).to_have_count(2)
         page.locator('#docs-query').fill('Shift+Enter')
         page.locator('#docs-search button[type=submit]').click()
         page.locator('#docs-results-list a[href="/docs/web-app/chat"]').click()

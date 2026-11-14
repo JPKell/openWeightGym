@@ -154,19 +154,39 @@ def _links(source: str):
     folder = posixpath.dirname(source)
     def resolve(href: str) -> str | None:
         """Keep web links and map maintained files to their corresponding visible article."""
-        if not href or href.startswith(('#', '/')) or urlsplit(href).scheme:
+        if not href or href.startswith('/') or urlsplit(href).scheme:
             return href
         relative, _, anchor = href.partition('#')
-        name = posixpath.normpath(posixpath.join(folder, relative))
+        name = posixpath.normpath(posixpath.join(folder, relative)) if relative else source
         target = DOC_PAGES.get(name)
-        if anchor:
+        if anchor and target:
+            path = ROOT / name
+            stat = path.stat()
+            found = _anchor_inventory(name, stat.st_mtime_ns, stat.st_size)
             for section in SECTIONS:
-                for topic in section['topics']:
-                    if topic.get('doc') == name and any(doc_markdown.slug(part) == anchor for part in topic['parts']):
-                        target = topic['url']
-                        break
-        return target + ('#' + anchor if anchor else '') if target else None
+                for topic in (section, *section['topics']):
+                    if topic.get('doc') != name:
+                        continue
+                    for title, identifiers in found:
+                        if topic['parts'] and title not in topic['parts']:
+                            continue
+                        ident = next((one for one in identifiers if one == anchor), None)
+                        ident = ident or next((one for one in identifiers if one.endswith('-' + anchor)), None)
+                        if ident:
+                            return topic['url'] + '#' + ident
+            # A maintained file can link to history that is deliberately absent from Docs.
+            # Keep its relevant section reachable without publishing a broken fragment.
+        return target
     return resolve
+
+
+@lru_cache(maxsize=128)
+def _anchor_inventory(relative: str, modified: int, size: int) -> tuple:
+    """Find rendered anchors without recursive link rewriting or importing any service."""
+    found = doc_markdown.document((ROOT / relative).read_text(encoding='utf-8'), admin=True)
+    return (('', ('overview',)), *(
+        (section['title'], (section['id'], *re.findall(r'id="([^"]+)"', str(section['body']))))
+        for section in found['sections']))
 
 
 @lru_cache(maxsize=128)

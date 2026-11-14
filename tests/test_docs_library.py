@@ -15,7 +15,7 @@ def test_docs_navigation_keeps_home_guides_and_code_separate():
     assert admin['children']['/docs/code'][0] == ('Models', '/docs/code/models')
     assert navigation('/docs', ['manage-settings'], False)['children'] == {}
     public = navigation('/docs', [], False)
-    assert public['links'] == [('Documentation', '/docs'), ('Web app', '/docs/web-app')]
+    assert public['links'] == [('Documentation', '/docs'), ('Getting started', '/docs/getting-started'), ('Web app', '/docs/web-app')]
 
 
 def test_settings_policy_guide_is_rendered_searchable_and_permission_scoped(desk):

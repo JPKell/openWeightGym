@@ -95,7 +95,7 @@ def test_reader_contents_history_keyboard_and_code_alias(preview):
     page = preview
     page.locator('.home-shortcuts a[href="/docs/web-app/api-keys"]').click()
     expect(page.locator('#article .page-title')).to_have_text('API keys')
-    page.locator('#outline-links a').last.click()
+    page.locator('#outline-links a[href*=api-connect]').click()
     expect(page).to_have_url(re.compile('anchor=api-connect'))
     expect(page.locator('#next')).to_be_hidden()
     page.go_back()

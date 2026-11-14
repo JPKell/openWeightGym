@@ -269,6 +269,8 @@ and row-level evidence stay in machine-readable artifacts.
 
 | Milestone | State / checks |
 |---|---|
-| M1 | Markdown discovery, maintained includes, public/admin filtering, legacy URL fixture, generated references and maintenance rules implemented; coverage 20/79 navigation pages, 42 public endpoint declarations, 35 abilities and 194 default keys; allowlist 59. Browser/component suite: 50 passed; focused discovery/reference checks pass. Full A7 rerun follows source-description cleanup; the known `test_install_progress.py` index gap is intentionally excluded from completion claims. |
+| M1 | Markdown discovery, maintained includes, public/admin filtering, legacy URL fixture, generated references and maintenance rules implemented; coverage 20/79 navigation pages, 42 public endpoint declarations, 35 abilities and 194 default keys; allowlist 59. Browser/component suite: 50 passed; focused discovery/reference checks pass. Final A7: 37 passed, only the explicitly excluded `test_install_progress.py` index failure remains. |
 
 M1 facts: existing prose is converted; M2 verifies and edits it against current controls. No unverified defaults or live settings are added to generated pages. No open owner decisions; the work is local on `docs-library`, with no push or deployment. The pre-existing missing-docstring failure is repaired with description-only edits; executable AST comparisons passed. Detailed local check output is in `/var/tmp/owg-docs-*.log`.
+
+M2 batch 1: Getting started, Chat, API keys and Tools refreshed against current controls; 22/80 navigation routes covered, allowlist 58. Public reading/search and legacy connection examples are retained; no unverified facts or owner questions.
