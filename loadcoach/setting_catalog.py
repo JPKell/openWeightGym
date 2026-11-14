@@ -731,3 +731,21 @@ for name, label, source, filename in (
     _add('loadcoach', name, 'secret', tier=NOW, scope='node', page='downloads', section='Download credentials',
          label=label, default='', rule=_bearer_secret, credential_file=source, credential_default=filename,
          help='Write-only on the selected node. Blank keeps the current credential; explicit removal clears it. Read again for each provider operation.')
+
+
+
+def _backup_time(value):
+    if not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]', value):
+        raise ValueError('Use a backup time in HH:MM format.')
+
+
+_add('weightroom', 'chat_keep_days', 'int', tier=NOW, scope='front', page='retention', section='Logs and retention',
+     label='Conversation retention', unit='days', control='number', min=0, max=36500, default=0,
+     help='Zero keeps conversations indefinitely. A daily sweep expires conversations by their last opening or new message, preserving active answers. Background polling does not renew activity. Applies at the next sweep without restarting.')
+_add('weightroom', 'backup_every', 'choice', tier=NOW, scope='front', page='retention', section='Scheduled backups',
+     label='Automatic control node backup', choices=('off', 'daily', 'weekly'), default='off',
+     choice_labels=(('off', 'Off'), ('daily', 'Every day'), ('weekly', 'Every Sunday')),
+     help='A built-in Schedules function creates and verifies the control node recovery archive. Weekly runs on Sunday. Other nodes retain their explicitly configured Schedules. Rotation uses Backups to keep. No node is woken.')
+_add('weightroom', 'backup_time', 'text', tier=NOW, scope='front', page='retention', section='Scheduled backups',
+     label='Automatic backup time', control='plain-text', default='03:00', rule=_backup_time,
+     help='HH:MM in the configured control node time zone, or its host zone when empty. Changes recalculate the next future run. The latest missed run may catch up after downtime; overlapping runs are skipped.')

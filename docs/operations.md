@@ -1460,3 +1460,21 @@ files may remain in destination directories and must be removed while services r
 After every host imports, start services and verify an existing client key, account permissions,
 node signatures, tools and adapters. Browser users sign in again. Normal recovery archives
 continue excluding raw keys; this separate encrypted bundle supplies the private source.
+
+
+### Conversation expiry and built-in backups
+
+`chat_keep_days` defaults to 0 (indefinite). The control node checks the live policy every minute
+and claims a daily sweep in the chat store. CHAT migration 7 seeds last activity from the existing
+message timestamp; authorized openings and new messages renew it. Background refreshes do not.
+Active answers survive cleanup. The sweep deletes expired conversation messages atomically; it
+does not alter Collections, workflows or other stores.
+
+`backup_every` defaults to `off`; `daily` and `weekly` use the existing Schedules worker and verified
+control node backup writer. Weekly means Sunday. `backup_time` defaults to `03:00`, using the
+configured control node time zone or its host zone. The built-in job appears in Schedules and is
+managed through Retention and privacy, without an account or remote grant. It does not wake nodes;
+use existing explicit schedules for other nodes. Rotation follows `backup_retention`. A policy
+edit recomputes the next future run, cancels unsubmitted old occurrences, and lets a backup already
+being written finish. After downtime only the latest missed occurrence is eligible. Retries reuse
+the same verified archive identifier. Raw keys remain excluded from normal recovery archives.

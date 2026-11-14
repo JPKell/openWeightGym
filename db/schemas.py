@@ -717,6 +717,12 @@ CHAT = (
         ALTER TABLE conversations ADD COLUMN tool_state TEXT NOT NULL DEFAULT '{}';
         CREATE INDEX conversations_kind_owner ON conversations(kind, "user", updated);
     """),
+    Migration(7, "conversation opening activity and daily retention clock", """
+        ALTER TABLE conversations ADD COLUMN last_activity DOUBLE PRECISION NOT NULL DEFAULT 0;
+        UPDATE conversations SET last_activity=updated WHERE last_activity=0;
+        CREATE INDEX conversations_activity ON conversations(last_activity);
+        CREATE TABLE chat_maintenance (name TEXT PRIMARY KEY, at DOUBLE PRECISION NOT NULL);
+    """),
 )
 
 

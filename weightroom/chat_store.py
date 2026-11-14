@@ -143,7 +143,7 @@ class Conversations:
 
     def __init__(self, path: DatabaseSource) -> None:
         """Open private chat storage and apply its portable schema migrations."""
-        source = database(path)
+        source = self.source = database(path)
         self.db = source.connect(check_same_thread=False)
         migrate(source, self.db, "weightroom.chat", CHAT)
 
@@ -151,8 +151,8 @@ class Conversations:
         """Create a conversation with its initial system, sampling and comparison settings."""
         with self.db:
             return self.db.insert_id(
-                "INSERT INTO conversations (user, title, system, thinking, sampling, compare, updated, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (user, title, system, thinking, json.dumps(sampling or {}), json.dumps(compare or []), time.time(), kind),
+                "INSERT INTO conversations (user, title, system, thinking, sampling, compare, updated, kind, last_activity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (user, title, system, thinking, json.dumps(sampling or {}), json.dumps(compare or []), time.time(), kind, time.time()),
             )
 
     def listing(self, user: str, kind: str = 'text', clearance: str = 'restricted') -> list[dict]:
@@ -170,6 +170,43 @@ class Conversations:
             for role, content, detail, at in self.db.execute("SELECT role, content, detail, at FROM messages WHERE conversation = ? ORDER BY id", (number,))
         ]
         return {"id": number, "title": found[0], "system": found[1], "thinking": bool(found[2]), "sampling": json.loads(found[3]), "memory": json.loads(found[4]), "compare": json.loads(found[5]), "session_mode": found[6], "sessions": json.loads(found[7]), "messages": said, "kind": found[8], "level": found[9], "tool_state": json.loads(found[10])}
+
+    def touch(self, number: int, user: str, now=None) -> bool:
+        """Count an authorized opening without changing the sidebar's message ordering."""
+        with self.db:
+            return bool(self.db.execute('UPDATE conversations SET last_activity=? WHERE id=? AND user=?',
+                (time.time() if now is None else now, number, user)).rowcount)
+
+    def retention_status(self, days):
+        """Expose effective policy and the durable sweep clock without conversation content."""
+        row = self.db.execute("SELECT at FROM chat_maintenance WHERE name='retention'").fetchone()
+        last = row[0] if row else None
+        return {'days': days, 'last_sweep': last, 'next_sweep': max(time.time(), last + 86400) if days and last else time.time() if days else None}
+
+    def prune(self, days, now=None):
+        """Claim a daily sweep, lock expired rows and preserve newly opened or active work."""
+        if not days:
+            return 0
+        from contextlib import nullcontext
+        from db import is_memory
+        now = time.time() if now is None else now
+        context = nullcontext(self.db) if is_memory(self.source) else self.source.connection()
+        count = 0
+        with context as db, db:
+            db.execute("INSERT INTO chat_maintenance(name,at) VALUES('retention',0) ON CONFLICT(name) DO NOTHING")
+            if not db.execute("UPDATE chat_maintenance SET at=? WHERE name='retention' AND (at=0 OR at<=?)", (now, now-86400)).rowcount:
+                return 0
+            cutoff = now - days * 86400
+            numbers = db.execute('SELECT id FROM conversations WHERE last_activity<? ORDER BY id', (cutoff,)).fetchall()
+            for (number,) in numbers:
+                # The no-op update acquires the same row lock that an opening/new message needs.
+                if not db.execute('UPDATE conversations SET last_activity=last_activity WHERE id=? AND last_activity<? '
+                    'AND NOT EXISTS (SELECT 1 FROM answering WHERE conversation=?)', (number, cutoff, number)).rowcount:
+                    continue
+                db.execute('DELETE FROM messages WHERE conversation=?', (number,))
+                db.execute('DELETE FROM conversations WHERE id=?', (number,))
+                count += 1
+        return count
 
     def tool_state(self, number: int, state: dict, level: str) -> None:
         """Persist exact approval context and monotonically raise a private conversation's level."""
@@ -212,6 +249,8 @@ class Conversations:
     def answering(self, number: int, branch: int, user: str, model: str) -> None:
         """Write down that an answer is being fetched: for which conversation, from which model, and in a comparison for which of the two."""
         with self.db:
+            if not self.db.execute("UPDATE conversations SET last_activity=? WHERE id=?", (time.time(), number)).rowcount:
+                return
             self.db.execute("INSERT INTO answering (conversation, branch, user, model) VALUES (?, ?, ?, ?) ON CONFLICT(conversation,branch) DO UPDATE SET user=excluded.user,model=excluded.model", (number, branch, user, model))
 
     def answered(self, number: int, branch: int) -> None:
@@ -240,8 +279,10 @@ class Conversations:
         """Add a message to a conversation. `detail` is whatever else is known of it, and things not known are left out."""
         kept = json.dumps({key: value for key, value in detail.items() if value not in (None, "", 0)})
         with self.db:
-            self.db.execute("INSERT INTO messages (conversation, role, content, detail, at) VALUES (?, ?, ?, ?, ?)", (number, role, content, kept, time.time()))
-            self.db.execute("UPDATE conversations SET updated = ? WHERE id = ?", (time.time(), number))
+            now = time.time()
+            if not self.db.execute("UPDATE conversations SET updated=?,last_activity=? WHERE id=?", (now, now, number)).rowcount:
+                return
+            self.db.execute("INSERT INTO messages (conversation, role, content, detail, at) VALUES (?, ?, ?, ?, ?)", (number, role, content, kept, now))
 
     def drop_answer(self, number: int) -> None:
         """Remove what was answered last, so that the last thing said is a question again."""

@@ -87,7 +87,7 @@ def reason(body: bytes) -> dict:
     return {"why": str(why)[:500]}
 
 
-def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: httpx.AsyncClient | None = None, *, plugins=None, tools=None, tool_level=None, tool_settings=lambda: {}, toolsets=lambda: [], content_limits=None) -> Starlette:
+def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: httpx.AsyncClient | None = None, *, plugins=None, tools=None, tool_level=None, tool_settings=lambda: {}, toolsets=lambda: [], content_limits=None, chat_keep_days=lambda: 0) -> Starlette:
     """Host web-chat APIs in WeightRoom's process using the user's own upstream key."""
     inference = inference or compute
     chats = Conversations(database)
@@ -374,7 +374,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
     async def conversation_list(request: Request, user: Principal) -> Response:
         """One's own conversations, the one last spoken in first."""
         mine = [{**talk, "id": f"t{talk['id']}", "temporary": True} for talk in passing.listing(user.name)] + [{**talk, "id": str(talk["id"])} for talk in chats.listing(user.name)]
-        return JSONResponse({"conversations": sorted(mine, key=lambda talk: talk["updated"], reverse=True)})
+        return JSONResponse({"conversations": sorted(mine, key=lambda talk: talk["updated"], reverse=True), "retention": chats.retention_status(chat_keep_days())})
 
     async def conversation_start(request: Request, user: Principal) -> Response:
         """Start a conversation with a first message, and set the answer going.
@@ -453,7 +453,11 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
     async def conversation_one(request: Request, user: Principal) -> Response:
         """Return an owner-scoped conversation with current model labels and live state."""
         found = talk_of(request, user)
-        return found if isinstance(found, Response) else JSONResponse(shown(found[0], found[3]))
+        if isinstance(found, Response):
+            return found
+        if request.query_params.get("peek") != "1" and not found[1].touch(found[2], user.name):
+            return error(404, "You have no such conversation.")
+        return JSONResponse(shown(found[0], found[3]))
 
     async def conversation_change(request: Request, user: Principal) -> Response:
         """Change a conversation's title, its instructions, whether the model is asked to think, or how it is to pick its words."""
@@ -624,11 +628,40 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         await workflows.forget(owner)
         await knowledge.forget(owner)
 
+    async def retention_sweep():
+        """Read the current policy at each due check; persisted claims survive restarts."""
+        from db import is_memory
+        gate = getattr(app.state, 'maintenance', None)
+        if gate and gate.token():
+            return 0
+        if gate:
+            gate.active += 1
+        try:
+            if is_memory(chats.source):
+                return chats.prune(chat_keep_days())
+            work = asyncio.create_task(asyncio.to_thread(chats.prune, chat_keep_days()))
+            try:
+                return await asyncio.shield(work)
+            except asyncio.CancelledError:
+                await work  # a database cutover must wait for the writer to drain
+                raise
+        finally:
+            if gate:
+                gate.active -= 1
+
     async def sweep() -> None:
-        """Expire temporary conversations after their existing one-day idle limit."""
+        """Expire retained chats daily and preserve the existing temporary-chat idle limit."""
+        temporary_at = time.time()
         while True:
-            await asyncio.sleep(3600)
-            passing.forget_idle(86400)
+            await asyncio.sleep(60)
+            try:
+                await retention_sweep()
+                if time.time() - temporary_at >= 3600:
+                    passing.forget_idle(86400)
+                    temporary_at = time.time()
+            except Exception:
+                observation.annotate(error_code='chat_retention_failed')
+
 
     @asynccontextmanager
     async def lifespan(app):
@@ -676,6 +709,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         route("/loadcoach/conversations/{ref}/stream", conversation_stream),
     ])
     app.state.chats, app.state.passing, app.state.turns = chats, passing, turns
+    app.state.retention_sweep = retention_sweep
     app.state.follow = signed_in(conversation_stream)
     app.state.forget = forget
     app.state.tool_chat = tool_chat

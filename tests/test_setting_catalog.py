@@ -167,6 +167,7 @@ def live_examples(entry):
         'tool_levels': ({}, {'catalogue': 'normal'}),
         'third_party_services': (['ollama'], ['docker']),
         'timezone': ('UTC', 'America/Vancouver'),
+        'backup_time': ('03:00', '04:12'),
         'notify_quiet_hours': ('', '22:00-07:00'),
         'notify_webhook_url': ('', 'http://127.0.0.1:9991/hook'),
         'notify_ntfy_url': ('', 'http://127.0.0.1:9991'),

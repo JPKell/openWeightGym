@@ -78,6 +78,8 @@ class ToolChat:
         """Read an accessible tool conversation under current account permissions."""
         talk=self.talk(request,user)
         await self.allowed(request,user,talk['id'],talk['level'])
+        if request.query_params.get('peek') != '1' and not self.chats.touch(talk['id'], user.name):
+            raise Problem('You have no such conversation.',404,'not_found')
         return JSONResponse(self.shown(talk))
 
     async def body(self, request, fields):

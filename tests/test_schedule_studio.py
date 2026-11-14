@@ -73,7 +73,7 @@ def test_timing_preview_is_authorized_offline_and_uses_dispatch_calendar(studio)
     assert response.status_code == 200 and '30 2 * * 1,3,0' in response.text
     # The exact display comes from the same next_at implementation as dispatch.
     at = next_at(spec, datetime.now().timestamp())
-    assert datetime.fromtimestamp(at, ZoneInfo(spec['timezone'])).strftime('%a %d %b, %H:%M %Z') in response.text
+    assert datetime.fromtimestamp(at, ZoneInfo(spec['timezone'])).strftime('%a %d %b, %H:%M UTC%z') in response.text
     assert server.get('/schedules?part=timing&time=02:30&timezone=Not/AZone&weekdays=0').status_code == 200
     assert 'known timezone' in server.get('/schedules?part=timing&time=02:30&timezone=Not/AZone&weekdays=0').text
     assert 'at least one' in server.get('/schedules?part=timing&time=02:30&timezone=UTC').text

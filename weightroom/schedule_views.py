@@ -1,6 +1,7 @@
 """Presentation for recurring schedules; timing always uses the dispatcher's calendar rules."""
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from weightroom.display import node_label
 
 from loadcoach.schedule_time import next_at, validate
 
@@ -31,5 +32,5 @@ def decorate(row, now):
     row['attention'] = bool(row['last'] and row['last']['state'] in ('failed', 'deferred', 'rejected'))
     row['work'] = (f"{row['model_name'] or spec['model_id']} · {spec['benchmark']}" if spec['kind'] == 'benchmark' else
                    f"One eligible pair · {spec.get('machine') or 'default'}" if spec['kind'] == 'outstanding' else
-                   f"Backups · {', '.join(spec.get('nodes') or ['all nodes'])} · retain {spec['retention'] or 'all'} per node")
+                   f"Backups · {', '.join(node_label(name) for name in (spec.get('nodes') or ['all nodes']))} · retain {spec['retention'] or 'all'} per node")
     return row

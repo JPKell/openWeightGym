@@ -42,7 +42,7 @@ def test_exact_chat_only_copy_and_verified_retirement(tmp_path):
     assert front.get(number, "pat") is None
     tables = {row[0] for row in front.db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert tables == {"conversations", "messages", "answering", "sqlite_sequence", "suite_schema_migrations",
-                      "collections", "documents", "document_chunks", "prompt_versions", "workflows", "workflow_attempts"}
+                      "collections", "documents", "document_chunks", "prompt_versions", "workflows", "workflow_attempts", "chat_maintenance"}
     assert not front.db.execute('SELECT id FROM collections').fetchall()
     retire(source, copy)
     assert users.by_name("pat") is not None

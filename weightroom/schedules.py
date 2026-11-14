@@ -17,6 +17,14 @@ from db import database, local_path, migrate
 from db.schemas import SCHEDULES
 from loadcoach.schedule_time import next_at, occurrence_ids, validate
 
+BUILTIN_BACKUP = 'builtin:control-node-backup'
+
+
+def policy_only(identifier):
+    """Reserve the built-in job for the validated Retention policy."""
+    if identifier == BUILTIN_BACKUP:
+        raise ValueError('Change the control node backup policy in Retention and privacy.')
+
 
 class Schedules:
     """Durable recurring schedules and their claimed occurrence history."""
@@ -30,6 +38,7 @@ class Schedules:
 
     def create(self, identifier, name, owner_id, owner_name, spec, token, now=None, model_name=''):
         """Validate and persist a recurring schedule with its scoped execution grant."""
+        policy_only(identifier)
         spec = validate(spec)
         if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
             raise ValueError('Give the schedule a name from 1 to 80 characters.')
@@ -46,7 +55,28 @@ class Schedules:
         rows = [dict(zip(columns, row)) for row in self.db.execute('SELECT '+','.join(columns)+' FROM recurring_schedules'+('' if include_deleted else ' WHERE deleted=0')+' ORDER BY name,id').fetchall()]
         for row in rows:
             row['spec'] = json.loads(row['spec'])
+            row['builtin'] = row['id'] == BUILTIN_BACKUP
         return rows
+
+    def sync_backup_policy(self, every, at, timezone, retention, now=None):
+        """Reconcile the built-in control node policy without accounts or remote grants."""
+        now = time.time() if now is None else now
+        spec = validate(dict(kind='backup', model_id='', benchmark='', timezone=timezone,
+                             time=at, weekdays=[6] if every == 'weekly' else list(range(7)),
+                             missed='latest', retention=retention, nodes=['front']))
+        enabled = every != 'off'
+        with self.db:
+            row = self.db.execute('SELECT spec,enabled FROM recurring_schedules WHERE id=?', (BUILTIN_BACKUP,)).fetchone()
+            if not row:
+                if enabled:
+                    self.db.execute('INSERT INTO recurring_schedules (id,name,owner_id,owner_name,model_name,spec,grant_token,enabled,next_at) VALUES(?,?,?,?,?,?,?,?,?)',
+                        (BUILTIN_BACKUP, 'Control node backups', 'builtin', 'Control node policy', '', json.dumps(spec), '', 1, next_at(spec, now)))
+                return
+            if json.loads(row[0]) == spec and bool(row[1]) == enabled:
+                return
+            self.db.execute('UPDATE recurring_schedules SET spec=?,enabled=?,next_at=? WHERE id=?',
+                            (json.dumps(spec), int(enabled), next_at(spec, now), BUILTIN_BACKUP))
+            self.db.execute("UPDATE schedule_occurrences SET state='cancelled',message='Backup policy changed before submission.',ended_at=? WHERE schedule_id=? AND state='dispatching'", (now, BUILTIN_BACKUP))
 
     def has_active(self, identifier):
         """Return whether a schedule already has dispatching or running work."""
@@ -54,6 +84,7 @@ class Schedules:
 
     def update(self, identifier, name, spec, token, model_name='', now=None):
         """Replace a schedule specification when no incompatible occurrence is active."""
+        policy_only(identifier)
         spec = validate(spec)
         if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
             raise ValueError('Give the schedule a name from 1 to 80 characters.')
@@ -67,6 +98,7 @@ class Schedules:
 
     def delete(self, identifier, now=None):
         """Stop future and unsubmitted work, retaining history and submitted benchmarks."""
+        policy_only(identifier)
         now = time.time() if now is None else now
         with self.db:
             changed = self.db.execute("UPDATE recurring_schedules SET deleted=1,enabled=0,grant_token='' WHERE id=? AND deleted=0", (identifier,)).rowcount
@@ -76,6 +108,7 @@ class Schedules:
 
     def enable(self, identifier, enabled, now=None):
         """Pause or enable a schedule and recalculate its next due occurrence."""
+        policy_only(identifier)
         row = next((row for row in self.rows() if row['id'] == identifier), None)
         if not row:
             raise ValueError('No such schedule.')
@@ -156,11 +189,13 @@ class Schedules:
 
 class ScheduleWorker:
     """Serialized dispatch of due schedules through existing backup and benchmark paths."""
-    def __init__(self, store, compute, benchmarks, front_backup, gate, wake):
+    def __init__(self, store, compute, benchmarks, front_backup, gate, wake, backup_policy=None):
         """Bind schedule execution dependencies and initialize the dispatch lock."""
         self.store, self.compute, self.benchmarks, self.front_backup, self.gate = store, compute, benchmarks, front_backup, gate
         self.lock = asyncio.Lock()
         self.wake = wake
+        self.backup_policy = backup_policy
+        self.policy_changed = asyncio.Event()
 
     async def choose_outstanding(self, occurrence, now):
         """Choose one fair missing pair using current owner-scoped inventories and evidence."""
@@ -218,6 +253,8 @@ class ScheduleWorker:
                 return
             self.gate.active += 1
             try:
+                if self.backup_policy:
+                    self.store.sync_backup_policy(*self.backup_policy(), now=now)
                 for occurrence in self.store.occurrences(active=True, limit=100):
                     if occurrence['state'] == 'running':
                         run = self.benchmarks.get(occurrence['id'])
@@ -234,6 +271,18 @@ class ScheduleWorker:
                             self.store.finish(number, run['state'], 'Benchmark '+run['state']+'. Open its run for retained evidence.', now)
                         continue
                     try:
+                        if occurrence['schedule_id'] == BUILTIN_BACKUP:
+                            # The administrator's local policy uses the existing verified writer.
+                            # It never authorizes a remote node or wakes another machine.
+                            _, front_id = occurrence_ids(BUILTIN_BACKUP + ':front', occurrence['due_at'])
+                            try:
+                                await self.front_backup(front_id, spec['retention'])
+                                self.store.backup_results(number, [{'node':'front', 'id':front_id, 'state':'verified', 'message':'Archive verified.'}])
+                                self.store.finish(number, 'completed', 'Control node archive verified.', now)
+                            except (ValueError, OSError, RuntimeError):
+                                self.store.backup_results(number, [{'node':'front', 'id':front_id, 'state':'missed', 'message':'Backup failed; check Backups and service output.'}])
+                                self.store.waiting(number, 'Control node backup failed; the same occurrence will retry.')
+                            continue
                         if spec['kind'] == 'benchmark' and not any(row['id'] == spec['benchmark'] and row['enabled'] for row in self.benchmarks.definitions()):
                             self.store.finish(number, 'failed', 'The selected benchmark is disabled or unavailable.', now)
                             continue
@@ -329,9 +378,13 @@ class ScheduleWorker:
         """Poll due schedules while respecting the shared maintenance barrier."""
         while True:
             await self.gate.wait()
+            self.policy_changed.clear()
             try:
                 await self.tick()
             except Exception:
                 # Monitoring/maintenance must keep functioning if this store fails.
                 print('weightroom: schedule processing failed; retrying.', flush=True)
-            await asyncio.sleep(15)
+            try:
+                await asyncio.wait_for(self.policy_changed.wait(), timeout=15)
+            except asyncio.TimeoutError:
+                pass

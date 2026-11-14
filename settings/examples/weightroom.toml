@@ -54,6 +54,16 @@ alert_allowance_percent = 0
 # Verified recovery sets retained on each machine. Zero keeps every set.
 # backup_retention = 10
 
+# Days since the last authorized opening or new message. Zero keeps chats indefinitely.
+# Daily cleanup preserves active answers; background polling does not renew activity.
+# chat_keep_days = 0
+
+# Built-in Schedules job for the control node only: off, daily, or weekly (Sunday).
+# Uses the configured control node time zone, or its host zone, and Backups to keep.
+# Policy edits recalculate the next future run; downtime catches up only the latest run.
+# backup_every = "off"
+# backup_time = "03:00"
+
 # In-app GPU heat alerts; notification only. Changed live under System > Settings.
 # alert_gpu_temperature = 85
 

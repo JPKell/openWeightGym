@@ -295,6 +295,12 @@ may not report source/default evidence yet. Retired overrides remain stored and 
 Security and sign-in also shows the file-controlled cookie, browser-origin and trusted-proxy settings.
 Alerts and notifications contains live thresholds, channel setup, write-only credentials and test delivery.
 
+**Retention and privacy** includes optional conversation expiry (0 keeps indefinitely) and
+automatic control node backups (off by default). Chat expiry counts authorized openings and new
+messages, preserves active answers, and runs daily. The built-in Schedules job runs daily or on
+Sunday at 03:00 by default in the control node time zone; rotation follows **Backups to keep**.
+Other nodes retain their explicit schedules.
+
 **Settings history** records who changed each setting and its old/new override. Revert restores
 one prior override, including returning to the file value. Older events without prior values
 remain readable. **Export JSON** downloads non-secret overrides across configured nodes; all

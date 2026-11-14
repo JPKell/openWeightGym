@@ -118,7 +118,7 @@ from weightroom import doc_markdown
 from weightroom.alerts import Alerts, machine_conditions
 from weightroom.notify import NotificationKeys, Notifications, account_owner
 from weightroom.notification_views import context as notification_context, routes as notification_routes
-from weightroom.schedules import Schedules, ScheduleWorker
+from weightroom.schedules import BUILTIN_BACKUP, Schedules, ScheduleWorker
 from weightroom import schedule_views
 from loadcoach.schedule_time import validate as validate_schedule
 from weightroom.pagination import controls, pagination
@@ -176,6 +176,9 @@ class Settings:
     allow_audio_generation: bool = True
     allow_model_downloads: bool = True
     allow_classifiers: bool = True
+    chat_keep_days: int = default_for("weightroom", "chat_keep_days")
+    backup_every: str = default_for("weightroom", "backup_every")
+    backup_time: str = default_for("weightroom", "backup_time")
     backup_retention: int = 10  # verified recovery sets kept on each machine; zero keeps all
     databases: dict = field(default_factory=dict)  # named local/server stores and service bindings
     alert_gpu_temperature: float = 85  # degrees Celsius; live threshold for operational alerts
@@ -756,10 +759,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     conversations = build_conversations(
         database_registry.database("weightroom.chat"), loadcoach, chat_inference, plugins=plugins, tools=tool_http,
         tool_level=lambda owner, trace: tool_log.trace_level(owner, trace),
-        content_limits=content_limits, tool_settings=lambda: {**response_defaults, **response_settings.of('turnstile')}, toolsets=chat_toolsets
+        content_limits=content_limits, chat_keep_days=lambda: settings.chat_keep_days, tool_settings=lambda: {**response_defaults, **response_settings.of('turnstile')}, toolsets=chat_toolsets
     )
     benchmarks.state.worker.maintenance = gate
     conversations.state.knowledge.maintenance = gate
+    conversations.state.maintenance = gate
     alerts = Alerts(database_registry.database("weightroom.alerts"))
     notification_folder = ((Path(settings.path).parent / settings.file.get('key_file','../keys/weightroom.key')).resolve().parent
                            if settings.path else Path(settings.data).parent/'keys')
@@ -832,6 +836,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     said_last: dict = {}  # what LoadCoach was last told that each program here runs with
     applied_observation_policy = None
+    applied_backup_policy = None
 
     async def in_step() -> None:
         """Fetch what was changed in the settings of the control node's programs, keep a copy for their next start, and say what they run with.
@@ -839,7 +844,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         weightroom reports both services, copies catalogue live fields and publishes shared span
         policy immediately. Restart fields retain their startup values. See loadcoach/settings.py.
         """
-        nonlocal settings, applied_observation_policy, zone
+        nonlocal settings, applied_observation_policy, applied_backup_policy, zone
         copied = kept("settings.json", {})
         for program in ("weightroom", "turnstile"):
             changed = await ask("GET", f"/loadcoach/settings/{program}/changes", settings.key)
@@ -850,6 +855,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             keep("settings.json", copied)
         settings, refused = apply_live('weightroom', settings, copied.get('weightroom', {}))
         zone = ZoneInfo(settings.timezone) if settings.timezone else None
+        backup_policy = (settings.backup_every, settings.backup_time, display.configured_timezone(settings.timezone), settings.backup_retention)
+        if backup_policy != applied_backup_policy:
+            applied_backup_policy = backup_policy
+            schedule_worker.policy_changed.set()
         applied_observation_policy = apply_observation_policy(observation_log.db, settings, applied_observation_policy)
         running = {**settings.file, **{entry.name: getattr(settings, entry.name)
                     for entry in catalog_entries('weightroom') if hasattr(settings, entry.name)}}
@@ -4072,7 +4081,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if operation and not re.fullmatch(r'(tools|[0-9]+(?:/actions)?)', operation):
             return JSONResponse({'error':{'message':'No such tool chat operation.', 'type':'tool_chat_error', 'code':'not_found'}},404,headers=PRIVATE)
         target='/loadcoach/tool-conversations'+('/'+operation if operation else '')
-        answer=await ask(request.method,target,person.key,content=await request.body(),params=request.query_params,
+        answer=await ask(request.method,target,person.key,content=await request.body(),params=[*request.query_params.multi_items(), *([("peek", "1")] if request.method == "GET" else [])],
                          headers={'content-type':'application/json'})
         return JSONResponse(answer.json(),answer.status_code,headers=PRIVATE)
 
@@ -4088,7 +4097,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """The list of one's conversations beside one of them, or beside the box that starts a new one."""
         listed = await fetch(request, person, "/loadcoach/conversations")
         ref = request.path_params.get("ref")
-        talk = await fetch(request, person, f"/loadcoach/conversations/{quote(ref, safe='')}") if ref and not isinstance(listed, Response) else None
+        talk = await fetch(request, person, f"/loadcoach/conversations/{quote(ref, safe='')}", params={"peek":"1"} if request.query_params.get("part") == "main" else {}) if ref and not isinstance(listed, Response) else None
         for answer in (listed, talk):
             if isinstance(answer, Response):
                 return answer
@@ -5580,7 +5589,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             await work  # keep the maintenance drain active until this writer stops
             raise
 
-    schedule_worker = ScheduleWorker(schedules, loadcoach, benchmarks.state.store, scheduled_front_backup, gate, benchmarks.state.worker.wake)
+    schedule_worker = ScheduleWorker(schedules, loadcoach, benchmarks.state.store, scheduled_front_backup, gate, benchmarks.state.worker.wake,
+        backup_policy=lambda: (settings.backup_every, settings.backup_time, display.configured_timezone(settings.timezone), settings.backup_retention))
 
     async def schedules_page(request: Request, person: Person, said='', failed=False, editing_id='', selected_id='', new_form=False):
         """Render durable recurring schedules and their occurrence history."""
@@ -5610,7 +5620,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         rows = schedules.rows()
         for row in rows:
             row.pop('grant_token')
-            row['can_edit'] = bool(person.key and row['owner_id'] == person.me.get('identity'))
+            row['can_edit'] = bool(not row['builtin'] and person.key and row['owner_id'] == person.me.get('identity'))
             row['model_name'] = next((model['id'] for model in catalogue if model['model_id'] == row['spec']['model_id']), row['model_name'])
             row['next_display'] = datetime.fromtimestamp(row['next_at'], ZoneInfo(row['spec']['timezone'])).strftime('%Y-%m-%d %H:%M %Z') if row['enabled'] else 'Paused'
             latest = schedules.db.execute('SELECT state,message FROM schedule_occurrences WHERE schedule_id=? ORDER BY due_at DESC LIMIT 1', (row['id'],)).fetchone()
@@ -5630,7 +5640,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             selected = next(iter(rows), None)
         editing = selected if selected and selected['can_edit'] else None
         form_spec = selected['spec'] if selected else {'kind': 'backup', 'model_id': '', 'benchmark': '',
-            'time': '03:00', 'timezone': settings.timezone or 'America/Vancouver', 'retention': settings.backup_retention,
+            'time': '03:00', 'timezone': display.configured_timezone(settings.timezone), 'retention': settings.backup_retention,
             'weekdays': list(range(7)), 'missed': 'skip'}
         upcoming = min((row for row in rows if row['enabled']), key=lambda row: row['next_at'], default=None)
         names = {row['id']: row['name'] for row in schedules.rows(include_deleted=True)}
@@ -5649,7 +5659,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, 'schedules.html', person, status=400 if failed else 200,
             schedules=rows, history=history[:25], history_page=number, more_history=len(history)>25,
             catalogue=catalogue, schedule_nodes=sorted({*person.me.get('machines', []), *(one['machine'] for model in catalogue for one in model.get('locations', []))}), definitions=[row for row in benchmarks.state.store.definitions() if row['enabled']],
-            timezone=settings.timezone or 'America/Vancouver', retention=settings.backup_retention,
+            timezone=display.configured_timezone(settings.timezone), retention=settings.backup_retention,
             editing=editing, selected=selected, form_spec=form_spec, upcoming=upcoming,
             active_count=sum(bool(row['enabled']) for row in rows), paused_count=sum(not row['enabled'] for row in rows),
             attention_count=sum(row['attention'] for row in rows),
@@ -5680,7 +5690,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         form = await typed_lists(request)
         identifier, token = uuid.uuid4().hex, secrets.token_urlsafe(32)
         try:
-            if len(schedules.rows()) >= 100:
+            if sum(not row['builtin'] for row in schedules.rows()) >= 100:
                 raise ValueError('At most 100 schedules are supported.')
             if not person.key or not person.me.get('identity'):
                 raise ValueError('Create schedules with an online sign-in.')
@@ -5729,6 +5739,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if action not in ('pause', 'resume', 'delete'):
             return Response('Choose pause, resume or delete.', status_code=400)
         identifier = request.path_params['identifier']
+        if identifier == BUILTIN_BACKUP:
+            return go('/settings/retention?said=Change+the+control+node+backup+policy+here.')
         try:
             async with schedule_worker.lock:
                 if not any(row['id'] == identifier for row in schedules.rows()):

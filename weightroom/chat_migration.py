@@ -44,6 +44,11 @@ def records(db: sqlite3.Connection, translate: bool = False) -> dict:
                     columns.append(column)
                     for row in rows:
                         row.append(default)
+            if 'last_activity' not in columns:
+                index = columns.index('updated')
+                columns.append('last_activity')
+                for row in rows:
+                    row.append(row[index])
         if translate and "user" in columns:
             index = columns.index("user")
             for row in rows:
