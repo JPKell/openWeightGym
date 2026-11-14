@@ -77,9 +77,11 @@ class ExtractionTools:
                                            caller=statement.caller_of(user), purpose='extraction-tool')
             response = await self.client.post(path, content=body, headers={statement.HEADER: header, 'content-type': 'application/json'})
             if response.headers.get(statement.PROOF) != statement.proof(statement.read_key(self.key_file), nonce):
-                raise ValueError('Extraction gateway did not prove its identity.')
+                if response.status_code == 403:
+                    raise ValueError(f'{self.name.capitalize()} gateway refused the request (403). Check Platform services and caller access.')
+                raise ValueError(f'{self.name.capitalize()} gateway did not prove its identity.')
             if not response.is_success:
                 raise ValueError(response.json().get('error', {}).get('message', 'Extraction was refused.'))
             return {'content': [{'type': 'text', 'text': json.dumps(response.json(), ensure_ascii=False)}], 'isError': False}
         except (httpx.HTTPError, ValueError, ValidationError) as error:
-            raise ToolProblem(str(error) if not isinstance(error, httpx.HTTPError) else 'Extraction gateway is unavailable.') from None
+            raise ToolProblem(str(error) if not isinstance(error, httpx.HTTPError) else f'{self.name.capitalize()} gateway is unavailable.') from None

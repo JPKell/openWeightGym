@@ -21,6 +21,7 @@
 {% call card(found.repository, actions=repository_actions, hint='Select a file or quantization. Split weights download together as a complete set.') %}
 <form method="post" action="/hub">
   <input type="hidden" name="repository" value="{{ found.repository }}">
+  <input type="hidden" name="kind" value="{{ request.query_params.get('kind', '') }}">
   <div class="table-responsive discovery-file-list">
   <table id="hub-files" class="table table-hover align-middle sortable">
     <thead><tr><th></th><th data-sort="text">File</th><th data-sort="value">Size</th><th></th></tr></thead>
@@ -44,7 +45,7 @@
     <div class="col-auto"><label for="place" class="col-form-label">Download to storage:</label></div>
     <div class="col col-md-6 col-xl-5">
       <select id="place" name="place" class="form-select">
-        {% for place in found.places %}<option value="{{ place.name }}">{{ place.name }}, {{ place.free|size }} free</option>{% endfor %}
+        {% for place in found.places %}<option value="{{ place.name }}"{% if request.query_params.get('kind') == 'classifier' and place.name == 'storage_classifier' %} selected{% endif %}>{{ place.name }}, {{ place.free|size }} free</option>{% endfor %}
       </select>
     </div>
     <div class="col-12 col-md-auto"><button class="btn btn-primary">Download selected files</button></div>

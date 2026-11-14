@@ -13,8 +13,10 @@ Nothing here knows of users, places or the log. That is in app.py.
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import re
+import secrets
 import time
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
@@ -25,6 +27,61 @@ HUB = "https://huggingface.co"
 REPOSITORY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*")  # OWNER/NAME, as Hugging Face writes a repository
 PART_OF = re.compile(r"-\d{5}-of-(\d{5})\.gguf$")  # how llama.cpp names the parts of a model that is split over several files
 PIECE = 2**20  # how much is written at a time, and so how often the progress moves on
+CLASSIFIER_PAGES = {}
+
+
+async def classifier_search_page(http, words, token, cursor, sort, direction):
+    """Merge a paginated OR of pipeline and tags, retaining private bounded cursor snapshots."""
+    identity = (words, sort, direction, hashlib.sha256(token.encode()).hexdigest())
+    now = time.monotonic()
+    for identifier, saved in list(CLASSIFIER_PAGES.items()):
+        if saved['expires'] < now:
+            CLASSIFIER_PAGES.pop(identifier, None)
+    if cursor:
+        saved = CLASSIFIER_PAGES.get(cursor)
+        if not saved or saved['identity'] != identity:
+            raise Refused(400, 'This Classifier search page expired. Search again to refresh the results.')
+        state = copy.deepcopy(saved['state'])
+    else:
+        state = {'seen': set(), 'branches': [{'params': params, 'rows': [], 'cursor': '', 'done': False} for params in
+            [{'pipeline_tag': 'text-classification'}, *[{'filter': tag} for tag in ('decision-model', 'system-one', 'typed-decisions', 'jev')]]]}
+
+    async def refill(branch):
+        """Read one branch only after its retained candidates have been consumed."""
+        params = {'search': words, 'sort': sort, 'direction': direction, 'limit': '20', **branch['params']}
+        if branch['cursor']:
+            params['cursor'] = branch['cursor']
+        try:
+            answer = await http.get(HUB + '/api/models', params=params, headers=signed(token))
+        except httpx.HTTPError as problem:
+            raise Refused(502, f'Hugging Face did not answer: {type(problem).__name__}.') from None
+        refused(answer, token)
+        branch['rows'] = [{key: row.get(key, '' if key in ('id', 'createdAt') else 0)
+                           for key in ('id', 'createdAt', 'downloads', 'likes')} for row in answer.json()]
+        branch['cursor'] = parse_qs(urlsplit(answer.links.get('next', {}).get('url', '')).query).get('cursor', [''])[0]
+        branch['done'] = not branch['cursor']
+        if not branch['rows']:
+            branch['done'] = True
+
+    found = []
+    while len(found) < 20:
+        await asyncio.gather(*(refill(branch) for branch in state['branches'] if not branch['rows'] and not branch['done']))
+        available = [branch for branch in state['branches'] if branch['rows']]
+        if not available:
+            break
+        chosen = (min if direction == '1' else max)(available, key=lambda branch: branch['rows'][0][sort])
+        row = chosen['rows'].pop(0)
+        if row['id'] in state['seen']:
+            continue
+        state['seen'].add(row['id'])
+        found.append({'repository': row['id'], 'downloads': row['downloads'], 'likes': row['likes'], 'made': row['createdAt'][:10]})
+    next_cursor = ''
+    if len(state['seen']) < 10000 and any(branch['rows'] or not branch['done'] for branch in state['branches']):
+        if len(CLASSIFIER_PAGES) >= 512:
+            CLASSIFIER_PAGES.pop(next(iter(CLASSIFIER_PAGES)))
+        next_cursor = secrets.token_urlsafe(24)
+        CLASSIFIER_PAGES[next_cursor] = {'identity': identity, 'expires': now + 900, 'state': state}
+    return {'found': found, 'next_cursor': next_cursor, 'paging': {'limit': 20, 'sort': sort, 'direction': direction}}
 
 
 class Refused(Exception):
@@ -84,17 +141,7 @@ async def search_page(http: httpx.AsyncClient, words: str, token: str = "", curs
     if kind == 'classifier':
         # Hub tag filters are conjunctive. Search each alternative separately so a model
         # tagged only as a decision model is not lost behind the pipeline filter.
-        alternatives = [{'pipeline_tag': 'text-classification'}, *[
-            {'filter': tag} for tag in ('decision-model', 'system-one', 'typed-decisions', 'jev')]]
-        async def one(extra):
-            """Read one bounded branch of the classifier discovery union."""
-            return await asked(http, '/api/models', token, search=words, sort=sort, direction=direction,
-                               limit='20', **extra)
-        merged = {row['id']: row for group in await asyncio.gather(*(one(extra) for extra in alternatives)) for row in group}
-        ordered = sorted(merged.values(), key=lambda row: row.get(sort, '' if sort == 'createdAt' else 0), reverse=direction == '-1')
-        return {'found': [{'repository': row['id'], 'downloads': row.get('downloads', 0), 'likes': row.get('likes', 0),
-                           'made': row.get('createdAt', '')[:10]} for row in ordered],
-                'next_cursor': '', 'paging': {'limit': 100, 'sort': sort, 'direction': direction}}
+        return await classifier_search_page(http, words, token, cursor, sort, direction)
     params = {'search': words, 'filter': 'gguf', 'sort': sort, 'direction': direction, 'limit': '20'}
     if cursor:
         params['cursor'] = cursor[:4096]
