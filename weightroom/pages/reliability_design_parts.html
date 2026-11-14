@@ -1,0 +1,12 @@
+{% from 'parts.html' import empty_row %}
+{% from 'reliability_parts.html' import overview, identity, inspector, candidate_choice, outcome_row %}
+
+{% macro templates() %}
+<template id="candidate-row"><tr><th scope="row"><button type="button" class="rl-model-button" data-open>{{ identity() }}</button></th><td data-role></td><td class="rl-numeric" data-rate></td><td class="rl-numeric" data-count="success"></td><td class="rl-numeric" data-count="error"></td><td class="rl-numeric" data-count="timeout"></td><td class="rl-numeric" data-count="empty"></td><td class="rl-numeric rl-ledger-only" data-feedback></td><td class="rl-numeric" data-factor></td><td><span class="badge" data-state></span><small class="d-block text-warning" data-regression hidden>Regression warning</small></td><td class="rl-ledger-only rl-reason" data-reason></td><td><button type="button" class="btn btn-outline-secondary btn-sm" data-inspect>Inspect</button></td></tr></template>
+<template id="candidate-choice">{{ candidate_choice() }}</template>
+<template id="outcome-row">{{ outcome_row() }}</template>
+<template id="quality-row"><tr><th scope="row">{{ identity() }}</th><td class="rl-numeric" data-good></td><td class="rl-numeric" data-bad></td><td class="rl-numeric" data-score></td><td data-explanations></td></tr></template>
+<template id="explanation"><small class="d-block"><button type="button" class="btn btn-link p-0" data-request></button> <span data-rating></span></small></template>
+<template id="empty-table">{{ empty_row(12, 'No candidates match. Clear filters or try another preview state.') }}</template>
+<template id="empty-quality">{{ empty_row(5, 'No answers rated yet for this model selection.') }}</template>
+{% endmacro %}

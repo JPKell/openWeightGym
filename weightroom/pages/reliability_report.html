@@ -1,30 +1,40 @@
-{% from "parts.html" import card, empty_row %}
-{% call card("Reliability report", attrs={"aria-labelledby": "reliability-heading"}, header_id="reliability-heading") %}
-    <p class="small text-secondary">Last seven days · {{ reliability.scope }} · up to 50 scored outcomes per model fingerprint and role. Counts and feedback follow your log permissions; preference and recovery state are shared routing state. Cancelled, interrupted benchmark, restart, admission refusal and unrecognized answers do not reduce preference. Historical fingerprints are shown separately. <a href="/log?kind=reliability">View reliability events</a></p>
-    <details class="small text-secondary mb-3"><summary>How scoring and recovery work</summary><p class="mt-2">Role preference is multiplied by 0.5–1.1 using recent faults and optional feedback. Three consecutive faults exclude a candidate from that role. After five minutes, Run recovery sends one short request (up to 16 output tokens, 60 seconds) as you, at low priority; it may load the model or incur hosted cost. Success restores eligibility. Reset starts a fresh scoring window and retains history.</p></details>
-    <form method="get" action="/reliability" class="row g-2 align-items-end mb-3">
-      <div class="col-sm-4"><label class="form-label" for="reliability-model">Model</label><select id="reliability-model" name="model" class="form-select form-select-sm"><option value="">All models</option>{% for name in choices.model %}<option {{ 'selected' if request.query_params.get('model') == name }}>{{ name }}</option>{% endfor %}</select></div>
-      <div class="col-sm-4"><label class="form-label" for="reliability-role">Role</label><input id="reliability-role" name="role" class="form-control form-control-sm" value="{{ request.query_params.get('role', '') }}" placeholder="All roles, including direct requests"></div>
-      <div class="col-sm-2"><div class="form-check"><input id="reliability-issues" name="issues" value="1" type="checkbox" class="form-check-input" {{ 'checked' if request.query_params.get('issues') == '1' }}><label class="form-check-label" for="reliability-issues">Issues only</label></div></div>
-      <div class="col-sm-auto"><button class="btn btn-primary btn-sm">Apply report filters</button></div>
-    </form>
-    {% if reliability.rows %}
-    <div id="reliability-chart" style="height: 320px; width: 100%" role="img" aria-label="Recent successful answers and model faults by model and role; exact values in the table below"></div>
-    <script id="reliability-data" type="application/json">{{ reliability.rows|tojson }}</script>
-    {% endif %}
-    <div class="table-responsive">
-      <table id="reliability-table" class="table table-sm align-middle" style="min-width: 1050px">
-        <thead><tr><th scope="col">Model / fingerprint</th><th scope="col">Role</th><th scope="col">Successful</th><th scope="col">Errors</th><th scope="col">Timeouts</th><th scope="col">Empty</th><th scope="col">Success rate</th><th scope="col">Feedback + / −</th><th scope="col">Preference / state</th><th scope="col">Inspect / manage</th></tr></thead>
-        <tbody>{% for row in reliability.rows %}
-          <tr><th scope="row">{{ row.model }}<small class="d-block text-secondary" title="{{ row.fingerprint }}">{{ row.fingerprint[:12] }} · {{ 'current' if row.current else 'historical' }}</small></th><td>{{ row.role or 'Direct model request' }}</td>
-            <td>{{ row.counts.success }}</td><td>{{ row.counts.error }}</td><td>{{ row.counts.timeout }}</td><td>{{ row.counts.empty }}</td><td>{{ (row.success_rate|round(1)) ~ '%' if row.success_rate is not none else 'No scored answers' }}</td><td>{{ row.positive }} / {{ row.negative }}</td>
-            <td style="min-width: 240px">×{{ row.factor|round(3) }} · {{ row.state }}{% if row.regression %}<strong class="d-block text-warning">Regression warning: fault rate rose at least 20 percentage points versus the preceding sample.</strong>{% endif %}<small class="d-block text-secondary">{{ row.reason }}</small>{% if row.ignored %}<small class="d-block">Ignored: {% for kind, count in row.ignored.items() %}{{ kind }} {{ count }}{{ ', ' if not loop.last }}{% endfor %}</small>{% endif %}</td>
-            <td>{% if row.last_request %}<a href="/requests/{{ row.last_request }}">Latest request</a>{% else %}<small class="text-secondary">No recent request in scope</small>{% endif %}{% if row.may_manage %}<form method="post" action="/reliability" class="d-flex gap-1 mt-1 flex-wrap">
-              <input type="hidden" name="model" value="{{ row.model }}"><input type="hidden" name="fingerprint" value="{{ row.fingerprint }}"><input type="hidden" name="role" value="{{ row.role }}">
-              <input type="hidden" name="filter_model" value="{{ request.query_params.get('model', '') }}"><input type="hidden" name="filter_role" value="{{ request.query_params.get('role', '') }}"><input type="hidden" name="filter_issues" value="{{ request.query_params.get('issues', '') }}">
-              <button class="btn btn-outline-secondary btn-sm" name="action" value="reset">Reset reliability</button>{% if row.state == 'recovery required' %}<button class="btn btn-outline-primary btn-sm" name="action" value="recover">Run recovery</button>{% endif %}
-            </form>{% endif %}</td></tr>
-        {% else %}{% call empty_row(10) %}No reliability outcomes recorded in this window. New logged requests will appear here.{% endcall %}{% endfor %}</tbody>
-      </table>
-    </div>
-  {% endcall %}
+{% from "parts.html" import card, empty_row, more %}
+{% from "reliability_parts.html" import identity, state, candidate_choice, outcome_row, inspector_content %}
+{% set offline = reliability.compute_unavailable %}
+<form method="get" action="/reliability" id="reliability-filters" class="rl-filters mb-3">
+<div><label class="form-label" for="reliability-search">Find a candidate</label><input type="search" name="q" id="reliability-search" class="form-control form-control-sm" value="{{ view.filters.q }}" placeholder="Model, role or fingerprint…"></div>
+<div><label class="form-label" for="reliability-model">Model</label><select id="reliability-model" name="model" class="form-select form-select-sm"><option value="">All models</option>{% for name in choices.model %}<option{% if view.filters.model == name %} selected{% endif %}>{{ name }}</option>{% endfor %}{% if view.filters.model and view.filters.model not in choices.model %}<option selected>{{ view.filters.model }}</option>{% endif %}</select></div>
+<div><label class="form-label" for="reliability-role">Role</label><input id="reliability-role" name="role" class="form-control form-control-sm" value="{{ view.filters.role }}" placeholder="All roles / direct requests"></div>
+<div><label class="form-label" for="reliability-fingerprints">Fingerprint</label><select id="reliability-fingerprints" name="fingerprints" class="form-select form-select-sm"{% if offline %} disabled{% endif %}>{% if offline %}<option>All saved fingerprints</option>{% else %}{% for value, label in [('current', 'Current'), ('all', 'Current & historical'), ('historical', 'Historical')] %}<option value="{{ value }}"{% if view.filters.fingerprints == value %} selected{% endif %}>{{ label }}</option>{% endfor %}{% endif %}</select></div>
+<div class="form-check"><input id="reliability-issues" name="issues" value="1" type="checkbox" class="form-check-input"{% if view.filters.issues == '1' %} checked{% endif %}><label class="form-check-label" for="reliability-issues">Issues only</label></div>
+<div class="d-flex gap-2"><button class="btn btn-primary btn-sm">Apply report filters</button><a class="btn btn-outline-secondary btn-sm" href="/reliability">Clear</a></div>
+</form>
+<div class="rl-workspace" aria-label="Reliability report">
+{% call card('Needs attention', id='attention', body_class='p-0', actions=('<span class="badge bg-secondary-lt">' ~ view.attention|length ~ (' candidate' if view.attention|length == 1 else ' candidates') ~ '</span>')|safe) %}
+<div class="rl-attention-list">{% for row in view.attention %}{{ candidate_choice(row, offline) }}{% else %}<p class="small text-secondary px-3 py-3 mb-0">{{ 'No exclusions or regression warnings in this view.' if view.rows else 'No reliability outcomes in this view.' }}</p>{% endfor %}</div>
+{% endcall %}
+{% call card('Outcome comparison', id='outcomes', body_class='py-2') %}
+<div class="rl-legend small text-secondary"><span><i data-kind="success"></i>Successful</span><span><i data-kind="error"></i>Errors</span><span><i data-kind="timeout"></i>Timeouts</span><span><i data-kind="empty"></i>Empty</span><span>Share of scored outcomes</span></div>
+<div id="reliability-chart" class="rl-outcome-list" role="region" aria-label="Recent successful answers and model faults; exact values in Candidate evidence" tabindex="0">{% for row in view.rows %}{{ outcome_row(row, offline) }}{% else %}<p class="small text-secondary mb-2">No scored outcomes to compare.</p>{% endfor %}</div>
+<script id="reliability-data" type="application/json">{{ view.rows|tojson }}</script>
+{% endcall %}
+{% set table_actions %}<span class="small fw-normal text-secondary">{{ view.rows|length }} candidates</span><label class="d-flex align-items-center gap-2 small fw-normal">Sort<select id="reliability-sort" name="sort" form="reliability-filters" class="form-select form-select-sm w-auto" data-reliability-sort>{% for value, label in [('attention','Attention first'), ('rate','Lowest success rate'), ('faults','Most faults'), ('model','Model name')] %}<option value="{{ value }}"{% if view.filters.sort == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>{% endset %}
+{% call card('Candidate evidence', id='inventory', header_id='reliability-heading', body_class='p-0', actions=table_actions) %}
+<div class="table-responsive" tabindex="0" role="region" aria-label="Candidate evidence table">
+<table id="reliability-table" class="table table-sm table-hover align-middle mb-0 rl-table"><caption class="visually-hidden">Seven-day reliability counts by model fingerprint and role</caption>
+<thead><tr><th scope="col">Model / fingerprint</th><th scope="col">Role</th><th scope="col" class="text-end">Success rate</th><th scope="col" class="text-end">Successful</th><th scope="col" class="text-end">Errors</th><th scope="col" class="text-end">Timeouts</th><th scope="col" class="text-end">Empty</th><th scope="col" class="text-end">Preference</th><th scope="col">Routing state</th><th scope="col">Inspect / manage</th></tr></thead>
+<tbody>{% for row in view.rows %}<tr>
+<th scope="row"><a class="rl-model-button" href="#{{ row.detail_id }}" data-reliability-open="{{ row.detail_id }}">{{ identity(row, offline) }}</a></th><td>{{ row.role or 'Direct model request' }}</td>
+<td class="rl-numeric">{{ '%.1f%%'|format(row.success_rate) if row.success_rate is not none else '—' }}</td>{% for kind in ('success','error','timeout','empty') %}<td class="rl-numeric">{{ row.counts[kind] }}</td>{% endfor %}
+<td class="rl-numeric">{{ '—' if offline else '×%.3f'|format(row.factor) }}</td><td>{{ state(row, offline) }}{% if row.regression %}<small class="d-block" data-regression>Regression warning</small>{% endif %}</td>
+<td>{% call more('Inspect', attrs={'id': row.detail_id, 'data-reliability-detail': ''}) %}{{ inspector_content(row, view.filters, offline) }}{% endcall %}</td>
+</tr>{% else %}{{ empty_row(10, 'No reliability outcomes in this view. Clear filters or make a new logged request.') }}{% endfor %}</tbody>
+</table></div>
+{% endcall %}
+{% call card('Answer quality', id='quality', header_id='quality-heading', body_class='p-0', hint='Lifetime ratings · across all roles · model and fingerprint filters only') %}
+<div class="table-responsive" tabindex="0" role="region" aria-label="Lifetime answer quality"><table id="quality-table" class="table table-sm align-middle mb-0 rl-quality-table"><caption class="visually-hidden">Lifetime ratings by model fingerprint; score is the share rated good</caption>
+<thead><tr><th scope="col">Model / fingerprint</th><th scope="col" class="text-end">Good</th><th scope="col" class="text-end">Bad</th><th scope="col" class="text-end">Score</th><th scope="col">Latest explanations</th></tr></thead>
+<tbody>{% for row in view.quality %}<tr><th scope="row">{{ identity(row, offline) }}</th><td class="rl-numeric">{{ row.good }}</td><td class="rl-numeric">{{ row.bad }}</td><td class="rl-numeric">{{ row.score }}%</td><td>{% for one in row.explanations or [] %}<small class="d-block"><a href="/requests/{{ one.request }}">#{{ one.request }}</a> {{ 'good' if one.value > 0 else 'bad' }} · {{ one.rater }}: {{ one.explanation }}</small>{% else %}<small class="text-secondary">{{ 'No explanations' if row.explanations is defined else "Reading explanations needs the ability to read everyone's log." }}</small>{% endfor %}</td></tr>{% else %}{{ empty_row(5, 'No answers rated yet for this model selection.') }}{% endfor %}</tbody>
+</table></div>
+{% endcall %}
+</div>

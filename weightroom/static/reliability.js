@@ -1,39 +1,43 @@
-// The table remains usable without JavaScript. Charts contain authorized aggregates only.
+// Enhance native evidence disclosures; all evidence and forms work without JavaScript.
 (() => {
-  /** Render retained reliability evidence with the selected model and role filters. */
-  function draw() {
-    const place = document.getElementById('reliability-chart');
-    const data = document.getElementById('reliability-data');
-    if (!place || !data || !window.echarts) return;
-    const rows = JSON.parse(data.textContent);
-    const css = getComputedStyle(document.documentElement);
-    const text = css.getPropertyValue('--bs-body-color').trim();
-    const background = css.getPropertyValue('--bs-body-bg').trim();
-    const border = css.getPropertyValue('--bs-border-color').trim();
-    const chart = echarts.getInstanceByDom(place) || echarts.init(place, null, {renderer: 'svg'});
-    chart.setOption({animation: false,
-      color: ['#41b89a', '#d76f88', '#d98e32', '#9478d1'],
-      textStyle: {color: text},
-      tooltip: {trigger: 'axis', renderMode: 'richText', confine: true,
-        backgroundColor: background, borderColor: border, textStyle: {color: text}},
-      legend: {top: 0, textStyle: {color: text}},
-      grid: {left: 15, right: 15, top: 45, bottom: 70, containLabel: true},
-      xAxis: {type: 'category', data: rows.map(r => `${r.model} · ${r.role || 'direct'} · ${r.fingerprint.slice(0, 8)}`),
-        axisLabel: {color: text, width: 130, overflow: 'truncate'}, axisLine: {lineStyle: {color: border}}},
-      yAxis: {type: 'value', min: 0, minInterval: 1, axisLabel: {color: text}, splitLine: {lineStyle: {color: border}}},
-      dataZoom: [{type: 'slider', bottom: 0, startValue: 0, endValue: Math.min(rows.length - 1, 5)}, {type: 'inside'}],
-      series: [['success', 'Successful'], ['error', 'Errors'], ['timeout', 'Timeouts'], ['empty', 'Empty answers']].map(([key, name]) =>
-        ({name, type: 'bar', stack: 'outcomes', barMaxWidth: 70, data: rows.map(r => r.counts[key])}))
-    });
+  if (window.reliabilityInstalled) return;
+  window.reliabilityInstalled = true;
+  let current = null, trigger = null;
+  function close() {
+    const dialog = document.getElementById('reliability-dialog');
+    if (!dialog) return;
+    if (current) {
+      const body = dialog.querySelector('#reliability-dialog-body').firstElementChild;
+      if (body && current.isConnected) current.append(body);
+      current = null;
+    }
+    dialog.close();
+    if (trigger?.isConnected) trigger.focus({preventScroll: true});
   }
-  draw();
-  document.addEventListener('htmx:afterSettle', event => {
-    const place = document.getElementById('reliability-chart');
-    if (place && event.detail?.elt?.contains(place)) draw();
+  document.addEventListener('click', event => {
+    if (event.target.closest('[data-reliability-close]')) { close(); return; }
+    const link = event.target.closest('[data-reliability-open]');
+    const summary = event.target.closest('[data-reliability-detail] > summary');
+    if (!link && !summary) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const details = summary?.parentElement || document.getElementById(link.dataset.reliabilityOpen);
+    const dialog = document.getElementById('reliability-dialog');
+    if (!details || !dialog?.showModal) return;
+    event.preventDefault();
+    if (current) close();
+    current = details; trigger = summary || link;
+    dialog.querySelector('#reliability-dialog-body').append(details.querySelector(':scope > div'));
+    dialog.showModal();
+    dialog.querySelector('[data-reliability-close]').focus();
   });
-  document.addEventListener('weightroom:theme', draw);
-  window.addEventListener('resize', () => {
-    const place = document.getElementById('reliability-chart');
-    if (place && window.echarts) echarts.getInstanceByDom(place)?.resize();
+  document.addEventListener('cancel', event => {
+    if (event.target.id !== 'reliability-dialog') return;
+    event.preventDefault(); close();
+  }, true);
+  document.addEventListener('change', event => {
+    if (event.target.matches('[data-reliability-sort]')) event.target.form.requestSubmit();
+  });
+  document.addEventListener('htmx:beforeSwap', event => {
+    if (current && event.detail.target?.contains(document.getElementById('reliability-dialog'))) close();
   });
 })();
