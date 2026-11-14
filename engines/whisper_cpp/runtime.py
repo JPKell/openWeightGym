@@ -27,6 +27,12 @@ TRANSLATE = '/v1/audio/translations'
 FIELDS = {'model', 'file', 'language', 'prompt', 'temperature', 'response_format', 'timestamp_granularities', 'user'}
 
 
+def failure(status, message, code):
+    """Keep native adapter failures in the same private public API error envelope."""
+    return JSONResponse({'error': {'message': message, 'type': 'whisper_error', 'code': code}}, status,
+                        headers={'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff'})
+
+
 def checked(path, asked):
     """Reject unsupported fields and timing formats before loading native weights."""
     if path not in (TRANSCRIBE, TRANSLATE):
@@ -109,20 +115,20 @@ def create_app(job, native=None):
         if not authorized(request):
             return Response(status_code=401)
         if busy:
-            return JSONResponse({'error': {'message': 'This runtime already has an admitted request.'}}, 409)
+            return failure(409, 'This runtime already has an admitted request.', 'runtime_busy')
         try:
             raw = bytearray()
             async for chunk in request.stream():
                 raw.extend(chunk)
                 if len(raw) > MAX_REQUEST_BYTES:
-                    return JSONResponse({'error': {'message': 'Audio request exceeds 96 MiB.'}}, 413)
+                    return failure(413, 'Audio request exceeds 96 MiB.', 'request_too_large')
             asked = checked(request.url.path, json.loads(raw))
             options = job['settings'].get('whispercpp', {})
             audio = encoded_audio(asked.get('file'), options.get('max_audio_mib', 32))
             if request.url.path == TRANSLATE and not model.multilingual(job['settings']):
                 raise ValueError('This model cannot translate speech.')
         except (ValueError, TypeError) as error:
-            return JSONResponse({'error': {'message': str(error)}}, 400)
+            return failure(400, str(error), 'invalid_audio')
         busy, completed = True, False
         try:
             wav = await to_wav(audio, 16000, 1)
@@ -138,11 +144,11 @@ def create_app(job, native=None):
                 raise RuntimeError('whisper.cpp refused the audio request (HTTP '+str(answer.status_code)+').')
             completed = True
             return Response(answer.content, answer.status_code, media_type=answer.headers.get('content-type', 'application/json'),
-                            headers={'cache-control': 'no-store'})
+                            headers={'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff'})
         except ValueError as error:
-            return JSONResponse({'error': {'message': str(error)}}, 400)
+            return failure(400, str(error), 'invalid_audio')
         except Exception as error:
-            return JSONResponse({'error': {'message': str(error)}}, 502)
+            return failure(502, str(error), 'native_error')
         finally:
             with anyio.CancelScope(shield=True):
                 if not completed:

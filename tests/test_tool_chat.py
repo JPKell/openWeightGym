@@ -198,6 +198,7 @@ def test_log_off_cannot_create_tool_history(tool_chat):
     client,app,rig=tool_chat
     answer=client.post('/loadcoach/tool-conversations',json={},headers={'x-loadcoach-log':'off'})
     assert answer.status_code==400 and app.state.chats.listing('alice-id','tools')==[]
+    assert answer.headers['cache-control']=='private, no-store' and answer.headers['x-content-type-options']=='nosniff'
 
 
 

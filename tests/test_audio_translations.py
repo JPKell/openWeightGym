@@ -39,6 +39,8 @@ def test_sdk_shaped_multipart_translation_uses_normal_admission(profile, fake_ll
         assert response.headers.get('x-loadcoach-request-id')
         bad = client.post('/v1/audio/translations', headers=headers, files={'file': ('speech.wav', audio)}, data={'model': 'whisper', 'language': 'es'})
         assert bad.status_code == 400 and 'omit language' in bad.text
+        assert bad.json()['error']['code']=='unsupported_parameter'
+        assert bad.headers['cache-control']=='private, no-store' and bad.headers['x-content-type-options']=='nosniff'
 
 
 def test_non_translating_model_gets_explicit_refusal(fake_llama_server):
