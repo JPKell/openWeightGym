@@ -299,6 +299,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                     if len(pending_pins) >= 1024:
                         return refuse(number, caller, 'rate_limited')
                     pending = pending_pins[call] = dict(created=time.monotonic(), attempts=0, challenges=[], responses={})
+                    phone_attempt(number, caller, 'challenged', 'pin_required')
                 if params.get('Digits', [''])[0]:
                     pending['attempts'] += 1
                     phone_rates.charge(number_key, caller_key)
@@ -1121,6 +1122,9 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                         async with throttle:
                             return account, await phone_choices(account)
                     result['choices_by_account'] = dict(await asyncio.gather(*(choices_for(account) for account in accounts)))
+                    result['activity'] = [dict(label=one['label'], number=masked_phone(one['number']),
+                        **activity.snapshot(phone_digest(Path(settings['key_file']).parent, one['number'])))
+                        for one in result.get('telephone', {}).get('numbers', [])]
                     return JSONResponse(result, headers={'cache-control': 'no-store'})
                 return Response(reply.content, status_code=reply.status_code, media_type='application/json', headers={'cache-control': 'no-store'})
             if action == 'status' and request.method == 'GET':

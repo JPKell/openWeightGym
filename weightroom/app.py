@@ -3190,6 +3190,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 problem = f'Voice gateway administration is unavailable (HTTP {reply.status_code}).'
         except (httpx.HTTPError, ValueError):
             problem = 'Voice gateway is not answering. Check voice-gateway.service on front and its private address in Settings.'
+        if request.url.path == '/system/voice/status' or request.url.path.startswith('/system/voice/calls/'):
+            from weightroom.voice_status_views import normalized, workspace
+            status = normalized(status)
+            return page(request, 'voice_status_content.html' if request.query_params.get('part') == 'content' else 'voice_status.html',
+                person, status=400 if failed else 200, voice_status=status, voice_workspace=workspace(status, problem),
+                voice_problem=problem, said=said or request.query_params.get('said', ''), failed=failed)
         try:
             found = await ask('GET', '/loadcoach/settings', person.key)
             if selected_machine:
@@ -3219,6 +3225,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             selected_machine=selected_machine,
             typed_in=typed_in or {}, opened=opened or request.query_params.get('open', 'voice'),
             greeting_names=list(voice_settings.TEXTS))
+
+    async def voice_end_call(request: Request, person: Person) -> Response:
+        if 'manage-settings' not in person.can:
+            return Response('Your account may not end voice calls.', status_code=403)
+        try:
+            result = await voice_admin_request(person, 'calls/' + quote(request.path_params['call_id'], safe='') + '/end', 'POST', timeout=10)
+            if result.status_code == 404:
+                message = 'That call has already ended.'
+            elif result.status_code in (200, 202):
+                message = 'Call ended.' if result.status_code == 200 else 'Call is ending.'
+            else:
+                return await voice_admin_page(request, person, 'The call could not be ended. Check the gateway and your permissions.', failed=True)
+        except httpx.HTTPError:
+            return await voice_admin_page(request, person, 'The gateway is not answering. Refresh status before retrying.', failed=True)
+        return go('/system/voice/status?said=' + quote(message))
 
     async def voice_admin_do(request: Request, person: Person) -> Response:
         """Validate and submit an authorized voice administration operation."""
@@ -5500,6 +5521,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             WebSocketRoute('/voice/browser/sessions/{sid}/stream', voice_stream),
             route('/system/voice', voice_admin_page),
             route('/system/voice/status', voice_admin_page),
+            route('/system/voice/calls/{call_id}/end', voice_end_call, 'POST'),
             route('/system/voice/telephone', voice_telephone_page),
             route('/system/voice/telephone/{action}', voice_telephone_do, 'POST'),
             route('/system/voice/{action}', voice_admin_do),

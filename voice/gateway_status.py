@@ -53,6 +53,8 @@ class Window:
         return now % self.size
 
     def record(self, outcome):
+        if outcome not in ('accepted', 'rejected'):
+            return
         index = self.advance()
         values = self.accepted if outcome == 'accepted' else self.rejected
         values[index] = min(2**32-1, values[index]+1)

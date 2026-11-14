@@ -1,7 +1,7 @@
 # Telephone voice and Voice status plan
 
 Drafted **2026-11-14**; decisions settled with the owner on 2026-11-14 (see
-[Decisions](#decisions)). Status: in progress; P1–P6 complete.
+[Decisions](#decisions)). Status: in progress; P1–P7 complete.
 
 ## Goal
 
@@ -103,7 +103,7 @@ Settled with the owner on 2026-11-14.
 | P4 | Complete — caller policy, hashed PINs, attestation, limits and private rejection evidence; 87 focused unit/browser checks pass | M | P1 |
 | P5 | Complete — SMS ownership, private numbers, limited personal sessions and revocation; 132 clean-snapshot unit/browser/UI checks pass, including signed real-socket model attribution | L | P2, P4 |
 | P6 | Complete — bound listeners, private call controls, scoped readiness reasons and bounded masked activity; 135 clean-snapshot unit/browser checks pass | M | — |
-| P7 | Voice status page rebuild | L | P6 |
+| P7 | Complete — polling readiness, active call controls, profile reasons, latency targets and activity; selection/disclosure/scroll and narrow browser checks pass | L | P6 |
 | P8 | Public routes, installer, upgrade and documentation | M | P3 |
 | P9 | Professional design for the Voice area | L | P3, P5, P7 |
 

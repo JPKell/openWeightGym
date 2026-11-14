@@ -1,6 +1,6 @@
 {% extends 'frame.html' %}
 {% from 'parts.html' import page_header, card, said_box, alert, confirm_two, more, empty_row %}
-{% from 'voice_admin_parts.html' import voice_tabs, telephone_credentials, telephone_strip, number_editor %}
+{% from 'voice_admin_parts.html' import voice_tabs, telephone_credentials, telephone_strip, number_editor, telephone_activity %}
 {% from 'user_parts.html' import phone_numbers_section %}
 {% block title %}Telephone · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/voice-admin.js?v=1" defer></script>{% endblock %}
@@ -25,6 +25,7 @@
 {% for setting in telephone_data.settings|default([]) if setting.name == 'public_port' and setting.changed and setting.changed.value != setting.value %}<p class="small text-warning mt-2">Public port {{ setting.changed.value }} is saved; port {{ setting.value }} remains in force until the gateway restarts.</p>{% endfor %}
 {% endcall %}
 {{ telephone_credentials(credentials) }}
+{{ telephone_activity(telephone_data.activity|default([])) }}
 {% if telephone_data.registered_numbers %}{{ phone_numbers_section(telephone_data.registered_numbers) }}{% endif %}
 <form method="post" action="/system/voice/telephone/check_credentials" class="mb-3"><button class="btn btn-outline-primary">Check credentials</button></form>
 {% call more('Manual webhook configuration') %}<p>In Twilio’s console, set the number’s Voice URL to <code class="text-break">{{ telephone_urls[0] or 'Save the public HTTPS address first.' }}</code> with method <strong>POST</strong>. Media uses <code class="text-break">{{ telephone_urls[1] or 'the same public route over WSS' }}</code>.</p>{% endcall %}
