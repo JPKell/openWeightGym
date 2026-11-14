@@ -3110,19 +3110,23 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response('Your account may not manage telephone.', status_code=403)
         action = request.path_params['action']
         if action not in ('save_credentials', 'remove_credential', 'create_account', 'rotate_account',
-                           'save_setup', 'add_number', 'save_number', 'remove_number', 'check_credentials', 'find_numbers', 'connect_number', 'simulate'):
+                           'save_setup', 'add_number', 'save_number', 'remove_number', 'check_credentials', 'find_numbers', 'connect_number', 'simulate',
+                           'save_access', 'add_caller', 'remove_caller', 'set_pin', 'remove_pin'):
             return Response(status_code=404)
         form = await typed(request)
         payload = {name: form[name] for name in ('token', 'api_sid', 'api_secret', 'kind', 'label', 'account_sid', 'public_url',
-            'public_port', 'number', 'account', 'mode', 'profile', 'voice', 'greeting', 'max_calls_per_hour', 'sid', 'caller') if name in form}
+            'public_port', 'number', 'account', 'mode', 'profile', 'voice', 'greeting', 'max_calls_per_hour', 'sid', 'caller',
+            'access_mode', 'caller_number', 'caller_note', 'caller_account', 'pin', 'refusal_greeting') if name in form}
         if action in ('save_setup', 'save_number'):
             payload['enabled'] = form.get('enabled') == 'yes'
+        if action == 'save_access':
+            payload.update({name: form.get(name) == 'yes' for name in ('accept_user_numbers', 'require_attested_caller_id')})
         try:
             reply = await voice_admin_request(person, 'telephone', 'POST', json={'action': action, **payload}, timeout=60 if action == 'simulate' else 15)
             if not reply.is_success:
                 message = reply.json().get('error', {}).get('message', 'Telephone settings could not be saved. Check the submitted fields and gateway.')
                 return await voice_telephone_page(request, person, message, failed=True,
-                    typed_in={key: value for key, value in form.items() if key not in ('token', 'api_sid', 'api_secret')})
+                    typed_in={key: value for key, value in form.items() if key not in ('token', 'api_sid', 'api_secret', 'pin')})
             if action in ('create_account', 'rotate_account'):
                 return go(reply.json()['url'])
             if action in ('check_credentials', 'find_numbers', 'connect_number', 'simulate'):

@@ -22,7 +22,7 @@ def edited(phone, form):
             if name in form:
                 phone[name] = form[name].strip()
         phone['enabled'] = form.get('enabled') is True
-    elif action in ('add_number', 'save_number', 'remove_number'):
+    elif action in ('add_number', 'save_number', 'remove_number', 'save_access', 'add_caller', 'remove_caller'):
         number = form.get('number', '')
         if not isinstance(number, str) or not E164.fullmatch(number):
             raise ValueError('Use an E.164 number such as +15555550123.')
@@ -40,6 +40,18 @@ def edited(phone, form):
             raise ValueError('Choose an existing telephone number.')
         if action == 'remove_number':
             phone['numbers'].remove(selected)
+        elif action == 'save_access':
+            selected['callers'] = {**selected.get('callers', {'entries': []}), 'mode': form.get('access_mode', 'allowlist')}
+            for name in ('accept_user_numbers', 'require_attested_caller_id'):
+                selected[name] = form.get(name) is True
+            selected['refusal_greeting'] = form.get('refusal_greeting', '')
+        elif action == 'add_caller':
+            access = selected.setdefault('callers', {'mode': 'allowlist', 'entries': []})
+            access.setdefault('entries', []).append({'number': form.get('caller_number', ''), 'note': form.get('caller_note', ''),
+                'account': form.get('caller_account') or selected['account']})
+        elif action == 'remove_caller':
+            access = selected.setdefault('callers', {'mode': 'allowlist', 'entries': []})
+            access['entries'] = [entry for entry in access.get('entries', []) if entry['number'] != form.get('caller_number')]
         elif action == 'save_number':
             for name in ('label', 'account', 'mode', 'profile', 'voice', 'greeting'):
                 if name in form:

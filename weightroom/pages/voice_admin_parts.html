@@ -15,7 +15,7 @@
 {% endcall %}
 {% endmacro %}
 
-{% macro number_editor(number, index, accounts, choices, typed={}) %}
+{% macro number_editor(number, index, accounts, choices, typed={}, caller_accounts=[]) %}
 {% set prefix = 'phone-' ~ index %}
 <section data-voice-panel="{{ number.number }}" aria-label="{{ number.label }} settings">
 {% call card(number.label ~ ' · ' ~ number.number) %}
@@ -41,7 +41,36 @@
 </form>
 <form method="post" action="/system/voice/telephone/remove_number" class="mt-2"><input type="hidden" name="number" value="{{ number.number }}"><button class="btn btn-outline-danger btn-sm" {{ confirm_two('Remove this number from the gateway? It remains in your Twilio account.') }}>Remove number</button></form>
 {% endcall %}
+{{ caller_access(number, index, caller_accounts) }}
 </section>
+{% endmacro %}
+
+{% macro caller_access(number, index, accounts) %}
+{% set prefix = 'phone-access-' ~ index %}
+{% set access = number.callers|default({'mode':'allowlist', 'entries':[]}) %}
+{% call card('Caller access') %}
+<form method="post" action="/system/voice/telephone/save_access?number={{ number.number|urlencode }}" data-hold-refresh>
+<input type="hidden" name="number" value="{{ number.number }}">
+<label class="form-label" for="{{ prefix }}-mode">Who may call</label><select class="form-select mb-2" name="access_mode" id="{{ prefix }}-mode">{% for mode, label in [('anyone', 'Anyone'), ('allowlist', 'Allowlist'), ('pin', 'PIN')] %}<option value="{{ mode }}"{% if mode == access.mode %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+<p class="small text-secondary">Anyone allows public calls charged to your Twilio account and your configured models. Allowlist admits known callers; PIN asks other callers for a keypad code.</p>
+{% for name, label in [('accept_user_numbers', 'Accept verified users’ registered numbers'), ('require_attested_caller_id', 'Require fully attested caller ID for allowlist matches')] %}<div class="form-check mb-2"><input class="form-check-input" id="{{ prefix }}-{{ name }}" name="{{ name }}" type="checkbox" value="yes"{% if number.get(name, access.mode != 'anyone' if name == 'accept_user_numbers' else true) %} checked{% endif %}><label class="form-check-label" for="{{ prefix }}-{{ name }}">{{ label }}</label></div>{% endfor %}
+<p class="small text-secondary">Caller ID can be spoofed. Without full attestation, a saved PIN permits a call as the phone account; it never selects the matched personal account.</p>
+<label class="form-label" for="{{ prefix }}-refusal">Refusal greeting</label><input class="form-control mb-2" id="{{ prefix }}-refusal" name="refusal_greeting" maxlength="300" value="{{ number.refusal_greeting|default('') }}"><button class="btn btn-primary">Save caller access</button>
+</form>
+{% call more('Keypad PIN') %}
+<p>{{ 'Saved' if number.pin_saved|default(false) else 'No PIN saved' }}. PINs are stored as salted hashes and never shown again.</p>
+<form method="post" action="/system/voice/telephone/set_pin?number={{ number.number|urlencode }}" data-hold-refresh><input type="hidden" name="number" value="{{ number.number }}"><label class="form-label" for="{{ prefix }}-pin">New PIN (4–12 digits)</label><input class="form-control mb-2" type="password" id="{{ prefix }}-pin" name="pin" inputmode="numeric" pattern="[0-9]{4,12}" maxlength="12" autocomplete="new-password" required><button class="btn btn-outline-primary">Save PIN</button></form>
+{% if number.pin_saved|default(false) %}<form method="post" action="/system/voice/telephone/remove_pin?number={{ number.number|urlencode }}" class="mt-2"><input type="hidden" name="number" value="{{ number.number }}"><button class="btn btn-outline-danger btn-sm" {{ confirm_two('Remove this number’s PIN? Unlisted callers will no longer pass a PIN challenge.') }}>Remove PIN</button></form>{% endif %}
+{% endcall %}
+{% call more('Allowlist · ' ~ access.entries|default([])|length ~ ' entries') %}
+<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Caller</th><th>Account</th><th>Note</th><th>Action</th></tr></thead><tbody>
+{% for entry in access.entries|default([]) %}<tr><th scope="row">{{ entry.number }}</th><td>{{ entry.account or number.account }}</td><td>{{ entry.note }}</td><td><form method="post" action="/system/voice/telephone/remove_caller?number={{ number.number|urlencode }}"><input type="hidden" name="number" value="{{ number.number }}"><input type="hidden" name="caller_number" value="{{ entry.number }}"><button class="btn btn-outline-danger btn-sm" {{ confirm_two('Remove this caller from the allowlist?') }}>Remove caller</button></form></td></tr>{% else %}{% from 'parts.html' import empty_row %}{{ empty_row(4, 'No callers yet. Add a caller below or enable verified user numbers.') }}{% endfor %}
+</tbody></table></div>
+<form method="post" action="/system/voice/telephone/add_caller?number={{ number.number|urlencode }}" data-hold-refresh><input type="hidden" name="number" value="{{ number.number }}"><div class="row g-2">
+{% for name, label in [('caller_number', 'Caller number (E.164)'), ('caller_note', 'Note')] %}<div class="col-md-6"><label class="form-label" for="{{ prefix }}-{{ name }}">{{ label }}</label><input class="form-control" id="{{ prefix }}-{{ name }}" name="{{ name }}" maxlength="{{ 16 if name == 'caller_number' else 300 }}"{% if name == 'caller_number' %} pattern="\+[1-9][0-9]{7,14}" required{% endif %}></div>{% endfor %}
+<div class="col-12"><label class="form-label" for="{{ prefix }}-account">Account the call runs as</label><select class="form-select" id="{{ prefix }}-account" name="caller_account"><option value="">{{ number.account }} (phone account)</option>{% for account in accounts if account != number.account %}<option>{{ account }}</option>{% endfor %}</select><p class="small text-secondary">Personal accounts need voice access. Their models, tools and limits apply.</p></div></div><button class="btn btn-outline-primary mt-2">Add caller</button></form>
+{% endcall %}
+{% endcall %}
 {% endmacro %}
 
 {% macro credential_state(credential) %}

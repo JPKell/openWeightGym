@@ -64,7 +64,7 @@ def validate(phone, profiles=None, voices=None):
         raise ValueError('Use a list of at most 100 telephone numbers.')
     seen_numbers, seen_labels = set(), set()
     permitted = {'label', 'number', 'enabled', 'mode', 'profile', 'voice', 'greeting', 'account',
-                 'callers', 'max_calls_per_hour', 'accept_user_numbers', 'require_attested_caller_id'}
+                 'callers', 'max_calls_per_hour', 'accept_user_numbers', 'require_attested_caller_id', 'refusal_greeting'}
     for number in numbers:
         if not isinstance(number, dict) or set(number) - permitted:
             raise ValueError('Choose valid number settings.')
@@ -94,4 +94,26 @@ def validate(phone, profiles=None, voices=None):
         limit = number.get('max_calls_per_hour', 60)
         if type(limit) is not int or not 1 <= limit <= 10000:
             raise ValueError('Use a rate limit between 1 and 10000 calls per hour.')
+        access = number.get('callers', {'mode': 'allowlist', 'entries': []})
+        if not isinstance(access, dict) or set(access) - {'mode', 'entries'} or access.get('mode') not in ('anyone', 'allowlist', 'pin'):
+            raise ValueError('Choose Anyone, Allowlist or PIN caller access.')
+        entries = access.get('entries', [])
+        if not isinstance(entries, list) or len(entries) > 1000:
+            raise ValueError('Use at most 1000 allowlist entries per number.')
+        seen_callers = set()
+        for entry in entries:
+            if not isinstance(entry, dict) or set(entry) - {'number', 'note', 'account'}:
+                raise ValueError('Choose valid allowlist entries.')
+            if not isinstance(entry.get('number'), str) or not E164.fullmatch(entry['number']) or entry['number'] in seen_callers:
+                raise ValueError('Use unique E.164 numbers in the allowlist.')
+            seen_callers.add(entry['number'])
+            if not isinstance(entry.get('note', ''), str) or len(entry.get('note', '')) > 300:
+                raise ValueError('Use an allowlist note of at most 300 characters.')
+            if entry.get('account') and (not isinstance(entry['account'], str) or not re.fullmatch(r'[a-z0-9][a-z0-9._-]{0,63}', entry['account'])):
+                raise ValueError('Choose an existing account for the allowlist entry.')
+        for name in ('accept_user_numbers', 'require_attested_caller_id'):
+            if name in number and type(number[name]) is not bool:
+                raise ValueError('Caller access switches must be true or false.')
+        if not isinstance(number.get('refusal_greeting', ''), str) or len(number.get('refusal_greeting', '')) > 300:
+            raise ValueError('Use a refusal greeting of at most 300 characters.')
     return phone

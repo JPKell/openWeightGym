@@ -10,6 +10,8 @@ from voice.telephone_keys import TelephoneKeys, atomic_secret
 from voice.telephone_admin import effective, edited
 from voice.telephone_settings import validate, urls
 from voice.twilio_api import TwilioAPI, TwilioError
+from voice.phone_access import decide
+from turnstile.phone_store import PhoneStore
 from weightroom.bootstrap import ensure_service_identity
 
 
@@ -18,8 +20,44 @@ class TelephoneAdmin:
         self.users, self.log, self.changes = users, log, changes
         self.keys = TelephoneKeys(folder)
         self.discovery = {}
+        self.store = PhoneStore(users, self.keys.folder)
+
+    async def admit(self, request, user):
+        """Only the signature-verifying gateway can exchange a caller match for a limited session."""
+        if user is None or user.name != 'voice-gateway' or not user.can('app-sign-in'):
+            return error(403, 'Telephone admission requires the voice gateway identity.')
+        form = await read_json(request, {'number', 'caller', 'attestation', 'digits'})
+        if not isinstance(form, dict):
+            return form
+        phone = effective(self.changes)
+        number = next((one for one in phone['numbers'] if one['number'] == form.get('number') and one.get('enabled')), None)
+        if not phone.get('enabled') or not number:
+            return JSONResponse({'accepted': False, 'reason': 'unknown_number'})
+        pin_saved = self.store.pin_saved(number['number'])
+        pin_ok = await self.store.check_pin(number['number'], form.get('digits', ''))
+        decision = decide(number, form.get('caller', ''), form.get('attestation', ''), pin_ok, pin_saved)
+        if decision['accepted']:
+            account = self.users.by_name(decision['account'])
+            if account is None or not account.can('front-voice'):
+                decision = {'accepted': False, 'reason': 'account_unavailable'}
+            elif decision['account'] != number['account']:
+                from loadcoach.groups import limited
+                if not limited(account.group, user.group).can & {'front-voice'}:
+                    decision = {'accepted': False, 'reason': 'account_unavailable'}
+                else:
+                    decision['session_key'] = self.users.new_key(account.name, 'telephone', hours=.5, via=user.name)
+            else:
+                try:
+                    owner = self.users.by_key((self.keys.folder / (number['account'] + '.key')).read_text().strip())
+                except OSError:
+                    owner = None
+                if owner is None or owner.name != number['account']:
+                    decision = {'accepted': False, 'reason': 'account_unavailable'}
+        return JSONResponse(decision, headers={'cache-control': 'no-store'})
 
     async def handle(self, request, user):
+        if request.url.path == '/loadcoach/telephone/admit' and request.method == 'POST':
+            return await self.admit(request, user)
         if request.url.path != '/loadcoach/telephone':
             return None
         if user is None:
@@ -30,20 +68,24 @@ class TelephoneAdmin:
             accounts = [name for (name,) in self.users.db.execute("SELECT name FROM users WHERE grp='app' AND enabled<>0")
                         if name == 'voice-phone' or name.startswith('voice-phone-')]
             phone = effective(self.changes)
+            for number in phone['numbers']:
+                number['pin_saved'] = self.store.pin_saved(number['number'])
             return JSONResponse({'credentials': self.keys.status(), 'telephone': phone, 'accounts': accounts,
                 'discovered': self.discovery.get(phone.get('account_sid'), []),
+                'caller_accounts': [name for (name,) in self.users.db.execute('SELECT name FROM users WHERE enabled<>0 ORDER BY name')],
                 'settings': next((one['settings'] for one in self.changes.everything() if one['program'] == 'voice-gateway'), [])},
                 headers={'cache-control': 'no-store'})
         if request.method != 'POST':
             return error(405, 'Unsupported telephone operation.')
         form = await read_json(request, {'action', 'token', 'api_sid', 'api_secret', 'kind', 'label', 'account',
             'account_sid', 'public_url', 'public_port', 'public_host', 'enabled', 'number', 'mode', 'profile', 'voice',
-            'greeting', 'max_calls_per_hour', 'sid'})
+            'greeting', 'max_calls_per_hour', 'sid', 'access_mode', 'caller_number', 'caller_note', 'caller_account',
+            'accept_user_numbers', 'require_attested_caller_id', 'pin', 'refusal_greeting'})
         if not isinstance(form, dict):
             return form
         action = form.get('action')
         try:
-            if action in ('save_setup', 'add_number', 'save_number', 'remove_number'):
+            if action in ('save_setup', 'add_number', 'save_number', 'remove_number', 'save_access', 'add_caller', 'remove_caller'):
                 phone = edited(effective(self.changes), form)
                 validate(phone)
                 for number in phone['numbers']:
@@ -59,8 +101,20 @@ class TelephoneAdmin:
                     if not 1 <= port <= 65535:
                         raise ValueError('Use a public port between 1 and 65535.')
                 self.changes.put('voice-gateway', 'telephone', phone, user.name)
+                if action == 'remove_number':
+                    self.store.remove_pin(form['number'])
                 if port is not None:
                     self.changes.put('voice-gateway', 'public_port', port, user.name)
+                self.log.add('telephone', action, user.name)
+                return JSONResponse({'saved': True}, headers={'cache-control': 'no-store'})
+            elif action in ('set_pin', 'remove_pin'):
+                phone = effective(self.changes)
+                if not any(one['number'] == form.get('number') for one in phone['numbers']):
+                    raise ValueError('Choose an existing telephone number.')
+                if action == 'set_pin':
+                    await self.store.set_pin(form['number'], form.get('pin', ''))
+                else:
+                    self.store.remove_pin(form['number'])
                 self.log.add('telephone', action, user.name)
                 return JSONResponse({'saved': True}, headers={'cache-control': 'no-store'})
             elif action in ('check_credentials', 'find_numbers', 'connect_number'):
@@ -123,7 +177,7 @@ class TelephoneAdmin:
             return error(400, str(problem))
         except (ValueError, TypeError) as problem:
             # Never echo values submitted to a credential endpoint.
-            return error(400, str(problem) if action in ('save_setup', 'add_number', 'save_number', 'remove_number') else
+            return error(400, str(problem) if action in ('save_setup', 'add_number', 'save_number', 'remove_number', 'save_access', 'add_caller', 'remove_caller') else
                          'Check the telephone account label or credential fields and try again.')
         except OSError:
             return error(503, 'Telephone credentials could not be saved. Check the keys folder permissions.')
