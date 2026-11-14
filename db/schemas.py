@@ -30,6 +30,13 @@ TELEPHONE = (Migration(1, 'private telephone PIN verifiers', '''
 '''))
 
 
+DOCS_GAPS = (Migration(1, 'anonymous bounded documentation questions', '''
+    CREATE TABLE docs_gaps (
+        id TEXT PRIMARY KEY, question TEXT NOT NULL, count INTEGER NOT NULL,
+        last_asked DOUBLE PRECISION NOT NULL);
+'''),)
+
+
 RESPONSES = (Migration(1, 'front-owned Responses lifecycle and input items', '''
     CREATE TABLE responses (
         id TEXT PRIMARY KEY, owner TEXT NOT NULL, owner_name TEXT NOT NULL,
@@ -892,6 +899,7 @@ from soundroom.schema import SOUNDROOM
 # The owner supplies the alias-dependent data rewrite at startup. Logical transfers
 # copy those rewritten rows and their ledger, so reproducing the schema is a no-op.
 STREAMS = {
+    'weightroom.docs_gaps': DOCS_GAPS,
     "turnstile.responses": RESPONSES,
     'mirrorwall.front': MIRRORWALL, 'soundroom.front': SOUNDROOM,
     'turnstile.installations': MODEL_INSTALLATIONS,

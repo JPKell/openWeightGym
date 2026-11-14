@@ -10,13 +10,14 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from weightroom import system_docs
+from weightroom import system_docs, display
 from weightroom.docs_views import article
 
 
 def render(base_url='http://localhost:8440'):
     """Reuse the live docs renderer, metadata, Markdown and API/source inventories without services."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
+    pages.filters['timestamp'] = display.timestamp
     system_docs.refresh()
     records, sections, aliases = [], system_docs.SECTIONS, system_docs.ALIASES
     for section in sections:

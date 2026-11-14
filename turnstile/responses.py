@@ -504,7 +504,7 @@ def problem_response(error):
                         error.status, headers=PRIVATE)
 
 
-def routes(caller, service):
+def routes(caller, service, chat_fallback=None):
     """Register creation and the private stored Responses lifecycle on the model gateway."""
     def authenticated(request):
         """Resolve the current bearer identity for every read, write and continuation."""
@@ -519,6 +519,8 @@ def routes(caller, service):
         try:
             user = authenticated(request)
             body = await read_json(request, MAX_BODY)
+            from turnstile.docs_help import prepare as prepare_help
+            help_question = await prepare_help(body, request, service, user)
             from loadcoach.request_tools import tools_refusal
             denied = tools_refusal(user, body)
             if denied and isinstance(body.get('model'), str):
@@ -557,6 +559,9 @@ def routes(caller, service):
                 headers['x-loadcoach-sensitivity'] = level
             def finished(result, response_headers):
                 """Keep the final object at its effective level with the ordinary request link."""
+                if help_question is not None:
+                    from turnstile.docs_help import finished as help_finished
+                    help_finished(result, help_question, service)
                 if storing:
                     current = caller(request.headers.get('authorization', '').removeprefix('Bearer '))
                     if not current or owner_of(current) != owner_of(user):
@@ -567,7 +572,12 @@ def routes(caller, service):
             attempted = True
             if tool_context:
                 from turnstile.response_tools import respond as tool_response
-                return await tool_response(tool_context, body, sent, headers, service, user, finished, store)
+                from turnstile.docs_help import NATIVE
+                token = NATIVE.set(help_question is not None)
+                try:
+                    return await tool_response(tool_context, body, sent, headers, service, user, finished, store)
+                finally:
+                    NATIVE.reset(token)
             if sent['stream']:
                 return await stream_response(service, body, sent, headers, finished)
             answer = await service.door.post('/v1/chat/completions', json=sent, headers=headers, timeout=None)
@@ -625,7 +635,8 @@ def routes(caller, service):
             return JSONResponse(record['response'], headers=PRIVATE)
         except Problem as error:
             return problem_response(error)
-    return [Route('/v1/responses', create, methods=['POST']),
+    from turnstile.docs_help import routes as help_routes
+    return [*help_routes(caller, service, create, chat_fallback), Route('/v1/responses', create, methods=['POST']),
             Route('/v1/responses/{identifier}/input_items', lifecycle),
             Route('/v1/responses/{identifier}', lifecycle, methods=['GET', 'DELETE'])]
 

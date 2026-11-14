@@ -5888,11 +5888,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     if settings.path:
         docs_key_file = str((Path(settings.path).parent / read_settings(Path(settings.path)).get('turnstile', {}).get('machine_key_file', '../keys/machine.key')).resolve())
     docs_api = DocsAPI(pages.env, ask, source_reference, api_reference, docs_search_cache, docs_key_file)
+    from weightroom.docs_help import routes as docs_help_routes
     app = Starlette(
         lifespan=lifespan,
         exception_handlers={HTTPException: http_error, 500: server_error},
         routes=[
             *docs_api.routes(),
+            *docs_help_routes(for_people, page, ask, loadcoach, pages.env, ServiceUnavailable, typed),
             *image_routes(for_people, page, ask, model_api),
             *audio_routes(for_people, page, ask, model_api, lambda: settings, platform, refresh_settings=in_step, content_limits=content_limits),
             *extraction_routes(for_people, page, ask, content_limits),
@@ -6082,6 +6084,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     from loadcoach.log import Log
     app.state.responses = response_store
     app.state.docs_api = docs_api
+    app.state.docs_help_http = loadcoach
     app.state.tool_http = tool_http
     observation_log = Log(database_registry.database("weightroom.accounts"))
     database_operations.audit = lambda event, owner, **detail: observation_log.add('database', event, owner, machine='front', **detail)

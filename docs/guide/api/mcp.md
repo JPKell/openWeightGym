@@ -32,6 +32,8 @@ A Responses request may declare `type: mcp`, `server_label: toollocker` and `ser
 
 The existing loop runs under the same caller and trace, rechecks tool access on each call, and uses normal model admission, allowances and logging. Approval policies can pause a stored Responses chain; see [Code references](/docs/code/turnstile?module=turnstile/response_tools.py) for its input contract. Tool chat exposes the same workflow interactively.
 
+The `docs-help` role also runs this same documentation assistant through Responses or chat completions. Send a text question as `input` or user `messages`; it supplies its own prompt and source tools and uses no stored conversation. Follow [Search and Ask](/docs/web-app/help) for setup and privacy.
+
 ## Options
 
 | Docs tool | Use |

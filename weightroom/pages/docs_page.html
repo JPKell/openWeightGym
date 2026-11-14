@@ -6,6 +6,7 @@
 {% block main %}
 <div class="docs-workspace" id="docs-workspace" data-docs-home="{{ 'true' if home else 'false' }}" data-docs-searching="{{ 'true' if searching else 'false' }}">
   {% if home %}<div class="docs-hero"{% if searching %} hidden{% endif %}><div class="hero-meta"><span class="hero-rule" aria-hidden="true"></span>THE OPENWEIGHTGYM HANDBOOK</div>{{ page_header('A clear path to what you need.') }}<p>Use the console, connect an application, or run your installation.<br class="d-none d-md-block"> Find the guide, then get back to your work.</p></div>{% endif %}
+  {{ library.modes(person) }}
   {{ library.search_form(sections, q, scope) }}
   {% include 'docs_search_results.html' %}
   <div id="docs-reading"{% if searching %} hidden{% endif %}>

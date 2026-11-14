@@ -1121,6 +1121,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         lambda: live('turnstile', 'response_keep_days', settings.response_keep_days))
     response_store.limits = content_limits
     extractions.responses = response_store
+    from weightroom.docs_gaps import Gaps
+    extractions.docs_gaps = Gaps(stores.database('weightroom.accounts'))
+    extractions.docs_role = lambda: bool(routing.roles.get('docs-help'))
     extractions.tool_url = 'http://turnstile.internal:8443/mcp'
     extractions.tool_level = lambda user, trace: log.trace_level(user.name, trace)
     extractions.hosted_models = hosted.models
@@ -3437,6 +3440,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         finally:
             await extractions.close()
             response_store.db.close()
+            extractions.docs_gaps.db.close()
             await front_files.close()
             maintenance_stop.set()
             for work in list(task_records.working.values()):
@@ -3475,7 +3479,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     from turnstile.responses import routes as response_routes
     from turnstile.classifier import routes as classifier_routes
-    app = Starlette(lifespan=lifespan, routes=[Route('/', diagnostic), *classifier_routes(extraction_delegate, routing), *extractions.routes(caller, extraction_delegate), *response_routes(caller, extractions), *image_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
+    app = Starlette(lifespan=lifespan, routes=[Route('/', diagnostic), *classifier_routes(extraction_delegate, routing), *extractions.routes(caller, extraction_delegate), *response_routes(caller, extractions, pass_on), *image_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
                             Route("/turnstile/power", power_notice, methods=["POST"]),
                             Route("/turnstile/accounts", accounts_list),
                             Route("/turnstile/machines", machines_list),

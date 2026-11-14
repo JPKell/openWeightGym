@@ -1,0 +1,19 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, alert %}
+{% import 'docs_library_parts.html' as library %}
+{% block title %}{{ 'Gaps' if help_mode == 'gaps' else 'Ask' }} · Documentation · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/docs.css?v=1"><script src="/static/docs-help.js?v=1" defer></script>{% endblock %}
+{% block main %}
+<div class="docs-workspace" id="docs-help-workspace" data-owner="{{ person.me.get('identity') or person.name }}">
+{{ library.modes(person, help_mode) }}
+{{ page_header('Documentation gaps' if help_mode == 'gaps' else 'Ask Documentation') }}
+{% if help_mode == 'gaps' %}{% include 'docs_gaps.html' %}{% elif 'use-tools' in person.can %}
+<p class="text-secondary">Ask about openWeightGym. Answers use the documentation and include source links.</p>
+{% if help_error %}{{ alert('warning', help_error) }}{% endif %}
+{% if role_missing %}{% call alert('info') %}{% if 'manage-settings' in person.can %}Open <a href="/roles">Models → Roles</a>, add the role <code>docs-help</code> and choose a permitted chat model that supports tools. Save the role, then return here.{% else %}Ask an administrator to configure the <code>docs-help</code> role in Roles.{% endif %}{% endcall %}{% endif %}
+<div id="docs-help-history" aria-label="Conversation in this tab">{% for message in help_history[:-2] %}<p class="text-break"><strong>{{ 'You' if message.role == 'user' else 'Documentation' }}:</strong> {{ message.content }}</p>{% endfor %}</div>
+{{ library.help_form(person, question, help_history) }}
+{{ answer_fragment }}
+{% endif %}
+</div>
+{% endblock %}

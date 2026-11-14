@@ -6,6 +6,7 @@ import pytest
 
 from test_console_browser import browser_context
 from test_weightroom import desk, sign_in  # noqa: F401
+from test_docs_help import help_desk, docs_gateway  # noqa: F401
 
 playwright = pytest.importorskip('playwright.sync_api')
 expect = playwright.expect
@@ -137,4 +138,65 @@ def test_docs_live_search_recovers_from_an_unavailable_response(desk):
         page.keyboard.press('Escape')
         expect(page.locator('#docs-search')).not_to_have_attribute('aria-busy', 'true')
         expect(page.locator('.docs-hero')).to_be_visible()
+        browser.close()
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+@pytest.mark.parametrize('theme', ['light', 'dark'])
+def test_ask_citations_tab_draft_history_gaps_and_failures(help_desk, width, theme):
+    server, _, _, rig, gaps = help_desk
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.set_viewport_size({'width': width, 'height': 1000})
+        page.emulate_media(color_scheme=theme)
+        errors = []
+        page.on('pageerror', lambda problem: errors.append(str(problem)))
+        page.goto('http://console.test/docs/ask')
+        expect(page.get_by_role('heading', name='Ask Documentation', exact=True)).to_be_visible()
+        page.locator('#docs-question').fill('Shift+Enter')
+        page.reload()
+        expect(page.locator('#docs-question')).to_have_value('Shift+Enter')
+        page.locator('#docs-ask-form button[type=submit]').click()
+        expect(page.locator('#docs-answer')).to_contain_text('Sources')
+        expect(page.locator('#docs-answer a[href^="/docs/"][href*="#"]')).to_have_count(2)
+        expect(page.locator('#docs-question')).to_have_value('')
+        page.reload()
+        expect(page.locator('#docs-help-history')).to_contain_text('Shift+Enter')
+        page.locator('[data-docs-new]').click()
+        expect(page.locator('#docs-help-history')).to_be_empty()
+        rig.mode = 'escape'
+        page.locator('#docs-question').fill('chat')
+        page.locator('#docs-ask-form button[type=submit]').click()
+        expect(page.locator('#docs-answer')).to_contain_text('<script>')
+        assert page.evaluate('window.docsPwned') is None
+        assert page.locator('#docs-answer script, #docs-answer a[href^="javascript:"]').count() == 0
+        rig.mode = 'offline'
+        page.locator('#docs-question').fill('chat')
+        page.locator('#docs-ask-form button[type=submit]').click()
+        expect(page.locator('#docs-answer')).to_contain_text('ToolLocker is not answering')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        gaps.record('<img src=x onerror=alert(1)> How do lunar jobs work?')
+        page.goto('http://console.test/docs/gaps')
+        expect(page.locator('#docs-gaps')).to_contain_text('How do lunar jobs work?')
+        assert page.locator('#docs-gaps img').count() == 0
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.locator('#docs-gaps button', has_text='Dismiss').click()
+        expect(page.locator('#docs-gaps')).to_contain_text('No unanswered documentation questions')
+        assert not errors, errors
+        browser.close()
+
+
+def test_ask_native_post_works_without_javascript(help_desk):
+    server, _, users, _, _ = help_desk
+    sign_in(server, 'pat')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        session = page.context.new_cdp_session(page)
+        session.send('Emulation.setScriptExecutionDisabled', {'value': True})
+        page.goto('http://console.test/docs/ask')
+        page.locator('#docs-question').fill('Shift+Enter')
+        page.locator('#docs-ask-form button[type=submit]').click()
+        expect(page.locator('#docs-answer')).to_contain_text('Sources')
+        assert 'use-tools' in users.by_name('pat').group.can
         browser.close()

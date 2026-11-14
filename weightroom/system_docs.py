@@ -218,7 +218,7 @@ def written(topic: dict, *, admin: bool = False) -> dict | None:
 SOURCES = {
     "api": ("loadcoach/app.py", "loadcoach/tasks.py", "soundroom/packages.py", "turnstile/app.py",
             "turnstile/accounts.py", "turnstile/events.py", "turnstile/roles.py", "turnstile/observations.py",
-            "turnstile/extractions.py", "turnstile/responses.py", "turnstile/classifier.py", "turnstile/batches.py",
+            "turnstile/extractions.py", "turnstile/responses.py", "turnstile/docs_help.py", "turnstile/classifier.py", "turnstile/batches.py",
             "turnstile/allowances.py", "turnstile/tasks.py", "turnstile/settings.py", "turnstile/hosted.py",
             "soundroom/front.py", "soundroom/runtime.py", "mirrorwall/front.py", "mirrorwall/runtime.py", "plugins/_turnstile.py", "plugins/_runtime.py",
             "voice/gateway.py", "voice/service.py", "spotter/app.py", "toollocker/door.py", "toollocker/remote_settings.py", "weightroom/docs_views.py"),

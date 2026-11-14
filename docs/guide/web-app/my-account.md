@@ -29,6 +29,8 @@ Use the account menu to change your own preferences and security choices.
 
 Personal preferences do not change permissions or retained-record policies. **Export preferences** includes account and audio preferences; it excludes credentials, requests and conversation content. A default page or model can disappear when permission or platform policy changes. Your administrator controls password rules and authenticator requirements; contact them if you lose your authenticator.
 
+Docs **Ask** keeps unanswered question text anonymously for documentation improvements, with a count and last-asked time. Administrators can dismiss entries. This list contains no account or answer; avoid private details in questions. Ask conversation history stays in the browser tab, while normal request usage/logging still applies.
+
 ## Related
 
 [API keys](/docs/web-app/api-keys) · [Find your way](/docs/getting-started/navigation)

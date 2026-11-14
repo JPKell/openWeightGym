@@ -290,3 +290,9 @@ M2 batch 6: Authentication, compatibility, errors, MCP and executable API exampl
 M2 batch 7: Benchmark task guides, current protocol/operation README, topology/settings, troubleshooting and short Docs index complete; 83/83 navigation pages, 49 declared public endpoints, 35 abilities, 194 defaults; zero coverage gaps and allowlist deleted. Frozen histories remain untouched. Legacy anchors and shared includes retained; editorial checks continue.
 
 M2 batch 8: Terms, summaries, task cross-links and legacy anchors reviewed; recovery procedures split, stale package deployment claims removed and generated facts linked. A7: 37 passed plus the explicitly excluded index failure; link audit: zero broken guide links. Coverage stays 83/83, allowlist absent. Earlier transient include/search checks were repaired; final browser verification is running. No unverified runtime promises or owner decisions.
+
+M2 final: 83/83 navigation pages, 49 declared public endpoint operations, 35 abilities and 194 default keys; allowlist removed. A7: 37 passed plus the owner-excluded `tests/test_install_progress.py` index failure; final browser/component matrix: 50 passed. No open content decisions.
+
+M3 final: all eight Tools test calls and caller-proof/security checks pass; browser/component matrix: 50 passed. No deployment or external client configuration was performed.
+
+M4: Shared caller-key `docs-help` Responses/chat adaptation, canonical prompt, native/streamed Ask, tab-local drafts/history and anonymous bounded Gaps implemented. C3 plus API examples: 20 passed; Ask browser matrix: 5 passed; A7: 37 passed plus the known excluded index failure. Live model quality remains unverified because deployment is excluded; no owner decisions remain.

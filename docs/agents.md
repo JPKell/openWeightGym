@@ -114,7 +114,7 @@ Each fact has one home:
 Update the affected guide in the **same commit** as a page, route, ability or setting change.
 Generated pages need no edits: fix their source descriptions. Link to generated entries instead of
 restating defaults, endpoint lists or abilities. A limit defined only in code may be explained in its
-guide and developer docstring. Check **Docs → Gaps** when choosing documentation work.
+guide and developer docstring. Check **Docs → Gaps** when choosing documentation work. [Docs help checks](../tests/test_docs_help.py) exercise the small fake-model smoke set and question-only gap privacy; [Docs tool checks](../tests/test_docs_tools.py) cover caller proof and source visibility.
 Run `rtk proxy .venv/bin/pytest tests/test_documentation.py tests/test_docs_library.py tests/test_docs_coverage.py tests/test_source_docs.py tests/test_doc_markdown.py tests/test_docs_designs.py`,
 plus Docs browser checks and UI consistency checks for UI changes. [API example checks](../tests/test_docs_examples.py) execute the published payloads against isolated gateway/console routes. `scripts/docs-coverage.py` prints
 the same coverage report. Guide metadata uses TOML in a leading `<!--docs` comment; public prose can
@@ -139,7 +139,7 @@ Markdown limited to `README.md` (the project's front page: what it is and the in
 | [Plugin guide](../plugins/README.md), [specification](plugins/SPEC.md), [Hermes](../plugins/hermes/README.md) | Adapter runtime, permissions, authoring and delivery. |
 | [Tool authoring](../toollocker/README.md) | Tool folders and remote hosts; shipped with each host. |
 | [Application sweep](application-sweep-2026-10-20.md), [observability](observability-work-plan.md) | Retained delivery/acceptance evidence and observation limits. |
-| [Agent walkthrough](agent-walkthrough.md) | Page-by-page automated testing methods, live boundaries and links to the owner's findings. |
+| [Application walkthrough](../app-walkthrough.md), [agent walkthrough](agent-walkthrough.md) | Page-by-page automated testing methods, live boundaries and links to the owner's findings. |
 | [Arithmetic audit](benchmarks/arithmetic-audit.md), [case contract](benchmarks/arithmetic-v3.md), [qualification](benchmarks/qualification-2026-10-15.md) | Versioned benchmark evidence; status remains in the ledger. |
 
 Installation/deployment interfaces must change with their contracts:

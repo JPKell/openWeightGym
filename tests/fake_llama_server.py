@@ -281,7 +281,14 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(result).encode())
             return
         if '--docs-examples' in arguments and self.path == '/v1/chat/completions':
-            result = {'choices': [{'message': {'role': 'assistant', 'content': 'Hello.'}, 'finish_reason': 'stop'}],
+            message, reason = {'role': 'assistant', 'content': 'Hello.'}, 'stop'
+            if request.get('tools') and request['messages'][-1]['role'] != 'tool':
+                message = {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'docs-search', 'type': 'function',
+                           'function': {'name': 'docs__search', 'arguments': '{"q":"chat"}'}}]}
+                reason = 'tool_calls'
+            elif request.get('tools'):
+                message['content'] = 'Use the documented chat controls. [Chat](/docs/web-app/chat#chat-options).'
+            result = {'choices': [{'message': message, 'finish_reason': reason}],
                       'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5}}
             self.send_response(200)
             self.send_header('content-type', 'application/json')

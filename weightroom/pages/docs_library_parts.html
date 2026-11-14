@@ -1,6 +1,8 @@
 {# Shared library navigation for live documentation and its standalone design proposals. #}
 {% from 'parts.html' import section_title %}
 {% from 'parts.html' import more %}
+{% from 'parts.html' import alert, card %}
+{% from 'navigation_parts.html' import pills, pill_link %}
 {% from 'docs_parts.html' import doc_table %}
 {% macro page_guide_map(rows) %}
 {% call more('Find the guide for a page') %}
@@ -19,8 +21,47 @@
 <form class="docs-search" role="search" id="docs-search" action="/docs" method="get"><label for="{{ query_id }}" class="visually-hidden">Search documentation</label><span aria-hidden="true" class="search-symbol">⌕</span><input id="{{ query_id }}" name="q" type="search" class="form-control" placeholder="Search guides, endpoints, commands…" value="{{ query }}" maxlength="300" autocomplete="off" aria-controls="{{ 'search-results' if preview else 'docs-search-results' }}"><kbd aria-hidden="true">/</kbd><label for="{{ scope_id }}" class="visually-hidden">Search section</label><select id="{{ scope_id }}" name="scope" class="form-select"><option value="">All documentation</option>{% for section in sections %}<option value="{{ section.slug }}"{% if scope == section.slug %} selected{% endif %}>{{ section.title }}</option>{% endfor %}</select><button class="btn btn-outline-secondary" type="submit">Search</button>{% if preview %}<button class="btn btn-outline-secondary" type="button" id="clear-search" hidden>Clear</button>{% else %}<a href="/docs" class="small" data-docs-clear{% if not query and not scope %} hidden{% endif %}>Clear</a>{% endif %}</form>
 {% endmacro %}
 
-{% macro search_result(result) %}
-<a class="search-result" href="{{ result.url }}"><span class="result-category">{{ result.category }}</span><strong class="result-title">{{ result.title }}</strong><p class="result-summary">{{ result.summary }}</p><p class="result-excerpt">{{ result.excerpt }}</p></a>
+{% macro search_result(result, template=false) %}
+<a class="search-result" href="{{ result.url }}"><span class="result-category">{{ result.category }}</span><strong class="result-title">{{ result.title }}</strong><p class="result-summary">{{ result.summary }}</p>{% if result.excerpt or template %}<p class="result-excerpt">{{ result.excerpt }}</p>{% endif %}</a>
+{% endmacro %}
+
+{% macro modes(person, selected='search') %}
+{% call pills('Documentation mode', class_='mb-3') %}
+{{ pill_link('Search', '/docs', selected == 'search') }}
+{% if 'use-tools' in person.can %}{{ pill_link('Ask', '/docs/ask', selected == 'ask') }}{% endif %}
+{% if 'manage-settings' in person.can %}{{ pill_link('Gaps', '/docs/gaps', selected == 'gaps') }}{% endif %}
+{% endcall %}
+{% if 'use-tools' not in person.can %}<p class="small text-secondary">Ask needs tool access. Search is available to this account.</p>{% endif %}
+{% endmacro %}
+
+{% macro help_form(person, question='', history=[]) %}
+<form id="docs-ask-form" method="post" action="/docs/ask" hx-post="/docs/ask" hx-target="#docs-answer" hx-swap="outerHTML" data-hold-refresh data-docs-ask>
+<label class="form-label" for="docs-question">Question</label>
+<textarea id="docs-question" name="question" class="form-control" rows="3" maxlength="2000" required aria-describedby="docs-ask-privacy">{{ question }}</textarea>
+<input type="hidden" name="history" value="{{ history|tojson|forceescape }}">
+<p id="docs-ask-privacy" class="small text-secondary mt-2">The conversation stays in this browser tab. Normal request usage and logging apply. Unanswered question text is kept anonymously for documentation improvements; leave out private details.</p>
+<div class="d-flex flex-wrap gap-2 mb-3"><button class="btn btn-primary" type="submit">Ask</button><button class="btn btn-outline-secondary" type="button" data-docs-new>Clear conversation</button><a class="btn btn-outline-secondary" href="/docs">Search documentation</a></div>
+<p id="docs-ask-progress" class="small text-secondary" role="status" aria-live="polite"></p>
+</form>
+{% endmacro %}
+
+{% macro help_answer(answer_html='', sources=[], error='', text='', history=[]) %}
+<section id="docs-answer" aria-label="Documentation answer" data-help-text="{{ text }}" data-help-history="{{ history|tojson|forceescape }}" data-help-error="{{ 'true' if error else 'false' }}">
+{% if error %}{{ alert('warning', error) }}<p><a href="/docs">Search documentation</a></p>{% endif %}
+{% if answer_html %}<div class="docs-page">{{ answer_html }}</div>{% endif %}
+{% if sources %}{{ section_title('Sources', level=2) }}<div class="search-results-list">{% for source in sources %}{{ search_result(source) }}{% endfor %}</div>{% endif %}
+</section>
+{% endmacro %}
+
+{% macro gap_list(gaps, error='') %}
+<section id="docs-gaps" aria-label="Documentation gaps">
+{% if error %}{{ alert('warning', error) }}{% endif %}
+<p class="text-secondary">Only unanswered question text, its count and last-asked time are kept. No account or answer is stored in this list.</p>
+{% if gaps %}{% call doc_table('Unanswered documentation questions') %}
+<thead><tr><th scope="col">Question</th><th scope="col">Count</th><th scope="col">Last asked</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+<tbody>{% for gap in gaps %}<tr><td class="text-break">{{ gap.question }}</td><td>{{ gap.count }}</td><td>{{ gap.last_asked|timestamp }}</td><td><form method="post" action="/docs/gaps" hx-post="/docs/gaps" hx-target="#docs-gaps" hx-swap="outerHTML"><input type="hidden" name="dismiss" value="{{ gap.id }}"><button class="btn btn-sm btn-outline-secondary" type="submit">Dismiss</button></form></td></tr>{% endfor %}</tbody>
+{% endcall %}{% else %}<p class="empty-state">No unanswered documentation questions.</p>{% endif %}
+</section>
 {% endmacro %}
 
 {% macro shortcuts(sections) %}

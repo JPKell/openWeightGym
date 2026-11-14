@@ -32,6 +32,6 @@
     <aside class="reader-outline" id="reader-outline" hidden aria-label="Article navigation"><div class="rail-label">ON THIS PAGE</div><nav id="outline-links" aria-label="On this page"></nav><div class="outline-related"><div class="rail-label">IN THIS SECTION</div><nav id="related-links" aria-label="Related topics"></nav></div></aside>
   </div>
 </div>
-<template id="search-result-template">{{ library.search_result({'url':'#', 'category':'', 'title':'', 'summary':'', 'excerpt':''}) }}</template>
+<template id="search-result-template">{{ library.search_result({'url':'#', 'category':'', 'title':'', 'summary':'', 'excerpt':''}, template=true) }}</template>
 <script id="docs-data" type="application/json">{{ {'pages':records, 'aliases':aliases, 'baseUrl':base_url}|tojson }}</script><script>{{ javascript|safe }}</script>
 </body></html>
