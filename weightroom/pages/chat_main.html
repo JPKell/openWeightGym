@@ -1,11 +1,9 @@
 {# Shared prompt controls are used by the composer and Ask again. #}
 {% from "parts.html" import said_box, page_header , confirm_two, alert %}
-{% from "chat_parts.html" import rename_form %}
+{% from "chat_parts.html" import rename_form, model_choice as shared_model_choice, prompt_input %}
 {% set last_model = ((talk.messages|selectattr('model', 'defined')|list|last or {}).model if talk else '') %}
 {% macro model_choice(chosen, compact=false) %}
-<select name="model" class="form-select{{ ' form-select-sm' if compact }}" aria-label="Model" data-chat-setting data-chat-model-picker{{ ' disabled' if not models }}>
-  {% for model in models %}<option value="{{ model }}" data-plugin-model="{{ 'true' if model in adaptor_names else 'false' }}"{{ ' selected' if model == chosen }}>{{ model }}{{ ' · Plugin' if model in adaptor_names }}</option>{% endfor %}
-</select>
+{{ shared_model_choice(models, chosen, compact, adaptor_names) }}
 {% endmacro %}
 
 {% macro answering_model(compact=false) %}
@@ -73,7 +71,7 @@
   {{ page_header("New conversation", lead="Talk with your permitted models and keep your conversations.") }}
   {{ said_box(said, true) }}
   <form method="post" action="/chat" data-chat-form class="composer-box frame">
-    <textarea aria-label="Message" name="content" rows="3" class="form-control border-0 shadow-none" placeholder="Ask something" data-enter required autofocus>{{ typed_in.content or "" }}</textarea>
+    {{ prompt_input(typed_in.content or '') }}
     <div class="composer-actions mt-2">
       {{ answering_model() }}
       {{ options('new') }}
@@ -171,7 +169,7 @@
   <form method="post" action="/chat/{{ talk.id }}" class="text-center m-0"><button  class="btn btn-outline-danger" name="do" value="stop" {{ confirm_two() }}>{{ 'Stop both' if talk.compare else 'Stop' }}</button></form>
   {% else %}
   <form method="post" action="/chat/{{ talk.id }}" data-chat-form class="composer-box frame m-0">
-    <textarea aria-label="Message" name="content" rows="2" class="form-control border-0 shadow-none" placeholder="Say more" data-enter required autofocus>{{ typed_in.content or "" if typed_in.do in (none, "say") else "" }}</textarea>
+    {{ prompt_input(typed_in.content or '' if typed_in.do in (none, 'say') else '', 2, 'Say more') }}
     <div class="composer-actions mt-2">
       {{ answering_model() }}
       {{ options('main') }}

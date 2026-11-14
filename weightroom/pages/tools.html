@@ -1,8 +1,9 @@
+{% from 'tool_parts.html' import argument_editor, tool_result, tool_templates %}
 {% extends "frame.html" %}
 {% from "parts.html" import card, said_box, section_title, empty_row %}
 {% from "parts.html" import page_header, form_section, more %}
 {% block title %}Tools · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/tools.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/tool-controls.js" defer></script><script src="/static/tools.js" defer></script>{% endblock %}
 {% block main %}
 {{ page_header('Tools', 'Manage available tools, access levels and connection checks.') }}
 <p><a href="/docs/modules/toollocker">ToolLocker setup and adding tools</a>: requirements, control node installation, a Python tool example and troubleshooting.</p>
@@ -63,10 +64,10 @@
 </div>
 <p id="tools-state" class="text-secondary small" role="status">Connect to list the tools your account may use.</p>
 <label for="tools-tool" class="form-label">Tool</label><select id="tools-tool" class="form-select mb-2"></select>
-<p id="tools-description" class="text-secondary"></p><div id="tools-arguments" class="row g-2 mb-3"></div>
+<p id="tools-description" class="text-secondary"></p>{{ argument_editor('tools') }}
 <button id="tools-call" type="button" class="btn btn-primary" disabled>Call</button>
 <span id="tools-status" class="ms-2" role="status"></span>
-{{ section_title("Result") }}<pre id="tools-answer" class="kept frame p-2"></pre>
+{{ section_title("Result") }}{{ tool_result('tools') }}{{ tool_templates() }}
 </div>
 {% endcall %}
 {% call card("Recorded tool descriptions", false) %}

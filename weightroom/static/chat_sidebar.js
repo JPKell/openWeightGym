@@ -66,7 +66,7 @@
       if (!response.ok) throw new Error(result.error?.message || 'The conversation could not be changed.');
       const row = form.closest('[data-conversation]');
       if (form.hasAttribute('data-chat-delete')) {
-        if (location.pathname === new URL(form.action).pathname) location.assign('/chat');
+        if (location.pathname === new URL(form.action).pathname) location.assign(form.dataset.chatBase || '/chat');
         else row.remove();
       } else {
         const container = scope(form);

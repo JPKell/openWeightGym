@@ -293,13 +293,15 @@ def test_tool_messages_use_the_session_identity(desk, tmp_path):
         response = browser.post('/tools/message', json={'message': {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'},
                                                        'toolset': 'reading', 'mcp-session-id': 'session-1'})
         assert response.status_code == 200 and response.headers['mcp-session-id'] == 'session-1'
-        assert forwarded[0].url.path == '/mcp/reading'
-        assert forwarded[0].headers['authorization'] == 'Bearer ' + session_key
-        assert forwarded[0].headers['mcp-session-id'] == 'session-1'
+        calls = [request for request in forwarded if request.url.path == '/mcp/reading']
+        assert len(calls) == 1
+        assert calls[0].url.path == '/mcp/reading'
+        assert calls[0].headers['authorization'] == 'Bearer ' + session_key
+        assert calls[0].headers['mcp-session-id'] == 'session-1'
         assert session_key not in response.text and session_key not in browser.get('/tools').text
         for toolset in ['../private', '/reading', 'reading?key=secret']:
             assert browser.post('/tools/message', json={'message': {'method': 'tools/list'}, 'toolset': toolset}).status_code == 400
-        assert len(forwarded) == 1
+        assert len([request for request in forwarded if request.url.path != '/mcp']) == 1
 
 
 def test_request_pages_and_group_time_log_filters(desk, tmp_path, monkeypatch):

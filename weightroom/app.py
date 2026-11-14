@@ -703,8 +703,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     origin_clients = (loadcoach, tool_http, spotter, chat_inference)
     for origin_client in {id(item): item for item in origin_clients if item is not None}.values():
         origin_client.event_hooks.setdefault('request', []).append(carry_origin)
+    tool_log = AliasLog(database_registry.database('weightroom.accounts'))
+
+    def chat_toolsets():
+        """Read reported narrowing sets from the existing private settings store."""
+        reported = next((one for one in response_settings.everything() if one['program'] == 'toollocker'), {})
+        config = {one['name']: one['value'] for one in reported.get('settings', [])}
+        return response_settings.of('toollocker').get('toolsets', config.get('toolsets', {}))
+
     conversations = build_conversations(
-        database_registry.database("weightroom.chat"), loadcoach, chat_inference, plugins=plugins
+        database_registry.database("weightroom.chat"), loadcoach, chat_inference, plugins=plugins, tools=tool_http,
+        tool_level=lambda owner, trace: tool_log.trace_level(owner, trace),
+        tool_settings=lambda: {**response_defaults, **response_settings.of('turnstile')}, toolsets=chat_toolsets
     )
     benchmarks.state.worker.maintenance = gate
     conversations.state.knowledge.maintenance = gate
@@ -744,7 +754,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """
         headers = {"authorization": f"Bearer {key}", NO_WAKE: "1", **more.pop("headers", {})}
         try:
-            target = (chat_client if path.startswith(("/loadcoach/conversations", "/loadcoach/collections", "/loadcoach/workflows")) else
+            target = (chat_client if path.startswith(("/loadcoach/conversations", "/loadcoach/tool-conversations", "/loadcoach/collections", "/loadcoach/workflows")) else
                       benchmark_client if path.startswith('/benchmarks') else loadcoach)
             answer = await target.request(method, path, headers=headers, **more)
             if method == "DELETE" and path.startswith("/loadcoach/users/") and answer.is_success:
@@ -917,6 +927,17 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         from types import SimpleNamespace
         observation.identify(SimpleNamespace(identity=info.get('identity'), name=info['name'], key_identity=None,
                                              can=lambda ability: ability in info['can']))
+        info['tool_chat'] = False
+        if 'use-tools' in info['can'] and not request.url.path.startswith('/chat/tools/api/'):
+            from turnstile.tool_loop import ToolClient
+            from weightroom.extraction import Problem
+            try:
+                async with asyncio.timeout(2):
+                    info['tool_chat'] = bool(await ToolClient(tool_http, '/mcp', 'Bearer '+cookie, '').listing())
+            except Problem as error:
+                info['tool_chat_error'] = str(error)
+            except TimeoutError:
+                info['tool_chat_error'] = 'ToolLocker is not answering.'
         person = Person(info["name"], info["can"], cookie, info)
         request.state.person = person
         return person
@@ -925,7 +946,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """One of the pages in pages/, filled in. Every page is told who is signed in and how compute is."""
         # The strip of meters is shown to someone signed in at compute, unless they chose not to see it.
         strip = bool(person and person.key and person.me.get("choices", {}).get("show_telemetry", True))
-        nav = navigation(request.url.path, person.can, bool(spotter), platform()) if person else None
+        nav = navigation(request.url.path, person.can, bool(spotter), platform(), tool_chat=person.me.get('tool_chat', False)) if person else None
         error_request_id = ''
         if template == 'refused.html' and status >= 500:
             context = getattr(request.state, 'observation', None)
@@ -1457,7 +1478,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     sessions_error=not sessions.is_success, said=said or asked.get("said", ""),
                     new_key=new_key, failed=failed or asked.get('failed') == '1',
                     phone_numbers=phone_numbers,
-                    nav=navigation('/account/keys' if is_keys else '/account', person.can, bool(spotter), platform()))
+                    nav=navigation('/account/keys' if is_keys else '/account', person.can, bool(spotter), platform(), tool_chat=person.me.get('tool_chat', False)))
 
     async def account_phone_number(request: Request, person: Person) -> Response:
         if 'front-phone' not in person.can:
@@ -1477,7 +1498,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Render the caller's personal display preferences."""
         return page(request, 'account_appearance.html', person, status=400 if failed else 200, me=person.me,
                     said=said or request.query_params.get('said', ''), failed=failed,
-                    nav=navigation('/account/appearance', person.can, bool(spotter), platform()))
+                    nav=navigation('/account/appearance', person.can, bool(spotter), platform(), tool_chat=person.me.get('tool_chat', False)))
 
     async def account_logs(request: Request, person: Person) -> Response:
         """Render account-specific retained activity and usage."""
@@ -3772,6 +3793,42 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     # Conversations and their tasks are hosted here, with their own chat-only database.
     # Compute is reached only for authorization, model requests, and request-log details.
 
+    async def tool_chat_page(request: Request, person: Person) -> Response:
+        """Render the shared chat workspace with exact tools and explicit approval controls."""
+        if person.me.get('tool_chat_error'):
+            return page(request, 'refused.html', person, status=503, why=person.me['tool_chat_error'])
+        if not person.me.get('tool_chat'):
+            return page(request, 'refused.html', person, status=403, why='Tool chat needs use-tools and at least one visible ToolLocker tool.')
+        listed = await ask('GET', '/loadcoach/tool-conversations', person.key)
+        if not listed.is_success:
+            return page(request, 'refused.html', person, status=listed.status_code, why=listed.json()['error']['message'])
+        ref = request.path_params.get('ref')
+        talk = await ask('GET', '/loadcoach/tool-conversations/'+quote(ref,safe=''), person.key) if ref else None
+        if talk is not None and not talk.is_success:
+            return page(request, 'refused.html', person, status=talk.status_code, why=talk.json()['error']['message'])
+        return page(request, 'tool_chat.html', person, conversations=listed.json()['conversations'], talk=talk.json() if talk else None,
+                    models=[name for name, options in person.me.get('chat', {}).get('models', {}).items() if options.get('tools')],
+                    adaptor_names=set(), chat_base='/chat/tools')
+
+    async def tool_chat_api(request: Request, person: Person) -> Response:
+        """Proxy browser operations with its private session key and existing CSRF checks."""
+        if request.method == 'POST' and request.headers.get('x-loadcoach-log', '').lower() == 'off':
+            return JSONResponse({'error': {'message': 'Tool chat requires logging; omit X-LoadCoach-Log: off.'}}, 400)
+        operation=request.path_params.get('operation','').strip('/')
+        if operation and not re.fullmatch(r'(tools|[0-9]+(?:/actions)?)', operation):
+            return JSONResponse({'error':{'message':'No such tool chat operation.'}},404)
+        target='/loadcoach/tool-conversations'+('/'+operation if operation else '')
+        answer=await ask(request.method,target,person.key,content=await request.body(),params=request.query_params,
+                         headers={'content-type':'application/json'})
+        return JSONResponse(answer.json(),answer.status_code)
+
+    async def tool_chat_change(request: Request, person: Person) -> Response:
+        """Keep the shared sidebar's rename and delete form contract for Tool chat."""
+        form = await typed(request)
+        body = {'delete': True} if form.get('do') == 'delete' else {'title': form.get('title', '')}
+        answer = await ask('POST', '/loadcoach/tool-conversations/'+quote(request.path_params['ref'],safe=''), person.key, json=body)
+        return JSONResponse(answer.json(), answer.status_code)
+
     async def chat_page(request: Request, person: Person, said: str = "", typed_in: dict | None = None) -> Response:
         """The list of one's conversations beside one of them, or beside the box that starts a new one."""
         listed = await fetch(request, person, "/loadcoach/conversations")
@@ -5471,6 +5528,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             await chat_inference.aclose()
         await benchmark_client.aclose()
         await loadcoach.aclose()
+        tool_log.db.close()
         await tool_http.aclose()
         await voice_http.aclose()
         if spotter is not None:
@@ -5499,6 +5557,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             *account_routes(for_people, page, ask, typed, go, platform, conversations.state.workflows),
             *plugin_routes(plugins, plugin_controller, for_people, page, go, typed),
             *conversations.routes,
+            route('/chat/tools', tool_chat_page),
+            route('/chat/tools/api/{operation:path}', tool_chat_api),
+            route('/chat/tools/api/{operation:path}', tool_chat_api, 'POST'),
+            route('/chat/tools/{ref}', tool_chat_page),
+            route('/chat/tools/{ref}', tool_chat_change, 'POST'),
             Route("/sign-in", sign_in_page),
             Route("/sign-in", sign_in, methods=["POST"]),
             Route("/sign-out", sign_out, methods=["POST"]),

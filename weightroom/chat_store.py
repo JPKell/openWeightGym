@@ -15,6 +15,7 @@ import base64
 import binascii
 import io
 import time
+from loadcoach.groups import LEVELS
 from datetime import datetime
 
 from db import DatabaseSource, database, migrate
@@ -140,29 +141,37 @@ class Conversations:
         self.db = source.connect(check_same_thread=False)
         migrate(source, self.db, "weightroom.chat", CHAT)
 
-    def start(self, user: str, title: str, system: str = "", thinking: bool = True, sampling: dict | None = None, compare: list | None = None) -> int:
+    def start(self, user: str, title: str, system: str = "", thinking: bool = True, sampling: dict | None = None, compare: list | None = None, *, kind: str = 'text') -> int:
         """Create a conversation with its initial system, sampling and comparison settings."""
         with self.db:
             return self.db.insert_id(
-                "INSERT INTO conversations (user, title, system, thinking, sampling, compare, updated) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (user, title, system, thinking, json.dumps(sampling or {}), json.dumps(compare or []), time.time()),
+                "INSERT INTO conversations (user, title, system, thinking, sampling, compare, updated, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (user, title, system, thinking, json.dumps(sampling or {}), json.dumps(compare or []), time.time(), kind),
             )
 
-    def listing(self, user: str) -> list[dict]:
+    def listing(self, user: str, kind: str = 'text', clearance: str = 'restricted') -> list[dict]:
         """One user's conversations, the one last spoken in first. No messages."""
-        rows = self.db.execute("SELECT id, title, updated FROM conversations WHERE user = ? ORDER BY updated DESC", (user,))
-        return [{"id": number, "title": title, "updated": datetime.fromtimestamp(updated).isoformat(timespec="seconds")} for number, title, updated in rows]
+        rows = self.db.execute("SELECT id, title, updated, level FROM conversations WHERE user = ? AND kind = ? ORDER BY updated DESC", (user, kind))
+        return [{"id": number, "title": title, "updated": datetime.fromtimestamp(updated).isoformat(timespec="seconds")} for number, title, updated, level in rows if LEVELS.index(level) <= LEVELS.index(clearance)]
 
     def get(self, number: int, user: str) -> dict | None:
         """One conversation with everything said in it, or None if this user has no such conversation."""
-        found = self.db.execute("SELECT title, system, thinking, sampling, memory, compare, session_mode, sessions FROM conversations WHERE id = ? AND user = ?", (number, user)).fetchone()
+        found = self.db.execute("SELECT title, system, thinking, sampling, memory, compare, session_mode, sessions, kind, level, tool_state FROM conversations WHERE id = ? AND user = ?", (number, user)).fetchone()
         if found is None:
             return None
         said = [
             {"role": role, "content": content, "at": datetime.fromtimestamp(at).isoformat(timespec="seconds"), **json.loads(detail)}
             for role, content, detail, at in self.db.execute("SELECT role, content, detail, at FROM messages WHERE conversation = ? ORDER BY id", (number,))
         ]
-        return {"id": number, "title": found[0], "system": found[1], "thinking": bool(found[2]), "sampling": json.loads(found[3]), "memory": json.loads(found[4]), "compare": json.loads(found[5]), "session_mode": found[6], "sessions": json.loads(found[7]), "messages": said}
+        return {"id": number, "title": found[0], "system": found[1], "thinking": bool(found[2]), "sampling": json.loads(found[3]), "memory": json.loads(found[4]), "compare": json.loads(found[5]), "session_mode": found[6], "sessions": json.loads(found[7]), "messages": said, "kind": found[8], "level": found[9], "tool_state": json.loads(found[10])}
+
+    def tool_state(self, number: int, state: dict, level: str) -> None:
+        """Persist exact approval context and monotonically raise a private conversation's level."""
+        with self.db:
+            current = self.db.execute('SELECT level FROM conversations WHERE id=?', (number,)).fetchone()
+            if current:
+                raised = max(current[0], level, key=LEVELS.index)
+                self.db.execute('UPDATE conversations SET tool_state=?, level=? WHERE id=?', (json.dumps(state), raised, number))
 
     def bind_models(self, number: int, user: str, options: dict) -> None:
         """Bind legacy native replies once without changing their recorded text or labels."""

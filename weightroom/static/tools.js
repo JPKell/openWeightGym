@@ -19,16 +19,7 @@
     const tool = tools.find(tool => tool.name === $('tool').value);
     $('description').textContent = tool?.description || '';
     $('call').disabled = !tool;
-    const schema = tool?.inputSchema || {};
-    $('arguments').replaceChildren(...Object.entries(schema.properties || {}).map(([name, property]) => {
-      const box = document.createElement('div'), label = document.createElement('label'), input = document.createElement('input');
-      box.className = 'col-md-6'; label.className = 'form-label'; input.className = 'form-control';
-      input.id = `tool-argument-${name}`; label.htmlFor = input.id;
-      label.textContent = `${name} (${property.type || 'JSON'}${schema.required?.includes(name) ? ', required' : ''})`;
-      input.required = schema.required?.includes(name) || false;
-      input.dataset.name = name; input.dataset.type = property.type || ''; input.title = property.description || '';
-      box.append(label, input); return box;
-    }));
+    OWGTools.argumentsFor('tools', tool?.inputSchema || {});
   }
   /** Initialize the MCP session and retrieve its permitted tool catalogue. */
   async function connect() {
@@ -45,17 +36,13 @@
   $('connect').addEventListener('click', connect); $('set').addEventListener('change', connect);
   $('tool').addEventListener('change', show);
   $('call').addEventListener('click', async () => {
-    const args = {};
-    try {
-      for (const input of $('arguments').querySelectorAll('input')) {
-        if (!input.reportValidity()) return;
-        if (input.value) args[input.dataset.name] = input.dataset.type === 'string' ? input.value : JSON.parse(input.value);
-      }
-    } catch { $('status').textContent = 'Enter valid JSON for non-text arguments.'; return; }
+    let args;
+    try { args = OWGTools.read('tools'); }
+    catch (error) { $('status').textContent = error.message; return; }
     $('call').disabled = true; $('connect').disabled = true; $('set').disabled = true; $('status').textContent = 'Waiting…';
     try {
       const result = await ask('tools/call', {name: $('tool').value, arguments: args});
-      $('answer').textContent = (result.content || []).map(piece => piece.text || JSON.stringify(piece)).join('\n');
+      OWGTools.result('tools', result);
       $('status').textContent = result.isError ? 'Tool failed or refused.' : 'Returned.';
     } catch (error) { $('status').textContent = error.message; }
     finally { $('call').disabled = false; $('connect').disabled = false; $('set').disabled = false; }
