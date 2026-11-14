@@ -513,7 +513,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
         names = machines.active_names
         # Which nodes there are, and which of them the console may offer to wake (it never wakes one itself).
-        listed = {"machines": list(names), "wake_nodes": [name for name in names if settings.machines.get(name, {}).get("wake_mac")],
+        listed = {"machines": list(names), "wake_nodes": [name for name in names if node_policy(name).get("wake_mac")],
                   "aliases": dict(log.former), "node_status": {row["name"]: {"age": row.get("age"), "state": row["state"]} for row in machines.report()}}
         answers = await asyncio.gather(*(metadata(name) for name in names))
         good = [answer.json() for answer in answers if answer is not None and answer.status_code == 200]
@@ -630,7 +630,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         name = node(machine)
         if not name:
             return no_node(request.url.path)
-        policy = settings.machines.get(name, {})
+        policy = node_policy(name)
         if why := lifecycle_refusal(name, request.method, request.url.path):
             return error(409, why)
         got = None if passive(request) and machines.available(name) is False else await attempt()
@@ -914,11 +914,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if any(can_start_now(copies.get(name, {}), reports.get(name, {})) for name in awake):
             return candidates
         sleeping = [name for name in candidates if machines.available(name) is False
-                    and settings.machines.get(name, {}).get('wake_mac') and machines.enabled(name)]
+                    and node_policy(name).get('wake_mac') and machines.enabled(name)]
         if not sleeping or NO_WAKE in request.headers:
             return candidates
         for name in sleeping:
-            policy = settings.machines[name]
+            policy = node_policy(name)
             try:
                 waker(policy['wake_mac'], policy.get('wake_address', '255.255.255.255'))
             except (OSError, ValueError):
@@ -1008,7 +1008,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(403, str(problem))
         if not (current.can('front-wake') or current.can('superuser')):
             return error(403, 'Waking a scheduled node requires the owner to retain manage-settings and front-wake.')
-        policy = settings.machines.get(name, {})
+        policy = node_policy(name)
         if not policy.get('wake_mac'):
             return error(503, f'Node {name} is not answering; configure its Wake-on-LAN settings or wake it manually.', {'retry-after': '15'})
         now = time.monotonic()
@@ -1043,6 +1043,20 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                    programs=FRONT_PROGRAMS | {'toollocker'},
                                    voice_nodes=lambda: voice_order(), defaults={'turnstile': configured_defaults})
     live = console_settings.live
+
+    def node_policy(name):
+        return nodes.wake_policy(name, settings.machines.get(name, {}), console_settings.changes)
+
+    def wake_settings(name):
+        from loadcoach.settings import said
+        from loadcoach.setting_catalog import entries
+        namespace = 'machines:' + name
+        fields = {entry.name: node_policy(name)[entry.name] for entry in entries('machines')}
+        file = {entry.name: settings.machines[name].get(entry.name, '' if entry.name == 'wake_mac' else '255.255.255.255') for entry in entries('machines')}
+        console_settings.changes.seen(namespace, said(fields, file, {}, namespace))
+        report = next(p for p in console_settings.changes.everything() if p['program'] == namespace)
+        report['program'] = 'machines'
+        return report
 
     def runtime_setting(name):
         """Read a current control-node setting through the common validated getter."""
@@ -2600,7 +2614,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(404, "Unknown node.")
         if not machines.enabled(name):
             return error(409, f"Compute node {name} is {machines.state(name)}; wake is disabled.")
-        policy = settings.machines.get(name, {})
+        policy = node_policy(name)
         if not policy.get("wake_mac"):
             return error(409, "Wake-on-LAN is not configured for this node.")
         try:
@@ -2616,7 +2630,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         hosts = with_power_state(machines.hosts(), machines.seen, notice)
         for host in hosts:
             host["wake_nodes"] = [name for name in host["machines"] if machines.enabled(name) and
-                settings.machines.get(name, {}).get("wake_mac")]
+                node_policy(name).get("wake_mac")]
         include_retired = request.query_params.get("include_retired") == "1"
         if include_retired and not caller(key_of(request)).can("manage-settings"):
             return error(403, "Node lifecycle settings require manage-settings.")
@@ -2791,10 +2805,28 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         name, program = node(request.path_params["name"]), request.path_params.get("program")
         if name not in machines.names:
             return error(404, "That LoadCoach is not configured.")
-        if program is not None and program not in ("loadcoach", "spotter", 'voice'):
+        if program is not None and program not in ("loadcoach", "spotter", 'voice', 'machines'):
             return error(403, "Only LoadCoach, Spotter and Voice settings belong to the selected host.")
         if (request.method == "GET") != (program is None):
             return error(405, "Unsupported host settings operation.")
+        if program == 'machines':
+            from loadcoach.setting_catalog import validate_patch, changeable_for
+            try:
+                raw = await request.body()
+                if len(raw) > 65536:
+                    raise ValueError('Settings requests may be at most 64 KiB.')
+                body = json.loads(raw)
+                if not isinstance(body, dict) or body.keys() - changeable_for('machines').keys():
+                    raise ValueError('Only Wake settings may be changed here.')
+                validate_patch('machines', node_policy(name), body)
+                namespace = 'machines:' + name
+                old = console_settings.changes.of(namespace)
+                for field, value in body.items():
+                    console_settings.changes.take_away(namespace, field) if value is None else console_settings.changes.put(namespace, field, value, user.name)
+                log.add('settings', 'changed', user.name, program=namespace, old={field: old.get(field) for field in body}, **body)
+                return JSONResponse({'programs': [wake_settings(name)]})
+            except (ValueError, TypeError) as problem:
+                return error(400, str(problem))
         path = "/loadcoach/settings" + ("/" + program if program else "")
         if request.method == 'GET' and pending_file_settings(name):
             await publish_file_settings()
@@ -2834,14 +2866,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                         machine=name, timeout=5))
         if answer is None:
             if request.method == 'GET':
-                return JSONResponse({**settings_with_pending(name, {}), 'machine': name, 'unavailable': True},
+                return JSONResponse({**settings_with_pending(name, {'programs': [wake_settings(name)]}), 'machine': name, 'unavailable': True},
                                     headers={'cache-control': 'no-store'})
             return JSONResponse({"error": {"message": f"LoadCoach {name} is not answering; verify its settings before retrying."}}, status_code=503, headers={"Retry-After": f'{runtime_setting("busy_retry_seconds"):g}'})
         if answer.status_code != 200:
+            if request.method == 'GET' and answer.status_code >= 500:
+                return JSONResponse({'programs': [wake_settings(name)], 'machine': name, 'unavailable': True}, headers={'cache-control': 'no-store'})
             return JSONResponse(answer.json(), status_code=answer.status_code)
         result = answer.json()
         if "programs" in result:
-            result["programs"] = [p for p in result["programs"] if p["program"] in ("loadcoach", "spotter", 'voice')]
+            result["programs"] = [p for p in result["programs"] if p["program"] in ("loadcoach", "spotter", 'voice')] + [wake_settings(name)]
         return JSONResponse({**settings_with_pending(name, result), "machine": name, "unavailable": bool(answer.headers.get("x-suite-retained"))},
                             headers={"cache-control": "no-store"})
 

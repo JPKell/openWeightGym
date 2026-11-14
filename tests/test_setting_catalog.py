@@ -170,6 +170,8 @@ def live_examples(entry):
         'observation_quiet_routes': (['/one'], ['/two']),
         'disabled_gpus': ([], ['unavailable-test-card']),
         'disks': (['/'], ['/tmp']),
+        'wake_mac': ('', '00:11:22:33:44:55'),
+        'wake_address': ('255.255.255.255', '192.0.2.255'),
         'models_folder': ('/tmp/catalogue-original', '/tmp/catalogue-changed'),
         'models_storage_folder': ('/tmp/catalogue-original', '/tmp/catalogue-changed'),
         'telephone': ({'enabled': False, 'account_sid': '', 'public_url': '', 'numbers': []},
@@ -226,6 +228,13 @@ def test_every_live_setting_changes_through_its_service_getter_without_restart(e
 
         asyncio.run(once())
         assert settings[entry.name] == changed
+    elif entry.program == 'machines':
+        from turnstile.nodes import wake_policy
+        from loadcoach.settings import Changes
+        changes = Changes(tmp_path / 'settings.db')
+        changes.put('machines:unit', entry.name, changed, 'owner')
+        assert wake_policy('unit', {entry.name: base}, changes)[entry.name] == changed
+        changes.db.close()
     elif entry.program == 'turnstile':
         api = ConsoleSettings(tmp_path / 'settings.db', SimpleNamespace(), None)
         try:

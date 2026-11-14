@@ -173,6 +173,20 @@ def _alert(name):
     return check
 
 
+def _wake_mac(value):
+    import re
+    if value and not re.fullmatch(r'(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}|[0-9a-fA-F]{12}', value):
+        raise ValueError('Wake MAC must be a hardware address, or empty to disable Wake.')
+
+
+def _wake_address(value):
+    from ipaddress import IPv4Address
+    try:
+        IPv4Address(value)
+    except ValueError:
+        raise ValueError('Wake address must be an IPv4 address.') from None
+
+
 def _disks(value):
     if len(value) > 32 or any(not isinstance(path, str) or not path.startswith('/') or '\0' in path for path in value):
         raise ValueError('disks must contain at most 32 absolute paths.')
@@ -457,3 +471,6 @@ _add("voice", 'profiles.default.modes', 'list', section='Direct conversations', 
 _add("voice", 'profiles.default.max_output_tokens', 'int', section='Direct conversations', label='Output limit', unit='tokens', control='number', page="voice")
 _add("voice", 'profiles.default.max_context_tokens', 'int', section='Direct conversations', label='Context limit', unit='tokens', control='number', page="voice")
 _add("voice", 'profiles.default.speaker', 'text', section='Speech', label='Speaker', unit='', control='text', page="voice")
+
+_add('machines', 'wake_mac', 'text', tier=NOW, scope='front', page='nodes', section='Wake', label='Wake MAC address', control='text', rule=_wake_mac, help='This node’s hardware address. Empty disables Wake. Applies immediately.')
+_add('machines', 'wake_address', 'text', tier=NOW, scope='front', page='nodes', section='Wake', label='Wake broadcast address', control='text', rule=_wake_address, help='IPv4 destination for Wake packets. Applies immediately; the file value is used after reset.')
