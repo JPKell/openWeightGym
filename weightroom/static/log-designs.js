@@ -1,6 +1,7 @@
 /* Standalone proposal client: all data and actions remain browser-local. */
 (() => {
   'use strict';
+  const nodeLabel = window.suiteNodeLabel || (name => name === 'front' ? 'Control node' : name);
   const $ = selector => document.querySelector(selector);
   const $$ = selector => [...document.querySelectorAll(selector)];
   const source = JSON.parse($('#log-data').textContent);
@@ -28,14 +29,14 @@
   const summary = event => event.error || event.reason || (event.of ? `Request #${event.of}` : `Event #${event.id}`) +
     (typeof event.duration === 'number' ? ` · ${event.duration.toLocaleString(undefined, {maximumFractionDigits:3})} s` : '');
   const clone = id => $(id).content.firstElementChild.cloneNode(true);
-  function fill(root, field, value) { const el = root.querySelector(`[data-field="${field}"]`); if (el) el.textContent = value ?? '—'; }
+  function fill(root, field, value) { const el = root.querySelector(`[data-field="${field}"]`); if (el) el.textContent = (field === 'node' ? nodeLabel(value) : value) ?? '—'; }
   function announce(message) { $('#feedback').textContent = message; }
   function filters() { return Object.fromEntries(Object.entries(controls).map(([key,selector]) => [key,$(selector).value])); }
   function localInstant(value) { return value ? Date.parse(value + sampleOffset) : null; } // This snapshot covers one Vancouver date.
   function populate() {
     for (const key of ['model','kind','what']) {
       for (const value of [...new Set(source.events.map(event => event[key]).filter(Boolean))].sort()) {
-        $(controls[key]).add(new Option(value, value));
+        $(controls[key]).add(new Option(key === 'node' ? nodeLabel(value) : value, value));
       }
     }
   }
@@ -141,7 +142,7 @@
     $('#detail-id').textContent = `#${event.id}`; $('#detail-outcome').textContent = outcome(event); $('#detail-outcome').className = badgeClass(event);
     $('#detail-facts').replaceChildren();
     for (const [label,value] of [['Recorded at',`${dateFormat.format(new Date(event.at))}, ${timeFormat.format(new Date(event.at))} Vancouver`],
-      ['Node',event.machine],['User',event.user],['Model',event.model || 'Not recorded'],['Caller',event.caller],
+      ['Node',nodeLabel(event.machine)],['User',event.user],['Model',event.model || 'Not recorded'],['Caller',event.caller],
       ['Trace ID',event.trace || 'Not recorded'],['Request reference',event.of ? `#${event.of}` : event.kind === 'request' && event.what === 'asked' ? `#${event.id}` : 'Not recorded'],
       ['Sensitivity',event.level || 'Not recorded']]) addFact($('#detail-facts'),label,value);
     $('#detail-payload').replaceChildren();
@@ -154,7 +155,7 @@
     $('#related-events').replaceChildren();
     for (const other of related(event)) {
       const li = document.createElement('li'), button = document.createElement('button'); button.type = 'button';
-      button.textContent = `${timeFormat.format(new Date(other.at))} · ${title(other)} · ${other.machine}`;
+      button.textContent = `${timeFormat.format(new Date(other.at))} · ${title(other)} · ${nodeLabel(other.machine)}`;
       button.addEventListener('click',() => choose(other.id,true)); li.append(button); $('#related-events').append(li);
     }
   }
@@ -201,7 +202,7 @@
     for (const [code,group] of [...groups].sort((a,b) => b[1].length - a[1].length).slice(0,3)) {
       const issue = clone('#issue-template'); fill(issue,'outcome','Failed'); fill(issue,'count',`${group.length} event${group.length === 1 ? '' : 's'}`);
       fill(issue,'title',names[code] || code.replaceAll('_',' '));
-      fill(issue,'summary',`${[...new Set(group.map(event => event.machine))].join(', ')} · ${code}`);
+      fill(issue,'summary',`${[...new Set(group.map(event => event.machine))].map(nodeLabel).join(', ')} · ${code}`);
       issue.addEventListener('click',() => { errorCode = code; quick = 'failed'; page = 0; render(); $('#event-list').scrollIntoView({block:'start'}); });
       $('#issue-list').append(issue);
     }
@@ -227,8 +228,8 @@
     for (const node of [...new Set(source.events.map(event => event.machine))].sort()) {
       const count = failures.filter(event => event.machine === node).length;
       const button = document.createElement('button'); button.type = 'button'; button.className = 'al-node-row';
-      const name = document.createElement('span'); name.textContent = node;
-      const bar = document.createElement('progress'); bar.max = Math.max(1,failures.length); bar.value = count; bar.setAttribute('aria-label',`${node}: ${count} failed events`);
+      const name = document.createElement('span'); name.textContent = nodeLabel(node);
+      const bar = document.createElement('progress'); bar.max = Math.max(1,failures.length); bar.value = count; bar.setAttribute('aria-label',`${nodeLabel(node)}: ${count} failed events`);
       const amount = document.createElement('strong'); amount.textContent = count;
       button.append(name,bar,amount); button.addEventListener('click',() => { $('#log-node').value = node; quick = 'failed'; page = 0; render(); });
       $('#node-breakdown').append(button);

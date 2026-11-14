@@ -1,7 +1,7 @@
 {% from "docs_parts.html" import doc_contents, doc_section %}
 {{ doc_contents([('benchmarks', 'How benchmarking is put together'), ('benchmark-pages', 'Where to find it'), ('topics', 'In this section')]) }}
 {% call doc_section('How benchmarking is put together', 'benchmarks') %}
-<p>Benchmarks run inside WeightRoom on front and use LoadCoach over HTTP. The <code>benchmarks/</code> package owns plans, the queue, results and scoring;
+<p>Benchmarks run inside WeightRoom on the control node and use LoadCoach over HTTP. The <code>benchmarks/</code> package owns plans, the queue, results and scoring;
   it has no service, command or port of its own. LoadCoach owns authentication, durable batches, model processes and GPU access, and the benchmark package
   never opens its database or starts a model itself. Each benchmark lives under <code>benchmarks/suites/</code>, in its own Python file or folder.</p>
 <p>Saved definitions, runs and results stay readable while LoadCoach is unavailable; starting a run and comparing live model state wait until a compute node answers.

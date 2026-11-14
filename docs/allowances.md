@@ -27,7 +27,7 @@ Missing costs, unrecorded requests, log retention and delayed compute delivery m
 remainder. Isolated benchmark probes, unlogged local requests and plugin-adaptor estimates are
 outside this first increment. Retained records shorter than one day cannot cover the full window.
 The page refreshes manually. If compute cannot flush its existing outbox without waking, the
-page warns that the report may be stale; front's retained history remains available.
+page warns that the report may be stale; the control node's retained history remains available.
 
 ## Attribution and access
 
@@ -55,7 +55,7 @@ no-store responses; successful policy changes are recorded in the existing audit
 ## Storage, API and deployment
 
 `loadcoach.users` migration 4 adds `spending_allowances(scope, subject, amount)` to the existing
-front accounts store. There is no new database, credential, reservation ledger or scheduler.
+control node accounts store. There is no new database, credential, reservation ledger or scheduler.
 Verified full-store backups/transfers preserve the policies and attribution-bearing log. The
 legacy `accounts-from` first-move command refuses populated new policies rather than silently
 omit them; use the verified full-store transfer workflow for that case.
@@ -64,9 +64,9 @@ omit them; use the verified full-store transfer workflow for that case.
 compute synchronization status. `POST` accepts only `scope`, `subject`, `amount`; the subject
 must be a current target returned to an authorized manager. Amount must be finite, nonnegative
 and at most one billion USD; zero removes the policy. There is no hard-mode flag.
-The console's `/allowances` page uses those existing front account APIs and the caller's key.
+The console's `/allowances` page uses those existing control node account APIs and the caller's key.
 
-Matching front code/templates, accounts migration 4 and compute attribution code were present
+Matching control node code/templates, accounts migration 4 and compute attribution code were present
 on this installation by 2026-10-16. A restricted live account saw only its user/group/key rows,
 all uneditable, through the 24-hour soft-USD API without waking compute. On 2026-10-17, a
 temporary manager key and restricted fixture account exercised live API saves for user, key and

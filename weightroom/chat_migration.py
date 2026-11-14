@@ -1,4 +1,4 @@
-"""Copy only web-chat records to front, verify them, then retire compute's chat tables.
+"""Copy only web-chat records to the control node, verify them, then retire compute's chat tables.
 
 Export reads a consistent SQLite snapshot. Retirement checks every copied value inside a
 write transaction before dropping the three chat tables. Neither operation exposes text.

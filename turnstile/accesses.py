@@ -7,7 +7,7 @@ class ClientAccesses:
     """Observe each external bearer-key attempt once, after trusted origin resolution."""
 
     def __init__(self, app, users, log, internal_prefix: str = '') -> None:
-        """Use front's existing account store and audit writer; exclude private in-process dispatch."""
+        """Use the control node's existing account store and audit writer; exclude private in-process dispatch."""
         self.app, self.users, self.log = app, users, log
         self.internal_prefix = internal_prefix
 

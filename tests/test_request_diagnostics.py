@@ -82,7 +82,7 @@ def test_cold_and_warm_requests_keep_actual_configuration_and_native_timing(fake
         assert raw[0]['first_output_seconds'] is None  # nonstreaming, not an invented TTFT
         assert facts[0]['text'] is None
         assert not any(secret in json.dumps(facts[0]['diagnostics']) for secret in ('PRIVATE_IMAGE', 'PRIVATE ANSWER', '/private/'))
-        assert caller.log.verify()[1] is None  # nested evidence is covered by front's existing chain
+        assert caller.log.verify()[1] is None  # nested evidence is covered by the control node's existing chain
 
 
 def test_metadata_permissions_live_queue_cancellation_and_no_log(fake_llama_server):

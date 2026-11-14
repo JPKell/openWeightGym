@@ -1,4 +1,4 @@
-"""Optional model-file storage on front, independent of inference workers."""
+"""Optional model-file storage on the control node, independent of inference workers."""
 
 import asyncio
 import hashlib
@@ -43,9 +43,9 @@ class FrontFiles:
     """Use the shared file formats and copy/download helpers without starting an engine."""
 
     def __init__(self, roots, log, index=None, every=lambda: 0):
-        """Read the front's current file roots on each operation and retain active downloads.
+        """Read the control node's current file roots on each operation and retain active downloads.
 
-        `index` is where the list of front's files is kept between looks (none: in memory), and
+        `index` is where the list of the control node's files is kept between looks (none: in memory), and
         `every` how many seconds a look is good for, 0 meaning until a Refresh asks again.
         """
         self.roots, self.log, self.every = roots, log, every
@@ -61,18 +61,18 @@ class FrontFiles:
                 Path(folder).mkdir(exist_ok=True)
 
     def places(self):
-        """Resolve configured tiers; empty paths leave front storage disabled."""
+        """Resolve configured tiers; empty paths leave control node storage disabled."""
         roots = checked_roots(self.roots())
         return model_places(roots['models_folder'], {}, roots['models_storage_folder'])
 
     def path(self, value):
-        """Allow only supported files inside front's explicitly configured locations."""
+        """Allow only supported files inside the control node's explicitly configured locations."""
         path = Path(value)
         if not path.is_absolute() or path.is_symlink() or not supported(path):
-            raise ValueError('Choose a model file from the configured front folders.')
+            raise ValueError('Choose a model file from the configured control node folders.')
         resolved = path.resolve()
         if not any(Path(folder).resolve() in resolved.parents for folder in self.places().values()):
-            raise ValueError('That file is outside the configured front folders.')
+            raise ValueError('That file is outside the configured control node folders.')
         return path
 
     def describe(self, path):
@@ -92,12 +92,12 @@ class FrontFiles:
         return description, metadata
 
     def inventory(self, refresh=False):
-        """List front's available folders and files from the kept index, reporting inaccessible locations inline."""
+        """List the control node's available folders and files from the kept index, reporting inaccessible locations inline."""
         spots = self.places()
         places, files, problems, shared = [], [], [], shared_places(spots)
         for name, folder in spots.items():
             if not Path(folder).is_dir():
-                problems.append(f'{folder} is not available. Check the folder or mount on front.')
+                problems.append(f'{folder} is not available. Check the folder or mount on the control node.')
                 continue
             try:
                 places.append({'name': name, 'folder': folder, 'tier': tier_of(name), 'shared': name in shared, **room(folder), 'files': 0})
@@ -117,7 +117,7 @@ class FrontFiles:
                 'checked': FileIndex.checked(index)}
 
     def changed(self, *paths):
-        """Put the kept list right for files front has just made, changed or removed."""
+        """Put the kept list right for files control node has just made, changed or removed."""
         spots = {name: folder for name, folder in self.places().items() if Path(folder).is_dir()}
         self.index.update(list(paths), spots)
 
@@ -153,7 +153,7 @@ class FrontFiles:
                     raise ValueError('Wait for cache maintenance to finish before moving or deleting files.')
                 path = self.path(asked.get('path', ''))
                 if not path.is_file():
-                    raise ValueError('That file is no longer available on front.')
+                    raise ValueError('That file is no longer available on the control node.')
                 if str(path) in self.moving:
                     return response({'error': {'message': 'That file is already being copied or moved.'}}, 409)
                 if action == 'files/delete':
@@ -166,7 +166,7 @@ class FrontFiles:
                     return response({'deleted': str(path), 'freed': size})
                 folder = self.places().get(asked.get('to'))
                 if folder is None:
-                    raise ValueError('Choose a configured destination folder on front.')
+                    raise ValueError('Choose a configured destination folder on the control node.')
                 relative = Path(asked.get('relative', path.name))
                 if relative.is_absolute() or '..' in relative.parts:
                     raise ValueError('The destination must stay inside the selected folder.')
@@ -275,7 +275,7 @@ class FrontFiles:
     def start_cleanup(self, user, asked):
         """Consolidate cache or clear only files with a verified retained storage copy."""
         if self.tasks or self.receiving:
-            return httpx.Response(409, json={'error': {'message': 'Wait for active front file transfers to finish.'}})
+            return httpx.Response(409, json={'error': {'message': 'Wait for active control node file transfers to finish.'}})
         mode = asked.get('mode')
         if mode not in ('clear-cache', 'promote'):
             raise ValueError('Choose cache consolidation or verified cache cleanup.')
@@ -293,7 +293,7 @@ class FrontFiles:
         protected = {str(self.path(path).resolve()) for path in keep}
         sources = [self.path(path) for path in promote]
         if any(not source.is_file() or not any(root.resolve() in source.resolve().parents for root in stored.values()) for source in sources):
-            raise ValueError('Promoted files must be in front storage.')
+            raise ValueError('Promoted files must be in the control node storage.')
         self.cleanup = {'mode': mode, 'state': 'running', 'since': time.time(), 'saved': 0, 'removed': 0,
                         'freed': 0, 'promoted': 0, 'protected': 0, 'failures': []}
 
@@ -310,7 +310,7 @@ class FrontFiles:
             for source, folder, relative in operations:
                 try:
                     if self.stopping.is_set():
-                        raise InterruptedError('Front file maintenance stopped.')
+                        raise InterruptedError('Control node file maintenance stopped.')
                     if folder is None:
                         raise ValueError(f'{source.name}: no matching {"cache" if mode == "promote" else "storage"} folder.')
                     target = self.path(str(folder / relative))
@@ -328,7 +328,7 @@ class FrontFiles:
                             self.cleanup['protected'] += 1
                         else:
                             if self.stopping.is_set():
-                                raise InterruptedError('Front file maintenance stopped.')
+                                raise InterruptedError('Control node file maintenance stopped.')
                             source.unlink()
                             self.cleanup['removed'] += 1
                             self.cleanup['freed'] += size
@@ -342,7 +342,7 @@ class FrontFiles:
                 self.cleanup.update(state='complete', ended=time.time())
                 self.log.add('file', 'cache-cleaned', user.name, machine='front', **self.cleanup)
             except asyncio.CancelledError:
-                self.cleanup.update(state='failed', failure='Front file maintenance stopped.')
+                self.cleanup.update(state='failed', failure='Control node file maintenance stopped.')
                 raise
             except (OSError, ValueError) as problem:
                 self.cleanup.update(state='failed', failure=str(problem))
@@ -355,16 +355,16 @@ class FrontFiles:
         return httpx.Response(202, json=dict(self.cleanup))
 
     async def receive(self, user, place, relative, pieces, size, digest, progress, source=''):
-        """Write a file sent from a compute node into a front place, and publish it only once its size and SHA-256 match.
+        """Write a file sent from a compute node into a control node place, and publish it only once its size and SHA-256 match.
 
         `pieces` yields its bytes. Until then it is a hidden file beside where it goes, which no listing
         shows; a failed or interrupted copy leaves nothing behind.
         """
         if self.cleanup.get('state') == 'running':
-            raise ValueError('Wait for cache maintenance to finish before copying files to front.')
+            raise ValueError('Wait for cache maintenance to finish before copying files to the control node.')
         folder = self.places().get(place)
         if folder is None or not Path(folder).is_dir():
-            raise ValueError(f'Front has no folder for {place}. Set its locations in Settings.')
+            raise ValueError(f'Control node has no folder for {place}. Set its locations in Settings.')
         parts = Path(relative).parts
         if not parts or Path(relative).is_absolute() or len(parts) > 6 or any(part in ('.', '..') for part in parts):
             raise ValueError('The destination must stay inside the selected folder.')
@@ -373,7 +373,7 @@ class FrontFiles:
             raise ValueError(f'{place} already has {relative}. No file was overwritten.')
         target.parent.mkdir(parents=True, exist_ok=True)
         if room(str(target.parent))['free'] < size + SPARE:
-            raise ValueError(f'{place} on front needs room for the file plus 1 GiB to spare.')
+            raise ValueError(f'{place} on the control node needs room for the file plus 1 GiB to spare.')
         self.receiving.add(str(target))
         part = target.with_name(f'.{target.name}.receiving')
         try:
@@ -400,7 +400,7 @@ class FrontFiles:
             self.receiving.discard(str(target))
 
     async def download(self, user, asked):
-        """Download verified public repository files into front storage; the cache is never a destination."""
+        """Download verified public repository files into control node storage; the cache is never a destination."""
         repository, names, place = asked.get('repository', ''), asked.get('files'), asked.get('place')
         if self.cleanup.get('state') == 'running':
             raise ValueError('Wait for cache maintenance to finish before downloading files.')
@@ -413,7 +413,7 @@ class FrontFiles:
         if place == 'storage_classifier' and folder and Path(folder).parent.is_dir():
             Path(folder).mkdir(exist_ok=True)
         if folder is None or not Path(folder).is_dir():
-            raise ValueError('Downloads go into storage, never the cache. Choose a front storage folder that exists.')
+            raise ValueError('Downloads go into storage, never the cache. Choose a control node storage folder that exists.')
         entries = hub.chosen(await hub.files(self.web, repository, classifier=Path(folder).name == 'classifier'), names)
         targets = [self.path(str(Path(folder) / hub.folder_of(repository) / Path(entry['path']).name)) for entry in entries]
         if any(target.with_name(target.name + '.part').is_symlink() for target in targets):
@@ -451,7 +451,7 @@ class FrontFiles:
                                        'size': sum(entry['size'] for entry in entries)})
 
     async def close(self):
-        """Stop transfers before closing the front storage HTTP client."""
+        """Stop transfers before closing the control node storage HTTP client."""
         self.stopping.set()
         for task in self.tasks:
             task.cancel()

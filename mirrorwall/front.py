@@ -1,4 +1,4 @@
-"""Front image API/assets and existing-batch integration; no inference scheduler."""
+"""Control node image API/assets and existing-batch integration; no inference scheduler."""
 import asyncio
 import base64
 import itertools
@@ -25,7 +25,7 @@ def error(status,message):
 
 
 class Front:
-    """Mirror Wall's front-owned assets/presets and ordinary batch execution hooks."""
+    """Mirror Wall's control-node-owned assets/presets and ordinary batch execution hooks."""
     def __init__(self,store,batches,users,*,adult_previews_allowed=lambda: False):
         """Initialize private image state without loading model weights."""
         self.store=store
@@ -71,7 +71,7 @@ class Front:
         return self.transient.get(identifier,{}).get('owner') or self.store.owner(identifier)
 
     def retain_event(self,user,event,job=None,line=None,quiet=False):
-        """Persist completed renders on front and hold only the newest partial frame."""
+        """Persist completed renders on the control node and hold only the newest partial frame."""
         if job and self.job_owner(job)!=user.identity:
             raise ValueError("There is no such image job of yours.")
         kind=event.get('type')
@@ -92,7 +92,7 @@ class Front:
         return {**event,'asset_id':asset['id'],'asset_url':'/mirrorwall/assets/'+asset['id']+'/content'}
 
     async def capture(self,request,user,response):
-        """Retain allowed completed image responses on front while forwarding real previews."""
+        """Retain allowed completed image responses on the control node while forwarding real previews."""
         if response.status_code>=400:
             return response
         quiet=request.headers.get('x-loadcoach-log')=='off'
@@ -362,7 +362,7 @@ class Front:
                                  "and the model has no upscaler: use a larger image, lower the reference size, or add an upscaler to the model.")
 
     async def start(self,request,user):
-        """Submit an image job to the established front batch executor."""
+        """Submit an image job to the established control node batch executor."""
         try:
             asked=await self.read_json(request)
             lines=self.lines(asked)
@@ -512,7 +512,7 @@ class Front:
         return JSONResponse({'versions':self.store.preset_history(user.identity,identifier)},headers={'cache-control':'no-store'})
 
     def routes(self,caller,log):
-        """Expose front-owned image operations through the existing API-key authority."""
+        """Expose control-node-owned image operations through the existing API-key authority."""
         from turnstile.accounts import signed_in
         def route(path,handler,method='GET'):
             """Register an image handler behind existing API authentication."""

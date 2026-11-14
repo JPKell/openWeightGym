@@ -19,7 +19,7 @@ from test_app import gateway as compute_gateway
 
 @contextmanager
 def gateway(fake_llama_server, *args, **kwargs):
-    """Host chats on front and every account/model operation on a real compute server."""
+    """Host chats on the control node and every account/model operation on a real compute server."""
     compute = compute_gateway(fake_llama_server, *args, **kwargs).app
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(compute, host="127.0.0.1", port=port, log_level="warning"))

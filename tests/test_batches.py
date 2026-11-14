@@ -113,7 +113,7 @@ def test_a_batch_goes_on_where_it_was_when_loadcoach_comes_back(fake_llama_serve
         begun = hand_in(caller, pat, lines(slow, slow, slow))
         until(caller, pat, begun["id"], lambda batch: batch["request_counts"]["completed"] == 1)
         time.sleep(0.1)  # the second request is being answered when LoadCoach stops
-    kept = Batches(str(tmp_path / "front" / "accounts.db"))  # the batches are front's, in its accounts store
+    kept = Batches(str(tmp_path / "front" / "accounts.db"))  # the batches are the control node's, in its accounts store
     between = kept.get(begun["id"])
     tries = [count for (count,) in kept.db.execute("SELECT tries FROM batch_lines WHERE batch = ? ORDER BY line", (begun["id"],))]
 
@@ -224,7 +224,7 @@ def test_a_batch_may_name_a_role_which_front_picks_for_as_each_request_comes_up(
         good, bad = answers(caller, jordan, done["output_file_id"]), answers(caller, jordan, done["error_file_id"])
         asked = [(entry["model"], entry.get("role")) for entry in events(caller, jordan, kind="request") if entry["what"] == "asked"]
 
-    # The role is picked for on the front machine; compute is sent the model, and keeps which role it was asked as.
+    # The role is picked for on the control node; compute is sent the model, and keeps which role it was asked as.
     assert [(one["custom_id"], json.loads(one["response"]["body"]["body"])["model"]) for one in good] == [("q0", "small")]
     assert asked == [("small", "chat")]
     assert bad[0]["custom_id"] == "q1" and bad[0]["response"]["status_code"] == 503 and "No model of the role none" in bad[0]["error"]["message"]

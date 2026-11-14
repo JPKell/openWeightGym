@@ -93,7 +93,7 @@ Tests: [dashboard](../tests/test_dashboard.py), [usage](../tests/test_usage.py).
 | [Voice](../app-walkthrough.md#chat-voice) | Run the Voice-first checklist above; inspect permissions, scoped call options and session cleanup. | L/R; W for a real generated-audio exchange; H for physical microphone/output. |
 | [Voice desktop app](../app-walkthrough.md#chat-voice-desktop-app) | Download/ZIP contents, launch instructions, absence of private credentials, saved-key handling and simulated device/socket cleanup. | L/R; H for native Windows/macOS/Linux setup and physical audio. |
 
-Tests: [front Chat](../tests/test_front_chat.py), [Chat controls](../tests/test_chat_controls.py), [restart](../tests/test_chat_restart.py), [scroll](../tests/test_chat_scroll_browser.py), [images](../tests/test_mirrorwall.py), [image controls](../tests/test_model_image_settings_browser.py), [audio](../tests/test_soundroom.py), [audio browser](../tests/test_soundroom_browser.py).
+Tests: [control node Chat](../tests/test_front_chat.py), [Chat controls](../tests/test_chat_controls.py), [restart](../tests/test_chat_restart.py), [scroll](../tests/test_chat_scroll_browser.py), [images](../tests/test_mirrorwall.py), [image controls](../tests/test_model_image_settings_browser.py), [audio](../tests/test_soundroom.py), [audio browser](../tests/test_soundroom_browser.py).
 
 ## Models
 
@@ -148,7 +148,7 @@ Tests: [benchmark pages](../tests/test_benchmark_pages.py), [browser](../tests/t
 | [Plugin logs](../app-walkthrough.md#logs-plugin-logs) | Instance/model correlation, outcome/timing/filtering and scoped private detail. | L/R; W only to create known plugin activity. |
 | [System logs](../app-walkthrough.md#logs-system-logs) | Service/time/context selection, request-centred links, unavailable output and persistent denial without `restart-services`. | L/R; selecting a service for logs must not restart it. |
 
-Tests: [usage](../tests/test_usage.py), [allowances](../tests/test_allowances.py), [request filters](../tests/test_request_filters.py), [diagnostics](../tests/test_request_diagnostics_pages.py), [front logs](../tests/test_log_front.py), [reliability pages](../tests/test_reliability_pages.py), [plugins](../tests/test_plugin_front.py).
+Tests: [usage](../tests/test_usage.py), [allowances](../tests/test_allowances.py), [request filters](../tests/test_request_filters.py), [diagnostics](../tests/test_request_diagnostics_pages.py), [control node logs](../tests/test_log_front.py), [reliability pages](../tests/test_reliability_pages.py), [plugins](../tests/test_plugin_front.py).
 
 ## System
 
@@ -162,7 +162,7 @@ Tests: [usage](../tests/test_usage.py), [allowances](../tests/test_allowances.py
 | [Schedules](../app-walkthrough.md#system-schedules) | Backup/benchmark/outstanding scopes, ownership, timezones/DST, missed/overlap/offline policy and next occurrence/history. | L/R; create/edit/pause/resume/delete isolated schedules; real recurring work must be bounded and explicitly selected. |
 | [DB](../app-walkthrough.md#system-db) | Store/engine/table/schema/health/backup-age presentation and export round-trip with synthetic records. | L/R; live exports contain private data and require a suitable selected scope; engine changes M. |
 | [Database migration preview](../app-walkthrough.md#system-database-migration-preview) | POST-rendered preflight/report, source/target bindings, tools/space and chain/artifact/recovery checks. | L using isolated profiles; live preview may probe resources; migration/cutover M. |
-| [Backups](../app-walkthrough.md#system-backups) | Verified versus partial/missing recovery sets, front/compute parts, sizes, retention and exact restore-preview links. | L/R; actual backup/identity bundle creation isn't needed for page coverage; live restore/import M. |
+| [Backups](../app-walkthrough.md#system-backups) | Verified versus partial/missing recovery sets, control node/compute parts, sizes, retention and exact restore-preview links. | L/R; actual backup/identity bundle creation isn't needed for page coverage; live restore/import M. |
 | [Restore preview](../app-walkthrough.md#system-restore-preview) | Selected manifest/parts/files/exclusions, owning services, restore order and missing-half refusal. | L/R; never execute restore as part of preview verification. |
 
 Tests: [status](../tests/test_status_nodes.py), [telemetry](../tests/test_machine_telemetry.py), [alerts](../tests/test_alerts.py), [schedules](../tests/test_schedules.py), [DB administration](../tests/test_database_admin.py), [migration](../tests/test_database_migration.py), [backups](../tests/test_backups.py). PostgreSQL-specific checks need an isolated test DSN; missing it is Blocked, not a live engine-change request.
@@ -194,7 +194,7 @@ Apply the shared page checks to every section and its topics: map/breadcrumb/top
 
 | Page / manual checklist | Specific agent comparison | Modes |
 |---|---|---|
-| [System reference](../app-walkthrough.md#docs-system-reference) | `/docs`, the Docs default: ownership map, front/worker boundaries and section directory; topics Models, Accounts and groups, Logs and Hosted providers with their code references. | L/R |
+| [System reference](../app-walkthrough.md#docs-system-reference) | `/docs`, the Docs default: ownership map, control node/worker boundaries and section directory; topics Models, Accounts and groups, Logs and Hosted providers with their code references. | L/R |
 | [API reference](../app-walkthrough.md#docs-api-reference) | Overview plus OpenAI compatibility, Custom endpoints, Headers and Code reference topics: implemented methods/paths/headers, unsupported APIs, handler links and credential-free examples. | L/R |
 | [Web app](../app-walkthrough.md#docs-web-app) | Every account: console categories, then Chat, Collections, Workflows, Voice and media, Tools and API keys; page Help buttons land on these topics and `/guide` redirects here. | L/R |
 | [Modules](../app-walkthrough.md#docs-modules) | Where each module runs, then WeightRoom, Turnstile, LoadCoach, ToolLocker, Voice, Spotter, Plugins, Mirror Wall and SoundRoom, each with its guide (where written) and code reference. | L/R |
@@ -221,7 +221,7 @@ Tests: [account/console routes](../tests/test_weightroom.py), [forms](../tests/t
 |---|---|---|
 | [Sign in](../app-walkthrough.md#sign-in-and-recovery-sign-in) | Safe deep-link/query retention through credential/authenticator steps, rejected external destinations, focus, validation and unavailable-auth guidance. | L/R; use isolated credentials for repeated failures/lockout tests. |
 | [Error and refusal pages](../app-walkthrough.md#sign-in-and-recovery-error-and-refusal-pages) | Framed 403/404/500, persistent reason, request ID, recovery links and no private exception detail. | L/R; 500 injection only L. |
-| [Compute or machine unavailable](../app-walkthrough.md#sign-in-and-recovery-compute-or-machine-unavailable) | Pages the front still serves, correct stale/missing labels, node-scoped disabled controls and Wake visibility. | L/R using an already unavailable node; deliberate outage/power under M. |
+| [Compute or machine unavailable](../app-walkthrough.md#sign-in-and-recovery-compute-or-machine-unavailable) | Pages the control node still serves, correct stale/missing labels, node-scoped disabled controls and Wake visibility. | L/R using an already unavailable node; deliberate outage/power under M. |
 
 Tests: [shared UI/recovery](../tests/test_ui_consistency.py), [console](../tests/test_console_browser.py), [node availability](../tests/test_node_availability_browser.py), [offline status](../tests/test_status_nodes.py).
 
@@ -233,7 +233,7 @@ Tests: [shared UI/recovery](../tests/test_ui_consistency.py), [console](../tests
 - [ ] **L or bounded read-only live call:** Exercise a harmless MCP tool with non-private scratch data and a denied tool/set/sensitivity. Confirm a refused tool did not execute; don't retry an unknown-outcome action blindly.
 - [ ] **L:** Simulate upstream loss, slow network, auth expiry and recovery; assert no duplicate submissions or replayed partial answers. A browser-local transport failure does not prove a real server/node outage recovered.
 
-Tests: [front Chat/API](../tests/test_front_chat.py), [front tools](../tests/test_front_toollocker.py), [tool permissions](../tests/test_tool_access.py), [gateway](../tests/test_voice_gateway.py).
+Tests: [control node Chat/API](../tests/test_front_chat.py), [control node tools](../tests/test_front_toollocker.py), [tool permissions](../tests/test_tool_access.py), [gateway](../tests/test_voice_gateway.py).
 
 ## Run the maintained checks
 

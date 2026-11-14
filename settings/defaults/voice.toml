@@ -34,7 +34,7 @@ max_context_tokens = 8192
 speaker = 3 # v1.0 speaker 3: af_heart; never reuse an ID across bundles without checking
 
 
-# Short prerecorded phrases; changes regenerate the complete set and refresh front.
+# Short prerecorded phrases; changes regenerate the complete set and refresh the control node.
 [greetings]
 connecting = "Hello. I'm connecting you now."
 preparing = "Hello. I'm getting the voice system ready. I'll let you know when you can begin."

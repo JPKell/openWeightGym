@@ -259,7 +259,7 @@ def run_lanes(catalogue, inventory, models, definition, runs, location_latest, l
     configured = {item['name']: item for item in inventory.get('machines', [])}
     available = set(catalogue.get('available_machines', []))
     unavailable = set(catalogue.get('unavailable_machines', []))
-    # Front's host is visible even when it has no registered inference service.
+    # Control node's host is visible even when it has no registered inference service.
     names = dict.fromkeys(['front', *configured, *sorted(available | unavailable)])
     candidates = {}
     for model in models:
@@ -336,12 +336,12 @@ def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs,
             return f'{value:.6g}'
         return f'{value:,.2f}'.rstrip('0').rstrip('.') if abs(value) >= .01 else f'{value:.4g}'
 
-    # Run studio includes front's host; measurements require an inference service.
+    # Run studio includes the control node's host; measurements require an inference service.
     nodes = [node for node in run_lanes(catalogue, inventory, models, selected, runs, location_latest, {}, False)
              if node['service']]
     reports = {node['name']: node for node in inventory.get('machines', [])}
     labels = {'ready': 'Ready', 'unknown': 'Status unknown', 'unavailable': 'Unreachable',
-              'disabled': 'Disabled', 'front': 'Front host'}
+              'disabled': 'Disabled', 'front': 'Control node'}
     for node in nodes:
         report = reports.get(node['name'], {})
         cards = report.get('cards') or []
@@ -349,7 +349,7 @@ def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs,
         node.update(id=node['name'], state_label=labels[node['state']], models=0, current=0, total=0,
                     hardware=(f'{len(cards)} GPU' + ('s' if len(cards) != 1 else '') +
                               (f' · {total / 1024:g} GiB VRAM' if total else '')) if cards else
-                             report.get('hostname') or ('Front host' if node['state'] == 'front' else 'Hardware not reported'))
+                             report.get('hostname') or ('Control node' if node['state'] == 'front' else 'Hardware not reported'))
     measurement = selected['id'].removeprefix('embedding_')
     metric = {'context': 'max_context_tokens', 'load': 'load_seconds',
               'speed': 'embedding_tokens_per_second' if selected.get('embedding') else 'generation_tokens_per_second',

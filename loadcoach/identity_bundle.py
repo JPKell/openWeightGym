@@ -150,7 +150,7 @@ def _open(content: bytes, passphrase: str) -> dict:
 
 
 def _accounts(config: Path):
-    """Resolve the configured front account authority without loading keys or starting services."""
+    """Resolve the configured control node account authority without loading keys or starting services."""
     told = tomllib.loads(_read(config).decode())
     data = config.parent / told.get("data", ".")
     return DatabaseRegistry.from_config(
@@ -820,7 +820,7 @@ def main(argv: list[str] | None = None) -> None:
     export.add_argument(
         "--accounts-config",
         type=Path,
-        help="Custom front account configuration (default settings/weightroom.toml).",
+        help="Custom control node account configuration (default settings/weightroom.toml).",
     )
     export.add_argument(
         "--include",

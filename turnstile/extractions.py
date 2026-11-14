@@ -1,4 +1,4 @@
-"""Front-owned vision jobs; GPU admission and every inference attempt use normal APIs."""
+"""Control-node-owned vision jobs; GPU admission and every inference attempt use normal APIs."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ async def read_json(request, limit=65536):
 class ExtractionService:
     """Orchestrate caller-private jobs through ordinary inference admission."""
     def __init__(self, source, caller):
-        """Open front persistence and bounded orchestration slots."""
+        """Open control node persistence and bounded orchestration slots."""
         self.store = Extractions(source)
         self.caller = caller
         self.door = None
@@ -205,7 +205,7 @@ class ExtractionService:
             self.store.failed(owner, identifier, {'code': getattr(error, 'code', 'upstream_disconnected'),
                               'message': str(error) if isinstance(error, Problem) else 'Inference connection ended. Upstream outcome may be unknown.'}, raw, provenance, usage)
         except Exception:
-            self.store.failed(owner, identifier, {'code': 'extraction_failed', 'message': 'Extraction failed. Check front service diagnostics.'}, raw, provenance, usage)
+            self.store.failed(owner, identifier, {'code': 'extraction_failed', 'message': 'Extraction failed. Check control node service diagnostics.'}, raw, provenance, usage)
             import traceback
             traceback.print_exc()
         finally:

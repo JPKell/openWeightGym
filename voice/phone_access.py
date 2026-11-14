@@ -11,7 +11,7 @@ import time
 
 
 def correlation_key(folder):
-    """Create once with an atomic link, including simultaneous front/gateway starts."""
+    """Create once with an atomic link, including simultaneous control node/gateway starts."""
     path = Path(folder) / 'voice-phone-correlation.key'
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

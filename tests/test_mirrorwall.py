@@ -120,7 +120,7 @@ def test_adult_previews_require_global_permission_and_each_users_opt_in(desk,mon
     changes=switch.front.state.console_settings.changes
     changes.seen('turnstile',{'image_adult_previews':{'value':False}})
     def ask(method,path,**kwargs):
-        # The front app also serves WeightRoom's background polls: use its existing
+        # The control node app also serves WeightRoom's background polls: use its existing
         # event loop rather than sharing its clients and stores across TestClient loops.
         async def request():
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=switch.front),base_url='http://front:8442') as client:

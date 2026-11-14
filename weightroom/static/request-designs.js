@@ -1,6 +1,7 @@
 // Portable design study: all filtering, evidence, exports and simulated controls stay in this tab.
 (() => {
   'use strict';
+  const nodeLabel = window.suiteNodeLabel || (name => name === 'front' ? 'Control node' : name);
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const records = JSON.parse($('#sample-data').textContent);
   const descriptions = {
@@ -55,7 +56,7 @@
     $('#peek-id').textContent = `REQUEST #${selected.id}`;
     $('#peek-model').textContent = selected.model; badge($('#peek-state'), selected.state);
     $('#peek-facts').replaceChildren();
-    [['Node', selected.node], ['User / caller', `${selected.user} / ${selected.caller}`],
+    [['Node', nodeLabel(selected.node)], ['User / caller', `${selected.user} / ${selected.caller}`],
       ['Compute total', selected.active ? `Elapsed ${seconds(selected.elapsed)}` : seconds(selected.total)],
       ['Queue wait', seconds(selected.waited)], ['First token', seconds(selected.ttft)]].forEach(([k,v]) => fact($('#peek-facts'), k, v));
     $('#peek-reason').textContent = selected.error || (selected.legacy ? 'No detailed compute stages were recorded.' : 'Open the full record for measured stages, trace context and retained evidence.');
@@ -112,7 +113,7 @@
         if (layout === 'explorer') { renderRows(); save(); $(`#request-rows [data-id="${r.id}"] [data-open]`)?.focus(); }
         else openDetail();
       });
-      const values = {at:time(r.at)+' PST', model:r.model, node:r.node, user:r.user, caller:r.caller,
+      const values = {at:time(r.at)+' PST', model:r.model, node:nodeLabel(r.node), user:r.user, caller:r.caller,
         total:r.active ? `${r.elapsed.toFixed(3)} elapsed` : r.total == null ? '—' : r.total.toFixed(3),
         waited:r.waited == null ? '—' : r.waited.toFixed(3), ttft:r.ttft == null ? '—' : r.ttft.toFixed(3),
         input:number(r.input), output:number(r.output), cost:r.cost == null ? '—' : r.cost.toFixed(5)};
@@ -141,7 +142,7 @@
     $('#detail-heading h1').textContent = `Request #${r.id}`;
     $('#detail-heading h1').tabIndex = -1;
     badge($('#detail-state'),r.state); $('#asked-at').textContent = time(r.at);
-    $('#detail-model').textContent = r.model; $('#detail-node').textContent = `${r.node} · ${r.service}`;
+    $('#detail-model').textContent = r.model; $('#detail-node').textContent = `${nodeLabel(r.node)} · ${r.service}`;
     $('#detail-path').textContent = r.path;
     $('.rq-verdict').dataset.error = String(isError(r));
     $('#verdict-label').textContent = r.active ? 'IN PROGRESS / SAMPLE SNAPSHOT' : 'REQUEST OUTCOME';
@@ -153,7 +154,7 @@
     $('#verdict-note').textContent = legacy ? 'The ending or detailed stage history was not retained. Missing values remain unavailable; no latency is inferred.' :
       r.error || (r.active ? 'This is a retained sample of an active request. The elapsed measurement is partial; it is not a completed total.' :
       r.load > 0 ? `Loading took ${seconds(r.load)} of ${seconds(r.total)} on compute. Inspect the stages before attributing latency to generation.` :
-      `Answered by ${r.model} on ${r.node}. Use the measured stages and service trace to inspect the path.`);
+      `Answered by ${r.model} on ${nodeLabel(r.node)}. Use the measured stages and service trace to inspect the path.`);
     $('#detail-total-label').textContent = r.active ? 'Elapsed on compute' : 'Compute total';
     $('#detail-total').textContent = legacy ? '—' : seconds(r.active?r.elapsed:r.total);
     $('#detail-wait').textContent = legacy ? '—' : seconds(r.waited);
@@ -183,21 +184,21 @@
     r.spans.forEach((span,i) => {
       const row = clone('#span-row'), button = row.querySelector('[data-span-open]');
       button.textContent = `${'↳ '.repeat(span.depth)}${span.operation}`;
-      row.querySelector('[data-span-host]').textContent = `${span.service} / ${span.machine}`;
+      row.querySelector('[data-span-host]').textContent = `${span.service} / ${nodeLabel(span.machine)}`;
       badge(row.querySelector('[data-span-outcome]'),span.outcome);
       row.querySelector('[data-span-time]').textContent = legacy && i===3 ? '—' : seconds(span.seconds);
       row.querySelector('[data-span-id]').textContent = span.id;
       row.querySelector('[data-span-parent]').textContent = `parent: ${span.parent}`;
       function inspect() {
         $$('#span-rows tr').forEach(el => el.setAttribute('aria-selected',String(el === row)));
-        $('#span-detail').textContent = `${span.operation} · ${span.service} / ${span.machine} · ${span.outcome}. Span ${span.id}; parent ${span.parent}. ${span.seconds == null || legacy && i===3 ? 'No completed duration was recorded.' : `Locally measured duration: ${seconds(span.seconds)}.`} ${i===3 && r.error ? r.error : ''}`;
+        $('#span-detail').textContent = `${span.operation} · ${span.service} / ${nodeLabel(span.machine)} · ${span.outcome}. Span ${span.id}; parent ${span.parent}. ${span.seconds == null || legacy && i===3 ? 'No completed duration was recorded.' : `Locally measured duration: ${seconds(span.seconds)}.`} ${i===3 && r.error ? r.error : ''}`;
       }
       button.addEventListener('click',inspect); $('#span-rows').append(row); if (i === 3) inspect();
     });
     $('#failure-alert').hidden = !r.error; $('#failure-text').textContent = r.error;
     $('#diagnostic-facts').replaceChildren();
     [['Error code',r.error_code || 'None recorded'],['Route',r.hosted?'Hosted':'Local compute'],['Selected model',r.model],
-      ['Selection reason',`Role ${r.role}: available model on ${r.node}`],['Context',`${number(r.context)} tokens`],
+      ['Selection reason',`Role ${r.role}: available model on ${nodeLabel(r.node)}`],['Context',`${number(r.context)} tokens`],
       ['Placement',r.cards.join(', ')],['Images sent','No'],['Tools offered','0'],['Tool execution','Not recorded'],
       ['Model fingerprint',r.fingerprint],['Engine build',r.service === 'LoadCoach'?r.build:'Not applicable'],
       ['Admission wait estimate','Not recorded']].forEach(([k,v]) => fact($('#diagnostic-facts'),k,v));

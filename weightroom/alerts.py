@@ -172,22 +172,22 @@ def observation_evidence(row, suffix, now, baseline, lost, hold_seconds):
     from loadcoach.observation_store import SOURCE_FRESH_SECONDS
     name = row['machine']
     recording = 'true' if row.get('recording') is True else 'false' if row.get('recording') is False else 'not reported'
-    origin = ("front's local Turnstile observation writer" if row['_local'] else
-              f"LoadCoach on node {name}, forwarded to front's Turnstile through signed POST /turnstile/log")
+    origin = ("the control node's local Turnstile observation writer" if row['_local'] else
+              f"LoadCoach on node {name}, forwarded to the control node's Turnstile through signed POST /turnstile/log")
     facts = f"Observation health from {origin}: fresh={'true' if row.get('fresh') else 'false'}; recording={recording}. "
     received = row.get('received')
     if not row['_local']:
         if type(received) in (int, float) and math.isfinite(received):
             try:
                 stamp = datetime.fromtimestamp(received, timezone.utc).strftime('%d %b %Y, %H:%M:%S UTC')
-                facts += f"Front last received this node's health report at {stamp} ({max(0, now-received):.1f} seconds before this check). "
+                facts += f"Control node last received this node's health report at {stamp} ({max(0, now-received):.1f} seconds before this check). "
             except (OverflowError, ValueError, OSError):
                 facts += 'The last health receipt time is unavailable. '
         else:
             facts += 'The report did not provide a last health receipt time. '
     if suffix == 'freshness':
         if row['_local']:
-            return facts + 'This check uses the presence of local writer health in front\'s metrics report. No service-status probe was made.'
+            return facts + 'This check uses the presence of local writer health in the control node\'s metrics report. No service-status probe was made.'
         return facts + (f'A source is fresh only while its last receipt is less than {SOURCE_FRESH_SECONDS} seconds old '
                         'and recording=true. The report does not identify whether the node is asleep, the sender stopped, '
                         'forwarding failed or recording is unavailable; it does not prove that a service crashed.')
@@ -264,7 +264,7 @@ def observation_conditions(report, previous=None, now=None, error_percent=0, p95
                                'explanation':f'Service {name}: {measurement}. {window}'
                                    f'Minimum sample count {min_samples}; observed count {group["count"]}. '
                                    f'The measured condition must persist for {hold_seconds:g} seconds. '
-                                   'WeightRoom reads the retained ingress metric window from front\'s Turnstile; benchmarks are excluded.',
+                                   'WeightRoom reads the retained ingress metric window from the control node\'s Turnstile; benchmarks are excluded.',
                                'recovery':'A sustained fresh measured window is below the configured threshold.'})
     latest['_rules'] = rules
     return conditions, latest

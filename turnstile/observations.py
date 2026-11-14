@@ -1,4 +1,4 @@
-"""Owner-scoped metadata lookup, export and operational reports on the existing front API."""
+"""Owner-scoped metadata lookup, export and operational reports on the existing control node API."""
 
 import asyncio
 import json

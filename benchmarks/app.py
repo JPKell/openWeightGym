@@ -276,7 +276,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None):
             try:
                 task = await ask(request, 'POST', '/loadcoach/tasks', json={'id':number,'token':store.token(number),
                     'model':target['local_name'], **({'model_id':target['model_id']} if target['model_id'] else {}),
-                    # Only a node the caller chose is sent as `machine`; the front may refuse that choice
+                    # Only a node the caller chose is sent as `machine`; the control node may refuse that choice
                     # (Settings → General). Otherwise the node's own model ID places the task.
                     **({'machine': target['machine']} if target['machine'] and (target.get('pinned') or not target['model_id']) else {}),
                     'metadata':{'benchmark':definition['id'],'benchmark_version':definition['version'],'model':target['model'],

@@ -37,7 +37,7 @@ class TwilioAPI:
         except httpx.TimeoutException:
             raise TwilioError('Twilio timed out. Try again shortly.') from None
         except httpx.HTTPError:
-            raise TwilioError('Twilio could not be reached. Check the front’s Internet connection.') from None
+            raise TwilioError('Twilio could not be reached. Check the control node’s Internet connection.') from None
         if not response.is_success:
             messages = {401: 'Twilio rejected the credentials (HTTP 401).', 403: 'Twilio refused this operation (HTTP 403).',
                 404: 'Twilio could not find that account or number (HTTP 404).', 429: 'Twilio’s rate limit was reached. Wait before trying again (HTTP 429).'}

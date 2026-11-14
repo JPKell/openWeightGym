@@ -25,7 +25,7 @@
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% macro database_summary(snapshot='') %}
 {% call kpi_row('Snapshot summary', class_='snapshot-bar mb-2') %}
-{{ kpi('Compute nodes reporting', value_attrs={'id':'coverage'}, note='Front reachable') }}
+{{ kpi('Compute nodes reporting', value_attrs={'id':'coverage'}, note='Control node reachable') }}
 {{ kpi('Databases', value_attrs={'id':'totals'}) }}
 {{ kpi('Known on disk', value_attrs={'id':'disk-total'}, note_attrs={'id':'disk-note'}) }}
 {% endcall %}

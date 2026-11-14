@@ -40,7 +40,7 @@ def door(tmp_path, servers=None, **settings):
 
 
 def accounts(tmp_path):
-    """The accounts, as front keeps them."""
+    """The accounts, as control node keeps them."""
     return Users(str(tmp_path / "accounts.db"), GROUPS)
 
 

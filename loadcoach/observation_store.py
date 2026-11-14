@@ -38,10 +38,10 @@ BUCKETS = (
 )
 MAX_RECORDS = 4096
 MAX_BYTES = 8 * 1024 * 1024
-# What front keeps, set from weightroom.toml and stored beside the spans so every writer and pruner
+# What control node keeps, set from weightroom.toml and stored beside the spans so every writer and pruner
 # of that store follows it. A store without a policy row (compute's spool) keeps everything.
 POLICY = {"keep_days": 7, "success_percent": 100, "max_spans": 0, "quiet_routes": list(POLLS)}
-SPOOL_SECONDS = 3600  # how long a node keeps spans front has acknowledged
+SPOOL_SECONDS = 3600  # how long a node keeps spans control node has acknowledged
 
 
 def policy(connection) -> dict:
@@ -347,7 +347,7 @@ def receive(source, records, machine: str, health=None) -> int:
 
 
 def optional_spool(connection) -> bool:
-    """Use WAL NORMAL only for optional node data; audit/front connections keep their policy."""
+    """Use WAL NORMAL only for optional node data; audit/control node connections keep their policy."""
     if (
         connection.engine == "sqlite"
         and connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
@@ -744,8 +744,8 @@ def prune(connection, now=None, forwarded: bool = False, *,stop=None) -> None:
 
     Spans go after the store's keep_days, and the oldest beyond its max_spans (spans that arrived in
     one batch share an arrival time, so the cap can be passed by up to one batch). A node that forwards
-    (`forwarded`) also lets go of what front has acknowledged after an hour: front keeps the copy.
-    Front then sweeps out routine polls (`sweep`).
+    (`forwarded`) also lets go of what control node has acknowledged after an hour: control node keeps the copy.
+    Control node then sweeps out routine polls (`sweep`).
     """
     now = time.time() if now is None else now
     rules = policy(connection)

@@ -1,4 +1,4 @@
-"""Plugin management uses openWeightGym permissions; front chat persists native session mappings/events."""
+"""Plugin management uses openWeightGym permissions; control node chat persists native session mappings/events."""
 
 import json
 import shutil
@@ -36,7 +36,7 @@ def test_model_snapshot_refresh_is_passive_and_keeps_cache_during_sleep(tmp_path
 
 
 def test_compute_mirror_lists_models_and_front_says_who_may_use_them(desk):
-    """Compute's list for the plugin path holds models only. Keys, expiry and an app's limits are front's to apply."""
+    """Compute's list for the plugin path holds models only. Keys, expiry and an app's limits are the control node's to apply."""
     import hashlib
     browser, switch, users = desk
     users.groups.put('adapter-app', {'can': ['app-sign-in', 'front-plugins'], 'models': ['hermes:gandalf']})
@@ -141,7 +141,7 @@ def test_adapter_models_remain_in_web_chat_when_compute_service_is_off(desk_with
 def test_front_chat_session_mapping_final_answer_events_and_edit_reset(tmp_path):
     registry, cli, adapter, _ = setup(tmp_path)
     user = {'name': 'alice', 'identity': 'person-one', 'can': ['front-plugins'], 'model_access': '*', 'models': [], 'roles': [], 'chat': {'temporary': False}, 'max_sensitivity': 'normal'}
-    def identify(authorization):  # turnstile's, from the accounts on front
+    def identify(authorization):  # turnstile's, from the accounts on the control node
         if authorization != 'Bearer user-key':
             raise AdapterError('Not authorized.', 401, 'invalid_api_key')
         return user

@@ -16,7 +16,7 @@ RENAMED = {
     "front_toollocker": "toollocker_runs_on_front",
 }
 RETIRED = {
-    "front_tasks": ("the front always keeps task records now. Whether callers may choose a node is "
+    "front_tasks": ("the control node always keeps task records now. Whether callers may choose a node is "
                     "'Allow callers to choose the node' (allow_caller_to_specify_destination) under Settings → General"),
 }
 BACKUP_SUFFIX = ".before-peer-nodes"
@@ -160,9 +160,9 @@ def _toml(value) -> str:
 
 
 def default_node_hostname(settings_folder: Path, told: dict) -> str:
-    """The old default node's host name, as the front last saw it: `machine_hosts` in the accounts store.
+    """The old default node's host name, as the control node last saw it: `machine_hosts` in the accounts store.
 
-    The store is read where the front's settings put it: SQLite in the data folder, or PostgreSQL
+    The store is read where the control node's settings put it: SQLite in the data folder, or PostgreSQL
     through its `dsn_file` when psycopg is installed (it is in the suite's environment). Empty when
     the store, the row or the driver is missing; the node's name is then set by hand.
     """
@@ -189,7 +189,7 @@ def default_node_hostname(settings_folder: Path, told: dict) -> str:
 
 
 def move_default_node(path: Path, hostname: str, say=_say) -> str:
-    """Front: move the top-level `compute` (and its wake settings) to `[machines.NAME]`, NAME from `hostname`.
+    """Control node: move the top-level `compute` (and its wake settings) to `[machines.NAME]`, NAME from `hostname`.
 
     The node is written with `formerly = "compute"`, so rows, links and statements that still use
     the old name keep resolving. The old lines stay in the file as comments. Gives the new name, or
@@ -252,10 +252,10 @@ def rename_node(path: Path, hostname: str, say=_say) -> str:
     name = node_name_for(hostname)
     if not name:
         raise NodeNameProblem(f"{path}: this node's host name {hostname!r} is not a valid node name. Set machine_name by hand "
-                              "to the name its [machines.NAME] has on the front, then update again.")
+                              "to the name its [machines.NAME] has on the control node, then update again.")
     lines = original.splitlines(keepends=True)
     end = _top_level(lines)
-    line = f"machine_name = {_toml(name)}  # formerly {LEGACY_NODE}; matches [machines.{name}] on the front\n"
+    line = f"machine_name = {_toml(name)}  # formerly {LEGACY_NODE}; matches [machines.{name}] on the control node\n"
     found = next((number for number in range(end) if re.match(r"^\s*machine_name\s*=", lines[number])), None)
     if found is None:
         lines.insert(end, line)
@@ -273,7 +273,7 @@ def rename_node(path: Path, hostname: str, say=_say) -> str:
 def rename_installation(settings_folder: Path, say=_say) -> None:
     """Rename old keys in an installation's settings files, as `owg update` does after fetching code.
 
-    Then every node becomes a peer: the front's default node gets its own [machines.NAME] and the
+    Then every node becomes a peer: the control node's default node gets its own [machines.NAME] and the
     node itself the same machine_name, both named from the node's host name.
     """
     import socket

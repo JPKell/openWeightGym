@@ -298,7 +298,7 @@ def test_schedule_ui_authorization_pause_resume_csrf_and_backup(desk, tmp_path, 
     backup_keys.configure(tmp_path / 'backups')
     backup_keys.configure(tmp_path / 'data/backups')
     browser, wire, users = desk
-    core = connect(str(tmp_path / 'loadcoach.db'))  # the grants are compute's; the accounts are front's
+    core = connect(str(tmp_path / 'loadcoach.db'))  # the grants are compute's; the accounts are the control node's
     sign_in(browser, 'pat')
     assert browser.get('/schedules').status_code == 403
     assert browser.post('/schedules', data={}).status_code == 403
@@ -327,7 +327,7 @@ def test_schedule_ui_authorization_pause_resume_csrf_and_backup(desk, tmp_path, 
 
 def test_schedule_ui_edit_delete_validation_and_history(desk, tmp_path):
     browser, wire, users = desk
-    core = wire.front.state.task_records.batches.db  # the front keeps the grants
+    core = wire.front.state.task_records.batches.db  # the control node keeps the grants
     sign_in(browser, 'jordan')
     data = {'name': 'Nightly backup', 'kind': 'backup', 'timezone': 'America/Vancouver', 'time': '23:59',
             'weekdays': ['0', '3'], 'missed': 'skip', 'retention': '10'}
@@ -388,7 +388,7 @@ def test_schedule_ui_edit_permissions_and_edits_while_nodes_are_off(desk):
     assert browser.get('/schedules?edit='+row['id']).status_code == 403
     assert browser.post(url+'/edit', data=data).status_code == 403
     sign_in(browser, 'jordan')
-    wire.off = True  # the front keeps the grant, so a backup schedule can be edited with every node off
+    wire.off = True  # the control node keeps the grant, so a backup schedule can be edited with every node off
     response = browser.post(url+'/edit', data={**data, 'name': 'Changed'})
     assert response.status_code == 200, response.text
     assert browser.app.state.schedules.rows()[0]['name'] == 'Changed'
@@ -409,7 +409,7 @@ def test_delete_keeps_submitted_benchmark_occurrence_and_history(tmp_path):
 
 
 def through(tmp_path, monkeypatch, **config):
-    """LoadCoach behind turnstile, as on the two machines. Compute asks front for the accounts at every turn here, not every ten seconds."""
+    """LoadCoach behind turnstile, as on the two machines. Compute asks control node for the accounts at every turn here, not every ten seconds."""
     monkeypatch.setattr('loadcoach.front.FRESH_FOR', 0)
     settings = Config(nvidia_smi='missing', machine_key_file=str(tmp_path/'machine.key'), front='http://front:8442', **config)
     return front_of(lambda front: build_app(settings, None, front), Users(tmp_path/'accounts.db', GROUPS), tmp_path)
@@ -418,7 +418,7 @@ def through(tmp_path, monkeypatch, **config):
 def test_schedule_dispatch_is_scoped_idempotent_and_preserves_model_access(tmp_path, monkeypatch, backup_keys):
     backup_keys.configure(tmp_path / 'backups')
     caller = through(tmp_path, monkeypatch, database=str(tmp_path/'core.db')).__enter__()
-    users, core = caller.users, caller.front.state.task_records.batches.db  # the front keeps the grants
+    users, core = caller.users, caller.front.state.task_records.batches.db  # the control node keeps the grants
     users.add('owner','admin'); users.add('pat','plain')
     owner = {'authorization':'Bearer '+users.new_key('owner')}
     identifier, token = 'b'*32, secrets.token_urlsafe(32)
@@ -443,7 +443,7 @@ def test_schedule_dispatch_is_scoped_idempotent_and_preserves_model_access(tmp_p
 
 def test_schedule_edit_api_rejects_invalid_scope_without_changing_existing_grant(tmp_path, monkeypatch):
     caller = through(tmp_path, monkeypatch, database=str(tmp_path/'core.db')).__enter__()
-    users, core = caller.users, caller.front.state.task_records.batches.db  # the front keeps the grants
+    users, core = caller.users, caller.front.state.task_records.batches.db  # the control node keeps the grants
     users.add('owner', 'admin'); users.add('other', 'admin'); users.add('pat', 'plain')
     headers = {'authorization': 'Bearer '+users.new_key('owner')}
     identifier, token = 'b'*32, 'x'*40
@@ -479,7 +479,7 @@ def test_scheduled_benchmark_delegation_uses_stable_model_and_current_permission
     monkeypatch.setattr('loadcoach.probes.Probes.identify',environment)
     monkeypatch.setattr('loadcoach.probes.Probes.subject',subject)
     caller = through(tmp_path, monkeypatch, database=str(path)).__enter__()
-    users, core = caller.users, caller.front.state.task_records.batches.db  # the front keeps the grants
+    users, core = caller.users, caller.front.state.task_records.batches.db  # the control node keeps the grants
     users.add('owner','admin')
     headers={'authorization':'Bearer '+users.new_key('owner')}
     identifier,token='c'*32,'x'*40

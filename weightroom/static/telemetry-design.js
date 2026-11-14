@@ -19,7 +19,7 @@
     const scenario = $('#scenario').value;
     state.hosts = Array.from({ length: count }, (_, index) => {
       const front = count > 1 && index === count - 1;
-      const name = front ? 'front' : ['atlas', 'orion', 'nova', 'cedar', 'lyra', 'vega'][index] || `worker-${String(index + 1).padStart(2, '0')}`;
+      const name = front ? 'Control node' : ['atlas', 'orion', 'nova', 'cedar', 'lyra', 'vega'][index] || `worker-${String(index + 1).padStart(2, '0')}`;
       const gpuCount = front || index % 7 === 3 ? 0 : scenario === 'dense' ? 8 : index === 1 ? 4 : 2;
       const gpuModel = index === 0 ? 'RTX A4000' : 'RTX 4090';
       const total = index === 0 ? 16 : 24;
@@ -28,7 +28,7 @@
         installedComponents: (front ? ['weightroom', 'turnstile', 'toollocker', 'spotter'] : ['loadcoach', 'spotter', 'voice'])
           .map((name, service) => ({id:name, name, kind:'services', running: scenario === 'healthy' || service !== 2}))
           .concat(front ? [] : [{id:'llama_cpp', name:'llama.cpp', kind:'engines', label:'Ready'}]),
-        services: front ? ['Front'] : index === 0 ? ['GPU compute', 'CPU compute'] : ['Compute'],
+        services: front ? ['Control node'] : index === 0 ? ['GPU compute', 'CPU compute'] : ['Compute'],
         state: scenario === 'stale' ? 'stale' : scenario === 'healthy' ? 'reporting' : index === 2 ? 'offline' : 'reporting',
         cpu: front ? 12 : index === 0 ? 1 : 31 + index * 13 % 49,
         cpuTemp: front ? null : index === 0 ? 39 : 48 + index * 4 % 25,

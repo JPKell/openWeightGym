@@ -1,4 +1,4 @@
-"""Versioned greeting recordings, generated on compute and cached atomically on front."""
+"""Versioned greeting recordings, generated on compute and cached atomically on the control node."""
 
 import base64
 from copy import deepcopy

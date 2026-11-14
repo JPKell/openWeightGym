@@ -1,4 +1,4 @@
-"""Checks of the event log kept on the front machine: compute sends, front chains, and the move."""
+"""Checks of the event log kept on the control node: compute sends, control node chains, and the move."""
 
 import json
 import sqlite3
@@ -22,7 +22,7 @@ def test_compute_sends_its_entries_front_chains_them_and_a_request_keeps_compute
     assert facts["asked"]["source"] == number and facts["ended"]["what"] == "done" and facts["text"]["asked"]["model"] == "small"
     assert listed[0]["id"] == number  # the request is known by compute's number
     assert [entry["of"] for entry in shown if entry["what"] == "done"] == [number]
-    # One chain, on front: the user added on front and the request sent from compute are in it together.
+    # One chain, on the control node: the user added on the control node and the request sent from compute are in it together.
     assert front.verify()[1] is None and front.verify()[0] > 2
     assert front.db.execute("SELECT COUNT(*) FROM events WHERE machine = 'compute' AND source = ?", (number,)).fetchone()[0] == 1
 
@@ -31,7 +31,7 @@ def test_compute_keeps_what_front_does_not_have_and_sends_it_once_front_is_back(
     compute, front = Log(str(tmp_path / "compute.db"), chained=False), Log(str(tmp_path / "front.db"), keep_days=0)
     first = compute.add("request", "asked", "pat", model="small")
     compute.add("request", "done", "pat", model="small", of=first)
-    entries, texts = compute.unsent()  # front is away: nothing is marked as sent
+    entries, texts = compute.unsent()  # control node is away: nothing is marked as sent
     assert [one["id"] for one in compute.unsent()[0]] == [first, first + 1] and texts == []
     assert compute.db.execute("SELECT COUNT(*) FROM events WHERE hash IS NOT NULL").fetchone()[0] == 0  # no chain on compute
 
@@ -65,7 +65,7 @@ def test_the_log_moves_to_front_once_and_compute_s_copy_stays(tmp_path):
     from weightroom.app import cli as weightroom_cli
 
     compute = Log(str(tmp_path / "compute.db"), keep_text=5)
-    compute.add("backup", "created", "pat", machine="compute")  # a detail with the name of a column front keeps: it stays a detail
+    compute.add("backup", "created", "pat", machine="compute")  # a detail with the name of a column control node keeps: it stays a detail
     first = compute.add("request", "asked", "pat", model="small")
     compute.add("request", "done", "pat", model="small", of=first)
     compute.keep_asked(first, json.dumps({"model": "small"}))
@@ -100,11 +100,11 @@ def test_front_prunes_from_the_start_of_its_chain_so_what_is_left_still_verifies
 
 def test_front_s_own_request_and_a_compute_request_with_the_same_number_keep_their_own_records(tmp_path):
     front = Log(str(tmp_path / "front.db"), keep_days=0, keep_text=5)
-    hosted = front.add("request", "asked", "pat", model="cloud", hosted="vendor")  # answered on front, numbered by front's entry
+    hosted = front.add("request", "asked", "pat", model="cloud", hosted="vendor")  # answered on the control node, numbered by the control node's entry
     front.add("request", "done", "pat", model="cloud", of=hosted)
     front.keep_asked(hosted, json.dumps({"from": "front"}))
     worker = Log(str(tmp_path / "compute.db"), chained=False, keep_text=5)
-    while (number := worker.add("request", "asked", "pat", model="small")) < hosted:  # compute's counter catches up with front's
+    while (number := worker.add("request", "asked", "pat", model="small")) < hosted:  # compute's counter catches up with the control node's
         worker.add("request", "done", "pat", model="small", of=number)
     worker.add("request", "done", "pat", model="small", of=number)
     worker.keep_asked(number, json.dumps({"from": "compute"}))

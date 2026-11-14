@@ -11,7 +11,7 @@ host = "compute.lan"
 port = 8445
 
 # Where the voice service asks LoadCoach for what it needs itself, with its own key: holds, the
-# status and its settings. That is turnstile, on the front machine, which checks the key.
+# status and its settings. That is turnstile, on the control node, which checks the key.
 compute = "http://front.lan:8442"
 
 key_file = "/home/you/openWeightGym/keys/voice-service.key"

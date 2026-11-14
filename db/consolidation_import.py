@@ -17,11 +17,11 @@ from loadcoach.config import data_folder, read_settings
 
 
 def telemetry(source, target, fingerprint, *, apply=False):
-    """Import retained machine telemetry into the history the front keeps."""
+    """Import retained machine telemetry into the history the control node keeps."""
     if not re.fullmatch(r"[a-f0-9]{64}", fingerprint):
         raise ValueError("A verified physical host fingerprint is required")
     if not target.execute("SELECT 1 FROM machine_hosts WHERE fingerprint=?", (fingerprint,)).fetchone():
-        raise ValueError("The verified physical host must already be known on front")
+        raise ValueError("The verified physical host must already be known on the control node")
     readings = source.execute("SELECT at,numbers FROM readings ORDER BY at").fetchall()
     additions, unchanged = [], 0
     for at, numbers in readings:
@@ -54,7 +54,7 @@ def telemetry(source, target, fingerprint, *, apply=False):
 
 
 def reliability(source, accounts, target, *, machine="compute", apply=False):
-    """Import retained model reliability outcomes into front storage."""
+    """Import retained model reliability outcomes into control node storage."""
     cursor = source.execute("SELECT * FROM reliability_outcomes ORDER BY request")
     names = [one[0] for one in cursor.description]
     additions, unchanged = [], 0
@@ -63,7 +63,7 @@ def reliability(source, accounts, target, *, machine="compute", apply=False):
         found = target.execute("SELECT " + ",".join(map(quoted, names)) + " FROM reliability_outcomes WHERE request=?", (row["request"],)).fetchone()
         if found:
             if tuple(found) != tuple(values):
-                raise ValueError("Reliability request conflicts with front; nothing imported")
+                raise ValueError("Reliability request conflicts with the control node; nothing imported")
             unchanged += 1
             continue
         owner = accounts.execute("SELECT name FROM users WHERE identity=?", (row["owner_id"],)).fetchone()
@@ -146,9 +146,9 @@ def tasks(source, target, *, machine='compute', apply=False):
     owners = dict(source.execute('SELECT name,identity FROM users')) if 'users' in known_tables else {}
     batch_users = dict(source.execute('SELECT id,user FROM batches'))
     def owner_id(row):
-        """Resolve a legacy task owner to its stable front account identity."""
+        """Resolve a legacy task owner to its stable control node account identity."""
         return json.loads(row['subject']).get('owner_id') or owners.get(batch_users[row['id']])
-    # Preserve all source columns exactly; immutable identity is added in a front-only
+    # Preserve all source columns exactly; immutable identity is added in a control-node-only
     # column, so a removed and recreated username cannot inherit legacy task history.
     return copy_missing(source, target, [
         ('files', "WHERE id IN (SELECT input_file FROM batches WHERE endpoint='/loadcoach/task' UNION SELECT output_file FROM batches WHERE endpoint='/loadcoach/task' UNION SELECT error_file FROM batches WHERE endpoint='/loadcoach/task')", (), {}),
@@ -159,7 +159,7 @@ def tasks(source, target, *, machine='compute', apply=False):
 
 
 def settings(source, target, *, apply=False, programs=None):
-    """Import front-program setting overrides from the legacy store."""
+    """Import control node program setting overrides from the legacy store."""
     from turnstile.settings import PROGRAMS
     names = tuple(sorted(PROGRAMS if programs is None else programs))
     where = 'WHERE program IN (' + ','.join('?' for _ in names) + ')'
@@ -167,7 +167,7 @@ def settings(source, target, *, apply=False, programs=None):
 
 
 def grants(source, target, *, apply=False):
-    """Import existing schedule authorization grants into the front's records."""
+    """Import existing schedule authorization grants into the control node's records."""
     return copy_missing(source, target, [('schedule_grants', '', (), {})], apply=apply)
 
 

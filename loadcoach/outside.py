@@ -2,7 +2,7 @@
 
 A service is an address that speaks OpenAI's format, such as OpenRouter, a rented server or
 another LoadCoach. It is registered once, with a name. Its key is not registered: that is a
-file on the front machine, `NAME.key` in the keys folder. Authorized administrators can
+file on the control node, `NAME.key` in the keys folder. Authorized administrators can
 replace it from Cloud APIs; the stored value is never returned or kept in the database.
 
 A service offers models. Each has a name of ours, which callers ask for, the service's own

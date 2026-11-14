@@ -1126,7 +1126,7 @@ def test_durable_execution_links_back_to_ingress_and_inherits_no_log_policy():
 
 
 def test_span_policy_samples_successful_traces_keeps_errors_and_bounds_the_table(tmp_path):
-    """Front's policy limits stored spans; metrics still count every finished span."""
+    """Control node's policy limits stored spans; metrics still count every finished span."""
     from loadcoach.log import Log
     from loadcoach.observation_store import ingest, metrics, prune, set_policy, policy
     import time

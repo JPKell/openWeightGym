@@ -1,4 +1,4 @@
-"""Front-owned image assets, workflow presets and existing-batch ownership bindings."""
+"""Control-node-owned image assets, workflow presets and existing-batch ownership bindings."""
 from db.migrations import Migration
 
 MIRRORWALL = (Migration(1,"private image assets and versioned workflow presets","""

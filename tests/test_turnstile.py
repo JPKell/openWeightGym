@@ -209,7 +209,7 @@ def test_the_waking_packet_and_the_settings(tmp_path):
     assert load_settings(file).compute_offset == 1000 and load_settings(file).machines[nodes.LEGACY]["spotter"] == "http://127.0.0.1:9444"
     file.write_text('compute = "http://compute.lan"\n')  # no port: as it always was
     assert load_settings(file).machines[nodes.LEGACY]["compute"] == "http://compute.lan:8442"
-    file.write_text('key_file = "x"')  # no node at all: a front that serves only its own pages and hosted models
+    file.write_text('key_file = "x"')  # no node at all: a control node that serves only its own pages and hosted models
     assert load_settings(file).machines == {}
     file.write_text('compute = "http://c:1"\n[machines.compute]\ncompute = "http://c:1"\n')  # the same node twice
     with pytest.raises(SystemExit, match="name the same node"):

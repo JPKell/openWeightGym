@@ -1,9 +1,9 @@
 # openWeightGym plugins
 
 Deployment status reviewed **2026-10-16**: the framework is loaded in WeightRoom and turnstile.
-The front Hermes `jeeves` adapter service is running and `hermes:gandalf` is enabled. A real
+The control node Hermes `jeeves` adapter service is running and `hermes:gandalf` is enabled. A real
 alias request and an adapter restart were qualified live on 2026-10-16. The Hermes messaging
-gateway on front is stopped; plugin routing does not need it.
+gateway on the control node is stopped; plugin routing does not need it.
 
 Plugins expose external agents and services as models at turnstile's existing `/v1` door.
 The first plugin wraps an existing Hermes installation using its CLI. Plugin requests work
@@ -11,7 +11,7 @@ without compute; a model request made by the external agent can independently wa
 
 Background native-model snapshot refreshes send `x-turnstile-no-wake` and keep the last valid
 snapshot while compute sleeps or is unavailable. Turnstile's plugin-mirror endpoint also refuses
-implicit wake-ups. Account permissions remain front-owned and are checked on each request.
+implicit wake-ups. Account permissions remain control-node-owned and are checked on each request.
 
 The contract and acceptance criteria are in [the specification](../docs/plugins/SPEC.md).
 Hermes-specific options are in [hermes/README.md](hermes/README.md).
@@ -22,7 +22,7 @@ Hermes-specific options are in [hermes/README.md](hermes/README.md).
    them. Superusers have both. Ordinary openWeightGym model restrictions also apply to public aliases.
 2. Open **Settings → Plugins**. Valid folders are listed; invalid manifests show their reason.
 3. Enable a plugin and add a named instance with its HTTP URL, listening address/port, and
-   plugin settings. Each instance gets a separate pairing key stored in the front machine's
+   plugin settings. Each instance gets a separate pairing key stored in the control node's
    `keys/plugins/` directory, never in its ordinary settings file.
 4. Download that instance's Linux installer. Extract it on the machine hosting the external
    service, read the root `README.md` beside `install.sh`, and run `./install.sh` as that
@@ -82,7 +82,7 @@ cancels the subprocess tree; interrupted work is never automatically replayed.
 Use your openWeightGym key with `GET /turnstile/plugins/runs/PLUGIN/INSTANCE/REQUEST_ID` to inspect an
 owned request receipt after a connection failure, without submitting the work again.
 
-Turnstile keeps minimal adapter-use records in front's `data/plugins.db`: caller, public model,
+Turnstile keeps minimal adapter-use records in the control node's `data/plugins.db`: caller, public model,
 plugin, instance, request/session IDs, time and outcome. It does not capture prompts, answers,
 tool output or token totals in this log. The Plugins page includes the authorized activity
 view. Normal compute calls made by an agent retain compute's normal logs and usage.
@@ -137,7 +137,7 @@ Adapter-local `data/runtime.db` stores owner/profile/native-session mappings and
 request receipts. Completed receipts retain final responses/events for idempotent replay;
 prompts are represented only by a hash, and accounting is excluded. Hermes retains its own
 native sessions according to its configuration. openWeightGym web-chat transcripts and returned
-session/event metadata live in front's existing `data/chat.db`.
+session/event metadata live in the control node's existing `data/chat.db`.
 
 Runtime state (`*/settings.json`, pairing keys and adapter databases) must stay outside source
 control. Deployment preserves these files. The plugin folder, README and specification ship

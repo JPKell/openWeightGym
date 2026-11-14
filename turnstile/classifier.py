@@ -1,4 +1,4 @@
-"""Signed Classifier tool delegation into ordinary front model routing."""
+"""Signed Classifier tool delegation into ordinary control node model routing."""
 
 import json
 

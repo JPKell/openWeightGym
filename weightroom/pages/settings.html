@@ -10,16 +10,16 @@
 {% call card("Model file locations", id="model-files") %}
   <form method="get" action="/settings" class="d-flex flex-wrap align-items-end gap-2 mb-3">
     <div><label class="form-label mb-1" for="file-machine">Node</label><select id="file-machine" name="file_machine" class="form-select form-select-sm">
-      {% for host in file_machine_choices %}<option value="{{ host.name }}"{% if host.name == file_machine %} selected{% endif %}>{{ 'Front machine' if host.name == 'front' else host.name }} · {{ node_state(host.state) }}</option>{% endfor %}
+      {% for host in file_machine_choices %}<option value="{{ host.name }}"{% if host.name == file_machine %} selected{% endif %}>{{ 'Control node' if host.name == 'front' else host.name }} · {{ node_state(host.state) }}</option>{% endfor %}
     </select></div><button class="btn btn-outline-secondary btn-sm">Show node</button>
   </form>
   {% if location_error %}<p class="text-warning-emphasis mb-0">{{ location_error }}</p>{% else %}
   {% if file_delivery_error %}{% call alert('warning', tag='p', role='status') %}{{ file_machine }} could not apply the saved locations: {{ file_delivery_error }} Check the paths and save again.{% endcall %}
-  {% elif file_pending %}{% call alert('info', tag='p', role='status') %}Locations saved on front. They will be sent to {{ file_machine }} when it reconnects, and apply after its compute service restarts.{% endcall %}
+  {% elif file_pending %}{% call alert('info', tag='p', role='status') %}Locations saved on the control node. They will be sent to {{ file_machine }} when it reconnects, and apply after its compute service restarts.{% endcall %}
   {% elif file_offline %}{% call alert('info', tag='p', role='status') %}{{ file_machine }} is offline. You can save its cache and storage locations now.{% endcall %}{% endif %}
   <form method="post" action="/settings/model-files" class="row g-2">
     <input type="hidden" name="file_machine" value="{{ file_machine }}">
-    <div class="col-md-6"><label class="form-label" for="models-folder">Active cache path</label><input id="models-folder" name="models_folder" class="form-control font-monospace" value="{{ typed_in.models_folder if typed_in.models_folder is defined else file_locations.models_folder }}"><div class="form-text">Contains llm, encoders, adapters, projectors, image and audio. {{ 'Optional on front; empty disables the cache.' if file_machine == 'front' else 'A restart applies changes.' }}</div></div>
+    <div class="col-md-6"><label class="form-label" for="models-folder">Active cache path</label><input id="models-folder" name="models_folder" class="form-control font-monospace" value="{{ typed_in.models_folder if typed_in.models_folder is defined else file_locations.models_folder }}"><div class="form-text">Contains llm, encoders, adapters, projectors, image and audio. {{ 'Optional on the control node; empty disables the cache.' if file_machine == 'front' else 'A restart applies changes.' }}</div></div>
     <div class="col-md-6"><label class="form-label" for="models-storage-folder">Storage library path</label><input id="models-storage-folder" name="models_storage_folder" class="form-control font-monospace" value="{{ typed_in.models_storage_folder if typed_in.models_storage_folder is defined else file_locations.models_storage_folder }}"><div class="form-text">Keeps every model file; the cache and nodes hold copies. The same path as the cache makes one folder for both. Empty disables it.</div></div>
     <div class="col-12"><button class="btn btn-primary">Save file locations</button></div>
   </form>{% endif %}

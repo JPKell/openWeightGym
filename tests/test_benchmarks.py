@@ -204,7 +204,7 @@ def queue_fixture(tmp_path, *, disabled=(), offline=(), rejected=(), rejected_st
             payload = json.loads(request.content)
             submitted.append(payload)
             kind = payload['metadata']['benchmark']
-            # As the front does: a named node, or else the node whose copy the model ID names.
+            # As the control node does: a named node, or else the node whose copy the model ID names.
             machine = payload.get('machine') or payload.get('model_id', 'compute-id').removesuffix('-id')
             if kind in rejected or machine in rejected_nodes:
                 return httpx.Response(rejected_status, json={'error': {'message': 'location unavailable'}})

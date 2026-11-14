@@ -4,7 +4,7 @@
 {% block main %}
 {% call card("", class_="mx-auto mt-4 entry") %}
     {{ page_header("Sign in", lead="Sign in to your openWeightGym account.") }}
-    {% if back %}<p class="text-secondary">The front is answering again. Sign in to continue.</p>{% endif %}
+    {% if back %}<p class="text-secondary">The control node is answering again. Sign in to continue.</p>{% endif %}
     {% if front_state.up is false %}
     <p class="text-secondary">The sign-in service is not answering. Try again shortly.</p>
     {% endif %}

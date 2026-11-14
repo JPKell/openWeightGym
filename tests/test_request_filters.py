@@ -92,7 +92,7 @@ def test_signed_origin_is_bound_to_request_and_isolated_across_clients(tmp_path)
         users.add(name, 'plain')
         keys[name] = users.new_key(name)
     log = Log(str(tmp_path / 'events.db'))
-    secret = 'private front application key'
+    secret = 'private control node application key'
     key_file = tmp_path / 'front.key'; key_file.write_text(secret)
 
     async def observed(request: Request):

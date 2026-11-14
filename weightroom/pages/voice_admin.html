@@ -18,7 +18,7 @@
 </form>{% endcall %}
 {% call card("Recorded greetings") %}
 {% if voice_status.recordings|default({}) %}<p class="small">{{ voice_status.recordings.source }}{% if voice_status.recordings.speaker is defined %} · Speaker {{ voice_status.recordings.speaker }}{% endif %}</p>{% endif %}
-<p class="text-secondary small">These previews play the recordings currently used on front, including while compute is off. Edit greeting text and the selected speaker below. Save changes, wait for Voice to report them, then regenerate to replace the complete front cache.</p>
+<p class="text-secondary small">These previews play the recordings currently used on the control node, including while compute is off. Edit greeting text and the selected speaker below. Save changes, wait for Voice to report them, then regenerate to replace the complete control node cache.</p>
 <form method="post" action="/system/voice/regenerate" class="mb-3"><button class="btn btn-outline-primary btn-sm">Regenerate all greetings</button></form>
 <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Greeting</th><th>Recorded text</th><th>Preview</th></tr></thead><tbody>
 {% for name in greeting_names %}<tr><th scope="row">{{ name }}</th><td class="wrap">{{ voice_status.recordings.texts[name] if voice_status.recordings|default({}) else 'Recording text unavailable' }}</td><td><audio controls preload="none" class="mw-100" aria-label="{{ name }} greeting" src="/system/voice/recordings?name={{ name }}"></audio></td></tr>{% else %}{{ empty_row(3, "No recorded greetings. Regenerate greetings after saving a voice.") }}{% endfor %}

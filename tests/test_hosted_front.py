@@ -1,4 +1,4 @@
-"""Hosted models are answered from the front machine: its keys, its checks, its log, and compute never sees them."""
+"""Hosted models are answered from the control node: its keys, its checks, its log, and compute never sees them."""
 import asyncio
 import json
 
@@ -112,7 +112,7 @@ def test_the_models_and_status_show_hosted_ones_and_the_service_pages_answer_her
 
 
 @pytest.mark.parametrize("make,status,why", [
-    (dict(key=False), 503, "has no key on the front machine"),
+    (dict(key=False), 503, "has no key on the control node"),
     (dict(ceiling=0.01), 429, "Its ceiling is 0.01"),
     (dict(spend=0.01), 429, "Your group's limit is 0.01"),
 ])

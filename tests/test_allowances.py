@@ -207,7 +207,7 @@ def test_legacy_accounts_copy_refuses_populated_new_policies(tmp_path):
 
 
 def test_unresolved_count_uses_the_parent_index(tmp_path):
-    """A time-ordered scan of every earlier request took 41 s on the front and stalled turnstile."""
+    """A time-ordered scan of every earlier request took 41 s on the control node and stalled turnstile."""
     users,log,key=store(str(tmp_path/'front.db'));pat=users.by_key(key)
     ending(log,pat,1)
     asked=[]

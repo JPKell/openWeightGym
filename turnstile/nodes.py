@@ -1,11 +1,11 @@
-"""The compute nodes the front knows, all peers (docs/peer-nodes-plan.md, Phase 2).
+"""The compute nodes the control node knows, all peers (docs/peer-nodes-plan.md, Phase 2).
 
 Every node is a `[machines.NAME]` table. An install that still has the old top-level `compute`
 address has it read as one more node, named `LEGACY`, until `owg update` moves it to
 `[machines.<hostname>]` with `formerly = "compute"`. That line records an alias: a stored row,
 request number or signed statement that still says `compute` means the renamed node.
 
-Stored names are rewritten to the new name only after a verified backup of the front's stores
+Stored names are rewritten to the new name only after a verified backup of the control node's stores
 (`rename_stored`); until then, and for hash-chained values that are never rewritten, readers
 resolve the old name through the alias.
 """
@@ -22,7 +22,7 @@ from urllib.parse import urlsplit
 
 from loadcoach.log import LEGACY  # the old default node's name, kept only to read older settings and rows
 NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,30}")
-BACKUP_FRESH_DAYS = 7  # how recent a verified front backup must be before stored names are rewritten
+BACKUP_FRESH_DAYS = 7  # how recent a verified control node backup must be before stored names are rewritten
 # Where stored rows name a node, by store. Each is (table, column). `benchmark_runs.location`
 # also has '' for the old default node.
 STORED = {
@@ -50,7 +50,7 @@ def legacy_entry(host: str, ports: tuple[int, ...], offset: int, key_file: str, 
 
 
 def base(entry: dict, port: int, ports: tuple[int, ...]) -> str:
-    """Where a node answers on one of the front's `ports`.
+    """Where a node answers on one of the control node's `ports`.
 
     LoadCoach's port is its `compute` URL and Spotter's its `spotter` URL. Any other port (voice)
     is on the same host, as far from the `compute` URL's port as it is from LoadCoach's own.
@@ -92,7 +92,7 @@ def remember_aliases(db, told: dict[str, str]) -> dict[str, str]:
 
 
 def verified_backup(data: str | Path, now: float | None = None, machine: str = "front") -> dict | None:
-    """The newest verified backup of the front's own stores, if it is recent enough to rewrite stored names after."""
+    """The newest verified backup of the control node's own stores, if it is recent enough to rewrite stored names after."""
     from loadcoach import backups
     root = backups.backup_root(data)
     if not root.is_dir():

@@ -57,7 +57,7 @@ journalctl --user -u suite-adapter-@PLUGIN@-@INSTANCE@.service -n 50 --no-pager
 In openWeightGym, open **System → Plugins**, synchronize the instance settings, discover
 profiles/models, and enable the desired public aliases. The instance URL must reach
 the configured `listen_host` and `listen_port`. Hermes defaults to `127.0.0.1:8450`:
-a loopback listener is reachable only on the adapter machine. For another front
+a loopback listener is reachable only on the adapter machine. For another control node
 host, configure an appropriate reachable listener and private network access.
 
 If installed with `--no-service`, run in the foreground:
@@ -87,14 +87,14 @@ systemctl --user restart suite-adapter-@PLUGIN@-@INSTANCE@.service
 
 | Error or symptom | What to check or do |
 |---|---|
-| `error: package directory 'db' does not exist` during wheel requirements | This was an installer packaging defect, not a pip configuration error. Get a regenerated bundle from an updated openWeightGym front and rerun it. The corrected installer copies `db` alongside `plugins`. |
+| `error: package directory 'db' does not exist` during wheel requirements | This was an installer packaging defect, not a pip configuration error. Get a regenerated bundle from an updated openWeightGym control node and rerun it. The corrected installer copies `db` alongside `plugins`. |
 | `ModuleNotFoundError` for `db.connection`, `db.migrations`, or `db.schemas` at startup | Get the corrected bundle and reinstall; these runtime modules must be included as well. |
 | `python3: not found`, unsupported Python, or venv/ensurepip failure | Install a supported Python with your distribution's virtual-environment support, then retry. |
 | pip download/build fails | Read the first error above the final `CalledProcessError`. Check package-index/network access, Python version, and write access to the chosen directory. |
 | `Failed to connect to bus` from `systemctl --user` | Run in the intended user's systemd login session, or install with `--no-service` and use the foreground command. The Python installation may already have completed. |
 | Service fails or port is already in use | Read its journal and check the configured listener port and other adapter processes. |
 | Hermes executable/module/profile cannot be found | Check the Hermes `cli`, `venv`, `repository`, and profile settings on this machine. The adapter environment does not contain Hermes. |
-| openWeightGym cannot reach the adapter | Check service status, listener address/port, front's instance URL, and network access. Restart the adapter locally after listener changes. |
+| openWeightGym cannot reach the adapter | Check service status, listener address/port, the control node's instance URL, and network access. Restart the adapter locally after listener changes. |
 | Pairing/authentication rejected | Confirm the archive belongs to this exact instance. Reinstallation preserves an existing key and settings; a new archive does not overwrite them. Do not publish either key while investigating a mismatch. |
 
 For help, retain the first install error and relevant service journal lines. Remove

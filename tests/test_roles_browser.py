@@ -15,7 +15,7 @@ def test_roles_preferences_save_preview_and_fit_phone_viewport(desk, tmp_path):
     server, _, _ = desk
     models = Models(str(tmp_path / 'loadcoach.db'))
     models.put('small', {'gpus': 1, 'flags': {'model': gguf(tmp_path/'small.gguf'), 'ctx-size': 2048}})
-    roles = Roles(str(tmp_path/'data'/'roles.db'))  # kept on the front machine
+    roles = Roles(str(tmp_path/'data'/'roles.db'))  # kept on the control node
     roles.put('chat', {'models': {'small': 1}})
     sign_in(server, 'jordan')
     with playwright.sync_playwright() as engine:
@@ -60,7 +60,7 @@ def test_benchmark_shares_presets_and_saves_are_scoped_to_one_role(desk, tmp_pat
     server, _, _ = desk
     models = Models(str(tmp_path/'loadcoach.db'))
     models.put('small', {'gpus':1,'flags':{'model':gguf(tmp_path/'small.gguf'),'ctx-size':2048}})
-    roles = Roles(str(tmp_path/'data'/'roles.db'))  # kept on the front machine
+    roles = Roles(str(tmp_path/'data'/'roles.db'))  # kept on the control node
     for name in ('code', 'chat'):
         roles.put(name, {'models':{'small':1}})
     sign_in(server, 'jordan')

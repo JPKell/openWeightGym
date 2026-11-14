@@ -32,7 +32,7 @@ def test_toollocker_setup_guide_is_available_without_compute_and_stays_private(d
     assert 'href="/docs/modules/toollocker"' in browser.get('/tools').text
     response = browser.get('/docs/modules/toollocker')
     assert response.status_code == 200
-    for anchor in ('requirements', 'install-toollocker-on-front', 'verify-the-connection', 'add-a-python-tool', 'troubleshooting'):
+    for anchor in ('requirements', 'install-toollocker-on-the-control-node', 'verify-the-connection', 'add-a-python-tool', 'troubleshooting'):
         assert f'href="#{anchor}"' in response.text and f'id="{anchor}"' in response.text
     for instruction in ('keep_console_settings_on_front', 'toollocker_url', 'install-suite.sh --services toollocker',
                         'restart toollocker.service', 'example__greet'):

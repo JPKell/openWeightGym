@@ -1,4 +1,4 @@
-"""Session-authenticated, front-local stored Responses ledger and record pages."""
+"""Session-authenticated, control-node-local stored Responses ledger and record pages."""
 
 from datetime import datetime, UTC
 from types import SimpleNamespace

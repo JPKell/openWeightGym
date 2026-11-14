@@ -9,7 +9,7 @@ or tool/code executor.
 
 The existing Hermes bridge was assessed first: it wraps a separate native agent CLI/profile
 with its own shared memory/files/credentials and native sessions. It remains available for
-that role. These private prompt versions and accepted front-side outputs use ordinary openWeightGym
+that role. These private prompt versions and accepted control-node-side outputs use ordinary openWeightGym
 model APIs so their ownership, source access and accounting remain the current user's.
 
 ## Live H3 review — 2026-10-16
@@ -51,7 +51,7 @@ Attempts, usage and full frozen configuration remain expandable below the run wo
    only a new draft attempt; it does not redo accepted research or retrieve different evidence.
 
 Status refresh is manual, so an active selection/form is not periodically replaced. Cancel
-stops the front task and uses ordinary request cancellation; it does not promise a physical
+stops the control node task and uses ordinary request cancellation; it does not promise a physical
 model stop latency. After restart, interrupted steps are paused and require a new authenticated
 resume. No account key is persisted for automatic replay. A replacement key for the same
 immutable account can resume; a recreated account cannot inherit the run.
@@ -118,7 +118,7 @@ leaves source documents and normal logs/backups under their existing retention p
 
 `weightroom.chat` migration 4 adds portable SQLite/PostgreSQL `prompt_versions`, `workflows` and
 `workflow_attempts` tables in the **same** private store. Existing backups and verified cross-engine
-transfer cover them. The old compute-to-front chat-only copy/retirement tool refuses populated
+transfer cover them. The old compute to control node chat-only copy/retirement tool refuses populated
 new collection/prompt/workflow tables rather than omit their data.
 
 Limits: 200 private prompt versions, 4,000 instruction characters per version; fifty retained
@@ -126,7 +126,7 @@ runs per account; ten attempts per step; twenty in-memory jobs with two active w
 A step has a five-minute total execution deadline including its queue wait, plus bounded usage
 reconciliation (two seconds per observed request). Native inference retains C08's ninety-second
 request and 1 MiB response limits. Conservative prompt-byte/context checks refuse oversized plans
-before generation. These front resource bounds do not change GPU admission or user/group limits.
+before generation. These control node resource bounds do not change GPU admission or user/group limits.
 Accepted background work participates in the existing maintenance drain until cleanup finishes;
 new steps refuse while the installation is marked for database maintenance.
 
@@ -141,8 +141,8 @@ Internal authenticated handlers beside conversations:
   `usage`. Invalid transitions refuse; a stale epoch cannot publish output into a changed run.
 
 The console reaches these through its existing in-process authenticated ASGI client. No public
-Turnstile route/port or credential is added. Deploy matching C08 compute guards and updated front
-code/templates; startup applies chat migration 4. There is no new dependency beyond the front
+Turnstile route/port or credential is added. Deploy matching C08 compute guards and updated control node
+code/templates; startup applies chat migration 4. There is no new dependency beyond the control node
 knowledge extra already selected for C08. Preserve the chat store and migration metadata when
 rolling code back; older code has no workflow handlers. Real-model grounding, interruption,
 receipt/cost availability and restore behaviour require deployment qualification.

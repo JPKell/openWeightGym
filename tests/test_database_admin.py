@@ -108,7 +108,7 @@ def test_discovery_ignores_links_and_database_endpoint_exports_sql(tmp_path):
     assert listed.status_code == 200
     database = listed.json()["databases"][0]
     assert database["name"] == "loadcoach.db"
-    assert any(table["name"] == "models" for table in database["tables"])  # the users are front's
+    assert any(table["name"] == "models" for table in database["tables"])  # the users are the control node's
     assert dumped.status_code == 200 and "CREATE TABLE models" in dumped.text
     assert dumped.headers["content-disposition"].endswith('filename="loadcoach-models.sql"')
     assert missing.status_code == 404

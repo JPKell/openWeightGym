@@ -170,7 +170,7 @@ class Knowledge:
         self.compute = compute
         self.jobs = {}  # document -> (owner, task); credentials remain in task memory only
         self.slots = asyncio.Semaphore(2)
-        self.searches = asyncio.Semaphore(2)  # bound front vector memory; GPU admission remains upstream
+        self.searches = asyncio.Semaphore(2)  # bound control node vector memory; GPU admission remains upstream
         self.maintenance = None
 
     def headers(self, authorization, collection=None):

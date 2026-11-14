@@ -95,7 +95,7 @@ def test_models_page_shows_active_installations_without_a_bookmarked_job(desk):
     response=server.get('/models?part=list&kind=image')
     assert response.status_code==200
     assert 'Flux2Dev' in response.text and 'Verifying SHA-256' in response.text and 'flux2-dev.gguf' in response.text
-    assert 'on front' in response.text
+    assert 'on the control node' in response.text
     job['state']='complete'
     assert 'Flux2Dev' not in server.get('/models?part=list&kind=image').text
     assert 'Installed' in server.get('/models?part=list&kind=image&install=progress').text

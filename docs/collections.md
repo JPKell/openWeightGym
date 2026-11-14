@@ -79,7 +79,7 @@ Administrators do not gain another user's source access through collection APIs 
 Group sensitivity reductions prevent reading or using higher-level collections. Ownership and
 active source generations are checked again after asynchronous retrieval/generation. Deleting
 an account cancels its ingestion and removes its active collections through the existing
-front-side account cleanup hook.
+control-node-side account cleanup hook.
 
 Only catalogue entries owned by local LoadCoach, with ready identity/fingerprint/build and
 advertised guarded inference, are eligible. Hosted models, roles and plugin adaptors are not
@@ -143,8 +143,8 @@ omit these optional guards.
   still required for the chosen model. Overflow fails visibly rather than indexing a prefix.
 - Vectors must have 1–4096 finite numeric dimensions and nonzero norm. They are normalized
   for cosine search. Different dimensions, nonfinite values and token-vector matrices fail.
-- Two ingestion jobs and two searches may run concurrently on front; at most twenty ingestion
-  jobs are retained in memory. These limits bound front resources, not GPU placement. An
+- Two ingestion jobs and two searches may run concurrently on the control node; at most twenty ingestion
+  jobs are retained in memory. These limits bound control node resources, not GPU placement. An
   ingestion job has a fifteen-minute total deadline including its queue wait; each inference
   request has a ninety-second timeout and a 1 MiB response ceiling.
 - Questions are at most 500 characters and must fit the embedder's conservative byte budget.
@@ -156,7 +156,7 @@ omit these optional guards.
 adds retained indexing diagnostics and a node-independent collection weights hash, with
 portable SQLite/PostgreSQL definitions. Originals are base64 TEXT, vectors JSON TEXT. Existing
 private backup/restore, integrity and cross-engine transfer paths cover these tables. No new
-DSN, store binding or pgvector extension is needed. The old chat-only compute-to-front
+DSN, store binding or pgvector extension is needed. The old chat-only compute to control node
 copy/retirement tool refuses a source with populated collection tables; use the full store
 backup/transfer workflow instead. This bounded first implementation scans
 at most 500 vectors per collection in process; a larger corpus needs a separately selected
@@ -168,11 +168,11 @@ Source deletion removes its active original and chunks/vectors; collection delet
 all its active documents. Earlier answers, accepted workflow outputs, ordinary inference logs and recovery backups keep
 their existing retention rules. Deleting a source does not silently rewrite historical logs.
 
-Install the front extra `.[knowledge]` (pypdf **6.20.1**) or use the existing installer/deployer,
+Install the control node extra `.[knowledge]` (pypdf **6.20.1**) or use the existing installer/deployer,
 which includes it whenever WeightRoom is selected. Dev dependencies include the parser for
 regression checks. Compute and plugin runtimes do not need pypdf. Deploy matching compute
-first for the guarded API capability, then front and its templates/assets; migration 3 runs
-on front at startup. Back up the existing chat store through the normal workflow before an
+first for the guarded API capability, then control node and its templates/assets; migration 3 runs
+on the control node at startup. Back up the existing chat store through the normal workflow before an
 upgrade. Code rollback after new collection data exists must retain the database and its
 migration metadata; an older binary does not implement these collection handlers.
 

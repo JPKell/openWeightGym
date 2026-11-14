@@ -12,8 +12,8 @@
 The `models` and `log` commands read and write the file themselves. They need no key and work
 whether or not LoadCoach is running.
 
-The users and groups are kept on the front machine since milestone 76. The `user` and `group`
-commands below are the `weightroom` command's: it opens the front machine's accounts and hands
+The users and groups are kept on the control node since milestone 76. The `user` and `group`
+commands below are the `weightroom` command's: it opens the control node's accounts and hands
 them to these (see weightroom/app.py), along with `log` for what was done to them.
 
 The line and the lock exist only inside a running LoadCoach, so `status`, `unlock` and `clear`
@@ -348,8 +348,8 @@ def model_command(models: Models, config: Config, action: str, arguments: list[s
         models.rename(name, new)
         if log:
             log.add("model", "renamed", "command-line", model=new, was=name, followed=[])
-        # The groups and accounts that list it by name are on the front machine. A rename on the site goes through turnstile, which has them follow.
-        print(f"Renamed {name} to {new}. Callers must ask for it by the new name from now on. Groups and accounts on the front"
+        # The groups and accounts that list it by name are on the control node. A rename on the site goes through turnstile, which has them follow.
+        print(f"Renamed {name} to {new}. Callers must ask for it by the new name from now on. Groups and accounts on the control node"
               " machine that list it by its old name do not follow a rename made here: change them there.")
     elif action == "show":
         print(as_toml(name, existing, models.place(name)), end="")
@@ -582,7 +582,7 @@ def opened(ctx: typer.Context) -> tuple[Config | None, Users | None, Log]:
     """The settings, the accounts and the log a command works on.
 
     For `loadcoach`: its settings file and its event log. It has no accounts. For `weightroom`,
-    which reuses the user, group and log commands here: the front machine's accounts and their log.
+    which reuses the user, group and log commands here: the control node's accounts and their log.
     """
     if ctx.find_root().obj:
         return ctx.find_root().obj()  # opened only when a command runs, so that its help needs no settings
@@ -594,19 +594,19 @@ def opened(ctx: typer.Context) -> tuple[Config | None, Users | None, Log]:
 def root(
     ctx: typer.Context,
     config: Annotated[Path, typer.Option(metavar="FILE", help="The settings file.")] = Path("settings/loadcoach.toml"),
-    replace_key: Annotated[bool, typer.Option("--replace-key", help="Set the machine key this machine shares with the front machine, typed or piped in, and stop.")] = False,
-    emergency: Annotated[bool, typer.Option("--emergency", help="Run on 127.0.0.1 only, for anyone on this machine, keeping no log: for when the front machine is down.")] = False,
+    replace_key: Annotated[bool, typer.Option("--replace-key", help="Set the machine key this machine shares with the control node, typed or piped in, and stop.")] = False,
+    emergency: Annotated[bool, typer.Option("--emergency", help="Run on 127.0.0.1 only, for anyone on this machine, keeping no log: for when the control node is down.")] = False,
 ) -> None:
     # Each paragraph is one line here, because Typer keeps the line breaks it is given.
     """LoadCoach: one OpenAI-compatible door in front of local model servers.
 
     With no command it runs the server, which is what its service does.
 
-    The commands are of two kinds. Models and the log are kept in a file, and those commands read and write it themselves: they need no key and work when LoadCoach is stopped. The line and the lock exist only inside a running LoadCoach, so those commands ask it, with a token it leaves for this machine. The users and groups are kept on the front machine: see `weightroom user --help` there.
+    The commands are of two kinds. Models and the log are kept in a file, and those commands read and write it themselves: they need no key and work when LoadCoach is stopped. The line and the lock exist only inside a running LoadCoach, so those commands ask it, with a token it leaves for this machine. The users and groups are kept on the control node: see `weightroom user --help` there.
 
-    --replace-key sets the key turnstile signs with, for when this machine and the front machine have fallen out of step. The front machine's Compute nodes page replaces it on both at once.
+    --replace-key sets the key turnstile signs with, for when this machine and the control node have fallen out of step. The control node's Compute nodes page replaces it on both at once.
 
-    --emergency runs LoadCoach for when the front machine is down: on 127.0.0.1 only, with no key asked of anyone on this machine, and no log. Stop the service first. Reach it from elsewhere through ssh: ssh -L 8442:127.0.0.1:8442 compute
+    --emergency runs LoadCoach for when the control node is down: on 127.0.0.1 only, with no key asked of anyone on this machine, and no log. Stop the service first. Reach it from elsewhere through ssh: ssh -L 8442:127.0.0.1:8442 compute
 
     Every command has a page of its own: loadcoach models add --help
     """
@@ -621,15 +621,15 @@ def key_replaced(file: Path) -> None:
     path = load_config(file).machine_key_file
     if not path:
         raise ValueError(f"{file} names no machine_key_file.")
-    new = (getpass.getpass("The new machine key, as it is on the front machine: ") if sys.stdin.isatty() else sys.stdin.read()).strip()
+    new = (getpass.getpass("The new machine key, as it is on the control node: ") if sys.stdin.isatty() else sys.stdin.read()).strip()
     replace_key(path, new)
-    print(f"Replaced the key in {path}. The one before counts for {OVERLAP // 60} more minutes. Turnstile on the front machine must have the same key.")
+    print(f"Replaced the key in {path}. The one before counts for {OVERLAP // 60} more minutes. Turnstile on the control node must have the same key.")
 
 
 def serve(file: Path, emergency: bool = False) -> None:
     """Run the server, unless the settings would leave it open to anyone or unable to do what they say.
 
-    In an emergency, with the front machine down: on 127.0.0.1 only, where anyone on this machine
+    In an emergency, with the control node down: on 127.0.0.1 only, where anyone on this machine
     may do anything, with no machine key and no log. The service must be stopped first, since two
     LoadCoaches would each think the cards their own.
     """
@@ -906,7 +906,7 @@ def log_verify(ctx: typer.Context) -> None:
 def settings_command(changes: Changes, action: str = "", program: str = "", name: str = "", excluded=()) -> None:
     """List what was changed in any program's settings from the site, or with `reset` take one change away."""
     if action == "reset" and program_name(program) in excluded:
-        raise ValueError("The front keeps this program's settings; use the Settings page on the front.")
+        raise ValueError("The control node keeps this program's settings; use the Settings page on the control node.")
     if action == "reset":
         if not changes.take_away(program, name):
             raise ValueError(f"Nothing was changed for {name!r} of {program!r}. See what was with: loadcoach settings")
@@ -921,7 +921,7 @@ def settings_command(changes: Changes, action: str = "", program: str = "", name
             print("No local settings have been changed from the site." if excluded else
                   "Nothing was changed from the site. Every program runs with what its file says.")
         if excluded:
-            print("Front-program settings are managed on front.")
+            print("Control node program settings are managed on the control node.")
 
 
 @app.command(rich_help_panel=IN_THE_FILE)
@@ -963,7 +963,7 @@ def loadouts_save(ctx: typer.Context, name: str, file: Path, version: Annotated[
     """Save NAME from 1–16 {model,cards,context} or fixed {model,cards,profile} entries.
 
     Get a media profile key from /loadcoach/models loadout_profile. Empty cards select CPU.
-    This CLI targets its configured local worker; front API clients can use the node-scoped route.
+    This CLI targets its configured local worker; control node API clients can use the node-scoped route.
     """
     if file.stat().st_size > 65536:
         raise ValueError('Selection JSON may be at most 64 KiB.')

@@ -1,7 +1,7 @@
 # Arithmetic score audit — Part D
 
 Completed **2026-10-14**, before Part B, at the owner's request. This was a read-only review
-of front's retained benchmark data, not a new inference run. All 60 raw answers, rendered
+of the control node's retained benchmark data, not a new inference run. All 60 raw answers, rendered
 prompts, extracted answers and field checks were inspected. Current extraction/grading
 reproduces every saved field count. No production results, model settings or graders changed.
 

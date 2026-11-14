@@ -1,1 +1,1 @@
-"""CPU speech, the voice service and the front machine gateway."""
+"""CPU speech, the voice service and the control node gateway."""

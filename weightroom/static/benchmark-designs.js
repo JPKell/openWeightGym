@@ -6,7 +6,7 @@
   const clone = id => $(`#${id}`).content.firstElementChild.cloneNode(true);
   const put = (root, selector, value) => { root.querySelector(selector).textContent = value; };
   const nodes = [
-    {id: 'front', name: 'Front', hardware: 'CPU · 32 GiB RAM', state: 'ready'},
+    {id: 'front', name: 'Control node', hardware: 'CPU · 32 GiB RAM', state: 'ready'},
     {id: 'atlas', name: 'Atlas', hardware: '2 × RTX 5090 · 64 GiB VRAM', state: 'running'},
     {id: 'orion', name: 'Orion', hardware: 'RTX 4090 · 24 GiB VRAM', state: 'running'},
     {id: 'cedar', name: 'Cedar', hardware: 'CPU · 128 GiB RAM', state: 'ready'},

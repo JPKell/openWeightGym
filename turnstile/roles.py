@@ -1,4 +1,4 @@
-"""Roles, their evidence and reliability, kept on the front machine (milestone 83).
+"""Roles, their evidence and reliability, kept on the control node (milestone 83).
 
 A caller may name a role, such as `chat` or `code:fast`, where a model's name would go. What a role
 is, and the rule that picks one of its models, are in loadcoach/roles.py. Turnstile picks here,
@@ -150,7 +150,7 @@ class Routing:
     """
 
     def __init__(self, store, log: Log, caller, facts_for, through, relay, placed: bool = False) -> None:
-        """Bind role definitions, model evidence and reliability to front request routing."""
+        """Bind role definitions, model evidence and reliability to the control node request routing."""
         self.roles = Roles(store)
         self.evidence, self.reliability = RoleEvidence(self.roles.db), Reliability(self.roles.db)
         self.log, self.caller, self.facts_for, self.through, self.relay = log, caller, facts_for, through, relay
@@ -719,7 +719,7 @@ class Routing:
         return JSONResponse({'rows': rows})
 
     async def alert_evidence(self, request: Request, user: User) -> Response:
-        """Sanitized operational facts for operators and the front collector: compute's spending, with the model failures kept here.
+        """Sanitized operational facts for operators and the control node collector: compute's spending, with the model failures kept here.
 
         No prompt, output, credential, request owner or raw exception is exported.
         """
@@ -772,7 +772,7 @@ class Routing:
                            'title': f"Repeated model failures: {name or mid} ({role or 'direct requests'})",
                            'explanation': state['reason'],
                            'recovery': 'Successful recovery or operator reset removed the exclusion.' if current else 'This model revision is no longer configured.'})
-        said.pop('spending', None)  # an older compute added it: what may be spent is front's to say
+        said.pop('spending', None)  # an older compute added it: what may be spent is the control node's to say
         return JSONResponse({'model failures': faults, 'spending': self.hosted.spending() if self.hosted else [], **said})
 
     def routes(self) -> list[Route]:

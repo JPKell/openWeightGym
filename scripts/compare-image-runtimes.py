@@ -176,7 +176,7 @@ def summarize(rows, phase, baseline):
 
 
 async def benchmark_queue(host, database):
-    """Read only the owning front's queue; never mutate/clear/pause another run."""
+    """Read only the owning the control node's queue; never mutate/clear/pause another run."""
     code = ("import sqlite3,json; "
             f"d=sqlite3.connect('file:'+{database!r}+'?mode=ro',uri=True); "
             "print(json.dumps(d.execute(\"SELECT state,count(*) FROM benchmark_runs WHERE state IN ('queued','running') GROUP BY state\").fetchall()))")
@@ -185,7 +185,7 @@ async def benchmark_queue(host, database):
                                                  stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     out, _ = await asyncio.wait_for(child.communicate(code.encode()), 15)
     if child.returncode:
-        raise RuntimeError("Cannot establish the front benchmark queue state")
+        raise RuntimeError("Cannot establish the control node benchmark queue state")
     if json.loads(out):
         raise RuntimeError("Benchmarks are queued/running; existing work must drain first")
 
@@ -210,7 +210,7 @@ class Lease:
         self.token, self.problem = None, None
 
     async def ask(self, method, path, body=None):
-        """Call the existing front API with a private server-side credential."""
+        """Call the existing control node API with a private server-side credential."""
         headers = {"X-LoadCoach-Lock": self.token} if self.token else {}
         response = await self.client.request(method, path, json=body, headers=headers)
         if response.status_code >= 400:

@@ -385,7 +385,7 @@ def test_weightroom_status_controls_target_the_selected_loadcoach(tmp_path):
     web_lifespan = web_app.router.lifespan_context
     @asynccontextmanager
     async def both(app):
-        # ASGITransport invokes front on WeightRoom's loop; keep its background
+        # ASGITransport invokes control node on WeightRoom's loop; keep its background
         # workers there too, matching the one-process ownership of its DB handles.
         async with front_app.router.lifespan_context(front_app), web_lifespan(app):
             yield
@@ -662,7 +662,7 @@ def test_retained_catalogue_wakes_owning_node_and_times_out(tmp_path, monkeypatc
         assert "sleepy" in [row["id"] for row in front.get("/v1/models", headers=headers).json()["data"]]
         assert "sleepy" in front.get("/loadcoach/me", headers=headers).json()["models"]
     wire.down = True
-    # Restart front while the worker is still asleep: discovery must survive.
+    # Restart control node while the worker is still asleep: discovery must survive.
     with TestClient(app(), base_url="http://front:8442") as front:
         listed = front.get("/v1/models", headers={**headers, "x-turnstile-no-wake": "1"}).json()
         assert "sleepy" in [row["id"] for row in listed["data"]]

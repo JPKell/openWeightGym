@@ -12,7 +12,7 @@ import httpx
 SOURCE = json.loads(Path(__file__).with_name('classifier_source.json').read_text())
 DEFINITION = {'id': 'classifier_accuracy', 'name': 'Classifier accuracy', 'classifier': True, 'quality': True,
     'summary': 'Held-out typed decisions: accuracy, macro-F1, Brier score and calibration error.',
-    'method': 'Run every record of the frozen kev-suites decision-v1 test partition. Answer keys remain on front '
+    'method': 'Run every record of the frozen kev-suites decision-v1 test partition. Answer keys remain on the control node '
               'and are never sent to the model. Use argmax for choice/score correctness and a 0.5 threshold for yes/no. '
               'Macro-F1 covers observed source/question/class labels. Brier is the mean sum of squared class errors; '
               'ECE uses ten equal-width maximum-probability bins. Probabilities remain uncalibrated for user data. '
@@ -67,7 +67,7 @@ async def measure(worker, run, ceiling):
 
 
 def grade(case, response):
-    """Score native distributions against front-retained labels."""
+    """Score native distributions against labels retained on the control node."""
     if isinstance(response, str):
         response = json.loads(response)
     observations, checks = [], []

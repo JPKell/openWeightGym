@@ -1,4 +1,4 @@
-"""Front's inventory of compute machines: what each last said of itself, and how long ago.
+"""Control node's inventory of compute machines: what each last said of itself, and how long ago.
 
 Nothing here wakes a machine or carries a request. A machine that has not answered since
 turnstile started is `unknown`; one that answered, but not within three polls, is `not answering`
@@ -36,7 +36,7 @@ def logical_catalogue(found: dict[str, dict]) -> list[dict]:
 
     Equal verified weights are one logical model only when each machine has at
     most one copy of those weights. Multiple aliases on one machine are
-    intentionally left distinct because front cannot infer that adapters or
+    intentionally left distinct because control node cannot infer that adapters or
     other semantic settings are interchangeable.
     """
     rows = [(machine, model) for machine, result in found.items()
@@ -136,7 +136,7 @@ class Machines:
         return [name for name in self.names if self.enabled(name)]
 
     def change_state(self, name: str, state: str, by: str) -> None:
-        """Persist lifecycle on front, without contacting the node or deleting history."""
+        """Persist lifecycle on the control node, without contacting the node or deleting history."""
         if name not in self.all_names():
             raise ValueError("Unknown compute node.")
         if state not in ("active", "disabled", "retired"):

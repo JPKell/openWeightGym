@@ -3,14 +3,14 @@
 Prepared **2026-10-20** for the five requested improvements; implementation was authorized.
 Status and remaining scope belong in the [agent ledger](agent-status.md).
 The operating contract is in [LoadCoach](loadcoach.md#observability-and-traceability-milestone-151).
-The design builds on the existing front-owned log, request diagnostics, signed node protocol
+The design builds on the existing control-node-owned log, request diagnostics, signed node protocol
 and operational alerts. It adds no monitoring daemon, external service or public port.
 
 ## Implemented changes by code section
 
 - **Ingress and transport:** `loadcoach/observability.py` supplies task-local contexts,
   `X-Request-Id` on application HTTP outcomes and bounded W3C trace parsing. Signed Suite
-  statements and request-bound private front proofs carry continuity; external correlation
+  statements and request-bound private control node proofs carry continuity; external correlation
   never establishes ownership. Existing `X-LoadCoach-Request-Id` remains the inference number.
   Spotter and standard-library tool hosts return IDs without creating a new history authority.
 - **Execution:** routing, readiness, placement attempts, native generation and actual tool
@@ -49,8 +49,8 @@ At plan preparation, the code supplied:
 - `X-LoadCoach-Trace` for grouping work, including model/tool calls, chat, workflows and batches.
   A shared value establishes correlation, not an explicit parent/child relationship.
 - Compute-side queue, readiness and generation diagnostics; bounded related events and p50/p95
-  summaries on request pages. Authentication, front routing and delivery are outside that timer.
-- Front-owned access records, signed compute-log forwarding, a chained audit log, and durable
+  summaries on request pages. Authentication, control node routing and delivery are outside that timer.
+- Control-node-owned access records, signed compute-log forwarding, a chained audit log, and durable
   alert episodes with acknowledgement and source freshness.
 
 Keep those contracts. Historical records continue to show unavailable evidence where no
@@ -66,7 +66,7 @@ measurement or parent relationship exists. See the [current diagnostics contract
 | O4 — Operational metrics and alerts | Windowed metrics, observation-pipeline health and actionable alert episodes | O2 and O3 |
 | O5 — Bounded overhead and privacy | Enforced limits, retention, sampling and measured performance/privacy acceptance | Applies to every item; final qualification after O4 |
 
-Front remains the authority for retained history; nodes retain their existing signed forwarding
+Control node remains the authority for retained history; nodes retain their existing signed forwarding
 spools. Extend the existing stores through portable migrations only where needed. Search and
 metric projections must be rebuildable from retained source evidence, with explicit limits
 when source retention prevents a full rebuild. Preserve audit-chain serialization and forwarding
@@ -183,7 +183,7 @@ and `weightroom/pages/request*.html`.
   link to their event IDs. Label native/third-party output as uncorrelated unless a real
   request link is available; do not infer ownership from time proximity alone.
 - Add exact-ID lookup and bounded filters for time, service, machine, application, outcome
-  and error code. Reuse the existing front reporting deadline/read-only connection boundary;
+  and error code. Reuse the existing control node reporting deadline/read-only connection boundary;
   index the actual lookup fields and paginate before returning results.
 - Provide authorized JSON/JSONL metadata export and a compact copyable failure receipt with
   IDs, version, route, attempts, timings and error code. Escape display values and redact
@@ -194,7 +194,7 @@ and `weightroom/pages/request*.html`.
 
 ### Acceptance
 
-- A single ingress ID finds the complete authorized event set across front and nodes;
+- A single ingress ID finds the complete authorized event set across control node and nodes;
   a user cannot search/export another user's events by guessing any identifier.
 - Secret-canary fixtures place credentials, cookies and prompt/tool content in headers,
   exceptions and URLs; none enter the new metadata fields, journals or exports.
@@ -290,7 +290,7 @@ the operating contract; the baseline precedes the changes.
   8 and 32 where supported: cheap API calls, CPU-model calls, SSE, tool calls and rejected
   credentials. Record offered load, model/build, payload size and p50/p95/throughput/memory;
   separate cold starts. Repeat noisy measurements before declaring a regression or a pass.
-- Slow/full disks, prolonged front outage, saturated queues and shutdown prove bounded memory,
+- Slow/full disks, prolonged control node outage, saturated queues and shutdown prove bounded memory,
   bounded flushing, visible diagnostic loss and unchanged required-audit failure behavior.
 - Security tests cover context forgery/replay, malformed headers, secret redaction, permission
   isolation, no-log behavior and hostile high-cardinality labels. The existing source-docstring
@@ -311,7 +311,7 @@ When implementation is authorized and ready:
 2. Validate portable schema upgrades, existing links/history and fresh-install behavior in
    disposable fixtures. Update installation/defaults/config compatibility documentation when
    those surfaces change. Live database engine bindings remain unchanged.
-3. Activate matching source overrides and affected services across front, compute and remote
+3. Activate matching source overrides and affected services across control node, compute and remote
    CPU hosts. Preserve private configuration and existing inactive-service state. Use a source
    release compatible with any new schema for recovery; do not point old writers at a newer
    schema. The owner's current disposable-install backup waiver remains as recorded in the

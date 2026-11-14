@@ -9,7 +9,7 @@ from pathlib import Path
 def reasoning_levels() -> tuple[str, ...] | None:
     """Return declared CLI levels; None means unavailable, () means none declared.
 
-    Read data only, so front can render choices without importing the CLI driver.
+    Read data only, so control node can render choices without importing the CLI driver.
     The immutable installed schema is shared by global and per-profile settings.
     """
     try:

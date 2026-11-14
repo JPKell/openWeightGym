@@ -4,9 +4,9 @@
   const $ = id => document.getElementById(id);
   const clone = id => $(id).content.firstElementChild.cloneNode(true);
   const nodes = [
-    {id: 'front', label: 'Front', role: 'Console & accounts'},
+    {id: 'front', label: 'Control node', role: 'Console & accounts'},
     {id: 'compute', label: 'Compute 01', role: 'Primary GPU'},
-    {id: 'front-cpu', label: 'Front CPU', role: 'CPU worker'},
+    {id: 'front-cpu', label: 'Control node CPU', role: 'CPU worker'},
     {id: 'remote-cpu', label: 'Remote CPU', role: 'CPU worker'},
     {id: 'compute-04', label: 'Compute 04', role: 'Additional worker'},
   ];
@@ -171,7 +171,7 @@
     setText(row, '[data-detail-name]', `${db.name} / ${nodeName(db.node)}`);
     setText(row, '[data-detail-owner]', db.owner);
     setText(row, '[data-path]', db.path);
-    setText(row, '[data-bindings]', `Bound services: ${db.kind === 'spotter' ? 'Spotter history' : db.node === 'front' ? 'WeightRoom / front repositories' : 'LoadCoach / Spotter identity'}`);
+    setText(row, '[data-bindings]', `Bound services: ${db.kind === 'spotter' ? 'Spotter history' : db.node === 'front' ? 'WeightRoom / control node repositories' : 'LoadCoach / Spotter identity'}`);
     setText(row, '[data-storage]', db.engine === 'SQLite'
       ? `Main file ${size(db.mb - 2)} · WAL + SHM 2.0 MiB · reusable pages ${size(db.reusable)} · SQLite 3.50 (sample)`
       : `Database ${size(db.mb)} · PostgreSQL 18 (sample) · free space requires analysis · pg_dump plain SQL`);

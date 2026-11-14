@@ -212,7 +212,7 @@ class ScheduleWorker:
         return None, 'No eligible work: active pairs or failure cooldown.' if blocked else 'Nothing outstanding.'
 
     async def tick(self, now=None):
-        """Dispatch due grants; front handles node wake, and benchmarks remain foreground-preemptible."""
+        """Dispatch due grants; control node handles node wake, and benchmarks remain foreground-preemptible."""
         async with self.lock:
             if self.gate.token():
                 return

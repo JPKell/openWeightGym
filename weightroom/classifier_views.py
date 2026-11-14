@@ -1,4 +1,4 @@
-"""Session-authenticated Classifier workspace using normal front inference and downloads."""
+"""Session-authenticated Classifier workspace using normal control node inference and downloads."""
 
 import json
 from urllib.parse import quote

@@ -1,4 +1,4 @@
-"""Which of a logical model's per-node copies may be used, kept on the front."""
+"""Which of a logical model's per-node copies may be used, kept on the control node."""
 
 import time
 
@@ -9,7 +9,7 @@ from db.schemas import MODEL_LOCATIONS
 class ModelLocations:
     """Persisted per-machine enablement of model placements."""
     def __init__(self, source):
-        """Bind model-location enablement to the configuration store the front keeps."""
+        """Bind model-location enablement to the configuration store the control node keeps."""
         self.source = database(source)
         self.db = self.source.connect(check_same_thread=False)
         self.former: dict[str, str] = {}  # old node name → its current name, until stored rows are renamed

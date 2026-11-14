@@ -198,7 +198,7 @@ def test_exclusion_durable_recovery_is_controlled_and_model_and_role_are_isolate
         assert caller.post('/loadcoach/reliability', headers=owner, json=recovery).status_code == 409
     with gateway(fake_llama_server, models, database=database) as caller:
         assert caller.get('/loadcoach/pick?model=work:best', headers=owner).json()['picked'] is None
-        db = sqlite3.connect(Path(database).with_name('front') / 'roles.db')  # reliability is kept on the front machine
+        db = sqlite3.connect(Path(database).with_name('front') / 'roles.db')  # reliability is kept on the control node
         db.execute('UPDATE reliability_state SET blocked_until=?', (time.time()-1,)); db.commit()
         before = caller.get('/loadcoach/events?kind=request', headers=owner).json()['events']
         assert caller.get('/loadcoach/reliability', headers=owner).json()['rows'][0]['state'] == 'recovery required'
@@ -259,7 +259,7 @@ def test_old_exclusion_stays_manageable_after_outcomes_are_pruned_and_model_is_r
         caller.post('/loadcoach/roles/work', headers=owner, json={'models': {'small': 1}})
         for _ in range(3):
             chat(caller, owner, reply={'choices': [{'message': {'content': ''}}]})
-        db = sqlite3.connect(Path(database).with_name('front') / 'roles.db')  # reliability is kept on the front machine
+        db = sqlite3.connect(Path(database).with_name('front') / 'roles.db')  # reliability is kept on the control node
         kept = Reliability(db)
         db.execute('UPDATE reliability_outcomes SET at=?', (time.time()-100*86400,)); db.commit()
         kept.prune(90)
@@ -282,5 +282,5 @@ def test_error_recording_reliability_cannot_break_a_successful_proxy_answer(fake
         monkeypatch.setattr(Reliability, 'record', fail)
         result = chat(caller, owner, 'small', reply={'choices': [{'message': {'content': 'hello'}}]})
         assert result.status_code == 200 and result.json()['choices'][0]['message']['content'] == 'hello'
-        events = caller.log.read(0, 100, None, 'reliability')  # on record at the front machine, where reliability is kept
+        events = caller.log.read(0, 100, None, 'reliability')  # on record at the control node, where reliability is kept
         assert events[-1]['what'] == 'record-failed'

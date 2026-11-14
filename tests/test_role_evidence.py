@@ -165,7 +165,7 @@ def test_worker_publishes_only_its_task_and_does_not_change_definitions(fake_lla
         assert caller.post('/loadcoach/role-evidence', headers=scoped, json=exported).status_code == 401
         exported['results'][0]['model_id'] = run['model_id']
         exported['definitions'][0]['direction'] = 'low'
-        # The worker already finished this task; the front keeps that evidence and refuses a different finish.
+        # The worker already finished this task; the control node keeps that evidence and refuses a different finish.
         assert caller.post('/loadcoach/tasks/'+number+'/finish', headers=scoped, json={'state':'completed', 'role_evidence':exported}).status_code == 409
         definitions = caller.get('/loadcoach/roles', headers=owner).json()['benchmarks']
         assert next(one for one in definitions if one['id'] == 'context')['direction'] == 'high'

@@ -375,7 +375,7 @@ def test_retirement_preserves_live_tables_vacuums_and_transfers_without_resurrec
     with readonly(database.path) as source:
         assert not set(RETIRED_COMPUTE_TABLES) & set(row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'"))
         assert source.execute('SELECT name,settings FROM models').fetchall() == [('kept', '{"flags":{}}')]
-    build_app(Config(database=str(database.path)))  # a retired store starts, and keeps no records the front keeps
+    build_app(Config(database=str(database.path)))  # a retired store starts, and keeps no records the control node keeps
     with sqlite3.connect(database.path) as source:
         assert not set(RETIRED_COMPUTE_TABLES) & set(row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'"))
     copy = Database.sqlite(tmp_path / 'transferred.db')

@@ -44,7 +44,7 @@ def test_a_dry_fit_uses_one_nodes_local_models_and_cpu_ram_measurement():
 
 def test_the_dry_fit_page_lists_measured_models_to_tick_and_says_what_each_role_would_pick_with_them_loaded(desk, tmp_path):
     browser, _, _ = desk
-    kept, roles = Models(str(tmp_path / "loadcoach.db"), {"flash-attn": "on"}), Roles(str(tmp_path / "data" / "roles.db"))  # kept on the front machine, beside the accounts
+    kept, roles = Models(str(tmp_path / "loadcoach.db"), {"flash-attn": "on"}), Roles(str(tmp_path / "data" / "roles.db"))  # kept on the control node, beside the accounts
     kept.put("strong", {"gpus": 1, "min_context": 4096, "flags": {"model": gguf(tmp_path / "strong.gguf"), "ctx-size": 8192}})
     kept.put("quick", {"gpus": 1, "flags": {"model": gguf(tmp_path / "quick.gguf"), "ctx-size": 2048}})
     kept.put("new", {"gpus": 1, "flags": {"model": gguf(tmp_path / "new.gguf"), "ctx-size": 2048}})

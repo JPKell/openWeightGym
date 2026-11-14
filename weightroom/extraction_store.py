@@ -1,4 +1,4 @@
-"""Bounded owner-private extraction data in the front's existing backed-up accounts store."""
+"""Bounded owner-private extraction data in the control node's existing backed-up accounts store."""
 
 import hashlib
 import json
@@ -18,7 +18,7 @@ def encoded(value):
 
 
 class Extractions:
-    """Own extraction assets, jobs, immutable revisions and presets on front."""
+    """Own extraction assets, jobs, immutable revisions and presets on the control node."""
     def __init__(self, source):
         """Open the accounts store and apply extraction migrations."""
         source = database(source)
@@ -156,7 +156,7 @@ class Extractions:
         """Fail abandoned work after restart without automatic replay."""
         with self.db:
             self.db.execute("UPDATE extraction_jobs SET state='failed',error=?,updated=? WHERE state IN ('queued','running')",
-                            (encoded({'code': 'interrupted', 'message': 'Front gateway restarted. Retry explicitly; previous upstream outcome may be unknown.'}), time.time()))
+                            (encoded({'code': 'interrupted', 'message': 'Control node gateway restarted. Retry explicitly; previous upstream outcome may be unknown.'}), time.time()))
 
     def prune(self):
         """Expire retained jobs, revisions and unreferenced sources."""

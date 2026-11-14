@@ -1,9 +1,9 @@
 # What the ToolLocker starts from, for everything that can be changed on the site's Settings page.
 #
 # This file is part of the suite. It is read at every start, with settings/toollocker.toml laid
-# over it. A site change is kept in the gateway owner's store (front after relocation), above
+# over it. A site change is kept in the gateway owner's store (control node after relocation), above
 # here, until the change is taken away: on the page, or with
-#   loadcoach settings reset toollocker NAME  # legacy compute gateway only; use Settings on front after relocation
+#   loadcoach settings reset toollocker NAME  # legacy compute gateway only; use Settings on the control node after relocation
 # What belongs to the machine, such as addresses, ports and paths, is not here. That is in
 # settings/toollocker.toml, and settings/examples/toollocker.toml explains it.
 

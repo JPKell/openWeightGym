@@ -174,7 +174,7 @@ def main():
     told, store, _ = kept_by_loadcoach(args.config)
     target = local_path(store)
     if not told.get('front') or target is None or not target.is_file():
-        parser.error('A compute configuration with a front address and an existing SQLite compute store are required')
+        parser.error('A compute configuration with a control node address and an existing SQLite compute store are required')
     if args.action == 'prepare':
         if not all((args.recovery, args.outside, args.approved_audit)):
             parser.error('prepare needs --recovery, --outside and --approved-audit')

@@ -1,1 +1,1 @@
-"""weightroom: the app on the front machine. Start reading at app.py."""
+"""weightroom: the app on the control node. Start reading at app.py."""

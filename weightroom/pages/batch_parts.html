@@ -70,20 +70,20 @@
 {% endmacro %}
 
 {% macro guide() %}
-<p>Submit a JSONL file to the front’s OpenAI-compatible Batch API using your own API key. Each line contains one request.</p>
+<p>Submit a JSONL file to the control node’s OpenAI-compatible Batch API using your own API key. Each line contains one request.</p>
 <p>Responses lines use <code>/v1/responses</code> with <code>input</code> instead of messages. They are stateless: omit <code>stream</code> and <code>previous_response_id</code>; <code>store</code> defaults to false. These lines may share a file with chat completions.</p>
 {% call doc_code('batch-example-input', 'requests.jsonl') %}{"custom_id":"ticket-001","method":"POST","url":"/v1/chat/completions","body":{"model":"YOUR_MODEL","messages":[{"role":"user","content":"Classify this support ticket."}]}}{% endcall %}
 {{ section_title('1. Upload your requests', level=3) }}
-{% call doc_code('batch-example-upload', 'Shell') %}curl FRONT/v1/files \
+{% call doc_code('batch-example-upload', 'Shell') %}curl CONTROL_NODE/v1/files \
   -H "Authorization: Bearer KEY" \
   -F purpose=batch -F file=@requests.jsonl{% endcall %}
 {{ section_title('2. Create the batch', level=3) }}
-{% call doc_code('batch-example-create', 'Shell') %}curl FRONT/v1/batches \
+{% call doc_code('batch-example-create', 'Shell') %}curl CONTROL_NODE/v1/batches \
   -H "Authorization: Bearer KEY" \
   -H "content-type: application/json" \
   -d '{"input_file_id":"FILE_ID","endpoint":"/v1/chat/completions","completion_window":"24h","metadata":{"name":"Support ticket classification"}}'{% endcall %}
 {{ section_title('3. Check progress and retrieve results', level=3) }}
-{% call doc_code('batch-example-results', 'Shell') %}curl FRONT/v1/batches/BATCH_ID -H "Authorization: Bearer KEY"
-curl FRONT/v1/files/OUTPUT_FILE_ID/content -H "Authorization: Bearer KEY"{% endcall %}
-<p class="small text-secondary mb-0">Replace FRONT, KEY, YOUR_MODEL and the file and batch IDs with your own values. Live requests take priority; batch progress survives restarts.</p>
+{% call doc_code('batch-example-results', 'Shell') %}curl CONTROL_NODE/v1/batches/BATCH_ID -H "Authorization: Bearer KEY"
+curl CONTROL_NODE/v1/files/OUTPUT_FILE_ID/content -H "Authorization: Bearer KEY"{% endcall %}
+<p class="small text-secondary mb-0">Replace CONTROL_NODE, KEY, YOUR_MODEL and the file and batch IDs with your own values. Live requests take priority; batch progress survives restarts.</p>
 {% endmacro %}

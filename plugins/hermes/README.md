@@ -1,6 +1,6 @@
 # Hermes adapter
 
-Deployment status reviewed **2026-10-16**: front's `jeeves` instance is configured and its
+Deployment status reviewed **2026-10-16**: the control node's `jeeves` instance is configured and its
 adapter service is running. It discovered ten profiles, synchronized its settings and enabled
 `hermes:gandalf`. Adapter heartbeat passes; the Hermes messaging gateway reports stopped.
 Live inference through the alias remains to be checked after the compute benchmark sweep.
@@ -82,5 +82,5 @@ runs. A stopped messaging gateway can coexist with working CLI chats; both state
 
 The adapter's own systemd user service provides process recovery. Its HTTP endpoint cannot
 restart an unreachable adapter. Changing `listen_host`/`listen_port` reports restart required:
-apply using the old connection URL, restart the adapter service locally, then update the front
+apply using the old connection URL, restart the adapter service locally, then update the control node
 connection URL if necessary. Plugin settings updates use HTTP and require no SSH access.

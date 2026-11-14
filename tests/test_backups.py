@@ -219,7 +219,7 @@ def test_loadcoach_manages_and_previews_compute_backups(tmp_path, backup_keys):
     with TestClient(build_app(Config(database=str(database_path)))) as client:
         listed = client.get("/loadcoach/backups")
         assert listed.status_code == 200
-        assert any(row["kind"].startswith("models, requests") for row in listed.json()["inventory"])  # the users are front's
+        assert any(row["kind"].startswith("models, requests") for row in listed.json()["inventory"])  # the users are the control node's
         backup_id = new_id(1_700_000_000, b"\x04\x05\x06")
         made = client.post("/loadcoach/backups", json={"id": backup_id, "retention": 3})
         preview = client.get(f"/loadcoach/backups/{backup_id}")

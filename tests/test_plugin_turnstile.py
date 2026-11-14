@@ -15,7 +15,7 @@ from turnstile.app import Settings, build_app
 
 def test_compute_offline_adapter_routing_auth_sessions_and_minimal_logs(tmp_path):
     registry, _, adapter, _ = setup(tmp_path)
-    # Who may use what is front's: the accounts are kept beside turnstile. Compute's list of models is the last it gave.
+    # Who may use what is the control node's: the accounts are kept beside turnstile. Compute's list of models is the last it gave.
     (tmp_path / 'data').mkdir(exist_ok=True)
     users = Users(str(tmp_path / 'data' / 'accounts.db'), {'plugins': Group(can=frozenset({'front-plugins'})), 'none': Group()})
     users.add('alice', 'plugins')

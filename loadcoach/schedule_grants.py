@@ -18,7 +18,7 @@ class ScheduleGrants:
         migrate(db.database, db, 'loadcoach.schedules', SCHEDULE_GRANTS)
 
     def owner(self, identity):
-        """The account a grant was made by, as front says it is now. Ask `users.fresh()` first."""
+        """The account a grant was made by, as control node says it is now. Ask `users.fresh()` first."""
         return self.users.by_identity(identity)
 
     def permitted(self, owner, spec):

@@ -17,7 +17,7 @@
   <div class="narrow"><label for="name">Name</label>
     <input id="name" autocomplete="username"></div>
   <div class="narrow"><label for="password">Password</label>
-    <input id="password" type="password" autocomplete="current-password" title="Checked by LoadCoach, from this machine only. From another machine, sign in at the front machine."></div>
+    <input id="password" type="password" autocomplete="current-password" title="Checked by LoadCoach, from this machine only. From another machine, sign in at the control node."></div>
   <div class="narrow"><label>&nbsp;</label>
     <button id="signin" title="Signs in with the name and password and fills in the key with the session key that comes back.">Sign in</button>
     <button id="signout">Out</button></div>
@@ -67,7 +67,7 @@
 
 <details><summary>Request sent</summary><pre id="sent"></pre></details>
 <details open><summary>Response</summary><pre id="raw"></pre></details>
-<details><summary>Named model sets</summary><p class="note">GET /loadcoach/loadouts lists this node's sets. POST {"action":"preview","name":"Daily"}, inspect the response, then POST {"action":"request","name":"Daily","token":"TOKEN_FROM_PREVIEW"}. Acknowledge warnings only after review. Front clients address a node through /turnstile/machines/NAME/control/loadouts. Fixed media entries use a loadout_profile key from /loadcoach/models instead of context tokens; sets contain at most 16 models.</p></details>
+<details><summary>Named model sets</summary><p class="note">GET /loadcoach/loadouts lists this node's sets. POST {"action":"preview","name":"Daily"}, inspect the response, then POST {"action":"request","name":"Daily","token":"TOKEN_FROM_PREVIEW"}. Acknowledge warnings only after review. Control node clients address a node through /turnstile/machines/NAME/control/loadouts. Fixed media entries use a loadout_profile key from /loadcoach/models instead of context tokens; sets contain at most 16 models.</p></details>
 
 {% endblock %}
 {% block scripts %}<script>const $ = id => document.getElementById(id);

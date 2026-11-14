@@ -387,7 +387,7 @@ def test_front_toollocker_audit_resolves_the_owners_defaults(tmp_path):
 
 
 def test_front_toollocker_preflight_runs_without_installed_runtime_packages(tmp_path):
-    """A retained front gateway must not import Typer or ASGI dependencies before reinstalling Python packages."""
+    """A retained control node gateway must not import Typer or ASGI dependencies before reinstalling Python packages."""
     settings = tmp_path / 'settings'
     settings.mkdir()
     (settings / 'weightroom.toml').write_text('data = "../data"\n')

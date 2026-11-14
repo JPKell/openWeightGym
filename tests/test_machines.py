@@ -1,4 +1,4 @@
-"""Front's inventory of compute machines: what each last said, and how long ago."""
+"""Control node's inventory of compute machines: what each last said, and how long ago."""
 import asyncio
 import time
 

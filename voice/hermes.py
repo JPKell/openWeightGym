@@ -1,4 +1,4 @@
-"""Hermes run API bridge, pinned to the capability contract inspected on the front host.
+"""Hermes run API bridge, pinned to the capability contract inspected on the control node.
 
 Only run.completed.output is speech. Runs are submitted once. Stop waits for a terminal
 state before another run may own the conversation; an uncertain outcome is never retried.

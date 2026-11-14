@@ -2,7 +2,7 @@
 # Load accounts written by scripts/export-accounts.sh into another installation, for testing it
 # with the users, passwords and API keys you already have.
 #
-#   scripts/import-accounts.sh IN.tar [ROOT]       ROOT is the new front installation, ~/weightroom by default
+#   scripts/import-accounts.sh IN.tar [ROOT]       ROOT is the new control node installation, ~/weightroom by default
 #
 # Run it from that installation's folder (its .venv makes the accounts tables if they are not
 # there yet). Stop turnstile and weightroom there first. Groups, users, key hashes and allowances

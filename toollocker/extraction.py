@@ -42,7 +42,7 @@ class ExtractionTools:
     path_prefix = '/owg/extraction-tools/'
 
     def __init__(self, url, key_file):
-        """Prepare a front gateway connection without a shared user key."""
+        """Prepare a control node gateway connection without a shared user key."""
         self.url, self.key_file = url.rstrip('/'), key_file
         self.starting = asyncio.Lock()
         self.tools = descriptions()

@@ -1,4 +1,4 @@
-"""Bounded, independent readers for the event and benchmark reports the front keeps.
+"""Bounded, independent readers for the event and benchmark reports the control node keeps.
 
 The writer connection belongs to turnstile's event loop. A report gets its own
 read-only connection in a worker thread so an expensive query cannot pause model

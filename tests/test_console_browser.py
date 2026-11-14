@@ -180,7 +180,7 @@ def test_log_diagnostic_model_is_remembered_per_account_in_the_browser():
 
 def test_current_requests_can_stop_one_unlogged_row_without_request_links(desk, tmp_path):
     _, wire, users = desk
-    # desk's console already polls its front on another event loop. The extra console
+    # desk's console already polls its control node on another event loop. The extra console
     # needs its own front/accounts connection, as independent processes have in production.
     front = turnstile_to(tmp_path, users, {8442: wire})
     turnstile = httpx.ASGITransport(app=front, client=('127.0.0.1', 1))

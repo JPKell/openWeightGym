@@ -27,7 +27,7 @@ def seed(tmp_path, users):
     stat = path.stat()
     models.keep_hash(str(path), hashlib.sha256(path.read_bytes()).hexdigest(), stat.st_size, stat.st_mtime)
     fp = models.fingerprint(models.get('small'), 'small')
-    front = str(tmp_path/'data'/'roles.db')  # roles and reliability are kept on the front machine, beside the accounts
+    front = str(tmp_path/'data'/'roles.db')  # roles and reliability are kept on the control node, beside the accounts
     Roles(front).put('chat', {'models': {'small': 1}})
     log = Log(database)
     kept = Reliability(sqlite3.connect(front))
@@ -60,7 +60,7 @@ def test_report_feedback_and_reset_follow_permissions_and_keep_history(desk, tmp
     refused = browser.post('/reliability', data={'model': 'small', 'role': 'chat', 'fingerprint': key[1], 'action': 'reset'})
     assert refused.status_code == 400 and 'Your group may not' in refused.text
     assert refused.url.path == '/reliability'
-    assert kept.summary(key)['excluded']  # front renders the permission refusal, never applies it
+    assert kept.summary(key)['excluded']  # control node renders the permission refusal, never applies it
     sign_in(browser, 'jordan')
     report = browser.get('/reliability').text
     assert 'all users' in report and 'Reset reliability' in report

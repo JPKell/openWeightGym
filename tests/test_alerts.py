@@ -1,4 +1,4 @@
-"""Operational episodes, isolated evidence sources and front permissions. No real power/GPU work."""
+"""Operational episodes, isolated evidence sources and the control node permissions. No real power/GPU work."""
 import json
 import sqlite3
 import time
@@ -93,7 +93,7 @@ def test_machine_service_intent_and_unavailable_heat():
 
 def test_compute_evidence_reuses_exclusion_and_real_spending_without_leaking_text(tmp_path):
     path = tmp_path / 'core.db'
-    users = Users(tmp_path / 'accounts.db', GROUPS)  # the accounts are front's: turnstile is in front, as on the two machines
+    users = Users(tmp_path / 'accounts.db', GROUPS)  # the accounts are the control node's: turnstile is in the control node, as on the two machines
     for name, group in [('jordan', 'admin'), ('pat', 'plain'), ('panel', 'front')]:
         users.add(name, group)
     keys = {name: {'authorization': 'Bearer ' + users.new_key(name)} for name in ('jordan', 'pat', 'panel')}
@@ -104,10 +104,10 @@ def test_compute_evidence_reuses_exclusion_and_real_spending_without_leaking_tex
     stat = weights.stat()
     library.keep_hash(str(weights), 'sha256-fixture', stat.st_size, stat.st_mtime)
     key = (library.identity('tiny'), library.fingerprint(library.get('tiny'), 'tiny'), 'chat')
-    reliability = Reliability(sqlite3.connect(tmp_path / 'roles.db'))  # kept on the front machine, in turnstile's folder
+    reliability = Reliability(sqlite3.connect(tmp_path / 'roles.db'))  # kept on the control node, in turnstile's folder
     for number in range(1, 4):
         reliability.record(number, 'pat', 'tiny', key, 0, 'error')
-    Services(tmp_path / 'accounts.db', str(tmp_path)).put('provider', {'url': 'https://example.invalid/v1', 'ceiling': 1, 'models': {}})  # front's
+    Services(tmp_path / 'accounts.db', str(tmp_path)).put('provider', {'url': 'https://example.invalid/v1', 'ceiling': 1, 'models': {}})  # the control node's
     users.db.execute('UPDATE groups SET settings=? WHERE name=?', (json.dumps({'can': ['load'], 'max_hosted_spend': 1}), 'plain'))
     users.db.commit()
     log = Log(path)
@@ -125,7 +125,7 @@ def test_compute_evidence_reuses_exclusion_and_real_spending_without_leaking_tex
     library.keep_hash(str(weights), 'sha256-fixture', stat.st_size, stat.st_mtime)
     reliability.reset(key)
     assert caller.get('/loadcoach/alert-evidence', headers=keys['jordan']).json()['model failures'][0]['active'] is False
-    for db in (log.db, users.db):  # compute's copy of the entries and the front's, which is the log spending is counted from
+    for db in (log.db, users.db):  # compute's copy of the entries and the control node's, which is the log spending is counted from
         db.execute('UPDATE events SET at=?', (time.time()-86401,))
         db.commit()
     assert not any(row['active'] for row in caller.get('/loadcoach/alert-evidence', headers=keys['panel']).json()['spending'])

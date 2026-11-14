@@ -1,4 +1,4 @@
-"""Front owns node lifecycle independently of installation and reachability."""
+"""Control node owns node lifecycle independently of installation and reachability."""
 
 import asyncio
 import json

@@ -1,4 +1,4 @@
-"""Authenticated browser-address forwarding across the front's internal HTTP hop."""
+"""Authenticated browser-address forwarding across the control node's internal HTTP hop."""
 
 from contextvars import ContextVar
 from ipaddress import ip_address
@@ -21,7 +21,7 @@ async def forward(request, key: str, machine: str = 'weightroom') -> None:
 
 
 class ClientOrigin:
-    """Capture socket addresses, accepting a forwarded address only with the private front proof."""
+    """Capture socket addresses, accepting a forwarded address only with the private control node proof."""
 
     def __init__(self, app, key_file: str = '') -> None:
         """Optionally configure proof verification; a console without a key file captures its own peer."""

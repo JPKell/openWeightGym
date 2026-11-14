@@ -1,7 +1,7 @@
 # External model plugins, protocol version 1
 
 Status reviewed 2026-10-16: implemented, deployed and live-qualified. The framework is deployed
-in WeightRoom and turnstile; Hermes instance `jeeves` runs on front. On 2026-10-16 a real
+in WeightRoom and turnstile; Hermes instance `jeeves` runs on the control node. On 2026-10-16 a real
 `hermes:gandalf` request through turnstile returned 200 with adapter, instance, profile, session
 and request headers. After `systemctl --user restart suite-adapter-hermes-jeeves` a second request
 also passed. Earlier evidence: the disposable Linux installation and Gandalf continuation check.
@@ -10,14 +10,14 @@ also passed. Earlier evidence: the disposable Linux installation and Gandalf con
 
 Turnstile routes registered adapter aliases directly to independent HTTP adapter servers. It
 continues forwarding ordinary model/tool requests to compute. Since milestone 76 the openWeightGym's
-users, groups, keys and permissions are kept on the front machine, and turnstile enforces them there.
+users, groups, keys and permissions are kept on the control node, and turnstile enforces them there.
 Authentication and catalog reads never wake compute. Downstream requests made by Hermes can
 use the ordinary turnstile wake path.
 
-The front machine owns plugin settings, model aliases and minimal adapter-use logs. WeightRoom
+The control node owns plugin settings, model aliases and minimal adapter-use logs. WeightRoom
 provides the management pages. The adapter server owns its executable invocation, native
 session mapping and request receipts. Existing web chat remains hosted inside WeightRoom and
-uses front's chat database; no separate chat service is introduced.
+uses the control node's chat database; no separate chat service is introduced.
 
 ## Discovery and installation
 
@@ -73,7 +73,7 @@ openWeightGym callers access receipts through `GET /turnstile/plugins/runs/PLUGI
 their openWeightGym key; turnstile supplies the private pairing credential and enforces current model
 permissions. Adapter receipts include profile and status; completed receipts retain responses
 and events for idempotent replay. They do not store prompts or accounting. Native histories
-remain in Hermes; openWeightGym web-chat histories remain in front's existing chat database.
+remain in Hermes; openWeightGym web-chat histories remain in the control node's existing chat database.
 
 The turnstile supplies a trusted `X-Suite-User-ID`; caller-supplied identity and adapter credentials
 are never forwarded. HTTP calls use fixed configured endpoints, not URLs supplied in chat
@@ -84,7 +84,7 @@ vectors, never interpolated into shell command text.
 
 `front-plugins` permits adapter use; `front-manage-plugins` permits configuration, discovery,
 installer downloads and health controls. Superusers have both. The effective group/app model
-allowlist applies to public aliases. Since milestone 76 the accounts are on the front machine:
+allowlist applies to public aliases. Since milestone 76 the accounts are on the control node:
 turnstile checks each key there on every request, so key expiry, disabled users, app restrictions
 and revocations apply at once, whether or not compute answers. Compute's snapshot holds only its
 model list, for the catalog while compute is unreachable; its `keys` list is always empty. There
@@ -100,7 +100,7 @@ requests obey the synchronized permission and setting and create no adapter-use 
 ## Settings and health
 
 Settings are schema-validated before a local atomic save. A new desired revision becomes
-pending. The front controller sends the full revision through HTTP and records the acknowledged
+pending. The control node controller sends the full revision through HTTP and records the acknowledged
 applied revision. Updates retry on reconnection; chat dispatch refuses an unapplied desired
 revision. Equal revisions are idempotent only for equal settings; stale/conflicting revisions
 are refused. Active runs use their original settings snapshot. Listen address/port changes
@@ -159,7 +159,7 @@ chat, profile, session and gateway commands; it never sets a sticky default prof
 ## Acceptance criteria
 
 - Adding a valid plugin folder needs no plugin-specific turnstile routing code.
-- Invalid or disabled drivers are not imported by front/turnstile or offered; aliases and instance mappings
+- Invalid or disabled drivers are not imported by control node/Turnstile or offered; aliases and instance mappings
   remain stable through discovery and public renaming.
 - Known authorized callers can list/use adapters with compute unavailable, without waking it.
   Unknown/expired/revoked/app-restricted keys and disallowed aliases are refused.

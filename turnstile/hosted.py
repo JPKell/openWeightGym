@@ -1,4 +1,4 @@
-"""Hosted models, answered from the front machine: the outside services, their keys, and what they may cost.
+"""Hosted models, answered from the control node: the outside services, their keys, and what they may cost.
 
 Compute is for inference, voice and telemetry. A model that lives at an outside service is asked
 for from here, with a key that is a file on this machine and goes nowhere else. Every check that
@@ -42,7 +42,7 @@ def refuse(status: int, message: str, headers: dict | None = None) -> JSONRespon
 
 
 class Hosted:
-    """Front-side hosted inference with caller policy, cost and audit enforcement."""
+    """Control-node-side hosted inference with caller policy, cost and audit enforcement."""
     def __init__(self, services: Services, log, client: httpx.AsyncClient, reliability, users, local_names=None) -> None:
         """`await local_names(user)` are the names compute's models go by, so that a service cannot take one."""
         async def none(user):
@@ -83,7 +83,7 @@ class Hosted:
         """Why this model cannot be asked just now, in words: its service has no key here, or has cost its ceiling. None if it can."""
         service = self.models()[name]["service"]
         if not self.services.key(service):
-            return f"The service {service} has no key on the front machine. It belongs in the file {self.services.key_file(service)}."
+            return f"The service {service} has no key on the control node. It belongs in the file {self.services.key_file(service)}."
         ceiling, cost = self.services.get(service).get("ceiling"), self.log.service_cost(service)
         if ceiling and cost >= ceiling:
             return f"The service {service} has cost {cost:.2f} in the last 24 hours. Its ceiling is {ceiling:.2f}."
@@ -184,7 +184,7 @@ class Hosted:
         going = {"hosted": there["theirs"], "service": there["service"], **({"instead_of": instead_of} if instead_of else {}), **chose}
         entry = self.log.add("request", "asked", *about, path=request.url.path.removeprefix("/v1/"), group=user.group_name,
                              account_id=user.identity, key_id=user.key_identity, **going)
-        number = public_number(None, entry) if entry else 0  # the number callers see: front's own range, never compute's
+        number = public_number(None, entry) if entry else 0  # the number callers see: the control node's own range, never compute's
         keeping = bool(entry and self.log.keep_text)  # the latest requests are kept in full, for finding out what went wrong
         self.log.keep_asked(entry, json.dumps(asked) if len(json.dumps(asked)) <= KEEP_AT_MOST else json.dumps({"too_big": len(json.dumps(asked))}))
         model_id, fingerprint = self.identity(name)
@@ -334,7 +334,7 @@ class Hosted:
         except ValueError as problem:
             return error(400, str(problem))
         except OSError:
-            return error(500, "The API key could not be saved on the front machine.")
+            return error(500, "The API key could not be saved on the control node.")
         self.log.add("service", "key-changed", user.name, address(request), name=name)
         return JSONResponse({"name": name, "key": True}, headers={"cache-control": "no-store"})
 

@@ -52,7 +52,7 @@ class HTTP(Adapter):
         registry.save_instance('httpdemo', 'local', 'http://adapter', {'endpoint': external_url + '/answer'}, enabled=True)
         registry.enable('httpdemo', True)
         user = {'name': 'alice', 'identity': 'id-one', 'can': ['front-plugins'], 'model_access': '*', 'max_sensitivity': 'normal'}
-        def identify(authorization):  # turnstile's, from the accounts on front
+        def identify(authorization):  # turnstile's, from the accounts on the control node
             if authorization != 'Bearer caller':
                 raise AdapterError('Not authorized.', 401, 'invalid_api_key')
             return user

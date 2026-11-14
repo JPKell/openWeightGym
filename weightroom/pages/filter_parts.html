@@ -18,7 +18,7 @@
 {% if show_label %}<label class="form-label" for="{{ prefix }}-node">Node</label>{% endif %}
 <select id="{{ prefix }}-node" name="{{ name }}" class="form-select form-select-sm node-filter" aria-label="Filter node">
 {% if allow_all %}<option value="">All nodes</option>{% endif %}
-{% if selected and selected not in nodes %}<option value="{{ selected }}" selected>{{ selected }} (unavailable)</option>{% endif %}
-{% for node in nodes %}<option value="{{ node }}"{{ ' selected' if node == selected }}>{{ 'Front' if node == 'front' else node }}</option>{% endfor %}
+{% if selected and selected not in nodes %}<option value="{{ selected }}" selected>{{ 'Control node' if selected == 'front' else selected }} (unavailable)</option>{% endif %}
+{% for node in nodes %}<option value="{{ node }}"{{ ' selected' if node == selected }}>{{ 'Control node' if node == 'front' else node }}</option>{% endfor %}
 </select>
 {% endmacro %}

@@ -90,7 +90,7 @@ def engines(config) -> list[dict]:
 def engines_from_settings(path: Path) -> list[dict]:
     """Engines as LoadCoach's settings file on this machine describes them; none installed when there is no such file.
 
-    For front, which reads the file without starting LoadCoach or opening its database.
+    For control node, which reads the file without starting LoadCoach or opening its database.
     """
     try:
         told = tomllib.loads(path.read_text())
