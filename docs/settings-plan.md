@@ -430,7 +430,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 1e Live disk monitoring paths (427 focused checks pass; cached readings invalidate on selection changes).
 - [x] 1f Per-node Wake overrides (445 focused checks pass; offline edits preserve node files, listeners and keys).
 - [x] 1g Voice recognition and synthesis tuning (498 checks pass; nested overrides preserve paths and freeze restart fields).
-- [ ] 1h Hermes tools for new calls.
+- [x] 1h Hermes tools for new calls (472 focused checks pass; active-call snapshots and execution paths preserved).
 - [ ] 1i Retired, derived and deprecated machine values.
 - [ ] 1j Responses limits dependencies; Phase 1 deployed and verified.
 - [ ] 2.1 Shared design, grouped routes and navigation.

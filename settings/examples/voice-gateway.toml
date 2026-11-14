@@ -61,7 +61,7 @@ origins = ["https://front.your-tailnet.ts.net", "http://localhost:8446", "http:/
 # Enable modes = ["direct", "hermes"] above only after checking the installed API.
 # Each call gets its own Hermes process, temporary home and search-only tools.
 # Model and agent choices are editable under Settings -> voice-gateway. A blank
-# hermes_model uses the machine's model below. Paths, credentials and toolsets stay here.
+# hermes_model uses the machine's model below. Paths and credentials stay here. Toolsets and search_url apply live to new calls from Voice.
 # [hermes]
 # python = "/home/you/.hermes/hermes-agent/venv/bin/python"
 # repository = "/home/you/.hermes/hermes-agent"

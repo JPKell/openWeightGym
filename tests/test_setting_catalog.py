@@ -170,6 +170,8 @@ def live_examples(entry):
         'observation_quiet_routes': (['/one'], ['/two']),
         'disabled_gpus': ([], ['unavailable-test-card']),
         'disks': (['/'], ['/tmp']),
+        'hermes.toolsets': (['search'], []),
+        'hermes.search_url': ('', 'http://127.0.0.1:8888'),
         'wake_mac': ('', '00:11:22:33:44:55'),
         'wake_address': ('255.255.255.255', '192.0.2.255'),
         'models_folder': ('/tmp/catalogue-original', '/tmp/catalogue-changed'),
