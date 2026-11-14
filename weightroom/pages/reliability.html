@@ -1,24 +1,18 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, page_header, card, alert, empty_row %}
+{% from "parts.html" import said_box, page_header, card, alert, empty_row, more %}
+{% from "reliability_parts.html" import overview, identity %}
 {% block title %}Reliability · openWeightGym{% endblock %}
-{% block page_class %}console-page{% endblock %}
-{% block scripts %}<script src="/static/echarts.min.js" defer></script><script src="/static/reliability.js?v=2" defer></script>{% endblock %}
+{% block page_class %}console-page reliability-page{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/reliability.css?v=1"><script src="/static/reliability.js?v=3" defer></script>{% endblock %}
 {% block main %}
-{{ page_header("Reliability", lead="Review answer quality, failures and model health.") }}
+{% call page_header('Reliability') %}<a class="btn btn-outline-secondary btn-sm" href="/log?kind=reliability">Reliability events</a><a class="btn btn-outline-secondary btn-sm" href="{{ view.export_url }}" download>Export CSV</a>{% endcall %}
 {{ said_box(said, failed) }}
-{% if reliability.compute_unavailable %}{% call alert('warning', tag='p', role='status') %}Compute is not answering. Showing saved reliability evidence; live model state and recovery controls are unavailable.{% endcall %}{% endif %}
+{% if reliability.compute_unavailable %}{{ alert('warning', 'Compute is not answering. Showing saved evidence; fingerprint identity, live state and recovery controls are unavailable.') }}{% endif %}
+<div class="small text-secondary mb-2">Last seven days · {{ reliability.scope }} · up to 50 scored outcomes per fingerprint and role</div>
+{{ overview(view.summary) }}
 {% include "reliability_report.html" %}
-{% call card("Answer quality", attrs={"aria-labelledby": "quality-heading"}, header_id="quality-heading") %}
-    <p class="small text-secondary">Every good or bad rating ever given, kept beyond the seven-day reliability window, per model fingerprint across all roles. Score is the share rated good.</p>
-    <div class="table-responsive">
-      <table id="quality-table" class="table table-sm align-middle">
-        <thead><tr><th scope="col">Model / fingerprint</th><th scope="col">Good</th><th scope="col">Bad</th><th scope="col">Score</th><th scope="col">Latest explanations</th></tr></thead>
-        <tbody>{% for row in quality %}
-          <tr><th scope="row">{{ row.model }}<small class="d-block text-secondary" title="{{ row.fingerprint }}">{{ row.fingerprint[:12] }} · {{ 'current' if row.current else 'historical' }}</small></th>
-            <td>{{ row.good }}</td><td>{{ row.bad }}</td><td>{{ row.score }}%</td>
-            <td>{% for one in row.explanations or [] %}<small class="d-block"><a href="/requests/{{ one.request }}">#{{ one.request }}</a> {{ 'good' if one.value > 0 else 'bad' }} · {{ one.rater }}: {{ one.explanation }}</small>{% else %}<small class="text-secondary">{{ 'No explanations' if row.explanations is defined else 'Reading explanations needs the ability to read everyone\'s log.' }}</small>{% endfor %}</td></tr>
-        {% else %}{% call empty_row(5) %}No answers rated yet.{% endcall %}{% endfor %}</tbody>
-      </table>
-    </div>
-  {% endcall %}
+{% call more('How scoring, scope and recovery work') %}<p>Role preference is multiplied by 0.5–1.1 using recent faults and optional feedback. Three consecutive faults exclude a candidate from that role. After a five-minute cooldown, a successful recovery check restores eligibility.</p><p>Counts and feedback follow your log permissions; preference and recovery are shared routing state. Cancelled requests, interrupted benchmarks, restarts, admission refusals and unrecognized answers do not reduce preference. Historical fingerprints stay separate.</p><p class="mb-0">Issues only keeps candidates with an error, timeout or empty answer. A regression is a fault-rate increase of at least 20 percentage points versus the preceding sample.</p>{% endcall %}
+<dialog id="reliability-dialog" class="rl-dialog" aria-labelledby="reliability-inspector-heading">
+{% call card('Candidate evidence', class_='mb-0', header_id='reliability-inspector-heading', actions='<button type="button" class="btn btn-outline-secondary btn-sm" data-reliability-close>Close</button>'|safe) %}<div id="reliability-dialog-body"></div>{% endcall %}
+</dialog>
 {% endblock %}

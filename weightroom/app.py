@@ -3966,22 +3966,28 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def reliability_page(request: Request, person: Person) -> Response:
         """Render retained reliability evidence and authorized recovery controls."""
+        from weightroom import reliability_views
+
         asked = request.query_params
         report = await fetch(request, person, '/loadcoach/reliability',
                              params={key: asked[key] for key in ('model', 'role') if asked.get(key)})
         if isinstance(report, Response):
             return report
-        if asked.get('issues') == '1':
-            report['rows'] = [row for row in report['rows']
-                              if sum(row['counts'].get(kind, 0) for kind in ('error', 'timeout', 'empty')) > 0]
         choices = await fetch(request, person, '/loadcoach/event-choices')
         if isinstance(choices, Response):
             return choices
         quality = await fetch(request, person, '/loadcoach/quality')
         if isinstance(quality, Response):
             return quality
-        return page(request, 'reliability.html', person, reliability=report, quality=quality['rows'], **choices,
-                    said=asked.get('said', ''), failed=asked.get('failed') == '1')
+        view = reliability_views.workspace(report, quality['rows'], asked)
+        if asked.get('export') == 'csv':
+            return Response(reliability_views.export_csv(view['rows'], report.get('compute_unavailable', False)),
+                            media_type='text/csv', headers={'Content-Disposition': 'attachment; filename="reliability.csv"',
+                                                          'Cache-Control': 'no-store'})
+        response = page(request, 'reliability.html', person, reliability=report, view=view, **choices,
+                        said=asked.get('said', ''), failed=asked.get('failed') == '1')
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     async def reliability_do(request: Request, person: Person) -> Response:
         """Validate and submit a reliability reset or controlled recovery request."""
@@ -3989,7 +3995,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         result = await ask('POST', '/loadcoach/reliability', person.key,
                            json={key: form.get(key, '') for key in ('model', 'role', 'fingerprint', 'action')})
         message = ('Reliability reset.' if form.get('action') == 'reset' else 'Recovery check finished: ' + result.json()['reliability']['state'] + '.') if result.status_code == 200 else result.json()['error']['message']
-        query = {key: form.get('filter_' + key, '') for key in ('model', 'role', 'issues') if form.get('filter_' + key)}
+        from weightroom.reliability_views import FILTERS
+        query = {key: form.get('filter_' + key, '') for key in FILTERS if form.get('filter_' + key)}
         query['said'] = message
         if result.status_code != 200:
             query['failed'] = '1'

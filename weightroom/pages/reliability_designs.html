@@ -1,0 +1,53 @@
+{% from 'parts.html' import page_header, card, more, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'reliability_design_parts.html' import templates %}
+{% from 'reliability_parts.html' import overview, inspector %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reliability · Three design proposals · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to Reliability</a>
+<header class="rl-review"><div class="d-flex flex-wrap align-items-center gap-3"><strong class="rl-brand">weightRoom<span aria-hidden="true"> / </span></strong><span class="small text-secondary">Reliability · Design review</span></div><div class="d-flex gap-2 align-items-center"><span class="badge bg-secondary-lt">Interactive sample</span><button class="btn btn-outline-secondary btn-sm" type="button" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" type="button" id="reset-demo">Reset demo</button></div></header>
+<main class="rl-page">
+<section class="rl-proposals" aria-label="Design proposals">
+{% call pills('Design options', buttons=true, class_='gap-2 mb-0') %}
+{{ pill_button('01 / Health briefing', true, attrs={'data-design':'briefing'}) }}{{ pill_button('02 / Evidence ledger', attrs={'data-design':'ledger'}) }}{{ pill_button('03 / Recovery desk', attrs={'data-design':'desk'}) }}
+{% endcall %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3"><p class="small text-secondary mb-0" id="design-description">A clear daily overview: spot issues, compare outcomes, then inspect the evidence. Recommended.</p><label class="d-flex align-items-center gap-2 small text-secondary">Preview state<select class="form-select form-select-sm w-auto" id="scenario"><option value="normal">Mixed health</option><option value="healthy">Healthy fleet</option><option value="empty">No evidence</option><option value="offline">Compute unavailable</option></select></label></div>
+</section>
+<div id="workspace" data-layout="briefing">
+{% call page_header('Reliability') %}<button type="button" class="btn btn-outline-secondary btn-sm" id="audit">Reliability events ↗</button><button type="button" class="btn btn-outline-secondary btn-sm" id="export">Export CSV</button>{% endcall %}
+<div class="d-flex flex-wrap justify-content-between gap-2 mb-3 small text-secondary"><span>Last seven days · <span id="scope-label">all users</span> · up to 50 scored outcomes per fingerprint and role</span><span>Sample snapshot · 13 Nov 2026, 10:42 PST</span></div>
+<div id="offline-note" hidden>{{ alert('warning', 'Compute is not answering. Saved evidence is available; live model state and recovery controls are unavailable.') }}</div>
+{{ overview() }}
+<form id="filters" class="rl-filters mb-4">
+<div><label class="form-label" for="search">Find a candidate</label><input type="search" class="form-control form-control-sm" id="search" placeholder="Model, role or fingerprint…"></div>
+<div><label class="form-label" for="model">Model</label><select class="form-select form-select-sm" id="model" name="model"><option value="">All models</option></select></div>
+<div><label class="form-label" for="role">Role</label><select class="form-select form-select-sm" id="role" name="role"><option value="">All roles</option><option value="direct">Direct model request</option></select></div>
+<div><label class="form-label" for="fingerprint">Fingerprint</label><select class="form-select form-select-sm" id="fingerprint"><option value="current">Current</option><option value="all">Current & historical</option><option value="historical">Historical</option></select></div>
+<div class="form-check"><input class="form-check-input" id="issues" type="checkbox" name="issues" value="1"><label class="form-check-label" for="issues">Issues only</label></div><button type="button" class="btn btn-outline-secondary btn-sm" id="clear">Clear</button>
+</form>
+<div class="d-flex flex-wrap justify-content-between gap-2 mb-3 small"><span id="result-count" class="text-secondary" role="status"></span><label class="d-flex gap-2 align-items-center text-secondary">Preview access<select class="form-select form-select-sm w-auto" id="access"><option value="operator">Operator · all users</option><option value="reader">Reader · own requests</option></select></label></div>
+<div id="feedback" class="small text-secondary mb-3" role="status" aria-live="polite">Illustrative data. Actions are simulated in this tab.</div>
+<div class="rl-workspace">
+{% call card('Needs attention', id='attention', header_id='attention-heading', body_class='p-0', actions='<span class="badge bg-secondary-lt" id="attention-count"></span>'|safe) %}<div id="attention-list"></div>{% endcall %}
+{% call card('Outcome comparison', id='outcomes', hint='Each bar shows the share of scored outcomes. Select a model for exact counts.') %}<div class="rl-legend small text-secondary"><span><i data-kind="success"></i>Successful</span><span><i data-kind="error"></i>Errors</span><span><i data-kind="timeout"></i>Timeouts</span><span><i data-kind="empty"></i>Empty</span></div><div id="outcome-list"></div>{% endcall %}
+{% call card('Candidate evidence', id='inventory', hint='One row per model fingerprint and role. Select a model to see reasons, ignored outcomes and recovery controls.', body_class='p-0', actions='<label class="d-flex align-items-center gap-2 small fw-normal">Sort<select class="form-select form-select-sm w-auto" id="sort"><option value="attention">Attention first</option><option value="rate">Lowest success rate</option><option value="faults">Most faults</option><option value="model">Model name</option></select></label>'|safe) %}
+<div id="table-wrap" class="table-responsive" tabindex="0" role="region" aria-label="Candidate evidence table"><table class="table table-hover align-middle mb-0 rl-table"><caption class="visually-hidden">Seven-day reliability counts, recent feedback and shared routing state</caption><thead><tr><th scope="col">Model / fingerprint</th><th scope="col">Role</th><th scope="col" class="text-end">Success rate</th><th scope="col" class="text-end">Successful</th><th scope="col" class="text-end">Errors</th><th scope="col" class="text-end">Timeouts</th><th scope="col" class="text-end">Empty</th><th scope="col" class="rl-ledger-only text-end">Feedback + / −</th><th scope="col" class="text-end">Preference</th><th scope="col">Routing state</th><th scope="col" class="rl-ledger-only">Reason</th><th scope="col"><span class="visually-hidden">Inspect candidate</span></th></tr></thead><tbody id="candidate-rows"></tbody></table></div>
+<div id="desk-list" hidden></div>
+{% endcall %}
+<aside id="inspector-slot" aria-label="Selected candidate">{{ inspector() }}</aside>
+{% call card('Answer quality', id='quality', hint='Lifetime ratings · across all roles · independent of the seven-day scoring window', body_class='p-0') %}
+<div class="small text-secondary px-3 py-3 border-bottom">Score is the share rated good. Model and fingerprint filters apply; role and issue filters apply only to reliability.</div>
+<div class="table-responsive" tabindex="0" role="region" aria-label="Lifetime answer quality"><table class="table align-middle mb-0 rl-quality-table"><caption class="visually-hidden">Lifetime good and bad ratings by model fingerprint</caption><thead><tr><th scope="col">Model / fingerprint</th><th scope="col" class="text-end">Good</th><th scope="col" class="text-end">Bad</th><th scope="col" class="text-end">Score</th><th scope="col">Latest explanations</th></tr></thead><tbody id="quality-rows"></tbody></table></div>
+{% endcall %}
+</div>
+<div class="mt-4">{% call more('How scoring, scope and recovery work') %}<p>Role preference is multiplied by 0.5–1.1 using recent faults and optional feedback. Three consecutive faults exclude a candidate from that role. After a five-minute cooldown, a successful recovery check restores eligibility.</p><p>Counts and feedback follow log permissions; preference and recovery are shared routing state. Cancelled requests, interrupted benchmarks, restarts, admission refusals and unrecognized answers do not reduce preference. Historical fingerprints remain separate.</p><p class="mb-0">Issues only keeps candidates with an error, timeout or empty answer. A regression is a fault-rate increase of at least 20 percentage points versus the preceding sample.</p>{% endcall %}</div>
+</div>
+</main>
+<dialog id="evidence-dialog" class="rl-dialog" aria-labelledby="inspector-heading"><div id="dialog-slot"></div></dialog>
+<dialog id="event-dialog" class="rl-dialog" aria-labelledby="event-heading">{% call card('Sample record', header_id='event-heading', class_='mb-0') %}<p id="event-text"></p><button type="button" class="btn btn-outline-secondary btn-sm" id="close-event">Close</button>{% endcall %}</dialog>
+{{ templates() }}
+<script type="application/json" id="reliability-sample">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>

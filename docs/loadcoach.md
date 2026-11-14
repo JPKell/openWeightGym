@@ -8571,16 +8571,19 @@ the rater's name is kept. Ratings still need the outcome to be within the reliab
 so rate within seven days. WeightRoom's request page takes an optional explanation beside the
 buttons, and Reliability shows an Answer quality table.
 
-**Logs → Reliability** (`/reliability`) has a reliability report with a stacked outcome chart and exact table,
-model/role filters, current versus historical fingerprints, success rates, errors/timeouts/empty
-counts, feedback, ignored outcomes, regressions, modifier and recovery status. It links to the
-latest request and offers reset/recovery controls to permitted operators. Counts and ratings
-are scoped to the caller unless they have `see-log`; routing modifiers/recovery state are
-shared. **Issues only** removes 100% rows from both the chart and table by retaining rows with
-at least one reported error, timeout or empty answer. A link opens reliability audit events in AI Logs, which retains its own filters.
-The chart can hide series and zoom among
-candidates; the table remains usable without JavaScript and scrolls within the page on phones.
-Roles links to this report and explains each candidate's adjustment.
+**Logs → Reliability** (`/reliability`) uses the compact Health briefing: scoped success/fault
+totals, exclusions and regressions above Needs attention, normalized outcome bars and an exact
+candidate table. Current fingerprints appear by default; model, role, search, fingerprint and
+**Issues only** filters apply to the report and its CSV export. Sort by attention, success rate,
+faults or model. Issues only retains candidates with an error, timeout or empty answer.
+Inspect opens recent feedback, ignored outcomes, routing reasons, timestamps, the latest request
+and permitted reset/recovery actions. Native disclosures and GET/POST forms also work without
+JavaScript; tables scroll within the page on phones. JavaScript adds shared two-click action confirmation.
+Counts and ratings follow log permissions; routing modifiers/recovery state are shared.
+Lifetime Answer quality stays separate from the seven-day report and follows only model and
+fingerprint filters. During a compute outage, saved evidence stays visible, current identity
+and routing values are marked unavailable, and management controls are hidden. The events link
+opens AI Logs with its own filters. Roles links to each candidate's reliability report.
 
 The separate page was implemented on **2026-10-14**, milestone 81; the owner confirmed all
 checks passed and completion on **2026-10-15**. AI Logs no longer embeds the report or loads
