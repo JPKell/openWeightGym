@@ -265,3 +265,19 @@ def test_every_live_setting_changes_through_its_service_getter_without_restart(e
         updated, refused = taken(entry.program, settings, {entry.name: changed}, make)
         actual = getattr(updated, entry.name)
         assert not refused and (list(actual) if isinstance(actual, tuple) else actual) == changed
+
+
+def test_nested_credentials_and_credential_urls_never_reach_seen_storage(tmp_path):
+    from loadcoach.settings import Changes, said
+    secret = 'never-store-this-private-value'
+    values = {'servers': {'remote': {'env': {'SERVICE_API_KEY': secret},
+              'headers': {'Authorization': 'Bearer ' + secret, 'X-API-Key': secret},
+              'url': 'https://user:' + secret + '@example.com/mcp',
+              'search': 'https://example.com/mcp?token=' + secret}},
+              'databases': {'dsn': 'dbname=service password=' + secret}}
+    changes = Changes(tmp_path / 'settings.db')
+    try:
+        changes.seen('toollocker', said(values, values, {}, 'toollocker'))
+        assert secret not in str(changes.db.execute('SELECT told FROM settings_seen').fetchone()[0])
+    finally:
+        changes.db.close()
