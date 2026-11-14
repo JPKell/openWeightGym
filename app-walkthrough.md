@@ -59,10 +59,10 @@
 - [x] Telemetry
 - [x] Physical host telemetry
 - [x] Components
-- [ ] Voice
+- [ ] Voice status
 - [ ] Alerts
 - [x] Schedules
-- [ ] DB
+- [ ] Databases
 - [ ] Database migration preview
 - [ ] Backups
 - [ ] Restore preview

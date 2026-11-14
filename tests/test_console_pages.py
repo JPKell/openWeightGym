@@ -37,7 +37,7 @@ def test_navigation_orders_and_detail_parents():
     assert navigation('/reliability', [], False)['section'] == 'Logs'
     nav = navigation('/tools', can, True)
     assert nav['section'] == 'Settings'
-    assert [name for name, _ in nav['links']] == ['Compute nodes', 'Users', 'Groups', 'Spending allowances', 'Tools', 'Plugins', 'Voice', 'Audio', 'Image', 'General']
+    assert [name for name, _ in nav['links']] == ['General', 'Compute nodes', 'Users', 'Groups', 'Spending allowances', 'Tools', 'Plugins', 'Image', 'Audio', 'Voice']
     # Every account may see its own allowance, so the page is in Settings for everyone.
     assert navigation('/allowances', [], False)['section'] == 'Settings' and navigation('/allowances', [], False)['links'] == [('Spending allowances', '/allowances')]
     assert navigation('/requests/42', can, True)['active'] == '/requests'
@@ -46,8 +46,8 @@ def test_navigation_orders_and_detail_parents():
     assert navigation('/status', [], False)['links'] == [('Status', '/status'), ('Telemetry', '/telemetry')]
     docs = navigation('/docs/modules/voice', can, True)
     assert docs['section'] == 'Docs' and docs['active'] == '/docs/modules/voice'
-    assert [name for name, _ in docs['links']] == ['System reference', 'API reference', 'Web app', 'Modules', 'Benchmarks',
-                                                   'Data and backups', 'Deployment and operations']
+    assert [name for name, _ in docs['links']] == ['System reference', 'API reference', 'Modules', 'Web app', 'Benchmarks',
+                                                   'Deployment and operations', 'Data and backups']
     assert docs['links'][0] == ('System reference', '/docs')
     # The section being read opens beneath its link; the others stay closed.
     assert list(docs['children']) == ['/docs/modules'] and ('Voice', '/docs/modules/voice') in docs['children']['/docs/modules']
