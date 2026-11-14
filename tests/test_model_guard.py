@@ -33,13 +33,27 @@ def test_local_guard_rejects_wrong_incomplete_hosted_and_offload_before_sending(
         before=len(native);assert before==1
         for field in ('model-id','fingerprint','build'):
             wrong={**headers,'x-loadcoach-require-'+field:'wrong'}
-            assert caller.post('/v1/chat/completions',headers=wrong,json=body).status_code==409
+            refused=caller.post('/v1/chat/completions',headers=wrong,json=body)
+            assert refused.status_code==409
+            number=refused.headers['x-loadcoach-request-id']
+            facts=caller.get('/loadcoach/requests/'+number,headers=owner).json()
+            assert facts['ended']['status']==409 and 'does not match' in facts['ended']['why']
         partial={**owner,'x-loadcoach-require-model-id':'one'}
         assert caller.post('/v1/chat/completions',headers=partial,json=body).status_code==400
         assert caller.post('/v1/chat/completions',headers={**headers,'x-loadcoach-offload':'cloud'},json=body).status_code==409
         assert caller.post('/v1/chat/completions',headers=headers,json={**body,'model':'cloud'}).status_code==404  # outside models are front's: see test_hosted_front.py
         assert len(native)==before
         assert caller.get('/loadcoach/status',headers=owner).json()['running']==[]
+
+
+def test_name_guard_accepts_local_name_and_rejects_a_different_name(fake_llama_server):
+    with gateway(fake_llama_server) as caller:
+        owner=add_user(caller,'owner','admin')
+        headers={**owner,'x-loadcoach-require-model-name':'small'}
+        body={'model':'small','messages':[]}
+        assert caller.post('/v1/chat/completions',headers=headers,json=body).status_code==200
+        refused=caller.post('/v1/chat/completions',headers={**headers,'x-loadcoach-require-model-name':'other'},json=body)
+        assert refused.status_code==409 and refused.headers['x-loadcoach-request-id'].isdigit()
 
 
 def test_the_guard_pins_the_configured_model_not_the_server_a_fit_reshaped(fake_llama_server,monkeypatch):

@@ -3641,7 +3641,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier")], *asked_as(person)], said=said, typed_in=typed_in or {},
                     adaptor_names={row["id"] for row in plugins.models(person.me)})  # fmt: skip
 
-    async def collections_page(request: Request, person: Person, said='', result=None, form=None, failed=False) -> Response:
+    async def collections_page(request: Request, person: Person, said='', result=None, form=None, failed=False, diagnostics=None) -> Response:
         """Render owner-private collections and the selected source/index state."""
         listing = await fetch(request,person,'/loadcoach/collections')
         if isinstance(listing,Response):
@@ -3667,7 +3667,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         response=page(request,'collections.html',person,status=400 if failed else 200,collections=listing['collections'],
             collection=selected,embedders=[m for m in models if m.get('embedding')],
             answer_models=[m for m in models if not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier')],levels=levels,
-            said=said,unavailable=unavailable,result=result,form=form or {},
+            said=said,unavailable=unavailable,result=result,form=form or {},diagnostics=diagnostics or {},
             conversations=listed.get('conversations',[]) if isinstance(listed,dict) else [])
         response.headers['cache-control']='no-store'
         return response
@@ -3712,7 +3712,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return Response('Unknown collection action.',status_code=400)
         answer=await ask(method,root+suffix,person.key,json=body)
         if not answer.is_success:
-            return await collections_page(request,person,answer.json()['error']['message'],form=form,failed=True)
+            problem=answer.json()['error']
+            return await collections_page(request,person,problem['message'],form=form,failed=True,
+                                          diagnostics=problem.get('diagnostics'))
         if action=='query':
             return await collections_page(request,person,result=answer.json(),form=form)
         if action=='create':

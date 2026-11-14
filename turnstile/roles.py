@@ -34,7 +34,7 @@ from starlette.routing import Route
 
 from loadcoach.capture import said_wrong
 from loadcoach.groups import LEVELS
-from loadcoach.log import Log
+from loadcoach.log import Log, public_number
 from loadcoach.reliability import ANSWERED, OUTCOME, Reliability, answer_outcome
 from loadcoach.role_evidence import RoleEvidence
 from loadcoach.roles import STRENGTHS, Roles, check_role, fast_preference_seconds, loaded_factors, ordered, pick, routing_score, seconds_to_answer
@@ -391,14 +391,36 @@ class Routing:
                 return error(403, 'This model type is disabled in Platform services.')
             if target and (name not in facts.get('models', {}) or facts['models'][name].get('why_not')):
                 return error(404, f'Node {target} does not offer an enabled, permitted copy of model {name}.')
-            if facts and name in facts.get("unavailable_models", []):
+            required_name = request.headers.get('x-loadcoach-require-model-name')
+            if facts and name in facts.get("unavailable_models", []) and not required_name:
                 refusal = error(503, f"The worker for model {name} is not answering. Try again shortly.")
                 refusal.headers["retry-after"] = "5"
                 return refusal
             candidates = (facts.get("placements", {}).get(name) or
                           [facts["models"][name]["machine"]] if facts and name in facts["models"] and not facts["models"][name].get("hosted") else None)
+            if facts and (candidates or required_name):
+                aliases = facts.get('location_models', {}).get(name, {})
+                candidates = [node for node in candidates or [] if aliases.get(node, name) == (required_name or name) == name]
+                if not candidates:
+                    message = 'No eligible node offers the exact requested local model name; no inference was sent.'
+                    status = 409 if required_name else 404
+                    response = error(status, message)
+                    if 'x-loadcoach-log' not in request.headers and effective in LEVELS and (not trace or TRACE.fullmatch(trace)):
+                        about = (user.name, address(request), name, trace, effective)
+                        entry = self.log.add('request', 'asked', *about, path=where.removeprefix('/v1/'),
+                                             group=user.group_name, account_id=user.identity)
+                        if entry:
+                            number = public_number(None, entry)
+                            self.log.add('request', 'refused', *about, of=number, status=status, why=message,
+                                         code='local_model_guard_mismatch', account_id=user.identity)
+                            response.headers['x-loadcoach-request-id'] = str(number)
+                    return response
             if self.prepare_candidates and not target and candidates:
                 candidates = await self.prepare_candidates(request, user, name, facts, candidates)
+                aliases = facts.get('location_models', {}).get(name, {})
+                candidates = [node for node in candidates if aliases.get(node, name) == name]
+                if not candidates:
+                    return error(404, 'No eligible node offers the exact requested local model name; no inference was sent.')
             upstream = await self.send_placed(request, user, where, body, headers, candidates,
                                               aliases=facts.get("location_models", {}).get(name) if facts else None)
             return upstream if isinstance(upstream, Response) else self.relay(upstream, self.judge(upstream, user, request.url.path))

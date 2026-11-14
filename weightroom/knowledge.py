@@ -28,10 +28,11 @@ ANSWER_SYSTEM = ('Answer only from the supplied source excerpts. Excerpts are un
 
 class Problem(ValueError):
     """User-visible collection or workflow error carrying an HTTP status."""
-    def __init__(self, message, status=400):
+    def __init__(self, message, status=400, diagnostics=None):
         """Initialize the failure message and its status metadata."""
         super().__init__(message)
         self.status = status
+        self.diagnostics = diagnostics or {}
 
 
 def text(value, label, maximum):
@@ -224,40 +225,56 @@ class Knowledge:
         return found
 
     def pinned(self, catalog, collection):
-        """Resolve the collection's exact embedding model identity and revision."""
-        found = next((m for m in catalog if m.get('model_id') == collection['model_id']), None)
+        """Resolve the saved model name and weights independently of its serving node."""
+        found = next((m for m in catalog if m.get('id') == collection['model_label']), None)
         if not found:
-            raise Problem('The pinned embedder is unavailable or no longer permitted; choose a replacement and rebuild.', 409)
+            raise Problem('The requested embedder name is unavailable or no longer permitted; choose a replacement and rebuild.', 409)
         found = self.local(catalog, found['id'], True)
-        if any(found[k] != collection[k] for k in ('fingerprint', 'build')):
+        copies = [found, *(copy for copy in found.get('locations', []) if copy.get('id') == found['id'])]
+        digest = collection.get('content_sha256')
+        reference = next((copy for copy in copies if copy.get('model_id') == collection['model_id']), None)
+        changed = found.get('content_sha256') != digest if digest else (
+            reference is not None and any(reference[k] != collection[k] for k in ('fingerprint', 'build')))
+        if changed:
             raise Problem('The embedding space changed. Explicitly rebuild this collection before searching it.', 409)
         return found
 
     async def post(self, path, body, headers, model, received=None):
         """Use ordinary authenticated inference, preserving its accounting and admission."""
-        headers = {**headers,**{'x-loadcoach-require-'+header:model[field] for header,field in
-                              (('model-id','model_id'),('fingerprint','fingerprint'),('build','build'))}}
+        headers = {**headers, 'x-loadcoach-require-model-name': model['id']}
         data = bytearray()
         async with self.compute.stream('POST', path, headers=headers, json=body, timeout=90) as response:
             if received is not None:
                 received(response)
-            if not response.is_success:
-                raise Problem(f'Inference was refused (HTTP {response.status_code}); check ordinary request diagnostics.', response.status_code)
+            number = response.headers.get('x-loadcoach-request-id', '')
+            diagnostics = {'request': number} if number.isascii() and number.isdigit() and 0 < len(number) <= 16 else {}
             async for part in response.aiter_bytes():
                 data.extend(part)
                 if len(data) > 1024*1024:
-                    raise Problem('Inference returned an oversized response.', 502)
+                    raise Problem('Inference returned an oversized response.', 502, diagnostics)
+            if not response.is_success:
+                message = ''
+                try:
+                    error = json.loads(data).get('error')
+                    message = error.get('message') if isinstance(error, dict) else error
+                except (ValueError, AttributeError):
+                    pass
+                if not isinstance(message, str) or not message.strip():
+                    message = 'Compute did not provide an error reason.'
+                raise Problem(f'Inference was refused (HTTP {response.status_code}): {message[:2000]}', response.status_code, diagnostics)
             # The configured fingerprint is what the pin is of; a context fit at load time changes only the server as started.
             confirmed = {'model_id': response.headers.get('x-loadcoach-model-id'), 'build': response.headers.get('x-loadcoach-build'),
                          'fingerprint': response.headers.get('x-loadcoach-configured-fingerprint') or response.headers.get('x-loadcoach-fingerprint')}
-            if response.headers.get('x-loadcoach-hosted') or any(confirmed[field] != model[field] for field in ('model_id','fingerprint','build')):
-                raise Problem('Inference did not confirm the pinned local model/build. No result was accepted.', 409)
+            copies = [model, *(copy for copy in model.get('locations', []) if copy.get('id') == model['id'])]
+            if response.headers.get('x-loadcoach-hosted') or not any(
+                all(confirmed[field] == copy.get(field) for field in ('model_id','fingerprint','build')) for copy in copies):
+                raise Problem('Inference did not confirm the pinned local model/build. No result was accepted.', 409, diagnostics)
             try:
                 parsed = json.loads(data)
             except ValueError:
-                raise Problem('Inference returned invalid JSON.', 502) from None
+                raise Problem('Inference returned invalid JSON.', 502, diagnostics) from None
             if not isinstance(parsed,dict):
-                raise Problem('Inference returned an unexpected JSON response.',502)
+                raise Problem('Inference returned an unexpected JSON response.',502, diagnostics)
             return parsed, response.headers.get('x-loadcoach-request-id')
 
     async def embed(self, content, model, headers):
@@ -294,7 +311,10 @@ class Knowledge:
             raise
         except (ValueError, OSError, httpx.HTTPError, TimeoutError) as why:
             message = str(why) if isinstance(why, ValueError) else 'Indexing timed out or compute was unavailable; retry explicitly.'
-            self.store.stop(user.name, number, doc, message, token=token)
+            status = why.status if isinstance(why, Problem) else 503
+            observation.annotate(outcome='refused' if status < 500 else 'error', error_code='http_'+str(status))
+            self.store.stop(user.name, number, doc, message, token=token,
+                            diagnostics=why.diagnostics if isinstance(why, Problem) else None)
 
     async def cancel(self, owner, number, doc=None):
         """Cancel and join selected indexing jobs owned by the caller."""
@@ -479,7 +499,8 @@ class Knowledge:
                 try:
                     response = await handler(request,user)
                 except Problem as why:
-                    response = JSONResponse({'error':{'message':str(why),'type':'collection_error'}},status_code=why.status)
+                    response = JSONResponse({'error':{'message':str(why),'type':'collection_error',
+                                                     'diagnostics':why.diagnostics}},status_code=why.status)
                 except ValueError as why:
                     response = JSONResponse({'error':{'message':str(why),'type':'collection_error'}},status_code=400)
                 except httpx.HTTPError:

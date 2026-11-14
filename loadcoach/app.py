@@ -604,14 +604,13 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return error(400, str(problem), code="unsupported_engine_operation")
         required_model = {field: request.headers.get('x-loadcoach-require-'+header) for field,header in
                           (('model_id','model-id'),('fingerprint','fingerprint'),('build','build'))}
+        required_name = request.headers.get('x-loadcoach-require-model-name')
         guarded = any(value is not None for value in required_model.values())
         if guarded:
             if not all(isinstance(value,str) and 0 < len(value) <= 256 for value in required_model.values()):
                 return error(400, 'A local model guard needs model-id, fingerprint and build headers together.')
-            actual = {'model_id':library.identity(name),'fingerprint':library.fingerprint(settings,name) if settings else None,
-                      'build':runner.known_version(settings) or None}
-            if 'x-loadcoach-offload' in request.headers or required_model != actual:
-                return error(409, 'The required local model identity, fingerprint or build does not match; no inference was sent.')
+        if required_name is not None and not 0 < len(required_name) <= 256:
+            return error(400, 'A local model name guard needs a nonempty model name of at most 256 characters.')
         if settings and not Path(settings["flags"]["model"]).is_file():
             return error(503, f"The file of {name} is missing: {settings['flags']['model']}")
         limit = user.group.max_requests
@@ -631,6 +630,25 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return error(403, f"Your group may not work at the {level} level.")
         if trace:
             log.set_trace_level(user.name, trace, level)
+
+        if guarded or required_name is not None:
+            actual = {'model_id':library.identity(name),'fingerprint':library.fingerprint(settings,name) if settings else None,
+                      'build':runner.known_version(settings) or None}
+            if not guarded:
+                required_model = actual
+            guarded = True
+            if 'x-loadcoach-offload' in request.headers or required_model != actual or required_name is not None and required_name != name:
+                message = 'The required local model identity, fingerprint or build does not match; no inference was sent.'
+                if not quiet:
+                    about = (user.name, address(request), name, trace, level)
+                    entry = request.state.entry = log.add('request', 'asked', *about, must=level != 'normal',
+                        path=request.url.path.removeprefix('/v1/'), group=user.group_name,
+                        account_id=user.identity, key_id=user.key_identity, model_id=actual['model_id'])
+                    log.add('request', 'refused', *about, of=entry, status=409, why=message,
+                        code='local_model_guard_mismatch', mismatches=[field for field in actual if actual[field] != required_model[field]],
+                        account_id=user.identity, key_id=user.key_identity)
+                request.state.outcome = 'refused'
+                return error(409, message, code='local_model_guard_mismatch')
 
         # Outside models, and the choice of one to answer in place of a local one that would have to wait, are front's.
         if "x-loadcoach-offload" in request.headers:

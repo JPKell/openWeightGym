@@ -6,6 +6,7 @@ import pytest
 
 from test_collections import EMBED
 from test_weightroom import desk,sign_in
+from loadcoach.log import public_number
 
 
 def seed(browser,users):
@@ -51,6 +52,32 @@ def test_collection_forms_source_links_identity_and_offline_front_reads(desk):
     sign_in(browser,'jordan')
     assert browser.post('/users/jordan',data={'do':'rename','name':'renamed-owner'}).status_code==200
     assert browser.get(path).status_code==200
+
+
+def test_collection_failure_links_to_exact_request_and_scoped_events(desk):
+    browser,switch,users=desk
+    number,doc,_=seed(browser,users)
+    service=browser.app.state.conversations.state.knowledge
+    owner=users.identity('jordan')
+    message='Inference was refused (HTTP 409): model changed <script>bad</script>'
+    log=switch.front.state.log
+    def record():
+        entry=log.add('request','asked','jordan',model='embed',trace='collection-'+number)
+        request=str(public_number(None,entry))
+        log.add('request','refused','jordan',model='embed',trace='collection-'+number,
+                of=int(request),status=409,why=message)
+        return request
+    request=browser.portal.call(record)
+    browser.portal.call(lambda:service.store.stop(owner,number,doc,message,diagnostics={'request':request}))
+    sign_in(browser,'jordan')
+    page=browser.get('/collections/'+number)
+    assert page.status_code==200 and f'href="/requests/{request}"' in page.text
+    assert 'href="/log?trace=collection-'+number+'"' in page.text
+    assert '&lt;script&gt;bad&lt;/script&gt;' in page.text and '<script>bad</script>' not in page.text
+    request_page=browser.get('/requests/'+request)
+    assert request_page.status_code==200 and 'HTTP 409' in request_page.text, request_page.text
+    events=browser.get('/log?complete=1&trace=collection-'+number)
+    assert events.status_code==200 and 'HTTP 409' in events.text and f'href="/requests/{request}"' in events.text
 
 
 def test_collection_upload_and_source_pages_in_chromium(desk):

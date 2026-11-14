@@ -42,6 +42,11 @@ def knowledge(tmp_path):
         model=next(m for m in state['models'] if m['id']==body['model'])
         headers={'x-loadcoach-model-id':model['model_id'],'x-loadcoach-fingerprint':model['fingerprint'],
                  'x-loadcoach-build':model['build'],'x-loadcoach-request-id':str(len(state['calls']))}
+        if state.get('served_copy'):
+            headers.update({'x-loadcoach-'+field.replace('_','-'):state['served_copy'][field]
+                            for field in ('model_id','fingerprint','build')})
+        if state.get('refusal'):
+            return httpx.Response(409,headers=headers,json={'error':{'message':state['refusal']}})
         if state.get('wrong_receipt'):
             headers['x-loadcoach-fingerprint']='wrong'
         if request.url.path=='/v1/embeddings':
@@ -106,6 +111,8 @@ def test_private_ingestion_retrieval_answers_and_no_evidence(tmp_path):
             assert headers['authorization']=='Bearer alice'
             assert headers['x-loadcoach-sensitivity']=='sensitive' and headers['x-turnstile-no-wake']=='1'
             assert headers['x-loadcoach-trace'].startswith('collection-')
+            assert headers['x-loadcoach-require-model-name']==body['model']
+            assert 'x-loadcoach-require-model-id' not in headers
             assert 'offload' not in body and 'tools' not in body
         assert caller.get(document).content.startswith(b'The Cedar')
         assert caller.get(document).headers['content-disposition']=='attachment'
@@ -135,17 +142,59 @@ def test_other_users_admin_and_new_identity_cannot_see_sources(tmp_path):
         assert caller.get('/loadcoach/collections').json()['collections']==[]
 
 
+def test_indexing_accepts_same_name_copy_and_retains_refusal_diagnostics(tmp_path):
+    with knowledge(tmp_path) as (caller,state,service):
+        copy={**EMBED,'model_id':'other-node-id','fingerprint':'other-node-settings','machine':'other'}
+        state['models'][0]['locations']=[copy]
+        state['served_copy']=copy
+        path=create(caller);doc=add(caller,path)
+        ready(caller,path,doc)
+        assert caller.post(path+'/query',json={'question':'Cedar'}).status_code==200
+        # An equal-weights alias with a different name must never pass receipt validation.
+        state['models'][0]['locations'][0]['id']='different-name'
+        refused=caller.post(path+'/query',json={'question':'Cedar'})
+        assert refused.status_code==409 and refused.json()['error']['diagnostics']['request']
+        state['served_copy']=None
+        state['refusal']='The required local model changed while waiting; no inference was sent.'
+        assert caller.post(doc+'/index').status_code==202
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            found=caller.get(path).json()['documents'][0]
+            if found['state']=='failed':
+                break
+            time.sleep(.01)
+        assert found['state']=='failed' and 'HTTP 409' in found['status'] and state['refusal'] in found['status']
+        number=found['diagnostics']['request']
+        # Diagnostics survive reopening the store and remain owner-private.
+        reopened=Collections(str(tmp_path/'chat.db'))
+        assert reopened.documents('alice',path.rsplit('/',1)[1])[0]['diagnostics']=={'request':number}
+        assert reopened.documents('bob',path.rsplit('/',1)[1])==[]
+        reopened.db.close()
+        assert caller.post(path+'/query',json={'question':'Cedar'}).json()['sources']==[]
+
+
+def test_saved_embedding_space_survives_reference_node_changes_with_the_same_weights(tmp_path):
+    with knowledge(tmp_path) as (caller,state,service):
+        state['models'][0]['content_sha256']='a'*64
+        path=create(caller);doc=add(caller,path);ready(caller,path,doc)
+        state['models'][0].update(model_id='another-node',fingerprint='another-configuration',build='another-build')
+        assert caller.post(path+'/query',json={'question':'Cedar'}).status_code==200
+        state['models'][0]['content_sha256']='b'*64
+        assert caller.post(path+'/query',json={'question':'Cedar'}).status_code==409
+
+
 def test_changed_embedding_space_requires_explicit_rebuild(tmp_path):
     with knowledge(tmp_path) as (caller,state,service):
         path=create(caller);doc=add(caller,path);ready(caller,path,doc)
-        # A rename preserves identity and space. A changed fingerprint does not.
+        # A differently named copy cannot answer a request for this embedder name.
         state['models'][0]['id']='renamed'
-        assert caller.post(path+'/query',json={'question':'Cedar'}).status_code==200
+        assert caller.post(path+'/query',json={'question':'Cedar'}).status_code==409
+        state['models'][0]['id']='embed'
         state['models'][0]['fingerprint']='new-fp'
         before=len(state['calls'])
         assert caller.post(path+'/query',json={'question':'Cedar'}).status_code==409
         assert len(state['calls'])==before
-        assert caller.post(path,json={'model':'renamed'}).status_code==200
+        assert caller.post(path,json={'model':'embed'}).status_code==200
         found=caller.get(path).json();assert found['dimensions']==0 and found['documents'][0]['state']=='pending'
         ready(caller,path,doc)
         assert caller.post(path+'/query',json={'question':'Cedar'}).status_code==200
@@ -277,16 +326,21 @@ def test_postgresql_collection_sources_and_engine_transfer(postgres,tmp_path):
     from db import Database
     from db.transfer import copy_store
     store=Collections(postgres)
-    number=store.create('owner','Source','normal',EMBED)
+    number=store.create('owner','Source','normal',{**EMBED,'content_sha256':'a'*64})
     doc=store.add('owner',number,'notes','text/plain','YWJj','digest')
     token=store.begin('owner',number,doc)
     assert store.finish('owner',number,doc,token,1,[dict(page=1,line=1,text='abc',vector=[1.,0.])])
     before=store.chunks('owner',number);assert len(before)==1 and store.listing('other')==[]
+    failed=store.add('owner',number,'failed','text/plain','YWJj','digest')
+    token=store.begin('owner',number,failed)
+    store.stop('owner',number,failed,'HTTP 409: model changed',token=token,diagnostics={'request':'222'})
     store.db.close()
     target=Database.sqlite(tmp_path/'restored-chat.db')
     assert copy_store(postgres,target)['state']=='verified'
     restored=Collections(target)
     assert restored.chunks('owner',number)==before
+    assert restored.one('owner',number)['content_sha256']=='a'*64
+    assert next(doc for doc in restored.documents('owner',number) if doc['id']==failed)['diagnostics']=={'request':'222'}
     restored.remove('owner',number)
     assert restored.chunks('owner',number)==[] and restored.documents('owner',number)==[]
     restored.db.close()

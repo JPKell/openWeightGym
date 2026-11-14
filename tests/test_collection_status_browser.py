@@ -19,7 +19,8 @@ def collection_page(state, result=None):
                       model_id='embed-id', fingerprint='fp', build='build', dimensions=1024 if state == 'ready' else None,
                       documents=[dict(id='document', name='notes.txt', mime='text/plain', state=state,
                                       status='Indexed chunks: 1.' if state == 'ready' else 'Extracting and embedding.',
-                                      chunks=1 if state == 'ready' else 0)])
+                                      chunks=1 if state == 'ready' else 0,
+                                      diagnostics={'request':'123'} if state == 'failed' else {})])
     return environment.get_template('collections.html').render(
         collection=collection, collections=[], embedders=[], answer_models=[dict(id='chat')],
         levels=['normal'], form={}, said='', unavailable='', result=result)
@@ -32,7 +33,7 @@ def test_index_completion_preserves_selection_question_and_answer():
         visits = []
 
         def serve(route):
-            if route.request.url.endswith('/static/collections.js?v=3'):
+            if route.request.url.endswith('/static/collections.js?v=4'):
                 return route.fulfill(content_type='text/javascript', path=ROOT / 'weightroom/static/collections.js')
             visits.append(route.request.url)
             result = dict(generated=True, answer='Preserved prior answer.', sources=[]) if len(visits) == 1 else None
@@ -71,6 +72,24 @@ def test_index_completion_preserves_selection_question_and_answer():
         browser.close()
 
 
+def test_failed_index_poll_retains_the_request_link_and_question():
+    with playwright.sync_playwright() as engine:
+        browser=engine.chromium.launch(headless=True,args=['--disable-gpu'])
+        page=browser.new_page();visits=[]
+        def serve(route):
+            if '/static/collections.js?' in route.request.url:
+                return route.fulfill(content_type='text/javascript',path=ROOT/'weightroom/static/collections.js')
+            visits.append(route.request.url)
+            route.fulfill(content_type='text/html',body=collection_page('indexing' if len(visits)==1 else 'failed'))
+        page.route('http://collection.test/**',serve)
+        page.goto(URL)
+        page.get_by_label('Question',exact=True).fill('Keep this question')
+        playwright.expect(page.locator('[data-document-status] a')).to_have_attribute('href','/requests/123',timeout=6000)
+        playwright.expect(page.locator('[data-index-status]')).to_contain_text('1 failed')
+        playwright.expect(page.get_by_label('Question',exact=True)).to_have_value('Keep this question')
+        browser.close()
+
+
 @pytest.mark.parametrize('failure', ['unavailable', 'sign-in'])
 def test_status_failure_is_visible_and_recovers_without_navigating(failure):
     with playwright.sync_playwright() as engine:
@@ -79,7 +98,7 @@ def test_status_failure_is_visible_and_recovers_without_navigating(failure):
         visits = []
 
         def serve(route):
-            if route.request.url.endswith('/static/collections.js?v=3'):
+            if route.request.url.endswith('/static/collections.js?v=4'):
                 return route.fulfill(content_type='text/javascript', path=ROOT / 'weightroom/static/collections.js')
             visits.append(route.request.url)
             if len(visits) == 2:
