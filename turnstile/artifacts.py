@@ -398,6 +398,8 @@ class FrontFiles:
         if not stored:
             raise ValueError(NO_STORAGE)
         folder = stored.get(place)
+        if place == 'storage_classifier' and folder and Path(folder).parent.is_dir():
+            Path(folder).mkdir(exist_ok=True)
         if folder is None or not Path(folder).is_dir():
             raise ValueError('Downloads go into storage, never the cache. Choose a front storage folder that exists.')
         entries = hub.chosen(await hub.files(self.web, repository), names)
