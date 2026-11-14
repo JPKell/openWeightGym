@@ -54,14 +54,14 @@ observation_alert_hold_seconds = 60
 # Observation spans kept on the control node: days kept (1-30), the percent of all-successful traces kept
 # (0-100; spans that did not succeed are always kept, and every span still counts in the metrics),
 # and a cap on stored spans (0 is none). Polling makes most spans, so a low percent saves the most.
-# Applied when weightroom starts.
+# Changes apply immediately to span writers and pruning.
 observation_keep_days = 7
 observation_success_percent = 100
 observation_max_spans = 0
 
 # SoundRoom audio pages (Chat → Music, Sounds and Speech). The chat model or role that writes
 # a style caption and lyrics on the Music page, and the model each page selects first; empty
-# selects the first audio model of that kind the person may use. Applied when weightroom starts.
+# selects the first audio model of that kind the person may use. Changes apply immediately to span writers and pruning.
 audio_lyrics_model = "chat"
 audio_music_model = ""
 audio_sound_model = ""

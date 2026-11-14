@@ -236,6 +236,17 @@ class ServiceUnavailable(Exception):
     """The control node or the explicitly selected node did not answer."""
 
 
+def apply_observation_policy(connection, settings, previous=None):
+    """Publish changed span policy for every writer and pruner of the shared store."""
+    from loadcoach.observation_store import set_policy
+    selected = (settings.observation_keep_days, settings.observation_success_percent,
+                settings.observation_max_spans, tuple(settings.observation_quiet_routes))
+    if selected != previous:
+        with connection:
+            set_policy(connection, *selected)
+    return selected
+
+
 class MachineOff(Exception):
     """spotter did not answer, or weightroom was not told where it is."""
 
@@ -769,14 +780,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return answer
 
     said_last: dict = {}  # what LoadCoach was last told that each program here runs with
+    applied_observation_policy = None
 
     async def in_step() -> None:
         """Fetch what was changed in the settings of the control node's programs, keep a copy for their next start, and say what they run with.
 
-        weightroom does this for itself and for turnstile, which has no key of its own. Each takes a
-        change on when it next starts. See loadcoach/settings.py.
+        weightroom reports both services, copies catalogue live fields and publishes shared span
+        policy immediately. Restart fields retain their startup values. See loadcoach/settings.py.
         """
-        nonlocal settings
+        nonlocal settings, applied_observation_policy
         copied = kept("settings.json", {})
         for program in ("weightroom", "turnstile"):
             changed = await ask("GET", f"/loadcoach/settings/{program}/changes", settings.key)
@@ -786,6 +798,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if copied != kept("settings.json", {}):
             keep("settings.json", copied)
         settings, refused = apply_live('weightroom', settings, copied.get('weightroom', {}))
+        applied_observation_policy = apply_observation_policy(observation_log.db, settings, applied_observation_policy)
         running = {**settings.file, **{entry.name: getattr(settings, entry.name)
                     for entry in catalog_entries('weightroom') if hasattr(settings, entry.name)}}
         # turnstile writes what it runs with into the folder the two share, each time it starts.
@@ -3751,7 +3764,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         answer = await ask("POST", target, person.key, json=asked)
         if answer.status_code not in (200, 202):
             return await render_settings(request, person, answer.json()["error"]["message"], failed=True, typed_in=form, opened=program)
-        if program == 'weightroom' and set(asked) & SERVICE_SETTINGS.keys():
+        if program == 'weightroom':
             await in_step()
         message = 'Saved on the control node. The node will receive these locations when it reconnects.' if answer.status_code == 202 else 'Saved.'
         return go(f"{destination}?{destination_query}open={quote(program)}&said=" + quote(message))
@@ -5699,10 +5712,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     app.state.responses = response_store
     observation_log = Log(database_registry.database("weightroom.accounts"))
     database_operations.audit = lambda event, owner, **detail: observation_log.add('database', event, owner, machine='front', **detail)
-    from loadcoach.observation_store import set_policy
-    with observation_log.db:  # the control node's span policy, which every writer and pruner of this store follows
-        set_policy(observation_log.db, settings.observation_keep_days, settings.observation_success_percent,
-                   settings.observation_max_spans, tuple(settings.observation_quiet_routes))
+    applied_observation_policy = apply_observation_policy(observation_log.db, settings)
     # Handle console failures before observation's generic JSON fallback, retaining its request ID.
     app.add_middleware(ExceptionMiddleware, handlers={Exception: server_error})
     observation.instrument(app, "weightroom", observation_log)
