@@ -1143,9 +1143,9 @@ def test_the_settings_page_shows_every_program_and_changes_what_may_be_changed(l
     assert "From the file." not in page and "A change holds at once." not in page
     assert "The file says" not in saved.text and "Back to the file" not in saved.text
 
-    # A program on the control node: its restart requirement is highlighted.
+    # The control node applies display time zones immediately.
     front = browser.post("/settings/weightroom", data={"value-timezone": '"Europe/Paris"'})
-    assert 'Needs restart · weightroom' in front.text
+    assert 'Saved.' in front.text and 'Needs restart · weightroom' not in front.text
     copy = tmp_path / "data" / "settings.json"
     while (not copy.exists() or "Paris" not in copy.read_text()) and time.monotonic() < until + 5:
         time.sleep(0.05)
