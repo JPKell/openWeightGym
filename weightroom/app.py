@@ -4073,6 +4073,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     async def output_page(request: Request, person: Person) -> Response:
         """Read live journals when available, retaining exact-filter snapshots for outages."""
+        from weightroom.system_log_views import workspace as journal_workspace
+
         if "restart-services" not in person.can:
             return page(request, "refused.html", person, status=403,
                         why="Your account needs the restart-services ability to read system logs.")
@@ -4144,7 +4146,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return page(request, "output.html", person, status=400 if why else 200,
                     sources=sources, source=source, nodes=person.me.get("machines", []), selected_node=selected_node, at=asked.get("at", ""), before=before, after=after,
                     most=wanted['lines'], lines=saved.get('lines', []), output_command=saved.get('command', ''),
-                    offline=offline, fetched=saved.get('fetched'), said=why, models=models)
+                    offline=offline, fetched=saved.get('fetched'), said=why, models=models,
+                    journal=journal_workspace(saved.get('lines', []), selected_node, source, settings.timezone or display.server_zone()))
 
     async def ask_model(request: Request, person: Person) -> Response:
         """Send a log and a few words to a model, as this person, and give back its answer once it is whole."""

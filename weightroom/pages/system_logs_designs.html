@@ -1,0 +1,59 @@
+{% from 'parts.html' import page_header, card, alert, more, section_title %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'filter_parts.html' import node_filter %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% from 'system_log_parts.html' import summary, journal_panel, inspector, templates %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>System logs · Three designs · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Preview appearance"><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a href="#workspace" class="visually-hidden-focusable">Skip to System logs</a>
+<header class="sl-review"><div class="d-flex flex-wrap align-items-center gap-2"><strong>weightRoom</strong><span class="text-secondary">/ System logs</span><span class="badge bg-azure-lt">Design preview</span></div><div class="d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" id="theme">Dark mode</button><button class="btn btn-outline-secondary btn-sm" id="reset">Reset sample</button></div></header>
+<main class="sl-page">
+<section class="sl-proposals" aria-label="Design review">
+{% call pills('System logs designs', buttons=true, class_='gap-2 mb-0') %}
+{{ pill_button('01 / Log explorer', true, attrs={'data-design':'explorer'}) }}
+{{ pill_button('02 / Investigation desk', attrs={'data-design':'investigation'}) }}
+{{ pill_button('03 / Stream console', attrs={'data-design':'console'}) }}
+{% endcall %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3"><p class="small text-secondary mb-0" id="design-description">Recommended · Scan a structured log, then inspect an entry without losing your place.</p><label class="d-flex align-items-center gap-2 small text-secondary">Preview state<select class="form-select form-select-sm w-auto" id="scenario"><option value="normal">Available</option><option value="offline">Offline · saved snapshot</option><option value="empty">Empty journal</option><option value="failure">Read failed</option></select></label></div>
+</section>
+<div id="workspace" data-layout="explorer">
+{% set actions %}<button class="btn btn-outline-secondary btn-sm" id="export">Export filtered logs</button><button class="btn btn-primary btn-sm" id="refresh">Refresh sample</button>{% endset %}
+{{ page_header('System logs', actions=actions) }}
+<div class="sl-snapshot small text-secondary"><span class="sl-status-dot" aria-hidden="true"></span><span id="snapshot-label"></span><span id="snapshot-zone">America/Vancouver</span></div>
+<div id="feedback" class="small text-secondary mb-2" role="status" aria-live="polite">Interactive sample · no services or models are called.</div>
+{% call alert('warning', class_='py-2', attrs={'id':'offline-notice', 'hidden':true}) %}<strong>Atlas is unavailable.</strong> <span id="offline-message">Showing the saved snapshot from 14:32:18. These lines may be out of date.</span>{% endcall %}
+{% call alert('danger', class_='py-2', attrs={'id':'failure-notice', 'hidden':true}) %}<strong>Could not read this journal.</strong> The sample node returned a journal read error. <button class="btn btn-outline-danger btn-sm ms-2" id="retry">Retry sample</button>{% endcall %}
+<div class="sl-workbench">
+{% call card('Narrow the journal', open=true, id='filters-panel', class_='sl-filters', body_class='p-3') %}
+<form id="journal-filters">
+<div class="sl-filter-fields">
+<div>{{ node_filter('output', nodes, 'atlas', allow_all=false) }}</div>
+<div><label for="source" class="form-label">Source</label><select id="source" name="source" class="form-select form-select-sm">{% for source in ['loadcoach','kernel','mirrorwall','soundroom','weightroom'] %}<option>{{ source }}</option>{% endfor %}</select></div>
+<div><label for="lines" class="form-label">Last lines</label><select id="lines" name="lines" class="form-select form-select-sm">{% for n in [100,200,500,1000,2000,5000] %}<option>{{ n }}</option>{% endfor %}</select></div>
+<div class="sl-moment"><label for="at" class="form-label">Around this moment</label><input id="at" name="at" type="datetime-local" step="1" class="form-control form-control-sm"><span class="form-hint">America/Vancouver</span></div>
+<div><label for="before" class="form-label">Seconds before / after</label><div class="input-group input-group-sm"><input id="before" name="before" type="number" min="0" step="any" value="60" class="form-control" aria-label="Seconds before"><span class="input-group-text">/</span><input id="after" name="after" type="number" min="0" step="any" value="15" class="form-control" aria-label="Seconds after"></div></div>
+</div>
+<div class="sl-filter-actions"><button class="btn btn-primary btn-sm" type="submit">Apply time window</button><button class="btn btn-link btn-sm" type="button" id="clear-window">Clear window</button></div>
+<p id="filter-error" class="small text-danger mb-0 mt-2" role="alert" hidden></p>
+</form>
+<div class="sl-investigation-tools">
+<div class="eyebrow mt-4 mb-2">QUICK VIEWS</div>
+<div class="d-grid gap-2"><button class="btn btn-outline-secondary btn-sm justify-content-start" data-quick="error">Errors only</button><button class="btn btn-outline-secondary btn-sm justify-content-start" data-quick="attention">Errors & warnings</button><button class="btn btn-outline-secondary btn-sm justify-content-start" data-quick="all">All output</button></div>
+<p class="small text-secondary mt-3 mb-0">Start with a source, narrow to a moment, then follow the surrounding output.</p>
+</div>
+{% endcall %}
+{{ summary() }}
+{{ journal_panel(preview=true) }}
+{{ inspector() }}
+</div>
+<div class="sl-bottom-note small text-secondary"><span>Levels are inferred from sample text. Unclassified output is retained.</span><span id="command-label">Command on atlas</span></div>
+{% call more('Journal command') %}<pre class="mb-0"><code id="journal-command"></code></pre>{% endcall %}
+<div id="analysis-panel" class="mt-3">{% include 'ask.html' %}<p class="small text-secondary">Preview only · the model answer is illustrative. The live page uses your permitted local models.</p></div>
+</div>
+</main>
+{{ templates() }}
+<script type="application/json" id="system-logs-data">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>
+</body></html>

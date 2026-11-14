@@ -1,0 +1,64 @@
+{% from 'parts.html' import card, section_title %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+
+{% macro summary(view={}) %}
+<section class="sl-summary" aria-label="Journal overview">
+{% call kpi_row('Fetched journal summary', class_='mb-0') %}
+{{ kpi('Entries', view.get('count', 0), value_attrs={'id':'total-count'}) }}
+{{ kpi('Errors', view.get('errors', 0), value_attrs={'id':'error-count'}) }}
+{{ kpi('Warnings', view.get('warnings', 0), value_attrs={'id':'warning-count'}) }}
+{{ kpi('Time covered', view.get('duration', '—'), '', value_attrs={'id':'time-range'}, note_attrs={'id':'time-range-note'}) }}
+{% endcall %}
+<div class="sl-volume"><div class="d-flex flex-wrap justify-content-between gap-2 small"><strong>Output over time</strong></div><div id="volume-chart" class="sl-chart" role="group" aria-label="Journal entries by time window"></div><div class="sl-chart-axis small text-secondary"><span id="chart-start"></span><span><i class="sl-legend-dot" data-level="error"></i> Error <i class="sl-legend-dot" data-level="warning"></i> Warning <i class="sl-legend-dot" data-level="info"></i> Other</span><span id="chart-end"></span></div></div>
+</section>
+
+{% endmacro %}
+
+{% macro journal_panel(preview=false, compact=false) %}
+{% set fallback = caller() if caller is defined else '' %}
+{% set journal_actions %}<label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="wrap" checked><span class="form-check-label small">Wrap lines</span></label>{% endset %}
+{% call card('' if compact else 'Journal', id='journal-panel', class_='sl-journal', actions='' if compact else journal_actions, body_class='p-0') %}
+<div class="sl-searchbar"><div><label class="visually-hidden" for="search">Find a line</label><input id="search" type="search"{% if not preview %} data-filter="printed"{% endif %} class="form-control" placeholder="Find a message, request ID or exact phrase…" autocapitalize="none" spellcheck="false"></div><div><label class="visually-hidden" for="level">Log level</label><select id="level" class="form-select"><option value="all">All levels</option><option value="attention">Errors & warnings</option><option value="error">Error</option><option value="warning">Warning</option><option value="info">Info</option><option value="debug">Debug</option><option value="unclassified">Unclassified</option></select></div></div>
+<div class="sl-results-bar"><span class="small text-secondary" id="visible-count"{% if not preview %} data-count="printed"{% endif %} role="status" aria-live="polite"></span><div class="d-flex flex-wrap gap-2 align-items-center">{% if compact %}{{ journal_actions }}{% endif %}<button class="btn btn-link btn-sm" id="clear-search">Clear filters</button><select class="form-select form-select-sm w-auto" id="sort" aria-label="Log order"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></div></div>
+<div class="sl-columns" aria-hidden="true"><span>Time</span><span>Level</span><span>Source / node</span><span>Message</span></div>
+{% if preview %}<div id="printed" class="sl-entries" role="group" aria-label="Log entries"></div>{% else %}
+<div class="sl-entries" id="journal-scroll"><table id="printed" class="sl-table" aria-label="Log entries"><tbody>{{ fallback }}</tbody></table></div>
+{% endif %}
+<div id="empty-state" class="sl-empty" hidden><strong id="empty-title">No matching entries</strong><p id="empty-description" class="text-secondary mb-3">Try another phrase or choose a different level.</p><button class="btn btn-outline-primary btn-sm" id="empty-reset">Reset filters</button></div>
+<div class="sl-pagination"><span class="small text-secondary" id="page-summary"></span><div class="d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" id="previous">Previous</button><button class="btn btn-outline-secondary btn-sm" id="next">Next</button></div></div>
+{% endcall %}
+
+{% endmacro %}
+
+{% macro inspector(can_ask=true, offline=false) %}
+<aside class="sl-inspector" aria-label="Selected log entry">
+{% call card('Inspect entry', id='detail-panel') %}
+<p class="text-secondary" id="detail-empty">Select an entry to inspect its complete output.</p>
+<div id="detail-content" hidden>
+<div class="d-flex justify-content-between align-items-center gap-2 mb-3"><span class="sl-level" id="detail-level"></span><span class="small text-secondary" id="detail-id"></span></div>
+{{ section_title('', id='detail-message', level=3, class_='sl-detail-title') }}
+<dl class="sl-facts"><dt>Timestamp</dt><dd id="detail-at"></dd><dt>Node</dt><dd id="detail-node"></dd><dt>Source</dt><dd id="detail-source"></dd></dl>
+<div class="d-flex justify-content-between align-items-center gap-2 mt-4 mb-2"><strong class="small">Original output</strong><button class="btn btn-outline-secondary btn-sm" id="copy-entry">Copy entry</button></div>
+<pre id="detail-raw" tabindex="0" aria-label="Original log output"></pre>
+<div class="d-flex flex-wrap gap-2 mt-3"><button class="btn btn-outline-primary btn-sm" id="around-entry"{% if offline %} disabled{% endif %}>±60 s around entry</button><button class="btn btn-outline-secondary btn-sm" id="ask-entry"{% if not can_ask %} hidden{% endif %}>Ask a local model</button></div>
+<div class="border-top mt-4 pt-3"><strong class="small">Surrounding output</strong><div id="entry-context"></div></div>
+</div>
+{% endcall %}
+</aside>
+{% endmacro %}
+
+{# One entry template serves the explorer, investigation timeline and output stream. #}
+{% macro templates() %}
+<template id="log-entry-template">
+  <button type="button" class="sl-entry" data-entry aria-pressed="false">
+    <span class="sl-line-number text-secondary" data-field="number"></span>
+    <time class="sl-time" data-field="time"></time>
+    <span class="sl-level" data-field="level"></span>
+    <span class="sl-origin"><strong data-field="source"></strong><small class="text-secondary" data-field="node"></small></span>
+    <span class="sl-message" data-field="message"></span>
+    <span class="sl-entry-arrow text-secondary" aria-hidden="true">↗</span>
+  </button>
+</template>
+<template id="log-bucket-template"><button type="button" class="sl-bucket" data-bucket><span class="sl-bucket-stack"><span data-bar="other"></span><span data-bar="warning"></span><span data-bar="error"></span></span></button></template>
+<template id="log-context-template"><button type="button" class="sl-context-entry" data-context><time data-field="time"></time><span data-field="message"></span></button></template>
+{% endmacro %}

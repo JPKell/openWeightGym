@@ -405,7 +405,7 @@ def test_system_logs_selection_refresh_and_tools_console(desk_with_machine, tmp_
         page.select_option('#lines', '5000')
         page.wait_for_function('new URL(location.href).searchParams.get("lines") === "5000"')
         assert '-n 5000' in page.locator('main').text_content()
-        page.evaluate("() => {const node = [...document.querySelector('#printed td').childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.includes('loadcoach')); const range = document.createRange(); const start = node.textContent.indexOf('loadcoach'); range.setStart(node, start); range.setEnd(node, start + 'loadcoach'.length); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);}")
+        page.evaluate("() => {const node = [...document.querySelector('#printed .sl-message').childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.includes('loadcoach')); const range = document.createRange(); const start = node.textContent.indexOf('loadcoach'); range.setStart(node, start); range.setEnd(node, start + 'loadcoach'.length); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);}")
         playwright.expect(page.locator('[data-log-selection]')).to_have_value('loadcoach')
         page.locator('#words').fill('Why did it start?')
         page.get_by_role('button', name='Ask', exact=True).click()
