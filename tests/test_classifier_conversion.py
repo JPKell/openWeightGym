@@ -47,6 +47,27 @@ def test_parity_requires_every_item_and_both_thresholds():
     assert result['argmax_agreement'] == 1 and not result['verified']
 
 
+def test_ollama_prompt_has_compact_quoted_fields_and_go_json_escaping():
+    """Conditional descriptions must be JSON strings, including HTML and JSON instructions."""
+    from jinja2 import Environment
+    from loadcoach.classifier_convert import ollama_template
+    environment = Environment()
+    # minja uses compact JSON without Jinja2's extra HTML escaping; the template
+    # applies Go encoding/json's HTML escapes to the complete outer JSON string.
+    encode = lambda value: json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+    environment.filters['tojson'] = encode
+    state = {'text': '<hello> & goodbye'}
+    instructions = {'question': '<read> & choose'}
+    question = {'id': 'tag', 'type': 'choice', 'instructions': instructions, 'options': [
+        {'label': 'A', 'key': 'one', 'description': None}, {'label': 'B', 'key': 'two', 'description': 'Other'}]}
+    prompt = environment.from_string(ollama_template()).render(state=state, questions=[question], id='tag')
+    actual = prompt.split('<|im_start|>user\n')[1].split('\n\nRequested field:')[0]
+    expected = encode({'context': encode(state), 'schema': [{'name': 'tag', 'description': encode(instructions), 'choices': [
+        {'code': 'A', 'value': 'one', 'description': 'one'}, {'code': 'B', 'value': 'two', 'description': 'Other'}]}]})
+    expected = expected.replace('<', r'\u003c').replace('>', r'\u003e').replace('&', r'\u0026')
+    assert actual == expected
+
+
 @pytest.mark.parametrize('verified', [True, False])
 def test_worker_manifest_records_source_hashes_and_actual_parity(tmp_path, monkeypatch, verified):
     """A successful tool exit cannot turn a failed parity comparison into a verified artifact."""
@@ -118,8 +139,10 @@ async def test_conversion_manifest_and_receipts_preserve_unverified_state(tmp_pa
     assert len(changed) == 2
     with pytest.raises(PermissionError):
         jobs.jobs.get(receipt['id'], 'bob')
-    with pytest.raises(ValueError, match='already'):
-        await jobs.convert('alice', str(source))
+    second = await jobs.convert('alice', str(source))
+    await asyncio.gather(*jobs.jobs.tasks)
+    assert jobs.jobs.get(second['id'], 'alice')['output'] != result['output']
+    assert Path(result['output']).is_dir()
 
 
 @pytest.mark.anyio

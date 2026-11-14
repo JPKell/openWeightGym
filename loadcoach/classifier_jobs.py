@@ -143,7 +143,7 @@ class ClassifierJobs:
         check_source(source)
         output = root / (source.name + '-decision')
         if output.exists():
-            raise ValueError('This bundle already has conversion output; inspect or move it before retrying.')
+            output = root / (source.name + '-decision-' + __import__('secrets').token_hex(6))
         row = self.jobs.create(owner, 'classifier-conversion', source.name)
 
         async def worker(identifier):
