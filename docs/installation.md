@@ -16,7 +16,7 @@ music/audio generation, and model downloads. Change these later under **General 
 changes apply immediately. Disabled services disappear from navigation, model-type pills and filters,
 and their requests are refused. Hugging Face requires model downloads; Civitai requires both model
 downloads and Images. Existing installations and unattended installs keep all four enabled by default.
-For an unattended choice, use `--platform-services images,speech,audio,downloads`, a subset, or `none`.
+For an unattended choice, use `--platform-services images,speech,audio,downloads,classifiers`, a subset, or `none`.
 Repair and updates preserve existing choices, settings and models.
 
 Release-by-release delivery notes, runtime pins and recovery procedures for this project's own
@@ -566,6 +566,10 @@ Classifiers use the configured llama.cpp engine and native `/v1/systemone` suppo
 `decision.type` and `tokenizer.chat_template.systemone`. Files are recognized wherever
 they are stored; new downloads use `classifier/`. Laya and Clef evaluate the whole prompt
 in one batch; LoadCoach sizes batch and ubatch to the configured context budget.
+
+Install optional CPU conversion tools on the owning node from Components. Their converter
+source matches the configured engine build; a changed engine requires reinstalling these tools.
+TinyJev references run inside the tools environment, and converted outputs retain their parity manifest.
 
 Enable or disable Classifiers in General settings → Platform services. The page and APIs
 use existing user/group model permissions; no new ability is needed. See

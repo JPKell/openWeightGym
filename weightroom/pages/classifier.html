@@ -3,7 +3,7 @@
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% from 'filter_parts.html' import node_filter %}
 {% from 'navigation_parts.html' import pills, pill_button, model_type_choices %}
-{% from 'classifier_parts.html' import question, criterion, result, probability, history_row %}
+{% from 'classifier_parts.html' import question, criterion, result, probability, history_row, run_group, score_level %}
 {% block title %}Classifier · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/static/classifier.css?v=1"><script src="/static/classifier.js?v=1" defer></script>{% endblock %}
 {% block main %}
@@ -41,5 +41,6 @@
 {% call more('Developer drawer') %}<label class="form-label" for="classifier-code">Format</label><select id="classifier-code" class="form-select mb-2"><option value="request">Request JSON</option><option value="response">Response JSON</option><option value="curl">curl</option><option value="python">Python requests</option><option value="openai">OpenAI SDK</option></select><pre class="border rounded p-3 overflow-auto"><code id="classifier-developer"></code></pre><button type="button" class="btn btn-outline-secondary btn-sm" data-copy-target="classifier-developer">Copy</button>{% endcall %}
 {% call more('History in this tab') %}<div class="d-flex gap-2 mb-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-export="json">Export JSON</button><button type="button" class="btn btn-outline-secondary btn-sm" data-export="csv">Export CSV</button></div><div class="table-responsive"><table class="table"><thead><tr><th>Model</th><th>Latency</th><th>Answers</th><th></th></tr></thead><tbody data-history>{% call empty_row(4, attrs={'data-history-empty':''}) %}No runs in this tab yet.{% endcall %}</tbody></table></div>{% endcall %}
 <template id="classifier-question-template">{{ question() }}</template><template id="classifier-criterion-template">{{ criterion() }}</template><template id="classifier-result-template">{{ result() }}</template><template id="classifier-probability-template">{{ probability() }}</template><template id="classifier-history-template">{{ history_row() }}</template>
+<template id="classifier-run-template">{{ run_group() }}</template><template id="classifier-score-level-template">{{ score_level() }}</template>
 </div>
 {% endblock %}

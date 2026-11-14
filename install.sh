@@ -58,7 +58,7 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
                           path of a llama-server you already have (default: auto)
   --database NAME         sqlite (default) or postgresql (installed and set up locally)
   --voice                 also install speech recognition and voices
-  --platform-services LIST  initial console services: images,speech,audio,downloads or none
+  --platform-services LIST  initial console services: images,speech,audio,downloads,classifiers or none
   --voice-key-file FILE   manual GPU-node setup: the console's voice-service.key (pairing supplies it)
   --power-control         let the console put this machine to sleep, restart or switch it off
   --no-linger             let the services stop when you log out
@@ -196,7 +196,7 @@ parse_arguments() {
   COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
   ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
   VOICE_KEY_FILE='' VOICE_KEY=''
-  PLATFORM_SERVICES=images,speech,audio,downloads
+  PLATFORM_SERVICES=images,speech,audio,downloads,classifiers
   ADD_SERVICES='' STRATA_ACTION=keep STRATA_HOST_RAM_MIB=22528
   SDCPP_ACTION=keep SDCPP_BACKEND=cuda AUDIOCPP_ACTION=keep AUDIOCPP_BACKEND=cuda
   OPERATION=install
@@ -210,7 +210,7 @@ parse_arguments() {
     [--services]='service names' [--strata]='install, skip or keep' [--strata-host-ram-mib]='a positive MiB budget'
     [--sdcpp]='install, skip or keep' [--sdcpp-backend]='cuda, vulkan or cpu'
     [--audiocpp]='install, skip or keep' [--audiocpp-backend]='cuda, vulkan or cpu'
-    [--platform-services]='images,speech,audio,downloads or none')
+    [--platform-services]='images,speech,audio,downloads,classifiers or none')
   [[ -n $DIR ]] && DIR_GIVEN=1
   while (($#)); do
     if [[ -v takes[$1] ]] && { (($# < 2)) || [[ -z $2 ]]; }; then
@@ -233,8 +233,8 @@ parse_arguments() {
       --voice) VOICE=1; PLAN_GIVEN[VOICE]=1; shift ;;
       --platform-services)
         PLATFORM_SERVICES=$2; PLAN_GIVEN[PLATFORM_SERVICES]=1
-        if [[ ! $PLATFORM_SERVICES =~ ^(none|(images|speech|audio|downloads)(,(images|speech|audio|downloads))*)$ ]]; then
-          ARGUMENT_ERROR='Platform services must be images,speech,audio,downloads, a subset, or none.'; return 0
+        if [[ ! $PLATFORM_SERVICES =~ ^(none|(images|speech|audio|downloads|classifiers)(,(images|speech|audio|downloads|classifiers))*)$ ]]; then
+          ARGUMENT_ERROR='Platform services must be images,speech,audio,downloads,classifiers, a subset, or none.'; return 0
         fi
         shift 2 ;;
       --voice-key-file) VOICE_KEY_FILE=$2; shift 2 ;;
@@ -949,12 +949,13 @@ choose_platform_services() {
   ((ASSUME_YES)) && return 0
   ui_section 'Platform services' 'Change these later in General settings'
   local selected=() service label default
-  for service in images speech audio downloads; do
+  for service in images speech audio downloads classifiers; do
     case "$service" in
       images) label='Allow image generation?' ;;
       speech) label='Allow speech (TTS, STT and Voice)?' ;;
       audio) label='Allow music and audio generation?' ;;
       downloads) label='Allow model downloads?' ;;
+      classifiers) label='Allow classifier models?' ;;
     esac
     default=n
     [[ ,$PLATFORM_SERVICES, != *,$service,* ]] || default=y
@@ -1586,7 +1587,7 @@ write_receipt() {
     echo "database=$DATABASE"
     echo "llama=$LLAMA"
     echo "voice=$VOICE"
-    echo "platform_services=${PLATFORM_SERVICES:-images,speech,audio,downloads}"
+    echo "platform_services=${PLATFORM_SERVICES:-images,speech,audio,downloads,classifiers}"
     echo "strata=${STRATA_ACTION:-keep}"
     echo "strata_host_ram_mib=${STRATA_HOST_RAM_MIB:-22528}"
     echo "sdcpp=${SDCPP_ACTION:-keep}"

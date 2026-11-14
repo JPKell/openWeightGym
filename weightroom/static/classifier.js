@@ -134,9 +134,9 @@
       card.querySelector('[data-distribution]').append(row);
     }
     function renderRun(run, disagreements = new Set()) {
-      const section = document.createElement('section'); section.setAttribute('aria-label',run.request.model);
-      const heading = document.createElement('h2'); heading.className = 'section-title'; heading.textContent = run.request.model; section.append(heading);
-      if (run.error) { const p = document.createElement('p'); p.className = 'text-danger'; p.textContent = run.error; section.append(p); return section; }
+      const section = clone('run'); section.setAttribute('aria-label',run.request.model);
+      section.querySelector('[data-run-heading]').textContent = run.request.model;
+      if (run.error) { section.querySelector('[data-run-error]').hidden=false; section.querySelector('[data-run-error-text]').textContent=run.error; return section; }
       for (const [key,answer] of Object.entries(run.response.answers || {})) {
         const card = clone('result'); card.querySelector('[data-result-title]').textContent = key;
         if (disagreements.has(key)) { card.dataset.disagreement = ''; card.querySelector('[data-confidence]').textContent = 'Models disagree. '; }
@@ -147,11 +147,21 @@
           const score = Object.hasOwn(answer,'score');
           card.querySelector('[data-result-value]').textContent = score ? `Expected level: ${Number(answer.score).toFixed(3)} (zero-based)` : `Choice: ${answer.choice}`;
           const entries = Object.entries(answer.probabilities || {});
+          if (score) {
+            card.querySelector('[data-score-rubric]').hidden=false;
+            const position=card.querySelector('[data-score-position]'); position.max=String(entries.length-1); position.value=String(answer.score);
+            position.setAttribute('aria-valuetext',`Expected level ${Number(answer.score).toFixed(3)}`);
+            for(const [key,label] of Object.entries(answer.legend || {})) {
+              const level=clone('score-level');level.textContent=label;
+              if(Number(key)===Math.round(answer.score))level.className='badge rounded-pill bg-primary text-white';
+              card.querySelector('[data-score-levels]').append(level);
+            }
+          }
           if (!score) entries.sort((a,b) => b[1]-a[1]);
           for (const [label,p] of entries) distribution(card,`${label}${answer.legend?.[label] ? ' · ' + answer.legend[label] : ''}${label === answer.choice ? ' · winner' : ''}`,p);
           if (answer.confidence !== undefined) card.querySelector('[data-confidence]').textContent += `Confidence: ${(answer.confidence*100).toFixed(2)}%`;
         }
-        section.append(card);
+        section.querySelector('[data-run-cards]').append(card);
       }
       return section;
     }

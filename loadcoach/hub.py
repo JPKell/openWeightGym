@@ -193,7 +193,7 @@ async def files(http: httpx.AsyncClient, repository: str, token: str = "", *, cl
         {"path": one["path"], "size": one["size"], "sha256": one.get("lfs", {}).get("oid")}
         for one in listed
         if one.get("type") == "file" and (one["path"].lower().endswith((".gguf", ".safetensors", ".pth"))
-            or classifier and (one['path'].lower().endswith(('.json', '.model', '.txt', '.jinja')) or one['path'] == 'Modelfile'))
+            or classifier and (one['path'].lower().endswith(('.json', '.model', '.txt', '.jinja')) or Path(one['path']).name in ('Modelfile', 'head.pt')))
         and not one['path'].lower().endswith('.py')
     ]
 
