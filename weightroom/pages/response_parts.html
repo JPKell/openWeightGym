@@ -1,0 +1,28 @@
+{# Stored Responses reuse request facts, identities and security presentation. #}
+{% from 'parts.html' import more %}
+{% from 'request_parts.html' import security_badge, status_badge %}
+{% macro response_row(record) %}
+<tr>
+<td><a href="/responses/{{ record.id|urlencode }}">{{ record.created|timestamp }}</a></td>
+<td>{{ record.owner_name }}</td><td class="text-break">{{ record.model }}</td>
+<td>{{ status_badge(record.status, error=record.status == 'failed') }}</td><td>{{ security_badge(record.level) }}</td>
+<td>{{ record.response.usage.input_tokens|count }} / {{ record.response.usage.output_tokens|count }}</td>
+<td class="text-break">{{ record.preview|truncate(120) }}</td><td>{{ 'Yes' if record.previous else '—' }}</td>
+</tr>
+{% endmacro %}
+
+{% macro response_items(items) %}
+{% for item in items %}
+{% if item.type == 'reasoning' %}
+{% call more('Reasoning') %}{% for summary in item.summary %}<pre class="text-wrap text-break">{{ summary.text }}</pre>{% endfor %}{% endcall %}
+{% elif item.type == 'message' %}
+<div class="mb-3"><strong>{{ item.role|capitalize }}</strong>
+{% if item.content is string %}<pre class="text-wrap text-break mb-0">{{ item.content }}</pre>
+{% else %}{% for part in item.content %}
+{% if part.type in ('input_text', 'output_text') %}<pre class="text-wrap text-break mb-0">{{ part.text }}</pre>
+{% elif part.type == 'refusal' %}<pre class="text-wrap text-break mb-0">{{ part.refusal }}</pre>
+{% else %}{% call more('Image input') %}<pre class="text-wrap text-break">{{ part|tojson(indent=2) }}</pre>{% endcall %}{% endif %}
+{% endfor %}{% endif %}</div>
+{% else %}{% call more(item.type|replace('_', ' ')|capitalize) %}<pre class="text-wrap text-break">{{ item|tojson(indent=2) }}</pre>{% endcall %}{% endif %}
+{% endfor %}
+{% endmacro %}

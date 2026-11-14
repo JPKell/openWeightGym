@@ -8,7 +8,9 @@
     ('GET', '/v1/models', 'Permitted local models, role names, hosted models and plugin aliases. openWeightGym adds capabilities and placement metadata; an inventory can be partial when a node is unavailable.', 'None'),
     ('GET', '/v1/models/{name}', 'Retrieve an accessible configured model or alias. This does not download weights.', 'None'),
     ('POST', '/v1/chat/completions', 'Local llama.cpp chat, SSE streaming and model-supported vision/tools/structured output; Strata exposes its supported chat subset. Hosted and plugin models use this address too.', 'Inference; Plugin sessions for plugin aliases'),
-    ('POST', '/v1/responses', 'Creation over ordinary chat admission: text and inline PNG/JPEG/WebP images, instructions, sampling limits and text.format text/json_object/json_schema. Supports stream:true with Responses SSE text, reasoning-summary and refusal events and final usage. Requires store:false; unsupported state, tools, remote images and file IDs are rejected.', 'Inference'),
+    ('POST', '/v1/responses', 'Creation over ordinary chat admission: text and inline PNG/JPEG/WebP images, instructions, sampling limits and text.format text/json_object/json_schema. Supports stream:true with Responses SSE text, reasoning-summary and refusal events and final usage. Stored by default for 30 days (administrator-adjustable); store:false opts out. previous_response_id continues a same-owner stored chain without inheriting old instructions, at most 50 prior responses. With X-LoadCoach-Log: off, explicitly send store:false. Metadata, tools, background:true, conversations, include, remote images, file IDs and automatic truncation are rejected.', 'Inference'),
+    ('GET, DELETE', '/v1/responses/{id}', 'Read or delete a stored response within current sensitivity clearance. Owners may read/delete; see-log permits reading other users, manage-users permits deletion. Hidden and missing IDs return the same 404.', 'None'),
+    ('GET', '/v1/responses/{id}/input_items', 'Stable saved input items; limit 1–100 (default 20), order asc/desc (default desc), after cursor.', 'None'),
     ('POST', '/v1/completions', 'Legacy text completion through a compatible llama.cpp backend. Not supported by Strata, image or audio engines.', 'Inference'),
     ('POST', '/v1/embeddings', 'Embeddings through a llama.cpp embedding model configured for that purpose; not a chat model.', 'Inference'),
     ('POST', '/v1/images/generations', 'Optional Mirror Wall/sdcpp generation; JSON input, base64 results and openWeightGym streaming extensions. Controls and supported sizes depend on the model.', 'Inference; X-MirrorWall-Job / X-MirrorWall-Line for internal batch capture'),
@@ -22,6 +24,7 @@
     ('GET', '/v1/batches/{number}', 'Retrieve your batch state, request counts and retained output/error file IDs.', 'None'),
     ('POST', '/v1/batches/{number}/cancel', 'Cancel remaining work in your batch; retain completed results.', 'None')
   ]) }}
+  <p>Stored Responses are available under Logs → Model activity → Responses. Records are scoped by stable account identity and current sensitivity clearance; account deletion removes them. Each account can keep at most 10,000 responses or 256 MiB. The console provides filters, pagination, chain navigation, ordinary request links and JSON export.</p>
   <p>openWeightGym batch endpoints are <code>/v1/chat/completions</code>, <code>/v1/completions</code>, <code>/v1/embeddings</code>,
     <code>/v1/images/generations</code>, <code>/v1/images/edits</code> and the custom <code>/v1/audio/generations</code>.
     Other OpenAI batch endpoint choices are not implemented. See the
@@ -34,7 +37,7 @@
     that is backend-dependent passthrough, not an openWeightGym implementation or a compatibility promise. Unknown requests need not return 404:
     model validation or an engine refusal can happen first. Hosted forwarding likewise does not implement OpenAI resources locally.</p>
   {{ api_endpoints('api-missing', 'OpenAI APIs without an openWeightGym implementation', [
-    ('GET, DELETE, WS, other POST', '/v1/responses and subresources', 'Only stateless creation (ordinary or streamed) above is implemented. No stored Responses lifecycle, retrieval, deletion, input-items, token-counting, cancellation, compaction or WebSocket implementation.', 'No openWeightGym-specific endpoint contract'),
+    ('WS, other POST', '/v1/responses and subresources', 'No background execution, token-counting, cancellation, compaction or WebSocket implementation; stored creation, retrieval, deletion and input-items are implemented above.', 'No openWeightGym-specific endpoint contract'),
     ('GET, POST, DELETE', '/v1/conversations and subresources', 'No OpenAI Conversations resource. openWeightGym conversations use their own application APIs.', 'No openWeightGym-specific endpoint contract'),
     ('GET, POST, DELETE', '/v1/chat/completions/{id} and stored-completion listing', 'No OpenAI stored-chat retrieval, update, messages, deletion or listing. openWeightGym request records are separate.', 'No openWeightGym-specific endpoint contract'),
     ('WS, POST', '/v1/realtime and subresources', 'No OpenAI Realtime protocol, client-secret or call/session implementation. openWeightGym Voice WebSockets use a different protocol.', 'No openWeightGym-specific endpoint contract'),

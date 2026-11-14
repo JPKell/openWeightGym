@@ -124,6 +124,9 @@ Keep refusing tool parameters exactly as today.
 
 ## R3. Stored Responses, API and console page
 
+**Implemented 2026-11-14:** default storage, private lifecycle and stable input-item paging, same-owner chains, live retention, quota checks, account cleanup and the Responses console ledger. Metadata stays unsupported. SQLite/PostgreSQL backups and verified transfer include the accounts-bound `turnstile.responses` schema; browser layout checks cover both widths and themes.
+
+
 ### Storage
 
 - A new front-owned store following

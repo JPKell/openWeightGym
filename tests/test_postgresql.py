@@ -37,6 +37,37 @@ from weightroom.schedules import Schedules
 from loadcoach.schedule_grants import ScheduleGrants
 
 
+def test_postgresql_responses_clearance_retention_backup_and_transfer(postgres, tmp_path):
+    from db.recovery import backup_store
+    from db.transfer import copy_store
+    from turnstile.responses import response_body
+    from weightroom.response_store import Responses
+    from weightroom.extraction import Problem
+
+    users = Users(postgres, {'members': read_group('members', {'can': ['load']})})
+    users.add('owner', 'members'); users.add('other', 'members')
+    kept = Responses(postgres)
+    request = {'model': 'test', 'input': [{'id': 'msg_input', 'type': 'message', 'role': 'user', 'content': 'Hi'}]}
+    response = response_body({'choices': [{'message': {'content': 'Hello'}, 'finish_reason': 'stop'}]}, request)
+    kept.save(users.by_name('owner'), request, response, 'normal', 42)
+    assert kept.one(users.by_name('owner'), response['id'])['response'] == response
+    assert kept.listing(users.by_name('owner'), {'q': 'Hi'})[1] == 1
+    assert kept.listing(users.by_name('other'), {})[1] == 0
+    with pytest.raises(Problem):
+        kept.one(users.by_name('other'), response['id'])
+    owner = users.by_name('owner')
+    kept.db.close(); users.db.close()
+    backup = backup_store(RecoveryStore('accounts', postgres, ('weightroom.accounts',)), tmp_path/'payload')
+    assert backup['verification']['counts']['public.responses'] == 1
+    target = Database.sqlite(tmp_path/'copied.db')
+    assert copy_store(postgres, target)['state'] == 'verified'
+    copied = Responses(target)
+    assert copied.one(owner, response['id'])['response'] == response
+    copied.forget(owner.identity)
+    assert copied.listing(owner, {})[1] == 0
+    copied.db.close()
+
+
 def test_postgresql_db1_history_import_is_idempotent_and_refuses_conflicts(postgres, tmp_path):
     import sqlite3
     from db.consolidation import readonly

@@ -27,7 +27,7 @@ PAGES = (
     '/models/images/workflows', '/models/audio', '/dry-fit', '/roles', '/files',
     '/hub', '/civitai', '/fingerprints', '/cloud-apis', '/benchmarks', '/benchmarks/runs',
     '/benchmarks/results', '/benchmarks/compare',
-    '/benchmarks/manage', '/usage', '/allowances', '/requests', '/batches', '/log', '/reliability',
+    '/benchmarks/manage', '/usage', '/allowances', '/requests', '/batches', '/responses', '/log', '/reliability',
     '/plugins/activity', '/output', '/status', '/system/voice', '/system/audio',
     '/telemetry', '/alerts', '/schedules', '/compute-nodes', '/users', '/groups',
     '/tools', '/plugins', '/backups', '/databases', '/settings', '/docs',
@@ -193,6 +193,8 @@ def ui_console(ui_host, desk_with_machine, tmp_path, backup_keys):
     owner = users.identity('jordan')
     collection = server.portal.call(lambda: server.app.state.conversations.state.workflows.store.one(owner, workflow))['collection']
     chunk = server.portal.call(lambda: server.app.state.conversations.state.knowledge.store.chunks(owner, collection))[0]['id']
+    from test_response_storage import seed_response
+    saved_response = seed_response(server, users, 'jordan', text='A stored input for layout review.')
     chats = server.app.state.conversations.state.chats
     conversation = chats.start(owner, 'Layout review')
     chats.say(conversation, 'user', 'How does the page fit?')
@@ -214,7 +216,7 @@ def ui_console(ui_host, desk_with_machine, tmp_path, backup_keys):
     store = server.app.state.benchmarks.state.store
     run = store.create('jordan', 'sample', 'load')
     store.finish(run, 'completed')
-    paths = (*PAGES, f'/benchmarks/run/{run}', f'/collections/{collection}',
+    paths = (*PAGES, f'/responses/{saved_response["id"]}', '/responses?q=no-such-input', f'/benchmarks/run/{run}', f'/collections/{collection}',
              f'/collections/{collection}/sources/{chunk}', f'/chat/{conversation}', f'/chat/{comparison}',
              '/file?path=' + quote(file, safe=''), f'/log/{number}', f'/requests/{number}', f'/workflows/{workflow}')
     yield server, paths

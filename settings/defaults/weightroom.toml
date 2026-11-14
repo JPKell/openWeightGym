@@ -197,6 +197,8 @@ can = ["follow-settings"]
 
 # turnstile's own part. Seconds it waits for compute to wake before it gives up on a request.
 [turnstile]
+# Days stored Responses are kept. Changes apply immediately; above 0, at most 3650.
+response_keep_days = 30
 wait = 180
 # Let callers choose the node their work runs on, such as benchmark runs on Node measurements that
 # name a node. When off, the front picks the node and a request that names one is refused with a

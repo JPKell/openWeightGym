@@ -13,15 +13,21 @@ from starlette.routing import Route
 
 from turnstile.extractions import PRIVATE, read_json
 from weightroom.extraction import MAX_BODY, Problem, image_upload, schema_checked
+from weightroom.response_store import normalized_input, owner_of
+from loadcoach.groups import LEVELS
 
 
 def chat_request(body):
     """Validate Responses input and build an ordinary chat request."""
-    allowed = {'model', 'input', 'instructions', 'text', 'store', 'stream', 'max_output_tokens', 'temperature', 'top_p'}
+    allowed = {'model', 'input', 'instructions', 'text', 'store', 'stream', 'max_output_tokens', 'temperature', 'top_p', 'previous_response_id', 'background', 'truncation'}
     if body.keys() - allowed:
         raise Problem('Unsupported Responses parameter.', 400, 'unsupported_parameter')
-    if body.get('store', False) is not False:
-        raise Problem('Responses currently requires store:false.', 400, 'unsupported_parameter')
+    if type(body.get('store', True)) is not bool:
+        raise Problem('store must be a boolean.')
+    if body.get('background', False) is not False or body.get('truncation', 'disabled') != 'disabled':
+        raise Problem('Background Responses and automatic truncation are unsupported.', 400, 'unsupported_parameter')
+    if 'previous_response_id' in body and (not isinstance(body['previous_response_id'], str) or not body['previous_response_id'] or len(body['previous_response_id']) > 100):
+        raise Problem('previous_response_id must be a response ID.')
     if type(body.get('stream', False)) is not bool:
         raise Problem('stream must be a boolean.')
     if not isinstance(body.get('model'), str) or not body['model']:
@@ -101,7 +107,8 @@ def final_body(request, output, *, identifier=None, created=None, model=None, us
     return {'id': identifier or 'resp_' + secrets.token_hex(16), 'object': 'response',
             'created_at': int(time.time()) if created is None else created, 'status': status,
             'error': error, 'incomplete_details': incomplete, 'model': model or request['model'],
-            'output': output, 'store': False, 'parallel_tool_calls': False, 'tools': [],
+            'output': output, 'store': request.get('store', True), 'previous_response_id': request.get('previous_response_id'),
+            'parallel_tool_calls': False, 'tools': [],
             'tool_choice': 'none', 'instructions': request.get('instructions'),
             'max_output_tokens': request.get('max_output_tokens'),
             'text': request.get('text', {'format': {'type': 'text'}}),
@@ -179,9 +186,9 @@ async def chat_events(answer):
 
 class ResponseStream:
     """Translate ordered chat deltas into Responses events with stable item identities."""
-    def __init__(self, request):
+    def __init__(self, request, on_done=None):
         """Initialize one response and its per-output event state."""
-        self.request = request
+        self.request, self.on_done = request, on_done
         self.identifier, self.created = 'resp_' + secrets.token_hex(16), int(time.time())
         self.output, self.sequence = [], 0
         self.reasoning, self.message, self.parts = None, None, {}
@@ -290,7 +297,10 @@ class ResponseStream:
                                      **fields, **({'refusal': part['refusal']} if kind == 'refusal' else {'text': part['text'], 'logprobs': []})))
             events.append(self.event('response.content_part.done', **fields, part=part))
         events.append(self.event('response.output_item.done', output_index=self.output.index(self.message), item=self.message))
-        events.append(self.event('response.' + status, response=self.body(status)))
+        result = self.body(status)
+        if self.on_done:
+            self.on_done(result)
+        events.append(self.event('response.' + status, response=result))
         return events
 
     async def events(self, chunks, first):
@@ -311,7 +321,10 @@ class ResponseStream:
             if self.message:
                 self.message['status'] = 'incomplete'
             yield self.event('error', **details, param=None)
-            yield self.event('response.failed', response=self.body('failed', details))
+            result = self.body('failed', details)
+            if self.on_done and details['code'] != 'storage_limit':
+                self.on_done(result)
+            yield self.event('response.failed', response=result)
 
 
 class ClosingStream(StreamingResponse):
@@ -330,7 +343,7 @@ class ClosingStream(StreamingResponse):
                 await self.upstream.__aexit__(None, None, None)
 
 
-async def stream_response(service, body, sent, headers):
+async def stream_response(service, body, sent, headers, on_done=None):
     """Open and validate upstream status before sending the first downstream byte."""
     context = service.door.stream('POST', '/v1/chat/completions', json=sent, headers=headers, timeout=None)
     answer = await context.__aenter__()
@@ -339,13 +352,15 @@ async def stream_response(service, body, sent, headers):
         forwarded = {key: value for key, value in answer.headers.items() if key.startswith(('x-loadcoach-', 'x-suite-'))}
         if not answer.is_success:
             await answer.aread()
+            if on_done:
+                on_done(final_body(body, [], status='failed', error={'message': 'Inference request failed.', 'code': 'upstream_error'}), answer.headers)
             return preserved_response(answer, forwarded)
         chunks = chat_events(answer)
         try:
             first = await anext(chunks)
         except StopAsyncIteration:
             raise Problem('Upstream returned an empty stream.', 502, 'invalid_upstream_response') from None
-        stream = ResponseStream(body)
+        stream = ResponseStream(body, (lambda result: on_done(result, answer.headers)) if on_done else None)
         response = ClosingStream(stream.events(chunks, first), context, media_type='text/event-stream',
                                  headers={**PRIVATE, **forwarded})
         handed_off = True
@@ -356,34 +371,118 @@ async def stream_response(service, body, sent, headers):
                 await context.__aexit__(None, None, None)
 
 
+def problem_response(error):
+    """Use the ordinary private API error envelope for validation and lifecycle failures."""
+    return JSONResponse({'error': {'message': str(error), 'type': 'invalid_request_error', 'code': error.code}},
+                        error.status, headers=PRIVATE)
+
+
 def routes(caller, service):
-    """Register explicit stateless Responses creation on the model gateway."""
+    """Register creation and the private stored Responses lifecycle on the model gateway."""
+    def authenticated(request):
+        """Resolve the current bearer identity for every read, write and continuation."""
+        user = caller(request.headers.get('authorization', '').removeprefix('Bearer '))
+        if not user:
+            raise Problem('Missing or wrong API key.', 401, 'invalid_api_key')
+        return user
+
     async def create(request):
-        """Authenticate and execute Responses creation through normal chat admission."""
-        authorization = request.headers.get('authorization', '')
-        if not caller(authorization.removeprefix('Bearer ')):
-            return JSONResponse({'error': {'message': 'Missing or wrong API key.'}}, 401, headers=PRIVATE)
+        """Execute creation and persist final state through the normal chat admission path."""
+        attempted = False
         try:
+            user = authenticated(request)
             body = await read_json(request, MAX_BODY)
             sent = chat_request(body)
+            storing = body.get('store', True)
+            if storing and request.headers.get('x-loadcoach-log', '').lower() == 'off':
+                raise Problem('Stored Responses require logging. Send store:false with X-LoadCoach-Log: off.')
+            store = getattr(service, 'responses', None)
+            if (storing or body.get('previous_response_id')) and store is None:
+                raise Problem('Responses storage is unavailable.', 503, 'storage_unavailable')
+            level = request.headers.get('x-loadcoach-sensitivity', 'normal')
+            if level not in LEVELS:
+                raise Problem('Invalid X-LoadCoach-Sensitivity level.')
+            if LEVELS.index(level) > LEVELS.index(user.group.max_sensitivity):
+                raise Problem('This sensitivity level is not allowed.', 403, 'sensitivity_not_allowed')
+            if body.get('previous_response_id'):
+                prior, previous_level = store.history(user, body['previous_response_id'])
+                level = max(level, previous_level, key=LEVELS.index)
+                first = 1 if 'instructions' in body else 0
+                sent['messages'][first:first] = prior
+            saved = {**body, 'input': normalized_input(body['input']), 'store': storing}
+            if storing:
+                store.capacity(owner_of(user), len(json.dumps(saved).encode()))
             headers = {key: value for key, value in request.headers.items()
-                       if key == 'authorization' or key.startswith(('x-loadcoach-', 'x-suite-node'))}
+                       if key == 'authorization' or key.startswith(('x-loadcoach-', 'x-suite-'))}
+            headers['x-loadcoach-sensitivity'] = level
+            def finished(result, response_headers):
+                """Keep the final object at its effective level with the ordinary request link."""
+                if storing:
+                    current = caller(request.headers.get('authorization', '').removeprefix('Bearer '))
+                    if not current or owner_of(current) != owner_of(user):
+                        raise Problem('Caller authorization changed.', 403, 'authorization_changed')
+                    store.save(user, saved, result, level, response_headers.get('x-loadcoach-request-id'))
+            attempted = True
             if sent['stream']:
-                return await stream_response(service, body, sent, headers)
+                return await stream_response(service, body, sent, headers, finished)
             answer = await service.door.post('/v1/chat/completions', json=sent, headers=headers, timeout=None)
             forwarded = {key: value for key, value in answer.headers.items() if key.startswith(('x-loadcoach-', 'x-suite-'))}
             if not answer.is_success:
+                if storing:
+                    finished(final_body(body, [], status='failed', error={'message': 'Inference request failed.', 'code': 'upstream_error'}), answer.headers)
                 return preserved_response(answer, forwarded)
             try:
-                result = answer.json()
-            except ValueError:
-                raise Problem('Upstream returned invalid JSON.', 502, 'invalid_upstream_response') from None
-            return JSONResponse(response_body(result, body), headers={**PRIVATE, **forwarded})
+                result = response_body(answer.json(), body)
+            except (ValueError, Problem) as error:
+                problem = error if isinstance(error, Problem) else Problem('Upstream returned invalid JSON.', 502, 'invalid_upstream_response')
+                if storing:
+                    finished(final_body(body, [], status='failed', error={'message': str(problem), 'code': problem.code}), answer.headers)
+                raise problem
+            finished(result, answer.headers)
+            return JSONResponse(result, headers={**PRIVATE, **forwarded})
         except httpx.HTTPError:
-            return JSONResponse({'error': {'message': 'Model gateway is unavailable.', 'code': 'gateway_unavailable'}}, 503, headers=PRIVATE)
+            if attempted and storing:
+                finished(final_body(body, [], status='failed', error={'message': 'Model gateway is unavailable.', 'code': 'gateway_unavailable'}), {})
+            return problem_response(Problem('Model gateway is unavailable.', 503, 'gateway_unavailable'))
         except Problem as error:
-            return JSONResponse({'error': {'message': str(error), 'type': 'invalid_request_error', 'code': error.code}}, error.status, headers=PRIVATE)
-    return [Route('/v1/responses', create, methods=['POST'])]
+            return problem_response(error)
+
+    async def lifecycle(request):
+        """Read, delete or page normalized inputs with current identity and clearance."""
+        try:
+            user = authenticated(request)
+            store = service.responses
+            identifier = request.path_params['identifier']
+            if request.method == 'DELETE':
+                store.remove(user, identifier)
+                return JSONResponse({'id': identifier, 'object': 'response.deleted', 'deleted': True}, headers=PRIVATE)
+            record = store.one(user, identifier)
+            if request.url.path.endswith('/input_items'):
+                try:
+                    limit = int(request.query_params.get('limit', 20))
+                except ValueError:
+                    raise Problem('limit must be an integer from 1 to 100.') from None
+                order = request.query_params.get('order', 'desc')
+                if not 1 <= limit <= 100 or order not in ('asc', 'desc'):
+                    raise Problem('Use limit 1–100 and order asc or desc.')
+                items = record['request']['input']
+                if order == 'desc':
+                    items = list(reversed(items))
+                after = request.query_params.get('after')
+                if after:
+                    index = next((index for index, item in enumerate(items) if item['id'] == after), None)
+                    if index is None:
+                        raise Problem('Unknown input_items cursor.')
+                    items = items[index+1:]
+                page = items[:limit]
+                return JSONResponse({'object': 'list', 'data': page, 'first_id': page[0]['id'] if page else None,
+                                     'last_id': page[-1]['id'] if page else None, 'has_more': len(items)>limit}, headers=PRIVATE)
+            return JSONResponse(record['response'], headers=PRIVATE)
+        except Problem as error:
+            return problem_response(error)
+    return [Route('/v1/responses', create, methods=['POST']),
+            Route('/v1/responses/{identifier}/input_items', lifecycle),
+            Route('/v1/responses/{identifier}', lifecycle, methods=['GET', 'DELETE'])]
 
 
 def preserved_response(answer, headers):

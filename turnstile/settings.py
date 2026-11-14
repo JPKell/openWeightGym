@@ -89,6 +89,8 @@ class ConsoleSettings:
                     raise ValueError(f'{name} must be true or false.')
                 if value is not None and name in current and (why := wrong_kind(value, current[name])):
                     raise ValueError(f'{name}: {why}')
+                if program == 'turnstile' and name == 'response_keep_days' and value is not None and (type(value) not in (int, float) or not 0 < value <= 3650):
+                    raise ValueError('response_keep_days must be above zero and at most 3650 days.')
                 if name == 'component_versions_every' and value is not None:
                     from loadcoach.component_versions import interval_seconds
                     interval_seconds(value)
