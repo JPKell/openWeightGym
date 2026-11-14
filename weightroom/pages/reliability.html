@@ -3,7 +3,7 @@
 {% from "reliability_parts.html" import overview, identity %}
 {% block title %}Reliability · openWeightGym{% endblock %}
 {% block page_class %}console-page reliability-page{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/reliability.css?v=1"><script src="/static/reliability.js?v=3" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/reliability.css?v=2"><script src="/static/reliability.js?v=3" defer></script>{% endblock %}
 {% block main %}
 {% call page_header('Reliability') %}<a class="btn btn-outline-secondary btn-sm" href="/log?kind=reliability">Reliability events</a><a class="btn btn-outline-secondary btn-sm" href="{{ view.export_url }}" download>Export CSV</a>{% endcall %}
 {{ said_box(said, failed) }}

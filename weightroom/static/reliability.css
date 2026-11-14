@@ -70,3 +70,6 @@
 .reliability-page [data-reliability-detail] { margin: 0; }
 .reliability-page [data-reliability-detail] > div { min-width: min(32rem, 75vw); padding-block: .8rem; }
 .reliability-page .rl-dialog [data-reliability-detail] > div { min-width: 0; }
+.rl-issues { grid-column: 1 / -1; scroll-margin-top: 8rem; }
+#reliability-issue-table { min-width: 42rem; }
+#reliability-issue-table :is(th, td) { padding: .6rem .8rem; }

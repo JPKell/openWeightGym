@@ -208,4 +208,62 @@ def test_native_evidence_disclosure_without_javascript(desk, tmp_path):
         page.locator('#reliability-search').fill('no matching candidate')
         page.get_by_role('button', name='Apply report filters').click()
         playwright.expect(page.locator('#reliability-table')).to_contain_text('No reliability outcomes')
+        page.goto('http://console.test/reliability?model=small')
+        playwright.expect(page.locator('#reliability-issue-table tbody tr')).to_have_count(3)
+        page.locator('#reliability-issue-outcome').select_option('empty')
+        page.get_by_role('button', name='Apply issue filters').click()
+        playwright.expect(page.locator('#reliability-issue-table tbody tr')).to_have_count(1)
+        playwright.expect(page.locator('#reliability-issue-table')).to_contain_text('Empty response')
+        browser.close()
+
+
+def test_issue_request_ids_follow_log_permissions_and_reset(desk, tmp_path):
+    browser, _, users = desk
+    kept, key, _ = seed(tmp_path, users)
+    log = Log(str(tmp_path / 'loadcoach.db'))
+    number = log.add('request', 'asked', 'pat', model='small')
+    log.add('request', 'failed', 'pat', of=number, model='small', reliability_outcome='error')
+    kept.record(number, 'pat', 'small', key, 0, 'error', owner_id=users.identity('pat'))
+    sign_in(browser, 'pat')
+    assert 'issue_requests' not in report_rows(browser.get('/reliability'))[0]
+    own = report_rows(browser.get('/reliability?model=small'))[0]['issue_requests']
+    assert [row['request'] for row in own] == [number]
+    assert own[0]['outcome'] == 'error'
+    sign_in(browser, 'jordan')
+    all_issues = report_rows(browser.get('/reliability?model=small'))[0]['issue_requests']
+    assert len(all_issues) == 4
+    assert {row['outcome'] for row in all_issues} == {'error', 'timeout', 'empty'}
+    selection = report_rows(browser.get('/reliability?model=small'))[0]['issue_urls']['empty']
+    selected = {key: value[0] for key, value in parse_qs(urlsplit(selection).query).items()}
+    reset = browser.post('/reliability', data=dict(model='small', role='chat', fingerprint=key[1], action='reset',
+                         filter_model='small', filter_issue_outcome='empty', filter_issue_candidate=selected['issue_candidate']))
+    assert reset.url.params['issue_outcome'] == 'empty' and reset.url.params['issue_candidate'] == selected['issue_candidate']
+    assert report_rows(browser.get('/reliability?model=small'))[0]['issue_requests'] == []
+
+
+def test_issue_count_links_filter_requests_and_open_the_record(desk, tmp_path):
+    playwright = pytest.importorskip('playwright.sync_api')
+    server, _, users = desk
+    _, _, numbers = seed(tmp_path, users)
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/reliability')
+        page.get_by_role('link', name='View error requests for small, chat', exact=True).click()
+        playwright.expect(page.locator('#reliability-issue-table tbody tr')).to_have_count(1)
+        playwright.expect(page.locator('#reliability-issue-outcome')).to_have_value('error')
+        page.locator('#reliability-issue-table').get_by_role('link', name=f'#{numbers["jordan"]}', exact=True).click()
+        page.wait_for_url(f'**/requests/{numbers["jordan"]}')
+        page.goto('http://console.test/reliability?model=small')
+        playwright.expect(page.locator('#reliability-issue-table tbody tr')).to_have_count(3)
+        for theme in ('light', 'dark'):
+            page.emulate_media(color_scheme=theme)
+            for width in (1440, 768, 390):
+                page.set_viewport_size({'width': width, 'height': 1000})
+                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (theme, width)
+                if theme == 'light' and width in (1440, 390):
+                    output = Path('data/reliability-previews'); output.mkdir(parents=True, exist_ok=True)
+                    page.screenshot(path=str(output / f'issues-{width}.png'), full_page=True)
+        assert not errors
         browser.close()

@@ -4027,7 +4027,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
         asked = request.query_params
         report = await fetch(request, person, '/loadcoach/reliability',
-                             params={key: asked[key] for key in ('model', 'role') if asked.get(key)})
+                             params={**{key: asked[key] for key in ('model', 'role') if asked.get(key)},
+                                     **({'include_issues': '1'} if asked.get('model') and asked.get('export') != 'csv' else {})})
         if isinstance(report, Response):
             return report
         choices = await fetch(request, person, '/loadcoach/event-choices')
@@ -4052,8 +4053,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         result = await ask('POST', '/loadcoach/reliability', person.key,
                            json={key: form.get(key, '') for key in ('model', 'role', 'fingerprint', 'action')})
         message = ('Reliability reset.' if form.get('action') == 'reset' else 'Recovery check finished: ' + result.json()['reliability']['state'] + '.') if result.status_code == 200 else result.json()['error']['message']
-        from weightroom.reliability_views import FILTERS
-        query = {key: form.get('filter_' + key, '') for key in FILTERS if form.get('filter_' + key)}
+        from weightroom.reliability_views import FILTERS, ISSUE_FILTERS
+        query = {key: form.get('filter_' + key, '') for key in (*FILTERS, *ISSUE_FILTERS) if form.get('filter_' + key)}
         query['said'] = message
         if result.status_code != 200:
             query['failed'] = '1'

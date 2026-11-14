@@ -1,0 +1,17 @@
+{% from 'parts.html' import card, empty_row %}
+{% from 'navigation_parts.html' import pager %}
+{% from 'reliability_parts.html' import identity %}
+{% set found = view.issue_view %}
+{% call card('Issue requests · ' ~ view.filters.model, id='reliability-issues', class_='rl-issues', body_class='p-0', hint='Requests counted in this report · last seven days · latest 50 scored outcomes per fingerprint and role') %}
+<form method="get" action="/reliability#reliability-issues" class="d-flex flex-wrap gap-3 align-items-end px-3 py-2 border-bottom">
+{% for key, value in view.filters.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+<div class="flex-grow-1"><label class="form-label" for="reliability-issue-candidate">Candidate</label><select id="reliability-issue-candidate" name="issue_candidate" class="form-select form-select-sm"><option value="">All shown candidates</option>{% for one in found.candidates %}<option value="{{ one.value }}"{% if found.selected == one.value %} selected{% endif %}>{{ one.role or 'Direct model request' }} · {{ one.fingerprint[:12] }} · {{ 'saved' if offline else 'current' if one.current else 'historical' }}</option>{% endfor %}{% if found.unavailable %}<option value="{{ found.selected }}" selected>Candidate no longer in this view</option>{% endif %}</select></div>
+<div><label class="form-label" for="reliability-issue-outcome">Outcome</label><select id="reliability-issue-outcome" name="issue_outcome" class="form-select form-select-sm">{% for value, label in [('', 'All issues'), ('error', 'Errors'), ('timeout', 'Timeouts'), ('empty', 'Empty responses')] %}<option value="{{ value }}"{% if found.outcome == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+<button class="btn btn-primary btn-sm">Apply issue filters</button>
+</form>
+<div class="table-responsive" tabindex="0" role="region" aria-label="Requests behind reliability issues"><table id="reliability-issue-table" class="table table-sm align-middle mb-0"><caption class="visually-hidden">{{ reliability.scope }}: error, timeout and empty-response requests behind the selected model's report counts</caption>
+<thead><tr><th scope="col">Request</th><th scope="col">Recorded</th><th scope="col">Outcome</th><th scope="col">Role</th><th scope="col">Model / fingerprint</th></tr></thead>
+<tbody>{% for one in found.rows %}{% set tone = 'danger' if one.outcome == 'error' else 'warning' if one.outcome == 'timeout' else 'secondary' %}<tr><th scope="row"><a href="/requests/{{ one.request }}">#{{ one.request }}</a>{% if one.recovery %}<small class="d-block text-secondary">Recovery check</small>{% endif %}</th><td>{{ one.at|timestamp }}</td><td><span class="badge bg-{{ tone }}-lt text-{{ tone }}-emphasis">{{ {'error':'Error', 'timeout':'Timeout', 'empty':'Empty response'}[one.outcome] }}</span></td><td>{{ one.role or 'Direct model request' }}</td><td>{{ identity(one, offline) }}</td></tr>{% else %}{{ empty_row(5, 'No matching issue requests in the current scoring sample.') }}{% endfor %}</tbody>
+</table></div>
+<div class="px-3 py-2">{{ pager(found.previous, found.next, found.start|string ~ '–' ~ found.end|string ~ ' of ' ~ found.total|string ~ ' issue requests · ' ~ reliability.scope, label='Reliability issue pages') }}</div>
+{% endcall %}

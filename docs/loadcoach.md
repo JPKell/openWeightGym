@@ -8576,6 +8576,13 @@ totals, exclusions and regressions above Needs attention, normalized outcome bar
 candidate table. Current fingerprints appear by default; model, role, search, fingerprint and
 **Issues only** filters apply to the report and its CSV export. Sort by attention, success rate,
 faults or model. Issues only retains candidates with an error, timeout or empty answer.
+Select a model to see **Issue requests**, or click an error/timeout/empty count to open the
+matching candidate and outcome. The paginated list links to each request and shows its recorded
+time, outcome, role and fingerprint; recovery checks are labelled. It contains exactly the
+faults in the report's current scoring sample (latest 50 scored outcomes per fingerprint/role,
+within seven days and since reset), rather than every retained failed request. Candidate and
+outcome filters narrow this list. Request IDs follow the same `see-log`/own-request scope as
+the counts, including while compute is unavailable; routing previews do not expose these IDs.
 Inspect opens recent feedback, ignored outcomes, routing reasons, timestamps, the latest request
 and permitted reset/recovery actions. Native disclosures and GET/POST forms also work without
 JavaScript; tables scroll within the page on phones. JavaScript adds shared two-click action confirmation.
@@ -8603,6 +8610,7 @@ Recovery checks, failures, fabricated IDs and unlogged requests cannot receive f
 | API | Permission / behavior |
 |---|---|
 | `GET /loadcoach/reliability?model=NAME&role=ROLE` | Own aggregate counts; everyone's with `see-log` |
+| `GET /loadcoach/reliability?model=NAME&include_issues=1` | Adds scoped request metadata for faults counted in each candidate's scoring sample; requires a model filter; no request/answer content |
 | `POST /loadcoach/reliability` | `manage-models`; `model`, `role`, current `fingerprint`, and `action` of `reset` or `recover` |
 | `GET /loadcoach/requests/ID/feedback` | Reports whether this caller may rate this completed request, the existing rating and its explanation |
 | `POST /loadcoach/requests/ID/feedback` | Owner (or `rate-answers`) and model permission checks; `value` is integer `-1`, `1`, or `0` to remove; optional `explanation` up to 2000 characters |
