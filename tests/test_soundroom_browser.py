@@ -530,6 +530,7 @@ def test_script_room_heading_layout_and_empty_states(desk, tmp_path, width, appe
         page.goto('http://console.test/chat/speech')
         playwright.expect(page.locator('#sr-voice')).to_have_value('one')
         playwright.expect(page.locator('.sp-script > .card-footer #sr-generate')).to_be_visible()
+        playwright.expect(page.locator('.sp-script > .card-footer .sp-script-tip')).to_contain_text('before a line to give each speaker a voice.')
         assert page.locator('#sr-generate').count() == 1
         assert page.locator('#sr-generate').evaluate('button => button.form.id') == 'sr-form'
         assert page.locator('#soundroom').evaluate("root => root.children[0].matches('.page-header') && root.children[1].getAttribute('aria-label') === 'Voice generation modes'")
@@ -552,6 +553,10 @@ def test_script_room_heading_layout_and_empty_states(desk, tmp_path, width, appe
             controls = page.locator('.sp-controls-area').bounding_box()
             assert cast['x'] < script['x'] < controls['x']
             assert abs(cast['width'] - controls['width']) < 1
+            hint = page.locator('.sp-script-tip').bounding_box()
+            generate = page.locator('#sr-generate').bounding_box()
+            assert max(hint['y'], generate['y']) < min(hint['y'] + hint['height'], generate['y'] + generate['height'])
+            assert hint['x'] + hint['width'] <= generate['x']
         payload['voices'] = []
         page.evaluate('window.soundroomRefresh()')
         playwright.expect(page.locator('#sr-generate')).to_be_disabled()
