@@ -132,7 +132,8 @@ HERE = Path(__file__).parent
 COOKIE = "weightroom"
 LEGACY_COOKIE = "frontdesk"
 # What the front machine itself lets people do, in the words LoadCoach uses for its own. Someone who can do everything can do these.
-FRONT_ABILITIES = {"front-wake": "wake an unavailable compute node from the site", "front-voice": "use voice conversations"}
+FRONT_ABILITIES = {"front-wake": "wake an unavailable compute node from the site", "front-voice": "use voice conversations",
+                   "front-phone": "call in by telephone as yourself"}
 LOOK_EVERY = 15  # seconds between looks at compute
 # The addresses turnstile answers itself, from the accounts. Their answers say nothing about whether compute is up.
 # Answered by turnstile from what is kept on front, so an answer to them says nothing about compute: the accounts, and the log (milestone 91).
@@ -3081,6 +3082,40 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return await voice_http.request(method, '/admin/' + action,
             headers={'authorization': 'Bearer ' + person.key}, **more)
 
+    async def voice_telephone_page(request: Request, person: Person, said='', failed=False) -> Response:
+        """Write-only telephone setup, available without waking compute."""
+        if 'manage-settings' not in person.can:
+            return Response('Your account may not manage telephone.', status_code=403)
+        credentials, problem = {'token': {}, 'api': {}}, ''
+        try:
+            reply = await voice_admin_request(person, 'telephone', timeout=10)
+            if reply.is_success:
+                credentials = reply.json()['credentials']
+            else:
+                problem = 'Telephone administration is unavailable. Check the gateway and your permissions.'
+        except (httpx.HTTPError, ValueError, KeyError):
+            problem = 'Voice gateway is not answering. Check voice-gateway.service on front.'
+        return page(request, 'voice_telephone.html', person, status=400 if failed else 200,
+            credentials=credentials, voice_problem=problem, said=said or request.query_params.get('said', ''), failed=failed)
+
+    async def voice_telephone_do(request: Request, person: Person) -> Response:
+        if 'manage-settings' not in person.can:
+            return Response('Your account may not manage telephone.', status_code=403)
+        action = request.path_params['action']
+        if action not in ('save_credentials', 'remove_credential', 'create_account', 'rotate_account'):
+            return Response(status_code=404)
+        form = await typed(request)
+        payload = {name: form[name] for name in ('token', 'api_sid', 'api_secret', 'kind', 'label') if name in form}
+        try:
+            reply = await voice_admin_request(person, 'telephone', 'POST', json={'action': action, **payload}, timeout=10)
+            if not reply.is_success:
+                return await voice_telephone_page(request, person, 'Telephone settings could not be saved. Check the submitted fields and gateway.', failed=True)
+            if action in ('create_account', 'rotate_account'):
+                return go(reply.json()['url'])
+        except (httpx.HTTPError, ValueError, KeyError):
+            return await voice_telephone_page(request, person, 'Telephone settings could not be saved. Check the gateway.', failed=True)
+        return go('/system/voice/telephone?said=' + quote('Saved. Empty credential fields keep their saved values.'))
+
     async def voice_admin_page(request: Request, person: Person, said='', failed=False, typed_in=None, opened='', **unused) -> Response:
         """Render current voice profiles, greetings and diagnostics."""
         if 'manage-settings' not in person.can:
@@ -5416,6 +5451,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             WebSocketRoute('/voice/browser/sessions/{sid}/stream', voice_stream),
             route('/system/voice', voice_admin_page),
             route('/system/voice/status', voice_admin_page),
+            route('/system/voice/telephone', voice_telephone_page),
+            route('/system/voice/telephone/{action}', voice_telephone_do, 'POST'),
             route('/system/voice/{action}', voice_admin_do),
             route('/system/voice/{action}', voice_admin_do, 'POST'),
             route("/compute-nodes", compute_nodes_page),

@@ -1,0 +1,23 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, card, said_box, alert, confirm_two %}
+{% from 'voice_admin_parts.html' import voice_tabs, telephone_credentials %}
+{% block title %}Telephone · openWeightGym{% endblock %}
+{% block main %}
+<div class="settings-page">
+{{ page_header('Telephone', 'Connect Twilio numbers and manage the accounts used for calls.') }}
+{{ voice_tabs('telephone') }}
+{{ said_box(said, failed) }}
+{% if voice_problem %}{% call alert('warning', role='status') %}{{ voice_problem }}{% endcall %}{% endif %}
+{{ telephone_credentials(credentials) }}
+{% call card('Phone accounts') %}
+<p>Each telephone number runs calls as a normal app account. Configure models, tools and limits on its Users page.</p>
+<form method="post" action="/system/voice/telephone/create_account" data-hold-refresh>
+<label class="form-label" for="phone-account-label">Account label</label>
+<input class="form-control" id="phone-account-label" name="label" pattern="[a-z0-9_-]{0,50}" maxlength="50" aria-describedby="phone-account-help">
+<p id="phone-account-help" class="small text-secondary">Leave empty for voice-phone, or enter a label for voice-phone-&lt;label&gt;.</p>
+<div class="d-flex flex-wrap gap-2"><button class="btn btn-primary">Create phone account</button>
+<button class="btn btn-outline-secondary" formaction="/system/voice/telephone/rotate_account" {{ confirm_two('Rotate this phone account’s API key? The old key will stop working.') }}>Rotate key</button></div>
+</form>
+{% endcall %}
+</div>
+{% endblock %}

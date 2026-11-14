@@ -1,7 +1,7 @@
 # Telephone voice and Voice status plan
 
 Drafted **2026-11-14**; decisions settled with the owner on 2026-11-14 (see
-[Decisions](#decisions)). Status: in progress; P1 complete.
+[Decisions](#decisions)). Status: in progress; P1–P2 complete.
 
 ## Goal
 
@@ -98,7 +98,7 @@ Settled with the owner on 2026-11-14.
 | # | Milestone | Size | Depends on |
 |---|---|---|---|
 | P1 | Complete — site settings and signed multi-number routing; 57 focused/settings/UI checks pass, including Chromium desktop/narrow | L | — |
-| P2 | Phone accounts and credentials managed from the panel | M | P1 |
+| P2 | Complete — write-only credentials, phone accounts/rotation and front-phone; 98 unit/browser/UI checks pass | M | P1 |
 | P3 | Telephone page: setup, connect numbers, test | L | P1, P2 |
 | P4 | Caller access: Anyone / Allowlist / PIN, per number | M | P1 |
 | P5 | Users register their own numbers (SMS verified) and call as themselves | L | P2, P4 |
