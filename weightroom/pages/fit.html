@@ -31,7 +31,7 @@
 {% call card('Available on ' ~ machine, id='catalogue-card', hint='Choose models to tune together.', body_class='p-0') %}
 <div class="p-3 border-bottom">
 <input id="catalogue-search" type="search" class="form-control form-control-sm mb-2" placeholder="Find a local model…" aria-label="Search model catalogue">
-<div class="d-flex gap-2"><select id="catalogue-kind" class="form-select form-select-sm" aria-label="Catalogue model type">{% call(value, label) model_type_choices([('all','All types'),('llm','LLM'),('audio','Audio'),('image','Image'),('classifier','Classifier')]) %}<option value="{{ value }}">{{ label }}</option>{% endcall %}</select><select id="catalogue-sort" class="form-select form-select-sm" aria-label="Sort model catalogue"><option value="name">Name A–Z</option><option value="memory">Smallest memory</option><option value="selected">Selected first</option></select></div>
+<div class="d-flex gap-2"><select id="catalogue-kind" class="form-select form-select-sm" aria-label="Catalogue model type">{% call(value, label) model_type_choices([('all','All types'),('llm','LLM'),('rerank','Reranker'),('audio','Audio'),('image','Image'),('classifier','Classifier')]) %}<option value="{{ value }}">{{ label }}</option>{% endcall %}</select><select id="catalogue-sort" class="form-select form-select-sm" aria-label="Sort model catalogue"><option value="name">Name A–Z</option><option value="memory">Smallest memory</option><option value="selected">Selected first</option></select></div>
 </div>
 <div id="catalogue-list" class="fit-catalogue-list" tabindex="0" aria-label="Available model choices"></div>
 <p id="catalogue-count" class="small p-3 mb-0 border-top"></p>
@@ -42,7 +42,7 @@
 <div class="fit-tuning-toolbar p-3 border-bottom">
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><strong id="selection-count" class="small"></strong><button type="button" id="fit-auto" class="btn btn-sm btn-outline-primary" title="Automatically fit within configured context limits; lock custom values to keep them.">Fit unlocked contexts</button></div>
 <div class="d-flex align-items-center flex-wrap gap-2">
-{% call pills('Selected model type', buttons=true, class_='gap-1') %}{% call(kind, label) model_type_choices([('all','All'),('llm','LLM'),('audio','Audio'),('image','Image'),('classifier','Classifier')]) %}{{ pill_button(label, kind == 'all', attrs={'data-fit-kind': kind}) }}{% endcall %}{% endcall %}
+{% call pills('Selected model type', buttons=true, class_='gap-1') %}{% call(kind, label) model_type_choices([('all','All'),('llm','LLM'),('rerank','Reranker'),('audio','Audio'),('image','Image'),('classifier','Classifier')]) %}{{ pill_button(label, kind == 'all', attrs={'data-fit-kind': kind}) }}{% endcall %}{% endcall %}
 <input id="search" type="search" class="form-control form-control-sm" placeholder="Filter selected rows…" aria-label="Filter selected models">
 </div></div>
 <form id="fit-editor" data-hold-refresh aria-label="Dry fit selection" novalidate>

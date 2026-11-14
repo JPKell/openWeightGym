@@ -114,6 +114,11 @@ class LlamaCpp:
     def capabilities(self, settings: dict) -> dict:
         """Describe the request features this engine supports."""
         from loadcoach.classifier import model_facts, limits
+        rerank = bool(settings.get('flags', {}).get('reranking'))
+        if rerank:
+            return {'version': 1, 'rerank': True, 'chat': False, 'streaming': False, 'embeddings': False,
+                    'raw_completion': False, 'prompt_rendering': False, 'tools': False, 'tokenize': True,
+                    'images': False, 'json_schema': False, 'adapters': True, 'native_probes': False, 'load_probes': True}
         decision = model_facts(settings)
         if decision:
             return {'version': 1, 'classifier': decision['decision_type'], 'chat': False, 'streaming': False,

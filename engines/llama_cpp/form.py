@@ -85,13 +85,16 @@ def settings_from(form: dict[str, list[str]], read) -> dict:
         flags["mmproj"] = one("projector")
     # The model page's box owns the flag, even if a raw row was typed. Its marker says how the flag
     # was saved, so an unticked box keeps an explicit false or an ignored inherited default as it was.
-    kept = one("embedding_controls")
-    if kept:
-        flags.pop(EMBEDDING_FLAG, None)
-        if kept in ("false", "none") and not one("embedding"):
-            flags[EMBEDDING_FLAG] = False if kept == "false" else None
-    if one("embedding"):  # the add form and the model page: an embedder, not a chat model
-        flags[EMBEDDING_FLAG] = True
+    for mode in (EMBEDDING_FLAG, 'reranking'):
+        kept = one(mode+'_controls')
+        if kept:
+            flags.pop(mode, None)
+            if kept in ('false', 'none') and not one(mode):
+                flags[mode] = False if kept == 'false' else None
+        if one(mode):
+            flags[mode] = True
+    from engines.llama_cpp.model import check_modes
+    check_modes(flags)
     if one("parallel_controls"):
         for flag in PARALLEL_FLAGS:
             flags.pop(flag, None)  # these fields own their flags, even if a raw row was typed

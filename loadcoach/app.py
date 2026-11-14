@@ -330,6 +330,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         marks = {"model_id": library.identity(name), "fingerprint": library.fingerprint(library.get(name), name), "build": runner.known_version(library.get(name))}
         marks['engine_id'] = engine_for(library.get(name)).id
         marks['capabilities'] = engine_for(library.get(name)).capabilities(library.get(name))
+        if marks['capabilities'].get('rerank'):
+            marks['rerank'] = True
         if marks['capabilities'].get('classifier'):
             marks.update(type='classifier', architecture={'output_modalities': ['decisions']},
                          limits=marks['capabilities']['limits'])
@@ -608,6 +610,13 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return error(400, 'This model does not support tool calls.', code='unsupported_tools')
         try:
             selected_engine = engine_for(settings)
+            if request.url.path == '/v1/rerank':
+                if not selected_engine.capabilities(settings).get('rerank'):
+                    raise ValueError('Choose a reranker model for rerank requests.')
+                from loadcoach.rerank import checked as checked_rerank
+                checked_rerank(asked)
+            elif selected_engine.capabilities(settings).get('rerank'):
+                raise ValueError('This model serves reranking only; use /v1/rerank.')
             if request.url.path == '/v1/audio/translations':
                 if not selected_engine.capabilities(settings).get('translates'):
                     raise ValueError('This model cannot translate speech.')
@@ -943,7 +952,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                         reliability_outcome='timeout' if timed_out else 'error' if broke or inside_it or upstream.status_code >= 500 else 'refused' if upstream.status_code >= 400 else (media_capture.outcome() if media_capture else answer_outcome(bytes(flight.whole), flight.kind, request.url.path)) if complete and readable else 'unscored',
                         **marks,
                         **why,
-                        **(token_counts(b"".join(flight.pieces)[-4096:]) if readable else {}),  # the counts come last
+                        **({**token_counts(b"".join(flight.pieces)[-4096:]), **({"answer_tokens": 0} if request.url.path == "/v1/rerank" else {})} if readable else {}),  # the counts come last
                     )
                     for call in calls:  # what the model asked a tool to do, each as its own entry
                         log.add("tool", "asked", *about, text={"arguments": call["arguments"]}, tool=call["tool"], call=call["id"], of=entry)
@@ -1043,6 +1052,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                            "json_schema": engine_for(library.get(name)).capabilities(library.get(name)).get('json_schema', False),
                            "image_generation": engine_for(library.get(name)).capabilities(library.get(name)).get("image_generation", False),
                            "audio": bool(engine_for(library.get(name)).capabilities(library.get(name)).get("audio")),
+                           "rerank": bool(engine_for(library.get(name)).capabilities(library.get(name)).get("rerank")),
                            "classifier": engine_for(library.get(name)).capabilities(library.get(name)).get('classifier', False),
                            "hosted": False, **runner.model_metadata(name)}
                     for name in offered(user)}},
@@ -2255,7 +2265,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     def unmeasured() -> list[str]:
         """The models a run would load: those on a card, whose file is there, with no measure for the settings they have now."""
         on_a_card = lambda settings: settings.get("gpus", len(config.gpus)) != 0  # noqa: E731
-        return [name for name in library.names() if engine_for(library.get(name)).id not in ('sdcpp', 'audiocpp', 'whispercpp') and on_a_card(library.get(name)) and Path(library.get(name)["flags"]["model"]).is_file() and not library.calibrated(name, runner.measured_settings(name))]
+        return [name for name in library.names() if engine_for(library.get(name)).id not in ('sdcpp', 'audiocpp', 'whispercpp') and not library.get(name).get('flags', {}).get('reranking') and on_a_card(library.get(name)) and Path(library.get(name)["flags"]["model"]).is_file() and not library.calibrated(name, runner.measured_settings(name))]
 
     async def measure_all(by: str, caller: str) -> None:
         """Load each model in `measuring["left"]`, one after another. Each is measured as it loads. Says in `measuring["ended"]` why it ended."""
@@ -3214,5 +3224,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     app.state.databases = databases
     app.add_middleware(Barrier, gate=gate)
     app.add_middleware(Statements, key_file=config.machine_key_file)  # who each caller is, as turnstile signed it
+    from loadcoach.rerank import RerankAlias
+    app.add_middleware(RerankAlias)
     observation.instrument(app, "loadcoach", log, config.machine_name)
     return app

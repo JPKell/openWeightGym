@@ -2,10 +2,11 @@
    The selected node's column keeps the single-node form's names and ids; another node's fields are
    named n:<node>:<field>. Shared settings appear once, two to a row, and apply to every copy. #}
 {% from "parts.html" import hardware, more, empty_row, card, section_title %}
+{% from 'model_form.html' import model_mode_choice %}
 {% from "model_matrix_parts.html" import group, cell, shared_item, shared_row, node_head, suppress_flag, loading_flag %}
 {% set preset_flags = ('temp', 'top-p', 'top-k', 'min-p', 'repeat-penalty', 'presence-penalty', 'frequency-penalty', 'repeat-last-n', 'seed', 'predict', 'reasoning', 'reasoning-effort', 'reasoning-budget') %}
 {% set labels = {'temp':'Temperature', 'top-p':'Top-p', 'top-k':'Top-k', 'min-p':'Min-p', 'reasoning':'Reasoning', 'reasoning-effort':'Reasoning effort'} %}
-{% set owned = ("model", "ctx-size", "mmproj", "embedding", "parallel", "kv-unified", "kv-unified-per-slot", "no-kv-unified") %}
+{% set owned = ("model", "ctx-size", "mmproj", "embedding", "reranking", "parallel", "kv-unified", "kv-unified-per-slot", "no-kv-unified") %}
 {% set classifier = model.get('capabilities', {}).get('classifier') %}
 {% set width = columns|length %}
 {% set lead = columns|selectattr("selected")|first %}
@@ -76,7 +77,8 @@
     {% call shared_item('Projector', 'projector') %}{{ part_choice("projector", "projector", showing.flags.mmproj or "", "projector", "projector") }}{{ suppress_flag('mmproj', checked=('mmproj' in showing.flags and showing.flags.mmproj is none)) }}{% endcall %}
     {% call shared_item('List position', 'order') %}<input id="order" name="order" type="number" step="1" class="form-control" value="{{ '' if showing.order is undefined or showing.order is none else showing.order }}" aria-describedby="order-help"><div id="order-help" class="form-hint">Lower numbers appear first; matching positions sort by name.</div>{% endcall %}
     {# llama.cpp's --embedding flag: LoadCoach marks the model an embedder from it (engines/llama_cpp/form.py). #}
-    {% if not classifier %}{% call shared_item('Embedding model', 'embedding', '--embedding') %}{% set embedding = showing.flags.get('embedding', 'absent') %}<input type="hidden" name="embedding_controls" value="{{ 'none' if embedding is none else 'false' if embedding is false else 'yes' }}"><div class="form-check mb-0"><input id="embedding" name="embedding" value="yes" type="checkbox" class="form-check-input" aria-describedby="embedding-help"{{ ' checked' if embedding and embedding != 'absent' }}><label for="embedding" class="form-check-label">Serve embeddings instead of chat</label></div><div id="embedding-help" class="form-hint">Offered as a Collections embedder and for /v1/embeddings.</div>{% endcall %}
+    {% if not classifier %}{% call shared_item('Embedding model', 'embedding', '--embedding') %}{% set embedding = showing.flags.get('embedding', 'absent') %}{{ model_mode_choice('embedding', 'embedding', 'Serve embeddings instead of chat', 'Offered as a Collections embedder and for /v1/embeddings.', embedding and embedding != 'absent', 'none' if embedding is none else 'false' if embedding is false else 'yes') }}{% endcall %}
+    {% call shared_item('Reranker', 'reranking', '--reranking') %}{% set reranking = showing.flags.get('reranking', 'absent') %}{{ model_mode_choice('reranking', 'reranking', 'Serve reranking instead of chat', 'Query/document relevance through /v1/rerank. Mutually exclusive with embedding mode.', reranking and reranking != 'absent', 'none' if reranking is none else 'false' if reranking is false else 'yes') }}{% endcall %}
     {% endif %}
     {% call shared_item('Engine') %}<span class="badge bg-secondary-lt">{{ engine_schema.label }}</span>{% endcall %}
   </div>{% endcall %}

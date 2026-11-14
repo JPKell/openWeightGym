@@ -144,7 +144,7 @@ class BenchmarkWorker:
         run = await self.check(number)
         settings = run['subject']['settings']
         module = self.store.module(run['benchmark'])
-        multimedia = settings.get('engine') in ('sdcpp', 'audiocpp', 'whispercpp')
+        multimedia = settings.get('engine') in ('sdcpp', 'audiocpp', 'whispercpp') or settings.get('flags', {}).get('reranking')
         classifier = bool(run['subject'].get('metadata', {}).get('decision_type'))
         if run['benchmark'] != 'load' and bool(module.DEFINITION.get('classifier')) != classifier:
             raise ValueError('Classifier benchmarks require a Classifier model; generation benchmarks require a text model.')

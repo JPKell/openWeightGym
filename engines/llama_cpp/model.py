@@ -38,6 +38,7 @@ def base(settings: dict) -> dict:
 def effective(settings: dict, defaults: dict) -> dict:
     """Legacy llama.cpp defaults; null removes an inherited flag."""
     flags = {key: value for key, value in {**defaults, **settings["flags"]}.items() if value is not None}
+    check_modes(flags)
     from loadcoach.classifier import model_facts
     decision = model_facts(settings)
     if decision:
@@ -59,6 +60,15 @@ def effective(settings: dict, defaults: dict) -> dict:
         flags['batch-size'] = max(flags.get('batch-size', 0), budget)
         flags['ubatch-size'] = max(flags.get('ubatch-size', 0), flags['batch-size'])
     return {**settings, 'flags': flags}
+
+
+def check_modes(flags):
+    """Keep vector embedding and relevance ranking as distinct, explicit model modes."""
+    for key in ('embedding', 'reranking'):
+        if flags.get(key) is not None and type(flags[key]) is not bool:
+            raise ValueError(key+' must be true or false.')
+    if flags.get('embedding') and flags.get('reranking'):
+        raise ValueError('embedding and reranking are mutually exclusive; choose one model mode.')
 
 
 def fingerprint_settings(settings: dict, hashes: dict) -> dict:
@@ -191,6 +201,7 @@ def check_model(name: str, settings: dict, cards: tuple[str, ...]) -> None:
     flags = settings.get("flags")
     if not isinstance(flags, dict) or not isinstance(flags.get("model"), str) or "ctx-size" not in flags:
         raise ValueError(f"model {name!r} needs both `model` (the .gguf file) and `ctx-size` in its flags")
+    check_modes(flags)
     parallel = flags.get("parallel")
     if parallel is not None and (type(parallel) is not int or parallel == 0 or parallel < -1):
         raise ValueError(f"model {name!r}: parallel is a positive whole number of requests, or -1 for server auto")

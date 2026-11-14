@@ -116,7 +116,9 @@ class FrontBatches:
                 if not (line := store.next_line(number, on_failure=lambda *args: self.line_outcome(batch, *args))):
                     break
                 endpoint = line.get('endpoint') or batch['endpoint']
-                body = {**line['body'], 'stream': False}
+                body = {**line['body']}
+                if endpoint != '/v1/rerank':
+                    body['stream'] = False
                 if endpoint == '/v1/responses':
                     original = line['body']
                     mcp = isinstance(original.get('tools'), list) and any(isinstance(tool, dict) and tool.get('type') == 'mcp' for tool in original['tools'])

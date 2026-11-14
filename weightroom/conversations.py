@@ -100,7 +100,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
     def offered(user: Principal) -> list[str]:
         """List concrete models this caller may ask for."""
         options = user.info.get("chat", {}).get("models", {})
-        return [name for name in user.info.get("models", []) if not options.get(name, {}).get("image_generation") and not options.get(name, {}).get("audio") and not options.get(name, {}).get("classifier")]
+        return [name for name in user.info.get("models", []) if not options.get(name, {}).get("image_generation") and not options.get(name, {}).get("audio") and not options.get(name, {}).get("classifier") and not options.get(name, {}).get('rerank')]
 
     def role_of(user: Principal, model: str) -> bool:
         """Recognize a permitted role and its optional routing strength."""

@@ -3457,6 +3457,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     app.add_middleware(ClientOrigin, key_file=settings.auth_key_file)
     app.add_middleware(PlatformServiceGate, policy=platform)
     app.add_middleware(Barrier, gate=gate)
+    from loadcoach.rerank import RerankAlias
+    app.add_middleware(RerankAlias)
     observation.instrument(app, "turnstile", log)
     return app
 

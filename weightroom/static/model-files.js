@@ -89,6 +89,10 @@ function initializeModelFiles() {
     if (embedding) { embedding.disabled=classifier; if(classifier) embedding.checked=false; }
     const choice = document.querySelector('[data-embedding-choice]');
     if (choice) choice.hidden=classifier;
+    const reranking = document.querySelector('#model-reranking');
+    if (reranking) { reranking.disabled=classifier; if (classifier) reranking.checked=false; }
+    const rankChoice=document.querySelector('[data-reranking-choice]');
+    if (rankChoice) rankChoice.hidden=classifier;
     if (classifier && note) note.textContent += ` Classifier: ${facts.decision_type}; up to ${facts.decision_max_choices || (facts.decision_type === 'openjev' ? 52 : 255)} choices. Context defaults to a bounded prompt budget.`;
   }
   /** Name the model after its file, unless a name of the person's own has been typed. */

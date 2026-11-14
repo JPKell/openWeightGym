@@ -16,6 +16,8 @@ def positive(value):
 def workload(asked):
     """Keep counts only, never messages, tools, images or credentials on scheduler tickets."""
     prompt = asked.get('messages', asked.get('prompt', asked.get('input')))
+    if 'query' in asked and 'documents' in asked:
+        prompt = [asked['query'], asked['documents']]
     image = any(isinstance(part, dict) and part.get('type') != 'text'
                 for message in prompt if isinstance(message, dict) and isinstance(message.get('content'), list)
                 for part in message['content']) if isinstance(prompt, list) else False
@@ -29,7 +31,7 @@ def workload(asked):
         output = None
     elif output is not None:
         output *= candidates
-    if 'input' in asked and 'messages' not in asked and 'prompt' not in asked:
+    if ('input' in asked and 'messages' not in asked and 'prompt' not in asked) or 'query' in asked and 'documents' in asked:
         output = 0  # embeddings do not generate completion tokens
     return {'prompt_tokens': tokens, 'output_tokens': output, 'basis': 'inferred prompt bytes / 3 and requested maximum output'}
 
