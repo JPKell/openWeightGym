@@ -328,8 +328,9 @@ def with_changes(program: str, path: Path):
         refused = {name: why for name, value in changed.items() if name in told and (why := wrong_kind(value, told[name]))}
         merged = laid_over(told, {name: value for name, value in changed.items() if name not in refused}, program)
         settings.clear()
-        settings.update(merged)
-        return said({**merged, **at_start}, told, says), refused
+        settings.update({name: value for name, value in merged.items() if CHANGEABLE[program].get(name) != RESTART})
+        settings.update(at_start)
+        return said(settings, told, says), refused
 
     return settings, lambda http, base, key: follow(program, asker(http, base, key), copy, take)
 

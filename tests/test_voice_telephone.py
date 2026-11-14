@@ -49,7 +49,7 @@ def test_invalid_telephone_table(field, value):
 
 
 @pytest.mark.parametrize('field,value', [('label', ''), ('number', '5555'), ('enabled', 'yes'), ('mode', 'bad'),
-    ('profile', '../bad'), ('account', '../owner'), ('greeting', 'x' * 301), ('voice', 'unknown'),
+    ('profile', '../bad'), ('account', '../owner'), ('greeting', 'x' * 301), ('voice', '../unknown'),
     ('max_calls_per_hour', 0), ('max_calls_per_hour', True), ('token_file', '/etc/passwd')])
 def test_invalid_number(field, value):
     settings = phone(); settings['numbers'][0][field] = value

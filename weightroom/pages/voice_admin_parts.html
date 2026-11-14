@@ -1,5 +1,5 @@
 {% from 'navigation_parts.html' import pill_link, pills %}
-{% from 'parts.html' import card, confirm_two %}
+{% from 'parts.html' import card, confirm_two, form_section, more, alert %}
 
 {% macro voice_tabs(selected) %}
 {% call pills('Voice administration') %}
@@ -7,6 +7,41 @@
 {{ pill_link('Telephone', '/system/voice/telephone', selected == 'telephone') }}
 {{ pill_link('Status', '/system/voice/status', selected == 'status') }}
 {% endcall %}
+{% endmacro %}
+
+{% macro telephone_strip(verdict) %}
+{% call alert('success' if verdict.state in ['Ready', 'Receiving calls'] else 'secondary', role='status') %}
+<strong>{{ verdict.state }}</strong> · {{ verdict.reason }}
+{% endcall %}
+{% endmacro %}
+
+{% macro number_editor(number, index, accounts, choices, typed={}) %}
+{% set prefix = 'phone-' ~ index %}
+<section data-voice-panel="{{ number.number }}" aria-label="{{ number.label }} settings">
+{% call card(number.label ~ ' · ' ~ number.number) %}
+<form method="post" action="/system/voice/telephone/save_number?number={{ number.number|urlencode }}" data-hold-refresh>
+<input type="hidden" name="number" value="{{ number.number }}">
+<div class="form-check mb-3"><input type="checkbox" class="form-check-input" id="{{ prefix }}-enabled" name="enabled" value="yes"{% if number.enabled %} checked{% endif %}><label class="form-check-label" for="{{ prefix }}-enabled">Accept calls on this number</label></div>
+<div class="row g-3">
+{% for name, label, limit in [('label', 'Label', 64), ('greeting', 'Greeting', 300)] %}
+<div class="col-12"><label class="form-label" for="{{ prefix }}-{{ name }}">{{ label }}</label><input class="form-control" id="{{ prefix }}-{{ name }}" name="{{ name }}" value="{{ typed.get(name, number.get(name, '')) }}" maxlength="{{ limit }}"{% if name == 'label' %} required{% endif %}></div>
+{% endfor %}
+<div class="col-md-6"><label class="form-label" for="{{ prefix }}-account">Phone account</label><select class="form-select" id="{{ prefix }}-account" name="account">
+{% for account in accounts %}<option value="{{ account }}"{% if account == number.account %} selected{% endif %}>{{ account }}</option>{% endfor %}
+{% if number.account not in accounts %}<option selected value="{{ number.account }}">{{ number.account }} (create before enabling)</option>{% endif %}
+</select><a class="small" href="/users/{{ number.account|urlencode }}">Models, tools and limits</a></div>
+<div class="col-md-6"><label class="form-label" for="{{ prefix }}-mode">Conversation mode</label><select class="form-select" id="{{ prefix }}-mode" name="mode">{% for mode in ['direct', 'hermes'] %}<option{% if mode == number.mode %} selected{% endif %}>{{ mode }}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label" for="{{ prefix }}-profile">Voice profile</label><select class="form-select" id="{{ prefix }}-profile" name="profile">
+<option selected value="{{ number.profile }}">{{ number.profile }}</option>{% for profile in choices.profiles|default([]) if profile.id != number.profile %}<option value="{{ profile.id }}">{{ profile.id }}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label" for="{{ prefix }}-voice">SoundRoom voice</label><select class="form-select" id="{{ prefix }}-voice" name="voice"><option value="">Profile voice</option>
+{% for voice in choices.voices|default([]) %}<option value="{{ voice.id }}"{% if voice.id == number.voice %} selected{% endif %}>{{ voice.name }}</option>{% endfor %}
+{% if number.voice and number.voice not in choices.voices|default([])|map(attribute='id')|list %}<option selected value="{{ number.voice }}">{{ number.voice }} (not currently available)</option>{% endif %}</select></div>
+<div class="col-md-6"><label class="form-label" for="{{ prefix }}-limit">Maximum calls per hour</label><input class="form-control" id="{{ prefix }}-limit" name="max_calls_per_hour" type="number" min="1" max="10000" value="{{ number.max_calls_per_hour|default(60) }}" required></div>
+</div><button class="btn btn-primary mt-3">Save number</button>
+</form>
+<form method="post" action="/system/voice/telephone/remove_number" class="mt-2"><input type="hidden" name="number" value="{{ number.number }}"><button class="btn btn-outline-danger btn-sm" {{ confirm_two('Remove this number from the gateway? It remains in your Twilio account.') }}>Remove number</button></form>
+{% endcall %}
+</section>
 {% endmacro %}
 
 {% macro credential_state(credential) %}
