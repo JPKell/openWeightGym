@@ -84,3 +84,15 @@ def test_new_sessions_snapshot_endpoint_settings_and_change_real_endpoint_behavi
         assert speech.feed(new, silence, False)[1] == 'Hello'
     finally:
         speech.close()
+
+
+@pytest.mark.parametrize('program', ['voice', 'voice-gateway'])
+def test_real_example_and_default_files_validate_together(tmp_path, program):
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / 'settings'
+    (tmp_path / 'defaults').mkdir()
+    for destination, source in ((tmp_path / (program + '.toml'), root / 'examples' / (program + '.toml')),
+                                (tmp_path / 'defaults' / (program + '.toml'), root / 'defaults' / (program + '.toml'))):
+        destination.write_text(source.read_text())
+    values, _ = with_changes(program, tmp_path / (program + '.toml'))
+    validate_values(program, values)

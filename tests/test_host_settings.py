@@ -73,8 +73,8 @@ def test_host_settings_identity_authorization_outage_and_sleep_policy(tmp_path):
         assert api.get(base, headers={'authorization': 'Bearer ' + plain}).status_code == 403
         found = api.get(base, headers=headers)
         assert found.status_code == 200 and found.json()['machine'] == 'remote'
-        assert [p['program'] for p in found.json()['programs']] == ['loadcoach', 'spotter']
-        assert api.post(base + '/voice', headers=headers, json={'idle_seconds': 9}).status_code == 403
+        assert [p['program'] for p in found.json()['programs']] == ['loadcoach', 'spotter', 'voice', 'machines']
+        assert api.post(base + '/voice', headers=headers, json={'idle_seconds': 9}).status_code == 200
         assert api.post(base + '/loadcoach', headers=headers, json={'host_ram_headroom_mib': 1024}).status_code == 200
         assert secondary['loadcoach']['host_ram_headroom_mib'] == 1024
         assert primary['loadcoach']['host_ram_headroom_mib'] == 512
@@ -85,6 +85,10 @@ def test_host_settings_identity_authorization_outage_and_sleep_policy(tmp_path):
             page = browser.get('/compute-nodes?machine=remote')
             assert page.status_code == 200 and 'name="machine" value="remote"' in page.text
             assert '1024' in page.text and '45' in page.text
+            assert 'name="value-wake_mac"' in page.text
+            wake_saved = browser.post('/settings/machines', data={'machine': 'remote', 'value-wake_mac': '00:11:22:33:44:55'})
+            assert wake_saved.status_code == 200
+            assert app.state.console_settings.changes.of('machines:remote')['wake_mac'] == '00:11:22:33:44:55'
             saved = browser.post('/settings/loadcoach', data={'machine': 'remote', 'value-host_ram_headroom_mib': '1200'})
             assert saved.status_code == 200 and secondary['loadcoach']['host_ram_headroom_mib'] == 1200
             assert primary['loadcoach']['host_ram_headroom_mib'] == 512

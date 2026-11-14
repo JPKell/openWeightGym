@@ -162,6 +162,7 @@ host = "0.0.0.0"
 ports = [8442, 8443, 8444]
 # The control node stores and serves the settings of its own programs (weightroom, turnstile, voice-gateway)
 # and the authenticated MCP gateway, even while compute is unavailable. (Formerly front_settings.)
+# Deprecated compatibility switch: ignored; console settings always belong to the control node.
 keep_console_settings_on_front = true
 toollocker_url = "http://127.0.0.1:9443"
 # machine_key_file = "../keys/machine.key"
