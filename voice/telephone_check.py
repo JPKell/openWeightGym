@@ -46,6 +46,8 @@ async def _check(args):
     form = {"CallSid": call, "AccountSid": args.account, "From": getattr(args, "caller", "+15555550123")}
     if getattr(args, "to_number", None):
         form["To"] = args.to_number
+    if getattr(args, 'attestation', 'TN-Validation-Passed-A'):
+        form['StirVerstat'] = getattr(args, 'attestation', 'TN-Validation-Passed-A')
     stages = args.telephone_stages
     phase = time.monotonic()
     sig = signature(token, args.public_url + "/voice/inbound", {k: [v] for k, v in form.items()})

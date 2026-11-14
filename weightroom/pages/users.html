@@ -2,7 +2,7 @@
 {% from "parts.html" import card, said_box, swaps, page_header, section_title, more, alert, empty_row, confirm_check, confirm_loss, confirm_two %}
 {% from "navigation_parts.html" import pills %}
 {% from "deferred.html" import loading %}
-{% from "user_parts.html" import account_choice, account_avatar, account_status, ability_categories %}
+{% from "user_parts.html" import account_choice, account_avatar, account_status, ability_categories, phone_numbers_section %}
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% block title %}{{ user.name }} · Users · openWeightGym{% endblock %}
 {% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=2"><link rel="stylesheet" href="/static/users.css?v=4"><script src="/static/users.js?v=2" defer></script>{% endblock %}
@@ -163,6 +163,8 @@
       </fieldset>
       {% endif %}
     {% endcall %}
+
+    {% if user.phone_numbers is defined %}<div class="account-panel" data-panel="access">{{ phone_numbers_section(user.phone_numbers, owner=user.name) }}</div>{% endif %}
 
     {% call card('API keys', id='account-keys', class_='account-panel', attrs={'data-panel': 'keys'}, hint='For programs. A key acts with this account’s access.') %}
       <fieldset {{ "disabled" if user.why_not }}>

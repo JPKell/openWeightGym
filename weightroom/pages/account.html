@@ -1,3 +1,4 @@
+{% from 'user_parts.html' import phone_numbers_section %}
 {% extends "frame.html" %}
 {% from "parts.html" import said_box, card, page_header , confirm_loss, empty_row %}
 {% block title %}Account · openWeightGym{% endblock %}
@@ -62,4 +63,5 @@
   </form>
 {% endcall %}</div>
 </div>
+{% if phone_numbers %}{{ phone_numbers_section(phone_numbers.numbers, own=true, registration=phone_numbers) }}{% endif %}
 {% endblock %}

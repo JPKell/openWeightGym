@@ -7,7 +7,27 @@ from .migrations import Migration, add_column
 
 TELEPHONE = (Migration(1, 'private telephone PIN verifiers', '''
     CREATE TABLE telephone_pins (number_key TEXT PRIMARY KEY, verifier TEXT NOT NULL);
-'''),)
+'''), Migration(2, 'verified personal numbers, SMS proofs and scoped call sessions', '''
+    CREATE TABLE telephone_numbers (
+        number_key TEXT PRIMARY KEY, number TEXT NOT NULL,
+        owner TEXT NOT NULL REFERENCES users(identity) ON DELETE CASCADE,
+        created DOUBLE PRECISION NOT NULL);
+    CREATE INDEX telephone_number_owner ON telephone_numbers(owner);
+    CREATE TABLE telephone_verifications (
+        number_key TEXT PRIMARY KEY, number TEXT NOT NULL,
+        owner TEXT NOT NULL REFERENCES users(identity) ON DELETE CASCADE,
+        challenge TEXT NOT NULL, verifier TEXT NOT NULL, expires DOUBLE PRECISION NOT NULL,
+        attempts INTEGER NOT NULL, created DOUBLE PRECISION NOT NULL);
+    CREATE INDEX telephone_verification_owner ON telephone_verifications(owner);
+    CREATE TABLE telephone_sms_attempts (
+        number_key TEXT NOT NULL, owner TEXT NOT NULL REFERENCES users(identity) ON DELETE CASCADE,
+        created DOUBLE PRECISION NOT NULL);
+    CREATE INDEX telephone_sms_number ON telephone_sms_attempts(number_key,created);
+    CREATE INDEX telephone_sms_owner ON telephone_sms_attempts(owner,created);
+    CREATE TABLE telephone_sessions (
+        key_hash TEXT PRIMARY KEY REFERENCES keys(hash) ON DELETE CASCADE,
+        number_key TEXT, kind TEXT NOT NULL);
+'''))
 
 
 RESPONSES = (Migration(1, 'front-owned Responses lifecycle and input items', '''

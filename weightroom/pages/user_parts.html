@@ -1,4 +1,5 @@
 {% from 'navigation_parts.html' import pill_link %}
+{% from 'parts.html' import card, empty_row, confirm_two, alert %}
 {# The Users directory and its account page (users.html), the Groups directory (groups.html), and the sample proposals (users_designs.html), share these pieces.
    An account here is a row of LoadCoach's /loadcoach/users with what account_facts in app.py adds: kind, state, attention, custom.
    A group is a row of /loadcoach/groups with what group_facts adds: kind ("group"), state, superuser, filters. #}
@@ -54,4 +55,21 @@
              attrs={'aria-label': group.name ~ ' · ' ~ group.members|length ~ ' members · ' ~ abilities ~ (' · read only' if group.state == 'read-only' else ''),
                     'data-group-choice': group.name, 'data-group-filters': group.filters,
                     'data-group-search': [group.name, group.members|join(' '), group.priority, group.max_sensitivity]|join(' ')}) }}
+{% endmacro %}
+
+{% macro phone_numbers_section(numbers, own=false, registration=None, owner='') %}
+{% call card('Phone numbers', attrs={'id':'phone-numbers'}) %}
+{% if own %}<p>Verify up to three numbers by SMS. Calls from them can run as your account on telephone numbers that accept registered users. Your models, tools and limits apply.</p>{% endif %}
+<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Number</th>{% if not own %}<th>Account</th>{% endif %}<th>Action</th></tr></thead><tbody>
+{% for number in numbers %}<tr><th scope="row">{{ number.number }}</th>{% if not own %}<td><a href="/users/{{ number.owner|default(owner)|urlencode }}">{{ number.owner|default(owner) }}</a></td>{% endif %}<td><form method="post" action="{{ '/account/phone-numbers/remove' if own else '/system/voice/telephone/revoke_user_number' }}"><input type="hidden" name="id" value="{{ number.id }}">{% if not own %}<input type="hidden" name="owner" value="{{ number.owner|default(owner) }}">{% endif %}<button class="btn btn-outline-danger btn-sm" {{ confirm_two('Remove this registered number? Future calls will no longer run as this account.') }}>{{ 'Remove' if own else 'Revoke' }}</button></form></td></tr>
+{% else %}{{ empty_row(2 if own else 3, 'No verified phone numbers.') }}{% endfor %}
+</tbody></table></div>
+{% if own and registration %}
+{% if registration.available %}
+<p class="small text-secondary">Verification SMS comes from {{ registration.sender.label }} ({{ registration.sender.number }}). Your mobile provider may charge for messages.</p>
+<form method="post" action="/account/phone-numbers/send" data-hold-refresh><label class="form-label" for="register-phone-number">Your number (E.164)</label><input class="form-control mb-2" id="register-phone-number" name="number" type="tel" placeholder="+15555550123" pattern="\+[1-9][0-9]{7,14}" maxlength="16" autocomplete="tel" required><button class="btn btn-primary">Send verification code</button></form>
+{% else %}{{ alert('secondary', registration.reason|default('SMS verification is unavailable. Ask your administrator to connect an SMS-capable Twilio number.')) }}{% endif %}
+{% if registration.pending %}<form method="post" action="/account/phone-numbers/verify" class="mt-3" data-hold-refresh><label class="form-label" for="verify-phone-number">Number to verify</label><select class="form-select mb-2" id="verify-phone-number" name="number">{% for number in registration.pending %}<option value="{{ number.number }}">{{ number.number }}</option>{% endfor %}</select><label class="form-label" for="phone-verification-code">Six-digit SMS code</label><input class="form-control mb-2" id="phone-verification-code" name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" required><p class="small text-secondary">Codes expire after 10 minutes. Five incorrect attempts require a new code.</p><button class="btn btn-primary">Verify number</button></form>{% endif %}
+{% endif %}
+{% endcall %}
 {% endmacro %}
