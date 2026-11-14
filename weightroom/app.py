@@ -3127,7 +3127,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         credentials, problem, telephone = {'token': {}, 'api': {}}, '', {}
         data = {}
         try:
-            reply = await voice_admin_request(person, 'telephone', timeout=10, params={'number': request.query_params.get('number', '')})
+            reply = await voice_admin_request(person, 'telephone', timeout=20, params={'number': request.query_params.get('number', '')})
             if reply.is_success:
                 data = reply.json()
                 credentials, telephone = data['credentials'], data.get('telephone', {})
@@ -3138,8 +3138,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         from voice.telephone_admin import verdict
         from voice.telephone_settings import urls
         return page(request, 'voice_telephone.html', person, status=400 if failed else 200,
-            credentials=credentials, telephone=telephone, telephone_data=data, telephone_verdict=verdict(telephone, credentials),
-            telephone_urls=data.get('planned_urls') or urls(telephone.get('public_url', '')) if telephone.get('public_url') else ('', ''),
+            credentials=credentials, telephone=telephone, telephone_data=data, telephone_verdict=verdict(telephone, credentials, data.get('active', 0), data.get('entry')),
+            telephone_urls=(data.get('webhook_url', ''), data.get('stream_url', '')) if data.get('legacy') else
+                (data.get('planned_urls') or urls(telephone.get('public_url', '')) if telephone.get('public_url') else ('', '')),
             result=result or {}, typed_in=typed_in or {}, selected_number=request.query_params.get('number', ''),
             voice_problem=problem, said=said or request.query_params.get('said', ''), failed=failed)
 
@@ -3221,6 +3222,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         synthesis = next((program['settings'] for program in programs if program['program'] == 'voice'), [])
         return page(request, 'voice_status.html' if request.url.path == '/system/voice/status' else 'voice_admin.html', person, status=400 if failed else 200,
             voice_admin=True, voice_status=status, voice_problem=problem, speakers=voice_settings.speaker_choices(synthesis),
+            voice_editor=voice_settings.workspace(programs),
             programs=programs, said=said or request.query_params.get('said', ''), failed=failed,
             selected_machine=selected_machine,
             typed_in=typed_in or {}, opened=opened or request.query_params.get('open', 'voice'),
@@ -3715,7 +3717,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if isinstance(catalog, Response):
                 return catalog
             models = [model["id"] for model in catalog["data"]]
-        profile_reset = program == "voice" and form.get("reset", "").startswith((voice_settings.PREFIX, voice_settings.GREETING_PREFIX))
+        profile_reset = program == "voice" and form.get("reset", "").startswith(("profiles.", voice_settings.GREETING_PREFIX))
         try:
             asked = voice_settings.profile_change(settings, form, models) if program == "voice" else {}
             if program == 'voice':

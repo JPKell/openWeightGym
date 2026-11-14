@@ -1,9 +1,9 @@
 {% for group in settings_groups|default(settings_sections(programs)) %}
-{% call card(group.title, none if settings_fixed|default(false) else loop.first or opened in group.programs|map(attribute='program')|list, 'settings:' ~ group.title) %}
+{% call card(group.title, group.open|default(none if settings_fixed|default(false) else loop.first or opened in group.programs|map(attribute='program')|list), 'settings:' ~ group.key|default(group.title)) %}
 <div data-settings-section>
 {% if group.programs|map(attribute='settings')|sum(start=[])|selectattr('when', 'equalto', 'restart')|list %}<p><span class="badge bg-orange-lt">Needs restart</span></p>{% endif %}
 {% for program in group.programs %}{% with fragment=true %}{% include 'settings_program.html' %}{% endwith %}{% endfor %}
-<div class="d-flex align-items-center flex-wrap gap-3"><button type="button" class="btn btn-primary" data-save-settings hidden>Save {{ group.title|lower }}</button><span class="small" role="status" data-settings-status></span></div>
+<div class="d-flex align-items-center flex-wrap gap-3"><button type="button" class="btn btn-primary" data-save-settings hidden>Save {{ group.save_title|default(group.title)|lower }}</button><span class="small" role="status" data-settings-status></span></div>
 </div>
 {% endcall %}
 {% else %}{% if settings_empty|default(true) %}<div class="empty"><p class="empty-title">No settings reported yet</p><p class="empty-subtitle">Settings appear after the services report their configuration.</p></div>{% endif %}{% endfor %}

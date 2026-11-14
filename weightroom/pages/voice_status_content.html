@@ -1,12 +1,21 @@
 {% from 'parts.html' import card, alert, empty_row, more, confirm_two, said_box %}
 {% from 'kpi_parts.html' import kpi_row, kpi %}
-{% from 'voice_admin_parts.html' import readiness_badge, latency_cell %}
+{% from 'voice_admin_parts.html' import readiness_badge, latency_cell, voice_choice, voice_overview %}
 <div id="voice-status-content" hx-get="/system/voice/status?part=content" hx-trigger="every 5s" hx-swap="outerHTML" data-voice-status>
+{{ voice_overview(voice_status) }}
 {{ said_box(said, failed) }}
 {% if voice_problem %}{% call alert('warning', role='status') %}{{ voice_problem }}{% endcall %}{% endif %}
 {% call kpi_row('Calls can start') %}
 {% for entry in voice_workspace.entries %}{% call kpi(entry.name, '✓' if entry.can_start else '—', entry.reason) %}{% if not entry.can_start %}<a class="small" href="{{ entry.fix }}">Check setup</a>{% endif %}{% endcall %}{% endfor %}
 {% endcall %}
+<div class="voice-workspace"><nav class="voice-navigator" aria-label="Voice ways in">
+{% for entry in voice_workspace.entries %}{{ voice_choice(entry.key, entry.name, '?way=' ~ entry.key, entry.reason, 'Ready' if entry.can_start else 'Needs attention', entry.can_start) }}{% endfor %}
+</nav><div class="voice-detail">
+{% for entry in voice_workspace.entries %}<section data-voice-panel="{{ entry.key }}" aria-label="{{ entry.name }} details">
+{% call card(entry.name) %}<div class="d-flex align-items-center gap-2 mb-2">{{ readiness_badge(entry.can_start) }}<span>{{ entry.reason }}</span></div>
+<dl class="row mb-2"><dt class="col-sm-5">Configured / listening</dt><dd class="col-sm-7">{{ 'Yes' if entry.configured|default(false) else 'No' }} / {{ 'Yes' if entry.listening|default(false) else 'No' }}</dd><dt class="col-sm-5">Last successful call</dt><dd class="col-sm-7">{{ entry.last_success_at|timestamp if entry.last_success_at else 'No successful call reported' }}</dd></dl>
+<a class="btn btn-outline-primary btn-sm" href="{{ entry.fix }}">{{ 'Telephone setup' if entry.key == 'telephone' else 'Configure entry' }}</a>
+{% endcall %}</section>{% endfor %}
 {% call card('Active calls', id='voice-active-calls', body=false) %}
 <div class="table-responsive"><table class="table table-sm align-middle mb-0" aria-label="Active voice calls"><thead><tr><th>Source / number</th><th>Account</th><th>Mode / profile</th><th>Model</th><th>Duration</th><th>Turns / state</th><th>Action</th></tr></thead><tbody>
 {% for call in voice_status.calls|default([]) %}<tr><th scope="row">{{ call.source }}{% if call.number %}<small class="d-block">{{ call.number }}</small>{% endif %}</th><td>{{ call.account or 'Authorizing' }}</td><td>{{ call.mode }} / {{ call.profile }}</td><td class="text-break">{{ call.model or 'Starting' }}</td><td class="text-nowrap">{{ call.duration_seconds|default(0)|round(0)|int }} s</td><td>{{ call.turns }} / {{ call.state }}</td><td><form method="post" action="/system/voice/calls/{{ call.id|urlencode }}/end"><button class="btn btn-outline-danger btn-sm" {{ confirm_two('End this voice call and release its compute session?') }}>End call</button></form></td></tr>
@@ -33,5 +42,6 @@
 {% endcall %}
 {% call card('Telephone activity', body=false) %}<div class="table-responsive"><table class="table table-sm align-middle mb-0" aria-label="Telephone activity counts"><thead><tr><th>Number</th><th>Caller access</th><th>Accepted / rejected · 1 h</th><th>Accepted / rejected · 24 h</th></tr></thead><tbody>{% for number in voice_status.telephone.numbers|default([]) %}<tr><th scope="row"><a href="/system/voice/telephone">{{ number.label }}</a><small class="d-block">{{ number.number }}</small></th><td>{{ number.caller_access }}</td><td>{{ number.hour.accepted }} / {{ number.hour.rejected }}</td><td>{{ number.day.accepted }} / {{ number.day.rejected }}</td></tr>{% else %}{{ empty_row(4, 'No telephone numbers configured. Set up Telephone to enable calls.') }}{% endfor %}</tbody></table></div>{% endcall %}
 {% call card('Facts') %}<dl class="row mb-0"><dt class="col-sm-4">Gateway version</dt><dd class="col-sm-8 text-break">{{ voice_status.version.commit|default('Not reported') }}</dd><dt class="col-sm-4">Uptime</dt><dd class="col-sm-8">{{ voice_status.version.uptime_seconds|default('Not reported') }}{% if voice_status.version.uptime_seconds is defined %} s{% endif %}</dd><dt class="col-sm-4">Greetings</dt><dd class="col-sm-8">{{ voice_status.recordings.source|default('Not reported') }} · {{ voice_status.recordings.revision|default('revision not reported') }}</dd><dt class="col-sm-4">Turnstile</dt><dd class="col-sm-8">Responding to this signed-in request</dd></dl><div class="d-flex flex-wrap gap-3 mt-2"><a href="/log?q=voice">Voice events</a><a href="/output?source=voice">Voice system logs</a></div>{% endcall %}
+</div></div>
 <p class="small text-secondary">Refreshes every 5 seconds; pauses while text is selected. No utterance text, audio, PINs, credentials or full phone numbers appear here.</p>
 </div>

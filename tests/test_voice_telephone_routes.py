@@ -105,6 +105,8 @@ def test_gateway_legacy_import_is_explicit_and_does_not_replace_existing_site_se
     app = build_app(settings, httpx.AsyncClient(transport=httpx.MockTransport(upstream)))
     with TestClient(app) as client:
         headers={'authorization':'Bearer owner'}
+        assert client.post('/admin/telephone', json={'action':'save_credentials','token':'replacement'}, headers=headers).status_code == 409
+        assert token.read_text() == 'secret' and old.read_text() == 'old-phone'
         assert client.post('/admin/telephone', json={'action':'import_legacy','number':'bad'}, headers=headers).status_code == 400
         assert not saved
         assert client.post('/admin/telephone', json={'action':'import_legacy','number':'+15555550123'}, headers=headers).status_code == 200

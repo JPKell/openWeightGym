@@ -65,7 +65,7 @@ def edited(phone, form):
     return phone
 
 
-def verdict(phone, credentials, active=0):
+def verdict(phone, credentials, active=0, entry=None):
     if not phone.get('enabled'):
         return {'state': 'Off', 'reason': 'Enable telephone after completing setup.'}
     for ready, reason in ((bool(phone.get('account_sid')), 'Save your Twilio Account SID.'),
@@ -74,4 +74,6 @@ def verdict(phone, credentials, active=0):
                           (any(one.get('enabled') for one in phone.get('numbers', [])), 'Add and enable a telephone number.')):
         if not ready:
             return {'state': 'Needs setup', 'reason': reason}
+    if entry is not None and not entry.get('can_start'):
+        return {'state': 'Needs setup', 'reason': entry.get('reason') or 'Check Voice status for readiness.'}
     return {'state': 'Receiving calls' if active else 'Ready', 'reason': 'Telephone setup is complete. Check Voice status for compute readiness.'}

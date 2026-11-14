@@ -1,11 +1,11 @@
 {% extends 'frame.html' %}
 {% from 'parts.html' import page_header %}
-{% from 'voice_admin_parts.html' import voice_tabs %}
+{% from 'voice_admin_parts.html' import voice_header %}
 {% block title %}Voice status · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/voice-admin.css?v=1"><script src="/static/voice-admin.js?v=2" defer></script>{% endblock %}
 {% block main %}
-<div class="settings-page">
-{% call page_header('Voice status', 'Call readiness, live activity and latency. Status reads never wake compute or load models.') %}<a class="btn btn-outline-secondary btn-sm" href="/system/voice/status">Refresh status</a>{% endcall %}
-{{ voice_tabs('status') }}
+<div class="voice-admin" data-voice-admin data-voice-query="way">
+{{ voice_header('status', voice_status) }}
 {% include 'voice_status_content.html' %}
 </div>
 {% endblock %}

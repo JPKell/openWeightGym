@@ -75,7 +75,7 @@ def signed_in(caller, log: Log, handler):
     return checked
 
 
-def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None, *, hosted_models=lambda: {}, forget_extractions=None, forget_responses=None, phone_numbers=lambda owner: []) -> list[Route]:
+def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambda user: [], batches=None, *, hosted_models=lambda: {}, forget_extractions=None, forget_responses=None, phone_numbers=lambda owner: [], forget_phone=lambda name: None) -> list[Route]:
     """The account addresses. `caller(key)` is who a key belongs to, as turnstile says.
     `ask_compute(user, method, path, body)` asks compute as that user, or gives None if it is not answering.
     `roles_for(models)` are the roles someone who may use those models may ask for.
@@ -396,6 +396,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
             await forget_extractions(identity)
         if forget_responses:
             await forget_responses(identity)
+        forget_phone(name)
         users.remove(name)
         log.add("user", "removed", user.name, address(request), name=name)
         return JSONResponse({"removed": name, "identity": identity})
