@@ -169,5 +169,6 @@ def facts(metadata: dict) -> dict:
         "decision_tokenizer_pre": metadata.get('tokenizer.ggml.pre') if decision_type else None,
         "decision_metaspace_prepend": metadata.get('tokenizer.ggml.metaspace.prepend_scheme') if decision_type else None,
         "decision_max_head_tokens": metadata.get(f'{build}.decision.max_head_tokens'),
+        'decision_max_choices': metadata.get(f'{build}.decision.max_choices'),
     }
     return {name: value for name, value in picked.items() if value is not None}

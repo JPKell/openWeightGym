@@ -1,4 +1,4 @@
-{% from 'parts.html' import card %}
+{% from 'parts.html' import card, section_title %}
 {% from 'kpi_parts.html' import kpi, kpi_row %}
 {% from 'benchmark_parts.html' import number, flags %}
 
@@ -40,7 +40,7 @@
 
 {% macro leaders(view) %}
 {% call card('Benchmark leaders', hint='Ranked on the focused task, with full precision.', body_class='p-3') %}
-<h3 class="mb-1">{{ view.benchmark.name }}</h3><p class="small text-secondary mb-3">{{ view.benchmark.score_unit }} · {{ 'Lower' if view.benchmark.green == 'low' else 'Higher' }} is better · protocol v{{ view.benchmark.version }}</p>
+{{ section_title(view.benchmark.name, level=3, wrapper_class='mb-1') }}<p class="small text-secondary mb-3">{{ view.benchmark.score_unit }} · {{ 'Lower' if view.benchmark.green == 'low' else 'Higher' }} is better · protocol v{{ view.benchmark.version }}</p>
 <ol class="results-leaderboard">{% for row in view.leaders %}<li><a class="leader-row text-decoration-none{{ ' baseline-row' if row.model == view.baseline }}" href="/benchmarks/run/{{ row.run.id }}"><span class="leader-rank">{{ '%02d'|format(row.rank) }}</span><span class="leader-model"><strong>{{ row.model }}{{ flags(row.run) }}</strong>{% if row.bar is not none %}<span class="leader-track" aria-hidden="true"><span style="width: {{ row.bar }}%"></span></span>{% endif %}</span><span class="leader-value">{{ number(row.run.score) }}</span><span class="leader-delta">{% if row.delta is not none %}{{ '+' if row.delta > 0 }}{{ number(row.delta) }} {{ 'pp' if view.benchmark.score_unit == '%' else view.benchmark.score_unit }}{% else %}—{% endif %}</span></a></li>{% else %}<li class="small text-secondary">No comparable final scores in this view.</li>{% endfor %}</ol>
 <p class="small text-secondary border-top pt-3 mt-3 mb-0">{% if view.baseline %}Baseline: {{ view.baseline }}. {{ 'Deltas use saved scores on the same protocol.' if view.baseline_scored else 'No current-protocol baseline score; deltas unavailable.' }} {% endif %}Older protocols are excluded from ranks. † retains earlier model settings.</p>
 {% endcall %}

@@ -1,3 +1,4 @@
+{% from 'parts.html' import section_title %}
 {% from "parts.html" import card %}
 {% from "benchmark_score_parts.html" import measurement_grid with context %}
 {% from 'benchmark_results_parts.html' import filters, insights, metric_jumps, leaders %}
@@ -5,7 +6,7 @@
 {{ filters(benchmarks, models, benchmark, results.search, results.baseline, results.evidence) }}
 {{ insights(results) }}
 {% call card(id='measurements', key='benchmark-measurements', body=false, class_='results-measurements') %}
-<div class="measurement-heading px-3 py-2 border-bottom"><div><h2 class="section-title mb-1">{{ benchmark.name }}</h2><p class="small text-secondary mb-0">{{ benchmark.score_unit }} · {{ 'Lower' if benchmark.green == 'low' else 'Higher' }} is better · protocol v{{ benchmark.version }}</p></div><span class="badge bg-secondary-lt">{{ benchmark.kpis|length }} metrics · {{ results.models|length }} models</span></div>
+<div class="measurement-heading px-3 py-2 border-bottom"><div>{{ section_title(benchmark.name, wrapper_class='mb-1') }}<p class="small text-secondary mb-0">{{ benchmark.score_unit }} · {{ 'Lower' if benchmark.green == 'low' else 'Higher' }} is better · protocol v{{ benchmark.version }}</p></div><span class="badge bg-secondary-lt">{{ benchmark.kpis|length }} metrics · {{ results.models|length }} models</span></div>
 {{ metric_jumps(results.benchmark) }}
 {{ measurement_grid(results.models, results.benchmark, latest, grouped=true) }}
 <details class="px-3 py-2 border-top"><summary class="small fw-medium">Method & score definition</summary><p class="small text-secondary mt-3 mb-0">{{ benchmark.method }}</p><p class="small text-secondary mt-2 mb-0">Saved score formula: <code>{{ benchmark.formula }}</code></p></details>

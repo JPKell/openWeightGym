@@ -4658,6 +4658,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         fields = await typed_lists(request)
         form = {name: values[-1] for name, values in fields.items()}
         path, name = form.get("path", ""), Path(form.get("path", "")).name
+        if form.get('do') == 'convert-classifier':
+            machine = form.get('machine', '')
+            inventory = await all_files(request, person)
+            if isinstance(inventory, Response):
+                return inventory
+            local = next((file for node in inventory.get('nodes', []) if node['name'] == machine
+                          for file in node.get('files', []) if Path(file['path']).name == name
+                          and Path(file['path']).parent.name == Path(path).parent.name), None)
+            if local is None:
+                return await file_page(request, person, 'Copy the complete source bundle to that compute node using Files first.', failed=True, path=path)
+            answer = await ask('POST', f'/turnstile/machines/{quote(machine, safe="")}/model-api/classifier-conversions',
+                               person.key, json={'path': local['path']}, timeout=30)
+            if answer.status_code != 202:
+                return await file_page(request, person, answer.json()['error']['message'], failed=True, path=path)
+            return go('/files?type=classifier&said=' + quote('Classifier conversion started. Progress and parity appear on Files.'))
         if form.get("do") == "adapt":
             # A new model: everything the chosen model has, and this adapter as well.
             new, short, known = form.get("name", "").strip(), form.get("short", "").strip(), await ask("GET", "/turnstile/artifacts/models", person.key)
@@ -4965,6 +4980,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Every service and engine on front and on each compute node, installed or not. Changes nothing and wakes nothing."""
         if "manage-settings" not in person.can:
             return page(request, "refused.html", person, status=403, why="Seeing what each machine has installed requires manage-settings.")
+        if request.method == 'POST':
+            form = await typed(request)
+            answer = await ask('POST', f'/turnstile/machines/{quote(form.get("machine", ""), safe="")}/model-api/classifier-tools',
+                               person.key, json={}, timeout=30)
+            message = 'Classifier tools installation started; refresh Components to see readiness.' if answer.status_code == 202 else answer.json()['error']['message']
+            return go('/system/components?said=' + quote(message))
         if initial_page(request):
             return page(request, "components.html", person, deferred=True, fragment_url=fragment_url(request, "page"))
         part = request.query_params.get("part") == "page" and request.query_params.get("complete") != "1"
@@ -5323,6 +5344,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             Route("/guide", guide_moved),
             route("/docs", docs_page),
             route("/system/components", components_page),
+            route('/system/components', components_page, 'POST'),
             route("/docs/{section}", docs_page),
             route("/docs/{section}/{topic}", docs_page),
             Route("/backups", for_people(backups_page)),

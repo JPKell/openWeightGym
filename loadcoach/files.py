@@ -21,6 +21,9 @@ def model_files_in(folder: str) -> list[Path]:
     """Find model data; image bundles may have nested component directories."""
     from mirrorwall.assets import supported
     root=Path(folder)
+    if root.name == 'classifier':
+        return sorted(file for file in root.rglob('*') if file.is_file() and not file.is_symlink() and supported(file)
+                      and len(file.relative_to(root).parts) <= (2 if file.suffix.lower() == '.gguf' else 6))
     if root.name in ('image', 'audio', 'encoders', 'classifier'):
         return sorted(file for file in root.rglob('*') if file.is_file() and not file.is_symlink() and supported(file) and len(file.relative_to(root).parts)<=6)
     return sorted(file for pattern in ('*','*/*') for file in root.glob(pattern) if file.is_file() and not file.is_symlink() and supported(file))

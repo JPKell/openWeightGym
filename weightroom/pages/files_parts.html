@@ -81,7 +81,10 @@
 
 {% macro distributions_table(found) %}
 {% for job in found.distributions if job.kind|default('') == 'arrange' %}{{ arrangement(job) }}{% endfor %}
-{% set distributions = found.distributions|rejectattr('kind', 'equalto', 'arrange')|list %}
+{% for job in found.distributions if job.kind|default('') == 'classifier-conversion' %}
+{% call alert('danger' if job.state == 'failed' else 'info', class_='mb-3', role='status') %}<strong>{{ job.file }}</strong> · {{ job.machine }} · {{ job.state }}{% if job.progress %} · {{ job.progress }}{% endif %}{% if job.error %}<p class="mb-0">{{ job.error }}</p>{% endif %}{% if job.parity %}<p class="mb-0">Parity: {{ 'verified' if job.parity.verified else 'unverified' }}{% if job.parity.reason %} · {{ job.parity.reason }}{% else %} · agreement {{ (100 * job.parity.argmax_agreement)|round(1) }}% · mean probability difference {{ job.parity.mean_absolute_probability_delta|round(4) }}{% endif %}</p>{% endif %}{% endcall %}
+{% endfor %}
+{% set distributions = found.distributions|rejectattr('kind', 'equalto', 'arrange')|rejectattr('kind', 'equalto', 'classifier-conversion')|list %}
 {% if distributions %}<div class="table-responsive mb-4"><table class="table table-sm align-middle"><thead><tr><th>Distribution</th><th>From</th><th>Nodes</th><th>State</th></tr></thead><tbody>{% for job in distributions %}<tr><td>{{ job.file }}{% if job.staging %}<small class="d-block text-secondary">cache: {{ job.staging.done|size }} of {{ job.staging.of|size }}</small>{% endif %}</td><td>{{ job.source|default(job.machine) }}</td><td>{% if job.kind|default('') == 'model-install' %}<a href="/models?install={{ job.id|urlencode }}">{{ job.name }} on {{ job.machine }}</a>{% if job.why %} · {{ job.why }}{% endif %}{% else %}{% for machine, target in job.targets.items() %}{{ machine }}: {{ target.done|size }} of {{ target.of|size }}{% if target.why %} <span class="text-danger">{{ target.why }}</span>{% endif %}{{ "; " if not loop.last }}{% else %}preparing{% endfor %}{% endif %}</td><td>{{ job.state }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 {% endmacro %}
 

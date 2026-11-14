@@ -62,6 +62,10 @@
   {% if not node.answering %}{% call alert('warning', class_='py-2 small mb-2', role='status') %}{{ node.why }}{% endcall %}{% endif %}
   {{ listing(title, 'services', node.services if node.answering else found.services, node.answering, (receipt.services or '').split(',')) }}
   {{ listing(title, 'engines', node.engines if node.answering else found.engines, node.answering) }}
+  {% if node.tools %}
+  {{ listing(title, 'tools', node.tools, node.answering) }}
+  {% for tool in node.tools if not tool.installed %}<form method="post" action="/system/components"><input type="hidden" name="machine" value="{{ node.name }}"><button class="btn btn-outline-primary btn-sm"{% if tool.installing %} disabled{% endif %}>{{ 'Installing Classifier conversion tools…' if tool.installing else 'Install Classifier conversion tools' }}</button><p class="small text-secondary mt-2 mb-0">{{ tool.why }}</p></form>{% endfor %}
+  {% endif %}
 {% endcall %}
 {% else %}
 <p class="text-secondary">No machines are configured.</p>

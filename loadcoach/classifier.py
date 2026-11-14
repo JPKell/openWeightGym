@@ -42,7 +42,7 @@ def model_facts(settings):
 
 def limits(facts):
     """Publish the supported typed-request limits."""
-    return {'questions': 64, 'choices': 52 if facts.get('decision_type') == 'openjev' else 255,
+    return {'questions': 64, 'choices': facts.get('decision_max_choices') or (52 if facts.get('decision_type') == 'openjev' else 255),
             'score_levels': 10, 'body_bytes': MAX_BODY,
             'max_head_tokens': facts.get('decision_max_head_tokens'),
             'whole_prompt_batch': facts.get('decision_type') in ('laya', 'clef')}

@@ -1350,7 +1350,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     def place_of(path: str) -> str | None:
         """The name of the place a file is in: its own folder, or the folder above that. None if it is in neither."""
         target=Path(path).resolve()
-        return next((name for name, folder in places().items() if Path(folder).resolve() in list(target.parents)[:6 if Path(folder).name in ('image', 'audio') else 2]), None)
+        return next((name for name, folder in places().items() if Path(folder).resolve() in list(target.parents)[:6 if Path(folder).name in ('image', 'audio', 'classifier') else 2]), None)
 
     def said_by(path: str) -> dict:
         """What a .gguf file says about itself, read once and remembered until the file changes."""
@@ -1398,7 +1398,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         # A finished cleanup is reported for ten minutes, then drops off the Files page.
         shown = cleanup if cleanup.get("state") == "running" or time.time() - cleanup.get("ended", 0) < 600 else {}
         return JSONResponse({"places": where, "files": found, "cleanup": shown, "checked": FileIndex.checked(index),
-                             "problems": index.get("problems", [])})
+                             "problems": index.get("problems", []),
+                             "conversions": classifier_jobs.jobs.recent(user.identity or user.name)})
 
     def files_changed(*paths: str | Path) -> None:
         """Put the index right for files LoadCoach has just made, changed or removed."""
@@ -1695,6 +1696,11 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if not known or not supported(path):
             return error(404, "That is not a model file LoadCoach knows of.")
         from soundroom.model import audio_asset, facts as audio_facts
+        if 'classifier' in Path(path).parts and not path.lower().endswith('.gguf'):
+            from loadcoach.classifier_sources import source_facts
+            if not Path(path).is_file():
+                return error(404, 'Classifier source is unavailable.')
+            return JSONResponse({'path': path, 'size': os.stat(path).st_size, 'facts': source_facts(path), 'metadata': {}})
         if audio_asset(path):
             if not Path(path).is_file():
                 return error(404, 'Audio package file is unavailable.')
@@ -1758,12 +1764,12 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 return JSONResponse({"found": await hub.search(web, words, hub_token()) if words else []})
             if not hub.REPOSITORY.fullmatch(repository):
                 return error(400, "A repository is written OWNER/NAME.")
-            listed = hub.rows(await hub.files(web, repository, download_token(repository)))
+            listed = hub.rows(await hub.files(web, repository, download_token(repository), classifier=request.query_params.get('kind') == 'classifier'))
         except hub.Refused as problem:
             return error(problem.status, str(problem))
         if request.query_params.get('kind') == 'classifier':
             for row in listed:
-                row['decision_ready'] = await hub.decision_header(web, repository, row['file'], hub_token())
+                row['decision_ready'] = row['file'].lower().endswith('.gguf') and await hub.decision_header(web, repository, row['file'], hub_token())
         spots = {name: folder for name, folder in places().items() if Path(folder).is_dir()}
         for row in listed:
             names = [Path(part["path"]).name for part in row["parts"]]
@@ -1826,7 +1832,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if place not in spots or not Path(spots[place]).is_dir():
             return error(400, f"Downloads go into storage, never the cache. There is no storage place named {place!r} with a folder that exists. Storage places: {', '.join(spots)}")
         try:
-            wanted = hub.chosen(await hub.files(web, repository, download_token(repository)), names)
+            wanted = hub.chosen(await hub.files(web, repository, download_token(repository), classifier=Path(spots.get(place, '')).name == 'classifier'), names)
         except hub.Refused as problem:
             return error(problem.status, str(problem))
         folder = Path(spots[place]) / hub.folder_of(repository)
@@ -1930,7 +1936,29 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         found = await components.here(config, running_here=("loadcoach",), versions=component_versions)
         for engine in found["engines"]:
             engine["build"] = runner.known_version({"engine": engine["id"]}) if engine["installed"] else ""
+            if engine['id'] == 'llama_cpp' and engine['installed']:
+                build = re.search(r'build (\d+)', engine['build'] or '')
+                if build and int(build[1]) < 11361:
+                    engine['why'] = (engine.get('why', '') + ' Classifier inference requires a build with /v1/systemone.').strip()
+        found['tools'] = [classifier_jobs.status()]
         return JSONResponse(found, headers={"cache-control": "no-store"})
+
+    async def classifier_operations(request: Request, user: User) -> Response:
+        """Expose owner-scoped conversion receipts and on-demand CPU tool installation."""
+        tools = request.url.path.endswith('classifier-tools')
+        if denied := lacks(user, 'manage-settings' if tools else 'manage-models'):
+            return denied
+        owner = user.identity or user.name
+        if request.method == 'GET':
+            return JSONResponse({'tools': classifier_jobs.status(), 'jobs': classifier_jobs.jobs.recent(owner)}, headers={'cache-control': 'no-store'})
+        try:
+            body = await read_json(request, set() if tools else {'path'})
+            if isinstance(body, Response):
+                return body
+            job = await classifier_jobs.install(owner) if tools else await classifier_jobs.convert(owner, str(body.get('path', '')))
+            return JSONResponse(job, 202, headers={'cache-control': 'no-store'})
+        except (ValueError, OSError) as problem:
+            return error(400, str(problem))
 
     async def flags(request: Request, user: User) -> Response:
         """The selected engine's installed, model-launch option catalogue."""
@@ -2528,6 +2556,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         report()
         log.add("loadcoach", "started", models=len(library.names()), cards=list(config.gpus))
         yield
+        await classifier_jobs.close()
         await database_operations.jobs.close()
         if config.token_file:
             os.unlink(config.token_file)
@@ -3005,6 +3034,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return denied
         return JSONResponse({"machine": config.machine_name, "stores": await compute_store_health()})
 
+    from loadcoach.classifier_jobs import ClassifierJobs
+    classifier_jobs = ClassifierJobs(compute_data_folder() / 'classifier-tools',
+        engine_for('llama_cpp').installation(config).executable, places, files_changed)
     database_operations = DatabaseOperations(compute_database_sources, compute_data_folder() / 'database-operations',
         lambda event, owner, **detail: log.add('database', event, owner, machine=config.machine_name, **detail), machine=config.machine_name)
 
@@ -3102,6 +3134,10 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             route('/loadcoach/loadouts', loadout_control, 'POST'),
             route("/loadcoach/engines", engines_list),
             route("/loadcoach/components", components_here),
+            route('/loadcoach/classifier-tools', classifier_operations),
+            route('/loadcoach/classifier-tools', classifier_operations, 'POST'),
+            route('/loadcoach/classifier-conversions', classifier_operations),
+            route('/loadcoach/classifier-conversions', classifier_operations, 'POST'),
             route("/loadcoach/flags", flags),
             route("/loadcoach/model-rename", model_rename, "POST"),  # not under /models/, where everything after is a model's name
             route("/loadcoach/model-forget-measure", model_forget_measure, "POST"),

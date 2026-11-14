@@ -36,7 +36,8 @@
 <div class="inventory-copy-facts"><strong>{{ place.node }}</strong>{% if model.name != row.model.name %}<small class="d-block text-secondary">{{ model.name }}</small>{% endif %}
 <dl class="mb-0">
 {% set minimum = model.min_context|default(model.flags['ctx-size']) or 'N/A' %}
-{% if kind == 'llm' %}
+{% if kind in ('llm', 'classifier') %}
+{% if kind == 'classifier' %}<dt>Decision type</dt><dd>{{ model.capabilities.classifier }}</dd>{% endif %}
 <dt>Min context</dt><dd>{{ '{:,}'.format(minimum) if minimum is number else minimum }}</dd>
 <dt>Max context</dt><dd>{{ '{:,}'.format(model.flags['ctx-size']) if model.flags['ctx-size'] else 'N/A' }}</dd>
 {% for context in [minimum, model.flags['ctx-size']] %}{% set point = model.measurements|default([])|selectattr('context', 'equalto', context)|first %}

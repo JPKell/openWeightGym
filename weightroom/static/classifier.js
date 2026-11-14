@@ -107,11 +107,12 @@
     async function catalogue() {
       try {
         const data = await api('models'); models = data.models;
-        const wanted = model.value; model.replaceChildren(); compare.replaceChildren();
+        const query = new URLSearchParams(location.search);
+        const wanted = model.value || query.get('model'); model.replaceChildren(); compare.replaceChildren();
         models.forEach(m => { option(model,m.id,m.id); option(compare,m.id,m.id); });
         if (models.some(m => m.id === wanted)) model.value = wanted;
         const nodes = data.nodes.filter(n => n.name && n.accepting_work !== false);
-        const oldNode = node.value; node.replaceChildren(); option(node,'','Automatic / cloud');
+        const oldNode = node.value || query.get('node') || ''; node.replaceChildren(); option(node,'','Automatic / cloud');
         $('#starter-node').replaceChildren();
         nodes.forEach(n => { option(node,n.name,n.name); if (n.cards?.length) option($('#starter-node'),n.name,n.name); });
         if (!$('#starter-node').options.length) nodes.forEach(n => option($('#starter-node'),n.name,n.name));

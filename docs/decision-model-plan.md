@@ -23,7 +23,7 @@ the user's data**. The UI and the docs say so.
 
 ### The runtime we already have
 
-The installed **llama.cpp b11457** (`~/.local/bin/llama-server`) serves decision models natively
+The configured **llama.cpp b12008** (`runtimes/llamacpp/current/llama-server` in the installed checkout) serves decision models natively
 at `POST /v1/systemone` (TypeSafe‑compatible; no streaming; images are optional through
 `--mmproj`). A model counts as a decision model only when its GGUF carries
 `<arch>.decision.type` metadata and a `systemone` chat template. `GET /v1/models` then reports
@@ -183,7 +183,9 @@ Fingerprints facts.
    (1, 8 and 32 questions; 2/8/50 options), reporting decisions/sec and p50/p95 latency per node.
 2. **Accuracy suite** (Results, a separate "Classifier" family): labelled decisions scored for
    accuracy, macro‑F1, Brier score and ECE with reliability bins. The data source is the
-   Apache‑2.0 `jaredpalmer/kev-suites` held‑out split. Its licence and hashes are recorded in
+   pinned `jaredpalmer/kev-suites` held-out split. The repository’s code is Apache-2.0; its
+   dataset has no blanket licence and retains the original sources’ terms. It is fetched at
+   runtime, hash-checked and never redistributed. Provenance and hashes are recorded in
    `benchmarks/suites/` like the existing suites. Saved scores stay authoritative.
 
 ### WP7 — MCP classify tool and Platform services
@@ -227,15 +229,14 @@ the live service source and behaviour on each node that serves classifiers.
 
 ## 6. Remaining risks and checks
 - **llama.cpp version.** Every classifier node needs a build with `server-decision.cpp`. The
-  local build is b11457; reports put the merge at about b11361. Components reports nodes that
+  configured local build is b12008; reports put the merge at about b11361. Components reports nodes that
   are too old.
 - **TinyJev‑0.6B on Qwen3.** llama.cpp's kev path was written for Qwen3.5 backbones. If the
   pointer head does not run on a Qwen3 GGUF, the parity gate fails and the model stays
   *unverified*; Kev‑0.8B covers the same niche.
 - **Cloud provider contracts.** The TypeSafe and Featherless request shapes and auth need
   checking against their live docs before WP3.3.
-- **kev‑suites licence and size.** These must be confirmed before the data is vendored into
-  `benchmarks/suites/`.
+- **kev-suites licence.** No dataset licence is declared; fetch the pinned held-out split at runtime and retain upstream terms. Do not vendor the data.
 
 ## Using Classifier
 
@@ -245,7 +246,7 @@ are ordered lowest first; native scores are expected zero-based indices and can 
 Compare adds up to two other models. Drafts and run history stay in page memory; export JSON
 or CSV before closing the tab. Probabilities are not calibrated for your data.
 
-The empty state queues the six starter downloads into the existing front Classifier storage.
+Install classifiers queues the six starter downloads into the existing front Classifier storage.
 Use **Install downloaded classifiers** after the files finish; normal installation verifies and
 copies them into the chosen GPU node’s active cache. This uses the established central storage
 and transfer route without changing node storage settings. Models and Files also expose a Classifier filter.
@@ -270,3 +271,11 @@ against [TypeSafe](https://api.typesafe.ai/redoc) and
 - Related reasoning metadata and hosted routing checks: 28 pass; cold-start inventory and missing-default rendering bugs fixed.
 - Starter files: all six filenames and Apache-2.0 repository metadata rechecked on Hugging Face.
 - Deployed inference, downloads, conversion parity, benchmarks, cloud live request and full surface audit: pending.
+
+Optional conversion: install **Classifier conversion tools** on the owning compute node in
+**System → Components**. Download source data with the Hugging Face Classifier filter, copy
+the complete bundle to that node through Files, open a source file, and choose **Convert to
+classifier GGUF**. Tools use the configured llama-server’s exact source commit in a separate
+CPU venv. Files shows durable progress and parity; the sibling output includes source/output
+hashes, converter commit and manifest. Unverified outputs retain the reason and are never
+reported as verified. TinyJev-4B parity needs an existing local Ollama >=0.35.1 reference.
