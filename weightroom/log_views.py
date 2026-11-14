@@ -6,8 +6,9 @@ import json
 from urllib.parse import urlencode
 
 from weightroom.display import moment
+from loadcoach.event_filters import SEARCH_FIELDS
 
-FILTERS = ('q', 'kind', 'what', 'user', 'group', 'model', 'trace', 'start', 'end', 'node')
+FILTERS = ('q', 'q_field', 'kind', 'what', 'user', 'group', 'model', 'trace', 'start', 'end', 'node')
 CORE = {'id', 'at', 'kind', 'what', 'user', 'caller', 'machine', 'model', 'trace', 'level', 'text'}
 
 
@@ -31,7 +32,7 @@ def event_view(event, query):
                 badge='red' if failed else 'orange' if denied else 'green' if complete else 'secondary',
                 title=f"{event.get('kind', '')} / {what}",
                 summary=summary or (f"Request #{request_id}" if event.get('kind') == 'request' else f"Event #{event['id']}"),
-                href='/log?' + urlencode({**query, 'selected': event['id']}),
+                href='/log?' + urlencode({**query, 'view': 'traces', 'selected': event['id']}),
                 record_url=f'/requests/{request_id}' if event.get('kind') == 'request' else f"/log/{event['id']}",
                 details={key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else '—' if value is None else str(value)
                          for key, value in event.items() if key not in CORE},

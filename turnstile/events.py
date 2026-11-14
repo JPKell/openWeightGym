@@ -66,6 +66,12 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         sensitive requests, for a user with `see-capture`.
         """
         asked = request.query_params
+        from loadcoach.event_filters import FIELD_NAMES
+
+        if asked.get('q_field') and asked['q_field'] not in FIELD_NAMES:
+            return error(400, 'Choose a supported event search field.')
+        if asked.get('order', 'id') not in ('id', 'time'):
+            return error(400, 'Choose a supported event ordering.')
         try:
             after, limit = int(asked.get("after", 0)), min(max(int(asked.get("limit", 100)), 1), 1000)
             before = int(asked.get("before", 0))
@@ -92,7 +98,8 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         memberships = users.memberships(None if user.can('see-log') else user.name)
         members = [name for name, group in memberships.items() if group == asked['group']] if asked.get('group') else None
         entries = await report(lambda view: view.read(after, limit, whose, asked.get("kind"), asked.get("trace"), with_text,
-                                                      asked.get("what"), asked.get("model"), before, since=since, until=until, members=members, node=asked.get('node'), q=asked.get('q')))
+                                                      asked.get("what"), asked.get("model"), before, since=since, until=until, members=members,
+                                                      node=asked.get('node'), q=asked.get('q'), q_field=asked.get('q_field', ''), order_by=asked.get('order', 'id')))
         if isinstance(entries, Response):
             return entries
         return JSONResponse({"events": [{**entry, "machine": log.former.get(entry.get("machine"), entry.get("machine")) or "front"} for entry in resolve(entries)]})
