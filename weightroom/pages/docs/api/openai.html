@@ -24,6 +24,7 @@
     ('GET', '/v1/batches/{number}', 'Retrieve your batch state, request counts and retained output/error file IDs.', 'None'),
     ('POST', '/v1/batches/{number}/cancel', 'Cancel remaining work in your batch; retain completed results.', 'None')
   ]) }}
+  <p>Tool definitions, choices and tool history in any model request require the account’s <code>use-tools</code> ability. This applies to local, role, cloud and batch requests; missing permission returns 403 <code>tools_not_allowed</code>. Existing groups receive the ability once on upgrade. Per-account overrides and app-session intersections apply. ToolLocker access is controlled separately by tool patterns.</p>
   <p>Stored Responses are available under Logs → Model activity → Responses. Records are scoped by stable account identity and current sensitivity clearance; account deletion removes them. Each account can keep at most 10,000 responses or 256 MiB. The console provides filters, pagination, chain navigation, ordinary request links and JSON export.</p>
   <p>openWeightGym batch endpoints are <code>/v1/chat/completions</code>, <code>/v1/responses</code>, <code>/v1/completions</code>, <code>/v1/embeddings</code>,
     <code>/v1/images/generations</code>, <code>/v1/images/edits</code> and the custom <code>/v1/audio/generations</code>.

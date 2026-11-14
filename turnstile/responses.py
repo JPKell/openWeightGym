@@ -5,6 +5,7 @@ import binascii
 import json
 import secrets
 import time
+from urllib.parse import quote
 
 import anyio
 import httpx
@@ -392,6 +393,14 @@ def routes(caller, service):
         try:
             user = authenticated(request)
             body = await read_json(request, MAX_BODY)
+            from loadcoach.request_tools import tools_refusal
+            denied = tools_refusal(user, body)
+            if denied and isinstance(body.get('model'), str):
+                checked = await service.door.get('/v1/models/' + quote(body['model'], safe=''),
+                    headers={'authorization': request.headers.get('authorization', '')}, timeout=30)
+                if not checked.is_success:
+                    return preserved_response(checked, {})
+                return denied
             sent = chat_request(body)
             storing = body.get('store', True)
             if storing and request.headers.get('x-loadcoach-log', '').lower() == 'off':
@@ -414,7 +423,8 @@ def routes(caller, service):
                 store.capacity(owner_of(user), len(json.dumps(saved).encode()))
             headers = {key: value for key, value in request.headers.items()
                        if key == 'authorization' or key.startswith(('x-loadcoach-', 'x-suite-'))}
-            headers['x-loadcoach-sensitivity'] = level
+            if request.headers.get('x-loadcoach-log') != 'off' or level != 'normal':
+                headers['x-loadcoach-sensitivity'] = level
             def finished(result, response_headers):
                 """Keep the final object at its effective level with the ordinary request link."""
                 if storing:

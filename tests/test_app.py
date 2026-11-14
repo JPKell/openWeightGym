@@ -1428,7 +1428,7 @@ SAYS_SUNNY = {"choices": [{"finish_reason": "stop", "message": {"role": "assista
 def test_a_sensitive_piece_of_work_can_be_read_back_from_the_log_alone(fake_llama_server):
     groups = {
         **GROUPS,
-        "cleared": Group(can=frozenset({"load"}), max_sensitivity="sensitive"),
+        "cleared": Group(can=frozenset({"load", "use-tools"}), max_sensitivity="sensitive"),
         "auditor": Group(can=frozenset({"see-log", "see-capture"})),
     }
     system = {"role": "system", "content": "You are careful."}

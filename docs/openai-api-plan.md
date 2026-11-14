@@ -1,6 +1,6 @@
 # OpenAI-compatible API completion plan
 
-Implementation status: see [R1](openai-api-work.md#r1-responses-streaming), [R3](openai-api-work.md#r3-stored-responses-api-and-console-page), and [R4](openai-api-work.md#r4-responses-in-batches) in the brief.
+Implementation status: see [R1](openai-api-work.md#r1-responses-streaming), [R3](openai-api-work.md#r3-stored-responses-api-and-console-page), and [R4](openai-api-work.md#r4-responses-in-batches) in the brief. TA is implemented by the [shared permission check](../loadcoach/request_tools.py).
 
 Drafted **2026-11-13**. Covers the endpoints judged worth adding or easy to add. Moderations is
 held for an owner decision (see [Open decision](#open-decision-moderations)). Out of scope:

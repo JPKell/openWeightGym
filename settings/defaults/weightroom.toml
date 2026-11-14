@@ -103,6 +103,7 @@ observation_quiet_routes = ["/loadcoach/status", "/v1/models", "/loadcoach/facts
 #
 # Abilities:
 #
+#   use-tools     send tool definitions to models and receive tool calls
 #   load          cause a model to be loaded, which may replace an idle one
 #   hosted        use a hosted model, which sends the request off this machine
 #   unlogged      send a request that leaves nothing behind: no entry in the log, no number, no kept
@@ -140,20 +141,20 @@ observation_quiet_routes = ["/loadcoach/status", "/v1/models", "/loadcoach/facts
 # Whoever owns the machine. The first account should be in this group:
 #   weightroom user add NAME superuser
 [groups.superuser]
-can = ["superuser"]
+can = ["use-tools", "superuser"]
 session_hours = 12
 # second_step = true      # turn on when you are ready to use an authenticator app
 
 # People who look after compute for others. They can make users and groups up to their own
 # level, never above it.
 [groups.admin]
-can = ["load", "benchmark", "lock", "break-lock", "unload", "high", "see-all", "clear-line", "stop", "see-log", "see-capture", "manage-users", "manage-groups", "manage-models", "hosted", "restart-services", "drain"]
+can = ["use-tools", "load", "benchmark", "lock", "break-lock", "unload", "high", "see-all", "clear-line", "stop", "see-log", "see-capture", "manage-users", "manage-groups", "manage-models", "hosted", "restart-services", "drain"]
 max_sensitivity = "restricted"
 session_hours = 12
 
 # People and tools that use models.
 [groups.user]
-can = ["load", "lock"]
+can = ["use-tools", "load", "lock"]
 max_lock = 3600
 max_requests = 4
 session_hours = 168      # a week
@@ -169,12 +170,12 @@ session_hours = 168      # a week
 # One whose requests should go ahead of the others in line, such as a telephone caller's:
 #   weightroom user adjust voice-phone priority=high
 [groups.app]
-can = ["load", "lock", "hosted"]
+can = ["use-tools", "load", "lock", "hosted"]
 max_requests = 4
 
 # Unattended scripts: behind everyone else.
 [groups.batch]
-can = ["load"]
+can = ["use-tools", "load"]
 priority = "low"
 max_requests = 2
 
@@ -193,7 +194,7 @@ max_requests = 2
 #
 # Programs from outside the suite, and the account a telephone caller is, belong in "app".
 [groups.system]
-can = ["follow-settings"]
+can = ["use-tools", "follow-settings"]
 
 # turnstile's own part. Seconds it waits for compute to wake before it gives up on a request.
 [turnstile]

@@ -589,6 +589,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         role_context = int(request.headers.get("x-loadcoach-role-context", "0")) if request.headers.get("x-loadcoach-role-context", "").isdigit() else 0
         if name not in offered(user):
             return no_such_model(name, user)
+        from loadcoach.request_tools import tools_refusal
+        if denied := tools_refusal(user, asked):
+            return denied
         # The model's settings as they are at this moment. They are read again when its turn
         # comes, so a change made while it waits is the one that counts.
         settings = library.get(name)

@@ -18,13 +18,13 @@ FRONT_ABILITIES = {'front-wake': 'wake compute from the first page while it is o
 MODELS = ['qwen3-32b', 'qwen3-coder-30b', 'gemma-3-27b', 'llama-3.3-70b', 'mistral-small-3.2', 'whisper-large-v3']
 
 GROUPS = [
-    dict(name='admins', can=['superuser'], priority='high', max_requests=8, max_sensitivity='restricted', models='*', tools='*'),
-    dict(name='staff', can=['load', 'hold', 'high', 'benchmark', 'hosted', 'see-all', 'see-summaries', 'rate-answers', 'front-voice', 'front-wake'],
+    dict(name='admins', can=['use-tools', 'superuser'], priority='high', max_requests=8, max_sensitivity='restricted', models='*', tools='*'),
+    dict(name='staff', can=['use-tools', 'load', 'hold', 'high', 'benchmark', 'hosted', 'see-all', 'see-summaries', 'rate-answers', 'front-voice', 'front-wake'],
          priority='normal', max_requests=4, max_sensitivity='sensitive', models='*', tools='*'),
-    dict(name='researchers', can=['load', 'hold', 'benchmark', 'see-summaries', 'front-voice'], priority='normal', max_requests=3,
+    dict(name='researchers', can=['use-tools', 'load', 'hold', 'benchmark', 'see-summaries', 'front-voice'], priority='normal', max_requests=3,
          max_sensitivity='normal', models=['qwen3-32b', 'qwen3-coder-30b', 'gemma-3-27b', 'llama-3.3-70b'], tools=['web.search', 'files.read']),
-    dict(name='apps', can=['load', 'hosted'], priority='low', max_requests=6, max_sensitivity='normal', models=['qwen3-32b', 'qwen3-coder-30b', 'mistral-small-3.2', 'whisper-large-v3'], tools='*'),
-    dict(name='guests', can=['front-voice'], priority='low', max_requests=1, max_sensitivity='normal', models=['mistral-small-3.2'], tools=[]),
+    dict(name='apps', can=['use-tools', 'load', 'hosted'], priority='low', max_requests=6, max_sensitivity='normal', models=['qwen3-32b', 'qwen3-coder-30b', 'mistral-small-3.2', 'whisper-large-v3'], tools='*'),
+    dict(name='guests', can=['use-tools', 'front-voice'], priority='low', max_requests=1, max_sensitivity='normal', models=['mistral-small-3.2'], tools=[]),
 ]
 
 

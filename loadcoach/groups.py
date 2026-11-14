@@ -37,6 +37,7 @@ ABILITIES = {
     "unload": "unload every model",
     "high": "ask for high priority",
     "load": "cause a model to be loaded, which may replace an idle one",
+    "use-tools": "send tool definitions to models and receive tool calls",
     "benchmark": "run benchmarks on models one may use",
     "rate-answers": "rate anyone's answered request as good or bad, with an explanation; meant for an app that judges answers",
     "hosted": "use a hosted model, which sends the request off this machine",
