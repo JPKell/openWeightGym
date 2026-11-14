@@ -1,0 +1,22 @@
+{% from 'parts.html' import section_title, more %}
+{% from 'alert_parts.html' import episode, state_badge, source_entry %}
+{% from 'icons.html' import icon %}
+
+{% macro choice() %}
+<button type="button" class="al-choice" data-open aria-pressed="false">
+  <span class="al-choice-top"><span class="al-source small text-secondary" data-source></span>{{ state_badge() }}</span>
+  <strong data-title></strong><span class="small text-secondary al-choice-explanation" data-explanation></span>
+  <span class="al-choice-bottom small"><span data-attention></span><span class="text-secondary" data-last-at></span></span>
+</button>
+{% endmacro %}
+
+{% macro templates() %}
+<template id="alert-choice-template">{{ choice() }}</template>
+<template id="alert-episode-template">{{ episode(preview=true) }}</template>
+<template id="alert-source-template">{{ source_entry() }}</template>
+<template id="alert-ledger-template"><tr><td><button type="button" class="al-table-open" data-open aria-pressed="false"><strong data-title></strong><span class="small text-secondary d-block mt-1" data-source></span></button></td><td>{{ state_badge() }}</td><td data-attention></td><td class="small" data-first-at></td><td class="small" data-resolved-at></td></tr></template>
+<template id="alert-lane-template"><section class="al-lane"><div class="d-flex align-items-center justify-content-between mb-3">{{ section_title('', attrs={'data-lane-title':''}, wrapper_class='mb-0') }}<span class="badge bg-secondary-lt" data-lane-count></span></div><div data-lane-items></div><p class="small text-secondary py-3" data-lane-empty hidden>No episodes in this group.</p></section></template>
+<template id="alert-empty-template"><div class="al-empty">{{ icon('check') }}{{ section_title('No matching episodes', wrapper_class='justify-content-center mt-3') }}<p class="text-secondary small" data-empty-message></p><button type="button" class="btn btn-outline-secondary btn-sm" data-clear>Clear filters</button></div></template>
+<template id="alert-detail-empty-template"><div class="al-empty">{{ section_title('No episode selected', wrapper_class='justify-content-center') }}<p class="text-secondary small">Choose an episode to inspect its evidence and acknowledgement.</p></div></template>
+<template id="alert-timeline-template"><li><span class="al-timeline-dot" aria-hidden="true"></span><div><strong class="small" data-event-title></strong><time class="small text-secondary d-block" data-event-time></time></div></li></template>
+{% endmacro %}
