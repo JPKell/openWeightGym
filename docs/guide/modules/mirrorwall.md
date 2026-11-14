@@ -20,11 +20,11 @@ Read the [image runtime code](/docs/code/mirrorwall).
 
 ## Models and their parts {#models}
 
-The image model editor checks compatible components; use its detected-family checklist.
+See [Image models](/docs/model-guides/image-models) for components and compatibility.
 
 ## Adding a model {#adding}
 
-Open **Models → Images** and follow the component checklist before saving.
+See [Image model setup](/docs/model-guides/image-models#do-it).
 
 ## Reference images {#references}
 

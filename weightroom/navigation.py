@@ -43,7 +43,7 @@ NAV_SECTIONS = {
     'Docs': (
         ('', ('/docs',)),
         ('Reference', ('/docs/system', '/docs/api', '/docs/modules')),
-        ('Guides', ('/docs/getting-started', '/docs/web-app', '/docs/benchmarks', '/docs/operations', '/docs/data')),
+        ('Guides', ('/docs/getting-started', '/docs/web-app', '/docs/model-guides', '/docs/benchmarks', '/docs/operations', '/docs/data')),
         ('Development', ('/docs/code',)),
     ),
     'My account': (
