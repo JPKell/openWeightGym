@@ -116,7 +116,7 @@ Generated pages need no edits: fix their source descriptions. Link to generated 
 restating defaults, endpoint lists or abilities. A limit defined only in code may be explained in its
 guide and developer docstring. Check **Docs → Gaps** when choosing documentation work.
 Run `rtk proxy .venv/bin/pytest tests/test_documentation.py tests/test_docs_library.py tests/test_docs_coverage.py tests/test_source_docs.py tests/test_doc_markdown.py tests/test_docs_designs.py`,
-plus Docs browser checks and UI consistency checks for UI changes. `scripts/docs-coverage.py` prints
+plus Docs browser checks and UI consistency checks for UI changes. [API example checks](../tests/test_docs_examples.py) execute the published payloads against isolated gateway/console routes. `scripts/docs-coverage.py` prints
 the same coverage report. Guide metadata uses TOML in a leading `<!--docs` comment; public prose can
 wrap private paragraphs in `<!-- audience: admin -->` / `<!-- /audience -->`. An explicit heading
 anchor (`## Heading {#old-anchor}`) preserves existing bookmarks.

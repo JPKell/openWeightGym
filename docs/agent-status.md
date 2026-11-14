@@ -284,3 +284,5 @@ M3: Eight caller-bound `docs__*` tools and seven shared-library JSON operations 
 M2 batch 4: Usage, reliability, requests, batches, stored Responses, event/plugin/system logs, Status, Telemetry and Alerts covered; 57/82 pages, allowlist 25. Shared-library/link checks pass; no unverifiable facts or owner questions.
 
 M2 batch 5: Shared settings, nodes, accounts/groups, allowances, tool/plugin/media administration, Telephone, schedules and Components covered; 80/83 pages, allowlist 3. A7: 37 passed plus the known index failure; all guide links resolve. No unverifiable facts or owner questions.
+
+M2 batch 6: Authentication, compatibility, errors, MCP and executable API examples added; generated defaults/endpoint facts replace duplicated tables. Published chat/Responses/search payloads pass against isolated normal gateway/console routes with a fake model (2 tests); 80/83 pages, allowlist 3. All guide links resolve; no unverifiable facts or owner questions.

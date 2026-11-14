@@ -280,6 +280,14 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(result).encode())
             return
+        if '--docs-examples' in arguments and self.path == '/v1/chat/completions':
+            result = {'choices': [{'message': {'role': 'assistant', 'content': 'Hello.'}, 'finish_reason': 'stop'}],
+                      'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5}}
+            self.send_response(200)
+            self.send_header('content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
+            return
         if '--benchmark-workflow' in arguments and self.path=='/v1/chat/completions' and request.get('stream') is False:
             supplied=json.loads(request['messages'][-1]['content'])
             source=supplied['sources'][0]
