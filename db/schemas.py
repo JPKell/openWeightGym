@@ -102,10 +102,22 @@ SETTINGS = (
     """),
 )
 
+def _group_tool_ability(database, connection):
+    """Keep tool use enabled for every existing group without changing account overrides."""
+    import json
+    for name, raw in connection.execute('SELECT name,settings FROM groups').fetchall():
+        section = json.loads(raw)
+        abilities = section.setdefault('can', [])
+        if 'use-tools' not in abilities:
+            abilities.append('use-tools')
+            connection.execute('UPDATE groups SET settings=? WHERE name=?', (json.dumps(section), name))
+
+
 GROUPS = (
     Migration(1, "groups table", """
         CREATE TABLE IF NOT EXISTS groups (name TEXT PRIMARY KEY, settings TEXT NOT NULL);
     """),
+    Migration(2, 'preserve tool use for existing groups', _group_tool_ability),
 )
 
 def _service_order(database, connection) -> None:

@@ -372,6 +372,10 @@ class Routing:
         role = await self.theirs(request, user, name)
         if isinstance(role, Response):
             return role
+        if role is not None:
+            from loadcoach.request_tools import tools_refusal
+            if denied := tools_refusal(user, asked):
+                return denied
         stand_in = request.headers.get("x-loadcoach-offload")
         headers = [(key, value) for key, value in headers if key != "x-loadcoach-offload"]  # compute does not answer for hosted models
         if stand_in is not None and any(key.startswith("x-loadcoach-require-") for key in request.headers):

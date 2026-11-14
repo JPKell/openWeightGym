@@ -28,6 +28,8 @@ def stored(tmp_path):
     calls = []
 
     async def model(request):
+        if request.headers.get('x-loadcoach-log') == 'off':
+            assert 'x-loadcoach-sensitivity' not in request.headers
         body = json.loads(request.content)
         calls.append((body, dict(request.headers)))
         if body['model'] == 'bad':

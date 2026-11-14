@@ -85,6 +85,11 @@ def test_postgresql_mixed_response_batch_lines_and_transfer(postgres, tmp_path):
     copied.db.close()
 
 
+def test_postgresql_existing_groups_get_tool_ability_once(postgres):
+    from test_model_tools import check_group_migration
+    check_group_migration(postgres)
+
+
 def test_postgresql_db1_history_import_is_idempotent_and_refuses_conflicts(postgres, tmp_path):
     import sqlite3
     from db.consolidation import readonly

@@ -1275,6 +1275,7 @@ means five things to think about, not a hundred.
 
 | Ability | Allows |
 |---|---|
+| `use-tools` | Sending tool definitions, tool choices or tool history to routed models (local, roles and cloud). Without it requests get 403 `tools_not_allowed`; existing groups receive it once on upgrade. Per-account add/remove overrides apply, and app sessions require it on both accounts. ToolLocker visibility remains a separate tool-pattern control |
 | `load` | Causing a model to be loaded, which may replace an idle one. Without it a user can only use what is already loaded |
 | `hosted` | Using a hosted model, by name or with the busy flag. Without it hosted models do not exist for the user |
 | `unlogged` | Sending a request that leaves nothing behind. It does nothing unless `unlogged = true` in the settings. Section 22 |

@@ -9,6 +9,8 @@ tool** checks them independently of a model.
 
 These same instructions are available in the console at **Docs → Modules → ToolLocker** (`/docs/modules/toollocker`).
 
+Removing the account’s `use-tools` ability stops tool calling through openWeightGym model requests. An MCP client talking to a cloud model directly can still call ToolLocker. To cut off server tools entirely, remove the account’s ToolLocker tools with its `tools` patterns.
+
 ## Installer defaults
 
 For a fresh installation, choose one of these options in `./install.sh`:

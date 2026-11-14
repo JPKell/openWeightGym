@@ -134,6 +134,11 @@ class Hosted:
     @observation.traced("hosted_attempt")
     async def answer(self, request: Request, user: User, asked: dict, name: str, chose: dict | None = None, instead_of: str = "", role: str = "") -> Response:
         """Ask the hosted model `name` for what `asked` says, after every check, and hand back its answer as it arrives."""
+        if name not in self.offered(user):
+            return error(404, 'This model does not exist or is not available to this account.')
+        from loadcoach.request_tools import tools_refusal
+        if denied := tools_refusal(user, asked):
+            return denied
         there, chose = self.models()[name], chose or {}
         from loadcoach.classifier import NATIVE_PATHS, Invalid, validate, shim_request, adapt_response
         try:
