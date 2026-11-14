@@ -1,5 +1,5 @@
 {% from 'navigation_parts.html' import pill_link, pills %}
-{% from 'parts.html' import card, confirm_two, form_section, more, alert %}
+{% from 'parts.html' import card, confirm_two, form_section, more, alert, page_header %}
 
 {% macro voice_tabs(selected) %}
 {% call pills('Voice administration') %}
@@ -7,6 +7,23 @@
 {{ pill_link('Telephone', '/system/voice/telephone', selected == 'telephone') }}
 {{ pill_link('Status', '/system/voice/status', selected == 'status') }}
 {% endcall %}
+{% endmacro %}
+
+{% macro voice_header(selected, status={}, verdict={}) %}
+{{ page_header({'settings':'Voice settings', 'telephone':'Telephone', 'status':'Voice status'}[selected], help='/docs/operations/telephone' if selected == 'telephone' else '/docs/modules/voice') }}
+{{ voice_tabs(selected) }}
+{% if selected != 'status' %}{{ voice_overview(status, verdict) }}{% endif %}
+{% endmacro %}
+
+{% macro voice_overview(status={}, verdict={}) %}
+{% if verdict %}{{ telephone_strip(verdict) }}{% else %}
+{% set ready = status.entries|default({})|dictsort|selectattr('1.can_start', 'defined')|selectattr('1.can_start')|list %}
+{% call alert('success' if ready else 'secondary', class_='voice-verdict') %}<strong>{{ ready|length }} ways ready</strong><span class="ms-2">{{ status.calls|default([])|length }} active call{{ 's' if status.calls|default([])|length != 1 else '' }}</span><a class="ms-auto" href="/system/voice/status">Inspect readiness</a>{% endcall %}
+{% endif %}
+{% endmacro %}
+
+{% macro voice_choice(key, title, href, note='', badge='', ok=false) %}
+<a class="voice-choice" aria-label="{{ title }}" data-voice-choice="{{ key }}" href="{{ href }}"><span class="d-flex flex-wrap justify-content-between align-items-center gap-2"><strong>{{ title }}</strong>{% if badge %}<span class="badge bg-{{ 'green' if ok else 'orange' }}-lt">{{ badge }}</span>{% endif %}</span>{% if note %}<small class="d-block text-secondary mt-1">{{ note }}</small>{% endif %}</a>
 {% endmacro %}
 
 {% macro telephone_strip(verdict) %}
@@ -21,7 +38,7 @@
 
 {% macro latency_cell(cell) %}
 <td class="text-end text-nowrap">{% if cell.value is not none %}<span{% if cell.within is not none %} class="badge bg-{{ 'green' if cell.within else 'orange' }}-lt"{% endif %}>{{ cell.value }}</span>{% else %}—{% endif %}
-{% if cell.target is not none %}<small class="d-block text-secondary">{{ 'Within' if cell.within else 'Over' }} target ≤{{ cell.target }}</small>{% endif %}</td>
+{% if cell.target is not none and cell.value is not none %}<meter class="voice-latency-reference" min="0" max="{{ cell.target * 2 }}" low="0" high="{{ cell.target }}" optimum="0" value="{{ cell.value }}" aria-label="{{ cell.value }} ms against {{ cell.target }} ms target"></meter><small class="d-block text-secondary">{{ 'Within' if cell.within else 'Over' }} target ≤{{ cell.target }}</small>{% endif %}</td>
 {% endmacro %}
 
 {% macro telephone_activity(numbers) %}
@@ -96,7 +113,7 @@
 {% endmacro %}
 
 {% macro telephone_credentials(credentials) %}
-{% call card('Twilio credentials') %}
+{% call card('Twilio credentials', open=not credentials.token.saved|default(false), key='voice-phone-credentials') %}
 <form method="post" action="/system/voice/telephone/save_credentials" data-hold-refresh>
 <div class="row g-3">
 <div class="col-12"><label for="telephone-token" class="form-label">Auth token</label>

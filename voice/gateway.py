@@ -5,6 +5,7 @@ from loadcoach import observability as observation
 import asyncio
 import base64
 from collections import defaultdict, deque
+from anyio import CancelScope
 from contextlib import asynccontextmanager, suppress
 import json
 from pathlib import Path
@@ -777,7 +778,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 rejected(live_calls[sid]['source'], code)
                 if mode == 'hermes':
                     rejected('hermes', code)
-            if running.done() and not listener.done():
+            if not isinstance(problem, (asyncio.CancelledError, WebSocketDisconnect)) and running.done() and not listener.done():
                 with suppress(Exception):
                     if source in ("browser", "desktop"):
                         code = str(problem) if str(problem) in START_FAILURES else "unavailable"
@@ -785,24 +786,26 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                     await output(dict(type="playback.clear", turn=turn or 0))
                     await prompt("busy" if str(problem) == "busy" else "unavailable")
         finally:
-            for task in (listener, running, ending, agent_task):
-                if task and not task.done():
-                    task.cancel()
-            await asyncio.gather(listener, running, ending, *([agent_task] if agent_task else []), return_exceptions=True)
-            with suppress(Exception):
-                if token:
-                    await ask("DELETE", session_voice + "/voice/sessions/" + sid, token, timeout=2)
-            if record:
+            # ASGI servers can cancel again during disconnect; finish releasing the session.
+            with CancelScope(shield=True):
+                for task in (listener, running, ending, agent_task):
+                    if task and not task.done():
+                        task.cancel()
+                await asyncio.gather(listener, running, ending, *([agent_task] if agent_task else []), return_exceptions=True)
                 with suppress(Exception):
-                    await keep_recordings()
-            if bridge:
+                    if token:
+                        await ask("DELETE", session_voice + "/voice/sessions/" + sid, token, timeout=2)
+                if record:
+                    with suppress(Exception):
+                        await keep_recordings()
+                if bridge:
+                    with suppress(Exception):
+                        await bridge.close()
+                sockets.discard(socket)
+                live_calls.pop(sid, None)
                 with suppress(Exception):
-                    await bridge.close()
-            sockets.discard(socket)
-            live_calls.pop(sid, None)
-            with suppress(Exception):
-                await socket.close()
-            ended.set()
+                    await socket.close()
+                ended.set()
 
     async def browser(socket):
         """Authenticate and serve the selected private browser voice WebSocket."""
@@ -897,7 +900,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 phone_calls[call]["closed"] = True  # a replayed webhook cannot repeat a finished call
                 phone_calls[call]['attempt']['duration'] = round(time.monotonic()-phone_calls[call]['created'], 1)
                 if item.get('session_key'):
-                    with suppress(httpx.HTTPError):
+                    with CancelScope(shield=True), suppress(httpx.HTTPError):
                         await ask('POST', turnstile + '/loadcoach/sign-out', item['session_key'], no_wake=True, timeout=2)
 
     async def browser_config(request):
@@ -1079,6 +1082,9 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 if len(body) > 16384:
                     return Response(status_code=413)
                 submitted = json.loads(body) if body else {}
+                if (request.method == 'POST' and telephone_configuration(settings, phone_keys).get('legacy')
+                        and submitted.get('action') not in ('import_legacy', 'check_route')):
+                    return JSONResponse({'error': {'message': 'Import the machine-file telephone configuration before editing it. Existing settings and credential files were preserved.'}}, status_code=409)
                 if submitted.get('action') == 'check_route':
                     try:
                         return JSONResponse(await check_route(telephone_configuration(settings, phone_keys), http), headers={'cache-control': 'no-store'})
@@ -1167,6 +1173,9 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                     result['activity'] = [dict(label=one['label'], number=masked_phone(one['number']),
                         **activity.snapshot(phone_digest(phone_keys.folder, one['number'])))
                         for one in result.get('telephone', {}).get('numbers', [])]
+                    observed = await status_payload(headers)
+                    result['entry'] = observed['entries']['telephone']
+                    result['active'] = sum(call['source'] == 'telephone' for call in observed['calls'])
                     return JSONResponse(result, headers={'cache-control': 'no-store'})
                 return Response(reply.content, status_code=reply.status_code, media_type='application/json', headers={'cache-control': 'no-store'})
             if action == 'status' and request.method == 'GET':

@@ -25,6 +25,8 @@
         }
         saved++;
       }
+      const savedEvent = new CustomEvent('weightroom:settings-saved', {cancelable: true, detail: {forms}});
+      if (!document.dispatchEvent(savedEvent)) return;
       location.assign(location.pathname + '?said=Saved.' + (location.search.includes('open=') ? '&open=' + encodeURIComponent(new URLSearchParams(location.search).get('open')) : ''));
     } catch (error) {
       status.className = 'small text-danger';

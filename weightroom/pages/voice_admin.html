@@ -1,13 +1,25 @@
 {% extends "frame.html" %}
 {% from "parts.html" import card, said_box, swaps, page_header, form_section, more , empty_row, alert %}
+{% from 'voice_admin_parts.html' import voice_header, voice_choice %}
 {% block title %}Voice settings · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/settings.js?v=1" defer></script><script src="/static/voice_admin.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/voice-admin.css?v=1"><script src="/static/voice-admin.js?v=2" defer></script><script src="/static/settings.js?v=2" defer></script><script src="/static/voice_admin.js?v=1" defer></script>{% endblock %}
 {% block main %}
-<div class="settings-page">
-{% call page_header('Voice settings', 'Configure Direct conversations, the Hermes agent and shared speech.') %}<a class="btn btn-outline-secondary btn-sm" href="/system/voice/status">Voice status</a>{% endcall %}
+<div class="voice-admin" data-voice-admin data-voice-query="profile">
+{{ voice_header('settings', voice_status) }}
 {{ said_box(said, failed) }}
 {% if voice_problem %}{% call alert('warning', role='status') %}{{ voice_problem }}{% endcall %}{% endif %}
-{% include 'settings_sections.html' %}
+<div class="voice-workspace"><nav class="voice-navigator" aria-label="Voice profiles">
+<p class="form-label px-3 pt-3">Profiles</p>
+{% for profile in voice_editor.profiles %}{{ voice_choice(profile.id, profile.id|capitalize, '?profile=' ~ profile.id|urlencode, 'Conversation and voice') }}{% endfor %}
+{{ voice_choice('shared', 'Gateway', '?profile=shared', 'Hermes and capacity') }}
+</nav><div class="voice-detail">
+{% for profile in voice_editor.profiles %}<section data-voice-panel="{{ profile.id }}" aria-label="{{ profile.id }} profile">
+{% with settings_groups=profile.groups, settings_fixed=true, settings_readonly=false %}{% include 'settings_sections.html' %}{% endwith %}
+</section>{% endfor %}
+<section data-voice-panel="shared" aria-label="Gateway settings">
+{% with settings_groups=voice_editor.shared, settings_fixed=true, settings_readonly=false %}{% include 'settings_sections.html' %}{% endwith %}
+</section>
+{% if not voice_editor.profiles and not voice_editor.shared %}{% call card('Voice configuration') %}<p class="text-secondary mb-0">No settings reported. Check the gateway and compute voice service in Components, then refresh this page.</p>{% endcall %}{% endif %}
 {% call card("Preview a voice") %}
 <form method="post" action="/system/voice/preview" data-voice-preview>
 <div class="row g-2"><div class="col-md-4"><label class="form-label" for="preview-speaker">Voice</label><select class="form-select" id="preview-speaker" name="speaker" required>{% for value, label in speakers %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
@@ -18,11 +30,13 @@
 </form>{% endcall %}
 {% call card("Recorded greetings") %}
 {% if voice_status.recordings|default({}) %}<p class="small">{{ voice_status.recordings.source }}{% if voice_status.recordings.speaker is defined %} · Speaker {{ voice_status.recordings.speaker }}{% endif %}</p>{% endif %}
-<p class="text-secondary small">These previews play the recordings currently used on the control node, including while compute is off. Edit greeting text and the selected speaker below. Save changes, wait for Voice to report them, then regenerate to replace the complete control node cache.</p>
+<p class="text-secondary small">These previews play the recordings currently used on the control node, including while compute is off. Edit the selected profile’s speaker and default-profile greeting texts above. Save changes, wait for Voice to report them, then regenerate to replace the complete control node cache.</p>
 <form method="post" action="/system/voice/regenerate" class="mb-3"><button class="btn btn-outline-primary btn-sm">Regenerate all greetings</button></form>
 <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Greeting</th><th>Recorded text</th><th>Preview</th></tr></thead><tbody>
-{% for name in greeting_names %}<tr><th scope="row">{{ name }}</th><td class="wrap">{{ voice_status.recordings.texts[name] if voice_status.recordings|default({}) else 'Recording text unavailable' }}</td><td><audio controls preload="none" class="mw-100" aria-label="{{ name }} greeting" src="/system/voice/recordings?name={{ name }}"></audio></td></tr>{% else %}{{ empty_row(3, "No recorded greetings. Regenerate greetings after saving a voice.") }}{% endfor %}
+{% for name in greeting_names %}<tr><th scope="row">{{ name }}</th><td class="wrap">{{ (voice_status.recordings|default({})).get('texts', {}).get(name, 'Recording text unavailable') }}</td><td><audio controls preload="none" class="mw-100" aria-label="{{ name }} greeting" src="/system/voice/recordings?name={{ name }}"></audio></td></tr>{% else %}{{ empty_row(3, "No recorded greetings. Regenerate greetings after saving a voice.") }}{% endfor %}
 </tbody></table></div>
 {% endcall %}
+{% include 'settings_machine_values.html' %}
+</div></div>
 </div>
 {% endblock %}

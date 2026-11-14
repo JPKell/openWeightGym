@@ -1,7 +1,7 @@
 # Telephone voice and Voice status plan
 
 Drafted **2026-11-14**; decisions settled with the owner on 2026-11-14 (see
-[Decisions](#decisions)). Status: in progress; P1–P8 complete.
+[Decisions](#decisions)). Status: complete; P1–P9 implemented and verified.
 
 ## Goal
 
@@ -32,7 +32,7 @@ What exists and stays:
 - The `voice-gateway` identity already holds `app-sign-in`, which lets it obtain limited app
   sessions for accounts (`limited()` in [loadcoach/groups.py](../loadcoach/groups.py)).
 
-What is missing:
+Initial gaps (resolved by the milestones below):
 
 | Gap | Where |
 |---|---|
@@ -105,7 +105,7 @@ Settled with the owner on 2026-11-14.
 | P6 | Complete — bound listeners, private call controls, scoped readiness reasons and bounded masked activity; 135 clean-snapshot unit/browser checks pass | M | — |
 | P7 | Complete — polling readiness, active call controls, profile reasons, latency targets and activity; selection/disclosure/scroll and narrow browser checks pass | L | P6 |
 | P8 | Complete — signed public probes, three route guides, lossless legacy import and installer/docs; 143 clean-snapshot unit/browser/UI checks pass | M | P3 |
-| P9 | Professional design for the Voice area | L | P3, P5, P7 |
+| P9 | Complete — shared Voice shell, profile/number/entry navigators, task saves, page-memory drafts, responsive account section and screenshots; [final verification](#final-verification-and-review) passes | L | P3, P5, P7 |
 
 P6–P7 can run in parallel with P1–P5. P9 comes last because it restyles what P3, P5 and P7 build;
 P3/P5/P7 should still use shared parts so P9 changes templates, not logic.
@@ -345,3 +345,21 @@ plus the **My account → Phone numbers** section, applied directly to the live 
 Outbound calling from conversations, SMS beyond verification codes, call recording on Twilio's
 side, other telephone providers (SIP, Vonage, Telnyx), billing and usage import from Twilio, and
 WebRTC for browser calls.
+
+## Final verification and review
+
+All nine milestones were committed and pushed separately. Final verification covers 492 Voice,
+Telephone, Twilio-client, settings-catalogue and UI consistency checks, plus the telephone PostgreSQL contract on a
+disposable local database. The normal run skips that PostgreSQL test without an explicit test
+DSN; it was run separately. Twilio API responses are mocked; signed simulations exercise actual
+HTTP and WebSocket sockets. No deployment, service restart or live telephone call was performed.
+
+Review captures use isolated sample accounts and numbers:
+
+| Area | Desktop | Narrow / dark |
+|---|---|---|
+| Settings | [Desktop](assets/voice/settings-desktop.png) | [Mobile](assets/voice/settings-mobile-dark.png) |
+| Telephone | [Desktop](assets/voice/telephone-desktop.png) | [Mobile](assets/voice/telephone-mobile-dark.png) |
+| Status | [Desktop](assets/voice/status-desktop.png) | [Mobile](assets/voice/status-mobile-dark.png) |
+| My account phone section | — | [Mobile](assets/voice/account-mobile-dark.png) |
+| Gateway unavailable | [Recovery state](assets/voice/status-unavailable.png) | — |

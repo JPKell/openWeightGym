@@ -1,4 +1,4 @@
-"""Show the default voice profile as individual fields while preserving its wire format."""
+"""Edit voice profiles as scalar fields while preserving each profile and setting state."""
 
 from copy import deepcopy
 
@@ -10,7 +10,7 @@ from voice.prompt_recordings import TEXTS, texts
 from voice.telephone_settings import validate as validate_telephone
 
 DESCRIPTIONS = {
-    "model": "Direct-mode model, requested with the caller's API key (voice-phone for telephone calls). Hermes has separate settings under voice-gateway.",
+    "model": "Direct-mode model, requested with the caller's account permissions. Hermes has separate settings under voice-gateway.",
     "modes": "Allowed conversation modes for this voice profile.",
     "system_prompt": "Instructions for direct voice conversations.",
     "max_output_tokens": "Maximum tokens in one direct-mode answer.",
@@ -48,35 +48,36 @@ def fields(settings, models=()):
                     row['changed'] = {**entry['changed'], 'value': value}
                 result.append(row)
             continue
-        if entry["name"] != "profiles" or "default" not in holds(entry):
+        if entry["name"] != "profiles":
             result.append(entry)
             continue
-        current = entry["value"].get("default", {})
-        original = entry.get("file", {}).get("default", {})
-        wanted = holds(entry)["default"]
-        for name, value in wanted.items():
-            label = "Direct " + name.replace("_", " ") if name in ("model", "system_prompt", "max_output_tokens", "max_context_tokens") else name
-            row = dict(name=PREFIX + name, label=label, value=current.get(name, value),
-                       when=entry["when"], says=DESCRIPTIONS.get(name, ""), changed=None,
-                       refused=entry.get("refused"))
-            if name in original:
-                row["file"] = original[name]
-            if entry.get("changed") and (name not in original or value != original[name] or value != current.get(name)):
-                row["changed"] = {**entry["changed"], "value": value}
-            if isinstance(value, str):
-                row["editor"] = "text"
-                row["multiline"] = name == "system_prompt"
-            if name == "model":
-                row["choices"] = [(model, model) for model in models]
-                row["select"] = True
-            elif name == "speaker":
-                row["choices"] = speaker_choices(settings)
-                if not row["choices"]:
-                    row["says"] += " Speaker names are unavailable for this synthesis bundle."
-            elif name == "modes":
-                row["choices"] = [('["direct"]', "Direct"), ('["hermes"]', "Hermes"),
-                                  ('["direct", "hermes"]', "Direct and Hermes")]
-            result.append(row)
+        for profile_id in holds(entry):
+            current = entry["value"].get(profile_id, {})
+            original = entry.get("file", {}).get(profile_id, {})
+            wanted = holds(entry)[profile_id]
+            for name, value in wanted.items():
+                label = "Direct " + name.replace("_", " ") if name in ("model", "system_prompt", "max_output_tokens", "max_context_tokens") else name
+                row = dict(name="profiles." + profile_id + "." + name, label=label, value=current.get(name, value),
+                           when=entry["when"], says=DESCRIPTIONS.get(name, ""), changed=None,
+                           refused=entry.get("refused"))
+                if name in original:
+                    row["file"] = original[name]
+                if entry.get("changed") and (name not in original or value != original[name] or value != current.get(name)):
+                    row["changed"] = {**entry["changed"], "value": value}
+                if isinstance(value, str):
+                    row["editor"] = "text"
+                    row["multiline"] = name == "system_prompt"
+                if name == "model":
+                    row["choices"] = [(model, model) for model in models]
+                    row["select"] = True
+                elif name == "speaker":
+                    row["choices"] = speaker_choices(settings)
+                    if not row["choices"]:
+                        row["says"] += " Speaker names are unavailable for this synthesis bundle."
+                elif name == "modes":
+                    row["choices"] = [('["direct"]', "Direct"), ('["hermes"]', "Hermes"),
+                                      ('["direct", "hermes"]', "Direct and Hermes")]
+                result.append(row)
     return result
 
 
@@ -99,18 +100,18 @@ def greeting_change(settings, form):
 
 
 def profile_change(settings, form, models=()):
-    """Merge submitted default-profile fields without overwriting unedited fields or profiles."""
+    """Merge submitted profile fields without overwriting unedited fields or other profiles."""
     entry = next((entry for entry in settings if entry["name"] == "profiles"), None)
-    if not entry or entry["when"] == "file" or "default" not in holds(entry):
+    if not entry or entry["when"] == "file":
         return {}
     profiles = deepcopy(holds(entry))
-    profile = profiles["default"]
     reset = form.get("reset", "")
     for row in fields(settings, models):
         field = row["name"]
-        if not field.startswith(PREFIX):
+        if not field.startswith("profiles."):
             continue
-        name = field[len(PREFIX):]
+        _, profile_id, name = field.split(".", 2)
+        profile = profiles[profile_id]
         if reset:
             if reset == field:
                 if "file" in row:
@@ -197,3 +198,43 @@ def gateway_change(settings, form, models=()):
         except ValueError as why:
             raise ValueError(f"{name}: {why}") from None
     return changed
+
+
+def workspace(programs):
+    """Arrange existing setting rows into independently saved task cards, without copying controls."""
+    profiles, shared = {}, []
+    for program in programs:
+        for row in program['settings']:
+            if row['when'] == 'file' or row['name'] in ('telephone', 'public_host', 'public_port'):
+                continue
+            name = row['name']
+            if name.startswith('profiles.'):
+                profile = name.split('.', 2)[1]
+                title = 'Voice and greetings' if name.endswith('.speaker') else 'Conversation'
+                bucket = profiles.setdefault(profile, {})
+            else:
+                bucket = None
+                title = ('Voice and greetings' if name.startswith('greetings.') else
+                         'Hermes' if name in HERMES_FIELDS else 'Capacity')
+            target = bucket.setdefault(title, []) if bucket is not None else shared
+            target.append((title, program, row))
+    # Greetings are global; keep their single editor alongside the default profile's speaker.
+    primary = 'default' if 'default' in profiles else next(iter(profiles), None)
+    if primary:
+        greetings = [entry for entry in shared if entry[2]['name'].startswith('greetings.')]
+        profiles[primary].setdefault('Voice and greetings', []).extend(greetings)
+        shared = [entry for entry in shared if entry not in greetings]
+    def groups(rows, profile=None):
+        result = []
+        for title in ('Conversation', 'Voice and greetings', 'Hermes', 'Capacity'):
+            entries = []
+            for program in programs:
+                settings = [row for heading, owner, row in rows if heading == title and owner is program]
+                if settings:
+                    entries.append({**program, 'settings': settings})
+            if entries:
+                result.append({'title': title, 'programs': entries, 'open': True,
+                               **({'key':'Speech', 'save_title':'Speech'} if title == 'Voice and greetings' and profile == primary else {})})
+        return result
+    return {'profiles': [{'id': name, 'groups': groups([row for rows in buckets.values() for row in rows], name)}
+                         for name, buckets in profiles.items()], 'shared': groups(shared)}

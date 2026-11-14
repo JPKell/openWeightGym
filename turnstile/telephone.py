@@ -24,6 +24,23 @@ class TelephoneAdmin:
         self.store = PhoneStore(users, self.keys.folder)
         self.registration = PhoneRegistration(self)
 
+    def forget_account(self, name):
+        """Remove personal caller entries before a deleted name can be used by another account."""
+        phone = effective(self.changes)
+        changed = False
+        for number in phone['numbers']:
+            access = number.get('callers', {})
+            entries = access.get('entries', [])
+            retained = [entry for entry in entries if entry.get('account') != name]
+            if retained != entries:
+                access['entries'] = retained
+                changed = True
+            if number.get('account') == name and number.get('enabled'):
+                number['enabled'] = False
+                changed = True
+        if changed:
+            self.changes.put('voice-gateway', 'telephone', phone, 'account removal')
+
     async def admit(self, request, user):
         """Only the signature-verifying gateway can exchange a caller match for a limited session."""
         if user is None or user.name != 'voice-gateway' or not user.can('app-sign-in'):

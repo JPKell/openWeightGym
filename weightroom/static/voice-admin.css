@@ -1,0 +1,22 @@
+/* Shared Voice layout; controls and state colors use the suite's existing primitives. */
+.voice-admin { min-width: 0; }
+.voice-workspace { display: grid; grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.voice-navigator { border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface); position: sticky; top: 5rem; overflow: hidden; }
+.voice-choice { display: block; padding: .85rem 1rem; color: inherit; text-decoration: none; border-inline-start: 3px solid transparent; border-bottom: 1px solid var(--tblr-border-color); overflow-wrap: anywhere; }
+.voice-choice:last-child { border-bottom: 0; }
+.voice-choice:hover { background: var(--tblr-bg-surface-secondary); color: inherit; }
+.voice-choice.active { border-inline-start-color: var(--tblr-primary); background: var(--tblr-primary-lt); }
+.voice-choice:focus-visible { outline: 2px solid var(--tblr-primary); outline-offset: -3px; }
+.voice-detail { min-width: 0; }
+.voice-admin .table { font-variant-numeric: tabular-nums; }
+.voice-admin pre { max-width: 100%; overflow: auto; }
+.voice-admin audio { width: 100%; max-width: 20rem; }
+.voice-verdict { display: flex !important; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.voice-latency-reference { width: 100%; max-width: 8rem; height: .35rem; accent-color: var(--tblr-primary); }
+@media (max-width: 991.98px) {
+  .voice-workspace { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .voice-navigator { position: static; display: flex; flex-wrap: wrap; }
+  .voice-navigator > .form-label { width: 100%; margin-bottom: 0; }
+  .voice-choice { flex: 1 1 9rem; border-bottom: 0; }
+  .voice-admin .settings-row { width: 100%; }
+}
