@@ -280,3 +280,5 @@ M2 batch 2: Voice chat, image generation, speech, transcription, music/sounds, d
 M2 batch 3: Model catalogue/configuration, image/audio models, cloud accounts, roles, Dry fit, files, fingerprints and downloads covered; 45/81 pages, allowlist 36. A7: 37 passed plus the known index failure; all guide links resolve. Compatibility detail: folder `models` uses `/docs/model-guides`, preserving the pre-existing `/docs/models` alias. No unverified facts or owner questions.
 
 M3: Eight caller-bound `docs__*` tools and seven shared-library JSON operations implemented; signed proof/replay checks, use-tools/admin visibility, bounded reads, path refusal, citation resolution and all eight Settings → Tools test calls pass in isolated integration. No live deployment; no unverifiable facts or owner questions.
+
+M2 batch 4: Usage, reliability, requests, batches, stored Responses, event/plugin/system logs, Status, Telemetry and Alerts covered; 57/82 pages, allowlist 25. Shared-library/link checks pass; no unverifiable facts or owner questions.
