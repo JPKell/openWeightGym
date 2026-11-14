@@ -18,6 +18,26 @@ is [owner-accepted with model-specific limits recorded](loadcoach.md#h3-image-re
 
 ## Using the page
 
+### Design previews
+
+Run `.venv/bin/python scripts/preview-collection-designs.py` and open
+`build/collection-designs/index.html`. Switch between **01 Evaluation desk**,
+**02 Evidence ledger** and **03 Guided workbench**, then choose Collections, Collection workspace
+or Workflows: nine coordinated screens. The HTML includes its assets and works offline.
+Five sample business use cases support filters, source inspection, retrieval thresholds,
+model-answer comparison, manual review with JSON export, and research-to-draft review gates.
+Reference sets, comparisons and review history are proposed additions, not live capabilities;
+all answers are authored fixtures and actions stay in the browser tab. Preview state includes
+empty and connection-error scenarios; the appearance control switches light/dark mode.
+
+### Live collections
+
+The live overview and collection page use **03 Guided workbench**. The overview shows real
+source counts and readiness, with searchable status filters and a short setup guide. A collection
+places source documents above the question/evidence pair, with Prepare sources → Retrieve evidence
+→ Review answer progress. **Create workflow** opens a new plan with that collection selected.
+Reference sets, comparison and assessment history remain proposals in the offline preview.
+
 Open **Benchmark → Collections**. Create a named collection with an explicit local embedding model
 and a sensitivity level your current group permits. Upload UTF-8 text or a selectable-text PDF,
 then select **Index / retry**. Uploading and viewing status never start inference or wake

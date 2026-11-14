@@ -67,6 +67,12 @@ if (documents) {
       !states.length ? 'Upload a source to begin.' :
       `${ready} ready` + (failed ? ` · ${failed} failed; see the reason below` : '') +
       (pending ? ` · ${pending} awaiting indexing or retry` : '') + '.';
+    const current = document.querySelector('#collection-result')?.dataset.hasResult === 'yes' ? 2 : ready ? 1 : 0;
+    document.querySelectorAll('#collection-steps li').forEach((step, index) => {
+      if (index === current) step.setAttribute('aria-current', 'step');
+      else step.removeAttribute('aria-current');
+      step.toggleAttribute('data-complete', index < current);
+    });
   };
   /** Schedule the next bounded collection-status refresh. */
   const schedule = () => {

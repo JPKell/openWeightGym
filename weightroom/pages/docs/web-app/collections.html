@@ -1,9 +1,10 @@
 {% from "docs_parts.html" import doc_contents, doc_section %}
 {{ doc_contents([('collections', 'Make a collection'), ('collections-ask', 'Ask and check the sources')]) }}
 {% call doc_section('Make a collection', 'collections') %}
-<p><a href="/collections">Create a collection</a> with a local embedding model and a sensitivity level. Upload UTF-8 text or a searchable PDF, then select Index. Wait for Ready before searching.</p>
+<p><a href="/collections">Open Collections</a> to search your private sets and see their source readiness. Select New collection, choose a local embedding model and sensitivity level, then upload UTF-8 text or a searchable PDF. Select Index / retry and wait for Ready before searching.</p>
 <p>The requested model can run on any eligible node hosting that exact name. Differently named copies are refused. A failed source shows the error reason and a request diagnostics link; View collection event log opens its related events.</p>
 {% endcall %}
 {% call doc_section('Ask and check the sources', 'collections-ask') %}
 <p>Ask a question and choose an answer model, or retrieve excerpts only. Review the cited sources: similarity is a retrieval score, not a guarantee that an answer is correct. Collections and their sources are private to their owner. Resetting the embedding space clears its vectors and requires indexing again.</p>
+<p>The guided workspace places sources above the question and evidence. Prepare sources, retrieve evidence, then review the answer against known facts. Create workflow starts a new research-to-draft plan with this collection selected.</p>
 {% endcall %}

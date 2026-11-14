@@ -1,0 +1,8 @@
+{# Live and preview evaluation components share progress and state presentation. #}
+{% macro stepper(label, steps, id, current=none) %}
+<ol class="evaluation-steps" id="{{ id }}" aria-label="{{ label }}">{% for step in steps %}<li{% if current == loop.index0 %} aria-current="step"{% endif %}{% if current is not none and loop.index0 < current %} data-complete{% endif %}><span aria-hidden="true">{{ loop.index }}</span>{{ step }}</li>{% endfor %}</ol>
+{% endmacro %}
+
+{% macro state_badge(label='', tone='secondary', attrs={}) %}<span class="badge bg-{{ tone }}-lt"{{ attrs|xmlattr }}>{{ label }}</span>{% endmacro %}
+
+{% macro request_links(requests) %}{% if requests %}<p class="small mt-2 mb-0">Request diagnostics: {% for entry in requests %}<a href="/requests/{{ entry }}">{{ entry }}</a>{{ ', ' if not loop.last else '' }}{% endfor %}</p>{% endif %}{% endmacro %}

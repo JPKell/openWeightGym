@@ -10,6 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 URL = 'http://collection.test/collections/review'
 
 
+def serve_asset(route):
+    from urllib.parse import urlsplit
+    path = ROOT / 'weightroom' / urlsplit(route.request.url).path.lstrip('/')
+    route.fulfill(content_type='text/css' if path.suffix == '.css' else 'text/javascript', path=path)
+
+
 def collection_page(state, result=None):
     environment = Environment(loader=ChoiceLoader([
         DictLoader({'frame.html': '<!doctype html>{% block scripts %}{% endblock %}{% block main %}{% endblock %}'}),
@@ -33,8 +39,8 @@ def test_index_completion_preserves_selection_question_and_answer():
         visits = []
 
         def serve(route):
-            if route.request.url.endswith('/static/collections.js?v=4'):
-                return route.fulfill(content_type='text/javascript', path=ROOT / 'weightroom/static/collections.js')
+            if '/static/' in route.request.url:
+                return serve_asset(route)
             visits.append(route.request.url)
             result = dict(generated=True, answer='Preserved prior answer.', sources=[]) if len(visits) == 1 else None
             route.fulfill(content_type='text/html', body=collection_page('indexing' if len(visits) == 1 else 'ready', result))
@@ -77,8 +83,8 @@ def test_failed_index_poll_retains_the_request_link_and_question():
         browser=engine.chromium.launch(headless=True,args=['--disable-gpu'])
         page=browser.new_page();visits=[]
         def serve(route):
-            if '/static/collections.js?' in route.request.url:
-                return route.fulfill(content_type='text/javascript',path=ROOT/'weightroom/static/collections.js')
+            if '/static/' in route.request.url:
+                return serve_asset(route)
             visits.append(route.request.url)
             route.fulfill(content_type='text/html',body=collection_page('indexing' if len(visits)==1 else 'failed'))
         page.route('http://collection.test/**',serve)
@@ -98,8 +104,8 @@ def test_status_failure_is_visible_and_recovers_without_navigating(failure):
         visits = []
 
         def serve(route):
-            if route.request.url.endswith('/static/collections.js?v=4'):
-                return route.fulfill(content_type='text/javascript', path=ROOT / 'weightroom/static/collections.js')
+            if '/static/' in route.request.url:
+                return serve_asset(route)
             visits.append(route.request.url)
             if len(visits) == 2:
                 return route.fulfill(status=503 if failure == 'unavailable' else 200,
