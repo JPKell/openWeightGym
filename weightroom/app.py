@@ -4072,9 +4072,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     # ---- what the programs on compute printed, and asking a model about it --------------------
 
     async def local_models(person: Person) -> list[str]:
-        """The models this person may ask that run on compute itself. A log is not sent to a hosted one."""
+        """Only permitted local chat LLMs may explain logs; exclude embedders and non-chat models."""
         answer = await ask("GET", "/v1/models", person.key)
-        return [model["id"] for model in answer.json()["data"] if model.get("owned_by") != "hosted"] if answer.status_code == 200 else []
+        return [model["id"] for model in answer.json()["data"]
+                if model.get("owned_by") == "loadcoach" and model.get("capabilities", {}).get("chat")
+                and not model.get("embedding")] if answer.status_code == 200 else []
 
     journal_cache: dict[tuple, dict] = {}  # Bounded, account-scoped snapshots for offline viewing.
 
