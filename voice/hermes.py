@@ -5,6 +5,7 @@ state before another run may own the conversation; an uncertain outcome is never
 """
 
 import asyncio
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -19,7 +20,7 @@ INSTRUCTIONS = "This is a voice call. Answer in one or two short sentences of pl
 
 def configuration(gateway):
     """Snapshot editable voice-agent choices without exposing machine paths or credentials to edits."""
-    settings = dict(gateway["hermes"])
+    settings = deepcopy(gateway["hermes"])
     for name in ("model", "system_prompt", "max_turns", "context_tokens", "max_output_tokens", "reasoning_effort"):
         value = gateway.get("hermes_" + name)
         if value is not None and (name != "model" or value):

@@ -188,6 +188,24 @@ def _wake_address(value):
         raise ValueError('Wake address must be an IPv4 address.') from None
 
 
+def _http_url(value):
+    from urllib.parse import urlsplit
+    try:
+        url = urlsplit(value)
+        if value and (url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password or url.fragment):
+            raise ValueError()
+        url.port
+    except ValueError:
+        raise ValueError('Use an HTTP or HTTPS URL without embedded credentials or a fragment.') from None
+
+
+def _hermes_tools(value):
+    import re
+    _distinct(value)
+    if len(value) > 64 or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', name) for name in value):
+        raise ValueError('Use at most 64 toolset names containing letters, digits, dashes or underscores.')
+
+
 def _disks(value):
     if len(value) > 32 or any(not isinstance(path, str) or not path.startswith('/') or '\0' in path for path in value):
         raise ValueError('disks must contain at most 32 absolute paths.')
@@ -493,3 +511,6 @@ _add('voice', 'recognition.max_utterance_seconds', 'float', tier=NOW, page='voic
 _add('voice', 'synthesis.speaker', 'int', tier=RESTART, page='voice', section='Synthesis', label='Default synthesis speaker', control='number', min=0, max=1023, default=0)
 _add('voice', 'synthesis.threads', 'int', tier=RESTART, page='voice', section='Synthesis', label='Synthesis threads', control='number', min=1, max=64, default=2)
 _add('voice', 'synthesis.workers', 'int', tier=RESTART, page='voice', section='Synthesis', label='Synthesis workers', control='number', min=1, max=16, default=2)
+
+_add('voice-gateway', 'hermes.toolsets', 'list', tier=NOW, scope='front', page='voice', section='Hermes', label='Hermes toolsets', rule=_hermes_tools, default=['search'], help='Applies to new calls; active calls keep their tool choices.')
+_add('voice-gateway', 'hermes.search_url', 'text', tier=NOW, scope='front', page='voice', section='Hermes', label='Hermes search URL', control='text', rule=_http_url, default='', help='HTTP or HTTPS search service. Applies to new calls.')
