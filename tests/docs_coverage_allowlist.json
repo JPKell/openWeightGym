@@ -1,27 +1,5 @@
 [
-  "page:/allowances",
   "page:/benchmarks/compare",
   "page:/benchmarks/manage",
-  "page:/benchmarks/node-measurements",
-  "page:/compute-nodes",
-  "page:/groups",
-  "page:/plugins",
-  "page:/schedules",
-  "page:/settings",
-  "page:/settings/alerts",
-  "page:/settings/downloads",
-  "page:/settings/history",
-  "page:/settings/image",
-  "page:/settings/limits",
-  "page:/settings/machine",
-  "page:/settings/requests",
-  "page:/settings/retention",
-  "page:/settings/security",
-  "page:/system/audio",
-  "page:/system/components",
-  "page:/system/voice",
-  "page:/system/voice/status",
-  "page:/system/voice/telephone",
-  "page:/tools",
-  "page:/users"
+  "page:/benchmarks/node-measurements"
 ]

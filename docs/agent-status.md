@@ -282,3 +282,5 @@ M2 batch 3: Model catalogue/configuration, image/audio models, cloud accounts, r
 M3: Eight caller-bound `docs__*` tools and seven shared-library JSON operations implemented; signed proof/replay checks, use-tools/admin visibility, bounded reads, path refusal, citation resolution and all eight Settings → Tools test calls pass in isolated integration. No live deployment; no unverifiable facts or owner questions.
 
 M2 batch 4: Usage, reliability, requests, batches, stored Responses, event/plugin/system logs, Status, Telemetry and Alerts covered; 57/82 pages, allowlist 25. Shared-library/link checks pass; no unverifiable facts or owner questions.
+
+M2 batch 5: Shared settings, nodes, accounts/groups, allowances, tool/plugin/media administration, Telephone, schedules and Components covered; 80/83 pages, allowlist 3. A7: 37 passed plus the known index failure; all guide links resolve. No unverifiable facts or owner questions.
