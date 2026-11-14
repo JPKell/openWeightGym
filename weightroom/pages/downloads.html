@@ -21,15 +21,16 @@
     </td>
     <td>
       {% if one.state == "coming" %}{{ one.speed|size }} a second{% if one.speed %}, {{ ((one.of - one.done) / one.speed / 60)|round(0, "ceil")|int }} min left{% endif %}
+      {% elif one.state == "queued" %}Waiting for a download slot
       {% elif one.state == "checking" %}being checked
       {% elif one.state == "failed" %}<span class="text-danger">{{ one.why }}</span>
       {% else %}stopped{% endif %}
     </td>
     <td class="text-end text-nowrap">
-      <form hx-post="/downloads" hx-target="#downloads" hx-swap="outerHTML" class="m-0">
+      <form method="post" action="/downloads" hx-post="/downloads" hx-target="#downloads" hx-swap="outerHTML" class="m-0">
         <input type="hidden" name="path" value="{{ one.path }}"><input type="hidden" name="repository" value="{{ one.repository }}">
         <input type="hidden" name="file" value="{{ one.file }}"><input type="hidden" name="place" value="{{ one.place }}">
-        {% if one.state == "coming" %}<button  class="btn btn-outline-danger btn-sm" name="do" value="stop" {{ confirm_two() }}>Stop</button>
+        {% if one.state in ("coming", "queued") %}<button  class="btn btn-outline-danger btn-sm" name="do" value="stop" {{ confirm_two() }}>Stop</button>
         {% elif one.state != "checking" %}<button class="btn btn-primary btn-sm" name="do" value="continue">Continue</button>
         <button class="btn btn-outline-danger btn-sm" name="do" value="discard">Discard</button>{% endif %}
       </form>

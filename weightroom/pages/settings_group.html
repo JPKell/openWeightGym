@@ -5,7 +5,8 @@
 <div class="settings-page">
 {{ page_header(settings_title) }}
 {{ said_box(said, failed) }}
-{% with settings_readonly=false %}{% include 'settings_sections.html' %}{% endwith %}
+{% if settings_section == 'downloads' %}{% include 'settings_downloads.html' %}{% endif %}
+{% with settings_readonly=false, settings_empty=settings_section != 'downloads' %}{% include 'settings_sections.html' %}{% endwith %}
 {% if node_settings or unavailable_nodes %}{{ settings_node_summary(node_settings, unavailable_nodes) }}{% endif %}
 {% if settings_section == 'alerts' %}{% from 'notification_parts.html' import credentials, tests, delivery_table %}
 {{ credentials(notification_credentials, notification_key_status, '/settings/alerts') }}

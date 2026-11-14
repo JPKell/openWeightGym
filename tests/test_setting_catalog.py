@@ -228,15 +228,26 @@ def test_every_live_setting_changes_through_its_service_getter_without_restart(e
     set_nested(original, entry.name, base)
     path.write_text(written(original))
     if entry.kind == 'secret':
-        from weightroom.notify import NotificationKeys
-        keys = NotificationKeys(tmp_path/'keys')
-        owner = 'test-owner' if entry.scope == 'account' else 'system'
-        assert keys.read(entry.name,owner) == base
-        keys.save(entry.name,changed,owner)
-        assert keys.read(entry.name,owner) == changed
-        assert changed not in str(keys.status(entry.name,owner))
-        keys.remove(entry.name,owner)
-        assert keys.read(entry.name,owner) == base
+        if entry.program == 'loadcoach':
+            from loadcoach.download_keys import DownloadKeys
+            from loadcoach.config import Config
+            keys = DownloadKeys(Config(data=str(tmp_path)))
+            assert keys.read(entry.name) == base
+            keys.save(entry.name,changed)
+            assert keys.read(entry.name) == changed
+            assert changed not in str(keys.status())
+            keys.remove(entry.name)
+            assert keys.read(entry.name) == base
+        else:
+            from weightroom.notify import NotificationKeys
+            keys = NotificationKeys(tmp_path/'keys')
+            owner = 'test-owner' if entry.scope == 'account' else 'system'
+            assert keys.read(entry.name,owner) == base
+            keys.save(entry.name,changed,owner)
+            assert keys.read(entry.name,owner) == changed
+            assert changed not in str(keys.status(entry.name,owner))
+            keys.remove(entry.name,owner)
+            assert keys.read(entry.name,owner) == base
     elif entry.scope == 'account':
         from loadcoach.users import Users
         users = Users(':memory:',{})

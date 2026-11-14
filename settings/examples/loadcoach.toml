@@ -90,7 +90,11 @@ llama_server = "/home/you/.local/bin/llama-server"
 #   install -m 600 /dev/null keys/huggingface.token
 # and paste the token into that file. It is read each time it is needed, so no restart.
 # This line goes above [places], or it would be read as a place.
+# Path stays file-only. Settings → Downloads can set/replace/remove this token without showing it.
+# With no path, the node uses keys/huggingface.token beside its existing machine key.
 # hub_token_file = "../keys/huggingface.token"
+# Optional Civitai path; an unset path uses keys/civitai.token in the same keys folder.
+# civitai_token_file = "../keys/civitai.token"
 
 # NVIDIA, AMD and Intel cards are detected from PCI hardware and driver metadata, even
 # without llama.cpp. Disable cards or assign them to engines under System → Compute nodes.
@@ -104,4 +108,9 @@ llama_server = "/home/you/.local/bin/llama-server"
 # executable = "/home/you/.local/bin/llama-server"
 #
 # Only llama_cpp is implemented in Phase A. Strata must pass the later gate before use.
+
+# Live per-node transfer concurrency, shared by Hugging Face and Civitai.
+# 0 preserves unlimited transfers. A lower limit lets active transfers finish;
+# queued transfers recheck changes without a restart. Range: 0–32.
+downloads_at_once = 0
 

@@ -1,12 +1,7 @@
 {# Shared system/personal delivery controls; credentials never return as form values. #}
-{% from 'parts.html' import card, credential_input, confirm_two, empty_row %}
+{% from 'parts.html' import card, credential_forms, empty_row %}
 {% macro credentials(entries, status, base, program='weightroom') %}
-{% call card('Notification credentials', open=false, key=program ~ ':notification-credentials') %}
-<p class="small text-secondary">Saved credentials are never shown. Leave a field blank to keep its current value.</p>
-{% for entry in entries %}<form method="post" action="{{ base }}/credentials/{{ entry.name }}" class="row g-3 mb-3" data-hold-refresh data-setting-search="{{ entry.label }} {{ entry.name }}" data-setting-changed="{{ 'true' if status[entry.name].saved else 'false' }}" data-setting-refused="{{ 'true' if status[entry.name].refused else 'false' }}">
-<div class="col-md-8">{{ credential_input('credential-' ~ program ~ '-' ~ entry.name,'credential',entry.label,status[entry.name]) }} <span class="badge bg-green-lt">{{ {'now':'Live','restart':'Needs restart','file':'File only'}[entry.tier] }}</span></div>
-<div class="col-md-4 d-flex flex-wrap align-items-end gap-2"><button class="btn btn-primary" name="operation" value="save">Save credential</button>{% if status[entry.name].saved %}<button class="btn btn-outline-danger" name="operation" value="remove" {{ confirm_two('Remove this saved credential?') }}>Remove…</button>{% endif %}</div>
-</form>{% endfor %}{% endcall %}
+{{ credential_forms(entries, status, base ~ '/credentials', program, 'Notification credentials', key=program ~ ':notification-credentials') }}
 {% endmacro %}
 {% macro tests(base, personal=false) %}
 <div class="d-flex flex-wrap gap-2">{% for channel,label in [('webhook','webhook'),('ntfy','ntfy'),('email','email')] if not personal or channel != 'webhook' %}<form method="post" action="{{ base }}/test/{{ channel }}"><button class="btn btn-outline-primary btn-sm">Send test {{ label }}</button></form>{% endfor %}</div>

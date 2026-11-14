@@ -13,6 +13,7 @@ Nothing here knows of users, places or the log. That is in app.py.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import copy
 import hashlib
 import re
@@ -28,6 +29,33 @@ REPOSITORY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*"
 PART_OF = re.compile(r"-\d{5}-of-(\d{5})\.gguf$")  # how llama.cpp names the parts of a model that is split over several files
 PIECE = 2**20  # how much is written at a time, and so how often the progress moves on
 CLASSIFIER_PAGES = {}
+
+
+class DownloadSlots:
+    """A live node-wide transfer cap; running transfers survive a lower limit."""
+    def __init__(self, limit):
+        self.limit = limit
+        self.active = 0
+        self.condition = asyncio.Condition()
+
+    @asynccontextmanager
+    async def slot(self, progress):
+        """Wait for a slot and reread changed policy without rebuilding workers."""
+        async with self.condition:
+            while (maximum := self.limit()) and self.active >= maximum:
+                progress['state'] = 'queued'
+                try:
+                    await asyncio.wait_for(self.condition.wait(), .25)
+                except TimeoutError:
+                    pass
+            self.active += 1
+            progress['state'] = 'coming'
+        try:
+            yield
+        finally:
+            async with self.condition:
+                self.active -= 1
+                self.condition.notify_all()
 
 
 async def classifier_search_page(http, words, token, cursor, sort, direction):

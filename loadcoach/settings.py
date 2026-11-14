@@ -119,7 +119,7 @@ def set_nested(values, name, value):
 
 def laid_over(told: dict, changed: dict, program: str) -> dict:
     """What a file says, with what was changed on the site laid over it. A change to a setting that may not be changed is left out."""
-    selected={name:value for name,value in changed.items() if name in changeable_for(program, told)}
+    selected={name:value for name,value in changed.items() if name in changeable_for(program, told) and not ((entry := catalog_entry(program, name)) and entry.kind == "secret")}
     table={'loadcoach':'engines','voice':'profiles'}.get(program)
     if table and isinstance(selected.get(table),dict) and isinstance(told.get(table),dict):
         # A new optional engine or voice profile in the file must not be hidden by an older
@@ -298,7 +298,9 @@ class Changes:
 
     def of(self, program: str) -> dict:
         """What was changed for one program: name and value."""
-        return {name: json.loads(value) for name, value in self.db.execute("SELECT name, value FROM settings_changed WHERE program = ?", (program_name(program),))}
+        program = program_name(program)
+        return {name: json.loads(value) for name, value in self.db.execute("SELECT name, value FROM settings_changed WHERE program = ?", (program,))
+                if not ((entry := catalog_entry(program, name)) and entry.kind == "secret")}
 
     def put(self, program: str, name: str, value, by: str) -> None:
         """Persist a validated program setting override and its changing account."""
@@ -318,7 +320,9 @@ class Changes:
     def listing(self) -> list[tuple]:
         """Every change there is: program, name, value, who made it and when."""
         rows = self.db.execute("SELECT program, name, value, by, at FROM settings_changed ORDER BY program, name")
-        return [(program, name, json.loads(value), by, datetime.fromtimestamp(at).isoformat(timespec="seconds")) for program, name, value, by, at in rows]
+        return [(program, name, redacted(json.loads(value), name), by, datetime.fromtimestamp(at).isoformat(timespec="seconds"))
+                for program, name, value, by, at in rows
+                if not ((entry := catalog_entry(program, name)) and entry.kind == "secret")]
 
     def seen(self, program: str, told: dict, refused: dict | None = None, *, started=None) -> None:
         """Keep what a program says it runs with, in place of what it said before."""
@@ -392,7 +396,7 @@ def taken(program: str, settings, changed: dict, made):
         wanted = made(Path(settings.path), laid_over(settings.file, changed, program))
     except SystemExit as why:
         return settings, {name: str(why) for name in changed}
-    return replace(settings, **{name: getattr(wanted, name) for name, when in CHANGEABLE[program].items() if when == NOW}), {}
+    return replace(settings, **{name: getattr(wanted, name) for name, when in CHANGEABLE[program].items() if when == NOW and hasattr(wanted, name) and hasattr(settings, name)}), {}
 
 
 async def follow(program: str, ask, copy: Path, take, every: float = 10, *, started=None) -> None:

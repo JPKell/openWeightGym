@@ -1238,6 +1238,20 @@ Older `[deploy]` settings are ignored and can be removed. The manual maintenance
 `scripts/deploy-front.sh` and `scripts/deploy.sh` remain available for developer updates and
 the one-time data moves `deploy.sh` performs.
 
+## Download credentials and concurrency
+
+`/settings/downloads` selects a node for its live transfer cap and write-only Hugging Face/Civitai
+credentials. Existing `hub_token_file` and `civitai_token_file` paths stay authoritative and file-only.
+Without a path, the node uses `huggingface.token` / `civitai.token` in its existing machine-key folder
+(or the installation's `keys` folder). Saving is atomic with mode 0600; blank keeps the current
+credential and Remove is explicit. Credentials never enter settings reports, history transfers or
+control node queues. Offline saves fail and leave node files unchanged; retry after reconnection.
+
+`downloads_at_once = 0` preserves unlimited transfers; 1–32 limits active file transfers on that
+node across both providers. Queued work rechecks the live limit; a decrease lets existing transfers
+finish. Queued transfers can be stopped and read the current provider credential when they start.
+The Downloads fragment retains polling, stop/resume/discard actions and native POST forms.
+
 ## Spending policy
 
 Allowances supports live advisory/warn/block policy and rolling-day/calendar-month accounting.

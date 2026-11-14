@@ -65,10 +65,11 @@ def local(package, root):
 class Packages:
     """The audio place's packages, and the downloads under way."""
 
-    def __init__(self, places, web, hub_token, log, manifest, files_in_use):
+    def __init__(self, places, web, hub_token, log, manifest, files_in_use, *, download_slots=None):
         """Keep the places, clients and the record of downloads under way."""
         self.places, self.web, self.hub_token, self.log, self.manifest = places, web, hub_token, log, manifest
         self.files_in_use = files_in_use  # every file a configured model uses, so it is never removed under one
+        self.download_slots = download_slots or hub.DownloadSlots(lambda: 0)
         self.progress = {}
         self.tasks = set()
 
@@ -135,15 +136,14 @@ class Packages:
         root = self.root()
         staging = root / (".staging-" + package["id"])
         try:
-            token = self.hub_token()
-            revision = (await hub.asked(self.web, f"/api/models/{package['repo']}/revision/main", token)).get("sha", "")
+            revision = (await hub.asked(self.web, f"/api/models/{package['repo']}/revision/main", self.hub_token())).get("sha", "")
             if not re.fullmatch(r"[0-9a-f]{40}", revision):
                 raise ValueError("Hugging Face did not name the repository's current revision.")
             folders = sorted({str(Path(remote).parent) for remote in package["files"]})
             listed = {}
             for folder in folders:
                 path = f"/api/models/{package['repo']}/tree/{revision}" + ("" if folder == "." else "/" + folder)
-                listed.update({one["path"]: one for one in await hub.asked(self.web, path, token, recursive="true") if one.get("type") == "file"})
+                listed.update({one["path"]: one for one in await hub.asked(self.web, path, self.hub_token(), recursive="true") if one.get("type") == "file"})
             entries = []
             for remote in package["files"]:
                 if remote not in listed:
@@ -167,7 +167,8 @@ class Packages:
                 base = progress["done"]
                 watcher = asyncio.create_task(self.follow(part, progress, base))
                 try:
-                    await hub.fetch(self.web, package["repo"], entry, target, token, part)
+                    async with self.download_slots.slot(part):
+                        await hub.fetch(self.web, package["repo"], entry, target, self.hub_token(), part)
                 finally:
                     watcher.cancel()
                 if not entry["sha256"] and entry["oid"] and await asyncio.to_thread(git_blob, target) != entry["oid"]:

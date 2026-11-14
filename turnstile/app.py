@@ -2839,6 +2839,27 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                   'by': pending['by'], 'at': pending['at']}
         return {**result, 'pending': bool(pending), 'pending_error': (pending or {}).get('error', '')}
 
+    async def machine_download_credentials(request: Request) -> Response:
+        """Write credentials only on their owning node; never cache or queue secret bodies."""
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, 'Missing or wrong API key.')
+        if not user.can('manage-settings'):
+            return error(403, 'Download credentials require manage-settings.')
+        name = node(request.path_params['name'])
+        if name not in machines.names:
+            return error(404, 'That node is not configured.')
+        body = b''
+        if request.method == 'POST':
+            value = await accounts.read_json(request, {'kind', 'operation', 'credential'})
+            if isinstance(value, Response):
+                return value
+            body = json.dumps(value).encode()
+        answer = await ask_compute(user, request.method, '/loadcoach/download-credentials', body, machine=name, timeout=5)
+        if answer is None:
+            return off(name)
+        return Response(answer.content, answer.status_code, headers={'content-type': 'application/json', 'cache-control': 'private, no-store'})
+
     async def machine_settings(request: Request) -> Response:
         """Read or edit one host's LoadCoach, Spotter or Voice settings without waking it."""
         user = caller(key_of(request))
@@ -3468,6 +3489,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route('/turnstile/models/install/{number}/retry', retry_installation, methods=['POST']),
                             Route("/turnstile/models/location", model_location, methods=["POST"]),
                             Route("/turnstile/models/configure", configure_models, methods=["POST"]),
+                            Route("/turnstile/machines/{name}/download-credentials", machine_download_credentials, methods=["GET", "POST"]),
                             Route("/turnstile/machines/{name}/settings", machine_settings),
                             Route("/turnstile/machines/{name}/settings/{program}", machine_settings, methods=["POST"]),
                             Route("/turnstile/components", components_list),

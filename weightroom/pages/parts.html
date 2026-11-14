@@ -30,11 +30,20 @@
 
 {# Shared write-only credentials keep values empty in every rendered response. #}
 {% macro credential_state(credential={}) %}
-{% if credential.saved|default(false) %}<span class="badge bg-green-lt">Saved</span> <span class="small text-secondary">Last changed {{ credential.changed }}</span>{% else %}<span class="badge bg-orange-lt">Not saved</span>{% endif %}
+{% if credential.unavailable|default(false) %}<span class="badge bg-secondary-lt">Unavailable</span>{% elif credential.saved|default(false) %}<span class="badge bg-green-lt">Saved</span> <span class="small text-secondary">Last changed {{ credential.changed }}</span>{% else %}<span class="badge bg-orange-lt">Not saved</span>{% endif %}
 {% endmacro %}
 {% macro credential_input(id, name, label, status=none, maxlength=8192) %}
 <label for="{{ id }}" class="form-label">{{ label }}</label><input id="{{ id }}" name="{{ name }}" type="password" class="form-control" autocomplete="new-password" maxlength="{{ maxlength }}">{% if status is not none %}{{ credential_state(status) }}{% endif %}
 {% endmacro %}
+{% macro credential_forms(entries, status, base, program, title='Credentials', available=true, key='') %}
+{% call card(title, open=false, key=key or program ~ ':credentials') %}
+<p class="small text-secondary">Saved credentials are never shown. Leave a field blank to keep its current value.</p>
+{% for entry in entries %}<form method="post" action="{{ base }}/{{ entry.name }}" class="row g-3 mb-3" data-hold-refresh data-setting-search="{{ entry.label }} {{ entry.name }}" data-setting-changed="{{ 'true' if status[entry.name].saved else 'false' }}" data-setting-refused="{{ 'true' if status[entry.name].refused else 'false' }}">
+<fieldset class="row g-3 m-0 p-0 border-0" aria-label="{{ entry.label }} credentials"{{ ' disabled' if not available }}><div class="col-md-8">{{ credential_input('credential-' ~ program ~ '-' ~ entry.name, 'credential', entry.label, status[entry.name]) }} <span class="badge bg-green-lt">{{ {'now':'Live','restart':'Needs restart','file':'File only'}[entry.tier] }}</span></div>
+<div class="col-md-4 d-flex flex-wrap align-items-end gap-2"><button class="btn btn-primary" name="operation" value="save">Save credential</button>{% if status[entry.name].saved %}<button class="btn btn-outline-danger" name="operation" value="remove" {{ confirm_two('Remove this saved credential?') }}>Remove…</button>{% endif %}</div></fieldset>
+</form>{% endfor %}{% endcall %}
+{% endmacro %}
+
 
 {# What the last action said. It stays under the top bar and is removed after 7 seconds by static/pieces.js. #}
 {% macro said_box(said, failed=false, warning=false) %}

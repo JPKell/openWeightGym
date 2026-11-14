@@ -77,6 +77,8 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Downloads preserve today’s unlimited concurrency with `downloads_at_once = 0` (range 0–32). The limit covers individual Hugging Face/Civitai transfers per node and preserves active transfers when lowered. Credentials honor configured paths or use the node’s existing keys folder, are never queued on the control node, and are read again when a queued transfer begins. Legacy secret override rows are ignored without deletion; write-only forms remain their only management route.
+
 - Allowance modes govern the recorded user/key/group allowance records; existing hosted service and per-user group spending ceilings remain enforced. Calendar months use the control node time zone. Rolling policy reports when the next recorded charge leaves the window. Warn headers describe every applicable allowance. Advisory mode preserves the existing 80% personal notice; warn/block use the configured allowance threshold (0 disables those notices).
 
 - Content limit ceilings are catalogue metadata: 32 chat files, 64 MiB each / 256 MiB total, 4,096 KiB text, 32 MiB documents / 1,000 pages, 100 collections / 1,000 documents / 50,000 chunks / 10,000 chunks per source, 16,384-byte chunks / 8,192-byte overlap, 32 MiB extraction, 256 MiB audio, 128 Mi pixels and 1,000,000 Responses / 8,192 MiB. Superuser group overrides are exempt; parsing CPU/memory limits and context-dependent chunk width/overlap remain in force. Binary image pixels preserve the previous 33,554,432-pixel default. Lower limits affect new work and preserve stored content.
@@ -465,7 +467,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 3.3 Notifications, personal channels and thresholds; 624 catalogue/service checks, all 39 UI cases and the separate PostgreSQL delivery contract pass.
 - [x] 3.4 Global limits and per-group overrides; 728 catalogue/feature checks, 85 UI/browser checks (all 39 consistency cases) and PostgreSQL policy/storage pass.
 - [x] 3.5 Spending policy; 649 catalogue/service checks, 97 UI/browser checks (all 39 consistency cases) and two serial PostgreSQL contracts pass.
-- [ ] 3.6 Download credentials and concurrency.
+- [x] 3.6 Download credentials and concurrency; 707 catalogue/feature checks, 107 UI/browser checks (all 39 consistency cases) and PostgreSQL secret-row preservation pass.
 - [ ] 3.7 Chat retention and scheduled backups.
 - [ ] 3.8 Display and defaults.
 - [ ] 3.9 Remote MCP servers; Phase 3 deployed and verified.

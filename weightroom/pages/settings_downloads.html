@@ -1,0 +1,8 @@
+{% from 'parts.html' import card, alert, credential_forms %}
+{% call card('Download node', id='settings-download-node') %}
+<form method="get" action="/settings/downloads" class="d-flex flex-wrap align-items-end gap-2">
+<div class="flex-grow-1"><label for="download-machine" class="form-label">Node</label><select id="download-machine" name="machine" class="form-select"{{ ' disabled' if not download_choices }}>{% for node in download_choices %}<option value="{{ node.name }}"{{ ' selected' if selected_machine == node.name }}>{{ node.name|node_label }}</option>{% endfor %}</select></div><button class="btn btn-outline-primary"{{ ' disabled' if not download_choices }}>Choose node</button>
+</form><p class="small text-secondary mt-3 mb-0">Provider credentials stay on this node and are read for each operation. Configured token-file paths stay in its machine file. <a href="/settings">Platform services</a> controls whether model downloads are enabled.</p>
+{% endcall %}
+{% if download_problem %}{% call alert('warning') %}{{ download_problem }}{% endcall %}{% endif %}
+{{ credential_forms(download_credentials, download_status, '/settings/downloads/' ~ selected_machine|urlencode ~ '/credentials', 'loadcoach', 'Download credentials', available=download_available) }}

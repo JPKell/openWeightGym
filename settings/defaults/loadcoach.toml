@@ -105,6 +105,11 @@ unlogged = false
 # by keeping it at 8 bits a number, not 16. The effect on answers is usually too small to
 # notice. A model that should keep full precision sets cache-type-k and cache-type-v to "f16".
 # "q4_0" halves it again, to 28 %, at a cost that can be noticed.
+# Live per-node transfer concurrency, shared by Hugging Face and Civitai.
+# 0 preserves unlimited transfers. A lower limit lets active transfers finish;
+# queued transfers recheck changes without a restart. Range: 0–32.
+downloads_at_once = 0
+
 [model_defaults]
 cache-type-k = "q8_0"
 cache-type-v = "q8_0"

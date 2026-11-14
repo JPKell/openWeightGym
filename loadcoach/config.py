@@ -40,6 +40,7 @@ class Config:
     places: dict[str, str] = field(default_factory=dict)
     models_folder: str = ""  # optional active-cache root; its llm, adapters, projectors, image and audio folders replace [places]
     models_storage_folder: str = ""  # optional complete library root; empty leaves this tier disabled
+    downloads_at_once: int = default_for("loadcoach", "downloads_at_once")
     hub_token_file: str = ""  # the file that holds the token of an account at Hugging Face, for repositories not open to all. Empty for none
     civitai_token_file: str = ""  # optional private Civitai download token; server-side file, never browser content
     gpus: tuple[str, ...] = ()  # the node's physical GPU inventory; independent of engine installation

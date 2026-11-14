@@ -50,6 +50,8 @@ class Setting:
     ceiling: float | None = None
     default: object = None
     choice_labels: tuple = ()
+    credential_file: str = ""
+    credential_default: str = ""
 
     def check(self, value, *, context=None):
         """Return a valid value, or raise ValueError without echoing its contents."""
@@ -160,6 +162,8 @@ def validate_patch(program, current, patch, *, context=None):
             entry = get(program, name)
             if entry and (entry.kind == 'secret' or redacted(value, name) != value or '(not shown)' in str(value)):
                 raise ValueError(f'{name}: secrets require their write-only credential form.')
+        elif (entry := get(program, name)) and entry.kind == 'secret':
+            raise ValueError(f'{name}: secrets require their write-only credential form.')
     if program == 'turnstile' and {'models_folder', 'models_storage_folder'} & patch.keys():
         from turnstile.artifacts import checked_roots
         checked_roots({name: effective.get(name, '') for name in ('models_folder', 'models_storage_folder')})
@@ -308,7 +312,7 @@ _add('loadcoach', 'port', 'int', tier='file', scope='node', page='machine', sect
 _add('loadcoach', 'data', 'text', tier='file', scope='node', page='machine', section='Additional settings', label='Data', help='The folder LoadCoach keeps its database and the token for the `loadcoach` command in, counted from this file. Left out, they are kept beside this file.')
 _add('loadcoach', 'machine_key_file', 'text', tier='file', scope='node', page='machine', section='Additional settings', label='Machine key file', help="The key this machine shares with the control node, counted from this file. Turnstile signs what it sends on with it, and LoadCoach, the ToolLocker, spotter and voice believe nothing else about who is asking. Readable by you alone, and the same on both machines: python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > ../keys/machine.key && chmod 600 ../keys/machine.key Left out, nobody but this machine itself may ask, as anyone: only for a host of 127.0.0.1.")
 _add('loadcoach', 'machine_name', 'text', tier='file', scope='node', page='machine', section='Additional settings', label='Machine name', help='This instance\'s stable name in the control node\'s [machines.NAME] registry. The primary is "compute"; a second instance might be "rig". Give every instance its own key, data folder and port.')
-_add('loadcoach', 'front', 'text', tier='file', scope='node', page='machine', section='Additional settings', label='Front', help="Turnstile's address on the control node. Compute asks it for the accounts, for work done later in someone's name: a batch, a benchmark task, a recurring schedule, and for the reports.")
+_add('loadcoach', 'front', 'text', tier='file', scope='node', page='machine', section='Additional settings', label='Control node URL', help="Turnstile's address on the control node. Compute asks it for the accounts, for work done later in someone's name: a batch, a benchmark task, a recurring schedule, and for the reports.")
 _add('loadcoach', 'llama_server', 'text', tier='restart', scope='node', page='machine', section='Additional settings', label='Llama server', help="Compatibility path for llama.cpp. A service does not always have your shell's PATH. Prefer [engines.llama_cpp] below for new configuration; if both paths exist they must match.", deprecated=True)
 _add('loadcoach', 'models_folder', 'text', tier='restart', scope='node', page='general', section='Model files', label='Active model cache', control='text', help='Optional common model root. When set, LoadCoach uses its `llm`, `adapters`, `projectors`, `image` `audio` and `encoders` subfolders instead of [places]. It can be changed in Settings and takes effect after restart.', rule=_absolute)
 _add('loadcoach', 'models_storage_folder', 'text', tier='restart', scope='node', page='general', section='Model files', label='Model storage library', control='text', help="Optional complete model library, separate from the active cache above. Downloads prefer its `llm`, `adapters`, `projectors`, `image`, `audio` and `encoders` folders. Empty keeps a new installation's storage disabled.", rule=_absolute)
@@ -715,3 +719,15 @@ _add('turnstile', 'allowance_period', 'choice', tier=NOW, scope='front', page='a
      label='Allowance period', choices=('rolling_24h', 'calendar_month'), default='rolling_24h',
      choice_labels=(('rolling_24h', 'Rolling 24 hours'), ('calendar_month', 'Calendar month')),
      help='Rolling 24 hours, or a calendar month in the control node time zone. Applies immediately to the same retained cost records. Short event retention may understate spending.')
+
+
+_add('loadcoach', 'downloads_at_once', 'int', tier=NOW, scope='node', page='downloads', section='Downloads',
+     label='Downloads at once', control='number', min=0, max=32, default=0,
+     help='Maximum active file transfers on this node, shared by Hugging Face and Civitai. Zero preserves unlimited transfers. Lowering the limit lets active transfers finish; queued transfers read the current limit.')
+for name, label, source, filename in (
+    ('hub_token', 'Hugging Face token', 'hub_token_file', 'huggingface.token'),
+    ('civitai_token', 'Civitai token', 'civitai_token_file', 'civitai.token'),
+):
+    _add('loadcoach', name, 'secret', tier=NOW, scope='node', page='downloads', section='Download credentials',
+         label=label, default='', rule=_bearer_secret, credential_file=source, credential_default=filename,
+         help='Write-only on the selected node. Blank keeps the current credential; explicit removal clears it. Read again for each provider operation.')

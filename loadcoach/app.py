@@ -215,12 +215,15 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     # {"repository", "file", "place", "state": coming, checking or failed, "done": bytes so far, "of": bytes in all}.
     # One that is still coming also has its "task".
     fetching: dict[str, dict] = {}
+    download_slots = hub.DownloadSlots(lambda: config.downloads_at_once)
+    from loadcoach.download_keys import DownloadKeys
+    download_keys = DownloadKeys(config)
     # A minute with nothing arriving ends a download, which can then be continued. There is no limit on the whole of it.
     web = web or httpx.AsyncClient(timeout=httpx.Timeout(60, connect=10), follow_redirects=True)
     # Every request that has been let in and has not ended, by the id of its `asked` log entry.
     changes = Changes(core)  # what was changed in any program's settings from the site
     if not config.file:  # built with no file, as a test does: what it was built with stands for the file's
-        config.file = {name: list(config.gpus) if name == "gpus" else getattr(config, name) for name in CHANGEABLE["loadcoach"]}
+        config.file = {name: list(config.gpus) if name == "gpus" else getattr(config, name) for name in CHANGEABLE["loadcoach"] if hasattr(config, name)}
     under_way: dict[int, Underway] = {}
     unlogged_under_way: dict[str, Underway] = {}
     # What this llama-server says its flags are, read from its own help once and kept for as
@@ -1778,20 +1781,35 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     # any other, and is added as a model in the usual way.
 
     def hub_token() -> str:
-        """The token of an account at Hugging Face. Read each time it is needed, so a new one needs no restart. Empty if there is none."""
-        try:
-            return Path(config.hub_token_file).read_text().strip() if config.hub_token_file else ""
-        except OSError:
-            return ""
+        """Read the node's current Hugging Face credential for each provider operation."""
+        return download_keys.read('hub_token')
 
     def download_token(repository=''):
-        """Keep provider credentials separate and read private token files only on server."""
-        if not repository.startswith('civitai/'):
-            return hub_token()
-        try:
-            return Path(config.civitai_token_file).read_text().strip() if config.civitai_token_file else ''
-        except OSError:
-            return ''
+        """Keep provider credentials separate and read them again when a queued transfer starts."""
+        return download_keys.read('civitai_token' if repository.startswith('civitai/') else 'hub_token')
+
+    async def download_credentials(request: Request, user: User) -> Response:
+        """Read presence metadata or update one write-only credential on its owning node."""
+        if denied := lacks(user, 'manage-settings'):
+            return denied
+        if request.method == 'POST':
+            body = await read_json(request, {'kind', 'operation', 'credential'})
+            if isinstance(body, Response):
+                return body
+            kind, operation = body.get('kind', ''), body.get('operation', '')
+            try:
+                if operation == 'save':
+                    download_keys.save(kind, body.get('credential', ''))
+                elif operation == 'remove':
+                    download_keys.remove(kind)
+                else:
+                    raise ValueError('Choose Save or Remove.')
+            except ValueError as problem:
+                return error(400, str(problem))
+            except OSError:
+                return error(503, 'The credential file could not be updated on this node.')
+            log.add('settings', 'credential-changed', user.name, address(request), program='loadcoach', name=kind, operation=operation)
+        return JSONResponse({'credentials': download_keys.status()}, headers={'cache-control': 'private, no-store'})
 
     async def hub_look(request: Request, user: User) -> Response:
         """With `?search=WORDS`, the repositories at Hugging Face that match. With `?repository=OWNER/NAME`, the model files of that one.
@@ -1922,7 +1940,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """Bring one file down, and note in the log how it ended."""
         progress, began = fetching[str(target)], time.monotonic()
         try:
-            await hub.fetch(web, repository, entry, target, download_token(repository), progress)
+            async with download_slots.slot(progress):
+                await hub.fetch(web, repository, entry, target, download_token(repository), progress)
             if entry["sha256"]:  # it was just checked against this, so it need not be worked out again
                 library.keep_hash(str(target), entry["sha256"], target.stat().st_size, target.stat().st_mtime)
             log.add("file", "downloaded", by, caller, path=str(target), repository=repository, size=entry["size"], seconds=round(time.monotonic() - began, 1))
@@ -2638,8 +2657,10 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     def report() -> None:
         """Keep what LoadCoach itself runs with, so that the page can show it: by the names its file uses."""
-        simple = ("host", "port", "engines", "llama_server", "load_timeout", "max_wait", "card_margin", "model_idle_minutes", "host_ram_headroom_mib", "host_ram_limit_mib", "cpu_idle_minutes", "disable_ram_offload", "models_folder", "models_storage_folder", "keep_days", "keep_text", "unlogged", "database", "places", "model_defaults", "disabled_gpus", "engine_gpus")
-        running = {**config.file, **{name: getattr(config, name) for name in simple}, "gpus": list(config.gpus)}
+        from loadcoach.setting_catalog import entries as setting_entries
+        running = {**config.file, **{entry.name: getattr(config, entry.name)
+                    for entry in setting_entries('loadcoach') if hasattr(config, entry.name)},
+                   'database': config.database, 'gpus': list(config.gpus)}
         from loadcoach.settings import dataclass_defaults
         reported = said(running, config.file, config.says, 'loadcoach', path=config.path, defaults=dataclass_defaults(config))
         for name, row in reported.items():
@@ -3139,7 +3160,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
 
     from soundroom.packages import Packages as AudioPackages, routes as audio_package_routes
     audio_packages = AudioPackages(places, web, hub_token, log, lambda: getattr(config, "engines", {}).get("audiocpp", {}).get("manifest", ""),
-                                   lambda: set(model_files()))
+                                   lambda: set(model_files()), download_slots=download_slots)
 
     app = Starlette(
         lifespan=lifespan,
@@ -3214,6 +3235,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             route("/loadcoach/files/cleanup", files_cleanup, "POST"),
             route("/loadcoach/hub", hub_look),
             *audio_package_routes(route, lacks, read_json, error, audio_packages, address),
+            route("/loadcoach/download-credentials", download_credentials),
+            route("/loadcoach/download-credentials", download_credentials, "POST"),
             route("/loadcoach/downloads", download_list),
             route("/loadcoach/downloads", download_start, "POST"),
             route("/loadcoach/downloads/stop", download_stop, "POST"),
@@ -3228,6 +3251,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         ],
     )
     app.state.databases = databases
+    app.state.download_slots = download_slots
     app.add_middleware(Barrier, gate=gate)
     app.add_middleware(Statements, key_file=config.machine_key_file)  # who each caller is, as turnstile signed it
     from loadcoach.rerank import RerankAlias

@@ -3537,20 +3537,28 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if section != 'general':
             nodes = await ask('GET', '/turnstile/machines', person.key)
             summaries = []
+            node_programs = {}
             unavailable = []
             choices = nodes.json().get('machines', []) if nodes.is_success else []
             responses = await asyncio.gather(*(ask('GET', '/turnstile/machines/' + quote(machine['name'], safe='') + '/settings', person.key) for machine in choices))
             for machine, response in zip(choices, responses):
                 if response.is_success:
                     body = response.json()
+                    node_programs[machine['name']] = body.get('programs', [])
                     summaries.extend(settings_views.node_rows(machine['name'], body.get('programs', []), section))
                     if body.get('unavailable'): unavailable.append(machine['name'])
                 else:
                     unavailable.append(machine['name'])
+            download_context, selected = {}, ''
+            if section == 'downloads':
+                from weightroom.download_views import context as download_context_for
+                selected = (typed_in or {}).get('machine') or request.query_params.get('machine') or (choices[0]['name'] if choices else '')
+                download_context = await download_context_for(ask, person, choices, selected, getattr(request.state, 'download_refused', ''))
+                found['programs'] = settings_views.filtered(node_programs.get(selected, []), 'downloads')
             return page(request, 'settings_group.html', person, status=400 if failed else 200,
                         settings_title=settings_views.PAGES[section][0], settings_section=section,
                         settings_return_to=settings_views.PAGES[section][1], programs=found['programs'],
-                        node_settings=summaries, unavailable_nodes=unavailable,
+                        node_settings=summaries, unavailable_nodes=unavailable, selected_machine=selected, **download_context,
                         security_programs=security_programs,
                         proxy_warning=not settings.trusted_proxies and found.get('security_status',{}).get('proxy_warning',False),
                         said=said or request.query_params.get('said', ''), failed=failed,
@@ -3968,6 +3976,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             elif settings_return.startswith('/settings/'):
                 async def render_settings(request, person, *args, **kwargs):
                     return await settings_page(request, person, *args, settings_section=settings_return.rsplit('/', 1)[-1], **kwargs)
+        if settings_return == '/settings/downloads' and program == 'loadcoach' and selected_machine:
+            destination = '/settings/downloads'
+            async def render_settings(request, person, *args, **kwargs):
+                return await settings_page(request, person, *args, settings_section='downloads', **kwargs)
         destination_query = "machine=" + quote(selected_machine or first_node(person), safe="") + "&" if node_return else ""
         found = await fetch(request, person, settings_path)
         if isinstance(found, Response):
@@ -5819,6 +5831,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     from soundroom.ui import routes as audio_routes
     from weightroom.response_views import routes as response_routes
     from weightroom.extraction_views import routes as extraction_routes
+    from weightroom.download_views import routes as download_routes
+    async def render_downloads(request, person, *args, **kwargs):
+        return await settings_page(request, person, *args, settings_section="downloads", **kwargs)
     from weightroom.classifier_views import routes as classifier_routes
 
     app = Starlette(
@@ -5828,6 +5843,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             *image_routes(for_people, page, ask, model_api),
             *audio_routes(for_people, page, ask, model_api, lambda: settings, platform, refresh_settings=in_step, content_limits=content_limits),
             *extraction_routes(for_people, page, ask, content_limits),
+            *download_routes(for_people, typed, go, ask, render_downloads),
             *response_routes(for_people, page, response_store),
             *classifier_routes(for_people, page, ask, platform),
             *account_routes(for_people, page, ask, typed, go, platform, conversations.state.workflows,
