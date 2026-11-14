@@ -1,9 +1,9 @@
 /* Shared live Speech inputs and proposal layouts; active palette supplies every colour. */
-.sp-grid { display:grid; grid-template-columns:minmax(0,1fr) 330px; grid-template-areas:'editor controls' 'action controls' 'output output' 'library library'; gap:1.1rem; align-items:start; }
+.sp-grid { display:grid; grid-template-columns:minmax(0,1fr) 330px; grid-template-areas:'editor controls' 'output output' 'library library'; gap:1.1rem; align-items:start; }
 .sp-editor-area { grid-area:editor; min-width:0; }
 .sp-controls-area { grid-area:controls; min-width:0; }
 .sp-cast-area { display:none; grid-area:cast; min-width:0; }
-.sp-action-area { grid-area:action; display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:1rem; min-width:0; padding:.2rem 0; }
+.sp-action-area { display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:1rem; min-width:0; padding:.2rem 0; }
 .sp-script-tools { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem; padding:.85rem 1.25rem; }
 .sp-script-tools .sp-overline { color:var(--theme-accent); font-size:.58rem; }
 .sp-script-tools select { width:auto; max-width:145px; }
@@ -37,7 +37,7 @@
 .sp-speaker > .min-w-0 { flex:1; }
 .sp-speaker strong { display:block; font-size:.75rem; margin-bottom:.4rem; }
 .sp-speaker-initial { display:grid; place-items:center; height:28px; width:28px; border-radius:50%; background:var(--theme-accent-bg); color:var(--theme-accent); font-size:.65rem; flex:none; }
-[data-layout=script] .sp-grid { grid-template-columns:300px minmax(0,1fr) 300px; grid-template-areas:'cast editor controls' 'cast action controls' 'output output controls' 'library library library'; }
+[data-layout=script] .sp-grid { grid-template-columns:300px minmax(0,1fr) 300px; grid-template-areas:'cast editor controls' 'output output controls' 'library library library'; }
 [data-layout=script] .sp-cast-area { display:block; }
 [data-layout=script] .sp-script-input { min-height:330px; font-family:var(--bs-font-monospace); font-size:.94rem; line-height:2; }
 [data-layout=script] .sp-script-tools > .sp-overline { display:none; }
@@ -51,12 +51,12 @@
 .sp-script-tools > .sp-overline { display:none; }
 }
 @media(max-width:950px) {
-[data-layout=script] .sp-grid { grid-template-columns:minmax(0,1fr) 300px; grid-template-areas:'cast controls' 'editor controls' 'action controls' 'output output' 'library library'; }
+[data-layout=script] .sp-grid { grid-template-columns:minmax(0,1fr) 300px; grid-template-areas:'cast controls' 'editor controls' 'output output' 'library library'; }
 [data-layout=script] #sr-speakers { grid-template-columns:repeat(2,minmax(0,1fr)); }
 [data-layout=script] .sp-cast .form-text { display:none; }
 }
 @media(max-width:700px) {
-.sp-grid, [data-layout=script] .sp-grid, [data-layout=listen] .sp-grid, [data-layout][data-dialogue=true] .sp-grid { grid-template-columns:minmax(0,1fr); grid-template-areas:'controls' 'cast' 'editor' 'action' 'output' 'library'; }
+.sp-grid, [data-layout=script] .sp-grid, [data-layout=listen] .sp-grid, [data-layout][data-dialogue=true] .sp-grid { grid-template-columns:minmax(0,1fr); grid-template-areas:'controls' 'cast' 'editor' 'output' 'library'; }
 [data-layout=script] .sp-cast-area { display:block; }
 .sp-script-input.form-control { font-size:1.1rem; padding:1rem; min-height:240px; }
 [data-layout=script] .sp-script-input { font-size:.86rem; }
@@ -80,11 +80,11 @@
 .speech-live .sp-action-area > .d-flex { justify-content:flex-end; }
 .speech-live #sr-availability:empty { display:none; }
 @container (max-width:1000px) {
-  .speech-live .sp-grid { grid-template-columns:minmax(0,1fr) 280px; grid-template-areas:'cast controls' 'editor controls' 'action controls' 'output output'; }
+  .speech-live .sp-grid { grid-template-columns:minmax(0,1fr) 280px; grid-template-areas:'cast controls' 'editor controls' 'output output'; }
   .speech-live #sr-speakers { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @container (max-width:650px) {
-  .speech-live .sp-grid { grid-template-columns:minmax(0,1fr); grid-template-areas:'controls' 'cast' 'editor' 'action' 'output'; }
+  .speech-live .sp-grid { grid-template-columns:minmax(0,1fr); grid-template-areas:'controls' 'cast' 'editor' 'output'; }
   .speech-live #sr-speakers { grid-template-columns:minmax(0,1fr); }
   .speech-live .sp-action-area > .d-flex, .speech-live #sr-generate { width:100%; }
 }

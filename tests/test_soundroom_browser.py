@@ -529,6 +529,9 @@ def test_script_room_heading_layout_and_empty_states(desk, tmp_path, width, appe
         page.emulate_media(color_scheme=appearance)
         page.goto('http://console.test/chat/speech')
         playwright.expect(page.locator('#sr-voice')).to_have_value('one')
+        playwright.expect(page.locator('.sp-script > .card-footer #sr-generate')).to_be_visible()
+        assert page.locator('#sr-generate').count() == 1
+        assert page.locator('#sr-generate').evaluate('button => button.form.id') == 'sr-form'
         assert page.locator('#soundroom').evaluate("root => root.children[0].matches('.page-header') && root.children[1].getAttribute('aria-label') === 'Voice generation modes'")
         playwright.expect(page.locator('h1')).to_have_text('Voice generation')
         assert not page.locator('.sp-review, .sp-intro, .eyebrow').count()
