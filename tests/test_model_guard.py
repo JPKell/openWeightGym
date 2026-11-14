@@ -41,7 +41,7 @@ def test_local_guard_rejects_wrong_incomplete_hosted_and_offload_before_sending(
         partial={**owner,'x-loadcoach-require-model-id':'one'}
         assert caller.post('/v1/chat/completions',headers=partial,json=body).status_code==400
         assert caller.post('/v1/chat/completions',headers={**headers,'x-loadcoach-offload':'cloud'},json=body).status_code==409
-        assert caller.post('/v1/chat/completions',headers=headers,json={**body,'model':'cloud'}).status_code==404  # outside models are front's: see test_hosted_front.py
+        assert caller.post('/v1/chat/completions',headers=headers,json={**body,'model':'cloud'}).status_code==404  # outside models are the control node's: see test_hosted_front.py
         assert len(native)==before
         assert caller.get('/loadcoach/status',headers=owner).json()['running']==[]
 

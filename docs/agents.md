@@ -34,7 +34,7 @@ Owner decisions D1–D7, recorded 2026-10-15/16, apply to the approved disposabl
 - Deployment/restarts are permitted for approved work. Before affected restarts or new model
   loads, verify no benchmark is queued/running; freeze submitted implementations and identities
   until drained. GPUs may run unattended. Use a reviewed immutable release with its dependencies.
-- Inspect deployer scope and every installed copy: front, workers, standalone adapters/tool hosts
+- Inspect deployer scope and every installed copy: control node, workers, standalone adapters/tool hosts
   and shared-checkout services can need separate updates. Report exactly what was activated.
 - Do not wake/suspend/reboot/power off hosts for qualification, change live DB engines, execute
   generated code or spend on new services without separate authorization. Controlled service
@@ -48,7 +48,7 @@ Owner decisions D1–D7, recorded 2026-10-15/16, apply to the approved disposabl
 
 ## Design constraints
 
-- **Ownership:** front owns identity, roles/reliability, hosted calls and retained history;
+- **Ownership:** control node owns identity, roles/reliability, hosted calls and retained history;
   LoadCoach owns final worker admission and model lifecycle. Applications use the APIs.
 - **Authentication:** Turnstile validates current keys and sends request-bound, expiring signed
   statements; workers reject unsigned/replayed calls and prove their responses. Clock agreement
@@ -139,7 +139,7 @@ Installation/deployment interfaces must change with their contracts:
 - SoundRoom: [optional audio runtime installer](../scripts/install-audiocpp.sh), [implementation](../soundroom/install.py); audio engine, packages, storage and UI live in the root `soundroom/` package ([plan](soundroom-plan.md)).
 - [Remote tool installer](../scripts/install-tool-host.sh), [tests](../tests/test_tool_host_installer.py).
 - Model file placement: [implementation](../turnstile/model_install.py), [API/file checks](../tests/test_model_install.py), [browser checks](../tests/test_model_install_browser.py); contract in [Models](loadcoach.md#the-models-pages).
-- [Front deployer](../scripts/deploy-front.sh), [full deployer](../scripts/deploy.sh), [shim retirement](../scripts/prune-frontdesk.py).
+- [Control node deployer](../scripts/deploy-front.sh), [full deployer](../scripts/deploy.sh), [shim retirement](../scripts/prune-frontdesk.py).
 - [Plugin bundler](../plugins/_installer.py), [shipped installer README](../plugins/INSTALLER-README.md).
 - [Desktop packager](../scripts/package-voice-desktop.py), [macOS/Linux launcher](../desktop/Voice.command), [Windows launcher](../desktop/Voice.cmd), [requirements](../desktop/requirements.txt).
 - [Voice assets](../scripts/voice-models.py), `scripts/voice-*-check.py`, [engine updater](../scripts/update-llamacpp.sh), [observation qualification](../scripts/qualify-observability.py).

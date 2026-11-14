@@ -49,12 +49,12 @@
 <div class="small border-top pt-3"><strong>How cleanup works</strong><p class="text-secondary mt-1 mb-0">Preview eligible records before a cutoff, confirm the deletion, then reclaim disk separately. Accounts, settings and active work stay protected.</p></div>
 {% endcall %}
 {% call card('Recent operations', false, id='jobs-card', body_class='py-2') %}
-<ol class="list-unstyled small mb-0" id="jobs"><li class="py-2"><span class="badge bg-green-lt me-1">Verified backup</span> Front · 2 hours ago</li><li class="py-2 border-top text-secondary">No export or cleanup jobs in this demo yet.</li></ol>
+<ol class="list-unstyled small mb-0" id="jobs"><li class="py-2"><span class="badge bg-green-lt me-1">Verified backup</span> Control node · 2 hours ago</li><li class="py-2 border-top text-secondary">No export or cleanup jobs in this demo yet.</li></ol>
 {% endcall %}
 </aside>
 </div>
 {% call card('Diagnostics & migration', false, id='diagnostics', hint='Store bindings, tools and migration readiness stay available off the main inventory.') %}
-<p class="small">Engines belong to stores. Front plus all four compute nodes remain visible even when a node cannot answer. Multiple services using the same physical database count once.</p>
+<p class="small">Engines belong to stores. Control node plus all four compute nodes remain visible even when a node cannot answer. Multiple services using the same physical database count once.</p>
 <div class="table-responsive"><table class="table table-sm" aria-label="Dump tools by node"><thead><tr><th>Node</th><th>Engine in use</th><th>Dump method</th><th>Restore capability</th></tr></thead><tbody id="tools"></tbody></table></div>
 <p class="small text-secondary mb-0">Migration profiles and reports belong here. An export job is not a verified recovery set; multi-database exports have separate snapshot times unless writers are coordinated.</p>
 {% endcall %}

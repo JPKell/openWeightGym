@@ -1,7 +1,7 @@
-"""Benchmark task records, kept on the front for every node; a node receives only signed individual probes.
+"""Benchmark task records, kept on the control node for every node; a node receives only signed individual probes.
 
-The front creates every new task and schedule, on whichever node it names. Task and schedule
-IDs the front does not know are older records still held by a node, and keep their route there.
+The control node creates every new task and schedule, on whichever node it names. Task and schedule
+IDs the control node does not know are older records still held by a node, and keep their route there.
 """
 
 import asyncio
@@ -24,7 +24,7 @@ from loadcoach.schedule_time import validate, is_due, occurrence_ids
 
 
 DESTINATION_OFF = ("Choosing a node is turned off. Turn on 'Allow callers to choose the node' in Settings → General, "
-                   "or leave the node out and the front will pick one.")
+                   "or leave the node out and the control node will pick one.")
 
 
 def refusal(answer) -> str:
@@ -39,7 +39,7 @@ def refusal(answer) -> str:
 
 
 class TaskRecords:
-    """Scoped benchmark tasks the front keeps for every node, their dispatch and durable evidence publication."""
+    """Scoped benchmark tasks the control node keeps for every node, their dispatch and durable evidence publication."""
     body = Tasks.body
     public = staticmethod(Tasks.public)
 
@@ -175,7 +175,7 @@ class TaskRecords:
             metadata = body.get("metadata", {})
             if not isinstance(metadata, dict):
                 raise ValueError("Task metadata must be an object.")
-            # The submitting identity and definition version are frozen by front.
+            # The submitting identity and definition version are frozen by the control node.
             definition = next((one for one in self.evidence.definitions() if one["id"] == metadata.get("benchmark")), None)
             # The benchmark application supplies its run's current protocol version;
             # routing's last published definition can lag a just-deployed protocol.
@@ -227,7 +227,7 @@ class TaskRecords:
         return {'models': models, 'unavailable': [name for name in self.names if name not in found], 'environments': environments}
 
     async def schedule(self, request, user):
-        """Front authorizes calendar work before it creates a task or compute backup."""
+        """Control node authorizes calendar work before it creates a task or compute backup."""
         parts = request.url.path.split('/')
         identifier = parts[3] if len(parts) > 3 else None
         known = identifier and self.batches.db.execute('SELECT 1 FROM schedule_grants WHERE id=?', (identifier,)).fetchone()
@@ -384,7 +384,7 @@ class TaskRecords:
         return current
 
     async def interrupt(self, task):
-        """Cancel active front dispatch and interrupt its scoped compute probe."""
+        """Cancel active control node dispatch and interrupt its scoped compute probe."""
         work = self.working.get(task["id"])
         if work:
             work.cancel()
@@ -478,7 +478,7 @@ class TaskRecords:
             return error(400, str(problem))
 
     async def handle(self, request, user):
-        """Authenticate and dispatch the selected front-task operation."""
+        """Authenticate and dispatch the selected control node task operation."""
         path = request.url.path
         if path.startswith("/loadcoach/front-probes"):
             return error(404, "No public dispatch route.")

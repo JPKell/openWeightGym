@@ -1,4 +1,4 @@
-# Voice: a gateway on the front machine and a voice service on compute
+# Voice: a gateway on the control node and a voice service on compute
 
 **Specification with an implementation.** Version 1.5, 16 October 2026 (1.4 of 14 October; owner-revised timing targets below). The owner authorized
 all seven steps, deployment and generated-audio testing in the implementation session.
@@ -18,7 +18,7 @@ and V8 native Windows/macOS desktop execution/audio qualification complete. Thos
 removed from Progression. This records operator confirmation; no new device tests were run
 for the documentation update. The later H1/V7, H2 and V10 results are recorded below.
 
-**Milestone 76 (deployed 2026-10-14)** moved the accounts to the front
+**Milestone 76 (deployed 2026-10-14)** moved the accounts to the control node
 machine and had compute believe only what turnstile signs. For voice this means: the gateway asks
 the model for each turn of a direct conversation, through turnstile with the caller's own key; the
 voice service hands it what to ask (`model.request` on the sound socket) and speaks the words it
@@ -26,12 +26,12 @@ hands back (`agent.text.*`, as in Hermes mode). The voice service knows the call
 statement when the session is made, and the sound socket takes a token for that one session, never
 the caller's key. Its own holds, status and settings go to turnstile with its own key. Where the
 text below says direct mode keeps the conversation and the model's answer on compute, the
-conversation is still kept there; the request to the model is made from front.
+conversation is still kept there; the request to the model is made from the control node.
 
-Two programs. A **voice gateway** on the front machine takes private browser calls and Twilio
+Two programs. A **voice gateway** on the control node takes private browser calls and Twilio
 telephone calls. A **voice service** on compute turns speech into text and text into speech on
 the processor, and in one of its two modes also holds the conversation. Each session picks one
-conversation mode. `hermes` uses Hermes on the front machine for history, skills and tools, with
+conversation mode. `hermes` uses Hermes on the control node for history, skills and tools, with
 the model reached through `turnstile` and LoadCoach as today. `direct` keeps transcription,
 conversation history, the model's answer and synthesis on compute. Both modes are let in by
 LoadCoach, woken through `turnstile`, and use the same sound socket from gateway to compute.
@@ -47,7 +47,7 @@ it reuses the conversation and speech protocol below.
 
 **H2/G12 cleared by owner confirmation:** “I checked H2 it can be cleared.” This accepts
 the existing checklist for desktop download/install, voice previews, greeting regeneration
-and controlled compute-unavailable front-cache playback. The owner supplied no separate
+and controlled compute-unavailable control node cache playback. The owner supplied no separate
 per-check timing or device log; no additional test was run to record this acceptance.
 
 
@@ -55,14 +55,14 @@ Chat → Voice links to the configured private web app and provides the desktop 
 and setup. System → Voice requires
 `manage-settings` and shows service/profile readiness, active calls, Direct/Hermes/shared
 configuration, speaker previews, six editable greeting phrases and previews of the actual
-front recordings. The existing private HTTPS microphone page remains directly available.
+control node recordings. The existing private HTTPS microphone page remains directly available.
 
 The operator's existing session authorizes every private gateway control through turnstile;
 public Twilio and desktop listeners expose no admin routes. Observations and cached playback
 do not wake compute or warm models. Explicit CPU synthesis previews do not alter the selected
 speaker. `voice.greetings` uses fixed names and 1–300 characters per phrase, and participates
 in the existing settings store/reset flow. Speaker, bundle and text determine the recording
-revision. Regeneration replaces the whole front cache atomically, preserving it on failure;
+revision. Regeneration replaces the whole control node cache atomically, preserving it on failure;
 the UI waits for Voice to report saved changes before regenerating. Matching pages are deployed;
 the owner acceptance above closes their remaining H2 qualification.
 
@@ -94,7 +94,7 @@ targets.
 
 Build a common voice backend for browser and telephone sessions, with immediate prerecorded
 greetings, truthful startup status, interruption handling, and concurrent calls. Keep the
-always-on front machine lightweight. Reuse the suite's accounts, keys, wake rule, usage
+always-on the control node lightweight. Reuse the suite's accounts, keys, wake rule, usage
 accounting and line.
 
 The two programs are deployed independently. LoadCoach, `turnstile` and `spotter` each need one
@@ -103,7 +103,7 @@ LoadCoach, turnstile and Spotter even though they are not speech programs.
 
 Assumptions for the first release:
 
-- Compute and the front machine have reliable wired networking.
+- Compute and the control node have reliable wired networking.
 - Browser clients join Tailscale and reach the gateway over HTTPS.
 - Twilio reaches the gateway through the existing VPS. Its public WebSocket endpoint is
   forwarded to the gateway.
@@ -124,11 +124,11 @@ restart of compute.
 
 ```mermaid
 flowchart TD
-    B["Private browser"] <-->|Sound| G["Voice gateway, front machine"]
+    B["Private browser"] <-->|Sound| G["Voice gateway, control node"]
     T["Twilio via VPS"] <-->|Sound| G
     G <-->|Sound and messages, direct| C["Voice service on compute: speech"]
-    G <-->|Hermes mode: text| H["Hermes, front machine"]
-    G -->|How ready, and wake| R["turnstile, front machine"]
+    G <-->|Hermes mode: text| H["Hermes, control node"]
+    G -->|How ready, and wake| R["turnstile, control node"]
     G -->|Sign-in, as an app| R
     H -->|Model requests| R
     R -->|Passes on, wakes| L["LoadCoach and the models on compute"]
@@ -139,7 +139,7 @@ flowchart TD
 | Part | Owns |
 |---|---|
 | Voice gateway | Callers' connections, the browser page, checking who a caller is, greetings, sound conversion, playback controls, the choice of mode, the bridge to Hermes, hanging up |
-| Hermes on the front machine | The agent loop, conversation and memory, skills, tools, a session for each caller, the words of the answer |
+| Hermes on the control node | The agent loop, conversation and memory, skills, tools, a session for each caller, the words of the answer |
 | Voice service | For each session: recognition, turn detection, phrase synthesis, cancelling speech, sound state, limits on its processor workers, and in direct mode the conversation and what to ask the model |
 | LoadCoach | The line, the lock, holding a model, the models, the log and usage |
 | `turnstile` | Accounts, abilities and session keys (milestone 76), checking every caller, passing requests on signed, waking compute, and saying how ready compute is |
@@ -165,14 +165,14 @@ sessions can each use either mode, at the same time.
 
 | Mode | Conversation owner | Route to the model | Gives |
 |---|---|---|---|
-| `hermes` | Hermes on the front machine | Hermes, `turnstile`, LoadCoach | Hermes's skills, memory and permitted tools |
+| `hermes` | Hermes on the control node | Hermes, `turnstile`, LoadCoach | Hermes's skills, memory and permitted tools |
 | `direct` | The direct adapter in the voice service | Voice service, LoadCoach on the same machine | History and answers on compute. No Hermes |
 
 Both modes use the same speech runtime and the same source adapters. LoadCoach is never
 replaced by a second, unmanaged model server.
 
 **Who may use voice** is an ability. Abilities whose names start `front-` are passed by
-LoadCoach to programs on the front machine untouched, so `front-voice` needs no change on
+LoadCoach to programs on the control node untouched, so `front-voice` needs no change on
 compute. It permits Direct and Hermes modes; ordinary model permissions still limit which
 model either mode may use.
 
@@ -211,7 +211,7 @@ Acceptance:
 - Browser and telephone sessions each use either allowed mode without a change of transport.
 - Direct speech, model and synthesis work while Hermes is stopped.
 - Direct model requests stay on compute, and appear in LoadCoach's log under the caller.
-- Hermes-mode tool use still runs through Hermes on the front machine.
+- Hermes-mode tool use still runs through Hermes on the control node.
 - A Hermes call and a direct call at once have separate histories and fair turns at the model.
 - A mode in the socket's first message that differs from the session's is refused.
 - A transcript or an answer is handled by exactly one conversation owner.
@@ -502,9 +502,9 @@ shared. Session state is never shared.
 A session has at most one assistant generation at a time, apart from a short overlap while an
 old one is being cancelled. Late output of the old one is thrown away by its turn number.
 
-## The Hermes bridge, on the front machine
+## The Hermes bridge, on the control node
 
-Hermes stays installed and running on the front machine. Its documentation offers a Python
+Hermes stays installed and running on the control node. Its documentation offers a Python
 library and an agent HTTP API [S9, S10]. Its model provider points at `turnstile`, as today [S11].
 Hermes handles text and tools there. The model itself runs on compute.
 
@@ -545,7 +545,7 @@ answer is acceptable where streaming of the final answer cannot be made safe, th
 delay. Do not claim words-to-speech streaming until it is shown end to end.
 
 The held model and the speech session cover the whole call, tool work included. Tools on the
-front machine do not use compute's speech. Moving the model off the front machine does not
+control node do not use compute's speech. Moving the model off the control node does not
 make browser automation or file scanning free there.
 
 Acceptance:
@@ -678,7 +678,7 @@ assistant thinks or speaks. One "speaking" state that turns the microphone off i
 4. The voice service gives the turn its number. In `hermes` mode the final transcript goes to
    the gateway's Hermes session. In `direct` mode it goes to the direct adapter.
 5. The conversation owner gets the model's output. Hermes runs its agent loop and tools on
-   the front machine. Direct mode asks LoadCoach under the caller's key.
+   the control node. Direct mode asks LoadCoach under the caller's key.
 6. The adapter gives only speakable text: no reasoning, no tool JSON, no drafts. Hermes's
    text arrives as `agent.text.delta`. Direct text goes into the same segmenter with no trip
    across the network.
@@ -724,7 +724,7 @@ A request that someone stopped from the first page ends as LoadCoach says, with
 
 ## Conversation adapters and the model
 
-The Hermes bridge on the front machine and the direct adapter in the voice service share the
+The Hermes bridge on the control node and the direct adapter in the voice service share the
 scheduling, the segmenter and the way of cancelling. Who owns the history is always plain.
 
 A voice profile holds: the system prompt, the name of a model at LoadCoach, a context budget,
@@ -899,7 +899,7 @@ the owner clarified that the instruction prefix had not been spoken. Owner repor
 slow. Exact OS release/client build and physical timing were not independently captured. System → Voice showed five desktop/direct turns on
 `qwen3.6-35b-a3b-q4`, revision `435eb3ff685a9ee6`: inferred receive-endpoint to first PCM
 p50 2844.3 ms / p95 4324.4 ms; recognition-final p50 1633.0 ms / p95 1855.0 ms;
-front first-PCM to playback-progress p50 41.6 ms / p95 43.2 ms. This small sample
+control node first-PCM to playback-progress p50 41.6 ms / p95 43.2 ms. This small sample
 was not separated into warm-only turns and does not qualify warm physical latency. No queue-clear
 measurement was displayed. At this initial review, repeated timing and V7 checks were still
 open with capacity one; the later owner acceptance and completed trial below supersede that state.
@@ -907,15 +907,15 @@ open with capacity one; the later owner acceptance and completed trial below sup
 Owner then reported correct model answers on three warm questions, with “hot” transcribed
 as “heart.” Eight accumulated desktop/direct turns under the same revision showed inferred
 receive-endpoint → first PCM p50 2559.6 ms / p95 4324.4 ms, endpoint → recognition final
-p50 1511.5 ms / p95 1855.0 ms, and front first-PCM → playback-progress p50 37.6 ms /
+p50 1511.5 ms / p95 1855.0 ms, and the control node first-PCM → playback-progress p50 37.6 ms /
 p95 1142.2 ms. These cumulative percentiles include the earlier five turns; they are not
 warm-only measurements. Recognition findings and timing samples are retained; later owner latency acceptance is recorded below.
 
 Phone browser initially displayed controls without sign-in but returned “Voice unavailable”
-on Start. Front's gateway configuration lacked `browser_key_file`; no speech session reached
+on Start. Control node's gateway configuration lacked `browser_key_file`; no speech session reached
 compute. Provisioned dedicated `voice-browser` account/group with only `front-voice`, `load`
 and `hold`, one request, no tools and only `qwen3.6-35b-a3b-q4`; temporary-key authentication
-passed and revocation returned 401. Final key is owner-private mode 0600 on front at
+passed and revocation returned 401. Final key is owner-private mode 0600 on the control node at
 `/home/jpk/weightroom/keys/voice-browser.key`, referenced by the gateway configuration.
 Gateway restarted with zero active/starting calls and idle benchmark queue, and is active.
 Owner then confirmed the phone's correct twenty-five answer, successful spoken interruption
@@ -932,7 +932,7 @@ access was denied; the owner performed the browser checks.
 
 ### V10 browser identity qualification — 2026-10-16
 
-**G13 closed.** The live front gateway listens on loopback `127.0.0.1:8446`; Tailscale Serve
+**G13 closed.** The live control node gateway listens on loopback `127.0.0.1:8446`; Tailscale Serve
 provides private HTTPS on port 443. Its `browser_key_file` is present, owned by the service
 user and mode 0600. The dedicated `voice-browser` account has `front-voice`, `load` and
 `hold` only; its group permits one model, no tools and one request at a time. Direct voice is
@@ -1006,7 +1006,7 @@ not a long-duration or population p95 guarantee. H2 operator pages are owner-acc
 
 ### Instrumentation and remaining acceptance
 
-Implemented locally **2026-10-15**; matching front/compute instrumentation was observed live
+Implemented locally **2026-10-15**; matching control node/compute instrumentation was observed live
 on **2026-10-16** during H1. The owner-accepted latency gate is closed; capacity/resource
 H1/V7 qualification is recorded below; V10 identity qualification is recorded above. System → Voice now shows numeric per-turn diagnostics and
 nearest-rank p50/p95 summaries. The private gateway status API supplies the last 200 turns
@@ -1028,7 +1028,7 @@ never monotonic timestamps. Controlled comparisons require unchanged configurati
 Gateway consumes those fields before forwarding events to clients. Existing PCM framing,
 backpressure and confirmed-playback history are unchanged.
 
-Front separately times first PCM received to first positive valid playback-progress report,
+Control node separately times first PCM received to first positive valid playback-progress report,
 and clear forwarding started to `playback.cleared`. The latter confirms only that a browser
 worklet or desktop application emptied its queue; hardware sound may already be scheduled.
 Both include network/processing delay. Native progress keeps its existing DAC scheduling;
@@ -1044,7 +1044,7 @@ finite, nonnegative and bounded; prompt text, PCM, caller keys and telephone num
 accepted as diagnostics. The existing manager permission and private listener protect status;
 public Twilio/desktop ports cannot expose it, and status reads do not wake compute. Inspect
 longer-lived numeric events through System logs or `journalctl --user -u voice-gateway` on
-front and `journalctl --user -u voice` on compute, subject to configured journal retention.
+control node and `journalctl --user -u voice` on compute, subject to configured journal retention.
 
 This installation admits two active conversations after the bounded
 [H1/V7 trial](#h1-two-source-trial--2026-10-16), under the [current targets](#counters-and-targets). The current installation's latency gate is closed
@@ -1095,7 +1095,7 @@ workers = 2
 ```
 
 ```toml
-# the voice gateway, on the front machine
+# the voice gateway, on the control node
 host = "127.0.0.1"                     # Tailscale Serve and the VPS's forward reach it here
 port = 8446
 turnstile = "http://127.0.0.1:8442"        # readiness, waking, sign-in

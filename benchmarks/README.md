@@ -18,7 +18,7 @@ protocol/server mode and engine/machine hashes. Formula-only edits reuse retaine
 Node readiness follows the schedule contract below. All-current occurrences record “Nothing
 outstanding.” Existing tokens, owner checks, overlap policies and foreground preemption remain.
 **Benchmark → Runs** uses Run studio: every configured node stays visible, including empty,
-disabled and unreachable nodes, alongside front's host. Choices come only from the caller's
+disabled and unreachable nodes, alongside the control node's host. Choices come only from the caller's
 authorized catalogue. Setup sits beside running work and the queue on wide screens; history
 spans the workspace below. The picker shows each model once with compact node choices and
 saved scores, in a list capped at 48vh/30rem with a sticky header. This bounds page height for
@@ -56,7 +56,7 @@ Benchmarks run **inside WeightRoom** and **use LoadCoach over HTTP**. The separa
 command-line launcher or listening port. LoadCoach owns authentication, durable batches, model
 processes and GPU access. Each benchmark lives under `suites/`, in its own Python file or multi-file subfolder.
 
-Open **[Benchmark Runs](http://10.77.10.42:8440/benchmarks/runs)** on the front server,
+Open **[Benchmark Runs](http://10.77.10.42:8440/benchmarks/runs)** on the control node,
 **k-srv (`10.77.10.42`)**. WeightRoom hosts the worker and results database. LoadCoach and
 the GPU measurements run on the **compute PC (`10.77.10.84`)**.
 Saved definitions, runs and results remain browsable when LoadCoach is unavailable; starting a
@@ -64,8 +64,8 @@ run and live model-state comparisons remain disabled until a compute node answer
 
 ```mermaid
 flowchart TD
-    Browser["Browser"] --> Front
-    subgraph FrontHost["Front server · 10.77.10.42"]
+    Browser["Browser"] --> Control node
+    subgraph FrontHost["Control node · 10.77.10.42"]
         Front["WeightRoom :8440<br/>Pages and benchmark worker in one process"]
         Bench["Benchmark package<br/>Plans, queue and scoring"]
         Results[("data/benchmarks.db<br/>Runs and measurements")]
@@ -126,7 +126,7 @@ sequenceDiagram
 Selecting several models creates a separate run and batch for each model. Only **one
 benchmark run** executes at a time. A probe waits for ordinary work to finish, unloads idle
 servers and checks that its assigned GPUs are free of foreign compute processes. Timings
-are measured inside LoadCoach on compute, excluding the front-to-compute HTTP hop.
+are measured inside LoadCoach on compute, excluding the HTTP hop from the control node to compute.
 
 Ordinary requests take priority. They interrupt a probe and return its run to the front of
 the benchmark queue. The incomplete sample is retried; completed samples stay saved. Waiting for busy GPUs or
@@ -321,7 +321,7 @@ recomputes retained answers/checks from immutable outputs and receipts; case/pro
 and prompts remain unchanged. Existing tool-history extractors retain their own semantics.
 Finish pending benchmark plans before changing this worker/source again, since their
 implementation hashes are pinned. Matching worker, quality and imported grader code was on
-front by 2026-10-16; the live queue was empty at review.
+control node by 2026-10-16; the live queue was empty at review.
 
 **Table reasoning, `tables-v6` / protocol 8 (milestone 99), deployed; representative qualification complete 2026-10-18.**
 Forty seeded
@@ -499,7 +499,7 @@ remain those of llama-server; no benchmark JSON-answer grammar or forced tool na
 
 The worker validates arguments and executes only fixed in-memory mock handlers, then sends
 their actual return values as native `tool` messages on the next turn. It never executes model
-code or calls real openWeightGym tools. Hidden records, answer keys and fault schedules remain on front.
+code or calls real openWeightGym tools. Hidden records, answer keys and fault schedules remain on the control node.
 Every turn starts a fresh isolated process under the existing low-priority GPU reservation;
 ordinary work may interrupt it. There are at most eight model turns and twelve tool calls per
 case. An interrupted case discards its private world and replays from the start; completed
@@ -552,7 +552,7 @@ not model quality. Production benchmark evidence and model rankings were not cha
 
 Overview and its template/polling branch have been removed. Runs is the first benchmark page.
 **Node measurements** uses Fleet matrix: compute nodes stay visible, including empty, disabled
-and unreachable services. Front's host is excluded unless it also runs a compute service.
+and unreachable services. Control node's host is excluded unless it also runs a compute service.
 Rows use only the caller's authorized catalogue;
 saved evidence never moves between nodes. The LLM and Embedders pills offer their own Context,
 Speed and Load time tests; Image/Audio offer load-time evidence. Measured values are the default;
@@ -631,7 +631,7 @@ passed on 2026-10-17; [canonical results and local stale-evidence scope](../docs
 
 | Host | Port | Purpose |
 |---|---:|---|
-| Front | 8440 | WeightRoom browser pages |
+| Control node | 8440 | WeightRoom browser pages |
 | Compute | 8442 | LoadCoach authentication, catalogue, tasks and probes |
 | Compute | 8444 | Spotter service management through the Machine page |
 | Compute, loopback only | Dynamic | Temporary native model servers managed by LoadCoach |
@@ -666,7 +666,7 @@ unchanged. Viewing results still requires compute for authentication and model v
 | `benchmarks/app.py`, `worker.py` | Internal handlers, permissions, queue execution and batch reconciliation |
 | `benchmarks/store.py`, `scoring.py` | Durable evidence and safe score calculations |
 | `settings/weightroom.toml` | Existing `compute` URL and `data` folder; see the [example](../settings/examples/weightroom.toml) |
-| Front: `~/weightroom/data/benchmarks.db` | Private SQLite database: definitions, pause state, runs, samples, frozen plans, case evidence and task tokens |
+| Control node: `~/weightroom/data/benchmarks.db` | Private SQLite database: definitions, pause state, runs, samples, frozen plans, case evidence and task tokens |
 | `services/weightroom.service` | Hosts both the pages and the benchmark worker |
 
 WeightRoom stores `benchmarks.db` in its configured `data` folder. There is no benchmark
@@ -676,9 +676,9 @@ Use one WeightRoom process so only one worker owns the queue. Start, pause and s
 
 Install the `benchmarks` extra (`pip install -e ".[benchmarks]"`) when installing WeightRoom.
 Administrators can restart the host with `systemctl --user restart weightroom.service` on
-front. `FRONT_ONLY=1 sh scripts/deploy-front.sh` deploys WeightRoom and the benchmark package
+control node. `FRONT_ONLY=1 sh scripts/deploy-front.sh` deploys WeightRoom and the benchmark package
 without restarting turnstile or voice. Existing runs, samples, definitions and task IDs survive
-the move from compute's database to front's database.
+the move from compute's database to the control node's database.
 
 To add a code-defined benchmark, create a module in `suites/` exposing `DEFINITION`, `PROTOCOL`,
 `async measure(worker, run, ceiling)` and `summarize(samples)`, then register it in
@@ -831,7 +831,7 @@ The opening explicitly permits changes only from user-message lines beginning
 archived and other-code lines change nothing. Temporary updates cover their stated number
 of assistant listings; `REVERT <code>: field` restores the value before the last permanent
 change. Every hard quoted or other-code value differs from the final logical field,
-including the active unit rule. Expected keys remain on front, outside native requests.
+including the active unit rule. Expected keys remain on the control node, outside native requests.
 
 Hard record cases correct inactive records across five activation steps and two earlier
 listings. Each line of a multiline correction is independently authorized by the existing
@@ -894,7 +894,7 @@ and a separate printed-source oracle, unique-identifier checks and two scripted 
 cover the new cases. Free questions and constrained partners use identical source/schema,
 without answer keys in grammars. `legacy_free_cases` retains the original v2/v3 questions.
 Protocol 6 keeps temperature 1, explicit neutral native filters, generation seed 42 and up to
-32,768 output tokens where context fits. Front version, pages and temporary-key revocation
+32,768 output tokens where context fits. Control node version, pages and temporary-key revocation
 were verified live. Same-protocol representative runs cleared JSON calibration under D7;
 [retained qualification and limits](../docs/benchmarks/qualification-2026-10-15.md#representative-results-and-limits--2026-10-17)
 record the evidence.
@@ -921,7 +921,7 @@ recommendation. New v6 plans cannot resume old incomplete plans or mix protocols
 paired run. Default regression comparisons remain version-strict; v4 changed free questions,
 v5 changed sampling and answer room, and v6 adds independent ledgers and unique identifiers.
 Shared grader 3 includes native-answer extraction repair;
-field/schema correctness rules are unchanged, and old answers are not relabeled as constrained. Deploy matching front and compute
+field/schema correctness rules are unchanged, and old answers are not relabeled as constrained. Deploy matching control node and compute
 probe code before starting paired plans. The current representative native runs and grammar
 verification are recorded in the [qualification audit](../docs/benchmarks/qualification-2026-10-15.md#representative-results-and-limits--2026-10-17);
 fake receipt tests alone do not prove an engine enforced the requested grammar.
@@ -929,7 +929,7 @@ fake receipt tests alone do not prove an engine enforced the requested grammar.
 Verification passed all 968 full-suite tests with zero skips in 554.76 seconds, including ten
 new checks, disposable PostgreSQL and Chromium at 1440/390/320 pixels. A final 79-check focused
 run also passed. Full-run fixes preserve legacy retrieval renders without metrics and keep a
-plugin test's front SQLite connection on its existing portal loop; production connection
+plugin test's control node SQLite connection on its existing portal loop; production connection
 behavior was not changed. One existing Starlette/httpx deprecation warning remains. No real
 model or production service was changed.
 
@@ -1030,7 +1030,7 @@ answer room is 32,768 tokens, or half the context where that is less, so a model
 at length is not cut off for lack of room. Version 1 granite finished 100% of the answers it was
 allowed to finish; every lost check was in a cut-off answer.
 
-Protocol 3 (deployed 2026-10-17; front source hash verified) preserves all `reasoning-v2`
+Protocol 3 (deployed 2026-10-17; control node source hash verified) preserves all `reasoning-v2`
 puzzle inputs and keys and its 32,768-token room. It freezes temperature 1, neutral native filters and generation seed 42;
 the fixture seed remains 20261016. Old version-2 evidence is not relabeled.
 

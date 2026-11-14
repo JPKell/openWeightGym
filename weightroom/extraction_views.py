@@ -1,4 +1,4 @@
-"""Browser page and bounded session-authenticated proxy for front-owned extraction APIs."""
+"""Browser page and bounded session-authenticated proxy for control-node-owned extraction APIs."""
 
 import re
 

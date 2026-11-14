@@ -6,7 +6,7 @@ The private browser identity has [bounded V10 permission/revocation qualificatio
 H2 operator pages are [owner-accepted](../docs/voice.md#h2-owner-acceptance--2026-10-16). Earlier V5/V8/V9 acceptance is retained.
 
 The voice service runs across **k-srv (`10.77.10.42`)** and the **compute PC
-(`10.77.10.84`)**. The front server handles connections and authentication; the compute
+(`10.77.10.84`)**. The control node handles connections and authentication; the compute
 PC handles speech recognition, speech synthesis, and local model inference. Capacity is
 currently **two active conversations** on this installation.
 
@@ -22,7 +22,7 @@ flowchart TD
     Twilio -->|"HTTPS / WSS"| VPS["kellrondgames.com<br/>VPS Caddy :443"]
     VPS -->|"Existing Tailscale route · :8081"| Gateway
 
-    subgraph Front["Front server · 10.77.10.42"]
+    subgraph Control node["Control node · 10.77.10.42"]
         Gateway["Voice gateway"]
         Turnstile["Turnstile<br/>Authentication / readiness / preparation"]
         Hermes["Optional Hermes agent"]
@@ -64,9 +64,9 @@ Milestone 89 is deployed; [H2 owner acceptance](../docs/voice.md#h2-owner-accept
 the ZIP and platform setup instructions at `/voice/desktop`.
 **System → Voice** (`/system/voice`, `manage-settings`) provides server/readiness status,
 Direct/Hermes/shared settings, voice previews, greeting text editing and regeneration, and
-playback of the actual front cache. Existing Settings forms edit the same values. Status
+playback of the actual control node cache. Existing Settings forms edit the same values. Status
 and cached playback do not wake compute; explicit previews use CPU synthesis. Edited
-phrases and speaker selection regenerate a complete versioned set, retained on front for
+phrases and speaker selection regenerate a complete versioned set, retained on the control node for
 compute outages. Public Twilio and desktop ports cannot reach the private admin controls.
 See [installation](../docs/operations.md#voice-pages-and-home-summaries) for delivery.
 
@@ -117,7 +117,7 @@ source, mode, profile/model revision and explicit/inferred endpoint basis. The p
 keeps at most 200 turns/24 hours in memory since start; numeric `voice.latency` events also
 use the existing service journals. No utterance/audio/key/telephone-number capture is added.
 Compute reports receive-endpoint/recognition/phrase/synthesis/first-PCM stages on its clock;
-front measures playback progress and client application queue-clear acknowledgements on its
+control node measures playback progress and client application queue-clear acknowledgements on its
 clock. Missing acknowledgements are unavailable; neither an acknowledgement nor PCM sent is
 physical speaker-stop proof. New clients negotiate queue-clear reports through the gateway's
 `queue_clear_ack` capability. Bounded H1/V7 two-call qualification is complete. The owner closed the current latency gate on 2026-10-16
@@ -129,13 +129,13 @@ See the [diagnostic contract](../docs/voice.md#voice-latency-diagnostics-c06-mil
 
 | Host | Port | Purpose |
 |---|---:|---|
-| Front | 443 | Tailscale Serve HTTPS → private browser listener |
-| Front | 8440 | WeightRoom and desktop client download |
-| Front | 8442 | Turnstile to LoadCoach: authentication and model requests |
-| Front | 8445 | Turnstile to compute voice: readiness and session preparation |
-| Front, localhost only | 8446 | Browser voice interface |
-| Front, LAN | 8447 | Desktop voice WebSocket using an API key |
-| Front | 8081 | Twilio voice webhook and audio stream |
+| Control node | 443 | Tailscale Serve HTTPS → private browser listener |
+| Control node | 8440 | WeightRoom and desktop client download |
+| Control node | 8442 | Turnstile to LoadCoach: authentication and model requests |
+| Control node | 8445 | Turnstile to compute voice: readiness and session preparation |
+| Control node, localhost only | 8446 | Browser voice interface |
+| Control node, LAN | 8447 | Desktop voice WebSocket using an API key |
+| Control node | 8081 | Twilio voice webhook and audio stream |
 | Compute | 8442 | LoadCoach model API |
 | Compute | 8444 | Spotter compute/power management |
 | Compute | 8445 | Speech service |
@@ -172,7 +172,7 @@ See the [implementation guide](../docs/loadcoach.md#25-voice) for setup/measurem
 
 Echo cancellation is enabled by default without pausing the microphone. Desktop uses WebRTC
 AEC3 against actual speaker output; browser and phone-browser playback uses a local WebRTC
-connection so the browser can cancel it; telephone calls use AEC3 at the front gateway before
+connection so the browser can cancel it; telephone calls use AEC3 at the control node gateway before
 recognition. Browser and desktop offer an Echo cancellation switch, which can be disabled
 when using headphones. Speak over a reply to interrupt it. See the implementation guide for
 simulated-audio verification. The owner confirmed V9 physical-device qualification complete
@@ -180,7 +180,7 @@ on 2026-10-14; recorded acceptance and limits are in the
 [agent ledger](../docs/agent-status.md#voice-acceptance).
 
 The greetings follow the speaker selected in **Settings → voice**. Compute regenerates a
-complete set when the speaker changes; front refreshes its persistent `data/voice-prompts.json`
+complete set when the speaker changes; control node refreshes its persistent `data/voice-prompts.json`
 cache through authenticated `GET /voice/prompts` on compute port **8445**. Allow roughly
 20 seconds plus synthesis time. The last complete set stays available while compute is off.
 Current fallback recordings use **26 — bm_george**. No desktop update is needed for speaker changes.

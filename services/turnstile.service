@@ -1,5 +1,5 @@
 [Unit]
-Description=turnstile, the way in to compute on the front machine
+Description=turnstile, the way in to compute on the control node
 After=network-online.target
 
 [Service]

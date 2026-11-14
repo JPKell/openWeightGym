@@ -608,7 +608,7 @@ def build_app(database: DatabaseSource, compute: httpx.AsyncClient, inference: h
         return Route(path, signed_in(handler), methods=[method])
 
     async def forget(owner: str) -> None:
-        """Remove a deleted account's front-side chats after cancelling its active turns."""
+        """Remove a deleted account's control-node-side chats after cancelling its active turns."""
         pending = [turn.task for group in list(turns.values()) for turn in group
                    if turn.owner == owner and turn.task]
         for task in pending:

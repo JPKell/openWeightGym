@@ -1,13 +1,13 @@
 # openWeightGym database storage and operations
 
-DB1 moved task/settings ownership and missing history to front on SQLite, then retired
+DB1 moved task/settings ownership and missing history to the control node on SQLite, then retired
 17 stale compute tables. Models and live operational state remain on compute.
 [Ownership and recovery instructions](operations.md#db1-ownership-and-retirement-milestone-124).
 Schema delivery status is recorded in the [agent ledger](agent-status.md#milestones).
 
-Mirror Wall uses the existing front `accounts.db`: `mirrorwall.front` owns private asset metadata,
+Mirror Wall uses the existing control node `accounts.db`: `mirrorwall.front` owns private asset metadata,
 stable account/job/upload bindings, workflow versions and preview preferences. Binary originals
-and thumbnails live under front `data/mirrorwall-assets/` and join the existing recovery inventory;
+and thumbnails live under the control node `data/mirrorwall-assets/` and join the existing recovery inventory;
 temporary/no-log assets never enter SQL, files or recovery sets. Workers retain model bundles
 and measured workflow resource envelopes in their existing model registry. Source igen data stays intact.
 
@@ -19,9 +19,9 @@ full-store backup/export/transfer includes the new table. A code rollback leaves
 older code will not append history, so restore a verified pre-upgrade recovery set if reverting
 the store as well. No model files or live settings are moved by this migration.
 
-SoundRoom uses the same front `accounts.db`: `soundroom.front` owns private audio asset metadata
+SoundRoom uses the same control node `accounts.db`: `soundroom.front` owns private audio asset metadata
 (takes, sounds, speech, references, recordings and their transcripts), saved voices with their
-consent time, group shares, job bindings and personal preferences. Audio files live under front
+consent time, group shares, job bindings and personal preferences. Audio files live under the control node
 `data/soundroom-assets/` and join the recovery inventory; temporary/no-log audio never enters SQL,
 files or recovery sets. Compute keeps installed audio packages, each with a `.suite-package-*.json`
 record of its source revision and hashes, under the `audio` model place.
@@ -45,7 +45,7 @@ backup/export/verified transfer; native runtime leases stay volatile and do not 
 No new store or production data move is introduced.
 
 Local **2026-10-15**, C04 / milestone 94: `weightroom.benchmarks` migration 4 adds immutable
-`benchmark_datasets` to the existing benchmark store on the front, keyed by suite/version with
+`benchmark_datasets` to the existing benchmark store on the control node, keyed by suite/version with
 canonical data, SHA-256, display name, timestamp and author. Runs freeze their chosen version
 before remote task creation; old versions remain available for history and restart. Existing
 full-store backup/restore, SQL exports and verified transfer discover this table automatically.
@@ -90,7 +90,7 @@ engines. P4 adds an operator-profile migration wizard with offline copy, accepta
 P4 was implemented locally on **2026-10-13** and qualified against isolated PostgreSQL 18.6 copies on **2026-10-16**. It has not switched production stores. PostgreSQL
 recovery requires compatible native `pg_dump` and `pg_restore` programs on the machine that owns
 the configured store; the page reports their availability.
-P5 health/backup-age code and panels match the installed front/compute files; isolated native PostgreSQL 18 signals passed on **2026-10-16**. The lossless migration, inventory, health and installer fixes below were deployed and live-verified on both primary hosts on **2026-10-16**. SQLite remains the installation default.
+P5 health/backup-age code and panels match the installed control node/compute files; isolated native PostgreSQL 18 signals passed on **2026-10-16**. The lossless migration, inventory, health and installer fixes below were deployed and live-verified on both primary hosts on **2026-10-16**. SQLite remains the installation default.
 
 [`scripts/install-suite.sh`](../scripts/install-suite.sh) now selects services and storage for new
 machines, audits existing schemas and native PostgreSQL tools, and can install PostgreSQL and
@@ -101,36 +101,36 @@ The active code and the repository README determine current storage support and 
 
 ## Live database inventory
 
-The 2026-10-16 inventory resolves **13 SQLite stores**: nine primary front/compute stores and
+The 2026-10-16 inventory resolves **13 SQLite stores**: nine primary control node/compute stores and
 four independent CPU-worker stores, with their bindings, writers and file-backed assets. System → DB also discovers other top-level `.db` files.
 Protected receipts are under `data/qualification/g14-postgresql18/evidence/` on compute;
-front receipts are under `~/.local/share/suite-pg18-qualification/evidence/`.
+control node receipts are under `~/.local/share/suite-pg18-qualification/evidence/`.
 
 | Machine | Store | Writers / ownership |
 | --- | --- | --- |
-| Front | `accounts.db` | WeightRoom, Turnstile and ToolLocker: accounts, client access, events, tasks, front-program/ToolLocker settings, tool schemas and schedule grants |
-| Front | `roles.db` | WeightRoom and Turnstile: roles, benchmark evidence, reliability and per-node model placement enablement |
-| Front | `chat.db` | WeightRoom: chats, collections, prompt versions and workflows |
-| Front | `benchmarks.db` | WeightRoom benchmark worker: plans, samples and evidence |
-| Front | `plugins.db` | WeightRoom and Turnstile: plugin-use records |
-| Front | `alerts.db` | WeightRoom alert collector and acknowledgement controls |
-| Front | `schedules.db` | WeightRoom recurring scheduler and occurrence controls |
+| Control node | `accounts.db` | WeightRoom, Turnstile and ToolLocker: accounts, client access, events, tasks, control node program/ToolLocker settings, tool schemas and schedule grants |
+| Control node | `roles.db` | WeightRoom and Turnstile: roles, benchmark evidence, reliability and per-node model placement enablement |
+| Control node | `chat.db` | WeightRoom: chats, collections, prompt versions and workflows |
+| Control node | `benchmarks.db` | WeightRoom benchmark worker: plans, samples and evidence |
+| Control node | `plugins.db` | WeightRoom and Turnstile: plugin-use records |
+| Control node | `alerts.db` | WeightRoom alert collector and acknowledgement controls |
+| Control node | `schedules.db` | WeightRoom recurring scheduler and occurrence controls |
 | Compute | `loadcoach.db` | LoadCoach and Spotter: models, live events/settings and identities; frozen former ToolLocker rows retained for recovery |
 | Compute | `spotter.db` | Spotter telemetry |
-| Front CPU | `data/front-cpu/loadcoach-front-cpu.db` | Independent CPU LoadCoach registry/live log; shared Spotter identity binding |
-| Front CPU | `data/front-cpu/spotter-front-cpu.db` | CPU host Spotter history |
+| Control node CPU | `data/front-cpu/loadcoach-front-cpu.db` | Independent CPU LoadCoach registry/live log; shared Spotter identity binding |
+| Control node CPU | `data/front-cpu/spotter-front-cpu.db` | CPU host Spotter history |
 | Remote CPU | `/home/jpk/suite-cpu/data/loadcoach-remote-cpu.db` | Independent CPU LoadCoach registry/live log; shared Spotter identity binding |
 | Remote CPU | `/home/jpk/suite-cpu/data/spotter-remote-cpu.db` | CPU host Spotter history |
 
-Current active consumers are WeightRoom, Turnstile, ToolLocker and Voice gateway on front; LoadCoach,
-Spotter and Voice on compute; and independent LoadCoach/Spotter CPU workers on front
+Current active consumers are WeightRoom, Turnstile, ToolLocker and Voice gateway on the control node; LoadCoach,
+Spotter and Voice on compute; and independent LoadCoach/Spotter CPU workers on the control node
 and remote. Voice uses the owning APIs and, when configured, writes optional observations to
-its owner's log store; the gateway uses front accounts and compute Voice uses compute core.
+its owner's log store; the gateway uses control node accounts and compute Voice uses compute core.
 LOG migration 7 adds `observation_spans`, `observation_metrics` and `observation_sources`;
-migration 8 adds `observation_policy` (front's span limits) and `usage_hours` (hourly usage
+migration 8 adds `observation_policy` (the control node's span limits) and `usage_hours` (hourly usage
 summaries, backfilled from existing request endings); migration 9 adds `observation_quiet`
 (trace IDs of swept routine polls, kept a day);
-front owns retained reporting while node and adapter stores provide bounded optional spools.
+control node owns retained reporting while node and adapter stores provide bounded optional spools.
 [Observation durability and retention](loadcoach.md#observability-and-traceability-milestone-151).
 Maintenance must also
 stop operator CLI/direct database writers. DB1 ownership remains authoritative; retired compute
@@ -146,36 +146,36 @@ checks: receipts are in `data/qualification/g14-postgresql18/evidence/front-cpu/
 the remote host's protected qualification directory.
 Source snapshots stayed unchanged; live bindings remain SQLite. [Protected DB1 receipts and recovery](operations.md#db1-ownership-and-retirement-milestone-124).
 
-## Front ToolLocker and remaining telemetry (milestone 128)
+## Control node ToolLocker and remaining telemetry (milestone 128)
 
-Authorized, deployed and live-verified **2026-10-16**. Front's existing accounts store now
+Authorized, deployed and live-verified **2026-10-16**. Control node's existing accounts store now
 owns ToolLocker settings, recorded schemas, trace levels and chained tool-call events.
-The public MCP address stays `10.77.10.42:8443`; Turnstile signs requests to front's
+The public MCP address stays `10.77.10.42:8443`; Turnstile signs requests to the control node's
 loopback ToolLocker at `127.0.0.1:9443`. Compute file/code tools run through fixed SSH
 stdio commands under their existing server names and roots; file bytes stay on compute.
-The existing front HTTP tool host and its private key remain in use. No hosted tool was added.
+The existing control node HTTP tool host and its private key remain in use. No hosted tool was added.
 
 Exact imports preserved 11 recorded tool schemas and the program report; there were no
 site overrides to move. All nine currently offered tool schemas matched before/after.
 Compute's former records remain frozen recovery originals: the disabled gateway refuses
 startup with `toollocker_runs_on_front = true` (formerly `front_toollocker`), and compute API/CLI refuse their settings/reports.
-Front backup inventory identifies ToolLocker as an accounts-store writer. Production
+Control node backup inventory identifies ToolLocker as an accounts-store writer. Production
 bindings remain SQLite; a PostgreSQL engine switch is separately authorized work.
 
-Verified physical-host snapshots added **611 front** and **632 VPS** missing telemetry
+Verified physical-host snapshots added **611 control node** and **632 VPS** missing telemetry
 readings. Every source row compared exactly after import, and repeat imports added zero.
-Local histories remain live; normal front history retains its existing 28-day policy.
+Local histories remain live; normal control node history retains its existing 28-day policy.
 
 Protected snapshots, SHA-256 receipts, exact imports, before/after schemas and live checks
-are under `~/.local/share/suite-db-audits/2026-10-16-db2/` on compute and front. The remote
-source snapshot is retained at that same path on the VPS. See [operating and rollback steps](operations.md#front-toollocker-relocation-milestone-128).
+are under `~/.local/share/suite-db-audits/2026-10-16-db2/` on compute and the control node. The remote
+source snapshot is retained at that same path on the VPS. See [operating and rollback steps](operations.md#control-node-toollocker-relocation-milestone-128).
 
 Live qualification covered signed tools, permission filtering, revocation, audit-chain and
-trace continuity, front Tools/Settings/Telemetry while primary LoadCoach was stopped, and
+trace continuity, control node Tools/Settings/Telemetry while primary LoadCoach was stopped, and
 prompt retryable 503/recovery when the gateway itself stopped. Restart and paired recovery
 receipts are stored with those protected checks. Pre-cutover pair `20261017T042002Z-2bb9f5`
 and final pair `20261017T042722Z-81134d` passed isolated restores. The final manifest names
-ToolLocker as a front accounts-store writer/service; both outside archive copies match SHA-256.
+ToolLocker as a control node accounts-store writer/service; both outside archive copies match SHA-256.
 Local checks passed: 124 focused checks, then 81 console/recovery checks including the
 normalized-settings ownership regression; suite counts overlap. Commands are in `local-checks.json`.
 
@@ -191,7 +191,7 @@ The remaining engine-specific work is operational:
 - ToolLocker and Spotter independently open that same file for shared identity, authorization,
   settings and event logging. Spotter also owns `spotter.db`.
 - `components.versions` keeps each host’s shared service Git tag/commit and engine-reported versions in
-  `loadcoach.core` (front-only installs use `weightroom.accounts`). Spotter checks them every 60 minutes;
+  `loadcoach.core` (control-node-only installs use `weightroom.accounts`). Spotter checks them every 60 minutes;
   installation forces a refresh. Failed probes display Unknown; Components reads saved versions without loading models.
 - WeightRoom owns `chat.db` and `plugins.db`; its embedded benchmark worker owns
   `benchmarks.db`.
@@ -209,7 +209,7 @@ The remaining engine-specific work is operational:
 - Routine Backups inventory reads reachability, file size and schema versions without full
   integrity or row-count scans. Creating and restoring a recovery set retains those full checks.
 
-The PostgreSQL 18.6 repository/native recovery contracts passed using front's loopback container
+The PostgreSQL 18.6 repository/native recovery contracts passed using the control node's loopback container
 and matching native clients. Compute used privately unpacked 18.6 clients under the qualification
 workspace through an SSH tunnel; those binaries are not installed service dependencies. SQLite
 backup/export continues to work without PostgreSQL clients. The installer audits both `pg_dump`
@@ -268,7 +268,7 @@ bind to the same store. Services sharing authoritative identity, permissions, ev
 other consistency-sensitive records must either use that same store or access the owner through
 an API; openWeightGym must not copy or silently synchronize those records between independent databases.
 
-Progression P5 / milestone 70 adds the `weightroom.alerts` binding on the front, defaulting to
+Progression P5 / milestone 70 adds the `weightroom.alerts` binding on the control node, defaulting to
 `data/alerts.db`. Its `weightroom.alerts` migration stream owns operational episodes and source
 freshness. It supports SQLite or PostgreSQL independently and is included in named-store health,
 exports, verified recovery, offline transfer and installer compatibility checks. Its collector
@@ -278,11 +278,11 @@ or raw journal/prompt text. Progression P5 was accepted as complete on 2026-10-1
 source/background collection checks and a deployed-code temporary-store lifecycle/persistence
 fixture. This qualification did not induce a production incident or live service restart.
 
-Progression P6 / milestone 71 adds front's `weightroom.schedules` binding, defaulting to
+Progression P6 / milestone 71 adds the control node's `weightroom.schedules` binding, defaulting to
 `data/schedules.db`, with the portable `weightroom.schedules` stream for definitions and
 occurrences. Compute's `loadcoach.schedules` stream stores hashed job grants in the core store.
 Both engines support them; backup, export, offline transfer and installer audit include them.
-Front's database contains job-specific schedule/task tokens, protected like benchmark tokens;
+Control node's database contains job-specific schedule/task tokens, protected like benchmark tokens;
 compute stores grant hashes. These are limited durable-work credentials, not general API keys.
 Maintenance tracks active scheduler writers and defers further claims and dispatch commits.
 There are no cross-store joins or atomic cross-store transactions. References across stores use
@@ -296,7 +296,7 @@ contains only store names and non-secret display metadata.
 
 ### P0 - inventory, dumps and migration workspace
 
-Add System -> DB for accounts with `manage-settings`. It inventories front and compute database
+Add System -> DB for accounts with `manage-settings`. It inventories control node and compute database
 files, tables, record counts, table/index bytes and total bytes on disk. It exposes restorable
 per-table SQL dumps and full-database dumps. Native `sqlite3` is used when available; Python's
 SQLite API is the fallback. The page reports detected SQLite/PostgreSQL tools and the actual
@@ -396,17 +396,17 @@ Implemented locally on **2026-10-13**, after P1-P3. A migration selects one name
 store and updates only its declared bindings; stores may therefore move engines or machines
 independently when their consistency boundaries permit it. It performs:
 
-On **2026-10-16**, the owner authorized preparing a local target. Front now has an empty
+On **2026-10-16**, the owner authorized preparing a local target. Control node now has an empty
 PostgreSQL 18.6 container named `suite-p4-postgres`, bound only to `127.0.0.1:55432`, with a
 persistent `suite-p4-postgres-data` Docker volume. The non-superuser `suite_app` owns the
 `suite_front` database; the owner-only connection file is
 `/home/jpk/weightroom/keys/postgres-p4.dsn`. Native `pg_dump` and `pg_restore` 18.6 are installed
-on front. A scratch database containing identity, text and JSONB columns passed a native
+on the control node. A scratch database containing identity, text and JSONB columns passed a native
 dump and isolated restore, and the target database remains empty. An initial 16 server failed
 that restore because the available 18 client emitted `transaction_timeout`; it was replaced
 before any openWeightGym data was copied. No production binding has changed. PostgreSQL 18 repository
 contracts and isolated 13-store qualification have since passed; a fresh reviewed maintenance
-preview still precedes any separately selected live cutover. This loopback target is for front
+preview still precedes any separately selected live cutover. This loopback target is for the control node
 stores; compute-owned stores require their own target or a deliberately networked database.
 
 The isolated G14 qualification on **2026-10-16** completed the current inventory and both
@@ -424,18 +424,18 @@ Qualification found and fixed three lossless compatibility issues:
   NUL use explicit base64 UTF-8 storage; reads, grading and retries retain the original text. One
   retained answer required encoding. Full-store exports, recovery and transfer include the metadata.
 - Retired compute streams retain their recorded versions during transfer, preventing newer
-  front-only tables from reappearing. Inventory accepts explicit checkout/config service commands
+  control-node-only tables from reappearing. Inventory accepts explicit checkout/config service commands
   without `WorkingDirectory` and ignores the retired users-mirror setting.
 
 Matching `db/`, `benchmarks/store.py` and installer support were deployed on **2026-10-16**, retaining
 all nine primary SQLite bindings. Both halves of the fresh pre-upgrade recovery set
 `20261017T015926Z-a540a3` restored independently; the restarted services passed schema, integrity,
 audit payload/hash, decoded benchmark-text, health/freshness and authenticated API/page checks.
-Direct-compute and front unauthenticated status requests returned 401. The temporary verification
+Direct-compute and the control node unauthenticated status requests returned 401. The temporary verification
 key was revoked, both maintenance markers were released, and the original PostgreSQL target remains
 empty. Receipts are in `data/qualification/g14-postgresql18/deployment/`. A code-only downgrade
 cannot decode encoded benchmark rows: restore the retained pre-upgrade snapshot with writers stopped;
-local old-code rollback bytes are in `deployment/pre-upgrade-code.tar.gz`, and front
+local old-code rollback bytes are in `deployment/pre-upgrade-code.tar.gz`, and the control node
 old-code copies are under `~/.local/share/suite-pg18-qualification/pre-upgrade-code/`. No engine switch occurred.
 
 1. preflight source/target connectivity, versions, free space, tools and schema compatibility;
@@ -456,7 +456,7 @@ The implementation is `db/transfer.py`, `db/migration.py` and `db/maintenance.py
 under System → DB. Profiles select the source by an existing repository binding, resolve every
 other binding to the same physical store, and generate changes only for those bindings. This
 includes ToolLocker and Spotter's implicit use of LoadCoach's identity store. Turnstile now resolves
-`weightroom.plugins` from the same front settings as WeightRoom, so migrating plugin records
+`weightroom.plugins` from the same control node settings as WeightRoom, so migrating plugin records
 does not leave turnstile writing a legacy SQLite file. All active openWeightGym
 user services on the declared installations are stopped for the maintenance window, including
 turnstile and voice consumers; unrelated store selections are preserved. There is no dual writing.
@@ -490,7 +490,7 @@ If rollback fails, services are stopped and maintenance stays closed for operato
 
 1. Install matching openWeightGym code on every participating host and restart the owning services so
    their schemas and maintenance barriers are current. No production P4 deployment is implied
-   by the local implementation status above. The existing front deployer copies `db/`; use its
+   by the local implementation status above. The existing control node deployer copies `db/`; use its
    full deployment mode when turnstile, ToolLocker or Spotter code also needs updating.
 2. Provision a dedicated empty PostgreSQL database and an owner-only DSN file, or create the
    parent directory for a new SQLite target file. PostgreSQL credentials and client tools must
@@ -498,7 +498,7 @@ If rollback fails, services are stopped and maintenance stays closed for operato
    have the DSN file at the previewed absolute path. The source owner can connect to a PostgreSQL
    server on another machine. SQLite targets remain local to their owning service host; a shared
    remote store cannot be rebound to separate local SQLite files.
-3. On the coordinator (normally front), copy
+3. On the coordinator (normally control node), copy
    [`settings/examples/database-migration.json`](../settings/examples/database-migration.json)
    to `settings/migrations/core-to-postgresql.json` with mode `600`. Set `owner`, `binding`, the
    complete `hosts` map, target, target server filesystem probe and acceptance file. Use one host
@@ -598,7 +598,7 @@ backup before freshness is claimed; an unreachable PostgreSQL identity yields un
 The panel reports the recorded restore verification, without reopening or rehashing the archive.
 It does not establish that both halves of a recovery set are verified; use Backups for that.
 Equivalent absolute SQLite path spellings resolve to the same source for freshness; changing the physical path still invalidates it. Backup freshness and store reachability are separate signals. Unavailable compute status does
-not hide front stores or imply that compute recovered. No recurring jobs are introduced.
+not hide control node stores or imply that compute recovered. No recurring jobs are introduced.
 
 Local verification covers missing/corrupt stores, unchanged SQLite application data, credential-safe
 probe failures, failed/future/malformed/stale backup evidence, engine/source/binding mismatches,
@@ -709,7 +709,7 @@ client tools are required for them. See
 ## DB operations desk
 
 System → DB uses the selected operations desk: a compact database ledger, expandable table
-inventories and an operations panel. Install matching code on Front and every configured
+inventories and an operations panel. Install matching code on Control node and every configured
 LoadCoach to enable the node-scoped API. Existing SQLite/PostgreSQL bindings are preserved;
 this change does not migrate an engine or delete production records on installation.
 The sample proposals remain available through `scripts/preview-database-designs.py`.
@@ -763,9 +763,9 @@ The sample proposals remain available through `scripts/preview-database-designs.
   [PostgreSQL vacuuming](https://www.postgresql.org/docs/current/routine-vacuuming.html).
 - [x] **Node-specific recovery evidence:** probe health and backups on every owning node and
   keep unknown/stale/missing distinct. Native node receipts use the configured machine identity.
-  Existing Backups remains the explicitly paired Front/default-Compute workflow; independent
+  Existing Backups remains the explicitly paired control node/default-compute workflow; independent
   worker maintenance evidence is available in the DB desk's Recent operations.
-- [x] **Validation:** four real signed LoadCoach fixtures plus Front, a real mixed-engine fleet,
+- [x] **Validation:** four real signed LoadCoach fixtures plus Control node, a real mixed-engine fleet,
   SQL round-trip restores, omitted-node manifests, protected stores, UTC boundaries, replay/owner/
   expiry/schema checks, low disk, PostgreSQL lock refusal and measured SQLite/PostgreSQL
   reclamation. Shared-component/all-page browser checks cover both themes, narrow layouts,
@@ -776,8 +776,8 @@ The sample proposals remain available through `scripts/preview-database-designs.
 
 SQL export input is limited to 2 GiB per archive, with a 64 MiB disk reserve and bounded dump
 workers. Export smaller stores separately when the limit is reached. SQL downloads expire after
-24 hours; operation receipts and review plans are private files under Front's `database-jobs`
-and each node's `database-operations` (Front maintenance uses `database-maintenance`). Job
+24 hours; operation receipts and review plans are private files under Control node's `database-jobs`
+and each node's `database-operations` (Control node maintenance uses `database-maintenance`). Job
 receipts expire after seven days and reviews after ten minutes. A purge review is limited to
 one million telemetry keys per owning-node review; choose fewer stores or an earlier cutoff for larger
 histories. The per-store backup receipt names the owning machine and encrypted recovery set.
@@ -799,12 +799,12 @@ this UI release introduces no schema migration or automatic database engine swit
 ## Private document collections in the chat store (milestone 105)
 
 Implemented locally **2026-10-15**. `weightroom.chat` migration 3 adds owner-private collection,
-original-document and indexed-chunk tables in the existing chat database. Immutable front
+original-document and indexed-chunk tables in the existing chat database. Immutable control node
 account identities own them. Base64 originals and JSON vectors use portable TEXT columns;
 SQLite/PostgreSQL transfer and the existing private recovery set include them. There is no
 new database, binding, DSN or vector extension. Generation/revision checks make index publication
 atomic against deletion, cancellation and embedding-space rebuild. Account deletion removes
-active collections through front cleanup. Earlier inference logs and backups retain their
+active collections through the control node cleanup. Earlier inference logs and backups retain their
 normal retention policy. See [the collection guide](collections.md) for delivery status.
 
 
@@ -821,16 +821,16 @@ workflow history follows its explicit retention/deletion controls; see [the guid
 
 ## Advisory spending policies (milestone 107)
 
-`loadcoach.users` migration 4 adds portable `spending_allowances` to the existing front
+`loadcoach.users` migration 4 adds portable `spending_allowances` to the existing control node
 accounts store. Its scope/subject key holds optional positive USD amounts; there is no cost
 ledger or reservation table. Existing ordinary event details retain account/key/group
 attribution; full-store recovery/transfer preserves both. Legacy `accounts-from` refuses
-populated policies rather than copying only old account tables. Matching front/compute
+populated policies rather than copying only old account tables. Matching control node/compute
 delivery status is recorded in [allowances](allowances.md).
 
 ## Scheduled machine-key rotation (milestone 136)
 
-`loadcoach.users` migration 5 adds `machine_key_rotations` to the front accounts store: one
+`loadcoach.users` migration 5 adds `machine_key_rotations` to the control node accounts store: one
 interval, immutable owner identity, next attempt and last error per configured compute node.
 It stores no key material. Key files remain owner-only filesystem secrets and their modification
 times remain the authoritative last-rotation record. Existing account-store backup, restore and
@@ -840,7 +840,7 @@ cross-engine transfer include the schedule table.
 ## Identity-only portability (milestone 152)
 
 The offline `suite-identity` command projects only `groups`, `users`, `keys`,
-`spending_allowances`, `services` and `settings_changed` from the front SQLite account store.
+`spending_allowances`, `services` and `settings_changed` from the control node SQLite account store.
 Import uses existing schema migrations and refuses different populated identity/configuration
 state; it does not copy the database file or its histories. Raw credential files are carried
 only in the separate encrypted host bundle. [Coverage, commands and interrupted-import recovery](operations.md#identity-and-credential-portability-milestone-152).

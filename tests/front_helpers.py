@@ -38,7 +38,7 @@ def serve_browser_request(client, origin, route):
     route.fulfill(status=response.status_code,
                   content_type=response.headers.get('content-type','text/html'),body=response.content)
 
-# Compute asks front for the accounts at every turn in tests, not once in ten seconds, so that a
+# Compute asks control node for the accounts at every turn in tests, not once in ten seconds, so that a
 # check made just after a change sees it. The ten seconds are a limit on the real machines only.
 import loadcoach.front  # noqa: E402
 import turnstile.roles  # noqa: E402
@@ -146,7 +146,7 @@ def front_of(build_compute, users: Users, folder: Path, port: int = 8442, addres
         await front(scope, receive, send)
 
     client = TestClient(on_port, base_url=f"http://front:{port}", client=(address, 50000))
-    client.users, client.compute, client.front, client.door, client.log = users, compute, front, on_port, front.state.log  # the log of what was done to the accounts is front's
+    client.users, client.compute, client.front, client.door, client.log = users, compute, front, on_port, front.state.log  # the log of what was done to the accounts is the control node's
     return client
 
 
@@ -184,7 +184,7 @@ class Ports(httpx.AsyncBaseTransport):
 
 
 def turnstile_to(folder: Path, users: Users, wires: dict, **settings):
-    """Turnstile on the front machine, with `users` as its accounts and `wires` to compute's ports. Its lifespan is not run.
+    """Turnstile on the control node, with `users` as its accounts and `wires` to compute's ports. Its lifespan is not run.
 
     It shares weightroom's data folder, `folder`/data, where the accounts are kept.
     """

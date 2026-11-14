@@ -6,7 +6,7 @@
 <p><code>{{ backup_id }}</code></p>
 
 
-{% for label, part in [("Front" if backup_node == "front" else backup_node, backup_part)] %}
+{% for label, part in [("Control node" if backup_node == "front" else backup_node, backup_part)] %}
 {% call card(label, true) %}
 {% if part %}
 {% if not part.get('protection', {}).get('encrypted') %}

@@ -1090,7 +1090,7 @@ class Runner:
     async def dispatch(self) -> None:
         """Decide who goes next. Runs for the whole life of LoadCoach.
 
-        Each time something changes, the line is read once from the front. A ticket goes if what
+        Each time something changes, the line is read once from the control node. A ticket goes if what
         it needs is free. If not, the cards it needs are marked as taken, so that nobody further
         back can use them first. That keeps the order fair while letting requests for unrelated
         cards go ahead.

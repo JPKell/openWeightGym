@@ -144,7 +144,7 @@ def test_a_program_reads_its_defaults_under_its_own_file_and_keeps_what_it_write
     watching = spotter.load_settings(folder / "spotter.toml")
     assert watching.database == config.database and watching.history == str(folder / "../data/spotter.db")
 
-    # A table in both files has its keys put together: turnstile's part of the front machine's file.
+    # A table in both files has its keys put together: turnstile's part of the control node's file.
     (folder / "defaults" / "weightroom.toml").write_text('[turnstile]\nwait = 180\n')
     (folder / "weightroom.toml").write_text('compute = "http://10.0.0.1:8442"\ndata = "../data"\n[turnstile]\nhost = "0.0.0.0"\n')
     assert read_settings(folder / "weightroom.toml")["turnstile"] == {"wait": 180, "host": "0.0.0.0"}

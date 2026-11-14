@@ -30,7 +30,7 @@
   <p id="design-description" class="text-secondary small my-2">Recommended · A complete file at a glance, with metadata and actions side by side.</p>
   <div id="file-workspace" data-layout="dossier">
     {% set header_actions %}<button class="btn btn-outline-secondary btn-sm" id="copy-path">Copy path</button><button class="btn btn-primary btn-sm" id="jump-transfer">Distribute to nodes</button>{% endset %}
-    {{ page_header('Qwen3-32B-Q6_K.gguf', pretitle='FILES / FRONT / ACTIVE CACHE', actions=header_actions, id='file-heading') }}
+    {{ page_header('Qwen3-32B-Q6_K.gguf', pretitle='FILES / CONTROL NODE / ACTIVE CACHE', actions=header_actions, id='file-heading') }}
     <div class="file-path"><span class="badge bg-azure-lt" id="file-kind">Language model</span><code id="file-path">/srv/models/cache/Qwen3-32B-Q6_K.gguf</code></div>
     {% call kpi_row('File summary', class_='file-summary mb-3') %}
       {{ kpi('File size', '24.6 GiB', 'Q6_K · GGUF', value_attrs={'id': 'summary-size'}, note_attrs={'id': 'summary-format'}) }}

@@ -34,7 +34,7 @@ Connection:
 
 The API key needs front-voice and access to the voice profile's model, including load
 if loading is needed. Hermes mode additionally needs front-voice-hermes. Turnstile
-checks keys against the accounts on front; calls can wake compute when waking is configured.
+checks keys against the accounts on the control node; calls can wake compute when waking is configured.
 The server must have its desktop listener enabled. Neither Tailscale nor a tunnel is
 needed on the home LAN. HTTP sends the API key and sound unencrypted over that LAN;
 use a trusted LAN or a configured HTTPS endpoint for other networks.

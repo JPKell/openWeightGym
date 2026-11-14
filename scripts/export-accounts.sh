@@ -1,9 +1,9 @@
 #!/bin/bash
-# Copy front's accounts out, to seed another installation for testing: groups, users (with their
+# Copy the control node's accounts out, to seed another installation for testing: groups, users (with their
 # password hashes, authenticator secrets and settings), API-key hashes, spending allowances, and
 # the key files in keys/ that the suite's programs and machines sign in with.
 #
-#   scripts/export-accounts.sh OUT.tar [ROOT]     ROOT is front's installation, ~/weightroom by default
+#   scripts/export-accounts.sh OUT.tar [ROOT]     ROOT is the control node's installation, ~/weightroom by default
 #
 # Bring it back with scripts/import-accounts.sh. Nothing in it is encrypted: anyone holding the
 # file can sign in as the suite's programs and attempt the password hashes offline. It is made

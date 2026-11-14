@@ -7,7 +7,7 @@ from test_outside import service  # noqa: F401
 
 def test_the_cloud_apis_page_registers_a_service_and_its_models_are_ticked_from_its_own_list(desk, service, tmp_path, monkeypatch):
     browser, _, _ = desk
-    kept = Services(str(tmp_path / "data" / "accounts.db"), str(tmp_path))  # the services and their keys are front's, beside the machine key
+    kept = Services(str(tmp_path / "data" / "accounts.db"), str(tmp_path))  # the services and their keys are the control node's, beside the machine key
     sign_in(browser, "pat")
     assert browser.get("/cloud-apis").status_code == 403
     browser.post("/sign-out")

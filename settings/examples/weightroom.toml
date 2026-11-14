@@ -28,7 +28,7 @@
 # observation_window_seconds = 300
 # observation_alert_hold_seconds = 60
 
-# Observation spans kept on front: days kept (1-30), the percent of all-successful traces kept
+# Observation spans kept on the control node: days kept (1-30), the percent of all-successful traces kept
 # (0-100; spans that did not succeed are always kept, and every span still counts in the metrics),
 # and a cap on stored spans (0 is none). Polling makes most spans, so a low percent saves the most.
 # Applied when weightroom starts.
@@ -114,7 +114,7 @@ data = "../data"
 plugins_dir = "../plugins"
 
 # Each node's Spotter is its [machines.NAME].spotter. System > Telemetry asks it through
-# turnstile, and front keeps its own sampled history by physical-host fingerprint.
+# turnstile, and the control node keeps its own sampled history by physical-host fingerprint.
 
 # Private voice-gateway listener for System → Voice status, recording and synthesis controls.
 # Do not use its public Twilio or desktop port. Operator sessions are checked by turnstile.
@@ -160,7 +160,7 @@ toollocker = ""
 [turnstile]
 host = "0.0.0.0"
 ports = [8442, 8443, 8444]
-# The front stores and serves the settings of its own programs (weightroom, turnstile, voice-gateway)
+# The control node stores and serves the settings of its own programs (weightroom, turnstile, voice-gateway)
 # and the authenticated MCP gateway, even while compute is unavailable. (Formerly front_settings.)
 keep_console_settings_on_front = true
 toollocker_url = "http://127.0.0.1:9443"
@@ -172,17 +172,17 @@ toollocker_url = "http://127.0.0.1:9443"
 # Seconds between turnstile's questions to each compute machine about itself (never waking one).
 # A machine counts as ready for three times this, then as not answering.
 # machines_poll_seconds = 10
-# Optional cache and storage on front; neither requires an inference worker. Both default to empty.
-# These paths can also be set under Settings → General → Model file locations → Front machine.
+# Optional cache and storage on the control node; neither requires an inference worker. Both default to empty.
+# These paths can also be set under Settings → General → Model file locations → Control node.
 # models_folder = "/home/you/models/cache"
 # models_storage_folder = "/home/you/models/storage"
-# File/download owner. Empty prefers optional front storage, then front_cpu, then compute.
-# Use "front" for front's built-in file manager, or an explicitly configured worker name.
+# File/download owner. Empty prefers optional control node storage, then front_cpu, then compute.
+# Use "front" for the control node's built-in file manager, or an explicitly configured worker name.
 # artifact_machine = "front_cpu"
 
 # The compute nodes: LoadCoach instances, inventoried on System > Telemetry and all eligible for
 # model placement. Each has its own secret; its LoadCoach machine_name must match the table
-# name here. `formerly` keeps an old name resolving in stored rows, links and request numbers. A Spotter URL lets front sample
+# name here. `formerly` keeps an old name resolving in stored rows, links and request numbers. A Spotter URL lets control node sample
 # CPU, RAM and GPU readings on that physical host. Several instances on one host share a
 # fingerprint and appear on one telemetry card. See docs/installation.md#multi-machine-telemetry.
 # [machines.rig]

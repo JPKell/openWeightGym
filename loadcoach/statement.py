@@ -1,9 +1,9 @@
 """Signed statements: how compute knows who is asking without holding any accounts.
 
-Accounts and keys are kept on the front machine. Turnstile checks each request's key there,
+Accounts and keys are kept on the control node. Turnstile checks each request's key there,
 then sends the request on to compute with a statement in one header: who the caller is, what
 they may do, when the statement stops counting, a random nonce, and a hash of the method, the
-address and the body. The statement is signed with a secret that front and that compute machine
+address and the body. The statement is signed with a secret that control node and that compute machine
 share, the machine key. The key itself never crosses the network.
 
 Compute checks the signature, the time and the hash, and refuses a nonce it has seen before, so
@@ -12,7 +12,7 @@ the nonce signed with the same secret. Turnstile refuses an answer without it, w
 answer came from the machine that holds that secret. Neither protects what is said from being
 read on the way: only TLS would.
 
-The same statement, with `machine` in place of a caller, is how compute asks front for something.
+The same statement, with `machine` in place of a caller, is how compute asks control node for something.
 """
 
 from __future__ import annotations

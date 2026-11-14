@@ -10,7 +10,7 @@ from test_weightroom import desk, sign_in  # noqa: F401  (the first sets a check
 
 def test_the_roles_page_makes_a_role_weights_its_models_and_shows_what_it_would_pick(desk, tmp_path):
     browser, _, _ = desk
-    kept, roles = Models(str(tmp_path / "loadcoach.db")), Roles(str(tmp_path / "data" / "roles.db"))  # kept on the front machine, beside the accounts
+    kept, roles = Models(str(tmp_path / "loadcoach.db")), Roles(str(tmp_path / "data" / "roles.db"))  # kept on the control node, beside the accounts
     for name in ("strong", "quick"):
         kept.put(name, {"gpus": 1, "flags": {"model": gguf(tmp_path / f"{name}.gguf", general__name=name), "ctx-size": 2048}})
     sign_in(browser, "pat")
@@ -48,7 +48,7 @@ def test_the_roles_page_makes_a_role_weights_its_models_and_shows_what_it_would_
 def test_invalid_role_weight_shows_an_error_and_preserves_saved_role(desk, tmp_path, weight):
     browser, _, _ = desk
     Models(str(tmp_path / "loadcoach.db")).put("small", {"gpus": 1, "flags": {"model": gguf(tmp_path / "small.gguf"), "ctx-size": 2048}})
-    roles = Roles(str(tmp_path / "data" / "roles.db"))  # kept on the front machine, beside the accounts
+    roles = Roles(str(tmp_path / "data" / "roles.db"))  # kept on the control node, beside the accounts
     roles.put("chat", {"models": {"small": 1}})
     sign_in(browser, "jordan")
     response = browser.post("/roles", data={"do": "save", "name": "chat", "model": "small", "weight": weight})
@@ -60,7 +60,7 @@ def test_benchmark_controls_requirements_and_invalid_preferences_preserve_settin
     browser, _, _ = desk
     kept = Models(str(tmp_path / "loadcoach.db"))
     kept.put("small", {"gpus": 1, "flags": {"model": gguf(tmp_path / "small.gguf"), "ctx-size": 2048}})
-    roles = Roles(str(tmp_path / "data" / "roles.db"))  # kept on the front machine, beside the accounts
+    roles = Roles(str(tmp_path / "data" / "roles.db"))  # kept on the control node, beside the accounts
     roles.put("chat", {"models": {"small": 1}})
     sign_in(browser, "jordan")
     shown = browser.get("/roles")
@@ -89,7 +89,7 @@ def test_benchmark_controls_requirements_and_invalid_preferences_preserve_settin
 def test_roles_reports_failed_publication_and_keeps_accepted_definitions(desk, tmp_path, monkeypatch):
     browser, _, _ = desk
     Models(str(tmp_path / "loadcoach.db")).put("small", {"gpus": 1, "flags": {"model": gguf(tmp_path / "small.gguf"), "ctx-size": 2048}})
-    roles = Roles(str(tmp_path / "data" / "roles.db"))  # kept on the front machine, beside the accounts
+    roles = Roles(str(tmp_path / "data" / "roles.db"))  # kept on the control node, beside the accounts
     roles.put("chat", {"models": {"small": 1}})
     sign_in(browser, "jordan")
     assert browser.get("/roles").status_code == 200

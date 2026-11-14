@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  const nodeLabel = window.suiteNodeLabel || (name => name === 'front' ? 'Control node' : name);
   const data = JSON.parse(document.getElementById('system-logs-data').textContent);
   const $ = id => document.getElementById(id);
   const descriptions = {
@@ -94,12 +95,12 @@
     shown.forEach((row,index) => {
       const button = $('log-entry-template').content.firstElementChild.cloneNode(true);
       button.dataset.id = row.id; button.setAttribute('aria-pressed', String(row.id === selected));
-      button.setAttribute('aria-label', `${time(row)}, ${row.level}, ${row.source} on ${row.node}: ${row.message}`);
+      button.setAttribute('aria-label', `${time(row)}, ${row.level}, ${row.source} on ${nodeLabel(row.node)}: ${row.message}`);
       const field = name => button.querySelector(`[data-field="${name}"]`);
       field('number').textContent = page * pageSize + index + 1;
       field('time').textContent = time(row); field('time').dateTime = row.at;
       setLevel(field('level'), row.level);
-      field('source').textContent = row.source; field('node').textContent = row.node;
+      field('source').textContent = row.source; field('node').textContent = nodeLabel(row.node);
       const body = $('workspace').dataset.layout === 'console' ? row.message + (row.raw.includes('\n') ? row.raw.slice(row.raw.indexOf('\n')) : '') : row.message;
       highlight(field('message'), body);
       if ($('workspace').dataset.layout === 'console') field('message').style.whiteSpace = $('wrap').checked ? 'pre-wrap' : '';
@@ -124,7 +125,7 @@
     setLevel($('detail-level'), row.level);
     $('detail-id').textContent = `#${row.id}`; $('detail-message').textContent = row.message;
     $('detail-at').textContent = `${localInput(row.epoch).replace('T', ' ')} · ${offset(row.epoch)}`;
-    $('detail-node').textContent = row.node; $('detail-source').textContent = row.source;
+    $('detail-node').textContent = nodeLabel(row.node); $('detail-source').textContent = row.source;
     $('detail-raw').textContent = row.raw;
     const ordered = [...scope].sort((a,b) => a.epoch - b.epoch), index = ordered.findIndex(entry => entry.id === row.id);
     $('entry-context').replaceChildren();

@@ -17,10 +17,10 @@ front = "weightroom.toml"
 
 # Tools run on their owning hosts; a fixed SSH stdio command or remote MCP server can reach
 # compute without moving files. Legacy compute-owned gateways use loadcoach = "loadcoach.toml"
-# instead of front; existing settings are preserved by the installer.
+# instead of the `front` setting; existing settings are preserved by the installer.
 
 # ToolLocker can name its identity/event store explicitly. Keep this binding on the same
-# authoritative store as its owner: WeightRoom on front, LoadCoach for legacy compute gateways.
+# authoritative store as its owner: WeightRoom on the control node, LoadCoach for legacy compute gateways.
 # [databases.stores.identity]
 # engine = "sqlite"
 # path = "../data/loadcoach.db"

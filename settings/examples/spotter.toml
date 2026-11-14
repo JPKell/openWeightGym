@@ -5,7 +5,7 @@
 # settings/defaults/spotter.toml. A value from there may be set here too: it is then this
 # machine's own starting value.
 
-# Address and port spotter listens on. It is asked by the front machine, so give compute's own address.
+# Address and port spotter listens on. It is asked by the control node, so give compute's own address.
 host = "127.0.0.1"
 port = 8444
 
@@ -14,9 +14,9 @@ port = 8444
 data = "../data"
 
 # Identity/event data and telemetry history have separate bindings. Identity normally resolves
-# to LoadCoach's authoritative store; local history defaults to spotter.db in `data`. Front
+# to LoadCoach's authoritative store; local history defaults to spotter.db in `data`. Control node
 # also samples this Spotter into its event-log store by physical-host fingerprint when its
-# machine has a Spotter URL configured in front's [machines.NAME] table.
+# machine has a Spotter URL configured in the control node's [machines.NAME] table.
 # [databases.stores.telemetry]
 # engine = "sqlite"
 # path = "../data/spotter.db"

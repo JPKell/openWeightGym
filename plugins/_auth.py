@@ -1,6 +1,6 @@
 """Local snapshots of compute's model list, for turnstile's plugin path and the plugin management page.
 
-Who a caller is, is turnstile's to say from the accounts on front. Compute's snapshot no longer
+Who a caller is, is turnstile's to say from the accounts on the control node. Compute's snapshot no longer
 carries any key verifiers: its `keys` list is always empty.
 """
 

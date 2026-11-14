@@ -31,7 +31,7 @@ No model in this delivery supplies measured OCR geometry: live `blocks` is empty
 | Responsibility | Canonical implementation |
 |---|---|
 | Schemas, prompts, raster validation, deterministic exports and warnings | `weightroom/extraction.py` |
-| Private assets/jobs/revisions/presets in front's existing accounts database | `weightroom/extraction_store.py`, `db/schemas.py` stream `weightroom.extractions` |
+| Private assets/jobs/revisions/presets in the control node's existing accounts database | `weightroom/extraction_store.py`, `db/schemas.py` stream `weightroom.extractions` |
 | Async orchestration and authenticated workflow routes | `turnstile/extractions.py` |
 | Browser session proxy and live page | `weightroom/extraction_views.py`, `extraction.html`, `extraction_parts.html`, `extraction.js`, `extraction.css` |
 | Stateless Responses conversion | `turnstile/responses.py` |
@@ -43,7 +43,7 @@ Provenance records the source digest, prompt/schema versions, preprocessing, req
 
 ## Workflow APIs
 
-These authenticated front gateway routes are OWG extensions, separate from OpenAI inference. The browser uses the narrowly scoped session/CSRF proxy `/chat/extraction/api/...`. Every lookup is bound to the stable caller identity; opaque IDs alone grant no access. Responses/downloads use `Cache-Control: private, no-store`.
+These authenticated control node gateway routes are OWG extensions, separate from OpenAI inference. The browser uses the narrowly scoped session/CSRF proxy `/chat/extraction/api/...`. Every lookup is bound to the stable caller identity; opaque IDs alone grant no access. Responses/downloads use `Cache-Control: private, no-store`.
 
 | Route | Contract |
 |---|---|
@@ -77,15 +77,15 @@ Existing `/v1/files` + `/v1/batches` accepts JSONL targeting `/v1/chat/completio
 
 ToolLocker registers `extraction__describe_image`, `extraction__extract_image_text`, `extraction__extract_receipt`, `extraction__extract_image_table`, `extraction__extract_image_fields`, `extraction__extraction_status` and `extraction__cancel_extraction`. Tasks accept an owned asset ID, permitted model and scalar options; custom fields accepts bounded `schema_json`. Results carry job ID/status, bounded summary, warnings, usage and authenticated status/export references.
 
-The adapter forwards a verified request-scoped caller proof, not a user-supplied identity or shared admin key. Front rechecks the original API key, identity, app restrictions, sensitivity and tool visibility; replay/foreign-owner/revoked-key tests cover this boundary. `extraction_url` defaults to the configured front gateway when ToolLocker loads front configuration. An existing configured MCP server named `extraction` is preserved rather than overwritten.
+The adapter forwards a verified request-scoped caller proof, not a user-supplied identity or shared admin key. Control node rechecks the original API key, identity, app restrictions, sensitivity and tool visibility; replay/foreign-owner/revoked-key tests cover this boundary. `extraction_url` defaults to the configured control node gateway when ToolLocker loads control node configuration. An existing configured MCP server named `extraction` is preserved rather than overwritten.
 
 ## Storage and recovery
 
 Uploads allow PNG/JPEG/WebP up to 5 MiB and 16 megapixels. Actual bytes are verified; animated, malformed, SVG, PDF and archive inputs are rejected. EXIF orientation is applied to a metadata-free PNG derivative; alpha is composited on white. The immutable original remains separately downloadable. Remote URL ingestion is unsupported.
 
-Records live in front's existing backed-up accounts database, using migrations 1–2 of `weightroom.extractions`. No extra deployment store or source override is needed. Limits per account: 100 sources/100 MiB of base64-encoded original plus derived data, 200 jobs, 20 pending jobs and 30 presets. Orchestration runs at most two jobs per caller/four globally, with a 900-second bound; normal inference admission still controls resources. Structured output is bounded to 256 KiB.
+Records live in the control node's existing backed-up accounts database, using migrations 1–2 of `weightroom.extractions`. No extra deployment store or source override is needed. Limits per account: 100 sources/100 MiB of base64-encoded original plus derived data, 200 jobs, 20 pending jobs and 30 presets. Orchestration runs at most two jobs per caller/four globally, with a 900-second bound; normal inference admission still controls resources. Structured output is bounded to 256 KiB.
 
-Abandoned sources and temporary jobs expire after 24 hours; ordinary jobs after 30 days. A reused source remains until its longest retained job expires. Explicit deletion and account deletion remove owned records; cleanup runs with normal front maintenance. Corrections use revision checks and never overwrite the first output. Downloads require authentication. Browser drafts stay in page memory, not local storage. Normal request logging policy still applies; the feature adds no image/OCR logging.
+Abandoned sources and temporary jobs expire after 24 hours; ordinary jobs after 30 days. A reused source remains until its longest retained job expires. Explicit deletion and account deletion remove owned records; cleanup runs with normal control node maintenance. Corrections use revision checks and never overwrite the first output. Downloads require authentication. Browser drafts stay in page memory, not local storage. Normal request logging policy still applies; the feature adds no image/OCR logging.
 
 On gateway restart, pending/running jobs become failed with `interrupted`: upstream outcome may be unknown and nothing is replayed automatically. Retry explicitly creates a new linked job. Existing database inventory/backups include these tables. Use the established backup/restore tooling for recovery; preserve accounts, model files and keys. Release through **`owg update; owg restart`** and verify effective running source/live behavior after authorized production deployment. This task verified Docker development behavior only.
 
@@ -120,7 +120,7 @@ Synthetic clear receipt checks matched merchant/date/currency/three items/quanti
 
 ### Reproduce the Docker qualification
 
-Requires Linux Docker, the mounted NVIDIA driver/CUDA toolkit, compatible llama.cpp source, two exposed NVIDIA device nodes and the stored model/projector above. `prepare.py` builds the dev image and native CUDA runtime in an external Docker cache volume; it does not change host runtime installation. The compose file mounts the current checkout read-only at `/app`, uses separate front/compute volumes and localhost ports 20440/20442/20443. Native build defaults target the tested GPU architecture 120.
+Requires Linux Docker, the mounted NVIDIA driver/CUDA toolkit, compatible llama.cpp source, two exposed NVIDIA device nodes and the stored model/projector above. `prepare.py` builds the dev image and native CUDA runtime in an external Docker cache volume; it does not change host runtime installation. The compose file mounts the current checkout read-only at `/app`, uses separate control node/compute volumes and localhost ports 20440/20442/20443. Native build defaults target the tested GPU architecture 120.
 
 ```bash
 rtk proxy .venv/bin/python tests/docker/extraction/prepare.py --llama-source /path/to/llama.cpp

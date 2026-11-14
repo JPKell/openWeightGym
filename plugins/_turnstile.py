@@ -24,7 +24,7 @@ class Router:
     """Route manifest-backed models, enforce mirrored permissions, and record only adaptor use."""
 
     def __init__(self, registry: Registry, adapters: httpx.AsyncClient, identify, ask) -> None:
-        """`identify(authorization)` names the caller from front's accounts, or raises AdapterError.
+        """`identify(authorization)` names the caller from the control node's accounts, or raises AdapterError.
         `ask(authorization, method, path)` asks compute as that caller without waking it, and gives None if it is not answering."""
         self.registry, self.adapters, self.identify, self.ask = registry, adapters, identify, ask
         self.controller = Controller(registry, adapters)

@@ -1,4 +1,4 @@
-"""Front reports cannot block inference, and failed compute bodies have honest statuses."""
+"""Control node reports cannot block inference, and failed compute bodies have honest statuses."""
 
 import asyncio
 import json

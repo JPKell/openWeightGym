@@ -1,4 +1,4 @@
-"""Front-wide service choices shared by setup, browser pages and API dispatch."""
+"""Platform service choices shared by setup, browser pages and API dispatch."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -103,7 +103,7 @@ class PlatformServices:
 
 
 class PlatformServiceGate:
-    """Reject disabled front services before they can submit work or contact providers."""
+    """Reject disabled control node services before they can submit work or contact providers."""
 
     def __init__(self, app, policy):
         self.app, self.policy = app, policy

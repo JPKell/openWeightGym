@@ -138,7 +138,7 @@ def test_empty_and_cpu_only_hosts(preview):
     page = preview
     playwright.expect(page.locator('#host-grid [data-host]')).to_have_count(4)
     playwright.expect(page.locator('#host-search, #host-filter, #host-sort')).to_have_count(0)
-    page.get_by_role('button', name='Open front telemetry', exact=True).click()
+    page.get_by_role('button', name='Open Control node telemetry', exact=True).click()
     playwright.expect(page.locator('#cpu-only')).to_be_visible()
     playwright.expect(page.get_by_role('tab')).to_have_count(2)
     page.get_by_role('button', name='Processor temperature', exact=True).click()

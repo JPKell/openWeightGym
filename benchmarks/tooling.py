@@ -55,7 +55,7 @@ TOOLS = {
 
 
 def cases(limit, recovery=False):
-    """Answer keys and fault schedules stay on front, outside every model request."""
+    """Answer keys and fault schedules stay on the control node, outside every model request."""
     result = []
     for n, customer in enumerate(('Mira Chen', 'Oren Vale', 'Priya Pike'), 1):
         rid, current = f'R-{n}A', f'R-{n}B'

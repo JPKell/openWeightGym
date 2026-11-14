@@ -30,7 +30,7 @@ from db.schemas import GROUPS
 # What a group's `can` list may contain.
 ABILITIES = {
     "front-plugins": "use external adapter models through turnstile",
-    "front-manage-plugins": "manage plugin instances, model aliases, installers and health controls on front",
+    "front-manage-plugins": "manage plugin instances, model aliases, installers and health controls on the control node",
     "hold": "keep a model loaded",
     "lock": "take the lock",
     "break-lock": "end a lock someone else holds",
@@ -56,15 +56,15 @@ ABILITIES = {
     "restart-services": "start, stop and restart services on a compute node, and read their output",
     "power": "restart a compute node, put it to sleep or switch it off",
     "manage-settings": "see every program's settings, and change those that can be changed from the site",
-    "superuser": "do everything a person can be allowed to do, here and on the front machine, also what is added later",
+    "superuser": "do everything a person can be allowed to do, here and on the control node, also what is added later",
     "follow-settings": "read what was changed in a program's settings and say what it runs with; meant for a program's own key",
     "sign-in": "have someone else's sign-in checked, for a session that can do all that person may; meant for weightroom's own key",
     "app-sign-in": "have someone else's sign-in checked here, for a session that can do no more than this account; meant for an app's own key",
-    "mirror-users": "read the models for front's plugins and the evidence for alerts; meant for the front machine",
+    "mirror-users": "read the models for the control node's plugins and the evidence for alerts; meant for the control node",
 }
 # Abilities that existed once. A group may still list one, so that an old file still loads. It does nothing.
 RETIRED = {"act-for"}
-# An ability starting with this is not LoadCoach's. It is passed to the front machine untouched.
+# An ability starting with this is not LoadCoach's. It is passed to the control node untouched.
 FRONT_PREFIX = "front-"
 
 NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")

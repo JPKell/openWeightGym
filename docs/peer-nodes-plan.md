@@ -7,28 +7,28 @@ installations are untouched. Production rollout is outside this qualification's 
 
 Node measurements previously sent pinned CPU-node tasks through an implicit default node.
 That node could not resolve another node's model ID and returned “The selected local model
-is not available.” The front now owns tasks and sends each target to its named peer.
+is not available.” The control node now owns tasks and sends each target to its named peer.
 
 | Topic | Implemented contract |
 |---|---|
 | Caller destination | Optional JSON `node`, beside `model`; enabled by default. **Settings → General → Requests and queue → Allow callers to choose the node**, writable with `manage-settings`, applies immediately. |
 | Setting off | A named destination receives 400 with the setting and its location; an unpinned request still uses placement. Console targets remain visible. |
-| Task ownership | New tasks, batches and schedule grants always live on front. Old node-owned records remain on their original node; ownership is discovered without guessing a default. |
-| Peers | Every node is `[machines.NAME]`; only front is special. The former default's hostname supplies its new name automatically. |
+| Task ownership | New tasks, batches and schedule grants always live on the control node. Old node-owned records remain on their original node; ownership is discovered without guessing a default. |
+| Peers | Every node is `[machines.NAME]`; only control node is special. The former default's hostname supplies its new name automatically. |
 | Model copies | Placement combines only enabled, permitted copies with the same verified weights and engine. Same names alone do not establish equivalence. |
 | Placement | A copy that can start now beats a busy loaded copy. Within that group, loaded first, then estimated answer time and name. Busy copies sort by finish estimate and fewer evictions. |
 | Overflow | Chat/API, batch lines and model residency calls use placement. If every awake candidate would queue or evict, wake a capable configured peer and wait within the existing bound. Work already queued stays on its node. |
 | Benchmarks | An explicitly selected node remains pinned, including scheduled runs; an absent node never falls back to another measurement target. |
 | Voice | **Settings → General → Speech → Preferred voice node** is a live preference. Full or unavailable preferred services fall back; each established session keeps its actual node and stream URL. Explicit caller pins obey the destination setting. |
-| Admin views | Combined data identifies each node. Writes target the owning node; passive page reads never wake one. Front accounts, settings and history remain available during node outages. |
-| Backups | Each node keeps its own encrypted, verified archives. Front schedules independent per-node results and retries only unverified nodes. |
+| Admin views | Combined data identifies each node. Writes target the owning node; passive page reads never wake one. Control node accounts, settings and history remain available during node outages. |
+| Backups | Each node keeps its own encrypted, verified archives. Control node schedules independent per-node results and retries only unverified nodes. |
 | Compatibility | Historical request links and chained statements resolve through aliases. Protocol fields such as a peer's `compute` URL and documented old-key readers remain supported. |
 
 ## Phase 0: safety and inventory
 
 - [x] Separate Docker project, generated accounts/keys, independent front/alpha/beta/gamma
   volumes, bounded native engines and optional read-only GPU access; no installed host paths.
-- [x] Verified encrypted backups of Front and all three peers before stored-name migration.
+- [x] Verified encrypted backups of Control node and all three peers before stored-name migration.
 - [x] Unmapped requests are refused with 404; bounded diagnostics record their route without
   record IDs. There is no implicit default-node dispatch.
 - [x] Audit-chain coverage reviewed: event payload/text remain byte-for-byte unchanged.
@@ -43,7 +43,7 @@ rollout prerequisite, not evidence supplied by the Docker run.
 
 - [x] `allow_caller_to_specify_destination` defaults true and uses the existing General settings
   rows and save handlers; it is absent from System and node-specific settings.
-- [x] `TaskRecords` always creates new work on front. Retired node stores refuse new tasks;
+- [x] `TaskRecords` always creates new work on the control node. Retired node stores refuse new tasks;
   non-retired stores continue serving their older history. Frozen model/node guards remain.
 - [x] Old task/file/batch IDs are checked against peers without wake. A unique owner receives
   the request; collisions are explicit and unavailable owners are not silently substituted.
@@ -54,12 +54,12 @@ rollout prerequisite, not evidence supplied by the Docker run.
   and associated evidence/reservation tables and migration history.
 - [x] Rename `front_settings` → `keep_console_settings_on_front` and
   `front_toollocker` → `toollocker_runs_on_front`, preserving old-key readers and conflict checks.
-  Front always keeps its settings; explicit false is refused with an explanation.
+  Control node always keeps its settings; explicit false is refused with an explanation.
 
 ## Phase 2: peer configuration, names and availability
 
 - [x] The existing `owg update` migration moves the old top-level address, Spotter address,
-  key reference and wake configuration into `[machines.<hostname>]`. Front reads its observed
+  key reference and wake configuration into `[machines.<hostname>]`. Control node reads its observed
   node hostname from the configured SQLite or PostgreSQL accounts store.
 - [x] Validate names and collisions before changing any file; preserve the original
   `*.before-peer-nodes` file, comments, credentials and custom model paths. Repeating the
@@ -72,9 +72,9 @@ rollout prerequisite, not evidence supplied by the Docker run.
 - [x] Conflicting aliases fail closed. Old unprefixed request IDs resolve to the renamed node;
   new requests use its normal prefix. Physical-host telemetry retains its fingerprint history.
 - [x] Replace the single compute outage state with per-node notices, last-seen age and
-  configured Wake actions. Front connectivity is reported independently. Unavailable nodes'
-  submissions disable while healthy-node and front controls remain usable.
-- [x] Merge outside-service model names across peers. Front ToolLocker and alert evidence
+  configured Wake actions. Control node connectivity is reported independently. Unavailable nodes'
+  submissions disable while healthy-node and the control node controls remain usable.
+- [x] Merge outside-service model names across peers. Control node ToolLocker and alert evidence
   have explicit routes and remain usable without a default compute node.
 - [x] Voice readiness observes every reported voice service in parallel without warming it.
   Preferred/full/down routing and gateway session pinning use the actual selected service.
@@ -98,17 +98,17 @@ rollout prerequisite, not evidence supplied by the Docker run.
   and identify missing ones. Passive reads carry no-wake policy through internal lookups.
 - [x] Requests, Usage and AI log have shared Node filters; request/event rows identify their
   origin. System logs require the selected node. Model/file/restore writes retain their node.
-- [x] Preserve the established front event stream for request/event pagination. Nodes already
-  forward it durably to front, so one ordered cursor is authoritative; introducing separate
+- [x] Preserve the established control node event stream for request/event pagination. Nodes already
+  forward it durably to the control node, so one ordered cursor is authoritative; introducing separate
   per-node cursors would duplicate this history and undermine stable paging.
 - [x] Shared filters, notices, recovery inventories and existing component templates are reused
   in pages/fragments. Hidden-state handling, narrow layouts and dynamic replacements were reviewed.
 
 ## Phase 5: independent backups
 
-- [x] Front and each compute node use their own backup routes, encryption, retention and
+- [x] Control node and each compute node use their own backup routes, encryption, retention and
   restore previews; a failed peer never substitutes another node's archive.
-- [x] A backup schedule accepts an explicit node list; empty means Front and all configured
+- [x] A backup schedule accepts an explicit node list; empty means Control node and all configured
   peers. Saved unavailable choices remain visible instead of silently broadening scope.
 - [x] Each occurrence/node has a deterministic backup ID and durable receipt. Verified peers
   are retained during outages; retries create only the missing archive. Missed results remain visible.
@@ -151,9 +151,9 @@ Docker results do not establish those outcomes.
 The owner requested that existing installs stay untouched. The following remains an operating
 procedure for a separately authorized rollout, not an action performed by this task:
 
-1. Obtain and verify fresh encrypted backups on front and every node, including settings and
+1. Obtain and verify fresh encrypted backups on the control node and every node, including settings and
    each node's stores. Keep recovery identities outside the machines being updated.
-2. Push the reviewed commit. Update front and all nodes together through their existing
+2. Push the reviewed commit. Update control node and all nodes together through their existing
    configured branch with `owg update; owg restart`; do not introduce pins, alternate runtime
    trees, `PYTHONPATH` overrides, service overrides or wrapper launchers.
 3. Verify the effective running source and live behavior on every host, including General's

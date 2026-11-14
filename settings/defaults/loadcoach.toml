@@ -7,7 +7,7 @@
 #   loadcoach settings reset loadcoach NAME
 # The models are taken into the database the first time LoadCoach runs. From then on they are
 # looked after on the site, or with `loadcoach models`, and changing them here changes nothing.
-# The groups and the users are kept on the front machine: see settings/defaults/weightroom.toml.
+# The groups and the users are kept on the control node: see settings/defaults/weightroom.toml.
 #
 # What belongs to the machine, such as addresses, ports and paths, is not here. That is in
 # settings/loadcoach.toml, and settings/examples/loadcoach.toml explains it. Cards are detected
@@ -86,8 +86,8 @@ keep_text = 50
 unlogged = false
 
 # Hosted models are not answered from here. Since milestone 114 the outside services, their keys and
-# what may leave are the front machine's: register a service under System > Outside on the site, and
-# put its key in a file NAME.key in the front machine's keys folder (`hosted_keys` in [turnstile]
+# what may leave are the control node's: register a service under System > Outside on the site, and
+# put its key in a file NAME.key in the control node's keys folder (`hosted_keys` in [turnstile]
 # of settings/weightroom.toml there, or beside machine.key). A caller asks for a hosted model by name
 # through turnstile and it appears in /v1/models; X-LoadCoach-Offload is decided there too. This
 # machine only answers inference, voice and telemetry. A [hosted] section or `keys` left in this

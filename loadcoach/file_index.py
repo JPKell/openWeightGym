@@ -7,7 +7,7 @@ only stats the folders and reads the files that are new or have changed.
 On a compute node spotter looks again every `files_every` minutes (a per-node setting) and
 LoadCoach answers the Files page from the index. LoadCoach puts right the entries for the files it
 moves, copies, deletes, downloads or cleans up, and a Refresh on the Files page looks again at
-once. Front's own storage, which turnstile keeps, uses the same index under its own name.
+once. Control node's own storage, which turnstile keeps, uses the same index under its own name.
 
 The index is a JSON file in the program's data folder. Both programs on a node write it, so every
 change happens under a lock on a file beside it and is written whole to a temporary file first.
@@ -80,7 +80,7 @@ class FileIndex:
 
     def __init__(self, path: str | Path | None, describe: Callable[[Path], dict] = describe,
                  accept: Callable[[str], object] | None = None):
-        """`accept` may refuse a file found in a place by raising ValueError, as front's path check does."""
+        """`accept` may refuse a file found in a place by raising ValueError, as the control node's path check does."""
         self.path = Path(path) if path else None
         self.describe, self.accept = describe, accept
         self.kept: dict | None = None  # the index itself when there is no file

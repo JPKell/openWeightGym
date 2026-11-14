@@ -1,6 +1,6 @@
-"""Private front-owned image files and metadata, using the existing accounts store.
+"""Private control-node-owned image files and metadata, using the existing accounts store.
 
-The batch executor remains openWeightGym's existing front executor; this store binds its
+The batch executor remains openWeightGym's existing control node executor; this store binds its
 image jobs to immutable account IDs and keeps binary renders out of the database.
 """
 import hashlib
@@ -79,7 +79,7 @@ class Store:
         path=self.path(identifier)
         path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
         if shutil.disk_usage(self.root).free<len(content)+len(thumb)+2**30:
-            raise ValueError("Front image storage needs at least 1 GiB free headroom.")
+            raise ValueError("Control node image storage needs at least 1 GiB free headroom.")
         made=[]
         try:
             for destination,data in ((path,content),(self.path(identifier,True),thumb)):

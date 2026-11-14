@@ -1,6 +1,6 @@
 # Image generation integration plan
 
-Status: implementation deployed on front and main compute; frozen-build GPU qualification and regression checks are complete. Flux2Dev/klein, references, LoRAs, upscaling, private assets, presets, queued jobs, live previews, sweeps, pause/resume and composite masks are implemented. Civitai authentication and the global/per-user preview policy are live-verified; owner visual quality review remains separate.
+Status: implementation deployed on the control node and main compute; frozen-build GPU qualification and regression checks are complete. Flux2Dev/klein, references, LoRAs, upscaling, private assets, presets, queued jobs, live previews, sweeps, pause/resume and composite masks are implemented. Civitai authentication and the global/per-user preview policy are live-verified; owner visual quality review remains separate.
 
 ## Confirmed requirements
 
@@ -42,7 +42,7 @@ Source checkout: `/home/jpk/ai/igen`. Read `README.md`, `HELP.md`, relevant `SPE
 
 Extend the existing [engine contract](../engines/contracts.py) and [LoadCoach runner](../loadcoach/runner.py) with an sdcpp adapter. Run the native runtime as a supervised child with a private local interface. Reuse the necessary igen orchestration, reference preparation and asset-conversion behavior around it. Keep one admission authority and existing identity, signing, lifecycle and logging paths.
 
-The owning implementation is `mirrorwall/` at the Suite root. Organize image engine/model/request contracts, supervised runtime, front-owned asset/workflow persistence, discovery and image UI/templates/static assets there. Installer entry scripts, the engine registry, front/worker route wiring, navigation and shared Files/admission changes remain small integrations in their existing locations. Package and deploy Mirror Wall with the relevant front/compute installations.
+The owning implementation is `mirrorwall/` at the Suite root. Organize image engine/model/request contracts, supervised runtime, control-node-owned asset/workflow persistence, discovery and image UI/templates/static assets there. Installer entry scripts, the engine registry, control node/worker route wiring, navigation and shared Files/admission changes remain small integrations in their existing locations. Package and deploy Mirror Wall with the relevant control node/compute installations.
 
 Each execution profile declares component placement, diffusion split mode, permitted input/output sizes, precision, host-RAM budget and required GPUs. Distinguish single-card execution, two-card component placement and true diffusion splitting across two cards. Prioritize layer-split qualification for larger-model capacity; qualify row splitting separately where the compiled backend supports it. Expose only assigned GPUs to the child and reserve the complete layout before preparation/loading begins.
 
@@ -54,7 +54,7 @@ Uneven diffusion placement is acceptable; equal card utilization is not a requir
 
 Extend the existing [Suite installer](../scripts/install-suite.sh) and its [support/audit code](../scripts/install-suite-support.py). The implemented interfaces are:
 
-- **Initial installation:** when LoadCoach is selected (including compute/all presets), ask “Install optional sdcpp image-generation support?” before the final action summary. Recommend default No on a fresh install. Detect an existing compatible installation and offer to keep it. Front-only installations explain that the runtime belongs on the selected compute host.
+- **Initial installation:** when LoadCoach is selected (including compute/all presets), ask “Install optional sdcpp image-generation support?” before the final action summary. Recommend default No on a fresh install. Detect an existing compatible installation and offer to keep it. Control-node-only installations explain that the runtime belongs on the selected compute host.
 - **Unattended installation:** add explicit install/skip/keep choices, `--sdcpp install|skip|keep`. Omission preserves an existing installation or skips a fresh one; `--yes` alone must not enable optional downloads/builds. Include the selection, dependencies, backend and target paths in `--dry-run`; `--check` audits without installing or starting a model.
 - **Install later:** add an independently runnable, idempotent `scripts/install-sdcpp.sh`, called by the main installer when selected. It discovers Suite paths and existing binaries, checks prerequisites, selects an explicitly supported backend and registers the resulting executable with the existing engine configuration. It must work without reinstalling Suite or resetting settings, keys, databases or model assets.
 - **Build and update:** pin a qualified upstream revision, record source/build/backend identities, build in a staging directory and verify the executable before atomic activation. Detect the GPU/toolchain and effective multi-GPU split capabilities, and explain missing requirements; do not silently substitute a CPU backend or advertise unsupported split modes. Preserve the previous working binary/configuration for rollback. Use existing queue/maintenance checks before replacing an active runtime; installation adds no independently scheduled daemon or public listener.
@@ -110,7 +110,7 @@ rtk proxy .venv/bin/python scripts/compare-image-runtimes.py \
   --runtimes sdcpp igen
 ```
 
-The existing key stays private; it is never copied into evidence. Defaults reproduce the bounded protocol above. `--layouts 1`, `--reference-counts 0 2`, `--repeats 3` and `--runtimes igen` can narrow a repeat. Failed/interrupted profiles remain visible in results rather than becoming successful timings; inspect the final summary status. The harness freezes inputs before loading models and refuses queued/running front benchmarks, so allow existing work to drain first.
+The existing key stays private; it is never copied into evidence. Defaults reproduce the bounded protocol above. `--layouts 1`, `--reference-counts 0 2`, `--repeats 3` and `--runtimes igen` can narrow a repeat. Failed/interrupted profiles remain visible in results rather than becoming successful timings; inspect the final summary status. The harness freezes inputs before loading models and refuses queued/running control node benchmarks, so allow existing work to drain first.
 
 ### API and configuration
 
@@ -138,7 +138,7 @@ Civitai discovery needs model-family/type/version/format filters, source IDs and
 
 ### Results and operations
 
-Use existing front ownership for retained user assets/history and worker ownership for model files/scratch. Decide reference-library persistence, output retention, intermediate retention and exported metadata before choosing schemas. Preserve no-log behavior throughout uploads, derivatives and outputs.
+Use existing control node ownership for retained user assets/history and worker ownership for model files/scratch. Decide reference-library persistence, output retention, intermediate retention and exported metadata before choosing schemas. Preserve no-log behavior throughout uploads, derivatives and outputs.
 
 Report image count, sizes, elapsed/native timings and per-stage per-card/RAM peaks; do not fabricate language-token usage. Define cancellation, disconnect, timeout, restart recovery and batch partial-failure behavior. Surface models, workflows and their dependencies in the requested Models pages, with normal Logs/Status/Files integration.
 
@@ -157,7 +157,7 @@ Confirmed rows record owner answers from 2026-10-23. Implementation defaults use
 | R7 | Output sizes and defaults | Distinguish base diffusion size from final output size; configure allowed native-generation/upscale combinations per workflow. | Implementation default |
 | R8 | One-/two-card policy and residency | Explicit qualified component/split profiles; uneven splits are acceptable and other models may remain resident when measured whole-workflow peaks plus headroom fit. Evict only eligible idle models when needed; preserve holds/locks and active work. | Confirmed |
 | R9 | User run surface | Image-generation window under Chat with editable image settings, reference uploads and an output browser with thumbnails and a larger view; detailed contract above. | Confirmed |
-| R10 | Storage/privacy | Private per-user reference/output assets on front, retained until user deletion with download/delete controls. No-log assets remain temporary. Keep sensitive exported metadata opt-in. | Confirmed; bounded implementation defaults for intermediates/limits |
+| R10 | Storage/privacy | Private per-user reference/output assets on the control node, retained until user deletion with download/delete controls. No-log assets remain temporary. Keep sensitive exported metadata opt-in. | Confirmed; bounded implementation defaults for intermediates/limits |
 | R11 | Editing scope | Include live partial-image previews in the first release; masks are a final-phase item. | Confirmed |
 | R12 | Discovery policy | Adult Civitai previews require global permission plus each user's opt-in; globally off hides the user control and enforces safe previews. Private administrator-configured download credentials. Preserve existing assets on import. | Confirmed |
 | R13 | Initial generation runtime | Use stable-diffusion.cpp (sdcpp), selected after the local automated comparison. | Confirmed |
@@ -172,7 +172,7 @@ Confirmed rows record owner answers from 2026-10-23. Implementation defaults use
 ## Implemented delivery and acceptance contract
 
 1. Resolve interview scope; define model/workflow/asset identities and bounded API capabilities.
-2. Add the optional native installer/shared later-install script and manual directions. Verify initial accept/decline, unattended choices, front-only behavior, dry-run/check, compatible existing/manual installs, missing toolchains, failed builds, retry and rollback. Skipping must leave ordinary Suite installation operational.
+2. Add the optional native installer/shared later-install script and manual directions. Verify initial accept/decline, unattended choices, control-node-only behavior, dry-run/check, compatible existing/manual installs, missing toolchains, failed builds, retry and rollback. Skipping must leave ordinary Suite installation operational.
 3. Integrate the sdcpp engine adapter and required igen helper behavior; import model assets non-destructively and validate native-compatible bundles/converters and automatic reference preparation.
 4. Integrate admission, supervised execution, resource reporting and cleanup; qualify single-card, two-card component-placement and true diffusion-split workflows, including representative larger-model capacity, without interrupting existing queued/running work.
 5. Add API routes, Models/workflow pages, Files/discovery and the Chat image-generation window using existing Suite components, including optional-runtime availability/setup guidance and explicit qualified component/split layout selection.
@@ -188,7 +188,7 @@ Confirmed rows record owner answers from 2026-10-23. Implementation defaults use
 
 The selected generation design is **01 Canvas studio**. Its live page and the design
 previews share the inspector, prompt, viewer, sweep editor, result/reference/job templates
-and palette-driven surfaces. Keep work in Mirror Wall and use existing front assets,
+and palette-driven surfaces. Keep work in Mirror Wall and use existing control node assets,
 model permissions, admission and batch execution; do not add another job service.
 
 | Step | Deliverable and acceptance | State |
@@ -235,14 +235,14 @@ The canonical machine record is [delivery.json](../data/qualification/mirrorwall
 
 | Area | Result / evidence |
 |---|---|
-| Installation/deployment | Optional pinned CUDA runtime installed; front API/UI, artifact worker and main GPU worker activated through immutable source pins. Previous releases, private configuration preimages and source-only front recovery copy are preserved. See [source override recovery](operations.md#runtime-source-overrides). |
+| Installation/deployment | Optional pinned CUDA runtime installed; control node API/UI, artifact worker and main GPU worker activated through immutable source pins. Previous releases, private configuration preimages and source-only control node recovery copy are preserved. See [source override recovery](operations.md#runtime-source-overrides). |
 | Workflows | Live front-generated Dev 1024px/28-step and klein gallery outputs; maximum configured 1024px/two-reference/4× pipelines and six native previews passed for Dev, single-card klein and unequal layer-split klein with blueprint LoRA. [Cases](../data/qualification/mirrorwall-20261023/live-workflows-flux2-klein-split-q4.json). |
 | Resource admission | [Per-card envelopes](../data/qualification/mirrorwall-20261023/live-profiles.json) include preparation, loading/sampling and output upscaling; incomplete/failed observations revoke sharing, successful smaller runs retain a current qualified envelope, and unqualified profiles retry on whole cards. Dev uses 0.5MP references because two 1MP references exceeded this machine's native budget. |
 | Coexistence | Fixed 3:1 diffusion placement generated while Qwen 1.5B remained entirely resident on CUDA1 with its process ID preserved. [Evidence](../data/qualification/mirrorwall-20261023/live-coexistence.json). |
-| Controls/recovery | [Live masks, sweeps and queue controls](../data/qualification/mirrorwall-20261023/live-controls.json): protected pixels retained; four-image sweep paused, survived a front API restart and resumed without duplicates; Stop cancelled eight queued images. [Cleanup](../data/qualification/mirrorwall-20261023/live-cleanup.json): preparation/loading/sampling cancellation and native crash released reservations and GPU children. |
-| Privacy/export | Stable per-user ownership covers originals, thumbnails and results; unauthorized reads return 404. Authorized temporary output had no front SQL row or disk file. [Evidence](../data/qualification/mirrorwall-20261023/live-privacy.json). Render exports explicitly strip inherited metadata; masks require matching source dimensions and output aspect ratio. |
+| Controls/recovery | [Live masks, sweeps and queue controls](../data/qualification/mirrorwall-20261023/live-controls.json): protected pixels retained; four-image sweep paused, survived a control node API restart and resumed without duplicates; Stop cancelled eight queued images. [Cleanup](../data/qualification/mirrorwall-20261023/live-cleanup.json): preparation/loading/sampling cancellation and native crash released reservations and GPU children. |
+| Privacy/export | Stable per-user ownership covers originals, thumbnails and results; unauthorized reads return 404. Authorized temporary output had no control node SQL row or disk file. [Evidence](../data/qualification/mirrorwall-20261023/live-privacy.json). Render exports explicitly strip inherited metadata; masks require matching source dimensions and output aspect ratio. |
 | UI | Private preset/version, exact seed reuse, thumbnail/keyboard browsing, clean PNG download and 390px single-column layout checked. [Live studio](../data/qualification/mirrorwall-20261023/live-studio.jpg). Browser filechooser automation lacked extension file-URL permission; API uploads and reference/masked generation passed. Human file selection/visual quality remain owner review. |
-| Discovery/Files | Image components/dependencies are tracked across nodes. Civitai filters, global-off control hiding and per-user opt-in passed; [preview policy](README.md#images). An authenticated 83 MiB LoRA download through the existing manager passed SHA-256 verification into front's configured storage library: [transfer](../data/qualification/mirrorwall-20261023/civitai-download.json). Real HF blueprint LoRA loaded all 224 tensors. |
+| Discovery/Files | Image components/dependencies are tracked across nodes. Civitai filters, global-off control hiding and per-user opt-in passed; [preview policy](README.md#images). An authenticated 83 MiB LoRA download through the existing manager passed SHA-256 verification into the control node's configured storage library: [transfer](../data/qualification/mirrorwall-20261023/civitai-download.json). Real HF blueprint LoRA loaded all 224 tensors. |
 | Regression | Frozen image-runtime suite: **1,648 passed, 38 skipped**. Subsequent preview-policy/settings/routing checks: **71 passed**. [Full JUnit](../data/qualification/mirrorwall-20261023/suite-final.xml), [policy JUnit](../data/qualification/mirrorwall-20261023/preview-policy.xml). |
 
 The source igen installation and its user data remain intact. Visual quality acceptance belongs to the owner; these qualifications cover the recorded CUDA profiles, not every model/backend or a clean Suite reinstall.
@@ -252,14 +252,14 @@ The source igen installation and its user data remain intact. Visual quality acc
 Operator guide: Docs → Modules → Mirror Wall (`weightroom/pages/docs/modules/mirrorwall.html`): the workflow diagram, a models table with each model's parts, sizes and measured peaks, adding a model, and reference-image rules.
 
 - Fixed: an SDXL checkpoint was launched with `--diffusion-model`, which loads its tensors under the diffusion prefix, so its built-in CLIP and VAE could not load; a checkpoint without separate CLIP files now uses `--model`. SDXL uses only its first reference as the start image, yet accepted two: its limit is now one, and a profile asking for more is refused. SDXL strength had no control on the Images page.
-- Fixed: a reference smaller than the reference size on a model without an upscaler, too many references and a mask without a reference all failed only after the job was queued; front now refuses them at once, and the Images page says why before Generate.
+- Fixed: a reference smaller than the reference size on a model without an upscaler, too many references and a mask without a reference all failed only after the job was queued; control node now refuses them at once, and the Images page says why before Generate.
 - Added: the Images page marks, per model, whether references are used, how many and how (conditioning or image-to-image), and each reference as main, enlarged, too small or not used. Models → Images reads each file's GGUF or safetensors header on the selected node (`mirrorwall/components.py`, `POST /loadcoach/images/check`, files outside the node's model places are not read), detects the family and size, marks each part required, optional or unused, names a wrong part (such as a Qwen3 4B encoder for klein 9B), offers matching files already on the node and links the Hugging Face repository for a missing one.
 - Fixed during integration: model-part searches enforce allowed roots through symlinks, malformed tensor shapes report unreadable files, and invalid reference megapixels are refused before dimension calculations. The intermittent preview-policy test shared clients across two event loops; it now uses the app's existing loop and passed ten consecutive checks.
 - SDXL Base 1.0 passed native 512×512 generation through 20 steps, fixed-seed negative-prompt comparison, cancellation and cleanup on 2026-10-27; [profile and receipts](../data/qualification/model-image-settings-20261027/sdxl.json). Flux 2 klein 4B remains unqualified; owner visual acceptance remains separate.
 
 ### Combined deployment 2026-10-24
 
-Claude's `615ce293`/`59b85901`, SoundRoom usability work and integration guards are combined on `main`; runtime source is `395fb7ac`, exported to `~/.local/share/ai-suite/releases/unified-395fb7ac/source` on compute, front and remote CPU. All 12 previously active core/adapter services select it through `99-unified-20261024.conf`; the separate front ToolLocker host's shipped files and the Hermes instance's runtime bundle were also updated. Installed source/CLI copies match. Settings, keys, native engines, limits and inactive services were preserved.
+Claude's `615ce293`/`59b85901`, SoundRoom usability work and integration guards are combined on `main`; runtime source is `395fb7ac`, exported to `~/.local/share/ai-suite/releases/unified-395fb7ac/source` on compute, control node and remote CPU. All 12 previously active core/adapter services select it through `99-unified-20261024.conf`; the separate control node ToolLocker host's shipped files and the Hermes instance's runtime bundle were also updated. Installed source/CLI copies match. Settings, keys, native engines, limits and inactive services were preserved.
 
 Validation: the complete suite passed **1,709 tests, 38 skipped** (one existing Starlette/httpx deprecation warning). Live authenticated pages, matching JS hashes, all three image profiles' component checks, signed management calls to all workers, anonymous API refusal and standalone tool discovery passed; the browser showed the operator guide and model checklist without console errors. The benchmark queue was paused only while idle, then its original pause state and retained run/batch counts were restored; no active voice or adapter run was interrupted. [Machine-readable receipt and test results](../data/qualification/unified-20261024/report.json).
 

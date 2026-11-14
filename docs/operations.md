@@ -10,7 +10,7 @@ This checkout starts a fresh Git history at `/home/jpk/ai/openWeightGym`. The or
 and its history remain at `/home/jpk/ai/suite`; historical commit IDs and local qualification
 receipts in these guides belong to that original installation.
 
-Front is **k-srv, `10.77.10.42`**, installed under `~/openWeightGym`; the historical main compute checkout is
+Control node is **k-srv, `10.77.10.42`**, installed under `~/openWeightGym`; the historical main compute checkout is
 **`10.77.10.84`, `/home/jpk/ai/suite`**. Additional CPU workers appear in **Compute nodes**.
 
 Current installation addresses, documented **2026-10-20**:
@@ -21,13 +21,13 @@ Current installation addresses, documented **2026-10-20**:
 | Model API base | `http://10.77.10.42:8442/v1` |
 | MCP tools | `http://10.77.10.42:8443/mcp` or `/mcp/TOOLSET` |
 | Browser voice | [Private HTTPS voice app](https://k-srv.tailaf60c6.ts.net/) |
-| Desktop voice | Front server, port `8447`; [download](https://10.77.10.42/static/LoadCoach-Voice.zip) |
+| Desktop voice | Control node, port `8447`; [download](https://10.77.10.42/static/LoadCoach-Voice.zip) |
 
 ### Model installation progress and restart recovery (2026-11-12)
 
 Large bundles are verified before copying starts; this phase now reports **Verifying SHA-256**,
-with the filename and byte progress when hashing front's files. Models shows active installations
-without requiring the original progress URL. Requests and progress are kept in the front accounts
+with the filename and byte progress when hashing the control node's files. Models shows active installations
+without requiring the original progress URL. Requests and progress are kept in the control node accounts
 database without caller API keys. After a restart, an interrupted request shows **Retry installation**;
 its owner or a superuser can retry the saved settings through fresh permission, node, space and
 checksum checks. Verified existing files are reused. A second request for the same pending model
@@ -40,7 +40,7 @@ Repair `7a55847` makes `owg update` and start/restart put the installed checkout
 release-source overrides. On k-srv, the normal update/restart route now runs WeightRoom and
 Turnstile from `~/openWeightGym`; the older release paths remain only as library fallbacks.
 Three changed override files have private rollback copies using the [runtime source policy](#runtime-source-overrides).
-Only those two front services were restarted, after every worker, chats, benchmarks and file
+Only those two control node services were restarted, after every worker, chats, benchmarks and file
 transfers reported no active work. Two hundred update/recovery checks passed. Authenticated live
 Models checks verified search between the pill rows, All models and the compact expandable-row
 assets; Users detail returned 200. Temporary verification sessions were revoked.
@@ -53,7 +53,7 @@ PostgreSQL fix, overlaying only `loadcoach/hub.py`, `turnstile/artifacts.py` and
 `mirrorwall/civitai.py`. WeightRoom initially ran immutable source `82e846b`, including the already
 deployed Models catalogue. Both use the existing virtualenv, settings and databases.
 
-Front `zz-model-discovery.conf` user-service drop-ins select each service's source beneath
+Control node `zz-model-discovery.conf` user-service drop-ins select each service's source beneath
 `~/.local/share/ai-suite/releases/model-discovery-82e846b/`. Only Turnstile and WeightRoom
 were restarted: requests, batches, benchmarks, downloads and file transfers were empty;
 benchmark pause state remained unchanged. Inference workers were not restarted.
@@ -62,7 +62,7 @@ Fourteen focused checks passed. Authenticated live search matched Hugging Face's
 rankings across two 20-result pages for downloads, likes, newest and oldest. Browser checks
 verified sorting, pagination and narrow layout; Users detail/activity still returned 200.
 Temporary verification sessions were revoked. Preflight, source hashes, activation and live
-result IDs are in front's `~/.local/share/ai-suite/recovery/model-discovery-82e846b/`.
+result IDs are in the control node's `~/.local/share/ai-suite/recovery/model-discovery-82e846b/`.
 
 Rollback after work drains: remove only the two `zz-model-discovery.conf` drop-ins, run
 `systemctl --user daemon-reload`, then restart Turnstile and WeightRoom. Keep the original
@@ -77,7 +77,7 @@ PostgreSQL token sums returned `Decimal` values. `Log.usage` now returns integer
 Six local checks passed, including a real PostgreSQL account-detail response; authenticated
 live checks returned 200 for `/users` and all six account-detail APIs, then revoked the test sessions.
 
-Only front Turnstile was restarted, after confirming no active requests, batches or queued/running
+Only control node Turnstile was restarted, after confirming no active requests, batches or queued/running
 benchmarks. Its `99-users-usage.conf` drop-in pins `PYTHONPATH` to
 `~/.local/share/ai-suite/releases/users-usage-5c29ff29-066adbe1/source`: runtime commit
 `5c29ff29` plus the reviewed `loadcoach/log.py` fix. Dependencies, settings and data stay in place.
@@ -95,7 +95,7 @@ no-wake header even with an injected HTTP client. Explicit compute requests reta
 and wake behavior. Recovery follows the configured monitor interval (10 seconds here); discovery
 before the first completed poll, or without a configured monitoring account, still probes live.
 
-Authenticated loopback HTTP on front, with compute unavailable: before is one request per route;
+Authenticated loopback HTTP on the control node, with compute unavailable: before is one request per route;
 after is the mean of three. Eight HTTPS Chromium navigations from the workstation completed
 loading in 51–159 ms with no JavaScript errors.
 
@@ -116,7 +116,7 @@ deduplicated background refresh, policy changes, disabled accounts and node reco
 invalid-key checks return 401; temporary audit sessions were revoked.
 
 Delivered `benchmarks/app.py`, `turnstile/app.py`, `turnstile/machines.py` and `weightroom/app.py`
-to front and restarted only Turnstile and WeightRoom after confirming an empty benchmark queue.
+to the control node and restarted only Turnstile and WeightRoom after confirming an empty benchmark queue.
 For rollback, reverse this patch in those four files and restart the same services, preserving
 later unrelated edits.
 
@@ -132,10 +132,10 @@ with working deferred charts and model-file controls. Opening the model editor s
 5.37 s for file inventory, without delaying initial navigation. Targeted server and browser
 regressions passed; no live JavaScript errors or mobile overflow were found.
 
-Civitai discovery on the front now dispatches to Civitai instead of Hugging Face and applies
+Civitai discovery on the control node now dispatches to Civitai instead of Hugging Face and applies
 the caller's preview policy. Cards reject wrong-provider results rather than showing undefined
 metadata. Live search returned 36 named versions with type/base-model fields. These changes
-require matching WeightRoom templates/static files and Turnstile artifact routing; both front
+require matching WeightRoom templates/static files and Turnstile artifact routing; both control node
 services were restarted with an empty benchmark queue. Roll back their matching code and
 assets together, preserving unrelated later changes; no migration or dependency is involved.
 
@@ -184,9 +184,9 @@ Native final-answer grading correction (**2026-10-15**) updates the existing ben
 worker, quality helper, regrader and imported-case grader; it adds no dependency or schema.
 Finish active/queued benchmark plans before deploying the worker change because their
 implementation hashes are pinned. Back up the benchmark store and deliver matching benchmark
-code on front, then restart WeightRoom through the existing workflow. Startup automatically
+code on the control node, then restart WeightRoom through the existing workflow. Startup automatically
 re-scores ended quality runs with shared grader 3 (imported-case grader 2), preserving raw
-outputs, native messages, prompts and timings without generation. Matching front worker and
+outputs, native messages, prompts and timings without generation. Matching control node worker and
 grader code was delivered by 2026-10-16; the live benchmark queue was empty at review.
 
 Named model load-outs (milestone 97, deployed **2026-10-16**) require matching LoadCoach API/CLI,
@@ -226,7 +226,7 @@ Bounded live configuration, protection, apply/undo, lease and shared-quant quali
 on 2026-10-16; see [the model setup contract](loadcoach.md#validated-model-setup-and-presets-c05-milestone-93).
 Neither preview nor applying a preset starts inference or certifies runtime compatibility.
 Shared model presets (milestone 110, deployed **2026-10-16**) require matching compute code and
-front templates. `loadcoach.models` migration 6 moves old presets into `shared_model_presets`
+control node templates. `loadcoach.models` migration 6 moves old presets into `shared_model_presets`
 on the same core store, preserving collisions with source-entry suffixes; no new dependency or
 service is needed. Include that store in the verified pre-upgrade recovery set. Same GGUF
 name/architecture/parameter-size quants share settings, while the target keeps its model file,
@@ -236,10 +236,10 @@ pre-upgrade core-store recovery set, because the old preset table is emptied by 
 
 C03 request diagnostics (milestone 92) was confirmed complete by the owner **2026-10-15**
 and removed from pending Progression. For new or older installations, it requires matching
-code on compute and front: LoadCoach records timing and model metadata; turnstile presents
+code on compute and the control node: LoadCoach records timing and model metadata; turnstile presents
 the retained evidence; WeightRoom renders the existing request page. Deploy and restart these three programs
 with the existing deployment scripts. This change adds no listener, dependency, store or schema
-migration. It builds on milestone 91's front event-log ownership; installations predating that
+migration. It builds on milestone 91's control node event-log ownership; installations predating that
 move must follow its existing log migration procedure. Older requests remain readable but
 cannot acquire detailed timing retroactively. Verify a new cold and warm request, a stream,
 a failure, authorization and retained diagnostics with compute unavailable after delivery.
@@ -254,7 +254,7 @@ scripts/install-suite.sh
 
 The installer scans this account's systemd user units, including the legacy `frontdesk` and
 `tooldoor` aliases. Installed openWeightGym services are preselected. On a new machine it offers compute,
-front, or all services as the starting set, then shows every service so the selection can be
+control node, or all services as the starting set, then shows every service so the selection can be
 overridden.
 
 **A fresh machine from a git clone.** [`install.sh`](../install.sh) is the usual way now (see
@@ -270,8 +270,8 @@ scripts/install-suite.sh --services compute --database sqlite --non-interactive 
 
 It makes `.venv`, renders settings from the examples, makes the SQLite stores and installs and
 enables the units; newly configured services are not started until their settings are reviewed.
-It also makes, only when absent, `keys/machine.key` (front and each compute machine must hold
-the same one: copy front's to the compute machine, owner-readable only) and, on front, the
+It also makes, only when absent, `keys/machine.key` (control node and each compute machine must hold
+the same one: copy the control node's to the compute machine, owner-readable only) and, on the control node, the
 `weightroom` account with `keys/weightroom.key`. Then add yourself
 (`.venv/bin/weightroom user add NAME superuser` and `.venv/bin/weightroom user password NAME`)
 or bring existing accounts with `scripts/import-accounts.sh`, and start the services. A fresh
@@ -284,7 +284,7 @@ Fresh installs default to keeping image support absent. Unattended installation 
 `--sdcpp install|skip|keep`; omission and `--yes` alone preserve an existing runtime without
 downloading one. `--sdcpp-backend cuda|vulkan|cpu` explicitly chooses the backend; CUDA is the
 default and missing CUDA requirements never select CPU implicitly. The native runtime belongs
-on compute; rendered user assets belong on front.
+on compute; rendered user assets belong on the control node.
 
 Install later from the openWeightGym root:
 
@@ -412,27 +412,27 @@ hash for small sidecars) before the package moves into place; a file already pre
 same hash is adopted, not downloaded again. A profile is then made on the same page: one installed
 package, its kind of work and its card or the CPU.
 
-**Accounts for a test installation.** `scripts/export-accounts.sh OUT.tar` on front copies the
+**Accounts for a test installation.** `scripts/export-accounts.sh OUT.tar` on the control node copies the
 groups, users (password hashes, authenticator secrets), API-key hashes, spending allowances and
-the `keys/` files; `scripts/import-accounts.sh OUT.tar ROOT` loads them into another front
+the `keys/` files; `scripts/import-accounts.sh OUT.tar ROOT` loads them into another control node
 installation, replacing same-named rows and copying only key files it lacks. No other secret
 or seed is involved: passwords are salted scrypt hashes and API keys plain SHA-256 hashes, so
 they check anywhere. The browser cookie secret (`data/secret.json`) is not carried; people sign
 in again. The tar is not encrypted: keep it private. `suite-identity` (below) is the encrypted,
 complete move of a host to the same paths.
 
-The obsolete `frontdesk/` Python import shim is no longer packaged or copied to front.
+The obsolete `frontdesk/` Python import shim is no longer packaged or copied to the control node.
 Both deployment modes run [the guarded cleanup](../scripts/prune-frontdesk.py) after
 installing canonical package metadata. Cleanup removes only the known shim and its bytecode;
 it refuses symlinks, unexpected files or a missing `weightroom/app.py`. It never deletes
 settings, keys or databases. Python callers use `weightroom`; the old command/service names
 and saved-settings/browser-preference migration readers remain compatible without the folder.
-Front's old home-directory symlink was retired separately on 2026-10-14 after canonicalizing
+Control node's old home-directory symlink was retired separately on 2026-10-14 after canonicalizing
 and privately backing up its live configuration paths and reloading the affected idle services.
 That cleanup reloaded turnstile and voice-gateway without restarting WeightRoom. Sign-in, turnstile
-model listing and browser voice configuration returned HTTP 200; all three front services
+model listing and browser voice configuration returned HTTP 200; all three control node services
 remained active and existing key contents were unchanged. Private configuration recovery copies
-are retained on front under `~/.local/share/suite-cleanup/`. Seventeen focused cleanup,
+are retained on the control node under `~/.local/share/suite-cleanup/`. Seventeen focused cleanup,
 rebrand, installer and documentation checks passed, followed by eight final guard/documentation
 checks; a built wheel contained WeightRoom and no obsolete source package.
 
@@ -441,7 +441,7 @@ artifact inventory (milestone 85), including tracked `build/lib` and `dist` outp
 wheel still contained the retired `frontdesk` and `relay` packages; new wheels are built
 from canonical source. `build/`, `dist/` and package metadata are ignored and should not be
 committed. The cleanup also removed local migration rollback copies and three recovery
-sets; create a new local set before relying on backup freshness. Front's installation and
+sets; create a new local set before relying on backup freshness. Control node's installation and
 private recovery directories were outside this cleanup's scope.
 Verification passed the full **701-test suite with zero skips**, including disposable
 PostgreSQL 16 native dump/restore and headless browser/Tk tests; seven installed service
@@ -453,14 +453,14 @@ One existing Starlette/httpx deprecation warning remains. A fresh wheel built in
 temporary source tree matched 283 current package files, omitted retired import packages,
 and retained supported legacy command aliases.
 
-The first front deployment after retiring that symlink exposed an incomplete virtual-environment
+The first control node deployment after retiring that symlink exposed an incomplete virtual-environment
 path cleanup: `pip` still began with `#!/home/jpk/frontdesk/.venv/bin/python3`, so the install
 stopped with `bad interpreter`. On **2026-10-14**, 19 generated launchers, activation files and
 `pyvenv.cfg` were corrected to `/home/jpk/weightroom/.venv`, with owner-only recovery copies
 under `~/.local/share/suite-cleanup/venv-paths-*`. Both direct pip and Python's pip module were
-verified on front, without reinstalling packages or restarting services. This repair did not
+verified on the control node, without reinstalling packages or restarting services. This repair did not
 complete the interrupted code deployment. Rerun `deploy-front` to install and activate it.
-Both front deployment modes and `install-suite.sh` now invoke `.venv/bin/python -m pip`
+Both control node deployment modes and `install-suite.sh` now invoke `.venv/bin/python -m pip`
 instead of relying on pip's generated interpreter path. They upgrade pip to at least 26.2.1
 before installing openWeightGym; benchmark installations pin NLTK 3.10.3. See the
 [security sweep](application-sweep-2026-10-20.md) for qualification and the remaining upstream advisory.
@@ -469,24 +469,24 @@ and documentation checks passed. A moved virtual environment can retain absolute
 all its generated launchers and activation scripts; removing a path alias requires inspecting
 those as well as service and configuration paths.
 
-Host-fingerprinted telemetry (milestone 123) upgrades front's existing event-log store to
+Host-fingerprinted telemetry (milestone 123) upgrades the control node's existing event-log store to
 schema version 5, adding telemetry and host-registry tables without rewriting the audit chain.
 See [host setup](#multi-machine-telemetry) and the [telemetry contract](loadcoach.md#physical-host-telemetry).
 
 ### Model-file storage
 
-Front model storage is optional. Under **Settings → General → Model file locations**, choose
-**Front machine** and set an absolute cache path, storage path, or both. Empty disables a tier
-without deleting its files. Front creates the standard model subfolders and uses them immediately;
+Control node model storage is optional. Under **Settings → General → Model file locations**, choose
+**Control node** and set an absolute cache path, storage path, or both. Empty disables a tier
+without deleting its files. Control node creates the standard model subfolders and uses them immediately;
 no inference worker is required. The equivalent settings are `turnstile.models_folder` and
 `turnstile.models_storage_folder` in `settings/weightroom.toml`.
 
 `turnstile.artifact_machine` can explicitly select `front` or an existing file-owning worker.
-Without an explicit selection, configured front storage is preferred, then `front_cpu`, then
+Without an explicit selection, configured control node storage is preferred, then `front_cpu`, then
 `compute`. Files remains available when a store is disabled or offline, with setup links and
 per-node availability. Distribution still requires an answering destination Spotter.
 
-Choose a compute node in the same location editor to save its paths while offline. Front retains
+Choose a compute node in the same location editor to save its paths while offline. Control node retains
 the change and delivers it without waking that node when it reconnects, rechecking the saving
 account's permission. The node applies the paths after its compute service restarts. Changing
 folders does not move model weights or rewrite configured model paths; retain old copies until
@@ -495,7 +495,7 @@ same folder, which then holds every file once and counts as both; two different 
 hold one another. Storage keeps every model file: place copies in the cache and on nodes in bulk
 from the Storage view on Files.
 
-Multi-node Status requires matching Turnstile/WeightRoom on front and existing LoadCoach status/
+Multi-node Status requires matching Turnstile/WeightRoom on the control node and existing LoadCoach status/
 Spotter readings; no new service, store, key or port is required. For upgrades or added nodes,
 verify GPU-loaded, CPU-loaded and unavailable nodes, secondary-node lock/unlock, and selected-node
 drain/clear/unload-all/resume without affecting primary. See the [runtime contract](loadcoach.md#physical-host-telemetry).
@@ -528,7 +528,7 @@ Settings and service units that the installer changes receive timestamped backup
 
 Deploy matching WeightRoom, Turnstile, `loadcoach/` and `db/` code through the existing
 workflow after benchmark/request work drains. `loadcoach.users` migration 6 adds the
-portable `client_accesses` table and indexes to the existing front accounts store; no new
+portable `client_accesses` table and indexes to the existing control node accounts store; no new
 store, listener or secret is introduced. Keep Turnstile's `auth_key_file` pointing to the
 same private API key WeightRoom loads through `key_file`, and update existing release-source
 overrides before restarting affected services. Previous code rejects the newer account schema;
@@ -539,7 +539,7 @@ provenance, privacy and filter behavior.
 
 ## Observability and traceability (milestone 151)
 
-Deploy matching shared `loadcoach`, `db`, front, voice and plugin code plus WeightRoom templates
+Deploy matching shared `loadcoach`, `db`, control node, voice and plugin code plus WeightRoom templates
 on all configured nodes. Existing log owner stores apply portable LOG migration 7; SQLite and
 PostgreSQL qualification are separate from live engine selection. Do not run older writers
 against the upgraded schema. Recovery requires a schema-compatible release; preserve private
@@ -558,9 +558,9 @@ incomplete telemetry. Existing signed node forwarding transports compute observa
 Voice processes may opt into their existing owner's store with root-level
 `observability_database` (SQLite path) or `observability_dsn_file` (existing PostgreSQL DSN file),
 and `observability_machine`. Configure the compute voice service against its compute log store
-and the gateway against the front accounts/log store. Without an owner store, response IDs
+and the gateway against the control node accounts/log store. Without an owner store, response IDs
 remain available but detailed voice spans are not persisted. Gateway `context_key_file` points
-to the existing private front proof key to authenticate continuity to Turnstile; never send it
+to the existing private control node proof key to authenticate continuity to Turnstile; never send it
 to a browser. Example files document these optional settings.
 
 An operator may set service environment `SUITE_OBSERVATION_RECORDING=off` to disable optional
@@ -626,7 +626,7 @@ at `~/.local/share/ai-suite/releases/usability-5d294199/source` through WeightRo
 were verified. Only WeightRoom was restarted; Voice gateway, workers, native engines,
 private settings and databases retain their existing releases/contracts. No migration is added.
 
-Activation drained front chats and checked an empty benchmark queue; the previous benchmark
+Activation drained control node chats and checked an empty benchmark queue; the previous benchmark
 pause state was restored. Private unit preimages/activation records are retained under
 `~/.local/share/ai-suite/recovery/usability-5d294199/`; the earlier usability cutovers retain
 matching `usability-cd4b3969/` and `usability-63b2f597/` recovery sets. Qualification/status
@@ -643,14 +643,14 @@ restore is needed for this UI release.
 ### UI consistency release 2026-10-30
 
 The shared-component UI release pins commit `7b968d01353bba1e358653a966854808c2d0e468` at
-`~/.local/share/ai-suite/releases/ui-consistency-7b968d01/source` on front. WeightRoom and
+`~/.local/share/ai-suite/releases/ui-consistency-7b968d01/source` on the control node. WeightRoom and
 Voice gateway select it through `zzzzzzzzzzzzzz-ui-consistency-20261030.conf`; worker services
 retain their prior releases and native runtimes. All 754 release files were hash-verified;
 imports and installed dependencies passed. No dependency, database or settings migration is added.
 
-Activation checked an empty benchmark queue, no active front chat and no active/starting voice
+Activation checked an empty benchmark queue, no active control node chat and no active/starting voice
 calls. The benchmark worker's previous pause state was restored. Unit preimages and activation
-records are private under `~/.local/share/ai-suite/recovery/ui-consistency-7b968d01/` on front.
+records are private under `~/.local/share/ai-suite/recovery/ui-consistency-7b968d01/` on the control node.
 Local regression evidence remains in [the execution record](../makeBetter.md#execution);
 live verification is recorded in `data/qualification/ui-consistency/deployment.json`.
 All 57 authenticated pages and 342 responsive/theme cases passed at 1440/390 in Slate light/dark
@@ -659,7 +659,7 @@ assets and the standalone Voice index/script/CSS matched the reviewed release. B
 remained active, the benchmark queue remained empty and the temporary verification session was revoked.
 These browser checks do not establish subjective owner acceptance.
 
-For rollback, wait for front chat, calls and benchmarks to drain; remove only this release's
+For rollback, wait for the control node chat, calls and benchmarks to drain; remove only this release's
 named drop-in from `weightroom.service.d` and `voice-gateway.service.d`, run
 `systemctl --user daemon-reload` and restart those two units. Preserve the earlier drop-ins,
 resource limits, settings, databases, credentials and native-runtime selections.
@@ -667,9 +667,9 @@ resource limits, settings, databases, credentials and native-runtime selections.
 ### Console polish release 2026-10-30
 
 The console polish release pins commit `25ebb0c36f906ba8d136cc938f2894e483aea1e8` at
-`~/.local/share/ai-suite/releases/console-polish-25ebb0c/source` on compute, front and remote CPU.
+`~/.local/share/ai-suite/releases/console-polish-25ebb0c/source` on compute, control node and remote CPU.
 Only four affected services select it through
-`zzzzzzzzzzzzz-console-polish-20261030.conf`: front `weightroom.service`,
+`zzzzzzzzzzzzz-console-polish-20261030.conf`: control node `weightroom.service`,
 `loadcoach-front-cpu.service`, primary `loadcoach.service` and remote
 `loadcoach-remote-cpu.service`. The worker update supplies the audio-family option metadata
 used by the new editor. Unchanged services retain their preceding reviewed source.
@@ -693,10 +693,10 @@ Do not restore older databases or overwrite newer settings as part of a code rol
 
 ### Module audit release 2026-10-30
 
-Compute, front and remote CPU select runtime commit `a1ae47646bb5d073e07cb8ad2cca12ef2f6dedec`
+Compute, control node and remote CPU select runtime commit `a1ae47646bb5d073e07cb8ad2cca12ef2f6dedec`
 from `~/.local/share/ai-suite/releases/module-audit-a1ae476/source` through
 `zzzzzzzzzz-module-audit-20261030.conf`. Twelve active services were restarted after work drained;
-inactive services were pinned for their next start. The separate front Hermes adapter received
+inactive services were pinned for their next start. The separate control node Hermes adapter received
 its five changed runtime/contract files. Native binaries, settings, credentials, databases and
 resource limits were preserved. [Live verification](../data/qualification/module-audit-20261029/deployment.json)
 and the [module audit](application-sweep-2026-10-20.md#module-audit-and-reasoning-discovery-started-2026-10-29)
@@ -711,15 +711,15 @@ migration. Original unit preimages are in that same recovery directory; final ac
 are under `recovery/module-audit-a1ae476/`. The incomplete `module-audit-9bbfdcc/source` archive
 is **not** a rollback target. Do not rerun an installer migration against a mismatched schema.
 
-Model/image deployment **2026-10-27**: seven core/telemetry services across compute, front and remote CPU
-initially selected immutable runtime `model-image-cdbd689f/source`; front WeightRoom selected
+Model/image deployment **2026-10-27**: seven core/telemetry services across compute, control node and remote CPU
+initially selected immutable runtime `model-image-cdbd689f/source`; control node WeightRoom selected
 `model-image-374de66f/source`. The respective overrides are `zzzzzz-model-image-20261027.conf`
 and `zzzzzzz-model-image-ui-20261027.conf`. [Verification and recovery receipts](../data/qualification/model-image-settings-20261027/report.json)
 record exact commits, source hashes, dependencies, tests, native qualification and live checks.
 Native runtimes, private configuration, resource limits and current user inference were preserved.
 
 Recovery preimages and node relocation manifests are under
-`~/.local/share/ai-suite/recovery/model-image-20261027/` on each affected host. For a front-only
+`~/.local/share/ai-suite/recovery/model-image-20261027/` on each affected host. For a control-node-only
 rollback, restore the saved `ui-weightroom.service.d` override; the original core-service
 drop-ins are retained separately. A rollback across the encoder move also requires the file/reference
 restoration above before starting older code. Preserve current databases and verified library copies.
@@ -733,9 +733,9 @@ release. Alert collection previously omitted the no-wake header and sent Wake-on
 each observed idle-sleep cycle. Collector headers and Turnstile's passive-route guard prevent
 those alert wake-ups. All 63 focused checks passed (one skipped), dependencies and live monitoring HTTP passed.
 The workstation's 60-minute idle policy is unchanged; no hardware sleep/wake test was performed.
-Recovery records and previous front overrides are under
+Recovery records and previous control node overrides are under
 `~/.local/share/ai-suite/recovery/passive-alerts-0a26d662/`. After affected work drains, removing
-only this correction's override and restarting the two front services restores their retained prior
+only this correction's override and restarting the two control node services restores their retained prior
 pins. Preserve current data/settings and the encoder relocation recovery contract above.
 
 Plugin-refresh correction **2026-10-28**, runtime `b5cfa311`: the first correction was active,
@@ -747,13 +747,13 @@ watchers with compute becoming unavailable between reads, cached-snapshot preser
 ordinary inference's retained wake behavior. Dependencies and live monitoring/mirror HTTP passed;
 the idle policy and other service processes remain unchanged. No physical sleep/wake test was run.
 Recovery preimages and verification are under `~/.local/share/ai-suite/recovery/passive-refresh-b5cfa311/`;
-after work drains, removing only this correction's override and restarting those two front services
+after work drains, removing only this correction's override and restarting those two control node services
 restores the previous alert-only correction. Keep current data and settings.
 
 For recovery of the preceding **2026-10-26 model-management boundary**, first wait for benchmark
 work, active requests and holds to clear. Compute's
 previous committed source is `data/qualification/models-ui-20261026/compute-before.tar`;
-extract it into a private recovery directory. Front's prior installed code is in
+extract it into a private recovery directory. Control node's prior installed code is in
 `~/.local/share/ai-suite/recovery/models-ui-20261026/code`. Point the affected compute/front
 release pins at those directories rather than falling back to the newly copied installation.
 On the remote CPU, remove only `zzzz-models-ui-20261026.conf` to restore its retained earlier
@@ -762,13 +762,13 @@ current databases, history, model files, keys and settings; an older release may
 the newly added Kokoro profile. Dependency and effective-unit records are retained alongside
 the recovery copies.
 
-API reference deployment **2026-10-26**, runtime commit `b3efeeb2`: WeightRoom on front
+API reference deployment **2026-10-26**, runtime commit `b3efeeb2`: WeightRoom on the control node
 selected `~/.local/share/ai-suite/releases/api-docs-b3efeeb2/source` through
 `zzzzz-api-docs-20261026.conf`. Only WeightRoom restarted; Turnstile, voice gateway and
-front CPU worker processes retained their PIDs. Dependencies did not change. All 23 focused
+control node CPU worker processes retained their PIDs. Dependencies did not change. All 23 focused
 checks passed; authenticated live HTTP/Chromium checks verified `/docs/api`, 222 custom
 operations, source navigation, 320/390-pixel layouts, private access and the desktop download.
-[Verification](../data/qualification/api-docs-20261026/report.json) and private front recovery
+[Verification](../data/qualification/api-docs-20261026/report.json) and private control node recovery
 records under `~/.local/share/ai-suite/recovery/api-docs-20261026/` retain the effective unit,
 dependency list and before/after service state. To roll back, remove only the new
 `zzzzz-api-docs-20261026.conf`, reload units and restart WeightRoom after affected work drains;
@@ -779,7 +779,7 @@ keys, settings and the earlier release.
 
 The Status page places processing and queued requests above node capacity and loaded model
 memory. Node headings show processing/queued counts; the capacity ledger omits CPU load.
-Rolling 5/15/60-minute KPIs count recorded arrivals received on front, including unfinished
+Rolling 5/15/60-minute KPIs count recorded arrivals received on the control node, including unfinished
 requests, and can lag unsent worker logs. They respect `see-all` (otherwise only the caller's
 arrivals). Current counts include authorized anonymous totals; unavailable readings stay unknown.
 Pause intake lets accepted work finish, Clear queue removes waiting work, and Unload models
@@ -794,12 +794,12 @@ graph or an active selection. Missing or stale current readings remain unknown. 
 loaded models and permission-scoped wake controls remain under **Services and power**.
 
 Install matching LoadCoach/Spotter code on each monitored host and Turnstile/WeightRoom/`db/`
-code on front. Give each host private Spotter settings referencing one local LoadCoach settings
+code on the control node. Give each host private Spotter settings referencing one local LoadCoach settings
 file and its machine key, a host-specific listening address/port, and only permitted `[services]`.
 Primary compute uses port 8444; the existing front/VPS Spotters use 9444. Keep `sleep_after = 0`
 unless that host intentionally sleeps; adding monitoring must not change its power policy.
 
-Add the private `spotter` URL to the corresponding `[machines.NAME]` in front's
+Add the private `spotter` URL to the corresponding `[machines.NAME]` in the control node's
 `settings/weightroom.toml`; requests use that node's existing machine key. Several LoadCoach
 instances on one host retain separate node identities but share one physical-host fingerprint
 and telemetry card. Start/check Spotter before restarting Turnstile, after requests and queued
@@ -807,7 +807,7 @@ benchmarks drain. Verify signed responses and matching LoadCoach/Spotter fingerp
 bars, host-registry/history growth and retained offline history. A live Spotter must not make
 an unavailable LoadCoach eligible for placement. Identity/storage/UI details are in the
 [telemetry contract](loadcoach.md#physical-host-telemetry); completed historical imports are
-recorded under [milestone 128](database-storage.md#front-toollocker-and-remaining-telemetry-milestone-128).
+recorded under [milestone 128](database-storage.md#control-node-toollocker-and-remaining-telemetry-milestone-128).
 
 ## Same-host two-LoadCoach rig
 
@@ -843,7 +843,7 @@ weights through `loadcoach --config FILE models add`, including `ctx-size`. Conf
 inventories report the same verified weights SHA-256 before treating copies as interchangeable;
 an unhashed resident model or an equal name alone is insufficient.
 
-On front, copy the rig key into its matching owner-only file and add:
+On control node, copy the rig key into its matching owner-only file and add:
 
 ```toml
 [machines.rig]
@@ -851,14 +851,14 @@ compute = "http://10.77.10.84:9442"
 machine_key_file = "../keys/rig.key"
 ```
 
-Primary and rig keys must differ. Front's account key must permit status/models/facts on both.
+Primary and rig keys must differ. Control node's account key must permit status/models/facts on both.
 The existing node monitor refreshes placement facts at `machines_poll_seconds` (default 10).
 Fleet chats and role requests select locally from retained facts, filtered by the caller's current
 model permissions, then contact the selected node. Admission is checked there; a failure before
 output can still try another eligible copy. Until inventory is available, requests return retryable
 503 without probing the fleet. Without a monitoring account, explicit model discovery primes the
-caller-scoped inventory; configure front's account key for automatic refreshes.
-Deploy matching code to front and both workers, start the rig and restart Turnstile in the
+caller-scoped inventory; configure the control node's account key for automatic refreshes.
+Deploy matching code to the control node and both workers, start the rig and restart Turnstile in the
 drained window. Verify both nodes become ready; route requests with each copy resident and
 check public request IDs, Requests/capture, Status, Peek, Diagnostics and Stop. Check fallback
 with the preferred node unavailable before output, then restore it. Stream failure after
@@ -891,14 +891,14 @@ chat itself, signed in as the person using it, and Chat → Voice desktop app is
 The retired `voice_url` setting is ignored, so a file that still has it starts as before.
 
 Check System → Voice with a `manage-settings` account. Verify status/readiness, saving the
-speaker and greeting texts, program uptake, explicit regeneration into the front cache,
+speaker and greeting texts, program uptake, explicit regeneration into the control node cache,
 voice preview and cached greeting playback. Status and playback must work without waking
 compute. Synthesis requires compute to be awake and does not load/hold a language model.
 A failed generation must preserve the previous complete cached greetings. Keep existing V7
 capacity and V10 browser-account qualification separate from these admin-page checks.
 
 Milestone 100 voice latency diagnostics were deployed and owner-accepted 2026-10-16. For an
-update, deliver matching compute `voice`, front `voice-gateway`/WeightRoom and browser/worklet assets; rebuild
+update, deliver matching compute `voice`, control node `voice-gateway`/WeightRoom and browser/worklet assets; rebuild
 the desktop ZIP through the existing packaging/deploy script. New clients report queue clears
 only when the gateway advertises `queue_clear_ack`, so older gateways retain their existing
 conversation protocol. Older clients continue working but queue-clear latency is unavailable.
@@ -913,7 +913,7 @@ qualification gates; no service restart or physical test was performed for this 
 Milestone 90 was implemented on 2026-10-14; the owner confirmed all Chat checks passed and
 completion on **2026-10-15**, including the independent Options panel refresh correction.
 The following deployment/checklist remains applicable to new or older installations.
-Deploy updated WeightRoom code, templates and static assets together. The existing front
+Deploy updated WeightRoom code, templates and static assets together. The existing control node
 deployer copies them and reloads WeightRoom. This change needs no compute update, schema
 migration, dependency, new service or credential. Verify Chat's section-rail conversation
 list, inline rename/trash controls, file selection, shared composer/Ask again Options,
@@ -935,7 +935,7 @@ installation choice from making existing users, logs, chats, or benchmark result
 Database P4 is deployed; its migration/recovery workflow passed isolated PostgreSQL 18
 qualification on 2026-10-16. An existing populated store uses the separate System → DB
 migration wizard described in [the database guide](database-storage.md#p4---offline-engine-migration).
-The deployed 2026-10-16 installer-audit correction includes front's `roles.db` alongside
+The deployed 2026-10-16 installer-audit correction includes the control node's `roles.db` alongside
 `accounts.db`, chat, benchmarks, plugins, alerts and schedules. Use matching corrected installer
 and migration inventory versions before treating an audit or P4 profile as production preflight
 evidence.
@@ -946,9 +946,9 @@ is involved. The source owner needs Python's `postgresql` extra and `pg_dump`/`p
 for a SQLite source migrating to PostgreSQL. Provision secret-file references independently
 on every host that receives a new binding. The installer still refuses unverified direct switches;
 use `--database keep` when installing migration-capable code on an existing machine. P4 has not
-switched production stores; live bindings remain SQLite. The existing front deployer copies the
+switched production stores; live bindings remain SQLite. The existing control node deployer copies the
 new modules without copying private `settings/migrations/`, keys or runtime data.
-WeightRoom and turnstile share the `weightroom.plugins` store binding from the front settings file.
+WeightRoom and turnstile share the `weightroom.plugins` store binding from the control node settings file.
 P5 adds storage health and verified local backup age to Machine and System → DB; it was deployed
 and live-verified for primary SQLite stores on 2026-10-16, with PostgreSQL 18 signals qualified
 in isolation. Install matching LoadCoach and WeightRoom code to show compute signals.
@@ -975,9 +975,9 @@ database per store, generates passwords, and writes DSNs under `keys/postgresql/
 permissions.
 
 WeightRoom's P5 alert history uses `weightroom.alerts`, defaulting to `data/alerts.db` when its
-binding is omitted. A fresh PostgreSQL front install also requires the `alerts` DSN (or local
+binding is omitted. A fresh PostgreSQL control node install also requires the `alerts` DSN (or local
 provisioning). Existing populated installations retain their engine/bindings with `keep`; adding
-this feature creates only its missing repository. Ensure the front program key retains
+this feature creates only its missing repository. Ensure the control node program key retains
 `mirror-users` for sanitized background collection. Spotter's service account needs journal
 read access to observe kernel memory kills; unavailable access appears on the Alerts page and
 does not claim recovery. Progression P5 was accepted as complete on 2026-10-14 after live
@@ -988,12 +988,12 @@ kernel access separately when no memory-kill events match. No additional privile
 by this correction; an inaccessible journal still appears unavailable.
 
 P6 / milestone 71 adds `weightroom.schedules`, defaulting to `data/schedules.db`; fresh PostgreSQL
-front installations require a `schedules` DSN or provisioning. Compute's hashed grant table uses
+control node installations require a `schedules` DSN or provisioning. Compute's hashed grant table uses
 its existing core binding. Existing `keep` installations preserve their selected engines and
 create the missing default store on first start. No extra service, port, package or program key
-is needed. Deploy matching front/compute code before enabling schedules. An operator's online
+is needed. Deploy matching control node/compute code before enabling schedules. An operator's online
 sign-in authorizes the particular job; current account/model permissions are checked on dispatch.
-Front's schedule database and its recovery archives contain protected scoped job credentials,
+Control node's schedule database and its recovery archives contain protected scoped job credentials,
 like the benchmark database. General API/provider keys retain their existing separate recovery policy.
 The table's Edit control needs the matching LoadCoach schedule-edit endpoint and an online
 owner sign-in; it rechecks job/model permissions and replaces the scoped grant. Delete requires
@@ -1021,7 +1021,7 @@ includes its migrations and schemas in the archive. Older bundles fail wheel set
 bundle for the same instance before retrying. Reinstallation preserves installed settings,
 pairing keys and `data/runtime.db`; it does not restart an already running adapter service.
 The bundle generator is deployed and a disposable install passed; a fresh install on a separate
-adapter host has not been verified. The existing front Hermes adapter was qualified live separately.
+adapter host has not been verified. The existing control node Hermes adapter was qualified live separately.
 
 ### Remote tool hosts
 
@@ -1044,11 +1044,11 @@ It does not change the firewall: admit only compute to the printed port, or use 
 `sudo loginctl enable-linger USER` keeps the unit running while nobody is signed in. Running it
 again replaces the suite's own files and the unit, and keeps the key, the settings and every
 other tool file; once the settings exist it refuses `--files` and `--code`, and folders are
-changed in `tools.toml`. On 2026-10-16 the scoped front host was installed on
+changed in `tools.toml`. On 2026-10-16 the scoped control node was installed on
 `10.77.10.42:9100` with a private-interface bind and a harmless fixture folder; its unit
 was active and the compute ToolLocker discovered two tools. Authorized read, missing/wrong-key
 and browser-origin refusal, outside-folder refusal, per-tool sensitivity, account hiding and
-revoked-account access were verified through the live front/compute path. The existing compute
+revoked-account access were verified through the live control node/compute path. The existing compute
 ToolLocker 2 GiB service ceiling was preserved.
 [Exact bounded checks](../data/qualification/delivery-2026-10-16.json).
 
@@ -1065,7 +1065,7 @@ P4 was deployed; completion after production runs was confirmed by the owner on 
 and removed from the progression backlog. See
 [the benchmark procedure](../benchmarks/README.md#tool-use-and-recovery-p4).
 
-Retrieval hardening (milestone 86, now `retrieval-v3`) requires matching front and compute
+Retrieval hardening (milestone 86, now `retrieval-v3`) requires matching control node and compute
 updates: generated archives exceed the earlier 64-KiB task-body cap. Update LoadCoach's
 `tasks.py` before starting new retrieval runs on the updated WeightRoom worker. Authorized
 evaluation probe bodies now accept up to 1 MiB; other task bodies keep 64 KiB. The existing
@@ -1088,7 +1088,7 @@ Audit without changing anything:
 scripts/install-suite.sh --check --services compute
 ```
 
-Preview a full front installation:
+Preview a full control node installation:
 
 ```bash
 scripts/install-suite.sh --dry-run --services front --database sqlite --no-start
@@ -1112,7 +1112,7 @@ services are enabled and restarted; `--no-start` only installs and enables them.
 Current paired JSON protocols and representative native-schema qualification are in the
 [benchmark guide](../benchmarks/README.md#paired-json-and-schema-part-7-milestone-103).
 On another installation, deliver the compute general conversation
-API before starting front paired JSON plans, with matching run-detail and metric-description
+API before starting control node paired JSON plans, with matching run-detail and metric-description
 templates. Existing question-only requests still work. No dependency,
 service, key, port or database migration is added. Completed v2/v3 JSON results retain their
 free scores; paused older plans cannot be extended with v4 cases and need a new run. No
@@ -1124,7 +1124,7 @@ before calling the new structured path live-verified.
 ## Private document collections (C08, milestone 105)
 
 Implemented **2026-10-15**, deployed **2026-10-16**. WeightRoom installs the `knowledge` extra,
-pinned pypdf 6.20.1, through both front deployment modes and `install-suite.sh` when WeightRoom
+pinned pypdf 6.20.1, through both control node deployment modes and `install-suite.sh` when WeightRoom
 is selected. Compute and
 plugin runtimes need no parser dependency. Dev installs include it for the fixed PDF parser
 checks. The resource-limited PDF child requires Linux; missing support is a visible ingestion
@@ -1153,29 +1153,29 @@ background steps. Deployment and H3 research-to-draft qualification passed on 20
 
 ## C07 advisory allowance delivery (milestone 107)
 
-Matching front handlers/templates and compute attribution code were present on 2026-10-16;
-the live front accounts store has the policy table. Manager editing, restricted access and
+Matching control node handlers/templates and compute attribution code were present on 2026-10-16;
+the live control node accounts store has the policy table. Manager editing, restricted access and
 retained attribution passed bounded qualification on 2026-10-17;
 [coverage limits and receipts](allowances.md#storage-api-and-deployment). On another installation,
-deploy updated front handlers/templates and matching compute attribution code. Front startup
+deploy updated control node handlers/templates and matching compute attribution code. Control node startup
 applies `loadcoach.users` migration 4 in the existing accounts store; take existing verified
 backups first. No dependency, DSN, listener or credential is added. Check Logs → Usage →
 Spending allowances with a log reader/account manager and a normal member. Confirm unknown
 and stale coverage, rename/key ownership, and that exceeding a soft allowance admits ordinary
 requests while existing hosted ceilings still apply. Old compute lacks stable attribution;
-do not claim complete coverage from front-only delivery. The legacy `accounts-from` move
+do not claim complete coverage from control-node-only delivery. The legacy `accounts-from` move
 refuses populated policies; use verified full-store transfer. Rollback keeps the additive
 table/log metadata; earlier code has no allowance UI. See [the contract](allowances.md).
 
 ## DB1 ownership and retirement (milestone 124)
 
-The front always keeps benchmark task records (tables `benchmark_tasks`,
+The control node always keeps benchmark task records (tables `benchmark_tasks`,
 `benchmark_task_evidence`, `benchmark_task_finishes` and `benchmark_task_reservations`,
 migration stream `turnstile.benchmark_tasks`, formerly `turnstile.tasks`) and sends each task to the node it is placed on.
-`[turnstile] keep_console_settings_on_front = true` in the front's `settings/weightroom.toml`
+`[turnstile] keep_console_settings_on_front = true` in the control node's `settings/weightroom.toml`
 keeps console settings there. A node whose store has the `loadcoach.retirement` migration
 refuses local task, batch and schedule creation and points callers at turnstile; there is no
-switch for this on the node. Task IDs the front does not know (older tasks and schedules a
+switch for this on the node. Task IDs the control node does not know (older tasks and schedules a
 node created itself) are still forwarded to the node that has them.
 
 `[turnstile] allow_caller_to_specify_destination` (Settings → General, "Allow callers to
@@ -1193,9 +1193,9 @@ migration 4 at the next start; a database restored from before it is renamed aga
 
 For another installation: drain and pause benchmark creation, take verified paired/outside
 recovery, deploy matching code, then preview/apply the terminal task/history, grant and
-front-program settings imports with `python -m db.consolidation_import`. Turn on
+control node program settings imports with `python -m db.consolidation_import`. Turn on
 `keep_console_settings_on_front` only after exact comparison and console checks. The existing services, ports and credentials
-are reused. Front-only settings must not be reset through compute's CLI or API.
+are reused. Control-node-only settings must not be reset through compute's CLI or API.
 
 `python -m db.consolidation_retire --help` describes explicit proof preparation, preview and
 apply. Preparation compares the archived compute/front databases, exact approved exceptions
@@ -1208,19 +1208,19 @@ clean, committed checkout: with any uncommitted or untracked change they stop an
 Services normally run the code in their installed folder. Inspect effective unit/drop-ins for
 [runtime source overrides](#runtime-source-overrides) before assuming that folder is active.
 
-Before a rollback, drain or cancel existing tasks; their records stay on the front.
-Transfer current front-program settings back before
+Before a rollback, drain or cancel existing tasks; their records stay on the control node.
+Transfer current control node program settings back before
 changing their authority. After retirement, stop every shared store writer (LoadCoach,
 ToolLocker and Spotter), restore the verified pre-retirement compute copy with compatible
 code/settings, then restart and verify forwarding. Never recreate empty legacy tables or
-overwrite newer front history as a recovery method.
+overwrite newer control node history as a recovery method.
 
 Native recovery archives remain under `data/backups/SET/` on their respective hosts. The
 pre-retirement pair is `20261017T000852Z-df0e3c`; later acceptance and restore checks are
 recorded in the [database inventory](database-storage.md#live-database-inventory). Protected
 copies, row comparisons and completion receipts are under
 `~/.local/share/suite-db-audits/2026-10-16-db1/` on compute and
-`~/.local/share/suite-db-audits/2026-10-16-db1-cutover/` on front. Independent compute snapshots
+`~/.local/share/suite-db-audits/2026-10-16-db1-cutover/` on the control node. Independent compute snapshots
 remain under `~/.local/share/suite-retired/2026-10-16/db1-post-cutover/`.
 
 ## Node installation and updates
@@ -1242,17 +1242,17 @@ the one-time data moves `deploy.sh` performs.
 
 Browsers give a page the microphone only over HTTPS. `scripts/front-https.sh`, run from compute,
 serves the console at `https://front.home.arpa` with no outside service: a home CA in `~/ca` on
-compute signs a certificate for front (its key never leaves compute, and its name constraint lets
-it sign only `*.home.arpa` and LAN addresses), and nginx on front (installed if missing) answers
+compute signs a certificate for the control node (its key never leaves compute, and its name constraint lets
+it sign only `*.home.arpa` and LAN addresses), and nginx on the control node (installed if missing) answers
 on the LAN address's port 443 and passes to the console on `127.0.0.1:8440`. Once HTTPS answers,
 it sets the console's top-level `host = "127.0.0.1"` and `secure = true` (backup
 `weightroom.toml.before-https`); `KEEP_HTTP=1` skips that. Run it again within 30 days of the
 certificate's end (825 days) to sign a new one. By hand: a router DNS record for the name, a fixed
-address for front, and trusting `~/ca/home-ca.crt` once on each device (the script lists how).
+address for the control node, and trusting `~/ca/home-ca.crt` once on each device (the script lists how).
 
-## Front ToolLocker relocation (milestone 128)
+## Control node ToolLocker relocation (milestone 128)
 
-Use the existing ToolLocker service on front, behind Turnstile's public port 8443.
+Use the existing ToolLocker service on the control node, behind Turnstile's public port 8443.
 Its machine file selects the same account/event database as WeightRoom without a local LoadCoach:
 
 ```toml
@@ -1262,10 +1262,10 @@ port = 9443
 ```
 
 In `weightroom.toml`, set `toollocker_url = "http://127.0.0.1:9443"` under `[turnstile]`,
-with `keep_console_settings_on_front = true` and port 8443 retained in `ports`. The front service unit must
-use the front installation's executable/settings paths; retain `tooldoor.service` as its alias.
-`deploy-front.sh` updates configured front ToolLocker instances and restarts their existing
-unit. It also refreshes LoadCoach defaults/examples used by an optional front CPU worker, so
+with `keep_console_settings_on_front = true` and port 8443 retained in `ports`. The control node service unit must
+use the control node installation's executable/settings paths; retain `tooldoor.service` as its alias.
+`deploy-front.sh` updates configured control node ToolLocker instances and restarts their existing
+unit. It also refreshes LoadCoach defaults/examples used by an optional control node CPU worker, so
 new per-node runtime controls appear without replacing that worker's private machine settings.
 The default `disable_ram_offload = true` prevents CUDA unified-memory spill. Change it with the
 host RAM headroom/limit below that node's GPU inventory on System → Compute nodes; restart that
@@ -1276,30 +1276,30 @@ WeightRoom's binding, never by making a second ToolLocker account store.
 Keep each server name, description, level, tool set, tool-level override and filesystem root.
 For compute files/code, the live command is the original fixed Python tool command prefixed
 with `/usr/bin/ssh -T -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15
--o ServerAliveCountMax=2 10.77.10.84`. This uses existing front-to-compute SSH access;
+-o ServerAliveCountMax=2 10.77.10.84`. This uses existing control node to compute SSH access;
 no generated/model arguments enter a shell command. Existing HTTP hosts retain their private
 bearer-file paths and host-side access rules. Their data and execution stay with their host.
 
 Before cutover, verify the benchmark pause and idle requests, create/restore-check a paired
-recovery set, save private code/settings/unit snapshots, and pause front requests through the
+recovery set, save private code/settings/unit snapshots, and pause control node requests through the
 shared maintenance barrier. Disable and stop compute's gateway, snapshot its final store,
 then use `db.consolidation_import.settings(..., programs={'toollocker'})` and `copy_missing`
-for `tool_schemas` against front's migrated `TOOL_SCHEMAS` table. Preview first; compare exact
-rows and repeat imports before starting the front gateway. Preserve source records and audit
+for `tool_schemas` against the control node's migrated `TOOL_SCHEMAS` table. Preview first; compare exact
+rows and repeat imports before starting the control node gateway. Preserve source records and audit
 serialization. Set `toollocker_runs_on_front = true` in primary LoadCoach's machine file and restart
 it when idle: its API/CLI then refuse stale ownership and a compute gateway cannot restart.
 
 After cutover, check signed MCP calls and identical offered schemas, manager tools/settings,
-permissions, revocation, trace sensitivity and the audit chain. Check the tools and pages the front
+permissions, revocation, trace sensitivity and the audit chain. Check the tools and pages the control node
 serves with LoadCoach unavailable, then gateway outage/refusal/recovery, restart persistence and a
 new verified pair. Restore all normal services; retain the owner's benchmark pause.
-[Canonical results and receipt locations](database-storage.md#front-toollocker-and-remaining-telemetry-milestone-128).
+[Canonical results and receipt locations](database-storage.md#control-node-toollocker-and-remaining-telemetry-milestone-128).
 
-Rollback: stop the front gateway and prevent new tool/settings requests; preserve current
-front schemas, settings and tool events first. Restore the previous routing and unit from
+Rollback: stop the control node gateway and prevent new tool/settings requests; preserve current
+control node schemas, settings and tool events first. Restore the previous routing and unit from
 the private recovery copy, transfer any newer settings back to the old owner with exact
 conflict checks, then unset `toollocker_runs_on_front`, restart LoadCoach and enable compute's
-ToolLocker. Keep tool events on front's audit chain; never overwrite the whole accounts
+ToolLocker. Keep tool events on the control node's audit chain; never overwrite the whole accounts
 store just to move the gateway back. Raw SSH/bearer/machine keys remain separate private
 recovery inputs. No physical power/sleep changes or live engine switch are part of this move.
 
@@ -1337,9 +1337,9 @@ supplied solely through process environment, custom external launchers, SSH/Tail
 identity, or another application's private store are not automatically captured. Select
 necessary private files explicitly with repeated `--include /absolute/file` (for example,
 a service EnvironmentFile); this copies the file, not the service unit that loads it.
-Use `--accounts-config /absolute/weightroom.toml` for a nonstandard front settings filename.
+Use `--accounts-config /absolute/weightroom.toml` for a nonstandard control node settings filename.
 SQLite account stores are supported; PostgreSQL identity import/export and path relocation
-are refused rather than presented as qualified. Never restore a front bundle on compute.
+are refused rather than presented as qualified. Never restore a control node bundle on compute.
 
 ```bash
 # Run from each host's installation root; choose a different output name for each host.

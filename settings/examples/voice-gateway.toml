@@ -5,7 +5,7 @@
 # settings/defaults/voice-gateway.toml. A value from there may be set here too: it is then this
 # machine's own starting value.
 
-# Front machine. Bind the private page locally; Tailscale Serve supplies trusted HTTPS.
+# Control node. Bind the private page locally; Tailscale Serve supplies trusted HTTPS.
 host = "127.0.0.1"
 
 port = 8446
@@ -20,7 +20,7 @@ voice = "http://compute.lan:8445"
 
 key_file = "/home/you/openWeightGym/keys/voice-gateway.key"
 
-# Optional observation metadata uses the existing front accounts store and private front key.
+# Optional observation metadata uses the existing control node accounts store and private control node key.
 # Use the same database/DSN as weightroom.accounts, never a new independent history store.
 # observability_database = "/home/you/openWeightGym/data/accounts.db"
 # observability_dsn_file = "/path/to/existing/front-accounts.dsn" # PostgreSQL alternative

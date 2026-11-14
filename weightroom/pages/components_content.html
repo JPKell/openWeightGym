@@ -46,7 +46,7 @@
 <div id="components-report" hx-get="/system/components?part=page" hx-trigger="every 30s" hx-swap="outerHTML">
 <div class="component-cards-frame"><div class="component-cards">
 {% for node in found.nodes or [] %}
-{% set title = 'Front' if node.name == 'front' else node.name %}
+{% set title = 'Control node' if node.name == 'front' else node.name %}
 {% set receipt = node.receipt or {} %}
 {% call card(tag='article', class_='component-card', attrs={'aria-label': title}) %}
   <div class="d-flex align-items-start gap-2">
@@ -55,8 +55,8 @@
   </div>
   <div class="component-card-about text-secondary small mb-2">
     {% if node.hostname %}<span>{{ node.hostname }}</span>{% endif %}
-    {% if node.name != 'front' and node.with_front %}<span>Same machine as front</span>{% endif %}
-    {% if receipt.topology %}<span>Installed as {{ {'all': 'front and compute', 'front': 'front', 'compute': 'compute'}.get(receipt.topology, receipt.topology) }}{% if receipt.mode %}, {{ receipt.mode }} mode{% endif %}{% if receipt.installed %}, {{ receipt.installed[:10] }}{% endif %}</span>
+    {% if node.name != 'front' and node.with_front %}<span>Same machine as the control node</span>{% endif %}
+    {% if receipt.topology %}<span>Installed as {{ {'all': 'control node and compute', 'front': 'Control node', 'compute': 'compute'}.get(receipt.topology, receipt.topology) }}{% if receipt.mode %}, {{ receipt.mode }} mode{% endif %}{% if receipt.installed %}, {{ receipt.installed[:10] }}{% endif %}</span>
     {% elif node.answering %}<span>No install receipt</span>{% endif %}
   </div>
   {% if not node.answering %}{% call alert('warning', class_='py-2 small mb-2', role='status') %}{{ node.why }}{% endcall %}{% endif %}

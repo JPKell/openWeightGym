@@ -73,7 +73,7 @@ def test_shared_host_capacity_and_cpu_only_service(preview):
     playwright.expect(page.locator('#detail-title')).to_have_text('atlas')
     playwright.expect(page.locator('#fleet-rows tr')).to_have_count(4)
     playwright.expect(page.locator('#services button')).to_have_count(2)
-    # Atlas 64 + Orion 128 + front 16; offline Nova is excluded, atlas is counted once.
+    # Atlas 64 + Orion 128 + control node 16; offline Nova is excluded, atlas is counted once.
     playwright.expect(page.locator('[data-stat="waiting"]')).to_have_text('208 GiB')
     playwright.expect(page.locator('[data-stat="running"]')).to_have_text('3')
 

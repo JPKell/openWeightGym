@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Read frozen G04/G17 benchmark receipts from front's SQLite store without modifying it.
+"""Read frozen G04/G17 benchmark receipts from the control node's SQLite store without modifying it.
 
-Run on front from a matching openWeightGym checkout after the runs finish. The output omits answers,
+Run on the control node from a matching openWeightGym checkout after the runs finish. The output omits answers,
 prompts, logs, task tokens and API keys. A false check is a review target, not an auto-retry.
 """
 
@@ -105,7 +105,7 @@ def receipt(db, kind, run_id, expected_model, expected_state):
 def main():
     """Collect selected retained benchmark receipts without launching model work."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--database", type=Path, required=True, help="front benchmarks.db path")
+    parser.add_argument("--database", type=Path, required=True, help="control node benchmarks.db path")
     parser.add_argument("--model", required=True, help="expected model name on each run")
     parser.add_argument("--run", action="append", required=True, metavar="KIND=ID")
     parser.add_argument("--expected-state", choices=("completed", "cancelled"), default="completed",

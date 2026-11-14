@@ -17,7 +17,7 @@ from voice.speech import Speech
 from voice.telephone import Conversion
 
 TEXTS = ["What is the capital of France?", "Please tell me a short story about a friendly robot.",
-         "LoadCoach runs on the compute machine. The front server is called K server."]
+         "LoadCoach runs on the compute machine. The control node is called K server."]
 
 
 async def main():

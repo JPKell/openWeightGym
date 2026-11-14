@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 
 def workspace(batches, person, params):
-    """Filter only the batches already authorized by the front's API."""
+    """Filter only the batches already authorized by the control node's API."""
     filters = {key: params.get(key, '') for key in ('q', 'status', 'owner', 'sort')}
     filters['sort'] = filters['sort'] if filters['sort'] in ('oldest', 'errors', 'progress') else 'newest'
     owners = sorted({batch['user'] for batch in batches})

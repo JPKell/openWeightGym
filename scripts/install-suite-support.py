@@ -298,7 +298,7 @@ def path_from(base: Path, value: str) -> Path:
 
 
 def toollocker_on_front_target(config: Path, told: dict) -> tuple[str, str, Path]:
-    """Resolve front's authoritative store before the gateway's runtime packages are installed."""
+    """Resolve the control node's authoritative store before the gateway's runtime packages are installed."""
     if 'loadcoach' in told:
         raise ValueError('Choose front or loadcoach for ToolLocker, not both')
     owner = path_from(config.parent, str(told['front']))
@@ -500,8 +500,8 @@ def database_block(service: str, engine: str, config: Path, dsns: dict[str, Path
     elif service == "toollocker":
         front = config.exists() and tomllib.loads(config.read_text()).get("front")
         if front:
-            # Front's store binding is authoritative; never create a second accounts store.
-            raise ValueError("Front ToolLocker inherits WeightRoom's database; configure weightroom's store instead")
+            # Control node's store binding is authoritative; never create a second accounts store.
+            raise ValueError("Control node ToolLocker inherits WeightRoom's database; configure weightroom's store instead")
         stores = {"identity": ("toollocker.identity", "../data/loadcoach.db")}
     elif service == "weightroom":
         stores = {
@@ -572,7 +572,7 @@ def configure(config: Path, service: str, engine: str, dsn_values: list[str]) ->
         dsns[name] = Path(raw).expanduser().resolve()
     if service == "toollocker" and config.exists() and tomllib.loads(config.read_text()).get("front"):
         if toollocker_on_front_target(config, tomllib.loads(config.read_text()))[1] != engine:
-            raise ValueError("Configure WeightRoom's owning database before its front ToolLocker")
+            raise ValueError("Configure WeightRoom's owning database before its control node ToolLocker")
         return 0
     block = database_block(service, engine, config, dsns)
     if not block:
@@ -586,7 +586,7 @@ def configure(config: Path, service: str, engine: str, dsn_values: list[str]) ->
 # Older examples named the original author's folders; they are still understood.
 TEMPLATE_PATHS = re.compile(r"/home/you/openWeightGym|/home/jpk/ai/openWeightGym|/home/jpk/ai/suite|/home/jpk/weightroom|/home/you|/home/jpk")
 
-# Turnstile keeps public ports 8442-8445. The front ToolLocker always stays on loopback 9443;
+# Turnstile keeps public ports 8442-8445. The control node ToolLocker always stays on loopback 9443;
 # compute programs also move up by 1000 when everything shares the same machine.
 SHARED_HOST_PORTS = {"loadcoach": 9442, "toollocker": 9443, "spotter": 9444, "voice": 9445}
 
@@ -710,7 +710,7 @@ def prepare_voice(root: Path, services: list[str], install_models=None) -> int:
     if not key_file.is_absolute():
         key_file = root / "settings" / key_file
     if not key_file.is_file() or not key_file.read_text().strip():
-        raise ValueError("Voice needs the service key the front issues; join with a pairing code or pass --voice-key-file.")
+        raise ValueError("Voice needs the service key the control node issues; join with a pairing code or pass --voice-key-file.")
     key_file.chmod(0o600)
     manifest = json.loads((root / "voice/models.json").read_text())
     names = {bundle["name"] for bundle in manifest["bundles"]}

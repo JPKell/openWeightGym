@@ -68,7 +68,7 @@ def list_folder(folder: str = "") -> str:
 
 @tool
 def read_file(file: str, start: int = 1, lines: int = 400) -> str:
-    """Read a text file, by full path. Each line comes back with its number in front.
+    """Read a text file, by full path. Each line comes back with its number in the control node.
 
     Returns `lines` lines beginning at line `start`. To read on, ask again with a later `start`.
     Requests allow at most 2,000 lines and 262,144 characters, starting within 1,000,000 lines.

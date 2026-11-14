@@ -1,4 +1,4 @@
-"""Physical-host identity and front-owned telemetry across LoadCoach instances."""
+"""Physical-host identity and control-node-owned telemetry across LoadCoach instances."""
 
 import asyncio
 import json
@@ -138,7 +138,7 @@ def test_signed_sleep_notice_marks_only_its_own_host_sleeping_until_it_answers_a
     assert [host["state"] for host in shown] == ["sleeping", "not answering"]
     assert with_power_state(hosts, {"jpk-main": {"at": 21.0}}, notice) == hosts
     assert notice == {"action": None, "at": 0.0, "machine": "jpk-main"}
-    # The notice of a node the front does not know marks nothing.
+    # The notice of a node the control node does not know marks nothing.
     assert with_power_state(hosts, {}, {"action": "sleep", "at": 20.0, "machine": ""}) == hosts
 
 

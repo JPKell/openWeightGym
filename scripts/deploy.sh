@@ -1,32 +1,32 @@
 #!/bin/bash
-# Deploy and update everything: front's code and services, then compute's, with any one-time moves of
-# data to front that the new code needs. Run it on compute, from the checkout compute's services run from:
+# Deploy and update everything: the control node's code and services, then compute's, with any one-time moves of
+# data to the control node that the new code needs. Run it on compute, from the checkout compute's services run from:
 #
 #   scripts/deploy.sh          says what it will do, and asks before doing it
 #   scripts/deploy.sh --yes    does it without asking
 #
 # In order:
-#   1. puts the code on front and restarts weightroom, turnstile and voice-gateway there (scripts/deploy-front.sh)
+#   1. puts the code on the control node and restarts weightroom, turnstile and voice-gateway there (scripts/deploy-front.sh)
 #   2. takes a copy of compute's database, at one moment, while LoadCoach goes on
-#   3. with turnstile and weightroom stopped on front, moves what front does not have yet, once each:
+#   3. with turnstile and weightroom stopped on the control node, moves what control node does not have yet, once each:
 #        weightroom roles-from   the roles and recent reliability (milestone 83)
 #        weightroom log-from     the event log and the requests kept in full (milestone 91)
 #        weightroom outside-from the outside services (milestone 114); their NAME.key files are copied across first,
-#                                 into front's keys folder, only where front has none, readable by you alone
+#                                 into the control node's keys folder, only where control node has none, readable by you alone
 #        weightroom batches-from the uploaded files and batches, those under way going on there (milestone 115)
 #      A move that was made before is skipped. DB1-retired stores skip all legacy moves.
 #   4. restarts compute's programs that are running, so that they take the new code
 #   5. checks that a key works through turnstile and is refused by compute itself, and that compute's
-#      log reaches front
+#      log reaches control node
 #
-# From step 1 until step 4 is done, a minute or two, front runs new code and compute old: role requests
+# From step 1 until step 4 is done, a minute or two, control node runs new code and compute old: role requests
 # and the log pages may fail. Restarting LoadCoach ends what it is answering and unloads its models.
 # Compute's own copies are left as they were; they are the way back. Entries compute writes after the
-# copy is taken are not lost: compute sends front everything it has once it restarts, and front skips
+# copy is taken are not lost: compute sends control node everything it has once it restarts, and the control node skips
 # what it has.
 set -eu
 
-FRONT="${FRONT:-10.77.10.42}"     # the front machine, as ssh reaches it
+FRONT="${FRONT:-10.77.10.42}"     # the control node, as ssh reaches it
 WHERE="${WHERE:-weightroom}"       # its folder there, under the home folder
 case "$WHERE" in *[!a-zA-Z0-9_/-]*|/*|*..*) echo 'WHERE must be a simple relative folder'; exit 2;; esac
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -48,7 +48,7 @@ if [ "${1:-}" != "--yes" ]; then
   [ "$answer" = y ] || [ "$answer" = Y ] || { echo "Nothing done."; exit 0; }
 fi
 
-say "1. The code on front"
+say "1. The code on the control node"
 scripts/deploy-front.sh
 
 say "2. A copy of compute's database"
@@ -68,7 +68,7 @@ print(f"Copied {source}.")
 EOF
 scp -q "$COPY" "$FRONT:$REMOTE"
 
-say "3. What front does not have yet"
+say "3. What control node does not have yet"
 RETIRED="$(.venv/bin/python - "$COPY" <<'EOF'
 import sqlite3, sys
 with sqlite3.connect(sys.argv[1]) as connection:
@@ -78,10 +78,10 @@ with sqlite3.connect(sys.argv[1]) as connection:
 EOF
 )"
 if [ "$RETIRED" = 1 ]; then
-  echo "DB1 retirement verified: front owns this data; legacy copy commands are skipped."
+  echo "DB1 retirement verified: control node owns this data; legacy copy commands are skipped."
   ssh "$FRONT" "rm -f $REMOTE"
 else
-# An outside service's key is a file, never in a database. Copy each service's across, once: front is where it is used now.
+# An outside service's key is a file, never in a database. Copy each service's across, once: control node is where it is used now.
 for service in $(python3 -c "
 import sqlite3, sys
 try:
@@ -128,6 +128,6 @@ through=$(ssh "$FRONT" "curl -s -o /dev/null -w '%{http_code}' -H \"Authorizatio
 around=$(ssh "$FRONT" "curl -s -o /dev/null -w '%{http_code}' -H \"Authorization: Bearer $key\" http://$COMPUTE:8442/v1/models")
 echo "weightroom's key through turnstile: $through (200 is right)"
 echo "the same key straight to compute:   $around (401 is right)"
-echo "The latest of the log on front, which should include compute's 'loadcoach started':"
+echo "The latest of the log on the control node, which should include compute's 'loadcoach started':"
 ssh "$FRONT" "cd $WHERE && .venv/bin/weightroom --config settings/weightroom.toml log -n 5"
 [ "$through" = 200 ] && [ "$around" = 401 ] && echo "Done." || { echo "A check did not come out right: look before going on."; exit 1; }

@@ -1,4 +1,4 @@
-"""Due schedule wake/retry through real front grants and signed, simulated compute nodes."""
+"""Due schedule wake/retry through real control node grants and signed, simulated compute nodes."""
 import asyncio
 import secrets
 from datetime import datetime

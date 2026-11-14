@@ -1,4 +1,4 @@
-"""Front-side chat behavior against compute's ordinary authenticated model APIs."""
+"""Control-node-side chat behavior against compute's ordinary authenticated model APIs."""
 
 import json
 import sqlite3

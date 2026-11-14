@@ -8,7 +8,7 @@ TERMINAL=frozenset({'complete','failed','cancelled'})
 
 
 class Installations:
-    """Keep exact retry settings and explicit interruptions in the front accounts store."""
+    """Keep exact retry settings and explicit interruptions in the control node accounts store."""
     def __init__(self,source):
         self.source=database(source)
         self.db=self.source.connect(check_same_thread=False)

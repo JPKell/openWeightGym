@@ -138,12 +138,12 @@ Downloads use the existing Hugging Face discovery and download path. The tasks a
 
 | Endpoint | Behaviour |
 |---|---|
-| `POST /v1/systemone`, `POST /v1/classifier` (alias) | Native contract. Front validation: `state` or chat `messages`, 1–64 questions, type‑specific criteria limits, the per‑model choice limit, 64 KiB body cap. Passed through to llama‑server; 400/501 mapped to OpenAI‑style error bodies. Usage counts input tokens only. |
+| `POST /v1/systemone`, `POST /v1/classifier` (alias) | Native contract. Control node validation: `state` or chat `messages`, 1–64 questions, type‑specific criteria limits, the per‑model choice limit, 64 KiB body cap. Passed through to llama‑server; 400/501 mapped to OpenAI‑style error bodies. Usage counts input tokens only. |
 | `GET /v1/models` | Classifier models with `type: "classifier"`, `capabilities.classifier`, `architecture.output_modalities: ["decisions"]` and their limits. |
 | `POST /v1/chat/completions` (shim) | When the target is a classifier: `response_format.json_schema` properties map to questions (`enum` → choice, `boolean` → noul, integer `minimum..maximum` or `x-levels` → score; `description` → instructions). The conversation becomes the state. The reply's `message.content` is the JSON answer object, `logprobs.content[].top_logprobs` carries each distribution, `finish_reason: "stop"`, and `completion_tokens: 0`. `stream: true` returns one chunk and `[DONE]`. Any other request returns a 400 that points to `/v1/systemone`. |
 
 3. Cloud APIs ([loadcoach/outside.py](../loadcoach/outside.py), [outside_parts.html](../weightroom/pages/outside_parts.html)):
-   each mapped model gets a `systemone` flag. The front sends `/v1/systemone` to a provider
+   each mapped model gets a `systemone` flag. The control node sends `/v1/systemone` to a provider
    such as `https://api.typesafe.ai/v1` or Featherless. The same validation, pricing (input
    tokens), daily ceiling and local‑first fallthrough apply. Credentials stay hidden as they
    are today.
@@ -202,7 +202,7 @@ Fingerprints facts.
 - Tests:
   - GGUF decision facts, using fixture headers built with gguf‑py;
   - `classifier/` discovery and the remote‑code refusal;
-  - front validation limits;
+  - control node validation limits;
   - the shim mapping both ways;
   - Cloud API systemone routing and fallthrough;
   - platform gating and model access;
@@ -210,14 +210,14 @@ Fingerprints facts.
   - the `test_ui_consistency.py` audit;
   - browser checks of the Classifier page (narrow layout, every state);
   - conversion job manifest and parity gate, with stubbed tools.
-- End‑to‑end on the GPU node: all six downloaded models through the front's `/v1/systemone`,
+- End‑to‑end on the GPU node: all six downloaded models through the control node's `/v1/systemone`,
   the shim and the page; both TinyJev conversions through the parity gate.
 
 ## 5. Delivery order
 
 | Step | Contents | Done when |
 |---|---|---|
-| 1 | WP1 + WP3.1–3.2 native endpoint and `/v1/models` | Julia‑1 placed by hand in `classifier/` answers `/v1/systemone` through the front |
+| 1 | WP1 + WP3.1–3.2 native endpoint and `/v1/models` | Julia‑1 placed by hand in `classifier/` answers `/v1/systemone` through the control node |
 | 2 | §3 downloads (Classifier destination, filter, starter set) | All six models downloaded to the GPU node from the UI and answering |
 | 3 | WP4 page + WP5 pills | Interactive page working with all six models |
 | 4 | Chat‑completions shim, WP7 | OpenAI SDK and MCP agents can classify; switch disables everything |
@@ -246,7 +246,7 @@ are ordered lowest first; native scores are expected zero-based indices and can 
 Compare adds up to two other models. Drafts and run history stay in page memory; export JSON
 or CSV before closing the tab. Probabilities are not calibrated for your data.
 
-Install classifiers queues the six starter downloads into the existing front Classifier storage.
+Install classifiers queues the six starter downloads into the existing control node Classifier storage.
 Use **Install downloaded classifiers** after the files finish; normal installation verifies and
 copies them into the chosen GPU node’s active cache. This uses the established central storage
 and transfer route without changing node storage settings. Models and Files also expose a Classifier filter.
@@ -266,7 +266,7 @@ against [TypeSafe](https://api.typesafe.ai/redoc) and
 
 ## Delivery verification
 
-- Deployed through `owg update; owg restart` on front and the GPU node; eight classifiers installed on `jpk-main` (six starters plus two verified conversions).
+- Deployed through `owg update; owg restart` on the control node and the GPU node; eight classifiers installed on `jpk-main` (six starters plus two verified conversions).
 - All six starters: native endpoint, alias, normal/streamed shim and direct app classification return 200; mobile layout has no overflow or browser errors.
 - Actual OpenAI SDK: normal response and one streamed chunk, zero completion tokens; MCP classification succeeds on port 8443.
 - Restricted test account: empty model catalogue, native/alias 404 and MCP refusal; account/group removed afterwards.

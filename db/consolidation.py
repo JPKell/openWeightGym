@@ -16,7 +16,7 @@ import sqlite3
 from db.schemas import current_table, stored_table
 
 
-# Even an identical front copy does not make these tables disposable. In particular
+# Even an identical control node copy does not make these tables disposable. In particular
 # events/texts/traces/seen/forwarded are a live spool and sensitivity state, not a replica.
 RETAIN = {
     "events", "texts", "traces", "seen", "forwarded", "settings_changed",
@@ -104,9 +104,9 @@ def compare(source, target, table, *, machine="compute", target_table=None):
     """Every source row appears once, including unmatched rows and conflicts.
 
     Additional destination columns are reported but cannot erase a source column.
-    Event hashes are re-chained by front; identity is (machine, source sequence).
+    Event hashes are re-chained by the control node; identity is (machine, source sequence).
     Text entry IDs use the same forwarding map rather than accidentally matching
-    an unrelated front-local request with the same integer ID.
+    an unrelated control-node-local request with the same integer ID.
     `target_table` is the table's name in `target` when it differs (a renamed table).
     """
     target_table = target_table or table
@@ -214,7 +214,7 @@ def audit(compute, accounts, roles, benchmarks, spotter=None, *, machine="comput
         if spotter:
             if not telemetry_host:
                 raise ValueError("Spotter comparison needs the verified physical host fingerprint")
-            # Legacy readings contain series(numbers), just like front's stored history.
+            # Legacy readings contain series(numbers), just like the control node's stored history.
             old = connections["spotter"]
             front = connections["accounts"]
             lookup = {at: numbers for at, numbers in front.execute(

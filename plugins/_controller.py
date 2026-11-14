@@ -21,7 +21,7 @@ class Controller:
         self.observation_polls = {}
 
     def headers(self, plugin: str, instance: str) -> dict:
-        """Use only the dedicated pairing key; openWeightGym account credentials stay on front."""
+        """Use only the dedicated pairing key; openWeightGym account credentials stay on the control node."""
         return {"authorization": "Bearer " + self.registry.pairing_key(plugin, instance), "X-Suite-Instance": instance}
 
     async def request(self, plugin: str, instance: str, method: str, path: str, body=None, timeout=35) -> dict:

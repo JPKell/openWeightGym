@@ -1,10 +1,10 @@
 #!/bin/sh
-# Serve the front machine's console over HTTPS on the home network, with no outside service,
+# Serve the control node's console over HTTPS on the home network, with no outside service,
 # so browsers give its pages the microphone. Run it on compute, from anywhere:
 #
 #   scripts/front-https.sh
 #
-# A home certificate authority (CA) on compute signs a certificate for the front machine.
+# A home certificate authority (CA) on compute signs a certificate for the control node.
 # nginx there answers https://front.home.arpa and passes it to the console on 127.0.0.1:8440.
 # The CA's key never leaves compute: whoever holds it can make certificates every trusting
 # device accepts, though only for *.home.arpa and LAN addresses. Each phone and computer
@@ -13,10 +13,10 @@
 # Once HTTPS answers, the console stops listening on the LAN in plain HTTP and its sign-in
 # cookie travels only over HTTPS (KEEP_HTTP=1 leaves the console as it is). Run the script
 # again before the certificate runs out: it signs a new one 30 days ahead and reloads nginx.
-# It needs sudo without a password on the front machine.
+# It needs sudo without a password on the control node.
 set -eu
 
-FRONT="${FRONT:-10.77.10.42}"            # the front machine, as ssh reaches it
+FRONT="${FRONT:-10.77.10.42}"            # the control node, as ssh reaches it
 IP="${IP:-$FRONT}"                       # its LAN address; reserve it in the router so it never moves
 NAME="${NAME:-front.home.arpa}"          # the name the router's DNS gives that address
 LAN="${LAN:-10.77.10.0/255.255.255.0}"   # the addresses the CA may sign for, beside *.home.arpa
@@ -105,7 +105,7 @@ cat <<EOF
 
 Done: https://$NAME (and https://$IP) reach the console.
 Still to do by hand:
-  - Router DNS: an A record $NAME -> $IP, and a fixed address for the front machine.
+  - Router DNS: an A record $NAME -> $IP, and a fixed address for the control node.
   - Trust $CA_DIR/home-ca.crt once on each device (the .crt only, never the .key):
       iPhone:  AirDrop it, Settings > Profile Downloaded > Install,
                then General > About > Certificate Trust Settings > turn it on

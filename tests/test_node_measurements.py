@@ -81,7 +81,7 @@ def test_front_host_is_not_a_compute_node_without_an_inference_service():
     matrix = measurement_matrix({}, {}, models, [bench], bench, [], {})
     assert [node['id'] for node in matrix['nodes']] == ['compute']
     assert [cell['node'] for cell in matrix['rows'][0]['cells']] == ['compute']
-    # A compute service can be registered on the same physical host as front.
+    # A compute service can be registered on the same physical host as control node.
     models[0]['locations'] = [{'machine': 'front'}, {'machine': 'compute'}]
     registered = measurement_matrix({'available_machines': ['front', 'compute']},
                                     {'machines': [{'name': 'front'}, {'name': 'compute'}]},

@@ -13,8 +13,8 @@ METRICS = {'endpoint_to_final_seconds': 'Endpoint received → recognition final
            'recognition_block_seconds': 'Final recognition block',
            'final_to_phrase_seconds': 'Recognition final → first speakable phrase ready',
            'synthesis_seconds': 'First phrase synthesis',
-           'audio_to_ack_seconds': 'First PCM received on front → first playback progress',
-           'clear_ack_seconds': 'Clear forwarded on front → client queue-cleared acknowledgement'}
+           'audio_to_ack_seconds': 'First PCM received on the control node → first playback progress',
+           'clear_ack_seconds': 'Clear forwarded on the control node → client queue-cleared acknowledgement'}
 
 
 class Turn:

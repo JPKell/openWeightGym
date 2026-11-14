@@ -18,11 +18,11 @@
       {%- endmacro %}
       <svg class="docs-map" viewBox="0 0 1200 990" aria-labelledby="map-title map-desc" xmlns="http://www.w3.org/2000/svg">
         <title id="map-title">openWeightGym component map</title>
-        <desc id="map-desc">Voice clients enter the voice gateway on front through an app, a telephone proxy or private web streaming. The web console and API clients reach openWeightGym and Turnstile. ToolLocker runs on front. Compute owns LoadCoach, Spotter and voice services. Permitted hosted providers are external; stores exist on front and compute. Click a component for its code reference.</desc>
+        <desc id="map-desc">Voice clients enter the voice gateway on the control node through an app, a telephone proxy or private web streaming. The web console and API clients reach openWeightGym and Turnstile. ToolLocker runs on the control node. Compute owns LoadCoach, Spotter and voice services. Permitted hosted providers are external; stores exist on the control node and compute. Click a component for its code reference.</desc>
         <defs><marker id="docs-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" class="docs-arrow-head"/></marker></defs>
 
         <rect class="docs-map-zone" x="70" y="270" width="1060" height="345" rx="5"/>
-        <text class="docs-zone-title" x="600" y="292" text-anchor="middle">Front server</text>
+        <text class="docs-zone-title" x="600" y="292" text-anchor="middle">Control node</text>
         <rect class="docs-map-zone" x="70" y="685" width="750" height="285" rx="5"/>
         <text class="docs-zone-title" x="445" y="707" text-anchor="middle">Compute machine</text>
 
@@ -82,7 +82,7 @@
         {{ node(590, 740, 200, 'LoadCoach', 'Models / queue / inference', '/docs/modules/loadcoach') }}
         {{ node(830, 740, 200, 'Hosted providers', 'Permitted offload', '/docs/system/hosted-providers') }}
         {{ node(590, 865, 200, 'Models', 'Local model processes', '/docs/system/models') }}
-        {{ node(830, 865, 200, 'Data and backups', 'Front / compute stores', '/docs/data') }}
+        {{ node(830, 865, 200, 'Data and backups', 'Control node / compute stores', '/docs/data') }}
       </svg>
       </div>
     {% endcall %}

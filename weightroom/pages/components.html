@@ -2,7 +2,7 @@
 {% from "parts.html" import page_header %}
 {% block title %}Components · openWeightGym{% endblock %}
 {% block main %}
-{{ page_header("Components", lead="Which services and engines front and each compute node have installed, and which they do not.") }}
+{{ page_header("Components", lead="Which services and engines control node and each compute node have installed, and which they do not.") }}
 {% if deferred %}{% from "deferred.html" import loading %}
 {{ loading('components-report', fragment_url, 'Asking each machine what it has installed…') }}
 {% else %}{% include "components_content.html" %}{% endif %}

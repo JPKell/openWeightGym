@@ -81,7 +81,7 @@ def test_a_role_is_asked_for_like_a_model_and_every_answer_says_what_was_picked_
     assert offered == (["middle", "quick", "strong", "chat"], ["chat"])  # a role is offered beside the models, and chat pages can list it
     assert said(first) == ("strong", "highest preference after loaded-model bonuses") and said(again) == ("strong", "ready and loaded locally; 25% loaded-model bonus")
     assert said(still)[0] == "strong" and said(available) == ("strong", "the highest in the list that is warm") and said(best) == ("strong", "the top of the list")
-    # Turnstile picks, on the front machine. Compute, and the model server behind it, are sent the plain model name.
+    # Turnstile picks, on the control node. Compute, and the model server behind it, are sent the plain model name.
     assert json.loads(first.json()["body"])["model"] == "strong" and first.headers["x-loadcoach-role"] == "chat" and best.headers["x-loadcoach-role"] == "chat:best"
     assert (asked["what"], asked["model"], asked["role"], asked["picked"], asked["because"]) == ("asked", "strong", "chat:best", "strong", "the top of the list")
     assert said(narrow[0])[0] == said(narrow[1])[0] == "quick" and none == (404, []) and unknown == (404, 404)
@@ -161,6 +161,6 @@ def test_roles_and_recent_reliability_move_to_front_once_and_evidence_is_publish
     assert moved.exit_code == 0 and "Took 1 roles and 1 reliability outcomes" in moved.output, moved.output
     assert Roles(str(tmp_path / "front" / "roles.db")).get("chat") == {"models": {"small": 2, "big": 1}}
     assert front.execute("SELECT streak FROM reliability_state").fetchall() == [(2,)]  # the state as it was, with both faults in it
-    assert front.execute("SELECT COUNT(*) FROM role_benchmarks").fetchone()[0] > 0  # the benchmark definitions, published from front's own store
+    assert front.execute("SELECT COUNT(*) FROM role_benchmarks").fetchone()[0] > 0  # the benchmark definitions, published from the control node's own store
     assert "first move only" in str(again.exception)  # never twice
     assert compute.get("chat") and kept.db.execute("SELECT COUNT(*) FROM reliability_outcomes").fetchone()[0] == 2  # compute's copy is the way back

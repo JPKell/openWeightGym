@@ -1,6 +1,6 @@
 """Request timing evidence, without prompts, replies, tool arguments or credentials.
 
-Compute measures monotonic intervals; front presents the retained evidence. Native server
+Compute measures monotonic intervals; control node presents the retained evidence. Native server
 timings overlap those intervals and are never stacked into a fabricated wall-clock timeline.
 """
 

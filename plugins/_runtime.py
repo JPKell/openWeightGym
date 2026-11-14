@@ -1,4 +1,4 @@
-"""Independent HTTP adapter server, installable without openWeightGym's compute or front applications."""
+"""Independent HTTP adapter server, installable without openWeightGym's compute or control node applications."""
 
 from __future__ import annotations
 
@@ -296,7 +296,7 @@ def build_app(config_file: Path, manifest: Manifest | None = None, driver=None) 
         return JSONResponse({"protocol": 1, "plugin": manifest.id, "capabilities": sorted(manifest.capabilities)})
 
     async def models(request):
-        """List underlying entries and their labels for front-side alias management."""
+        """List underlying entries and their labels for control-node-side alias management."""
         if "models" not in manifest.capabilities:
             raise AdapterError("Model discovery is unsupported.", 405, "unsupported_capability")
         return JSONResponse({"object": "list", "data": await runtime.models(force=True)})

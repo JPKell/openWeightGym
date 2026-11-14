@@ -1,7 +1,7 @@
 {% from "parts.html" import card, empty_row %}
 {% set diagnostic = facts.diagnostics or {} %}
 {% call card("Diagnostics", true, "request-diagnostics", id="request-diagnostics") %}
-<p class="small text-secondary">Wall-clock stages are measured on compute, starting at admission. Front authentication, waking compute and delivery to your app are outside this measurement. Native timings overlap these stages.</p>
+<p class="small text-secondary">Wall-clock stages are measured on compute, starting at admission. Control node authentication, waking compute and delivery to your app are outside this measurement. Native timings overlap these stages.</p>
 {% if not diagnostic.available %}<p class="text-secondary">Detailed timing was not recorded for this request. Legacy measurements and inferred totals are labelled below.</p>{% endif %}
 {% if diagnostic.truncated %}<p class="text-warning">The stage history reached its limit; some later stage boundaries are unavailable.</p>{% endif %}
 {% if ended.admission_estimate is defined %}{% set estimate = ended.admission_estimate %}

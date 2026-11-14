@@ -119,7 +119,7 @@
     filename = scenario === 'adapter' ? 'Qwen3-32B-terse-lora.gguf' : scenario === 'projector' ? 'Qwen3-VL-32B-mmproj-f16.gguf' : 'Qwen3-32B-Q6_K.gguf';
     path = `/srv/models/cache/${filename}`;
     $('#file-heading .page-title').textContent = filename;
-    $('#file-heading .eyebrow').textContent = 'FILES / FRONT / ACTIVE CACHE';
+    $('#file-heading .eyebrow').textContent = 'FILES / CONTROL NODE / ACTIVE CACHE';
     $('#delete-name').disabled = false; $('#jump-transfer').disabled = false;
     $('#copy-path').disabled = false; $('#add-model').disabled = false;
     $('#file-path').textContent = path;
@@ -133,7 +133,7 @@
     $('#summary-usage').textContent = unused ? '0 models' : '2 models';
     $('#summary-protection').textContent = unused ? 'Available to configure' : 'File protected from deletion';
     $('[data-fact="last-used"]').textContent = unused ? 'Never' : '12 Nov 2026 · 10:42 PST';
-    $('[data-fact="location"]').textContent = 'Front · active cache';
+    $('[data-fact="location"]').textContent = 'Control node · active cache';
     $('[data-fact="place"]').textContent = 'nvme';
     $('#model-uses').hidden = unused;
     $('#add-model').hidden = !unused || isPart;
@@ -233,8 +233,8 @@
         $('#file-path').textContent = path;
         $$('[data-path-input]').forEach(e => { e.value = path; });
         $('[data-fact="place"]').textContent = destination;
-        $('[data-fact="location"]').textContent = destination === 'archive' ? 'Front · storage' : 'Front · active cache';
-        $('#file-heading .eyebrow').textContent = `FILES / FRONT / ${destination.toUpperCase()}`;
+        $('[data-fact="location"]').textContent = destination === 'archive' ? 'Control node · storage' : 'Control node · active cache';
+        $('#file-heading .eyebrow').textContent = `FILES / CONTROL NODE / ${destination.toUpperCase()}`;
       }
       notice(operation === 'copy' ? `Copied to ${destination}. SHA-256 verified; original retained.` : `Moved to ${destination}. SHA-256 verified; model paths updated. Loaded models keep answering.`);
     });

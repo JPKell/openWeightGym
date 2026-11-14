@@ -72,7 +72,7 @@ def made_up(tmp_path, monkeypatch, **more):
     (tmp_path / "token").write_text("made-up-token")
 
     database = str(tmp_path / "loadcoach.db")
-    users = Users(str(tmp_path / "accounts.db"), GROUPS)  # the accounts are the front machine's: turnstile is in front, as there
+    users = Users(str(tmp_path / "accounts.db"), GROUPS)  # the accounts are the control node's: turnstile is in the control node, as there
     keys = {}
     for name, group in (("jordan", "admin"), ("pat", "plain"), ("panel", "front")):
         users.add(name, group)
@@ -317,7 +317,7 @@ def test_spotter_believes_only_what_turnstile_signed(machine):
     assert refused.status_code == 401  # an API key means nothing here
     assert len(refused.headers["x-request-id"]) == 32 and refused.headers["x-request-id"] != "caller-chosen"
     assert caller.get("/spotter/now", headers=keys["pat"]).status_code == 200  # through turnstile, with the same key
-    assert caller.post("/spotter/sign-in", json={"name": "pat", "password": "correct horse"}, headers=keys["panel"]).status_code in (404, 405)  # signing in is front's
+    assert caller.post("/spotter/sign-in", json={"name": "pat", "password": "correct horse"}, headers=keys["panel"]).status_code in (404, 405)  # signing in is the control node's
 
 
 def test_the_settings_name_services_by_their_unit_and_nothing_else(tmp_path):
@@ -434,7 +434,7 @@ def test_spotter_refreshes_versions_in_its_background_worker(tmp_path, monkeypat
 
     monkeypatch.setattr(Versions, "refresh", refresh)
     with made_up(tmp_path, monkeypatch, component_versions_every=5):
-        # Front has its own checker; verify this node's configured store and interval.
+        # Control node has its own checker; verify this node's configured store and interval.
         own = lambda: [row for row in refreshed if row[0] == str(tmp_path / "loadcoach.db")]
         wait_until(own)
         assert own() == [(str(tmp_path / "loadcoach.db"), 300, {"settings": None})]

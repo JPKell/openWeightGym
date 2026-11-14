@@ -10,7 +10,7 @@ Its rule is a short, fixed list of things it can do. A caller names a service fr
 settings and one of three actions, or one of three things to do to the machine. Nothing a caller
 sends is ever run as a command, used as a path, or taken as the name of a unit.
 
-Who may ask is turnstile's to say, on the front machine: it checks the caller's key and sends a
+Who may ask is turnstile's to say, on the control node: it checks the caller's key and sends a
 signed statement in its place (see loadcoach/statement.py), so the same keys work here, through
 turnstile, whether or not LoadCoach is running.
 """
@@ -86,7 +86,7 @@ class Settings:
     busy_gpu: float = 10  # a GPU at this percentage or more counts as the machine being used
     busy_processor: float = 25  # and so does the processor at this
     machine_key_file: str = ""  # the key turnstile signs with, and spotter signs its notice to turnstile with
-    machine_name: str = LEGACY  # LoadCoach's machine_name: the node the notice is about, as [machines.NAME] on front calls it
+    machine_name: str = LEGACY  # LoadCoach's machine_name: the node the notice is about, as [machines.NAME] on the control node calls it
     database: DatabaseSource = ":memory:"  # resolved identity store; legacy paths remain accepted
     history: str = ":memory:"  # where spotter keeps its readings: a file of its own
     databases: dict = field(default_factory=dict)  # optional named identity/history store bindings
@@ -831,7 +831,7 @@ def serve(config: Annotated[Path, typer.Option(metavar="FILE", help="The setting
 
     It has no commands. It runs until stopped, normally as a service: systemctl --user status spotter
 
-    Who may ask it for what is turnstile's to say, on the front machine: callers ask through it, with their keys. Root's services, sleep, restart and switching off also need the polkit rule in spotter.rules.
+    Who may ask it for what is turnstile's to say, on the control node: callers ask through it, with their keys. Root's services, sleep, restart and switching off also need the polkit rule in spotter.rules.
 
     Every setting is explained in settings/examples/spotter.toml and settings/defaults/spotter.toml.
     """

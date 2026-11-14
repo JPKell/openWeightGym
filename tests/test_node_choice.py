@@ -1,4 +1,4 @@
-"""Phase 1 of docs/peer-nodes-plan.md: the front keeps every task record, and callers may name a node.
+"""Phase 1 of docs/peer-nodes-plan.md: the control node keeps every task record, and callers may name a node.
 
 Covers the `allow_caller_to_specify_destination` setting (Settings → General), tasks placed on
 nodes other than the default, the renamed settings keys and the renamed task tables and stream.
@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def destination_allowed(caller, allowed: bool) -> None:
-    """Change the setting as Settings → General does, in the front's console settings store."""
+    """Change the setting as Settings → General does, in the control node's console settings store."""
     caller.front.state.console_settings.changes.put('turnstile', 'allow_caller_to_specify_destination', allowed, 'owner')
 
 
@@ -38,7 +38,7 @@ def test_naming_the_node_is_refused_with_a_clear_message_only_while_the_setting_
         assert refused.status_code == 400
         assert "Allow callers to choose the node" in refused.json()['error']['message']
         assert "Settings → General" in refused.json()['error']['message']
-        placed = create(caller, owner)  # without a node, the front still places it
+        placed = create(caller, owner)  # without a node, the control node still places it
         status = caller.get('/loadcoach/tasks/' + placed['id'], headers={'x-loadcoach-task': placed['token']}).json()
         assert status['machine'] == 'compute'
         destination_allowed(caller, True)
@@ -77,7 +77,7 @@ def test_the_setting_is_on_by_default_and_listed_under_general(desk):
     assert switch.front.state.task_records.destination_allowed() is True
 
 
-# Records on the front, work on the nodes
+# Records on the control node, work on the nodes
 
 
 def test_tasks_are_created_on_the_front_for_any_node_and_legacy_ids_keep_their_node(fake_llama_server, fake_cards, tmp_path):

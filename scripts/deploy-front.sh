@@ -1,16 +1,16 @@
 #!/bin/sh
-# Put weightroom and turnstile on the front machine: copy the code, install it, restart the services.
+# Put weightroom and turnstile on the control node: copy the code, install it, restart the services.
 # Run it on compute, from anywhere:
 #
 #   scripts/deploy-front.sh
 #
-# The front machine then has a complete copy that runs whether compute is on or off.
+# The control node then has a complete copy that runs whether compute is on or off.
 # Its own settings, its keys and what it keeps (settings/*.toml, keys/, data/) live only
 # there. This script never reads, copies or removes them. What it does copy, beside the code:
-# the defaults and the examples of the front machine's programs, and their unit files.
+# the defaults and the examples of the control node's programs, and their unit files.
 set -eu
 
-FRONT="${FRONT:-10.77.10.42}"   # the front machine, as ssh reaches it
+FRONT="${FRONT:-10.77.10.42}"   # the control node, as ssh reaches it
 WHERE="${WHERE:-weightroom}"     # the folder there, under the home folder
 case "$WHERE" in *[!a-zA-Z0-9_/-]*|/*|*..*) echo 'WHERE must be a simple relative folder'; exit 2;; esac
 
@@ -71,7 +71,7 @@ ssh "$FRONT" "set -e
   .venv/bin/python -m pip install -q -e '.[voice-gateway,benchmarks,postgresql,knowledge]'
   .venv/bin/python -m compileall -q weightroom benchmarks turnstile loadcoach voice plugins engines mirrorwall soundroom db
   # Milestone 75 renamed relay to turnstile, with no alias. Carry relay's service, settings and
-  # remembered keys over once; on a front that has already moved, each step finds nothing to do.
+  # remembered keys over once; on a control node that has already moved, each step finds nothing to do.
   systemctl --user disable -q --now relay.service 2>/dev/null || true
   rm -rf relay ~/.config/systemd/user/relay.service
   [ ! -f settings/weightroom.toml ] || sed -i 's/^\\[relay\\]/[turnstile]/' settings/weightroom.toml
@@ -90,7 +90,7 @@ ssh "$FRONT" "set -e
     sleep 1
     systemctl --user is-active --quiet weightroom.service
     echo \"weightroom is \$(systemctl --user is-active weightroom.service)\"
-    # Opt-in relocation: keep the installed front unit and its private server settings.
+    # Opt-in relocation: keep the installed control node unit and its private server settings.
     if [ -f settings/toollocker.toml ] && grep -q '^front *=' settings/toollocker.toml; then
       systemctl --user restart toollocker.service
       sleep 1

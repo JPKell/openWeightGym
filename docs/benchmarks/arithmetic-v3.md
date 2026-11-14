@@ -25,7 +25,7 @@ and four cross an ordinary February. Persons, places, dates and record identifie
 across cases. Questions request flat named fields and one final object, then stop.
 
 Only `case['request']` is sent to the existing native task probe. Expected answers and source
-facts remain in front's frozen plan/evidence. Native decoding is unconstrained; reasoning,
+facts remain in the control node's frozen plan/evidence. Native decoding is unconstrained; reasoning,
 raw output, token counts and cap flags remain available under the existing protocol.
 
 ## Verification and limits
@@ -53,7 +53,7 @@ warning remains. No full Suite test run or production deployment was performed f
   ranking evidence, and no production benchmark result was written.
 
 Local implementation does not establish the required best-model 80–95%, smallest-model
-under-30% distribution. Deliver the front benchmark files, then run the four-model check with
+under-30% distribution. Deliver the control node benchmark files, then run the four-model check with
 the current full answer allowance when the owner authorizes GPU availability. Inspect raw
 answers, cap flags and serving identity before interpreting a low score; delimiter loops in
 the audited v2 runs cannot be assumed to disappear with additional answer room.

@@ -153,7 +153,7 @@ class DatabaseConsole:
                     if store['machine'] == 'front':
                         source = self.sources().get(store['id'])
                         if source is None or await asyncio.to_thread(source_identity, source) != store['identity']:
-                            raise OperationRefused('A selected front store changed identity; export stopped.')
+                            raise OperationRefused('A selected control node store changed identity; export stopped.')
                         temporary, method = await asyncio.to_thread(make_sql_dump, source)
                         try:
                             if temporary.stat().st_size + total > MAX_EXPORT_BYTES:
@@ -315,7 +315,7 @@ class DatabaseConsole:
             if request.method == 'POST' and operation == ['execute']:
                 return JSONResponse(await self.execute(person, await request.json()), status_code=202)
             if request.method == 'GET' and operation == ['jobs']:
-                # Fleet maintenance jobs are discovered per owning node; exports are front receipts.
+                # Fleet maintenance jobs are discovered per owning node; exports are control node receipts.
                 try:
                     inventory = await self.ask('GET', '/turnstile/machines?include_retired=1', person.key, timeout=5)
                     nodes = inventory.json().get('machines', []) if inventory.is_success else []

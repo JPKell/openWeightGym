@@ -93,7 +93,7 @@ def test_firewall_ports_refuse_invalid_ports_without_suggesting_rules(tmp_path, 
 ])
 @pytest.mark.parametrize('voice', [False, True])
 def test_bootstrap_assigns_toollocker_to_front_with_optional_voice(tmp_path, topology, expected, voice):
-    """The public installer keeps MCP on front regardless of the voice selection."""
+    """The public installer keeps MCP on the control node regardless of the voice selection."""
     answer = shell(tmp_path, script_functions('install.sh') + '''
 parse_arguments --topology "$TEST_TOPOLOGY"
 VOICE=$TEST_VOICE
@@ -1019,7 +1019,7 @@ def test_voice_compute_requires_a_front_key_before_downloading_weights(tmp_path)
     support = support_module()
     (tmp_path / "settings").mkdir()
     (tmp_path / "settings/voice.toml").write_text('key_file = "../keys/voice-service.key"\n')
-    with pytest.raises(ValueError, match="service key the front issues"):
+    with pytest.raises(ValueError, match="service key the control node issues"):
         support.prepare_voice(tmp_path, ["voice"], install_models=lambda *args, **kwargs: pytest.fail("unexpected download"))
 
 

@@ -79,7 +79,7 @@ def test_usage_api_and_page_enforce_scope_and_validate_filters(desk, tmp_path, m
     for name, tokens in [("pat", 10), ("jordan", 999)]:
         recorded(log, monkeypatch, "2026-10-01T12:00:00+00:00", name, model="private-model" if name == "jordan" else "own-model",
                  prompt_tokens=tokens, answer_tokens=1, group="plain" if name == "pat" else "admin")
-    # WeightRoom polls its front on another event loop. Give this client independent
+    # WeightRoom polls its control node on another event loop. Give this client independent
     # account/log connections to the same files, as separate real processes have.
     with TestClient(turnstile_to(tmp_path, users, {8442: switch}), base_url="http://front:8442") as api:
         key = users.new_key("pat")
@@ -180,7 +180,7 @@ def test_recorded_model_and_mock_cost_precedence(tmp_path, monkeypatch):
 
 def test_usage_api_uses_registered_model_prices_without_disclosing_catalog(desk, tmp_path, monkeypatch):
     browser, switch, users = desk
-    services = Services(str(tmp_path / "data" / "accounts.db"), str(tmp_path / "keys"))  # the services are front's
+    services = Services(str(tmp_path / "data" / "accounts.db"), str(tmp_path / "keys"))  # the services are the control node's
     services.put("rented", {"url": "http://unused/v1", "models": {
         "own-model": {"theirs": "remote", "in": 2, "out": 6},
         "secret-model": {"theirs": "secret", "in": 999}}})

@@ -444,7 +444,7 @@ def test_mixed_store_registry_keeps_sqlite_and_postgresql_independent(postgres, 
 
 
 def test_loadcoach_application_starts_and_serves_from_postgresql(postgres, tmp_path):
-    # Both LoadCoach's own store and front's accounts on PostgreSQL, with turnstile in front as on the two machines.
+    # Both LoadCoach's own store and the control node's accounts on PostgreSQL, with turnstile in the control node as on the two machines.
     accounts = Users(postgres, {"admin": read_group("admin", {"can": ["superuser"]})})
     with loadcoach_through(tmp_path, accounts, database=postgres, keys=str(tmp_path), token_file=str(tmp_path / "loadcoach.token"),
                            model_idle_minutes=0) as client:
@@ -592,7 +592,7 @@ def test_retired_compute_transfers_across_engines_without_recreating_front_table
     from db.transfer import copy_store, tables
     source, proof = retirement_fixture(tmp_path)
     retire(source.path, proof, apply=True)
-    # The deployed retired compute retained users v3; later account-owned tables belong to front.
+    # The deployed retired compute retained users v3; later account-owned tables belong to the control node.
     with source.transaction() as connection:
         connection.execute('DROP TABLE spending_allowances')
         connection.execute('DROP TABLE client_accesses')

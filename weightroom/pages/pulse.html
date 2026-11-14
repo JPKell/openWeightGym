@@ -1,6 +1,6 @@
-{# Front connectivity; each compute node has its own availability notice. #}
+{# Control node connectivity; each compute node has its own availability notice. #}
 <span id="pulse" class="meter pulse" hx-get="/pulse" hx-trigger="every 15s" hx-swap="outerHTML"
-      title="{{ 'Front is answering' if front_state.up else 'Checking front connection' if front_state.up is none else 'Front is not answering' }}">
+      title="{{ 'Control node is answering' if front_state.up else 'Checking control node connection' if front_state.up is none else 'Control node is not answering' }}">
   <span class="dot {{ 'bg-success' if front_state.up else 'bg-secondary' if front_state.up is none else 'bg-danger' }}"></span>
-  <b>{% if front_state.up %}Front{% elif front_state.up is none %}Checking front{% else %}Front unavailable<span class="reading"> since {{ front_state.since|timestamp }}</span>{% endif %}</b>
+  <b>{% if front_state.up %}Control node{% elif front_state.up is none %}Checking control node{% else %}Control node unavailable<span class="reading"> since {{ front_state.since|timestamp }}</span>{% endif %}</b>
 </span>

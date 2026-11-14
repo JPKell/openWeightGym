@@ -3,19 +3,19 @@
                  ('canvas', 'Canvas studio'), ('references', 'Reference images'), ('resize', 'Resize and add detail'), ('trouble', 'When something goes wrong'), ('source', 'Code reference')]) }}
 
   {% call doc_section("Overview", "overview") %}
-  <p>Mirror Wall makes images on the compute machine with stable-diffusion.cpp. You write a prompt under <a href="/chat/images">Chat → Images</a>, optionally add reference images, and the finished pictures are kept privately on front. Administrators set up models under <a href="/models/images">Models → Images</a>.</p>
+  <p>Mirror Wall makes images on the compute machine with stable-diffusion.cpp. You write a prompt under <a href="/chat/images">Chat → Images</a>, optionally add reference images, and the finished pictures are kept privately on the control node. Administrators set up models under <a href="/models/images">Models → Images</a>.</p>
   {% endcall %}
 
   {% call doc_section("How an image is made", "workflow") %}
-    <p>Every request takes the same path. Front checks it and queues it; LoadCoach reserves the cards and memory the whole job needs before anything loads; sd.cpp then runs the stages in order, loading each part only when its stage starts, so the text encoder and the diffusion weights need not be on the card at the same time.</p>
+    <p>Every request takes the same path. Control node checks it and queues it; LoadCoach reserves the cards and memory the whole job needs before anything loads; sd.cpp then runs the stages in order, loading each part only when its stage starts, so the text encoder and the diffusion weights need not be on the card at the same time.</p>
     <p class="small text-secondary mb-2 d-md-none">Swipe across the diagram to see all of it.</p>
     <div class="docs-map-scroll">
     <svg class="docs-map" viewBox="0 0 1100 600" role="img" aria-labelledby="flow-title flow-desc" xmlns="http://www.w3.org/2000/svg">
       <title id="flow-title">Image generation workflow</title>
-      <desc id="flow-desc">A request from Chat, Images or the API goes to front, which checks references and queues a job. LoadCoach on compute reserves cards and host memory. sd.cpp prepares reference images with the upscaler or a resize, encodes the prompt with the text encoder, samples with the diffusion weights and any LoRAs, decodes with the VAE, optionally composites an edit mask and upscales the output. The PNG is kept in the private library on front and shown in the gallery.</desc>
+      <desc id="flow-desc">A request from Chat, Images or the API goes to the control node, which checks references and queues a job. LoadCoach on compute reserves cards and host memory. sd.cpp prepares reference images with the upscaler or a resize, encodes the prompt with the text encoder, samples with the diffusion weights and any LoRAs, decodes with the VAE, optionally composites an edit mask and upscales the output. The PNG is kept in the private library on the control node and shown in the gallery.</desc>
       <defs><marker id="flow-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" class="docs-arrow-head"/></marker></defs>
       <rect class="docs-map-zone" x="15" y="20" width="200" height="560" rx="5"/><text class="docs-zone-title" x="115" y="46" text-anchor="middle">Browser or API</text>
-      <rect class="docs-map-zone" x="235" y="20" width="220" height="560" rx="5"/><text class="docs-zone-title" x="345" y="46" text-anchor="middle">Front</text>
+      <rect class="docs-map-zone" x="235" y="20" width="220" height="560" rx="5"/><text class="docs-zone-title" x="345" y="46" text-anchor="middle">Control node</text>
       <rect class="docs-map-zone" x="475" y="20" width="610" height="560" rx="5"/><text class="docs-zone-title" x="780" y="46" text-anchor="middle">Compute</text>
       {% macro step(x, y, w, h, title, lines) -%}
       <g class="docs-map-endpoint"><rect x="{{ x }}" y="{{ y }}" width="{{ w }}" height="{{ h }}" rx="5"/>
@@ -55,7 +55,7 @@
     </svg>
     </div>
     <ol class="docs-steps mt-3">
-      <li><strong>Check and queue.</strong> Front refuses at once what would fail later: more reference images than the model uses, a reference too small for a model without an upscaler, or a mask without a reference.</li>
+      <li><strong>Check and queue.</strong> Control node refuses at once what would fail later: more reference images than the model uses, a reference too small for a model without an upscaler, or a mask without a reference.</li>
       <li><strong>Admission.</strong> LoadCoach reserves the whole job's measured peak on each card plus headroom. A model without a measurement yet takes its cards to itself.</li>
       <li><strong>Prepare references.</strong> Each reference is scaled to the model's reference size, keeping its shape. A smaller one is first enlarged with the upscaler; an ordinary resize is never used to enlarge.</li>
       <li><strong>Encode the prompt</strong> with the text encoder (SDXL: its built-in CLIP L and CLIP G).</li>
@@ -63,7 +63,7 @@
       <li><strong>Decode</strong> the latent image to pixels with the VAE.</li>
       <li><strong>Mask.</strong> With an edit mask, white or transparent areas take the new picture and the rest keeps the first reference. This is a composite after generation, not inpainting.</li>
       <li><strong>Upscale</strong> the output 2× or 4× with the upscaler, if asked.</li>
-      <li><strong>Keep.</strong> The PNG goes into your private library on front; nothing about the prompt is written into the file.</li>
+      <li><strong>Keep.</strong> The PNG goes into your private library on the control node; nothing about the prompt is written into the file.</li>
     </ol>
   {% endcall %}
 
@@ -122,7 +122,7 @@
     <p><a href="/models/images">Models → Images</a> combines the model navigator, its workflows and an editor. <em>Add image model</em> or <em>Edit model setup</em> opens the files, hardware, defaults and limits on the same page. When adding, select the destination compute nodes in the form header. The installer checks every selected node before starting, copies and verifies the complete bundle, and creates a model on each destination after its files are ready. Installation progress is shown for every selected node. Hardware settings must be valid on all destinations; edits remain scoped to the node being browsed. Choose <em>New workflow</em> to create another named set of image settings without duplicating the model files or GPU allocation.</p>
     <p>Workflow edits create a new saved version. <em>Duplicate</em> creates a separate workflow; <em>Version history</em> loads earlier settings into a draft, which can be saved as a new version. Revisions overwritten before history was introduced cannot be reconstructed. Drafts stay in page memory across model switches; reloading the page drops unsaved changes. Shared workflow visibility is fixed after creation; duplicate to change it. Non-managers can save personal copies of shared workflows.</p>
     <ol class="docs-steps">
-      <li><strong>Bring the diffusion weights down.</strong> Find them on the <a href="/hub">Hugging Face</a> page (type the repository, tick the file) or on <a href="/civitai">Civitai</a>. Downloads arrive in front's library.</li>
+      <li><strong>Bring the diffusion weights down.</strong> Find them on the <a href="/hub">Hugging Face</a> page (type the repository, tick the file) or on <a href="/civitai">Civitai</a>. Downloads arrive in the control node's library.</li>
       <li><strong>Copy it to the compute node.</strong> On <a href="/files">Files</a>, copy the file to compute, into the image folder. Files on the node are what a model can use.</li>
       <li><strong>Start the model.</strong> Press <em>Configure</em> beside the file on Files, or <a href="/models/images">Models → Images</a> → <em>Add image model</em> and paste its path into Diffusion weights.</li>
       <li><strong>Read the checklist.</strong> It reads each file's header on the node (never the weights) and shows what the model is, such as “Detected: Flux 2 klein 9B”, and sets the family. Each part is marked:

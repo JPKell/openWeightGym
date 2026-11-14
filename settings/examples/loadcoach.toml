@@ -13,22 +13,22 @@ port = 8442
 # from this file. Left out, they are kept beside this file.
 data = "../data"
 
-# The key this machine shares with the front machine, counted from this file. Turnstile signs
+# The key this machine shares with the control node, counted from this file. Turnstile signs
 # what it sends on with it, and LoadCoach, the ToolLocker, spotter and voice believe nothing else
 # about who is asking. Readable by you alone, and the same on both machines:
 #   python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > ../keys/machine.key && chmod 600 ../keys/machine.key
 # Left out, nobody but this machine itself may ask, as anyone: only for a host of 127.0.0.1.
 machine_key_file = "../keys/machine.key"
 
-# This instance's stable name in front's [machines.NAME] registry. The primary is "compute";
+# This instance's stable name in the control node's [machines.NAME] registry. The primary is "compute";
 # a second instance might be "rig". Give every instance its own key, data folder and port.
 machine_name = "compute"
 
-# Turnstile's address on the front machine. Compute asks it for the accounts, for work done later
+# Turnstile's address on the control node. Compute asks it for the accounts, for work done later
 # in someone's name: a batch, a benchmark task, a recurring schedule, and for the reports.
 front = "http://front.lan:8442"
 
-# Set to true once ToolLocker runs on the front machine. This node then refuses ToolLocker settings and
+# Set to true once ToolLocker runs on the control node. This node then refuses ToolLocker settings and
 # tool reports, and stops managing toollocker.service. (Formerly front_toollocker.)
 # toollocker_runs_on_front = false
 
@@ -42,7 +42,7 @@ llama_server = "/home/you/.local/bin/llama-server"
 # nvidia_smi = "/usr/bin/nvidia-smi"
 
 # The file that holds the models, the event log and the rest of what LoadCoach keeps. The users
-# are not here: they are on the front machine. Left out, as here, it is in the data folder
+# are not here: they are on the control node. Left out, as here, it is in the data folder
 # with this file's name: loadcoach.toml gives loadcoach.db. Give a full path to keep it elsewhere.
 # database = "/home/you/openWeightGym/data/loadcoach.db"
 

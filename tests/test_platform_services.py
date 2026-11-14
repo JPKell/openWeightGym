@@ -1,4 +1,4 @@
-"""Initial service choices and live front policy across pages, fragments and APIs."""
+"""Initial service choices and live control node policy across pages, fragments and APIs."""
 
 import itertools
 import json
@@ -171,7 +171,7 @@ printf '%s\\n' "$PLATFORM_SERVICES"
 
 @pytest.mark.parametrize('selected', ['none', 'images,downloads', 'speech', 'images,speech,audio,downloads'])
 def test_new_config_gets_choices_and_repair_keeps_existing_file(tmp_path, selected):
-    root = tmp_path / 'installed front'
+    root = tmp_path / 'installed control node'
     (root / 'settings/examples').mkdir(parents=True)
     shutil.copyfile(ROOT / 'settings/examples/weightroom.toml', root / 'settings/examples/weightroom.toml')
     (root / 'scripts').mkdir()

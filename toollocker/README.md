@@ -1,9 +1,9 @@
 # ToolLocker setup and adding tools
 
 ToolLocker is the MCP gateway for tools such as reading files, searching code and calling your
-own Python functions. A client connects to `http://FRONT:8443/mcp` with an openWeightGym API key.
+own Python functions. A client connects to `http://CONTROL_NODE:8443/mcp` with an openWeightGym API key.
 Turnstile checks the account and signs the request for the private gateway on port 9443.
-Tools run on the machine that owns their files or service; the gateway runs on front while
+Tools run on the machine that owns their files or service; the gateway runs on the control node while
 compute is off. An MCP-capable client or agent executes tool calls; **Settings → Tools → Try a
 tool** checks them independently of a model.
 
@@ -18,29 +18,29 @@ For a fresh installation, choose one of these options in `./install.sh`:
 | Main installer choice | Command-line option | ToolLocker |
 |---|---|---|
 | Console only | `--topology front` | Installed on the console with WeightRoom and Turnstile. |
-| Everything on this machine | `--topology all` | Installed alongside the console; uses the front account store. |
-| GPU node | `--topology compute` | Gateway omitted. Tools hosted here are connected to the front gateway separately. |
+| Everything on this machine | `--topology all` | Installed alongside the console; uses the control node account store. |
+| GPU node | `--topology compute` | Gateway omitted. Tools hosted here are connected to the control node gateway separately. |
 
-New front installations write `settings/toollocker.toml`, configure local MCP routing in
+New control node installations write `settings/toollocker.toml`, configure local MCP routing in
 `settings/weightroom.toml`, and install `toollocker.service`. The gateway inherits the console's
 SQLite or PostgreSQL accounts/event store; it needs no local LoadCoach or separate identity
 database. The installer creates `data/shared/` and registers these bundled servers:
 
-| Server | Default resource on front | Offered tools |
+| Server | Default resource on the control node | Offered tools |
 |---|---|---|
 | `files` | The installation's `data/shared/` folder | `files__list_folder`, `files__read_file` |
 | `code` | The installation's Git repository | Repository listing, search, status, history and changes under `code__*` |
 
 The caller's permissions still determine which tools are offered and callable. A tool hosted on
-an unavailable machine remains unavailable even when the front gateway is running.
+an unavailable machine remains unavailable even when the control node gateway is running.
 
 The lower-level `scripts/install-suite.sh` assigns ToolLocker to its `front` and `all` presets,
 including `--services front` and `--preset front`; its `compute` preset omits the gateway.
-Its front preset also selects the voice gateway. To select only the core front services, use
+Its control node preset also selects the voice gateway. To select only the core control node services, use
 `--services weightroom,turnstile,toollocker`. Voice is optional in the main installer.
 
 For a new installation, continue at [Verify the connection](#verify-the-connection). For an
-existing console without ToolLocker, use [Install ToolLocker on front](#install-toollocker-on-front).
+existing console without ToolLocker, use [Install ToolLocker on the control node](#install-toollocker-on-the-control-node).
 
 ## Why tools can be missing
 
@@ -59,7 +59,7 @@ for the caller to see its tools. An empty recorded catalogue alone does not iden
 | Authentication | Existing `settings/weightroom.toml`, its accounts/event database and Turnstile's machine-key file. `front = "weightroom.toml"` inherits them; a separate LoadCoach or accounts database is unnecessary. |
 | PostgreSQL | If the console uses PostgreSQL, its database must be reachable and the environment needs the project's `postgresql` extra. A console already using PostgreSQL has this dependency. |
 | Services | Linux with the console account's systemd user manager. The account needs access to the installation and tool files. |
-| Ports | Turnstile owns public port 8443; the front gateway listens on `127.0.0.1:9443`. Keep 9443 private. Clients use the trusted LAN/VPN or an HTTPS proxy for bearer-key access. |
+| Ports | Turnstile owns public port 8443; the control node gateway listens on `127.0.0.1:9443`. Keep 9443 private. Clients use the trusted LAN/VPN or an HTTPS proxy for bearer-key access. |
 | Tool servers | At least one MCP server: a fixed stdio command, an authenticated HTTP address, or an explicitly public HTTPS address. Install each server's own dependencies in its runtime. |
 | Included tools | File tools need an explicitly allowed folder. Code tools also need `git` and an allowed repository. Neither requires a GPU or inference model. |
 | Client access | An enabled account/key, a matching group/account tool pattern, a sufficient sensitivity ceiling, and any selected tool set containing the tool. Administrators need `manage-settings` for the Tools page. |
@@ -67,7 +67,7 @@ for the caller to see its tools. An empty recorded catalogue alone does not iden
 The separate lightweight remote tool host needs Python 3.11+; its built-in tools use the standard
 library. The full gateway uses the project's Python 3.13+ environment.
 
-## Install ToolLocker on front
+## Install ToolLocker on the control node
 
 Run these steps on the console machine as the account that already runs WeightRoom and Turnstile.
 Use the updated installer checkout for these steps, which add the gateway to older or custom installs.
@@ -94,7 +94,7 @@ paths may differ from this installation; use the actual checkout path from `pwd`
 
 If `settings/toollocker.toml` is absent, the installer in step 4 writes the bundled server
 configuration automatically. To configure it by hand, use the example below. For an existing
-file, merge the front ownership settings and preserve its server names, levels and tool sets.
+file, merge the control node ownership settings and preserve its server names, levels and tool sets.
 Replace `/home/you/openWeightGym` with the absolute path printed by `pwd`; TOML command arguments
 do not expand `~` or `$HOME`.
 
@@ -123,7 +123,7 @@ store and signing key. The included file tools skip hidden paths, paths without 
 permission bit, and symlinks escaping the allowed folder. Keep the allowed folder separate from
 settings, keys and databases.
 
-### 3. Route MCP to the front gateway
+### 3. Route MCP to the control node gateway
 
 In `settings/weightroom.toml`, add or update these keys **inside the existing `[turnstile]` table**:
 
@@ -166,20 +166,20 @@ Installing just the gateway does not require starting a compute node. The standa
 
 ## Moving a compute-owned gateway
 
-Installing on front does not move an existing compute gateway's settings or records. Preserve
+Installing on the control node does not move an existing compute gateway's settings or records. Preserve
 the server names, descriptions, sensitivity levels, tool sets and per-tool overrides. Replace
 compute-local stdio paths with a fixed SSH command or a remote MCP host so tools still execute
 where their files and dependencies live; see [Remote tool hosts](#remote-tool-hosts).
 
 Settings changed through the console and recorded tool schemas live in the owning database,
-separately from `toollocker.toml`. Follow **Front ToolLocker relocation (milestone 128)** in
+separately from `toollocker.toml`. Follow **Control node ToolLocker relocation (milestone 128)** in
 `docs/operations.md` for the verified store transfer, cutover and rollback procedure. Verify the
-front gateway's tool list, permissions and calls before retiring the old service. The installer
+control node gateway's tool list, permissions and calls before retiring the old service. The installer
 does not disable a legacy compute gateway automatically.
 
 ## Verify the connection
 
-For the bundled file server, create a sample in its default allowed folder on front:
+For the bundled file server, create a sample in its default allowed folder on the control node:
 
 ```bash
 cd ~/openWeightGym
@@ -194,7 +194,7 @@ Open **Settings → Tools → Try a tool → Connect**. Expect `files__list_fold
 Call `files__list_folder` with an empty folder to list the allowed roots, then read the sample
 file by its absolute path. Recorded descriptions appear after gateway discovery.
 
-For an API check, set `OWG_API_KEY` to a key from **My account**, then run on front:
+For an API check, set `OWG_API_KEY` to a key from **My account**, then run on the control node:
 
 ```bash
 curl -fsS http://127.0.0.1:8443/mcp \
@@ -213,7 +213,7 @@ with the account the client actually uses, then refresh its MCP tool list.
 
 ## Add a Python tool
 
-This example adds a harmless greeting tool on front. From the checkout, create `data/tools/greeting.py`:
+This example adds a harmless greeting tool on the control node. From the checkout, create `data/tools/greeting.py`:
 
 ```bash
 mkdir -p data/tools
@@ -294,17 +294,17 @@ scripts/install-tool-host.sh --name nas --files /srv/shared \
   --bind 192.168.1.20 --address 192.168.1.20 --compute 192.168.1.10
 ```
 
-Here `192.168.1.20` is the tool host and `192.168.1.10` is the front gateway. The script's legacy
+Here `192.168.1.20` is the tool host and `192.168.1.10` is the control node gateway. The script's legacy
 `--compute` flag names the permitted gateway host for its printed firewall example. It creates
 `toollocker-host.service`, a private host key, tools under `~/.local/share/toollocker-host/tools`
 and `~/.config/toollocker-host/tools.toml`. Register the printed `[servers.nas]` section and a
-private copy of its host key on front. Allow only the gateway host to reach the tool-host port
+private copy of its host key on the control node. Allow only the gateway host to reach the tool-host port
 (default 9100); use a trusted private network or secure transport for HTTP bearer keys.
 
 Put custom Python files beside the tool host's `files.py` and `code.py`; add any setup sections to
-its `tools.toml`. Restart `toollocker-host.service` there, then `toollocker.service` on front.
+its `tools.toml`. Restart `toollocker-host.service` there, then `toollocker.service` on the control node.
 Do not edit the shipped tool files: the host installer replaces those on update while retaining
-custom files and settings. A fixed SSH stdio command is also supported when front already has
+custom files and settings. A fixed SSH stdio command is also supported when control node already has
 SSH access to the file-owning host.
 
 ## Troubleshooting
@@ -313,7 +313,7 @@ SSH access to the file-owning host.
 |---|---|
 | Unit not found | Add ToolLocker with the installer command above; Update/Repair of an older console-only selection does not add a missing service. |
 | Tool service has not reported configuration | Check `systemctl --user status toollocker` and its journal, then `keep_console_settings_on_front`, `toollocker_url` and port 8443 in the console configuration. |
-| Gateway will not start | Check absolute command paths, Python/server dependencies, database access and the shared machine-key path. A legacy `loadcoach` setting must be replaced by `front` for a front-owned gateway. |
+| Gateway will not start | Check absolute command paths, Python/server dependencies, database access and the shared machine-key path. A legacy `loadcoach` setting must be replaced by `front` for a control-node-owned gateway. |
 | Address already in use | Turnstile uses 8443; the private gateway uses loopback 9443. Check `ss -ltnp`. |
 | No tools for one account | Check group/account tool patterns, hidden tools, sensitivity and the selected tool set. Refresh the client's list. |
 | No tools for any account | Configure at least one server; inspect the gateway journal for server startup/discovery failures. |

@@ -13,7 +13,7 @@ The current LoadCoach package is split by responsibility:
 | Configuration, settings and shared storage | [`config.py`](../loadcoach/config.py), [`settings.py`](../loadcoach/settings.py), and [`db/`](../db/) |
 | Accounts and authorization | [`groups.py`](../loadcoach/groups.py), [`users.py`](../loadcoach/users.py) |
 | Models and scheduling | [`models.py`](../loadcoach/models.py), [`model_setup.py`](../loadcoach/model_setup.py), [`cards.py`](../loadcoach/cards.py), [`runner.py`](../loadcoach/runner.py), [`probes.py`](../loadcoach/probes.py) |
-| Roles and production evidence | [`roles.py`](../loadcoach/roles.py), [`role_evidence.py`](../loadcoach/role_evidence.py), [`reliability.py`](../loadcoach/reliability.py); used on the front machine by [`turnstile/roles.py`](../turnstile/roles.py) |
+| Roles and production evidence | [`roles.py`](../loadcoach/roles.py), [`role_evidence.py`](../loadcoach/role_evidence.py), [`reliability.py`](../loadcoach/reliability.py); used on the control node by [`turnstile/roles.py`](../turnstile/roles.py) |
 | Durable work and records | [`batches.py`](../loadcoach/batches.py), [`tasks.py`](../loadcoach/tasks.py), [`log.py`](../loadcoach/log.py), [`capture.py`](../loadcoach/capture.py), [`usage.py`](../loadcoach/usage.py) |
 | External services and maintenance | [`outside.py`](../loadcoach/outside.py), [`backups.py`](../loadcoach/backups.py), [`database_admin.py`](../loadcoach/database_admin.py) |
 | HTTP and command line | [`app.py`](../loadcoach/app.py), [`cli.py`](../loadcoach/cli.py) |
@@ -40,7 +40,7 @@ without executing help or loading a model; it requires manage-models or manage-s
 installed — a service counts when systemd, the account's own manager or the system one, knows its
 unit, under its current or former name — and which engines' programs are found, with the install
 receipt's topology, mode and date. It only reads `systemctl show`; nothing is started or run.
-`GET /turnstile/components` gathers it from front and every compute node for the console's
+`GET /turnstile/components` gathers it from the control node and every compute node for the console's
 System → Components page; a node the monitor finds silent is reported as such and never woken.
 
 Models may explicitly store `engine = "llama_cpp"`; omission still means llama.cpp.
@@ -57,17 +57,17 @@ The ToolLocker is a second program beside LoadCoach, with files of its own. It i
 section 13. Hosted models, answered outside this machine, are explained in section 14. Models
 are no longer written in the settings file: section 15 explains where they are kept and how
 one is added, changed or removed without a restart. Section 16 explains signing in with a
-password, which replaced the part of section 5 about the front machine acting for people. Section 17
-explains `weightroom`, the app on the front machine, and section 18 `spotter`, the helper that
+password, which replaced the part of section 5 about the control node acting for people. Section 17
+explains `weightroom`, the app on the control node, and section 18 `spotter`, the helper that
 watches compute, puts it to sleep and restarts it. Section 19 explains draining, which is how
 LoadCoach is emptied before that, and section 20 `turnstile`, which passes requests on from the
-front machine and wakes compute for them. Section 21 explains where groups are kept now, how
+control node and wakes compute for them. Section 21 explains where groups are kept now, how
 one account can have more or less than its group, the rules that stop anyone raising
 themselves, and how an app outside this suite signs in. Where an earlier section speaks of a
 model's section in `settings/loadcoach.toml`, read it as that model's settings.
 
-The last section, *Accounts on the front machine, milestone 76*, moves the users, keys and groups
-to the front machine and supersedes what earlier sections say about who checks a key or a password.
+The last section, *Accounts on the control node, milestone 76*, moves the users, keys and groups
+to the control node and supersedes what earlier sections say about who checks a key or a password.
 
 ## 1. What LoadCoach is
 
@@ -205,7 +205,7 @@ A caller sends a chat request naming the model `gemma-31b`. `forward` handles it
    - `max_wait` seconds pass. The ticket is removed and the caller gets `503` with a
      `Retry-After` header.
    - Its model will not load. The caller gets `502` with the reason.
-8. **Its turn comes.** `dispatch` reads the line from the front. Under a lock it looks only at
+8. **Its turn comes.** `dispatch` reads the line from the control node. Under a lock it looks only at
    the holder's tickets. For this request, one of four things happens:
    - Its model is loaded and has room: it goes at once.
    - Its model is loaded but busy: it waits for a running request to finish.
@@ -271,7 +271,7 @@ A frozen dataclass. Frozen means it cannot change after startup.
 | `keep_days` | `90` | How long event log entries are kept. `0` keeps them for ever |
 | `keep_text` | `50` | How many of the latest requests are kept in full, with what was sent and what came back. `0` keeps none |
 | `unlogged` | `false` | `true` lets an account with the ability `unlogged` send a request that leaves nothing behind. Section 22 |
-| `[hosted]`, `keys` | gone | Ignored, with a note in the log. Cloud APIs and their keys are the front machine's: see section 14a |
+| `[hosted]`, `keys` | gone | Ignored, with a note in the log. Cloud APIs and their keys are the control node's: see section 14a |
 
 Each model is a small table with two parts: `gpus`, which LoadCoach reads, and `flags`, which go
 to `llama-server` untouched. Keeping them apart means a LoadCoach setting can never be mistaken
@@ -543,7 +543,7 @@ answering during a load that may take a minute. When it finishes it sets `wake`.
 will not load, every ticket waiting for it is given the `Refusal` and removed from the line.
 
 **`dispatch()`** is the loop that decides who goes next. It runs as a task for the whole life of
-LoadCoach, asleep until `wake` is set. Each time it wakes it reads the line once, from the front.
+LoadCoach, asleep until `wake` is set. Each time it wakes it reads the line once, from the control node.
 
 ```python
 taken = set()                      # cards that a ticket ahead in line is waiting for
@@ -713,7 +713,7 @@ existed. The moment one user is added, every request needs a key.
 
 Then comes acting for someone else. If the request carries `X-LoadCoach-User: NAME` and the
 key's own group has the `act-for` ability, the request is treated as coming from `NAME`, with
-`NAME`'s group and limits. This is how the front machine's web pages will make requests for
+`NAME`'s group and limits. This is how the control node's web pages will make requests for
 whoever is signed in there, using one key of its own.
 
 **`address`** is where a request came from, for the log.
@@ -871,7 +871,7 @@ the new address. The name follows account creation's lowercase spelling rules; o
 invalid names return 400, missing accounts 404, and accounts with active work, model holds or
 a lock return 409. Managers may rename themselves without changing their permissions.
 `Users.rename` updates the account, key ownership, app-session `via` references and batch/file
-ownership in one SQLite transaction with deferred foreign-key checks. Front-side conversations
+ownership in one SQLite transaction with deferred foreign-key checks. Control-node-side conversations
 keep the account's immutable identity, so their ownership needs no rewrite. Failed-login
 and authenticator replay state follow the rename. Existing audit records and their usage keep
 the old name; a `user/renamed` event records both names without rewriting the hash chain.
@@ -1293,9 +1293,9 @@ means five things to think about, not a hundred.
 | `manage-users` | Adding, changing and removing users, within what one may do oneself. Section 21 |
 | `manage-groups` | Adding, changing and removing groups, within what one may do oneself. Section 21 |
 | `app-sign-in` | Having someone's sign-in checked, for a session that can do no more than the account that asked. For an app's own key. Section 21 |
-| `act-for` | Acting as another user by naming them. For the front machine's own key |
-| `mirror-users` | Reading every user's abilities and password hash. For the front machine |
-| `front-` anything | Not LoadCoach's. Passed to the front machine untouched |
+| `act-for` | Acting as another user by naming them. For the control node's own key |
+| `mirror-users` | Reading every user's abilities and password hash. For the control node |
+| `front-` anything | Not LoadCoach's. Passed to the control node untouched |
 | `superuser` | Everything a person can be allowed to do. See below |
 
 **`superuser` stands for every ability.** A group with `can = ["superuser"]` has each ability in
@@ -1303,12 +1303,12 @@ the table, and any that is added later, without listing them. It is spelled out 
 group is read, in `read_group`, so nothing that asks "may this user do X" knows about it. Three
 things to know:
 
-- It leaves out `sign-in` and `mirror-users`. Those are for the front machine's own key: with
+- It leaves out `sign-in` and `mirror-users`. Those are for the control node's own key: with
   them a key can have anyone's password tried and can read password hashes. No person needs
   that, an owner included.
 - It lifts `max_sensitivity` to the highest level, unless the group sets one. The group's
   other limits, such as `max_requests`, stay as they are set: they are limits, not abilities.
-- On the front machine it counts as each of `weightroom`'s own abilities, today `front-wake`.
+- On the control node it counts as each of `weightroom`'s own abilities, today `front-wake`.
   So a superuser is among the few whose password hash is copied there, to sign in while
   compute is off.
 
@@ -1331,20 +1331,20 @@ Neither keys nor passwords are stored. Only hashes are.
 
 **LoadCoach never checks a password.** It only keeps the hash. See the next part for why.
 
-### The compute machine and the front machine
+### The compute machine and the control node
 
-*Superseded by milestone 76: see the last section, Accounts on the front machine.*
+*Superseded by milestone 76: see the last section, Accounts on the control node.*
 
 There is one record per user, and it lives here, on the compute machine. That is what lets
-compute keep working when the front machine is switched off: API keys are all it needs.
+compute keep working when the control node is switched off: API keys are all it needs.
 
-The front machine will have web pages, and people sign in to web pages with a password. It must
+The control node will have web pages, and people sign in to web pages with a password. It must
 also keep working when *compute* is down, so that someone can sign in and look at logs, restart
 things or wake compute up. So it cannot ask compute to check a password at that moment.
 
 The division is this:
 
-| | Compute, LoadCoach | Front, the web pages |
+| | Compute, LoadCoach | Control node, the web pages |
 |---|---|---|
 | Owns the user records | Yes | No |
 | Stores | Names, groups, key hashes, password hashes | A copy of names, abilities and password hashes |
@@ -1352,7 +1352,7 @@ The division is this:
 | Changes users | Yes, through `/loadcoach/users` | Only by asking compute |
 | Works alone | Yes, with API keys | Yes, for signing in and for its own `front-` abilities |
 
-The front machine has one API key of its own, in a group with `mirror-users` and `act-for`.
+The control node has one API key of its own, in a group with `mirror-users` and `act-for`.
 
 - With `mirror-users` it reads `/loadcoach/users/mirror` whenever compute is reachable and keeps
   what it gets. Each entry has the user's name, group, whether they are enabled, their abilities
@@ -1362,13 +1362,13 @@ The front machine has one API key of its own, in a group with `mirror-users` and
 - With `act-for` it then makes requests on that person's behalf, by adding
   `X-LoadCoach-User: NAME` to its own key. LoadCoach applies that person's group and limits.
 - Abilities starting with `front-` are defined in the same groups but mean nothing to LoadCoach.
-  They are for the front machine's own features, such as waking compute.
+  They are for the control node's own features, such as waking compute.
 
-Changes always go to compute. With compute down, people can still sign in at the front, but
+Changes always go to compute. With compute down, people can still sign in at the control node, but
 nobody can be added or changed until it is back. A password changed or a user switched off on
-compute reaches the front the next time it refreshes its copy.
+compute reaches the control node the next time it refreshes its copy.
 
-The front machine does not exist yet. What exists is everything it will need from LoadCoach.
+The control node does not exist yet. What exists is everything it will need from LoadCoach.
 
 ### The code
 
@@ -1381,13 +1381,13 @@ and to word the `403` message.
 `User.can(ability)` are the two questions the rest of the code asks.
 
 **`ANONYMOUS`** is who a caller is before any user exists: every ability except the two that are
-only for the front machine. **`COMMAND_LINE`** is who the `loadcoach` command is when it talks
+only for the control node. **`COMMAND_LINE`** is who the `loadcoach` command is when it talks
 to a running LoadCoach, with the same abilities.
 
 **`read_group`** checks one `[groups.NAME]` section and turns it into a `Group`.
 
 **`hash_key`**, **`hash_password`** and **`check_password`** are the three hashing functions.
-`check_password` is not used by LoadCoach itself. It is here so the front machine checks
+`check_password` is not used by LoadCoach itself. It is here so the control node checks
 passwords in exactly the way they were made.
 
 **`keep_private`** makes the database file readable by its owner only.
@@ -1407,7 +1407,7 @@ to, a label and a date. Removing a user removes their keys with them.
 | `change(name, group, enabled, password)` | Changes whichever were given |
 | `remove(name)` | Removes the user and their keys |
 | `listing()` | Users with their keys' labels and ids, for whoever manages users |
-| `mirror()` | Users with abilities and password hashes, for the front machine |
+| `mirror()` | Users with abilities and password hashes, for the control node |
 
 Every change is written at once. Nothing about users is kept in memory between requests, so a
 change, even one made by the command line while LoadCoach runs, applies to the very next request.
@@ -1450,7 +1450,7 @@ Tools are tested on a second page, served by the ToolLocker at port `8443` and l
 top of this one. See section 13.
 
 Everything it sends is checked like any other caller's request. The page has no screen for
-managing users; that belongs to the front machine's pages. The page needs no key to load because
+managing users; that belongs to the control node's pages. The page needs no key to load because
 it contains no secrets. It remembers what you typed, including the key, in this
 browser's local storage, in plain text. It saves as soon as a field is changed, so a
 key pasted once is still there after a reload. A browser keeps this per address, so
@@ -1605,7 +1605,7 @@ loadcoach user import people.csv > keys.csv
 Section 4d lists them all. They need no key and work whether or not LoadCoach is running.
 
 From another machine, or from a program, the same things are done over HTTP with a key that has
-`manage-users`. This is what the front machine's pages will use.
+`manage-users`. This is what the control node's pages will use.
 
 ```bash
 KEY=lc_...        # jordan's key
@@ -1617,7 +1617,7 @@ curl -X POST localhost:8442/loadcoach/users -H "Authorization: Bearer $KEY" \
 # See everyone.
 curl localhost:8442/loadcoach/users -H "Authorization: Bearer $KEY"
 
-# Move someone to another group, switch them off, or set a password for the front machine.
+# Move someone to another group, switch them off, or set a password for the control node.
 curl -X POST localhost:8442/loadcoach/users/pat -H "Authorization: Bearer $KEY" -d '{"group": "batch"}'
 curl -X POST localhost:8442/loadcoach/users/pat -H "Authorization: Bearer $KEY" -d '{"enabled": false}'
 curl -X POST localhost:8442/loadcoach/users/pat -H "Authorization: Bearer $KEY" -d '{"password": "..."}'
@@ -1843,7 +1843,7 @@ them. `forward` adds one when it writes the `asked` entry, and `ended` removes i
 - **Traffic is plain HTTP.** Keys, lock tokens, prompts and, when set over HTTP, passwords cross
   the network unencrypted. Acceptable on a network you trust or inside a tunnel, not across the
   internet.
-- **The front machine's key is powerful.** `act-for` lets it be any user, and `mirror-users` lets
+- **The control node's key is powerful.** `act-for` lets it be any user, and `mirror-users` lets
   it read every password hash. Whoever holds that key holds everything. Give those two abilities
   to that one key only.
 - **`manage-users` is the top of the tree.** A user with it can move themselves into any group.
@@ -1870,15 +1870,15 @@ them. `forward` adds one when it writes the `asked` entry, and `ended` removes i
   so can anyone with `see-capture`. The owner chose this, to be able to look into failures.
   Set `keep_text = 0` where that is not wanted. One request can be sent that leaves nothing
   at all: section 22.
-- **Conversations are text on disk, kept until deleted.** They are in front's `data/chat.db`,
+- **Conversations are text on disk, kept until deleted.** They are in the control node's `data/chat.db`,
   unencrypted and owner-readable only. Through WeightRoom only their owner reads them.
   Each turn is also a request, so the latest of them are among the requests kept in full. A
   temporary conversation is the one kind that rests nowhere. Section 24.
 - **An unlogged request is a hole in the record, on purpose.** Where `unlogged = true`, an
   account with the ability can use a model and leave no entry. What remains is that the
   ability was given, which is logged, and what section 22 lists under "What still shows".
-- **The front machine's key and `see-capture`.** Acting for a user gives that user's abilities,
-  so text is shown through the front machine only to users who have `see-capture` themselves.
+- **The control node's key and `see-capture`.** Acting for a user gives that user's abilities,
+  so text is shown through the control node only to users who have `see-capture` themselves.
 - **The database file is as sensitive as it sounds.** It holds key hashes and, for sensitive
   work, the text itself. LoadCoach keeps it readable by its owner only, each time it opens it.
   Anyone who can write to it can make themselves an admin with `loadcoach user add`.
@@ -1909,7 +1909,7 @@ them. `forward` adds one when it writes the `asked` entry, and `ended` removes i
 | Groups are edited in the file and need a restart; only users change live |
 | A `low` request can wait forever while better ones keep arriving. Only `max_wait` ends it |
 | A loaded model stays loaded until its cards are wanted, or unload is called |
-| The front machine's copy of users is only as fresh as its last refresh. A user switched off on compute can still sign in at the front until then |
+| The control node's copy of users is only as fresh as its last refresh. A user switched off on compute can still sign in at the control node until then |
 | The line and the lock are lost when LoadCoach restarts; waiting callers see a dropped connection |
 | Kept text is not encrypted, and is kept the same 90 days as everything else |
 | Token counts are read with a pattern from the end of the answer. An answer the caller asked to have compressed, or a model server that reports them differently, gives none |
@@ -1985,9 +1985,9 @@ cards it is given but reports them, so a test can check where LoadCoach put each
 | a user without `load` | They get an answer from a loaded model, `403` for one that is not, and nothing is replaced |
 | requests at once | The third request of a user capped at two is `429`, and a later one works |
 | without `see-all` | One user sees both requests; the other sees their own and a count of one |
-| the front machine acts for a user | The named user's identity and model limits apply; the header is not forwarded; an unknown name, and a key without `act-for`, are `403` |
+| the control node acts for a user | The named user's identity and model limits apply; the header is not forwarded; an unknown name, and a key without `act-for`, are `403` |
 | managing users over HTTP | Five things a plain user may not do, five malformed requests, one's own password and keys, removing a key, changing group, switching off, removing; the list never contains a key or a hash |
-| the front machine's copy | Needs `mirror-users`, which even an admin lacks; holds worked-out abilities including `front-` ones, and a password hash that `check_password` accepts for the right password only |
+| the control node's copy | Needs `mirror-users`, which even an admin lacks; holds worked-out abilities including `front-` ones, and a password hash that `check_password` accepts for the right password only |
 | users are kept in a file | Starting on a network address with no users is refused; an unknown group is refused; `user add` prints a key that a fresh look at the file accepts, and the file does not contain the key |
 | clearing the line | Two waiting requests get `503` naming who cleared it, the running one finishes, and a user without `clear-line` is refused |
 | renaming a model | `403` without `manage-models`, `404` for no such model, `409` for a name that is taken, `400` for one that is no name; then the same settings in the same place in the list, the old name gone and the new one answering from a freshly loaded copy, the group and the account that listed it following, the log saying what it was; and the same from the command line |
@@ -2042,7 +2042,7 @@ cards it is given but reports them, so a test can check where LoadCoach put each
   LoadCoach running, the same request got `401` and the new key worked.
 - A user limited to one model saw only it, got `404` for the other, `403` for unload and for a
   lock longer than their group's limit. An admin saw their lock and broke it.
-- The front machine's key acted for that user and read the mirror, with a password hash for
+- The control node's key acted for that user and read the mirror, with a password hash for
   the one user who had a password. A disabled user's key stopped working at once.
 - The `loadcoach` command itself, against a running LoadCoach: `user add`, `user import` and
   `user list` with it stopped; then `status` showing one running and two waiting requests,
@@ -2161,13 +2161,13 @@ It is the installer's record of the package. It is not source and git ignores it
 
 ## 13. The ToolLocker
 
-For fresh-install requirements, installing the gateway on front and adding a Python tool, use
+For fresh-install requirements, installing the gateway on the control node and adding a Python tool, use
 [ToolLocker setup and adding tools](../toollocker/README.md), also available at **Docs → Modules → ToolLocker**.
 
 The ToolLocker is a second program in this repository. LoadCoach is the door to the models. The
 ToolLocker is the door to tools: reading files, looking at code, and whatever is added later. It has its own port, its own settings file and its own service, and it shares
-front's users, groups and event log. The gateway now runs on front; file/code tools remain on
-their owning hosts. [Current relocation contract](operations.md#front-toollocker-relocation-milestone-128).
+the control node's users, groups and event log. The gateway now runs on the control node; file/code tools remain on
+their owning hosts. [Current relocation contract](operations.md#control-node-toollocker-relocation-milestone-128).
 
 ```text
               ┌─ LoadCoach, port 8442 ──── llama-server ── GPUs
@@ -2540,7 +2540,7 @@ names. `GIT_OPTIONAL_LOCKS=0` keeps even `status` from writing.
 | `[toolsets.NAME]` `tools` | Tool names this set offers. `*` stands for anything: `files__*`. Changed on Settings → Tools; holds within seconds |
 
 Adding a tool is adding a server section and restarting the ToolLocker. LoadCoach is not
-restarted and no model is unloaded. Front account and group restrictions are checked on each
+restarted and no model is unloaded. Control node account and group restrictions are checked on each
 request through Turnstile's signed identity.
 
 Any MCP server that runs as a command and speaks stdio, or that answers by address over
@@ -2575,7 +2575,7 @@ scripts/install-tool-host.sh --name nas --description "the NAS: family files" \
 
 The same tools on three machines are three runs with three names, such as `nas`, `office` and
 `laptop`. Compute offers them as `nas__read_file`, `office__read_file` and so on, each with its
-machine's description in front, so a model can tell them apart and a group can be shown
+machine's description in the control node, so a model can tell them apart and a group can be shown
 `office__*` and not the rest. A tool of one's own is a file put in a host's tool folder and a
 restart of its service, then of the ToolLocker; [`toollocker/README.md`](../toollocker/README.md)
 says how. Running the installer again replaces the suite's own files and the unit, and keeps the
@@ -2642,13 +2642,13 @@ its discovered schemas and restrict its tools before making them available to ac
 | A tool server gets no settings but its arguments. No environment of its own, such as a token |
 | A server that is down is tried again only when a harness lists tools, and the harness waits while it is tried, up to five seconds to connect |
 | A server that comes back with different tools keeps the tools it had until the ToolLocker restarts, unless it was down from the start |
-| The tool servers here answer HTTP without TLS. `https://` needs a server that has it, or a proxy in front |
+| The tool servers here answer HTTP without TLS. `https://` needs a server that has it, or a proxy in the control node |
 | A tool added to a tool folder is offered only after its host restarts and then the ToolLocker, which reads each server's tools when it starts |
 | A tool in a tool folder runs as the host's account, with all it may do. The ToolLocker checks who calls a tool, not what the tool does |
 | The tool servers here take one call at a time. A slow `search` of a large repository holds up the next call to that server |
 | The door answers each message with plain JSON, never a stream, and sends nothing unasked. A tool cannot report progress |
 | Several messages in one `POST`, which older MCP allowed, are refused |
-| The front machine cannot act for a signed-in user here, as it can at LoadCoach |
+| The control node cannot act for a signed-in user here, as it can at LoadCoach |
 | A dead tool server is started again when next called; an HTTP server that forgot its session may require one failed call before reconnecting |
 | A call under way when the caller hangs up still runs to its end |
 | The test page shows tools, not servers. Nothing lists which tool servers are running or which failed to start, except the log |
@@ -2775,10 +2775,10 @@ The address may be `/mcp`, for every tool the key's level allows, or a tool set 
 
 ## 14. Hosted models
 
-> **Since milestone 114 hosted models are the front machine's.** Compute is for inference, voice and
+> **Since milestone 114 hosted models are the control node's.** Compute is for inference, voice and
 > telemetry. The services, their keys and every check described below are made by turnstile on the
-> front machine, before anything is sent, against that machine's own log: see section 14a. Where this
-> section and the next say "LoadCoach" or "compute", read "turnstile on the front machine". The
+> control node, before anything is sent, against that machine's own log: see section 14a. Where this
+> section and the next say "LoadCoach" or "compute", read "turnstile on the control node". The
 > `[hosted]` section and `keys` in compute's settings are ignored.
 
 A hosted model is answered by a service outside this machine, such as OpenRouter, and not by
@@ -3007,7 +3007,7 @@ fingerprints and measurements. No running service or model was changed.
 
 ### Over HTTP
 
-For a page, and for the front machine. All three need the ability `manage-models`.
+For a page, and for the control node. All three need the ability `manage-models`.
 
 | Request | What it does |
 |---|---|
@@ -3165,15 +3165,15 @@ then gave `404` while the first still answered.
 
 ## 16. Signing in
 
-*Superseded by milestone 76: see the last section, Accounts on the front machine.*
+*Superseded by milestone 76: see the last section, Accounts on the control node.*
 
 A person signs in with a name and a password and gets a **session key**: an ordinary API key
 that stops working after some hours. Because it is an ordinary key, LoadCoach, the ToolLocker
 and anything else that reads the users file accept it with no code of their own.
 
-This replaced an earlier plan, described in section 5, in which the front machine checked
-passwords and LoadCoach took its word for who had signed in. Someone who broke into the front
-machine could then have been any user. Now the password is checked on compute, and the front
+This replaced an earlier plan, described in section 5, in which the control node checked
+passwords and LoadCoach took its word for who had signed in. Someone who broke into the control node
+machine could then have been any user. Now the password is checked on compute, and the control node
 machine's key can do nothing but pass a sign-in on. `X-LoadCoach-User` and the ability
 `act-for` are gone. A settings file that still lists `act-for` loads, and it does nothing.
 
@@ -3190,7 +3190,7 @@ an API key. `POST /loadcoach/sign-out`, sent with the session key, ends it.
 
 **Who may send a password in.** It arrives as plain text, so it is accepted from two places
 only: this machine itself, and a caller whose own key has the `sign-in` ability. That key is the
-front machine's, passing on what someone typed there. Anyone else gets `403`. The front may add
+the control node's, passing on what someone typed there. Anyone else gets `403`. The control node may add
 `X-LoadCoach-From` with the address the person is really at, and it is written to the log.
 
 **How long it lasts** is the group's `session_hours`, 12 unless said. An API key does not end.
@@ -3214,7 +3214,7 @@ issues no session. Nobody is ever signed in on a temporary password or without t
 An admin does not choose anyone's password. `loadcoach user temporary NAME`, or
 `{"temporary_password": true}` sent to `/loadcoach/users/NAME`, makes one up and shows it once.
 It serves only to sign in a first time and choose one's own. A password an admin types in for
-someone else is treated the same way. The front machine's copy leaves such users out.
+someone else is treated the same way. The control node's copy leaves such users out.
 
 Changing your own password needs your current one, as `current_password`, so that a sign-in
 which fell into the wrong hands is not enough to take the account over. A changed password ends
@@ -3253,7 +3253,7 @@ when it is opened.
 
 `sign_in` and `sign_out` in `app.py` are short. `sign_in` is the one route that needs no key.
 
-### The front machine's copy
+### The control node's copy
 
 `GET /loadcoach/users/mirror` now gives only users whose group has an ability starting with
 `front-`, which are the ones who can do something while compute is off, and of their abilities
@@ -3264,15 +3264,15 @@ only those. Nobody else's password hash leaves compute.
 It has Name, Password, Sign in and Out. Signing in puts the session key in the key box, and the
 rest of the page works as before. It asks in a small box for a new password or a code when
 LoadCoach wants one. It works from a browser on compute itself. From another machine LoadCoach
-refuses, and says to sign in at the front machine.
+refuses, and says to sign in at the control node.
 
 ### What this does and does not protect
 
-- **Protected:** a break-in at the front machine no longer yields a key that can be anyone.
+- **Protected:** a break-in at the control node no longer yields a key that can be anyone.
 - **Protected:** a guessed or stolen password alone, where the group asks for a code.
-- **Not protected:** the front machine sees each password as it is typed, and holds the session
+- **Not protected:** the control node sees each password as it is typed, and holds the session
   keys of whoever is signed in at that moment. Whoever controls it can use those.
-- **Not protected:** the hop from the front machine to compute is plain HTTP on the home
+- **Not protected:** the hop from the control node to compute is plain HTTP on the home
   network, like every other request to LoadCoach today. Passwords and keys cross it unhidden.
 - **Not protected:** anyone who can send sign-ins can lock a name out for five minutes at a
   time by guessing wrongly. API keys of that user still work.
@@ -3294,7 +3294,7 @@ Six automated checks: a session key that works, ends, signs out, and dies when t
 switched off; who may send a sign-in; the lock after five wrong tries, and signing in from this
 machine with no key; temporary passwords and changing one's own; the second step, including a
 code used twice, a clock one step ahead, a lost phone, and that being asked for a new password
-does not use a code up; and the smaller copy for the front. The ToolLocker's test signs in with
+does not use a code up; and the smaller copy for the control node. The ToolLocker's test signs in with
 a session key and is refused one that has ended.
 
 By hand on 2026-10-08, in a real browser on a scratch LoadCoach: a wrong password, a temporary
@@ -3303,10 +3303,10 @@ reload, signing out, and a user in a `second_step` group setting up a code and c
 password in one go. `loadcoach user list` then showed the password as set, the code as set up
 and one person signed in.
 
-## 17. `weightroom`, the front machine's app
+## 17. `weightroom`, the control node's app
 
 `weightroom` is the third program, and the first that does not run on compute. It runs on the
-front machine, `k-srv`, and is where people sign in and use everything from a browser. This
+control node, `k-srv`, and is where people sign in and use everything from a browser. This
 milestone is its foundation: signing in, a page for one's own account, what it does while
 compute is off, and the frame every later page sits in.
 
@@ -3364,7 +3364,7 @@ also learns at once whenever a request it makes on someone's behalf fails.
 | Someone whose group has a `front-` ability | May sign in with their password, checked against the copy. They see the last status `weightroom` saw, dimmed and marked as old. That sign-in lasts one hour |
 | Anyone else trying to sign in | That only people who can act while compute is off can sign in |
 
-When compute answers again, a sign-in that was checked on the front machine is no longer
+When compute answers again, a sign-in that was checked on the control node is no longer
 enough. The person is sent to the form with "Compute is back. Sign in again."
 
 **Waking compute** is the one thing that can be done while it is off. Someone whose group has
@@ -3863,7 +3863,7 @@ used by none. So files have pages of their own, for people with `manage-models`.
 
 **`/files`.** At the top, each node has one horizontally scrolling row of place bars. The node's
 absolute model root is shown once beside its name; place and file names below are relative to
-that root. Front's active cache and complete Storage library have separate rows, with Storage's
+that root. Control node's active cache and complete Storage library have separate rows, with Storage's
 absolute root beside its heading. Each bar shows free space, model-file space and other use.
 
 Below are Cache and Storage pills. Cache retains separate model, adapter and projector tables.
@@ -3872,7 +3872,7 @@ and names those nodes separately. The page refreshes itself every five seconds, 
 progress remains current.
 
 **Storage is the complete library, and its view is where files are placed in bulk.** It has a row
-for every file in storage, then a row for each file found only in front's cache or on a node,
+for every file in storage, then a row for each file found only in the control node's cache or on a node,
 marked *not in storage*. Beside File, Size and It says it is there is a box for Storage, one for
 the Cache and one for each compute node, ticked where a copy of the file is. Two copies are the
 same file when name, size and description match, as elsewhere on Files. Ticking a box copies the
@@ -3889,10 +3889,10 @@ offers and the changes turnstile accepts (`POST /turnstile/artifacts/arrange`):
 - A copy a model uses on that node is kept, with *in use* under its box; change the model first.
 - A node that is not answering or has no model folders has no boxes to change.
 - New copies go into the destination's cache folder of the same kind (`llm`, `adapters`, `image`…),
-  at the same relative path. On front they are made from the nearest copy: the other tier on the
-  same machine, a hard link when it is the same drive. To a node they are streamed from front's
+  at the same relative path. On control node they are made from the nearest copy: the other tier on the
+  same machine, a hard link when it is the same drive. To a node they are streamed from the control node's
   cache or storage, or another node, through that node's Spotter, which checks the SHA-256 before
-  publishing the file. A node's file kept in storage comes the other way: front streams it from
+  publishing the file. A node's file kept in storage comes the other way: control node streams it from
   the node, checks size and SHA-256 against the node's own hash, and only then names it.
 - Every change is checked against a fresh look through every folder, as Refresh files does. Only
   boxes changed since the page was drawn are sent, so a copy that arrived since is not removed.
@@ -3907,12 +3907,12 @@ changed and not applied, the five-second refresh leaves the table alone (`data-h
 `static/pieces.js`).
 
 **Cache and storage may be one folder.** Give `models_folder` and `models_storage_folder` the same
-path, on front or a node, to keep a single folder. Each file there is in the cache and in storage
+path, on the control node or a node, to keep a single folder. Each file there is in the cache and in storage
 at once: the index lists it once, under the cache place; Files shows one *Storage and cache*
 card; Storage has no Cache column; and the file's page offers no move to its own folder. Clear
 cache, Consolidate cache and Cleanup nodes leave such a folder alone, since its files are the
 storage copies themselves. Two different folders must still not hold one another.
-Front storage is optional and can be configured under Settings → General without compute.
+Control node storage is optional and can be configured under Settings → General without compute.
 See the [storage setup and offline delivery contract](operations.md#model-file-storage).
 Each refresh gives unavailable nodes a short deadline; an absent store produces an inline setup
 or offline state rather than a generic error page. An existing worker can still own the file store.
@@ -3920,14 +3920,14 @@ or offline state rather than a generic error page. An existing worker can still 
 The page answers from a kept list of each machine's files ([loadcoach/file_index.py](../loadcoach/file_index.py)),
 not by reading every file on each visit. On a compute node spotter looks through LoadCoach's
 places every `files_every` minutes (System → Compute nodes, 10 by default, 0 for only when
-asked) and keeps the list as `files-index.json` in LoadCoach's data folder; front's own cache
+asked) and keeps the list as `files-index.json` in LoadCoach's data folder; the control node's own cache
 and storage keep `front-files-index.json` in turnstile's, with turnstile's `files_every`. A look
 reads only files that are new or have changed size or time. Moves, copies, deletes, downloads
 and received files put their own lines right at once, and a cleanup has the next listing look
-again. **Refresh files** at the top of the page looks through every folder on front and every
+again. **Refresh files** at the top of the page looks through every folder on the control node and every
 node now, and names any node that did not answer. Which models use a file, when it was last
 used and transfer progress are never kept: they are asked on each listing. Clear cache,
-Consolidate cache and the in-use check before a front move or delete always look again first, so
+Consolidate cache and the in-use check before a control node move or delete always look again first, so
 they decide on what is in the folders, not on the kept list. The page shows when each list was
 last checked.
 
@@ -3936,23 +3936,23 @@ visible there and on Files while they are active.
 
 The top of Files has two two-step maintenance actions. **Clear cache** first asks every configured
 LoadCoach which files its models use. It refuses to delete while any node cannot answer. It then
-makes or verifies a SHA-256-matching storage copy of every front cache file and removes only cache
+makes or verifies a SHA-256-matching storage copy of every control node cache file and removes only cache
 files unused across all nodes; a matching cache file used by any configured model remains active.
 It also refuses to run without matching storage places or while another file copy/move is active.
 Cleanup runs in the background so proxy/browser timeouts cannot interrupt full-file hashing; Files
-polls and reports running, completed or failed state. **Cleanup nodes** asks every non-front LoadCoach to remove files unused by its configured
+polls and reports running, completed or failed state. **Cleanup nodes** asks every LoadCoach outside the control node to remove files unused by its configured
 models and reports nodes that did not answer. The page warns that byte-for-byte cache and Storage
 verification can take an hour or more for a large library and continues in the background.
 If a cache file must be restored, its verified Storage copy remains available: select Storage on
 Files and use **Promote** to copy it atomically back into the matching active cache place.
 **Consolidate cache** does that for every file at once: it asks every configured LoadCoach which
-files its models use (refusing while any node cannot answer), and copies each such file that front
-has in Storage but not in its cache into the matching cache place. A used file front has no copy of
+files its models use (refusing while any node cannot answer), and copies each such file that control node
+has in Storage but not in its cache into the matching cache place. A used file control node has no copy of
 at all is named in the result. A finished cleanup or consolidation message stays on Files for ten
 minutes, then clears.
 
 When `models_folder` is set, the places are the fixed `llm`, `adapters`, and `projectors`
-subfolders below that one per-node root. Settings → Model file locations selects front or any
+subfolders below that one per-node root. Settings → Model file locations selects control node or any
 compute node and edits both `models_folder` and `models_storage_folder`; changes apply after that
 node's LoadCoach restarts. With an empty root, explicit `[places]` retain
 their older meaning. Spotter derives the same effective places, including a saved setting change,
@@ -3970,11 +3970,11 @@ source is first copied to the correspondingly named cache (`storage_llm` to `llm
 then the storage and cache SHA-256 values are compared. Only that verified cache path is sent to
 Spotter. The storage copy remains in the complete library.
 
-On 2026-10-17, front CPU's startup settings report confirmed the saved storage root
-`/mnt/usb/ai/models` and all six effective cache/library places. The initial compute, front
+On 2026-10-17, control node CPU's startup settings report confirmed the saved storage root
+`/mnt/usb/ai/models` and all six effective cache/library places. The initial compute, control node
 cache and library inventories match by relative path and size: 50 files, 318,343,467,121 bytes.
 This closes the seed-in-progress status; this audit did not rehash model contents or repeat
-the earlier compute-to-front transfer verification.
+the earlier compute to control node transfer verification.
 
 **`/file?path=...`, the one page for a file.** Its facts, the same "What the file says about
 itself" as on a model's page, here under the heading Metadata, and two parts under headings
@@ -4132,7 +4132,7 @@ Twenty-five browser/documentation checks passed, covering real automatic polling
 these tables, resume after clearing the selection, selection begun during an in-flight
 response, undeclared out-of-band ID/selector targets, unrelated header updates, explicit
 requests, login focus and remembered card state. The initial Status fix and the four-file
-extension were backed up privately and deployed to front on 2026-10-14. Extension hashes,
+extension were backed up privately and deployed to the control node on 2026-10-14. Extension hashes,
 the served script and the sign-in frame's new script URL were independently verified with
 HTTP 200; the active user-service process predates the deployment backup, confirming no
 restart during delivery. These live checks verify delivery, while
@@ -4182,15 +4182,15 @@ that the cookie travels only that way. The `[turnstile]` part of the file is `tu
 
 `weightroom`'s own key is in a file of its own, named by `key_file`, never in the settings file.
 
-### Putting it on the front machine
+### Putting it on the control node
 
 [`scripts/deploy-front.sh`](../scripts/deploy-front.sh), run on compute, copies the code to
 `~/weightroom` on `k-srv`, installs it into a Python environment there, installs the services
 of `weightroom` and `turnstile` and restarts them. `turnstile` is started only if `settings/weightroom.toml` has
-a `[turnstile]` part. The front machine then has a complete copy and runs whether compute is on or
+a `[turnstile]` part. The control node then has a complete copy and runs whether compute is on or
 off. The script never reads, copies or removes the settings, the key or the `data` folder.
 
-**The first time**, three things on compute and two on the front machine:
+**The first time**, three things on compute and two on the control node:
 
 ```bash
 # on compute
@@ -4201,7 +4201,7 @@ off. The script never reads, copies or removes the settings, the key or the `dat
 #   2. give yourself a password
 .venv/bin/loadcoach user password jpk
 
-# on the front machine
+# on the control node
 cd ~/weightroom
 cp settings/examples/weightroom.toml settings/weightroom.toml
 nano weightroom.key                 # paste the key from step 3, save
@@ -4230,7 +4230,7 @@ copy. Nothing a person types is run as HTML. A form from another site is refused
 - **It is plain HTTP.** The owner decided to put HTTPS off. A password typed here, and the
   cookie with every request, cross the home network unhidden.
 - **`weightroom` sees every password** as it is typed, and holds nothing back from whoever
-  controls the front machine while people use it.
+  controls the control node while people use it.
 - **Signing in while compute is off is by password alone**, even for a group that asks for a
   code. The copy does not hold the authenticator's secret.
 - **No limit on sign-in tries at `weightroom` itself** while compute is up. LoadCoach's lock
@@ -4664,11 +4664,11 @@ In the code it is small: a dictionary `draining` in `build_app`, empty while req
 taken; `not_now()`, the answer a new request gets; one check at the top of `forward` and one
 in `lock`; and the handler `drain`. The log gains `line` `draining` and `line` `open`.
 
-## 20. `turnstile`, the way in on the front machine
+## 20. `turnstile`, the way in on the control node
 
-*Superseded by milestone 76: see the last section, Accounts on the front machine.*
+*Superseded by milestone 76: see the last section, Accounts on the control node.*
 
-`turnstile` is the fifth program, and the second on the front machine. A harness is pointed at it
+`turnstile` is the fifth program, and the second on the control node. A harness is pointed at it
 instead of at compute. It passes every request on to compute and hands the answer back, and if
 compute is asleep it wakes it first and the caller simply waits a little longer.
 
@@ -4677,7 +4677,7 @@ compute is asleep it wakes it first and the caller simply waits a little longer.
 | [`turnstile/app.py`](../turnstile/app.py) | about 190 | All of it: passing on, waking, remembering keys |
 
 It exists because compute now sleeps when it is not used. A sleeping machine cannot hear a
-request, so something that is always on has to stand in front of it. The front machine is
+request, so something that is always on has to stand in front of it. The control node is
 always on.
 
 ### What it does, and what it leaves alone
@@ -4732,7 +4732,7 @@ Measured on 2026-10-08 on one machine, a real LoadCoach behind a real `turnstile
 | The first piece of a streamed answer | 1.78 ms | 2.38 ms | 0.60 ms |
 
 So about half a thousandth of a second for each request, and nothing for each piece of a
-stream after the first. For a harness on the front machine the network is no longer: it
+stream after the first. For a harness on the control node the network is no longer: it
 reaches `turnstile` without leaving the machine, and `turnstile` makes the hop the harness used to make.
 
 When compute is asleep the first request waits for it to wake, which from sleep is ten to
@@ -4746,7 +4746,7 @@ answer's second piece sat for 40 ms. `listening()` makes them by name, and says 
 
 ### Settings and running it
 
-`turnstile` reads the front machine's one file, `settings/weightroom.toml`: `compute` (it takes the address
+`turnstile` reads the control node's one file, `settings/weightroom.toml`: `compute` (it takes the address
 and passes each port on to the same port there), `data`, `wake_mac`, `wake_address`, and its
 own part:
 
@@ -4770,9 +4770,9 @@ client to its adapters is not covered by this.
 
 ### Machine inventory (milestone 112)
 
-Front keeps an inventory of compute machines (`turnstile/machines.py`), the first step of placement on front.
+Control node keeps an inventory of compute machines (`turnstile/machines.py`), the first step of placement on the control node.
 Every `machines_poll_seconds` (10) turnstile asks each machine `GET /loadcoach/status` and `GET /v1/models`, signed
-with that machine's own key and as front's own account (the key in `auth_key_file`), and keeps the last answer with its age.
+with that machine's own key and as the control node's own account (the key in `auth_key_file`), and keeps the last answer with its age.
 It never wakes a machine and sends no request on. The machine named `compute` is the one `compute` and `machine_key_file`
 describe; more are `[machines.NAME]` tables with `compute = "http://host:port"` and their own `machine_key_file`.
 A machine is `ready` for three polls after it last answered, then `not answering` with its last facts and their age, and
@@ -4782,29 +4782,29 @@ capacity; placement uses its freshness and asks for fresh caller-scoped facts as
 
 **One model across machines (milestones 113 and 130).** The SHA-256 of the weights file joins per-node copies into one
 logical model when no machine has two aliases for those weights; ambiguous variants remain separate. Each `/v1/models`
-entry carries `content_sha256` and front returns one canonical entry with `locations`: machine, local name, immutable
+entry carries `content_sha256` and the control node returns one canonical entry with `locations`: machine, local name, immutable
 model ID and fingerprint. The primary copy's name is canonical when present. Turnstile rewrites that name to the selected
 location's local alias, while LoadCoach still validates the local model and admits the request. An unhashed file stands
 alone. Projectors and settings remain location-specific and their fingerprints still say exactly how each copy is run.
 `GET /turnstile/models` supplies the manage-page row with its complete location settings.
 The individual model page lists every location's node, local alias and model-file path immediately
 above Benchmark results. Its per-location
-switch is kept on the front: disabling a copy excludes it from Turnstile placement without deleting the
+switch is kept on the control node: disabling a copy excludes it from Turnstile placement without deleting the
 node's model configuration or file; enabling it makes the copy eligible again.
 
-**Front-side placement (milestone 116, deployed and live-qualified 2026-10-16).** When `[machines.NAME]`
-is configured, front asks ready machines for signed `/loadcoach/facts` scoped to the caller. It
+**Control-node-side placement (milestone 116, deployed and live-qualified 2026-10-16).** When `[machines.NAME]`
+is configured, control node asks ready machines for signed `/loadcoach/facts` scoped to the caller. It
 prefers an eligible resident model, then a fit without eviction and a shorter line. Logical
 copies must have matching verified weights hashes before being treated as interchangeable.
 LoadCoach still makes the admission decision against actual GPU or host memory. If a
-machine refuses or disconnects before sending answer bytes, front tries the next eligible
+machine refuses or disconnects before sending answer bytes, control node tries the next eligible
 machine. It never replays after output starts. Each compute has a stable `machine_name` and its
-own key, port, data and GPU set. Front verifies the claimed machine name with that machine's key,
+own key, port, data and GPU set. Control node verifies the claimed machine name with that machine's key,
 keeps forwarded events separate, and assigns secondary requests public numeric IDs distinct
 from the primary's existing IDs. The combined Status and model catalogue, Stop, Peek, request
 diagnostics, feedback and batch pins use those identities. Machine polling is concurrent so a
 silent worker does not delay another's observation. For an unstarted request with no eligible
-machine, front returns 503 with `Retry-After`; a mid-stream failure ends the existing stream
+machine, control node returns 503 with `Retry-After`; a mid-stream failure ends the existing stream
 without replay. Batch pins use the weights hash and prefer the original model name when present.
 The [same-host rig procedure](operations.md#same-host-two-loadcoach-rig) retains setup and restoration safeguards.
 
@@ -4822,7 +4822,7 @@ UI labels them as historical locations. Quality evidence retains its logical mod
 nodes, and retained registrations from previously removed nodes. Operators with `manage-settings`
 can change a node's lifecycle without contacting it:
 
-- **Disable node** stops new inference, model installation and wake requests through front.
+- **Disable node** stops new inference, model installation and wake requests through the control node.
   Existing work can finish. Monitoring continues and the node stays in the telemetry strip and pages.
 - **Retire node** also stops monitoring and hides the node from telemetry, including after a
   gateway restart. Other nodes on the same physical host remain visible. Retirement preserves
@@ -4830,8 +4830,8 @@ can change a node's lifecycle without contacting it:
 - **Enable node** makes a configured disabled or retired node eligible again. A retained node
   that is no longer configured must be paired or configured again first.
 
-Uninstalling services on a compute node does not unregister it on front; retire its registration
-here after uninstalling. Lifecycle is separate from reachability and runtime draining. Front
+Uninstalling services on a compute node does not unregister it on the control node; retire its registration
+here after uninstalling. Lifecycle is separate from reachability and runtime draining. Control node
 stores it in `machine_lifecycle` in the existing event-log database (log migration 11) and audits
 changes with the operator and previous state. `POST /turnstile/machines/{name}/lifecycle` accepts
 `{"state":"active"}`, `disabled` or `retired` under the same permission. The ordinary machine
@@ -4842,7 +4842,7 @@ inventory omits retired nodes; `?include_retired=1` gives settings operators all
 Each physical host has a stable `machine_fingerprint`: SHA-256 of an openWeightGym-specific prefix and
 `/etc/machine-id`. The raw machine ID never crosses the network; hosts without one keep a
 private random ID under `~/.local/share/suite/machine-id`. LoadCoach status and Spotter readings
-report the same fingerprint/hostname. Front refuses mismatched readings instead of joining
+report the same fingerprint/hostname. Control node refuses mismatched readings instead of joining
 hosts by a reusable node name. Instances sharing a host retain separate node names, keys,
 models and routing, but telemetry groups them under that physical fingerprint.
 
@@ -4850,8 +4850,8 @@ New signed/chained event details include the host fingerprint and link to its ch
 events remain unlabelled rather than being attributed retrospectively. Turnstile polls primary
 Spotter on port 8444 and additional `[machines.NAME].spotter` URLs using each node's machine key.
 It persists at most one flattened reading per 30 seconds per host and retains 28 days plus a
-fingerprint/hostname/node-name registry in front's existing event-log database. Each Spotter's
-local history remains independent. Front history survives host outages and Turnstile restarts;
+fingerprint/hostname/node-name registry in the control node's existing event-log database. Each Spotter's
+local history remains independent. Control node history survives host outages and Turnstile restarts;
 a responding Spotter supplies telemetry when LoadCoach is down without making inference ready.
 
 The compact strip shows a host name, primary RAM/VRAM and CPU/GPU load per physical host.
@@ -4883,7 +4883,7 @@ moment, which is why it is a program of its own: restarting the pages does not.
 
 | Documented constraint |
 |---|
-| LoadCoach's log shows the front machine's address for everything that came through `turnstile`. The user is still the right one |
+| LoadCoach's log shows the control node's address for everything that came through `turnstile`. The user is still the right one |
 | A new key cannot wake compute until it has been used once through `turnstile` while compute was awake |
 | `turnstile` cannot tell asleep from switched off from unplugged. It tries for `wait` seconds either way |
 | With every eligible LoadCoach stopped and the machine up, a request with a known key may be held for the full `wait` before it fails |
@@ -4907,7 +4907,7 @@ models.
 
 For real, by the owner on 2026-10-08, once wake-on-LAN was switched on: compute was put to
 sleep from the Machine page three times and woke each time. The third time it was woken by a
-request from the harness on the front machine: `turnstile` printed "waking compute for a request
+request from the harness on the control node: `turnstile` printed "waking compute for a request
 to /v1/chat/completions", and the request was answered. The log shows it asleep for 64, 62 and
 37 seconds.
 
@@ -4943,7 +4943,7 @@ from nothing. [`settings/examples/loadcoach.toml`](../settings/examples/loadcoac
 | `user` | People and tools that use models | Models and the lock |
 | `app` | Programs outside this suite, each with its own account | Models, the lock, hosted models |
 | `batch` | Unattended scripts | Models, behind everyone else |
-| `front` | The front machine's own key | Passing on sign-ins, and the copy of a few password hashes |
+| `front` | The control node's own key | Passing on sign-ins, and the copy of a few password hashes |
 
 If the file later says something else than the group that is kept, LoadCoach prints one line
 at each start saying so, and where to look. It changes nothing.
@@ -5001,7 +5001,7 @@ Two things to know:
   are, worked out the same way by `fewer_tools`. `/loadcoach/me` says `tools` and `hidden_tools`.
 - **`superuser` with something taken away is no longer `superuser`.** The account keeps every
   other ability, and gets new ones as they are added, but the word itself goes, because the
-  front machine reads the word as "everything of mine too". Add `front-wake` back by name if
+  control node reads the word as "everything of mine too". Add `front-wake` back by name if
   it is wanted.
 
 It is set with `"own"` in the body of `POST /loadcoach/users` and `POST /loadcoach/users/NAME`,
@@ -5041,7 +5041,7 @@ after users could give a stronger account a new password, sign in as it, and be 
 "May do more" is `beyond(actor, wanted)` in `groups.py`: an ability the actor lacks, a higher
 level of sensitive work, or models the actor may not use. Someone with `superuser` can hand
 out anything, the abilities meant for a program's own key included. So only a superuser can
-make the front machine's account, or let an app sign people in.
+make the control node's account, or let an app sign people in.
 
 **The `loadcoach` command is held to none of these.** It works on the file, and whoever can
 run it owns the file. It is how an account is raised or lowered, one's own included, as the
@@ -5073,7 +5073,7 @@ is disabled or removed. `GET /loadcoach/me` says which app a session came throug
 
 | Ability | A session made with it | Meant for |
 |---|---|---|
-| `sign-in` | Can do all that the person may | The front machine's own key |
+| `sign-in` | Can do all that the person may | The control node's own key |
 | `app-sign-in` | Can do no more than the account that asked | An app's own key |
 
 Nothing else on the network can try a password: without one of those two, a sign-in is
@@ -5184,7 +5184,7 @@ Nothing is hidden beyond what is listed above. These remain:
 - **What LoadCoach prints.** The web server prints one line for each request, with the
   caller's address, the path and the status. `llama-server` prints how long the request took
   and how many tokens it was. Both go to the service's journal. Neither holds the text.
-- **`turnstile` on the front machine,** if the request came through it, notes that the key was
+- **`turnstile` on the control node,** if the request came through it, notes that the key was
   used that day. It notes the key's hash, never the key or the request.
 - **The ToolLocker is separate.** A tool called there by the same harness is logged there.
 - **The telemetry.** A busy card shows on Telemetry's charts.
@@ -5309,7 +5309,7 @@ since the machine last started. `journalctl` gives lines picked out with `-g` ne
 In `weightroom`: `output_page` is the handler and `output.html` the page. Service output has
 one view, on this page. During compute outages it shows the last
 successful snapshot for the same account and exact filters, with its fetch time. Snapshots
-are bounded to 32 selections in the front process and are cleared on restart; an uncached
+are bounded to 32 selections in the control node process and are cleared on restart; an uncached
 selection shows an offline empty state. Journal access is checked again on every visit.
 
 ### Asking a model
@@ -5405,7 +5405,7 @@ python -m weightroom.chat_migration export data/loadcoach.db data/backups/chat-e
 python -m weightroom.chat_migration verify data/loadcoach.db data/backups/chat-export.db
 ```
 
-Copy the export to the front machine as `data/chat.db`, mode 0600, and compare its checksum
+Copy the export to the control node as `data/chat.db`, mode 0600, and compare its checksum
 with the export before starting WeightRoom. Keep the verified export for rollback. Retire the
 old compute chat tables only after verifying the copy:
 
@@ -5426,7 +5426,7 @@ verified after the move. Compute's three chat tables were retired; accounts, mod
 and logs remain. The owner-only source backup and verified chat export are in
 `data/backups/front-chat-20261011-184356/`. No separate chat process or port was added.
 These local rollback files were subsequently deleted at the owner's request on 2026-10-14;
-the active front chat database was outside that cleanup's scope.
+the active control node chat database was outside that cleanup's scope.
 
 189 targeted tests passed. A live `smollm2-135m` web-chat request streamed its first HTML
 frame in 18 ms, saved a reply, rendered the completed page, and linked its compute request.
@@ -5458,9 +5458,9 @@ supply permitted context limits, vision support, hosted-model status and the unl
 and permissions and returns 404 for another account's conversation. Ownership uses the
 immutable `users.identity`, so renaming an account preserves history, and recreating a deleted
 username cannot expose old chats. Removing an account through WeightRoom removes its local
-chats. Removing it directly on compute makes its retained front records inaccessible. Each
+chats. Removing it directly on compute makes its retained control node records inaccessible. Each
 turn remains an ordinary request whose captured text follows compute's existing log rules.
-Whoever can read the front machine's `chat.db` can read its saved messages and attachments.
+Whoever can read the control node's `chat.db` can read its saved messages and attachments.
 
 ### What a person can do
 
@@ -5487,7 +5487,7 @@ controls and mirror edits immediately. System prompt, Reasoning and sampling cha
 through the existing conversation API after a short typing pause, without sending a message.
 Send and Ask again wait for outstanding option saves, then submit their current values.
 Reloading restores saved prompt settings. Only the model selector is remembered in browser
-storage, scoped by account identity and conversation; prompt text is kept on front.
+storage, scoped by account identity and conversation; prompt text is kept on the control node.
 Each panel has a distinct `details` ID (`new-options`, `main-options`, `again-options`) so
 the shared card-state code stores its open/closed state separately within the current page
 and account. Telemetry's global card-state restore can no longer collapse Ask again's Options
@@ -5638,9 +5638,9 @@ its answer quality is limited compared with larger vision models.
 
 Deployment on 2026-10-09: 239 tests passed (one existing Starlette deprecation warning).
 The earlier power-timing test failure passed both its focused retry and the final full run.
-Compute's database was backed up before restarting LoadCoach; front was deployed with
+Compute's database was backed up before restarting LoadCoach; control node was deployed with
 `scripts/deploy-front.sh` while requests and voice sessions were idle. All seven services
-were active afterward. A disposable account exercised the deployed front's authenticated
+were active afterward. A disposable account exercised the deployed the control node's authenticated
 chat, image upload, preview and actual CPU reply, then was removed with its conversation.
 `smolvlm-256m-vision` is registered as a CPU-only image-capable choice; existing model defaults
 were not changed. Browser checks also covered the expandable summary notice with originals
@@ -5781,7 +5781,7 @@ seen by a person; copying; Enter; a hosted model; the dark colours.**
 ## 25. Voice
 
 Implemented and deployed on 2026-10-08 under the owner's authorization to carry out all seven
-steps of [the specification](voice.md), restart services, deploy front, and test with generated
+steps of [the specification](voice.md), restart services, deploy control node, and test with generated
 speech. The supported default is **one active call, direct mode**. Hermes can be selected by
 an account with its additional ability. No telephone was dialled, and this PC was never
 suspended or woken for testing.
@@ -5791,14 +5791,14 @@ suspended or woken for testing.
 | Program | Installed address | Job |
 |---|---|---|
 | `voice.service` on compute | `10.77.10.84:8445` | CPU recognition/synthesis, admission, direct conversations, holds |
-| `voice-gateway.service` on front | `127.0.0.1:8446` | Private browser page, open to whoever can reach it |
+| `voice-gateway.service` on the control node | `127.0.0.1:8446` | Private browser page, open to whoever can reach it |
 | Same gateway, public forwarding port | `0.0.0.0:8081` | Only signed Twilio webhook and WebSocket routes |
-| `turnstile.service` on front | ports 8442, 8443, 8445 | Existing authenticated wake/forward path; voice HTTP preparation |
-| Per-call Hermes subprocess on front | an ephemeral loopback port | Isolated run API, history and search tools |
+| `turnstile.service` on the control node | ports 8442, 8443, 8445 | Existing authenticated wake/forward path; voice HTTP preparation |
+| Per-call Hermes subprocess on the control node | an ephemeral loopback port | Isolated run API, history and search tools |
 
-Front is `k-srv`, reached from this PC at `10.77.10.42`. Its browser URL is configured as
+Control node is `k-srv`, reached from this PC at `10.77.10.42`. Its browser URL is configured as
 `https://k-srv.tailaf60c6.ts.net`. **Tailscale Serve is disabled in the tailnet**: that URL was
-not publicly claimed to work. After an administrator enables Serve for this node, run on front:
+not publicly claimed to work. After an administrator enables Serve for this node, run on the control node:
 
 ```bash
 sudo tailscale serve --bg --https=443 http://127.0.0.1:8446
@@ -5894,7 +5894,7 @@ key. Direct turns use `X-LoadCoach-Trace` to link model requests to session and 
 
 The browser page asks for no name and no password (step V10). The gateway checks browser
 Origin, and every caller is then the one account whose key is in `browser_key_file`, as every
-telephone caller is the account in `[twilio] key_file`. The key stays on front: an HttpOnly,
+telephone caller is the account in `[twilio] key_file`. The key stays on the control node: an HttpOnly,
 SameSite cookie binds one browser socket to the reservation, and the browser never sees the
 key. Starting asks nothing of compute. Compute is woken when the socket connects, and the voice
 service decides there what the account may do. Without `browser_key_file` the page answers 503.
@@ -5912,7 +5912,7 @@ owner's API key.
 `asleep`, `awake_not_ready` and `ready`; a signed spotter notice is required to assert asleep.
 `POST /turnstile/power` is authenticated by a shared notice key. There is no heartbeat.
 Preparation uses the existing known-key wake rule. Greetings and periodic waiting prompts
-are local files on front; they do not require compute or the model.
+are local files on the control node; they do not require compute or the model.
 
 Compute exposes `POST /voice/sessions`, `DELETE /voice/sessions/{id}`, `GET /voice/ready` and
 `WS /voice/stream?session_id=...`. Session creation checks account, profile, mode and capacity,
@@ -5982,7 +5982,7 @@ threads; synthesis uses two bounded workers with four threads each. Configured e
 silence is 350 ms; observed endpoint delay is longer because the streaming model also buffers
 context. Short direct answers are capped at 128 model tokens; thinking is disabled.
 
-Hermes was inspected on front at commit `a9c783f`. Its supported run API advertises submission,
+Hermes was inspected on the control node at commit `a9c783f`. Its supported run API advertises submission,
 status and stop. Each voice call starts an isolated Hermes process using the existing venv
 and checkout, a temporary `HERMES_HOME`, workspace, API key and limited configuration. It uses
 its own LoadCoach account, reaches the model through turnstile, and enables only the existing
@@ -6019,7 +6019,7 @@ and homes are removed on hang-up.
 
 ### Configuration and deployment
 
-Install `.[voice,voice-gateway]` on compute; front needs only `.[voice-gateway]`. Copy and edit
+Install `.[voice,voice-gateway]` on compute; control node needs only `.[voice-gateway]`. Copy and edit
 `settings/examples/voice.toml` and `settings/examples/voice-gateway.toml` as the ignored live TOML files. Example
 files document the installed field names, including the optional per-call Hermes settings.
 Enable `modes = ["direct", "hermes"]` in both the profile and gateway only after Hermes works.
@@ -6034,7 +6034,7 @@ needs `app-sign-in`. Turnstile wakes compute only for a key compute has accepted
 browser key once while compute is awake. Secret files are mode 600 and ignored by Git. No credential belongs in
 a URL, browser JavaScript, documentation or the deployment script.
 
-Front's turnstile ports include 8445. The same random notice key is configured in turnstile and
+Control node's turnstile ports include 8445. The same random notice key is configured in turnstile and
 spotter. Spotter's allowed service list includes voice. WeightRoom's Chat → Voice page is the
 browser voice chat, for permitted users only: WeightRoom reserves each call at the gateway with the
 person's own key and carries the call's socket, so the browser never reaches the gateway. The voice unit has a 4 GiB memory ceiling and the
@@ -6042,7 +6042,7 @@ gateway a 2 GiB ceiling, including its isolated Hermes child.
 
 `scripts/deploy-front.sh` copies packages, prompts, examples and units, installs the gateway
 extra, restarts configured services, checks their active state, then checks the actual private
-browser configuration route. It preserves front's live configuration, keys and data. This
+browser configuration route. It preserves the control node's live configuration, keys and data. This
 script was run successfully against `10.77.10.42`; both voice services and the existing suite
 services were checked after restart.
 
@@ -6138,7 +6138,7 @@ control, conditional refresh, cache reload/offline behavior, invalid bundles and
 failure. AEC retains fixed caller/reference fixtures under `tests/fixtures/voice` so changing
 a greeting does not redefine the original acoustic baseline; the new George greeting is
 also tested against that caller at 40/120/240 ms echo delays. All six new PCM files have no
-clipped samples. The deployed front cache automatically populated with speaker 26 and all
+clipped samples. The deployed control node cache automatically populated with speaker 26 and all
 six phrases; its revision matches the fallback assets, and live conditional requests return
 304 while anonymous requests return 401.
 
@@ -6181,7 +6181,7 @@ is Paris", completed without errors and produced zero playback clears.
 ### Native desktop client: one API key
 
 Added at the owner's request on 2026-10-08, for Linux, Windows and macOS 12 Monterey. This
-uses the same front gateway, CPU speech, direct/Hermes modes and call limits. It introduces
+uses the same control node gateway, CPU speech, direct/Hermes modes and call limits. It introduces
 no new service account or key. Paste an existing LoadCoach API key into the masked field,
 or load its existing file. The account needs `front-voice` and access to the configured
 model, plus `load` when loading is needed. The same Voice grant permits Direct and Hermes.
@@ -6365,7 +6365,7 @@ microphone page; that gateway page and its transports remain available at their 
 
 **Settings → Voice** (`/system/voice`, `manage-settings`) lists service observations and profile
 readiness, active gateway calls, Direct/Hermes/shared speech settings, per-speaker synthesis
-preview and each greeting currently played on front. It shares `settings_program.html` with
+preview and each greeting currently played on the control node. It shares `settings_program.html` with
 Settings, and both forms save through `/loadcoach/settings/{program}`. The `voice.greetings`
 table has six fixed names and phrases of 1–300 characters; scalar form fields merge edits or
 resets without replacing another phrase. Defaults are in `settings/defaults/voice.toml`.
@@ -6381,8 +6381,8 @@ warm speech or load/hold a model. Explicit synthesis uses existing CPU speech wo
 preview does not change the selected speaker. Known names/IDs apply only to the pinned bundle.
 
 Greeting revisions include speaker, synthesis bundle and edited texts. A complete validated
-set replaces the same atomic front cache used by real calls; synthesis failure preserves the
-last good set. The periodic refresh and explicit regeneration share a lock. The front form
+set replaces the same atomic control node cache used by real calls; synthesis failure preserves the
+last good set. The periodic refresh and explicit regeneration share a lock. The control node form
 refuses regeneration while saved speaker/text changes have not yet been reported by Voice.
 Previews are mono 24 kHz WAV wrappers around the existing PCM. No new service, store,
 credential, scheduler, GPU request or external dependency is introduced.
@@ -6395,7 +6395,7 @@ and its nine files and included README verified; no production service was chang
 ## 26. Settings changed from the site
 
 Every program reads its settings from a TOML file of its own, once, when it starts. System →
-Settings shows the programs whose settings the front keeps. Settings → Compute nodes selects a named host and shows its
+Settings shows the programs whose settings the control node keeps. Settings → Compute nodes selects a named host and shows its
 LoadCoach and Spotter settings in fixed, non-collapsible sections. Spotter settings are there
 because each instance reports and stores its own values. The owner asked for the original page
 on 2026-10-08 and split node ownership from it on 2026-10-17.
@@ -6489,7 +6489,7 @@ A setting that is shown only has no box.
 | `weightroom` | It asks LoadCoach with its own key, at each look at compute | `data/settings.json` |
 | `turnstile` | It has no key. `weightroom` fetches for it | The same `data/settings.json` |
 
-The copies are why a program on the front machine starts with its changes while compute is
+The copies are why a program on the control node starts with its changes while compute is
 asleep, and why the voice service starts with them while LoadCoach is down.
 
 `turnstile` says what it runs with by leaving a file in the folder it shares with `weightroom`,
@@ -6580,7 +6580,7 @@ Every change is in the event log as `settings changed`, with the program, who, a
 | File and page can say different things. That is what "lies over" means, and the page shows both |
 | A voice program lists only the settings its file names, since its defaults are in its code |
 | A setting inside a table cannot be protected by itself: a table is changeable whole or not at all |
-| The front machine's programs cannot be restarted from the site. "From the next start" means by hand there |
+| The control node's programs cannot be restarted from the site. "From the next start" means by hand there |
 | A change made with `loadcoach settings reset` reaches a running LoadCoach only at its next start |
 | `spotter` takes a change on within half a minute, not at once |
 | A program that is not running, or has no `follow-settings`, is simply absent from the page |
@@ -6599,7 +6599,7 @@ by its own rules, and falling back at start; the ToolLocker and `turnstile`; and
 follows over the network, with its copy. One in
 [`tests/test_weightroom.py`](../tests/test_weightroom.py): the page for someone who may and
 someone who may not, a change saved, refused with what was typed kept, waiting for a start,
-taken back, and a front-machine setting copied to the front.
+taken back, and a control node setting copied to the control node.
 
 **Not checked: the page in a real browser; any of it against the live programs; the voice
 programs following for real, which needs their keys to be given `follow-settings`.**
@@ -6683,7 +6683,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now loadcoach.service
 ```
 
-`scripts/deploy-front.sh` copies the front machine's defaults, examples and unit files along
+`scripts/deploy-front.sh` copies the control node's defaults, examples and unit files along
 with the code. It never touches that machine's own settings, keys or data.
 
 ### What was done to switch over
@@ -6697,7 +6697,7 @@ A setting of yours that differed from its default was left in your file.
 The local `data/before-new-layout/` copies were removed at the owner's request on 2026-10-14.
 
 Each program's own loader was run before and after, and what it would run with compared.
-On compute all four were the same but for the place of one key file. On the front machine
+On compute all four were the same but for the place of one key file. On the control node
 both were the same but for the places of key files. Then the unit files were installed from
 `services/` and the services started. The one-time script that did this is not part of the
 suite.
@@ -6717,7 +6717,7 @@ answered since the switch; a voice call; signing in at the site.**
 ## 28. Finding model files at Hugging Face and bringing them down
 
 In a multi-node installation the designated `turnstile.artifact_machine` owns a persistent
-front-side cache (empty prefers `front_cpu`, then `compute`). WeightRoom sends Hugging Face
+control-node-side cache (empty prefers `front_cpu`, then `compute`). WeightRoom sends Hugging Face
 searches and downloads there and Files shows the configured places and free storage reported by
 every node. From a cached file, an operator may select destination nodes. Turnstile obtains a
 short-lived, single-file capability from each node's Spotter and streams the file to it. Spotter
@@ -6857,7 +6857,7 @@ loadcoach downloads discard PATH                # remove one stopped/failed part
 ```
 
 These ask the local LoadCoach selected by `--config`, as `loadcoach status` does. To manage
-the Files page’s downloads, which the front keeps,, run them on the configured artifact worker with its
+the Files page’s downloads, which the control node keeps,, run them on the configured artifact worker with its
 LoadCoach configuration. `PATH` is copied exactly from the first column of
 `loadcoach downloads`; a compute worker’s list contains only that worker’s downloads.
 
@@ -7071,7 +7071,7 @@ An already loaded smaller model stays at that size until it is unloaded or its s
 Verification on 2026-10-09: the full suite passed 246 tests, followed by 19 focused context
 and GPU-placement checks after adding explicit multi-card split sharing. GPU allocations
 were simulated; no real GPU calibration was run. Headless Chrome verified saving the range,
-all measurement rows, the model table and desktop/mobile layouts. LoadCoach and the front
+all measurement rows, the model table and desktop/mobile layouts. LoadCoach and the control node
 services were reloaded while idle, and the deployed API reports the three-minute default.
 
 Measurements at other contexts are retained across range edits. Changed files or other
@@ -7509,16 +7509,16 @@ processor, as the rules for real model checks say.
 
 ## 32. Batches: work that outlives the system going down
 
-> **Since milestone 115 batches are the front machine's** (`turnstile/batches.py`). The files, the batches and
-> their requests are kept in front's accounts store with the same tables as below, and turnstile works through
+> **Since milestone 115 batches are the control node's** (`turnstile/batches.py`). The files, the batches and
+> their requests are kept in the control node's accounts store with the same tables as below, and turnstile works through
 > them: each request is sent in through turnstile's own front door, in the name of whoever handed it in, with
-> `X-LoadCoach-Priority: low` and the batch's number as its trace. So a role is picked for it on front, a hosted
-> model answers it from front (section 14a), and compute only sees an ordinary request. The door is opened
+> `X-LoadCoach-Priority: low` and the batch's number as its trace. So a role is picked for it on the control node, a hosted
+> model answers it from the control node (section 14a), and compute only sees an ordinary request. The door is opened
 > by a key made at start that never leaves the process. A request that is turned away for now (compute off or
 > waking, turnstile full, the account over its limit) is not a try and is asked again after `AGAIN_AFTER`.
 > A batch under way when turnstile stops goes on at its next start. An account with a batch under way cannot
 > be renamed. The executing batches in Status are found by matching compute's running requests to the batch.
-> External tasks (benchmarks) are still compute's: `/v1/batches/ID` forwards to compute for a number front
+> External tasks (benchmarks) are still compute's: `/v1/batches/ID` forwards to compute for a number control node
 > does not hold, and the batch lists show both. `weightroom batches-from FILE` moves them once.
 > Where this section says "LoadCoach" doing the work, read turnstile.
 
@@ -7580,7 +7580,7 @@ out from its lines each time they are asked for, so they cannot disagree with th
 
 ### Answering a batch
 
-Front's current executor preserves a pinned model while its node is temporarily absent:
+Control node's current executor preserves a pinned model while its node is temporarily absent:
 `/v1/models` reports `unavailable_machines`, and a missing model in an incomplete catalogue
 waits without consuming an attempt. Models present on answering nodes can still run. Only a
 complete catalogue establishes that a pinned model was removed; current account permissions
@@ -7641,7 +7641,7 @@ simpler than keeping a list and cannot be wrong.
 
 ### Web-chat interruption after milestone 48
 
-Web chat now runs in WeightRoom, with its records in front's `data/chat.db`. A browser
+Web chat now runs in WeightRoom, with its records in the control node's `data/chat.db`. A browser
 reconnection leaves the answer running. WeightRoom shutdown interrupts it and retains available
 partial output; an abandoned `answering` row on startup is marked interrupted. No turn is
 automatically replayed. The owner explicitly chose this availability boundary on 2026-10-11.
@@ -7805,11 +7805,11 @@ viewing results or changing context. The view change was deployed on 2026-10-12 
 visible in the live matrix increased from 5 to 121, with all 269 runs, 2,433 samples and chat
 records verified unchanged by before/after database digests. Fifty-four benchmark checks
 passed, including context edits, current-result precedence, evidence preservation and no
-automatic rerun. Backup: front's `data/backups/benchmark-visibility-20261012-065025/`.
+automatic rerun. Backup: the control node's `data/backups/benchmark-visibility-20261012-065025/`.
 
 ### Evidence attached to batches
 
-`benchmarks/` is a separate package hosted by WeightRoom on front. WeightRoom explicitly starts
+`benchmarks/` is a separate package hosted by WeightRoom on the control node. WeightRoom explicitly starts
 and stops its ASGI handler lifespan and worker. Calls to those handlers use an in-memory ASGI
 transport, not a network listener. No separate service, CLI or port is needed. LoadCoach remains
 an authenticated HTTP dependency and imports no benchmark code. The benchmark package imports
@@ -7851,9 +7851,9 @@ specifying warm-up and whether a capacity failure is a measured boundary.
 
 ```mermaid
 flowchart LR
-    Browser[Browser] --> Front["WeightRoom :8440 on front"]
+    Browser[Browser] --> Control node["WeightRoom :8440 on the control node"]
     Front -->|"In-process calls"| Bench["Benchmark package and worker"]
-    Bench --> Results[("Benchmark database on front")]
+    Bench --> Results[("Benchmark database on the control node")]
     Bench -->|"Authenticated HTTP tasks and probes"| Coach["LoadCoach :8442 on compute"]
     Coach --> Batches[("Batch and account database")]
     Coach --> GPU["Model processes and GPUs"]
@@ -7933,10 +7933,10 @@ after adding the clean-shutdown flush.
 
 After the separate-service cutover, the owner chose to host benchmarks inside WeightRoom.
 For this move, stop and disable the old compute worker before copying its SQLite database.
-Use a private SQLite backup, refuse to overwrite an existing front database, and verify every
+Use a private SQLite backup, refuse to overwrite an existing control node database, and verify every
 row in definitions, queue state, runs and samples before starting the new worker. Keep the
 backup for rollback; never run both hosts against independent copies of the same queue.
-Remove the old service from Spotter's allowed-service list. Front-only deployment now includes
+Remove the old service from Spotter's allowed-service list. Control-node-only deployment now includes
 `benchmarks/` as well as `weightroom/`; it restarts only WeightRoom.
 
 The regression test submits a run through browser forms, restarts WeightRoom while LoadCoach
@@ -7949,7 +7949,7 @@ state, verified row for row after deployment. The private pre-move backup is
 was stopped and disabled before copying; its unit and settings were archived, and its
 Spotter entry removed. Both machines now have port 8450 closed. LoadCoach's PID was unchanged.
 All four browser pages loaded without JavaScript errors. A real `smollm2-135m` load benchmark
-completed nine samples on front after a mid-run WeightRoom restart, retained its first sample
+completed nine samples on the control node after a mid-run WeightRoom restart, retained its first sample
 unchanged, and closed its owning batch. The app, batches, benchmarks, task, WeightRoom and
 settings regression suites passed 181 tests.
 
@@ -8034,33 +8034,33 @@ rail state and Escape. `FRONT_ONLY=1 scripts/deploy-front.sh` updates weightroom
 existing installation, leaving turnstile and voice gateway running. It installs the benchmark
 dependencies before restarting WeightRoom.
 
-## 14a. Hosted models from the front machine (milestone 114)
+## 14a. Hosted models from the control node (milestone 114)
 
-The owner's decision: hosted model calls are always made from the front machine, and compute is only for
+The owner's decision: hosted model calls are always made from the control node, and compute is only for
 inference, voice and telemetry. `turnstile/hosted.py` is the whole of it.
 
-- **Services and keys.** The registry (`loadcoach/outside.py`'s `Services`) is kept in front's accounts store, and the
+- **Services and keys.** The registry (`loadcoach/outside.py`'s `Services`) is kept in the control node's accounts store, and the
   `/loadcoach/services` addresses are turnstile's own, with the same contract, so the Cloud APIs page is unchanged. A key is
   a file `NAME.key` in `hosted_keys` of `[turnstile]` (default: the folder `machine_key_file` is in), read when needed.
   `weightroom outside-from FILE` takes the services from a copy of compute's database once. The key files are copied by hand.
 - **Before anything is sent**, in this order and with the messages section 14 gives: a request that leaves nothing behind
   (`X-LoadCoach-Log`) or that requires one exact local model (`X-LoadCoach-Require-*`) is refused; the group's `max_requests`
   for hosted answers under way; the sensitivity level and its trace (a trace that was ever sensitive never leaves); the
-  service's key; the service's 24-hour ceiling; the group's `max_hosted_spend`. The last two read front's own log.
+  service's key; the service's 24-hour ceiling; the group's `max_hosted_spend`. The last two read the control node's own log.
 - **The call.** The service gets its own key, its own name for the model and nothing of the caller's. The answer is handed
-  back as it arrives. Front writes the same two request entries compute did (`hosted`, `service`, token counts, `cost`
+  back as it arrives. Control node writes the same two request entries compute did (`hosted`, `service`, token counts, `cost`
   priced from the model's price when the service says none), the latest requests in full, diagnostics, and the model's
   reliability, kept under where it is asked, not any file.
 - **The busy flag.** `X-LoadCoach-Offload: NAME` is decided here: the local model is not warm and does not fit now,
   according to compute's facts, and nothing forbids leaving. Compute never receives the header.
 - **Lists and facts.** `/v1/models`, `/v1/models/NAME`, `/loadcoach/me`, `/loadcoach/status` (`hosted` and `busy`) and the
-  facts roles are picked with add the hosted models; spend alerts are front's too.
+  facts roles are picked with add the hosted models; spend alerts are the control node's too.
 - **Not carried over.** Batch items that name a hosted model: compute answers batches itself and no longer knows hosted
   models, so they are refused. The per-user limit counts hosted answers under way, and not local ones beside them.
 
 ## 34. Cloud APIs, registered from the site
 
-Since milestone 114 this is all done on the front machine (section 14a). Section 14 describes a model that is answered somewhere else: who may ask for one, what may
+Since milestone 114 this is all done on the control node (section 14a). Section 14 describes a model that is answered somewhere else: who may ask for one, what may
 never leave, and how it is recorded. All of that stands. What it could not do was more than
 one service, or any change without editing the settings file and restarting. Now services
 are kept in the database and looked after on the site.
@@ -8075,7 +8075,7 @@ are kept in the database and looked after on the site.
 | `ceiling` | The most it may cost in 24 hours, everyone together, in dollars. Left out: none |
 | `models` | What it offers here. Each has our name, which callers ask for, `theirs`, the service's own name for it, and optionally `in` and `out`, prices in dollars for a million tokens |
 
-**The key is not among them.** On front it is an owner-only file, `NAME.key`, in the
+**The key is not among them.** On control node it is an owner-only file, `NAME.key`, in the
 `hosted_keys` folder (default: beside `machine_key_file`). An account with `manage-hosted`
 can install or replace it through Cloud APIs. `Services.set_key()` validates a nonempty,
 header-safe key and atomically replaces the file with mode 600; a failed write preserves
@@ -8251,7 +8251,7 @@ Descriptions explain the measured capabilities: the code benchmark tests code re
 not code generation or tool use. New benchmarks remain available as individual weights.
 The follow-up controls passed 45 role/scoring/page/browser checks on 2026-10-13, including
 different inference choices for code/chat from the same evidence, zero-weight exclusion,
-independent saves, contribution totals and desktop/mobile rendering. The matching front and
+independent saves, contribution totals and desktop/mobile rendering. The matching control node and
 compute files were deployed and loaded on 2026-10-13.
 
 ```json
@@ -8381,7 +8381,7 @@ weights and reliability/capability/access exclusions keep their existing contrac
 rows expose each multiplier, ordinary-role score and fast comparison alongside quality and
 unadjusted timing. Saving one role does not change another.
 
-Matching routing and Roles-form code is deployed on front and compute; current source
+Matching routing and Roles-form code is deployed on the control node and compute; current source
 parity was checked on 2026-10-17. This is delivery evidence, not a new live form interaction.
 The running compute service's `model_idle_minutes` was changed
 from 3 to **0** through its authenticated settings API and independently read back as 0;
@@ -8487,7 +8487,7 @@ given a role of that name.
 | With no usable benchmark evidence, preference follows manual weights and reliability; selected compatible benchmark results contribute quality |
 | Ordinary residency preference is bounded by the configured bonus, default 25%; eligibility requirements still apply |
 | `:fast` preview uses 400 output tokens; live requests use requested maximum output. The loaded-model multiplier changes preference, not measured time |
-| Historical rates/load can be up to a minute old, and front's queue snapshot up to three seconds old. Missing timing remains unknown; a provisional preference is used only when no known completion estimate is available |
+| Historical rates/load can be up to a minute old, and the control node's queue snapshot up to three seconds old. Missing timing remains unknown; a provisional preference is used only when no known completion estimate is available |
 | Whether a model takes tools is read from its file. An outside model is taken to take tools and to see |
 | A model that will not load is tried again by the next request for the role, which costs that request a few seconds before the next model answers |
 | A comparison in chat is between two models, not two roles |
@@ -8566,7 +8566,7 @@ window; `0` keeps them indefinitely. Exclusion persists across restarts until re
 
 **Answer quality.** A rating may carry an `explanation` of up to 2000 characters, written by
 the rater about the answer (never the answer itself). Besides nudging routing, every rating is
-kept in `quality_ratings` on front, which retention never prunes, under the model ID and
+kept in `quality_ratings` on the control node, which retention never prunes, under the model ID and
 fingerprint the answer came from. `GET /loadcoach/quality` returns, per model fingerprint across
 all roles, the good and bad counts and `score`, the percentage rated good, newest first; callers
 with `see-log` also get the ten latest explanations. The owner of a request may rate it, as
@@ -8659,7 +8659,7 @@ exposed an existing cleanup race: `Runner.stop` could be cancelled while measuri
 model, before signaling its process. Termination/wait now runs in `finally`, and telemetry is
 invalidated even after cancellation, so removed idle servers cannot keep occupying cards.
 
-Implemented locally on **2026-10-14**; paired front/compute delivery and real-embedder GPU
+Implemented locally on **2026-10-14**; paired control node/compute delivery and real-embedder GPU
 qualification remain in [Agent backlog](agent-status.md#proposals). An isolated CPU-only SmolLM2 135M
 mean-pooling transport smoke passed at 128/512/1,024/2,048 tokens with 576-dimensional vectors.
 It establishes native transport only. Final verification passed 736 full-suite tests with zero
@@ -8798,11 +8798,11 @@ each of multi-step purchases, 30-row CSV queries, chained unit conversions, perc
 and calendar calculations. Its 128 fields use exact Fraction/datetime keys and explicit cents,
 tenths-of-percent, English weekdays and ISO dates. Flat fields, filter scope, tie-breaking and
 stopping are named in the question; native decoding remains unconstrained. Source facts and
-keys remain in front's frozen plan, and only the request goes to the existing task probe.
+keys remain in the control node's frozen plan, and only the request goes to the existing task probe.
 No compute endpoint, scheduler, credentials, dependencies or installer changes are required.
 Independent Decimal/SQL/inverse/date checks pass; null and shortcut answerers score 0% and
 14.8%. Protocol and dataset advance to v3. Shared grader 3 includes native-answer extraction
-repair; field-correctness rules are unchanged, and v2 evidence/plans remain separate. Front delivery and the four-model qualification are still pending in
+repair; field-correctness rules are unchanged, and v2 evidence/plans remain separate. Control node delivery and the four-model qualification are still pending in
 [Agent backlog](agent-status.md#conditional-maintenance-candidates).
 
 **Retrieval hardening, local 2026-10-14, milestone 86.** Part C's `retrieval-v2` uses seed
@@ -8826,8 +8826,8 @@ The 64-KiB task body limit rejected these archives. `Tasks.body` now permits up 
 when the authenticated, currently authorized probe path opts in with an evaluation object;
 create/finish and non-evaluation requests retain 64 KiB. Question/block validation, input
 caps, task permissions, model identity and all native probe isolation remain in effect.
-Only the request reaches compute; keys and source metadata remain with front's frozen plan.
-Deploy this LoadCoach task update together with the front benchmark/UI. Protocol advances
+Only the request reaches compute; keys and source metadata remain with the control node's frozen plan.
+Deploy this LoadCoach task update together with the control node benchmark/UI. Protocol advances
 to 3 and dataset to retrieval-v2. Shared grader 3 repairs native-answer extraction; unchanged
 field-correctness rules and a legacy-case fallback preserve versioned v1-dataset/v2-protocol
 evidence. Unfinished old plans refuse continuation. Independent parsed
@@ -8879,12 +8879,12 @@ As of the **2026-10-15** correction, native dialogue receipts use parsed assista
 directly; separate reasoning and empty/tool-only messages cannot become answers. Raw
 completion output still uses `final_answer` with its prompt markers. Shared quality grader 3
 and imported-case grader 2 repair retained scores without changing case/protocol versions
-or repeating model generation. Matching front code was delivered by 2026-10-16; see the
+or repeating model generation. Matching control node code was delivered by 2026-10-16; see the
 [benchmark guide](../benchmarks/README.md) for the grader contract.
 An older-protocol run retains its recorded protocol version and generation settings after
 regrading.
 
-Earlier verification of grader 2 tried the 692 saved answers of the then-newest 53 runs, read from front and
+Earlier verification of grader 2 tried the 692 saved answers of the then-newest 53 runs, read from the control node and
 scored here, with nothing written there. Fifteen results moved, none down: extraction for
 Gemma 12B Q4, Gemma 31B and Qwen Coder 14B from 0 to 100, JSON for gpt-oss from 0 to 98.7,
 arithmetic for Muse Glimmer from 0 to 70. Those of Qwen 3.5 to 3.8, which answered bare, did
@@ -8907,7 +8907,7 @@ and four benchmark-page checks passed. The full 541-case IFEval checker set ran 
 identical grades, alongside correct/wrong answer-key tests, typed comparisons, frozen plans,
 size summaries, evidence escaping, rescoring, pause/preemption/restart recovery and simulated
 native disconnects. Wheel inspection confirmed the dataset, checker files, licenses and
-sentence tables are packaged. The installed front package loads all nine definitions and
+sentence tables are packaged. The installed control node package loads all nine definitions and
 its bundled IFEval checker without a runtime download.
 
 Native CPU verification used the actual configured llama-server and SmolLM2 135M Q8 across
@@ -9171,7 +9171,7 @@ milestone 97, separate named load-out controls explicitly save, review/apply and
 the selection; see [the load-out contract](#named-model-load-outs-milestone-97).
 
 The node pills select exactly one LoadCoach catalogue and live status snapshot. GPU bars use
-that node's local card names, preventing combined front status keys from being mistaken for
+that node's local card names, preventing combined control node status keys from being mistaken for
 missing `nvidia-smi` readings. The system-RAM bar is shown only when that node has at least one
 model configured for CPU placement (`gpus = 0`); a GPU-only catalogue does not imply that host
 RAM is another placement option. CPU models are drawn against the selected node's host, service
@@ -9340,7 +9340,7 @@ The same section owns `card_margin`, `disable_ram_offload`, `host_ram_headroom_m
 Old `/cards` bookmarks redirect to `/compute-nodes#manage-gpus`, and old GPU form posts remain compatible.
 
 The page also omits the one-time `models` seed, front-ownership cutover flags, and the
-`hub_token_file`. Model inventory is database-owned on front; the token remains file-only because
+`hub_token_file`. Model inventory is database-owned on the control node; the token remains file-only because
 the node's artifact proxy still needs it for private repositories. Node-local model cache/library
 paths, executable paths, addresses, places and storage/database locations remain file settings.
 
@@ -9363,7 +9363,7 @@ preserve split permission. Existing model settings are not migrated automaticall
 Verification uses fake model processes and fake GPU memory; no real model inference is
 needed. `tests/test_cards.py` covers variable detection, saved exclusions, automatic one-card
 placement, a two-card OOM retry, disabled-card scheduling, busy/held/locked protections and
-the full WeightRoom form path. Compute's LoadCoach and front's WeightRoom were updated and
+the full WeightRoom form path. Compute's LoadCoach and the control node's WeightRoom were updated and
 restarted on 2026-10-13; their loaded files match this checkout.
 
 
@@ -9444,21 +9444,21 @@ new one.
 
 Milestone 50. Root `plugins/` contains one folder per driver. `plugins/_sdk.py` validates
 manifests and schemas without importing drivers; `_registry.py` owns plugin-local instance
-settings, selections and public aliases on front. `_controller.py` synchronizes revisions,
+settings, selections and public aliases on the control node. `_controller.py` synchronizes revisions,
 discovers models and applies optional allowed health controls. `plugins/_runtime.py` is the
 independent HTTP server installed on the external service's machine. Its own environment,
 pairing key, settings and session/receipt database do not depend on openWeightGym compute.
 
 `plugins/_turnstile.py` intercepts selected aliases, supplies trusted openWeightGym identities and pairs
 with instances. `/loadcoach/plugins/mirror` exports complete effective key verifiers and
-permissions for a front account with `mirror-users`, including app restrictions and expiry.
+permissions for a control node account with `mirror-users`, including app restrictions and expiry.
 Turnstile synchronizes directly without a wake request. Native requests keep the existing path.
 `front-plugins` enables use; `front-manage-plugins` enables settings, model aliases, installers
 and health controls. They are normal person abilities included in superuser expansion.
 
 WeightRoom's `/plugins` pages render driver schemas and save settings locally before HTTP
 application; desired and applied versions show pending updates. Its existing chat process
-stores session identifiers and available reasoning/tool/preview events in front's chat.db.
+stores session identifiers and available reasoning/tool/preview events in the control node's chat.db.
 The turnstile log in data/plugins.db stores only adaptor identity/use/outcome, not chat contents
 or accounting. `/plugins/activity` is available from Manage and Logs, including offline.
 
@@ -9472,10 +9472,10 @@ The complete protocol, storage ownership, deployment limits and verification evi
 in [docs/plugins/SPEC.md](plugins/SPEC.md); setup and extension instructions are in
 [plugins/README.md](../plugins/README.md). The Linux installer and real Gandalf continuation
 were verified in a disposable installation. The framework is deployed in WeightRoom and
-turnstile. Front's `jeeves` instance is now configured and its adapter running with
+turnstile. Control node's `jeeves` instance is now configured and its adapter running with
 `hermes:gandalf` enabled; a live alias request awaits the end of the compute benchmark sweep.
 The current adapter unit needed a manual `WorkingDirectory` correction. The installer fix is
-on front; existing adapter units need reinstalling to inherit it.
+on the control node; existing adapter units need reinstalling to inherit it.
 
 
 ## Stable local model IDs, milestone 52
@@ -9507,7 +9507,7 @@ benchmark. New frozen subjects include both the stable ID and file revision.
 Verified on 2026-10-12: 243 relevant regression checks passed, including rename chains,
 legacy schema migration, delete/recreate boundaries, queued batch references, scoped tasks,
 saved/comparison chats and plugin regressions. The deployed compute catalogue has 28 unique
-native IDs with all original fingerprints unchanged. Front linked 241 existing runs; 28
+native IDs with all original fingerprints unchanged. Control node linked 241 existing runs; 28
 unmatched historical runs remain stored without guessing a current identity. Eleven completed
 runs recorded under former Qwen/Muse names are visible again; the results grid increased from
 121 to 132 saved score cells. Existing 269 run records, 2,433 samples, 1,870 evidence rows,
@@ -9515,11 +9515,11 @@ runs recorded under former Qwen/Muse names are visible again; the results grid i
 columns; native chat reply IDs are backfilled when the owner opens the conversation.
 
 Private pre-migration SQLite backups were created in compute's
-`data/backups/model-identity-20261012-072505/` and front's
-`data/backups/model-identity-20261012-073006/`. Only the five reviewed front files were replaced;
+`data/backups/model-identity-20261012-072505/` and the control node's
+`data/backups/model-identity-20261012-073006/`. Only the five reviewed control node files were replaced;
 the existing deployed plugin import paths were retained. No benchmark was run by the migration.
 The local compute rollback copies were deleted at the owner's request on 2026-10-14;
-front's copies were outside the project cleanup's scope.
+the control node's copies were outside the project cleanup's scope.
 
 ## Backup and restore management, milestone 59
 
@@ -9534,7 +9534,7 @@ offline recovery checks, maintenance-window restore, identity portability and le
 require public recipients in the host's own `DATA/backups/recipients.txt`, where `DATA` is the
 `data` setting of that host's settings file counted from the settings folder (`../data` as
 installed). For the default per-account install that is
-`/home/ACCOUNT/openWeightGym/data/backups/recipients.txt` on the front and on every compute node;
+`/home/ACCOUNT/openWeightGym/data/backups/recipients.txt` on the control node and on every compute node;
 for `--system` it is `/var/lib/openweightgym/data/backups/recipients.txt`, owned by
 `openweightgym`. The folder is mode 700 and the file 600, owned by the service account.
 [Where recipients.txt goes](../weightroom/pages/docs/data/backups.html) has the commands and a
@@ -9548,7 +9548,7 @@ verification and a recovery drill with the saved private key are separate checks
 
 ## Database inventory and exports, milestone 62
 
-System → DB inventories every top-level `.db` file in the configured data folders on front and
+System → DB inventories every top-level `.db` file in the configured data folders on the control node and
 compute. `GET /loadcoach/databases` supplies compute's read-only catalog; authorized downloads
 come from `GET /loadcoach/databases/{database}/dump`, optionally with an exact `table` query.
 Both require `manage-settings`. Browser routes under `/databases` render or proxy them without
@@ -9580,7 +9580,7 @@ serialize chain appends with a table lock. The current hosts do not have
 Database P5 was implemented locally on 2026-10-13 after P0-P4. Accounts with `manage-settings`
 see the named-store health and backup-age panel on System → DB, directly below the Databases,
 Tables and On disk now summary cards. Telemetry shows service states from Spotter;
-storage checks use the configured store bindings independently on DB. Front store status remains
+storage checks use the configured store bindings independently on DB. Control node store status remains
 visible there when compute is unreachable, and a Spotter failure does not prevent storage
 reporting when authentication is available.
 
@@ -9612,7 +9612,7 @@ implemented and have not been deployed or used to switch production engines.
 ## openWeightGym installation and compatibility audit, milestone 66
 
 `scripts/install-suite.sh` is the supported first-installation and topology-change entry point.
-It scans installed and running openWeightGym units, preselects matching front/compute/voice services,
+It scans installed and running openWeightGym units, preselects matching control node/compute/voice services,
 lets the operator override those choices, and selects SQLite or PostgreSQL independently for
 each chosen program. Existing settings and databases are audited before a plan is applied;
 unsupported or conflicting layouts stop rather than being overwritten. PostgreSQL installation
@@ -9634,7 +9634,7 @@ existing same-origin checks. Authentication still uses openWeightGym sessions, S
 permitted offline mirrors; alert persistence does not create a second account authority.
 
 `weightroom/alerts.py` stores episodes and source timestamps through `db/` with the portable
-`weightroom.alerts` migration stream. The logical binding defaults to front's `data/alerts.db`,
+`weightroom.alerts` migration stream. The logical binding defaults to the control node's `data/alerts.db`,
 separate from chat, benchmark and plugin stores. A partial unique index permits one open episode
 per condition. Each observation updates its last-seen time and explanation, rather than adding
 another alert. Closing a condition preserves its history; a later recurrence starts a fresh
@@ -9643,7 +9643,7 @@ condition. Confirmed memory-kill event IDs stay deduplicated after explicit revi
 
 The background collector runs every 30 seconds inside WeightRoom and also on an authorized page
 refresh. It reads `GET /loadcoach/alert-evidence` and `GET /spotter/alert-evidence`, using the
-front's existing `mirror-users` program key. Both APIs also allow `manage-settings`, reject
+the control node's existing `mirror-users` program key. Both APIs also allow `manage-settings`, reject
 ordinary users and return only sanitized operational facts. No raw output, credential, prompt,
 answer or request-owner data is returned.
 
@@ -9675,16 +9675,16 @@ Collection cannot reconstruct older kernel events or every transient state betwe
 Unlogged requests do not gain new retained request evidence. Source unavailability never implies
 either service failure or recovery, which matters when compute is deliberately asleep.
 
-History is paginated in 25-episode pages, kept across restart and included in front recovery,
+History is paginated in 25-episode pages, kept across restart and included in the control node recovery,
 SQL exports, installer schema audit and engine transfers. No new daemon, port or outbound
 notification channel is introduced. Collection counts toward the persistent maintenance gate's
 active work, pauses under its marker and discards snapshots crossing the boundary. The page
 remains usable during outages when an existing authentication authority/cached login is available.
 Live qualification on 2026-10-14 confirmed all six sources available, HTTP 200 from both
-evidence APIs with front's background key, and stored timestamps advancing without an Alerts
+evidence APIs with the control node's background key, and stored timestamps advancing without an Alerts
 page refresh. The operator confirmed 85°C; one provider ceiling was configured and below its
 limit, with no per-user ceilings configured. No production episodes were open. A temporary
-database fixture using deployed front code passed deduplication, acknowledgement, unknown
+database fixture using deployed control node code passed deduplication, acknowledgement, unknown
 readings, close/reopen persistence, recovery/history, fresh recurrence, incident review and
 clean-stop classification. No production incident or live service restart was induced for
 qualification. Completion is recorded in the [agent ledger](agent-status.md#milestones).
@@ -9789,7 +9789,7 @@ specification, stable owner ID, grant hash, enabled state and earliest authorize
 due time and scoped task token, rejects timestamps before authorization or after now, and
 rechecks the owner's enabled account/current abilities. `POST /loadcoach/schedules/{id}` lets
 a settings manager revoke or re-enable the grant. These tokens cannot authenticate ordinary
-APIs. Pausing the front calendar is distinct from revoking the compute grant.
+APIs. Pausing the control node calendar is distinct from revoking the compute grant.
 
 The dispatcher reuses `Tasks.create` under the authorized owner and stable model identity;
 it never offers general impersonation. Newly created task subjects pin `owner_id`, and probe
@@ -9798,26 +9798,26 @@ retain their existing compatibility behavior. Renames preserve identity and reso
 model/account names. Existing benchmark batches, plans, sample persistence, protocol checks,
 low priority and foreground preemption still govern execution.
 
-For grants the front keeps, a due backup can wake `compute`; a due benchmark or outstanding run
+For grants the control node keeps, a due backup can wake `compute`; a due benchmark or outstanding run
 can wake its saved preferred node (default `compute`). The node must remain active with
-Wake-on-LAN configured, and front rechecks the owner's `front-wake` permission before sending
+Wake-on-LAN configured, and the control node rechecks the owner's `front-wake` permission before sending
 a packet. Disabled/retired nodes are never woken. Per-node packets are limited to one every
 30 seconds. While the node starts, the occurrence stays `dispatching`, records the wake or
 configuration message, and retries on the normal 15-second worker loop with the same IDs and
 tokens. A missing wake configuration or send failure remains retryable; configure the node
 or wake it manually. Accepted benchmark tasks are returned without waking their nodes again.
-Compute-owned compatibility grants remain passive until migrated to front ownership; an
+Compute-owned compatibility grants remain passive until migrated to the control node ownership; an
 unverified token cannot wake hardware. No suspend or shutdown behavior is added.
 
 Backups reuse `create_backup` and the existing two-machine verification/retention path.
 Recorded verified halves are reused on lost-reply recovery instead of taking another archive
 for the same occurrence. The worker is part of WeightRoom's lifespan, with a 15-second loop;
-front requests wake only after validating the due grant. Maintenance pauses claims, counts active
-work, defers dispatch commits across the barrier and waits for front backup writers before
+control node requests wake only after validating the due grant. Maintenance pauses claims, counts active
+work, defers dispatch commits across the barrier and waits for the control node backup writers before
 shutdown releases its active count. Online snapshots do not drain interactive inference.
 
 Named-store health, exports, verified recovery, offline transfer and installer audits include
-the new front store and compute grant stream. Front databases/archives contain protected
+the new control node store and compute grant stream. Control node databases/archives contain protected
 job-specific tokens like the benchmark store; compute retains hashes. No new daemon, port,
 dependency or machine key is introduced. The owner subsequently confirmed both installations
 updated, schedule editing working and acceptance passed; P6 was removed from Progression.
@@ -9831,7 +9831,7 @@ selection and pause/resume with no overflow or JavaScript errors. One existing S
 warning remains. An earlier three-second cancellation-test timeout passed both its focused
 rerun and the final full run; no cancellation behavior was changed by P6.
 
-## Accounts on the front machine, milestone 76
+## Accounts on the control node, milestone 76
 
 This section supersedes what sections 5, 13, 16, 17, 18, 20 and 25 say about who keeps the users,
 who checks a key or a password, and how a program on compute knows who is asking. Those sections
@@ -9839,12 +9839,12 @@ remain as the history of how it was before.
 
 ### The idea
 
-The users, their keys and passwords, and the groups are kept on the front machine now, in
+The users, their keys and passwords, and the groups are kept on the control node now, in
 `data/accounts.db` (the named store `weightroom.accounts`). Turnstile checks every caller there.
 Compute keeps no accounts at all. This is so that with two compute machines, or more, there is
 still one place where people and keys are looked after, and one place where a key is checked.
 
-| | Front: turnstile and weightroom | Compute: LoadCoach, ToolLocker, spotter, voice |
+| | Control node: turnstile and weightroom | Compute: LoadCoach, ToolLocker, spotter, voice |
 |---|---|---|
 | Keeps | Users, key hashes, password hashes, authenticator secrets, groups, and a log of what was done to them | No accounts |
 | Checks | Every key, every password and every authenticator code | Turnstile's signed statement, and nothing else about who is asking |
@@ -9854,11 +9854,11 @@ A request goes like this:
 
 1. A harness asks turnstile, with its key, exactly as it asked LoadCoach before.
 2. Turnstile looks the key up in the accounts. A wrong, disabled, ended or revoked key is turned
-   away here, at once, and written to front's log. Nothing is sent on and nothing is woken.
+   away here, at once, and written to the control node's log. Nothing is sent on and nothing is woken.
 3. Turnstile sends the request on without the key. In its place goes a **statement**: who the
    caller is, everything they may do, the address they called from, a nonce, an expiry a minute
    away, and a hash of the method, the path and the body, signed with the **machine key** that
-   front and compute share.
+   control node and compute share.
 4. The program on compute checks the signature, the expiry, the hash and that it has not seen the
    nonce before, and serves the request as that caller.
 5. Its answer carries a **proof**: the nonce signed with the same key. Turnstile passes back no
@@ -9897,7 +9897,7 @@ tools a group is shown, keeps its order.
 their paths, so the site and any harness ask exactly as before: `/loadcoach/sign-in`,
 `/loadcoach/sign-out`, `/loadcoach/me`, `/loadcoach/users...`, `/loadcoach/groups...` and the
 keys. The three rules against raising oneself are unchanged. What is done to an account is
-written to front's own log, in the same file. Compute is asked only for what it alone knows: an
+written to the control node's own log, in the same file. Compute is asked only for what it alone knows: an
 account's usage (`/loadcoach/users/{name}/usage`), whether it has work under way before it is
 renamed (`/loadcoach/users/{name}/rename` on compute renames its batches), and the rest of what
 `/loadcoach/me` says, such as the models and roles. While compute is not answering,
@@ -9932,16 +9932,16 @@ recurring schedule. It is done with what the account may do at that moment, so `
 turnstile for every account, at most every ten seconds, and keeps the answer in memory only.
 The usage report's groups, the per-user spending alerts and the log's member filter ask the same.
 A permission taken away therefore reaches work already queued within ten seconds, and a request
-at once. If front has not answered for a minute, no account is known. This goes when that work
-and those reports move to the front machine (Progression).
+at once. If control node has not answered for a minute, no account is known. This goes when that work
+and those reports move to the control node (Progression).
 
 The ToolLocker and spotter put `Statements` in front of themselves, with the key named in
-LoadCoach's file, and read the caller from it. Spotter no longer signs anyone in: front does that,
+LoadCoach's file, and read the caller from it. Spotter no longer signs anyone in: control node does that,
 whatever compute is doing. Neither opens the users file any more.
 
 ### Voice
 
-The gateway on front makes the model calls now, through turnstile with the caller's own key.
+The gateway on the control node makes the model calls now, through turnstile with the caller's own key.
 For each turn of a direct conversation, compute's voice service sends the gateway a
 `model.request` over the sound socket, with what to ask: the model and the conversation heard so
 far, up to 48,000 bytes. The gateway asks, and hands the answer's words back as
@@ -9966,22 +9966,22 @@ to them are gone. The accounts store is in weightroom's named stores too, so tha
 database page and migrations include it.
 
 The `weightroom` command looks after the accounts: `weightroom user ...`, `weightroom group ...`
-and `weightroom log` work on the front machine's file, as `loadcoach user` and `loadcoach group`
+and `weightroom log` work on the control node's file, as `loadcoach user` and `loadcoach group`
 did on compute's. `weightroom accounts-from FILE` takes the users, keys and groups from a copy of
 compute's `loadcoach.db`, once, for the move. The first groups are in
 `settings/defaults/weightroom.toml` now.
 
 ### Not in it
 
-- The Log page shows compute's log. Sign-ins and changes to accounts are in front's, read with
-  `weightroom log`, until the event log moves to the front machine.
+- The Log page shows compute's log. Sign-ins and changes to accounts are in the control node's, read with
+  `weightroom log`, until the event log moves to the control node.
 - A benchmark task's token and a schedule's grant are still checked on compute.
 - Rotating the machine key, `loadcoach --replace-key` and the emergency mode are milestone 77.
 
 ### Tests
 
 Every test that asks LoadCoach, the ToolLocker or spotter with a key asks it through a real
-turnstile, in one process (`tests/front_helpers.py`): the key is checked on front and the
+turnstile, in one process (`tests/front_helpers.py`): the key is checked on the control node and the
 statement on compute. `Streamed` hands an answer on as the app sends it, since httpx's own ASGI
 transport reads it whole and would hide a stream. `OnCompute` asks a program on compute straight,
 as the `loadcoach` command does. Turnstile is given its own connection to the accounts file, as
@@ -9999,7 +9999,7 @@ caller's key.
 
 The non-collapsible *Machine key* section at the top of Settings → Compute nodes says when the
 selected node's key was last rotated, rotates it immediately, or schedules an interval of 1–3650
-days (zero disables the schedule). Turnstile persists one schedule per node in the front accounts
+days (zero disables the schedule). Turnstile persists one schedule per node in the control node accounts
 store, rechecks that its immutable owner still has `manage-settings`, never wakes or falls back to
 another node, and retries a failed due rotation after one hour with the error visible. WeightRoom
 uses `GET/POST /turnstile/machines/{name}/machine-key`; the old primary route remains compatible.
@@ -10023,11 +10023,11 @@ turnstile each write what was done to their logs.
 
 `loadcoach --replace-key` sets compute's key from the terminal, or a pipe, for when the two
 machines have fallen out of step: a key replaced on one only, or a file restored from a backup.
-Front's key is the file `keys/machine.key`; it is the one to copy.
+Control node's key is the file `keys/machine.key`; it is the one to copy.
 
 ### An emergency
 
-`loadcoach --emergency`, with the service stopped, runs LoadCoach for when the front machine is
+`loadcoach --emergency`, with the service stopped, runs LoadCoach for when the control node is
 down: on 127.0.0.1 only, with no machine key, so anyone on this machine may do anything, as a
 fresh install could, and with its log in memory, gone when it stops. It refuses while
 `loadcoach.service` runs. From another machine it is reached through ssh:
@@ -10042,11 +10042,11 @@ request signed with the old one still counts, and compute takes a new key only t
 turnstile; the Settings card; `--replace-key`; and an emergency that answers without a key, keeps
 nothing in the log, and will not start beside the running service.
 
-## Roles, their evidence and reliability on the front machine, milestone 83
+## Roles, their evidence and reliability on the control node, milestone 83
 
-Benchmark runs, their samples and the evidence made from them were on the front machine already
+Benchmark runs, their samples and the evidence made from them were on the control node already
 (milestone 76 and after). What compute still kept was the roles, the evidence published from those
-runs, and how reliably each model has answered. All three are kept on front now, in
+runs, and how reliably each model has answered. All three are kept on the control node now, in
 `data/roles.db` (the named store `weightroom.roles`), beside the accounts. Compute keeps none of
 them. Its own tables are left as they were, unread, as the way back.
 
@@ -10098,7 +10098,7 @@ answer is judged by turnstile as it passes, keeping a copy, with `judged()`:
 
 A compute that restarts in the middle of an answer looks like a break from here, and counts as an
 error. A request that leaves nothing behind has no number and is not kept. The outcome is
-recorded on front; if that fails, it is put in turnstile's log as `record-failed`, and the answer
+recorded on the control node; if that fails, it is put in turnstile's log as `record-failed`, and the answer
 is not affected. Turnstile prunes outcomes older than seven days once a day.
 
 Batch requests are answered inside compute and do not pass turnstile, so they are not judged. A
@@ -10123,31 +10123,31 @@ what the worker is told.
 
 `weightroom roles-from FILE`, with turnstile stopped, takes the roles, all reliability state and
 the last seven days of outcomes from a copy of compute's `data/loadcoach.db`, and publishes the
-evidence again from front's benchmark store. It refuses if there are roles on front already.
+evidence again from the control node's benchmark store. It refuses if there are roles on the control node already.
 
 ### Tests
 
 `tests/test_roles.py`, `tests/test_reliability.py`, `tests/test_role_evidence.py`,
 `tests/test_reliability_pages.py` and `tests/test_alerts.py` now run against roles and
-reliability kept by turnstile. New: a role named in a batch is picked on front, and a role with
+reliability kept by turnstile. New: a role named in a batch is picked on the control node, and a role with
 nothing to pick ends that line with 503 (`tests/test_batches.py`); `roles-from` moves once,
-leaves compute's copy, and publishes the definitions from front (`tests/test_roles.py`).
+leaves compute's copy, and publishes the definitions from the control node (`tests/test_roles.py`).
 
-## The event log on the front machine, milestone 91
+## The event log on the control node, milestone 91
 
-The log that is kept is front's now. Compute still writes every entry as it happens, into its own
+The log that is kept is the control node's now. Compute still writes every entry as it happens, into its own
 `events` table, because a request is checked against it while it runs: hosted spending, a trace's
 level, text already seen in a trace. It no longer chains them (`Log(chained=False)`). The chain is
-made on front only.
+made on the control node only.
 
 ### Sending
 
 `Accounts.send_log` in `loadcoach/front.py` runs for as long as LoadCoach does. Every two seconds
-(`SEND_EVERY`) it takes the entries front does not have (`Log.unsent`: those after the number in
+(`SEND_EVERY`) it takes the entries control node does not have (`Log.unsent`: those after the number in
 the table `forwarded`), with the full texts of the requests among them that have ended, and posts
-them to `/turnstile/log`, signed with the machine key. When front has them, `Log.sent` moves the
-number on. Whatever has not been sent stays where it is, however long front is away: compute's own
-log is the spool. Of what front has, compute keeps a day (`SENT_KEPT`), and `prune` removes the
+them to `/turnstile/log`, signed with the machine key. When control node has them, `Log.sent` moves the
+number on. Whatever has not been sent stays where it is, however long control node is away: compute's own
+log is the spool. Of what control node has, compute keeps a day (`SENT_KEPT`), and `prune` removes the
 rest; traces and seen texts keep `keep_days` as before.
 
 Before it shows the log, turnstile asks compute to send what it has right now
@@ -10156,33 +10156,33 @@ Compute is not woken for that.
 
 ### Keeping
 
-On front, `Log.take` adds each entry to front's own log, in `data/accounts.db`, with its time,
+On control node, `Log.take` adds each entry to the control node's own log, in `data/accounts.db`, with its time,
 the machine it came from (`machine`) and compute's number for it (`source`), and chains it as it
 comes, with turnstile's own entries (sign-ins, account and role changes) in the same chain. An
 entry that is there already is not taken twice. `weightroom log verify` checks the whole chain.
 
-Front keeps the log `keep_days` days, 90 unless `[turnstile]` says otherwise (0 keeps everything),
+Control node keeps the log `keep_days` days, 90 unless `[turnstile]` says otherwise (0 keeps everything),
 and turnstile prunes it once a day. It removes only from the start of the chain: everything before
 the first entry young enough to keep. Entries from compute can be older than ones made here before
 them, most of all those moved at once, so a few old ones may stay a while; what is left always
 verifies. The accounts' own record, kept for good until now, is held to the same length.
 
 A request keeps compute's number. It is the one callers were given, and `of` in later entries
-means it. Entries in the log have front's numbers (`id`); a request's entries also say `source`.
-Renumbering requests on front is for when there is a second compute machine (Progression).
+means it. Entries in the log have the control node's numbers (`id`); a request's entries also say `source`.
+Renumbering requests on the control node is for when there is a second compute machine (Progression).
 
 ### Pages
 
 Turnstile answers, in `turnstile/events.py`, at the old paths: `/loadcoach/events` and
 `/loadcoach/events/{id}`, `/loadcoach/event-choices`, `/loadcoach/requests` and
 `/loadcoach/requests/{number}`, `/loadcoach/usage`, `/loadcoach/account-events`. An account's
-usage on its page is counted from front's log. How far a request still under way has got, and what
+usage on its page is counted from the control node's log. How far a request still under way has got, and what
 has come back so far, is still compute's: Status, Peek and Stop. A request's page still under way
 asks compute's Peek how far it has got, without waking it.
 
 How fast each model answers, how long it last took to load and when it was last used are read
-from front's log, which reaches further back than compute's day (`/turnstile/log-facts`,
-`Accounts.log_facts`), once a minute, and from compute's own day when front does not answer.
+from the control node's log, which reaches further back than compute's day (`/turnstile/log-facts`,
+`Accounts.log_facts`), once a minute, and from compute's own day when control node does not answer.
 
 The usage report prices a hosted answer recorded without its cost by compute's prices for its
 hosted models, which compute sends with its entries, and also when turnstile asks it to send before
@@ -10193,7 +10193,7 @@ such an answer is not priced.
 
 `weightroom log-from FILE`, with turnstile stopped and before compute's new LoadCoach starts,
 takes every entry and every text from a copy of compute's `data/loadcoach.db`, in order. Compute
-then sends what it has from its beginning once; front already has those and skips them.
+then sends what it has from its beginning once; control node already has those and skips them.
 
 ### Not in it
 
@@ -10206,7 +10206,7 @@ then sends what it has from its beginning once; front already has those and skip
 Requests has inclusive minimum/maximum filters for the displayed public request number,
 request date/time and completed duration in seconds. Model, user, IP and status are exact
 dropdown selections. Native/provider/adapter catalogs and account membership supply options;
-request rows never seed them. IP options come from the client-access registry on the front.
+request rows never seed them. IP options come from the client-access registry on the control node.
 The current URL retains filters through pagination and completed-list polling. Date inputs
 use WeightRoom's selected timezone, falling back to its server's local timezone. Unfinished
 requests have no duration and are excluded by duration bounds. Old or deleted selections in
@@ -10232,7 +10232,7 @@ access**; retained request/audit rows are never rewritten or assigned an inferre
 For browser traffic, WeightRoom carries its observed socket IP across its internal HTTP hop
 using a short-lived, nonce-protected HMAC bound to the HTTP method, complete path/query and
 bearer credential. This does not buffer request bodies or uploads. Turnstile verifies it with
-the existing private front key before recording access or signing the client origin for
+the existing private control node key before recording access or signing the client origin for
 compute. Unsigned, altered, replayed and credential-mismatched claims cannot replace the peer
 address. Untrusted `X-Forwarded-For` headers add no authority at this boundary; the external
 HTTP server must continue trusting only its actual reverse proxies. Direct API clients retain
@@ -10281,31 +10281,31 @@ or one second and a two-second shutdown flush. SQL transactions contain at most 
 optional records and yield between commits so shared-store audit writes can proceed. Pressure samples successes first; hard failure
 can lose optional error detail too, with reason counters. Required audit writes retain their
 existing failure behavior and durability. Optional SQLite node-spool connections use WAL
-NORMAL and background passive checkpoints; required audit and front receipt connections keep
+NORMAL and background passive checkpoints; required audit and the control node receipt connections keep
 FULL durability. An abrupt power loss can discard unforwarded optional detail; replayed
 acknowledgements are deduplicated. No production power-failure test is implied. Minute metrics
-are kept thirty days. What front keeps of spans is set in `weightroom.toml` and applied when
+are kept thirty days. What control node keeps of spans is set in `weightroom.toml` and applied when
 weightroom starts (LOG migration 8 stores it in `observation_policy`, beside the spans, so every
-writer and pruner of front's store follows it): `observation_keep_days` (1–30, default 7),
+writer and pruner of the control node's store follows it): `observation_keep_days` (1–30, default 7),
 `observation_success_percent` (0–100, default 100) and `observation_max_spans` (0, the default,
 is no cap; spans arriving in one batch share an arrival time, so the cap can be passed by up to
 one batch). Spans that did not succeed are always kept; of all-successful spans, the same share
 of traces is kept whole, chosen from the trace ID. Unkept spans still count in the minute
-metrics. Polling (`/loadcoach/status`, `/v1/models`, facts, log forwarding) made most of front's
+metrics. Polling (`/loadcoach/status`, `/v1/models`, facts, log forwarding) made most of the control node's
 941,000 spans in a week on 2026-10-22, so a low percent saves the most. A forwarding node
-deletes spans front has acknowledged after an hour instead of keeping its own week of copies.
+deletes spans control node has acknowledged after an hour instead of keeping its own week of copies.
 
 Routine polls are not kept. `observation_quiet_routes` (default: LoadCoach status, models, facts,
 me, send-log, plugin mirror, observation metrics, alert evidence and downloads, plus
 `/spotter/now`, `/spotter/alert-evidence`, `/voice/ready` and `/turnstile/ready`; `[]` keeps them)
 names them. Each service
-starts its own ingress span, so the prune sweep (front, hourly, LOG migration 9) removes a trace
+starts its own ingress span, so the prune sweep (control node, hourly, LOG migration 9) removes a trace
 only when every span succeeded and every service it entered through has a quiet route, once
 nothing in it has arrived for ten minutes; its ID goes into `observation_quiet` for a day so late
 spans from compute are not stored. A chat request whose routing looks up `/loadcoach/facts` also
 entered turnstile on `/v1/...`, so it is kept. Swept spans still count in the minute metrics.
 Turnstile's catch-all routes record these exact paths instead of their template; other paths
-keep the template, so no IDs are recorded. On a copy of two days of front's spans (2026-10-22),
+keep the template, so no IDs are recorded. On a copy of two days of the control node's spans (2026-10-22),
 the sweep removed 139,470 polls (200,000 of 791,941 spans, 130 MB of 519 MB) and kept all 573
 chat/completion traces; 103,393 more traces (419,000 spans), mostly Spotter and Voice readiness
 polls through turnstile's other ports, carried only the template and are recognised once the new
@@ -10335,14 +10335,14 @@ new external-provider spending test was performed. The owner's clean reinstall r
 Implemented locally **2026-10-15** at the owner's request. The owner confirmed all checks
 passed and completion **2026-10-15**; C03 is removed from pending
 [Agent backlog](agent-status.md#proposals). This confirmation is separate from the implementation's
-local test evidence. Matching front request-page and compute diagnostic code was present in
+local test evidence. Matching control node request-page and compute diagnostic code was present in
 the live installation on 2026-10-16; the original local tests did not themselves establish delivery.
 
 Open an existing request link from Status, Requests or AI Logs. Its page remains
 `/requests/ID`; there is no separate dashboard or diagnostics service. `loadcoach/diagnostics.py`
 contains the bounded timing observer and metadata presentation. Compute attaches its version-1
 `diagnostics` object to the request ending in the existing event log. Milestone 91 forwards it
-to front under the existing signed, deduplicated log protocol and covers it with the existing
+to the control node under the existing signed, deduplicated log protocol and covers it with the existing
 audit chain. No extra store, schema migration, listener or dependency is introduced.
 
 ### Evidence and its limits
@@ -10358,7 +10358,7 @@ audit chain. No extra store, schema migration, listener or dependency is introdu
 | First generated output | First actual streamed output observed on compute, including queue/loading; role-only events, usage and heartbeats do not count. It is not a tokenizer-level or client-visible TTFT |
 | Prompt processing / native generation | Nonnegative, finite `timings.prompt_ms` / `timings.predicted_ms` reported by the upstream, converted to seconds. These overlap the wall-clock stages and are never added to them |
 
-Authentication, front routing, wake time and delivery to the caller are outside compute's
+Authentication, control node routing, wake time and delivery to the caller are outside compute's
 timing boundary. Streaming observation handles arbitrary HTTP chunk boundaries and discards
 oversized SSE lines without changing the forwarded bytes. Stage history is capped at 128
 entries; at most 64 tool names of 256 characters are retained, without arguments. Native
@@ -10397,7 +10397,7 @@ also returns `distribution`. Metadata retains own-request/`see-log` authorizatio
 of own-text/`see-capture`. Model lifecycle evidence is operator-only, and trace/aggregate
 queries enforce the caller's scope. `GET /loadcoach/diagnostics/ID` on compute exposes only
 volatile progress/timing metadata under own-request/`see-log` checks; `peek` continues to guard
-response text with `see-capture`. Front asks without waking compute. Retained diagnostics are
+response text with `see-capture`. Control node asks without waking compute. Retained diagnostics are
 readable offline; unavailable live output or feedback eligibility does not hide the page.
 
 Unlogged requests instantiate no diagnostic observer and write no timing, tool names or
@@ -10420,7 +10420,7 @@ One existing Starlette/httpx deprecation warning remains. No production GPU infe
 ## Validated model setup and presets (C05, milestone 93)
 
 Implemented locally **2026-10-15** in the existing model editor and llama-server scheduler.
-Front and compute were deployed by **2026-10-16**. A real Qwen3.8 Q6 request passed at its
+Control node and compute were deployed by **2026-10-16**. A real Qwen3.8 Q6 request passed at its
 131,072-token minimum context after a reviewed configuration change. On 2026-10-16,
 disposable CPU aliases passed live active-work, hold and model-lock preview/apply/undo
 without changing resident processes; a stale undo returned 409. Shared Qwen3.8 Q4/Q6
@@ -10523,7 +10523,7 @@ operation, followed by its editor.
   characters); `replace: true` explicitly authorizes overwrite. It never applies settings.
 - `delete-preset` takes the model and preset name. It never alters model settings.
 
-Every action requires `manage-models` through the existing signed front identity. Web forms
+Every action requires `manage-models` through the existing signed control node identity. Web forms
 retain origin/CSRF checks; model audit events record mutations. No credential, listener,
 dependency or background service is added. The optimistic token binds identity/file revision,
 current/proposed settings/order, defaults, configured/enabled cards, engine executable stat/help
@@ -10589,7 +10589,7 @@ Implemented locally **2026-10-15**, following the owner's choice of an optional 
 editable through the existing Settings page/API. The ordinary `max_wait` timeout still applies
 after admission. Per-group overrides remain a future extension.
 
-`loadcoach/waiting.py` supplies the same calculations to `Runner.acquire` and front's role
+`loadcoach/waiting.py` supplies the same calculations to `Runner.acquire` and the control node's role
 selection. At arrival, before enqueueing, compute snapshots work already running and earlier
 queued work at the same or higher priority. Only potentially overlapping GPU devices count;
 CPU work is conservatively serialized too. A compatible ready server with a spare parallel
@@ -10600,7 +10600,7 @@ existing scheduler's decision, preserving active work, model locks, holds and en
 
 Rates are historical measurements: mean generation speed and native prompt speed from the
 latest 20 qualifying records, and the last recorded load duration. Compute reuses the existing
-minute cache of front's log facts, falling back to its retained log. Native prompt speed is
+minute cache of the control node's log facts, falling back to its retained log. Native prompt speed is
 read from structured `timings.prompt_per_second`, never answer text, and forwarded in the
 existing signed event stream; no new store is created. These are historical per-name rates,
 not a guarantee for changed model configurations, prompt shapes or contention.
@@ -10653,7 +10653,7 @@ and 35 usage/admission/Dry fit checks. The new checks cover concurrent inference
 device overlap, spare parallel slots, missing rates and budgets, unknown/known refusal headers,
 settings disable/reset, unchanged holds, request-size-dependent fast-role picks, and benchmark
 preemption/resume with the limit enabled. One existing Starlette/httpx warning remains.
-An exposed usage-fixture race was corrected by giving its second front client independent
+An exposed usage-fixture race was corrected by giving its second control node client independent
 connections to the same database files, matching separate processes; production database
 connection behavior was unchanged. Reports and captures are under ignored `data/m96-verification/`.
 No production service or real model was changed.
@@ -10721,7 +10721,7 @@ and group `max_hold` limits keep their existing behavior. Runtime leases are vol
 and never automatically reload models after a restart. Definitions and undo survive restart.
 
 `GET /loadcoach/loadouts` requires `manage-models` and returns saved versions, `max_members: 16`,
-and the caller's leases. Front clients use **GET/POST `/turnstile/machines/{name}/control/loadouts`**
+and the caller's leases. Control node clients use **GET/POST `/turnstile/machines/{name}/control/loadouts`**
 to address a configured node explicitly, including `compute`. The gateway signs the original caller,
 preserves admission priority/lock headers, never wakes a host, and never falls back to another node.
 Same-named sets and leases on different nodes are independent. The local worker API remains available
@@ -10772,7 +10772,7 @@ headroom, other use, model-RAM limits and the separate cgroup ceiling stay visib
 tuning load nothing; existing Select/replace/review/apply/request/renew/release/undo/delete actions
 retain their checks, origin protection and escaped names. Every form preserves its selected node.
 
-For a set already saved on `rig`, review it first (replace the URL/key with your front API values):
+For a set already saved on `rig`, review it first (replace the URL/key with your control node API values):
 
 ```bash
 curl --fail-with-body "$OWG_URL/turnstile/machines/rig/control/loadouts" \
@@ -10825,14 +10825,14 @@ qualification are pending; no production service was changed.
 
 ## Abstention benchmark (Part 1, milestone 98)
 
-Implemented locally **2026-10-15** using the existing registry, front durable worker and
+Implemented locally **2026-10-15** using the existing registry, control node durable worker and
 LoadCoach prompted probe. `abstention-v1` freezes 20 seeded six-question project passages:
 120 checks, 60 supported values and 60 nulls, with 15 each for never mentioned, value not
 given, another project's value and false-premise questions. Present accuracy, absent-null
 accuracy, invented-value rate and each absence category are reported as separate KPIs.
 
 Only question text reaches native inference; expected values and source metadata remain in
-the front evidence store. Complete questions are not truncated to fit small contexts. Native
+the control node evidence store. Complete questions are not truncated to fit small contexts. Native
 token receipts establish length, not the approximate 300–2,000-token passage targets. The
 existing freeze, pause, restart, cancellation and version checks remain authoritative.
 Scripted null-only and first-typed-value baselines score 50% and 10.83%; missing keys earn no
@@ -10842,10 +10842,10 @@ from pending progression. See the
 
 ## Table reasoning benchmark (Part 2, milestone 99)
 
-Implemented in `benchmarks/suites/tables.py`, using the existing registry, front durable
-worker and LoadCoach prompted probe. `tables-v6` / protocol 8 was deployed on front on 2026-10-18. The contract and checker evidence are in [the benchmark guide](../benchmarks/README.md#quality-suites);
+Implemented in `benchmarks/suites/tables.py`, using the existing registry, control node durable
+worker and LoadCoach prompted probe. `tables-v6` / protocol 8 was deployed on the control node on 2026-10-18. The contract and checker evidence are in [the benchmark guide](../benchmarks/README.md#quality-suites);
 Native representative qualification is complete; [results and limits](benchmarks/qualification-2026-10-15.md#representative-results-and-limits--2026-10-17).
-Table grader 4, deployed and saved-answer regrading verified on front on 2026-10-17, scores
+Table grader 4, deployed and saved-answer regrading verified on the control node on 2026-10-17, scores
 136 independent list-element/scalar checks. Format/category KPIs, unavailable-case handling and durable
 pause/resume are unchanged. Native inference receives question text without answer keys;
 no generated code is executed.
@@ -10854,7 +10854,7 @@ no generated code is executed.
 
 Implemented locally **2026-10-15** in the existing voice service/gateway and System → Voice.
 Compute reports receive-endpoint, recognition, first phrase/synthesis and first-PCM durations;
-front measures first playback progress and negotiated client queue-clear acknowledgement.
+control node measures first playback progress and negotiated client queue-clear acknowledgement.
 No clock is subtracted across machines. The private gateway retains at most 200 numeric
 turn records/24 hours since start, with grouped p50/p95 and newest twenty rows; journals retain
 numeric events under existing policy. No database, speech capture or credential is added.
@@ -10888,7 +10888,7 @@ request; the supported unload control cleared it and that request began loading.
 regression-tested dispatcher correction also reaps dead `probing` servers, which never become
 ordinary-ready; reuse rejects a dead or replaced kept server before cancelling its watcher.
 Calibration ownership remains unchanged. These corrections were deployed on 2026-10-17 from
-a reviewed 56-file runtime snapshot; authenticated front status/model inventory passed and
+a reviewed 56-file runtime snapshot; authenticated control node status/model inventory passed and
 unsigned direct access was denied. [Private deployment receipt](../data/qualification/gates-2026-10-16/compute-runtime-deployment.json).
 
 The existing compatible bound is 1–40 messages (it was 1–32 before milestone 121), with system/user/assistant/tool roles, text
@@ -10913,7 +10913,7 @@ are preserved; `jinja` is not injected or removed, and reasoning stays as served
 uncached prompt counts must match exact token IDs, output counts must fit the budget and
 32 tokens remain for context bookkeeping. Facts and histories are never truncated. Evidence
 keeps the rendered input/digest, complete native assistant message (including parsed calls
-and reasoning), native usage/timings and requested format. The front run page exposes these
+and reasoning), native usage/timings and requested format. The control node run page exposes these
 in an escaped **Native conversation response** section. The probe executes no tools; P4's
 caller-owned controlled mock worlds continue using their existing executor.
 
@@ -10939,10 +10939,10 @@ service or real model was changed.
 
 ## Multi-turn consistency benchmark (Part 6, milestone 102)
 
-`turns-v5` / protocol 6 (milestone 121) was deployed on front on 2026-10-18.
+`turns-v5` / protocol 6 (milestone 121) was deployed on the control node on 2026-10-18.
 The case, grammar, sampler and checker contract is in [the benchmark guide](../benchmarks/README.md#multi-turn-consistency-part-6-milestone-102).
 The existing durable worker and native-message probe retain raw responses, token receipts,
-pause/resume and foreground yielding. Keys remain on front; no model output is executed.
+pause/resume and foreground yielding. Keys remain on the control node; no model output is executed.
 Field grader 3 and historical grades are unchanged. Representative native qualification
 completed on 2026-10-18; [retained results and limits](benchmarks/qualification-2026-10-15.md#representative-results-and-limits--2026-10-17)
 separate numeric calibration from the corrected fixture contract.
@@ -10959,7 +10959,7 @@ The original implementation and verification below describe protocol 3.
 Implemented locally **2026-10-15** in the existing JSON suite. Protocol 3 / dataset
 `json-schema-paired-v3` keeps the fifteen free requests and their strict grading, then adds
 fifteen native constrained partners. Each partner uses the exact free question in one user
-message plus that case's own JSON Schema as `response_format`. The normal front worker,
+message plus that case's own JSON Schema as `response_format`. The normal control node worker,
 isolated scheduler, task identity, context guard, adapters and native conversation receipts
 are reused. No model judge, second executor or generated-code execution is added.
 
@@ -10984,7 +10984,7 @@ See [the paired protocol](../benchmarks/README.md#paired-json-and-schema-part-7-
 Verification passed all 968 full-suite tests with zero skips in 554.76 seconds, including ten
 new checks, disposable PostgreSQL and Chromium at 1440/390/320 pixels. A final 79-check focused
 run also passed. Full-run fixes preserve legacy retrieval renders without metrics and keep a
-plugin test's front SQLite connection on its existing portal loop; production connection
+plugin test's control node SQLite connection on its existing portal loop; production connection
 behavior was not changed. One existing Starlette/httpx deprecation warning remains. No real
 model or production service was changed.
 
@@ -10998,7 +10998,7 @@ work; no external tools or model-generated code execute. Strict v2 completion ch
 schema, required values, extras, exact call count and actual observed lookup dependencies.
 Separate cards expose argument validity and no-call errors. Independent calls can be reordered.
 Eight model turns and twelve calls bound each fresh world; interruption replays only unfinished
-cases. Hidden fixture keys remain on front. Saved v1 P4 traces retain their original scores;
+cases. Hidden fixture keys remain on the control node. Saved v1 P4 traces retain their original scores;
 recovery keeps its twelve-case contract. Shared implementation stamps may reject unfinished
 old tool-use/recovery plans rather than mix sources. Delivery is recorded in [milestone 104](agent-status.md#milestones); expanded real-model
 representative qualification cleared 2026-10-18 ([results and coverage](benchmarks/qualification-2026-10-15.md#representative-results-and-limits--2026-10-17)). See [the protocol and compatibility boundary](../benchmarks/README.md#expanded-tool-use-part-8-milestone-104).
@@ -11033,7 +11033,7 @@ refuse 400. They are stripped from native-server requests. Collection clients ad
 verify the receipt and refuse old compute lacking the advertised guard. This closes model-name
 reuse between a catalogue read and dispatch without a second inference path.
 
-The front `knowledge` extra adds pypdf 6.20.1. The fixed Linux parser has resource/time bounds;
+The control node `knowledge` extra adds pypdf 6.20.1. The fixed Linux parser has resource/time bounds;
 it never executes PDF JavaScript, source instructions or generated code. Deployment order,
 source limits, context/pooling requirements, deletion and qualification boundaries are in
 [the maintained collection guide](collections.md).
@@ -11053,7 +11053,7 @@ and invented source IDs. Source/model/context changes refuse visibly. Cancellati
 leave resumable state; account deletion cancels/cleans private records. Existing maintenance drain
 counts accepted background steps. `weightroom.chat` migration 4 adds prompt/run/attempt tables
 without a new database binding or dependency. The Hermes bridge remains the wrapper for native
-agent sessions; these records, kept on the front, do not inherit its shared profile files/credentials.
+agent sessions; these records, kept on the control node, do not inherit its shared profile files/credentials.
 
 Request receipts are retained when headers arrive. Usage/cost reconcile against existing normal
 request records with trace matching; unknown/unpriced/incomplete values stay unavailable, and an
@@ -11063,7 +11063,7 @@ The private internal `/loadcoach/workflows` routes and console controls are docu
 
 ## Advisory spending allowances (C07, milestone 107)
 
-The owner selected soft enforcement. Settings → Spending allowances and front
+The owner selected soft enforcement. Settings → Spending allowances and the control node
 `GET/POST /loadcoach/allowances` reuse the accounts store and ordinary event log. Optional
 rolling 24-hour USD policies cover immutable users, persistent keys and pooled named groups;
 zero disables them. Existing hosted spending ceilings remain unchanged. No reservation or
@@ -11072,12 +11072,12 @@ delivery are separate; model/mock prices do not fill missing costs.
 
 Ordinary compute starts/endings now retain signed-caller account/key attribution and group
 snapshots. Renames preserve attribution; old records are not guessed into a new identity.
-`loadcoach.users` migration 4 adds one policy table beside front accounts. Matching front
-handlers/page and compute attribution code are deployed; the live front policy table exists.
+`loadcoach.users` migration 4 adds one policy table beside control node accounts. Matching control node
+handlers/page and compute attribution code are deployed; the live control node policy table exists.
 Manager policy edits, restricted access, signed attribution and honest unknown/missing-ending
 coverage passed bounded qualification on 2026-10-17; [receipts and limits](allowances.md#storage-api-and-deployment). The unresolved-request count writes
 `+e.at` so SQLite searches endings by the `events_request_parent` index; the plain time
-bound made it scan every earlier request (41 s on the front's 48k events, which stalled
+bound made it scan every earlier request (41 s on the control node's 48k events, which stalled
 turnstile and showed "Compute is not answering"). See [the allowance contract](allowances.md)
 for permissions, exact window/coverage, deletion, API and rollback.
 
@@ -11091,7 +11091,7 @@ task door accepts `outputs` up to 32,768, and a native answer may take up to an 
 a unique exhaustive solution; independent tests parse the exact printed data. The existing
 native conversation probe and durable worker retain unpadded inputs, final answers, native
 reasoning, total output counts and explicit unsupported coverage. No expected answers or
-solvers leave front, and no generated code executes. All-correct puzzles are reported apart
+solvers leave control node, and no generated code executes. All-correct puzzles are reported apart
 from field accuracy. See [the suite contract](../benchmarks/README.md#multi-step-reasoning--part-3-milestone-108).
 
 The native probe now exposes an optional valid integer reasoning count from
@@ -11137,11 +11137,11 @@ evidence/grader versions are preserved.
 
 ## Turnstile report hardening (milestone 118)
 
-The front Turnstile runs event, usage and model-timing history reports on independent read-only database connections
+The control node Turnstile runs event, usage and model-timing history reports on independent read-only database connections
 in worker threads. SQLite reports use a query deadline; PostgreSQL reports use a statement
 timeout. Overdue reports return 503 without holding model-request handling. Home summary calls
 use a three-minute cache scoped to the account, permissions and filters; Logs → Usage remains
-uncached and exact. The front web console sets the Home marker only for its summary cards.
+uncached and exact. The control node web console sets the Home marker only for its summary cards.
 Request lists use indexed, machine-scoped ending lookups rather than aggregating the entire
 ending history for each page; filters, totals and pagination retain their existing behavior.
 WeightRoom's benchmark listings and role-evidence snapshots use the same bounded readers;
@@ -11151,15 +11151,15 @@ before sending a success status to the client. A compute connection lost before 
 returns 502. A connection lost mid-stream cannot change an already-sent status.
 
 The implementation and local interrupted-SQL/slow-report regressions passed on 2026-10-16.
-It was deployed to front the same day. A live Home usage call returned cache `miss`, then `hit`,
+It was deployed to the control node the same day. A live Home usage call returned cache `miss`, then `hit`,
 while an ordinary Usage call stayed uncached. Twelve concurrent event reports each returned 200
 with about 480 KB of data in 0.62–1.18 seconds; a warmed local inference returned 200 in
 0.063 seconds while all twelve reports were still active. Stopping primary compute during a
 nonstreaming response returned 502 with `RemoteProtocolError` before the caller received an
 incomplete answer. Primary was restarted and a normal request succeeded.
 
-The 2026-10-25 page-load follow-up was deployed on compute, front and the remote CPU host
-after work drained. Against front's retained history, identical personal request results took
+The 2026-10-25 page-load follow-up was deployed on compute, control node and the remote CPU host
+after work drained. Against the control node's retained history, identical personal request results took
 0.037 s instead of 0.812 s; all-request results took 0.228 s instead of 0.951 s. After correcting
 the service release selection, Chrome Benchmark navigation measured 1.9 s against the earlier
 10.1 s baseline. Regression checks cover restart metadata reuse,
@@ -11169,13 +11169,13 @@ by missing historical files under `data/qualification`; no evidence was regenera
 
 ## DB1 ownership and compute retirement (milestone 124)
 
-Front owns external task records, tokens, batches, finish receipts, evidence publication,
+Control node owns external task records, tokens, batches, finish receipts, evidence publication,
 schedule grants and settings for WeightRoom, Turnstile and Voice gateway. Compute retains
 native execution and operational state. No additional service, port or credential is introduced.
 
 ### External benchmark task contract
 
-`turnstile/tasks.py` stores tasks in front's existing accounts/batch store. Creation writes
+`turnstile/tasks.py` stores tasks in the control node's existing accounts/batch store. Creation writes
 the input file, one-item batch, line and token hash atomically, with immutable account/machine
 ownership. Cancellation and finish update task/batch state in one transaction. Finish claims
 an open batch once; identical retries reuse its receipt and changed finishes are refused.
@@ -11183,13 +11183,13 @@ Evidence must match the frozen model ID, weights/settings fingerprint, benchmark
 engine/machine environment. Publication rechecks current owner/model permissions; its durable
 outbox retries interrupted publication through normal housekeeping/startup paths.
 
-Before every probe, front checks the account's current `benchmark` permission, model allowance,
+Before every probe, control node checks the account's current `benchmark` permission, model allowance,
 immutable identity, task state and token scope. A task token is never a general API key.
 Task and associated-file authorization preserves immutable identities through history imports
-and deleted/recreated usernames. Front's persisted owner wins merged batch lists; retained
+and deleted/recreated usernames. Control node's persisted owner wins merged batch lists; retained
 compute rollback copies are not counted twice.
 
-Front freezes a signed subject from one eligible LoadCoach: machine, model ID, weights hash,
+Control node freezes a signed subject from one eligible LoadCoach: machine, model ID, weights hash,
 fingerprint, settings and engine/machine environment. Matching model names at different nodes
 require verified equal weights. New tasks use fresh inventories; accepted tasks never change
 their frozen machine. If it is unavailable, retry the incomplete sample after it returns;
@@ -11197,7 +11197,7 @@ a different machine or environment requires a new run, not mixed samples or sile
 
 Dispatch uses a bounded signed request binding method/path/body and purpose `front-probe`;
 ordinary forwarded caller statements and public direct-dispatch routes cannot invoke it.
-Subject responses advertise dispatch protocol 1; front refuses incompatible compute before
+Subject responses advertise dispatch protocol 1; control node refuses incompatible compute before
 allocating ownership. `loadcoach/tasks.py` reuses `Probes`, retaining compute admission,
 foreground preemption, kept servers, telemetry, the probe lock and process cleanup. Compute
 rechecks current settings, stable model ID, fingerprint and engine/machine environment before
@@ -11205,14 +11205,14 @@ touching a GPU. It serializes each task through cleanup and retains a bounded co
 cache indexed by task/attempt; the worker supplies stable per-sample probe IDs. A retry cannot
 overlap its earlier attempt.
 Disconnect/interruption stops that probe and leaves the task open; only a completed receipt
-becomes a saved sample. Compute cannot create/finish front batches or publish role evidence.
+becomes a saved sample. Compute cannot create/finish control node batches or publish role evidence.
 
 The worker retains scoped tokens in its private benchmark store. Scheduled benchmarks use the
-same front creation/current-permission checks and matching grant ownership, scoped token,
+same control node creation/current-permission checks and matching grant ownership, scoped token,
 due-time and occurrence-ID rules. Scheduled backups still use compute's guarded backup route
-and pair with front's existing worker; no parallel scheduler is introduced.
+and pair with the control node's existing worker; no parallel scheduler is introduced.
 
-The front always creates and keeps benchmark task records and sends each task to the node it
+The control node always creates and keeps benchmark task records and sends each task to the node it
 is placed on; `[turnstile] allow_caller_to_specify_destination` (Settings → General, default
 on) only decides whether a caller may name that node. Unknown IDs (tasks and schedules a node
 created before this) keep their route to that node. Never dual-write or reassign an accepted
@@ -11229,7 +11229,7 @@ the tables to `benchmark_tasks`, `benchmark_task_evidence`, `benchmark_task_fini
 `benchmark_task_reservations`. The settings are described in
 [installation](operations.md#db1-ownership-and-retirement-milestone-124). After retirement,
 a node refuses local task, batch and schedule creation. Compute's API/CLI refuse the
-settings the front keeps while preserving its own settings and grants.
+settings the control node keeps while preserving its own settings and grants.
 
 `db.consolidation` compares offline snapshots; `db.consolidation_import` previews and verifies
 history imports. `tasks|grants --apply` inserts only missing records and compares every source

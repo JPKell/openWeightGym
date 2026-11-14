@@ -27,7 +27,7 @@ def test_stale_report_describes_front_receipt_and_recording_without_inventing_ca
     rows, _ = observation_conditions(report(), now=100)
     row = find(rows, 'freshness')
     assert row['active'] is True
-    for text in ('LoadCoach on node compute', 'front\'s Turnstile', 'POST /turnstile/log',
+    for text in ('LoadCoach on node compute', 'control node\'s Turnstile', 'POST /turnstile/log',
                  '60.0 seconds before this check', 'less than 60 seconds', 'recording=true',
                  'does not prove that a service crashed'):
         assert text in row['explanation']
@@ -95,7 +95,7 @@ def test_active_episode_message_refresh_preserves_identity_and_acknowledgement(t
     refreshed = store.rows(open_only=True)[0]
     assert refreshed['id'] == original['id'] and refreshed['first_at'] == 90
     assert refreshed['acknowledged_by'] == 'jordan'
-    assert 'Front last received' in refreshed['explanation']
+    assert 'Control node last received' in refreshed['explanation']
     store.db.close()
 
 
@@ -141,7 +141,7 @@ def test_live_stale_alert_links_to_open_metrics_and_shows_recorded_health(desk, 
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/alerts?source=observability&q=compute')
-        playwright.expect(page.locator('#inspector [data-explanation]')).to_contain_text('Front last received')
+        playwright.expect(page.locator('#inspector [data-explanation]')).to_contain_text('Control node last received')
         playwright.expect(page.locator('[data-related-services]')).to_contain_text('loadcoach.service')
         page.get_by_text('Host journal commands', exact=True).click()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')

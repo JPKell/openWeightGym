@@ -229,7 +229,7 @@ def test_task_tokens_are_scoped_and_permissions_are_rechecked(fake_llama_server,
         path='/loadcoach/tasks/'+first['id']
         assert caller.get(path,headers=scoped).json()['allowed']
         assert caller.post('/loadcoach/tasks',headers=owner,json=first).json()['id']==first['id']
-        assert caller.get('/loadcoach/tasks/'+second['id'],headers=scoped).status_code==404  # the front never says whether another task exists
+        assert caller.get('/loadcoach/tasks/'+second['id'],headers=scoped).status_code==404  # the control node never says whether another task exists
         assert caller.get('/v1/models',headers={'authorization':'Bearer '+first['token']}).status_code==401
         assert caller.post('/loadcoach/tasks',headers=plain,json=first).status_code==403
         assert caller.post(path+'/probe',headers=scoped,json={'context':128,'inputs':120,'outputs':16}).status_code==400

@@ -13,7 +13,7 @@ This report records the sweep and subsequent Requests changes, validation and de
 - **Admission and shutdown — `loadcoach/runner.py`:** bound optional final memory sampling before shielded child cleanup, so stalled telemetry cannot indefinitely retain a model process; replace mutable helper defaults with immutable tuples.
 - **Console and chat — `weightroom/app.py`, `weightroom/conversations.py`, `weightroom/pages/chat_main.html`:** bound streamed form/account/chat input, reject invalid form encoding or excessive fields, prevent private HTML caching and stack mobile chat controls. General forms allow 256 KiB, benchmark forms 6 MiB, chat forms/API input 24 MiB and account API input 64 KiB; forms allow 4,096 fields.
 - **Source documentation — maintained Python and browser code:** add 1,060 definition docstrings and 130 JSDoc summaries; retain vendor/test-fixture exclusions. Admin Docs reads Python ASTs and attached JSDoc to show definitions, signatures and line numbers. It never imports/executes sources, escapes displayed text, parses off the event loop and caches up to 256 file revisions using modification time and size.
-- **Docs layout — `weightroom/pages/docs_*.html`:** replace empty outline cards with a compact scope summary; correct the system map's front-owned ToolLocker, external providers and shared stores.
+- **Docs layout — `weightroom/pages/docs_*.html`:** replace empty outline cards with a compact scope summary; correct the system map's control-node-owned ToolLocker, external providers and shared stores.
 - **Readability — workflow storage/orchestration and form restoration:** expand dense statements into conventional Python blocks.
 - **Verification — `tests/`, `pyproject.toml`:** enforce production docstring coverage, test failure/concurrency boundaries, update obsolete RSS/protocol/settings assertions and bound telemetry streams in browser fixtures; run tests against this checkout independently of stale editable-install metadata.
 - **Dependencies — `pyproject.toml`, IFEval, installation/deployment scripts:** replace NLTK 3.9.2 with 3.10.3 and require pip 26.2.1 or newer during installation. IFEval version 3 records and checks the exact dependency versions before inference; existing results retain their earlier protocol.
@@ -53,7 +53,7 @@ The original sweep (milestone 149) requires no new credentials, service, port, d
 Existing deployment permissions apply. Deployment briefly interrupts chat, inference, tools
 and voice; restarting LoadCoach unloads its models.
 
-- **Quiet window:** the live front benchmark store had no queued/running runs at the
+- **Quiet window:** the live control node benchmark store had no queued/running runs at the
   2026-10-20 inspection. Recheck immediately before rollout, pause new scheduled benchmark
   submissions and let active requests/tasks finish. Preserve submitted implementations until
   their work drains, as required by the [operating contract](agents.md#standing-permissions-and-execution-constraints).
@@ -61,18 +61,18 @@ and voice; restarting LoadCoach unloads its models.
   Skip recovery sets and backup copies for this rollout; retain existing settings, keys,
   live SQLite bindings and benchmark evidence during the update.
 - **Matching release:** review and freeze this sweep's changes in an immutable deployment
-  snapshot, preserving any unrelated checkout work. Use the existing full front deployment
+  snapshot, preserving any unrelated checkout work. Use the existing full control node deployment
   workflow; `FRONT_ONLY=1` omits the changed Turnstile and ToolLocker code. Refresh affected
   environments with the qualified dependency versions before restarting their services.
-- **All installed copies:** update compute and front, including configured LoadCoach nodes.
-  The front CPU services (`loadcoach-front-cpu`, `spotter-front-cpu`) share the front checkout
+- **All installed copies:** update compute and the control node, including configured LoadCoach nodes.
+  The control node CPU services (`loadcoach-front-cpu`, `spotter-front-cpu`) share the control node checkout
   but need explicit restarts. The standalone `toollocker-host` uses a separate copy under
   `~/.local/share/toollocker-host`; update its packaged host and built-in tools while retaining
   private settings, custom tools, its key and its existing bind/port. The general deployer
   does not perform those extra restarts or refresh the standalone host copy.
 - **Activation:** restart the affected active services after work drains. Current active
-  core services are front's WeightRoom, Turnstile, ToolLocker and voice gateway, and compute's
-  LoadCoach, Spotter and voice service, plus the front CPU/tool-host services above. A restart
+  core services are the control node's WeightRoom, Turnstile, ToolLocker and voice gateway, and compute's
+  LoadCoach, Spotter and voice service, plus the control node CPU/tool-host services above. A restart
   alone does not update separately installed source copies or dependencies.
 - **Acceptance:** check service health, sign-in and authorization denials,
   source Docs, tool discovery/calls, model-file operations and retained records through live
@@ -82,7 +82,7 @@ and voice; restarting LoadCoach unloads its models.
 ## Deployment result (2026-10-20)
 
 - **Release:** `application-sweep-20261020T181018Z`; all 384 packaged source files match on
-  compute (`10.77.10.84`), front (`10.77.10.42`) and `remote_cpu` (`kellrondgames.com`).
+  compute (`10.77.10.84`), control node (`10.77.10.42`) and `remote_cpu` (`kellrondgames.com`).
   Running services select the matching release explicitly; the standalone tool-host files
   and adapter copy also match. The optional same-host rig remains stopped with its next-start
   source updated.
@@ -94,7 +94,7 @@ and voice; restarting LoadCoach unloads its models.
   pass. Read-only calls work through both SSH and HTTP tool hosts; the new file-read limit
   and standalone host authentication are enforced.
 - **Dependencies and regression checks:** pip 26.2.2 is installed in the application
-  environments; compute/front use NLTK 3.10.3 and front's IFEval protocol-3 dependency check
+  environments; compute/front use NLTK 3.10.3 and the control node's IFEval protocol-3 dependency check
   passes. The deployed compute environment passes 96 focused regression/documentation/quality
   checks; the existing Starlette/httpx deprecation warning remains.
 - **Retained work:** 687 benchmark runs, 8,497 samples and 7,372 evidence rows remain.
@@ -131,7 +131,7 @@ unused-import/redefinition checks, all 32 maintained JavaScript and 11 shell syn
 and `git diff --check` pass. The existing conditional exception-binding lint warning was
 reviewed and retained because the caught exception is used when neither resource watcher fails.
 
-Deployed `b541b8ff` to compute, front and remote CPU; all 43 changed packaged files match,
+Deployed `b541b8ff` to compute, control node and remote CPU; all 43 changed packaged files match,
 as do the standalone Hermes adapter's five changed files. All 12 affected services are active
 with no automatic restarts. Worker status/authentication denials, console sign-in/assets,
 voice readiness and adapter capabilities pass. Restarts followed idle checks; benchmark pause
@@ -144,12 +144,12 @@ Baseline: all 71 navigation/account pages plus 14 available representative detai
 timed through authenticated HTTP; 84 also received browser checks without JavaScript errors.
 The 32.8-second Backups request blocked the console event loop, so its repeated browser baseline
 was deferred. Browser requests used a temporary loopback SSH forward and cold asset requests;
-HTTP measurements ran on front, excluding the owner's WAN/VPN latency.
+HTTP measurements ran on the control node, excluding the owner's WAN/VPN latency.
 
-- **Backups:** use lightweight schema inventory and move front inventory work off the event loop.
+- **Backups:** use lightweight schema inventory and move control node inventory work off the event loop.
   Full recovery verification remains in [the storage contract](database-storage.md).
 - **Files:** read long GGUF vocabulary arrays in bounded blocks. All metadata matches across
-  front's 65 GGUF files; standalone parsing improved from 7.9 to 3.1 seconds. The original first
+  the control node's 65 GGUF files; standalone parsing improved from 7.9 to 3.1 seconds. The original first
   Files request timed out after 10 seconds; warm requests were already fast.
 - **Benchmarks:** batch summary reads and reuse them when publishing role evidence within the
   same request. All 687 retained summaries match; scoring, permissions and retired model bindings
@@ -175,7 +175,7 @@ recovery-set preview returns HTTP 404; it had no baseline timing. Database stati
 take about 2.4 seconds. [Per-page HTTP/browser timings and remaining findings](../data/qualification/page-loading-20261026.json)
 record initial/warm responses and measurement limits.
 
-Deployed `44201841` to compute, front and remote CPU; all five changed packaged files match
+Deployed `44201841` to compute, control node and remote CPU; all five changed packaged files match
 on all three machines. The four affected services are active with no automatic restarts;
 authenticated worker status and unsigned-request denials pass. Benchmark pause was restored
 and retained result counts are unchanged. The temporary audit session was revoked and its
@@ -215,7 +215,7 @@ benchmark identity matching and resource ceilings were reviewed and retained; th
 eligibility guesses. [Reasoning discovery contract](loadcoach.md#llamacpp-reasoning-capabilities)
 and [node wake operation](README.md#where-things-run) describe current behavior.
 
-Deployed runtime `a1ae476` on **2026-10-30** to compute, front and remote CPU, including the
+Deployed runtime `a1ae476` on **2026-10-30** to compute, control node and remote CPU, including the
 separate Hermes adapter. All 709 release files match on each host; all 12 restarted services
 are active with zero automatic restarts. Inactive services remain inactive. Signed worker status
 returns 200 and unsigned requests return 401 on all three nodes; adapter capabilities and Voice

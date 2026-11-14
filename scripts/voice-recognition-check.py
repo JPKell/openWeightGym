@@ -37,7 +37,7 @@ def cases(settings):
     recordings = [(folder / line.split(' ', 1)[0], line.split(' ', 1)[1]) for line in
                   (folder / 'trans.txt').read_text().splitlines() if line.strip()]
     for number, text in enumerate(("What is the capital of France?", "Please tell me a short story about a friendly robot.",
-                                 "LoadCoach runs on the compute machine. The front server is called K server.")):
+                                 "LoadCoach runs on the compute machine. The control node is called K server.")):
         path = Path(f'voice-test/v1_0-{number}.wav')
         if path.exists():
             recordings.append((path, text))

@@ -4,7 +4,7 @@ LoadCoach serves an embedder with `gpus = 0`, `gpu-layers = 0` and
 `embedding = true`. Turnstile's named-machine placement routes ordinary
 `/v1/embeddings` requests to it with a machine-specific signed key. CPU-only
 execution is an explicit model setting; a GPU model does not silently fall back
-to CPU. Compute, front and remote workers now admit CPU model loads against observed
+to CPU. Compute, control node and remote workers now admit CPU model loads against observed
 host RAM and existing service ceilings, and evict idle CPU models as described
 below (deployed and endpoint-verified 2026-10-16).
 
@@ -16,26 +16,26 @@ Both workers serve the same `Qwen3-Embedding-0.6B-Q8_0.gguf` weights, whose
 SHA-256 is `06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439`.
 The CPU-only llama.cpp runtime reports build 906, commit `5ad1c5da0`. Each
 worker has its own private key, model settings and data directory. Turnstile's
-`[machines.front_cpu]` and `[machines.remote_cpu]` entries are in front's
+`[machines.front_cpu]` and `[machines.remote_cpu]` entries are in the control node's
 private `weightroom.toml`; private pre-change copies were kept there. Both
 machines appeared ready in System → Machines, with the common weights hash
 grouped correctly.
 
-| Worker | Endpoint | Model settings | Service limits | Verified request through front |
+| Worker | Endpoint | Model settings | Service limits | Verified request through the control node |
 |---|---|---|---|---|
-| `front_cpu` on front | `127.0.0.1:9442` | alias `qwen3-embedding-0.6b-cpu`; 8,192 context; 2 threads; 1 slot; last-token pooling | `loadcoach-front-cpu.service`: 200% CPU, 4G high / 6G maximum RAM, no swap | HTTP 200, 1,024 dimensions, 7 prompt tokens; warm call 0.337 s; service memory about 1.06 GB |
+| `front_cpu` on the control node | `127.0.0.1:9442` | alias `qwen3-embedding-0.6b-cpu`; 8,192 context; 2 threads; 1 slot; last-token pooling | `loadcoach-front-cpu.service`: 200% CPU, 4G high / 6G maximum RAM, no swap | HTTP 200, 1,024 dimensions, 7 prompt tokens; warm call 0.337 s; service memory about 1.06 GB |
 | `remote_cpu` on `kellrondgames.com` | Tailscale `100.69.178.99:9442` | alias `qwen3-embedding-0.6b-remote`; 2,048 context; 1 thread; 1 slot; last-token pooling | `loadcoach-remote-cpu.service`: 100% CPU, 1,500M high / 2,200M maximum RAM, no swap | HTTP 200, 1,024 dimensions, 10 prompt tokens; warm call 0.69 s; service memory about 352 MB |
 
-Front's unit and settings live under `~/weightroom`; the remote worker uses
+Control node's unit and settings live under `~/weightroom`; the remote worker uses
 `~/suite-cpu`. Both user units are enabled and active. The remote user's
-systemd linger is enabled so its unit survives logout. Front reaches the
+systemd linger is enabled so its unit survives logout. Control node reaches the
 remote worker over Tailscale, avoiding an unencrypted public-network route.
 The temporary user API keys used for qualification were revoked afterward.
 The benchmark queue had drained before activation and the Turnstile restarts.
 
 ## Validation, 2026-10-16
 
-Run through front's turnstile with the owner's key on the throwaway installation.
+Run through the control node's turnstile with the owner's key on the throwaway installation.
 
 - **Sustained, `front_cpu`:** 300 requests (about 125 tokens each, 4 concurrent) all returned
   HTTP 200 with 1,024 dimensions in 520 s. Latency was flat (p50 6.9 s, p95 7.0 s, max 8.6 s),
@@ -116,22 +116,22 @@ eviction, real child RSS, and cached-worker outage/refusal ownership.
 Compute, `front_cpu` and `remote_cpu` received the reviewed CPU worker modules,
 defaults and the two-field runtime settings-report correction. The remote keeps
 its existing DB1 application baseline with that reporting correction applied in
-place. Restarts followed an empty front task queue and zero worker requests,
+place. Restarts followed an empty control node task queue and zero worker requests,
 holds and locks. Private settings hashes and unit ceilings were preserved.
 
-All three signed front routes passed a headroom **512 → 513 → 512 MiB** write,
+All three signed control node routes passed a headroom **512 → 513 → 512 MiB** write,
 runtime read and original-override restore; benign Spotter writes were restored.
 Sleep policies remained **60 minutes / disabled / disabled**. Both CPU workers
-returned 1,024 finite embedding dimensions through front. After stopping only
+returned 1,024 finite embedding dimensions through the control node. After stopping only
 `loadcoach-remote-cpu.service`, its known alias returned **503**, `Retry-After: 5`,
-in **0.155 s**; its host settings also returned retryable 503. The front CPU
+in **0.155 s**; its host settings also returned retryable 503. The control node CPU
 worker continued returning 200, and the remote recovered to 200 within **7.53 s**
 after restart. The temporary qualification key was revoked.
 
-Observed live service RAM was about **1,088 MiB** on front and **334 MiB** remotely;
+Observed live service RAM was about **1,088 MiB** on the control node and **334 MiB** remotely;
 resident-process RSS was **1,584 MiB / 912 MiB**, illustrating shared mmap page
 accounting. Signed inventory reported RAM, CPU slot concurrency and per-model RSS
-on both hosts. Full receipts live in front's private
+on both hosts. Full receipts live in the control node's private
 `~/weightroom/g11-worker-backup-20261016/live-qualification.jsonl`; scoped source
 backups and settings hashes are beside them.
 
@@ -205,8 +205,8 @@ checks are separate from the live fresh-result check.
 [Deployment and queue receipts](../data/qualification/gates-2026-10-16/g18-runtime-deployment.json).
 G18 and milestones 130/135 are complete for the eligible three-node workload.
 
-During qualification, front-owned queued benchmarks did not appear in the compute
+During qualification, control-node-owned queued benchmarks did not appear in the compute
 Spotter's direct queue counts. Preserve its configured sleep policy: interleave
 needed GPU runs with CPU work by pausing individual CPU runs at durable sample
-boundaries, then resume them. A front queue alone is not evidence that compute
+boundaries, then resume them. A control node queue alone is not evidence that compute
 will stay awake; do not add artificial holds or wake the host for this loop.

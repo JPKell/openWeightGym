@@ -1,4 +1,4 @@
-"""Front-owned manifests, instance settings, public aliases and minimal adapter-use records."""
+"""Control-node-owned manifests, instance settings, public aliases and minimal adapter-use records."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ ACTIVITY_SORTS = ("at", "user", "model", "plugin", "instance", "outcome")
 
 
 class Registry:
-    """Read discovery without importing code; coordinate front/turnstile state through private files."""
+    """Read discovery without importing code; coordinate control node/Turnstile state through private files."""
 
     def __init__(self, root: Path, data: Path, database: DatabaseSource | None = None) -> None:
         """Open plugin configuration and activity storage with portable schema migrations."""

@@ -108,7 +108,7 @@ def test_an_outside_service_is_registered_its_models_chosen_and_its_cost_kept_un
     assert (listed["name"], listed["spent"], listed["ceiling"], sorted(listed["models"])) == ("rented", 0.025, 0.02, ["big-out", "small-out"])
     assert over[0].status_code == 429 and "has cost 0.03 in the last 24 hours. Its ceiling is 0.02." in over[0].json()["error"]["message"] and over[1] == 200
     assert stood_in.status_code == 200 and "x-loadcoach-hosted" not in stood_in.headers  # it stayed here and was answered by `big` itself
-    assert keyless_ask.status_code == 503 and "has no key on the front machine" in keyless_ask.json()["error"]["message"]
+    assert keyless_ask.status_code == 503 and "has no key on the control node" in keyless_ask.json()["error"]["message"]
     assert removed == ({"removed": "rented"}, ["big", "small"], 404, 404)
     assert whats == [("added", "rented"), ("changed", "rented"), ("changed", "rented"), ("removed", "rented")]
 

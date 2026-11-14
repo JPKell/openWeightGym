@@ -77,7 +77,7 @@ Baseline findings (implementation status below):
 - Fix: list first; "Add a model" as a closed card or a header action. Name the node state plainly ("compute · not reachable"), rename "Show node" to what it opens, and explain a disabled Add next to the button.
 
 ### V13 — Home starts with what the person can do
-- Home shows only usage. A plain user lands on zero token counts, scope buttons named after groups (Admin, Front, Plain, Superuser) and four cost cards including "Mock fallback" and "Model-rate estimate".
+- Home shows only usage. A plain user lands on zero token counts, scope buttons named after groups (Admin, Control node, Plain, Superuser) and four cost cards including "Mock fallback" and "Model-rate estimate".
 - Fix: Home leads with a Start a conversation action and the person's available models and their state, then usage. Label the scope buttons ("Group: Admin") and show the detailed cost breakdown only on the Usage page.
 
 ### V14 — Help for everyone
@@ -143,7 +143,7 @@ Related improvements found during verification include responsive Status control
 
 Final local qualification: 127 related regression checks, 33 UI checks (including six route/theme/width sweeps), 23 media checks and 7 collection/confirmation checks passed. Logs are `data/qualification/usability/final-regressions.log`, `final-ui-tests.log`, `media-tests.log` and `collection-tests.log`. Collection status refreshes also retain the correct confirmation requirement as an action changes from Cancel to Reindex.
 
-Activation receipts are `data/qualification/usability/activation.json`, `first-activation.json` and `second-activation.json`; only the front console changed runtime. A live non-administrator check exposed a System logs link leading to a transient 400 permission message. The UI now hides that unavailable link and returns a persistent framed 403 for direct visits, matching the existing service permission. Roles benchmark help also uses plain missing-answer wording.
+Activation receipts are `data/qualification/usability/activation.json`, `first-activation.json` and `second-activation.json`; only the control node console changed runtime. A live non-administrator check exposed a System logs link leading to a transient 400 permission message. The UI now hides that unavailable link and returns a persistent framed 403 for direct visits, matching the existing service permission. Roles benchmark help also uses plain missing-answer wording.
 
 
 Live review also fixed polling recovery after an htmx source replaces itself, released completed form feedback tied to the original request, and extended browser-local time formatting to telemetry chart axes/tooltips. Follow-up permission, recovery and chart checks passed (`final-fixes.log`, `final-runtime-fixes.log`). Two stale assertions from the earlier component redesign were reproduced on unchanged HEAD and updated to the shared-component structure.

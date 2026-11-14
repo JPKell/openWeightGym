@@ -5,21 +5,21 @@
 {% call doc_table('Stores and their writers') %}
 <thead><tr><th scope="col">Machine</th><th scope="col">Store</th><th scope="col">Written by, and what it holds</th></tr></thead>
 <tbody>
-  <tr><td>Front</td><td><code>accounts.db</code></td><td>WeightRoom, Turnstile and ToolLocker: accounts, client access, events, tasks, front program and ToolLocker settings, tool schemas, schedule grants, and Mirror Wall and SoundRoom library records.</td></tr>
-  <tr><td>Front</td><td><code>roles.db</code></td><td>WeightRoom and Turnstile: roles, benchmark evidence, reliability, and which models each node may serve.</td></tr>
-  <tr><td>Front</td><td><code>chat.db</code></td><td>WeightRoom: conversations, collections, prompt versions and workflows.</td></tr>
-  <tr><td>Front</td><td><code>benchmarks.db</code></td><td>The benchmark worker in WeightRoom: plans, samples and evidence.</td></tr>
-  <tr><td>Front</td><td><code>plugins.db</code></td><td>WeightRoom and Turnstile: plugin use.</td></tr>
-  <tr><td>Front</td><td><code>alerts.db</code></td><td>WeightRoom: alerts and their acknowledgements.</td></tr>
-  <tr><td>Front</td><td><code>schedules.db</code></td><td>WeightRoom: recurring schedules and their occurrences.</td></tr>
+  <tr><td>Control node</td><td><code>accounts.db</code></td><td>WeightRoom, Turnstile and ToolLocker: accounts, client access, events, tasks, control node program and ToolLocker settings, tool schemas, schedule grants, and Mirror Wall and SoundRoom library records.</td></tr>
+  <tr><td>Control node</td><td><code>roles.db</code></td><td>WeightRoom and Turnstile: roles, benchmark evidence, reliability, and which models each node may serve.</td></tr>
+  <tr><td>Control node</td><td><code>chat.db</code></td><td>WeightRoom: conversations, collections, prompt versions and workflows.</td></tr>
+  <tr><td>Control node</td><td><code>benchmarks.db</code></td><td>The benchmark worker in WeightRoom: plans, samples and evidence.</td></tr>
+  <tr><td>Control node</td><td><code>plugins.db</code></td><td>WeightRoom and Turnstile: plugin use.</td></tr>
+  <tr><td>Control node</td><td><code>alerts.db</code></td><td>WeightRoom: alerts and their acknowledgements.</td></tr>
+  <tr><td>Control node</td><td><code>schedules.db</code></td><td>WeightRoom: recurring schedules and their occurrences.</td></tr>
   <tr><td>Each worker</td><td><code>loadcoach.db</code></td><td>LoadCoach and Spotter: models, live events and settings, and identities.</td></tr>
   <tr><td>Each worker</td><td><code>spotter.db</code></td><td>Spotter: telemetry history.</td></tr>
 </tbody>
 {% endcall %}
-<p>Every worker has its own pair, including a CPU worker that runs on front.</p>
+<p>Every worker has its own pair, including a CPU worker that runs on the control node.</p>
 {% endcall %}
 {% call doc_section('Files beside the stores', 'files') %}
-<p>Images and audio that people keep are files under front's <code>data/mirrorwall-assets/</code> and <code>data/soundroom-assets/</code>; their records are in <code>accounts.db</code>, and both are part of every recovery set.
+<p>Images and audio that people keep are files under the control node's <code>data/mirrorwall-assets/</code> and <code>data/soundroom-assets/</code>; their records are in <code>accounts.db</code>, and both are part of every recovery set.
   Temporary and unlogged images and audio are never written to a store, a file or a recovery set.</p>
 <p>Model files stay on the worker that owns them, in its model places, and are not part of a recovery set.
   Files downloaded from Hugging Face or Civitai go into model storage only, never the cache. A model's file reaches the cache only as a copy promoted from storage for use, and cache cleanup removes it again once it is unused.</p>

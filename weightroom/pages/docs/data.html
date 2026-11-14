@@ -1,8 +1,8 @@
 {% from "docs_parts.html" import doc_contents, doc_section %}
 {{ doc_contents([('data', 'Who owns what'), ('topics', 'In this section')]) }}
 {% call doc_section('Who owns what', 'data') %}
-<p>Front owns accounts and the history people keep: conversations, collections, workflows, benchmark results, logs and media libraries.
-  Each worker owns its model files, its model settings and its own runtime state. Pages and records kept on front stay readable while a worker is away.</p>
+<p>Control node owns accounts and the history people keep: conversations, collections, workflows, benchmark results, logs and media libraries.
+  Each worker owns its model files, its model settings and its own runtime state. Pages and records kept on the control node stay readable while a worker is away.</p>
 <p>Every store uses SQLite unless it is moved; PostgreSQL works through the same shared storage layer, and each store can use its own engine.
   <a href="/databases">System → DB</a> lists every store with its engine, owner, size and tables, and exports a database or one table as SQL.
   <a href="/backups">System → Backups</a> makes recovery sets from both machines and previews a restore before anything changes.</p>

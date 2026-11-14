@@ -73,7 +73,7 @@
       host.waiting += node.waiting || 0;
     }
     // Telemetry includes the control-plane host, even before any workers are connected.
-    state.hosts.push({ id: 'front', name: 'front', state: ['outage', 'stale'].includes(state.scenario) ?
+    state.hosts.push({ id: 'front', name: 'Control node', state: ['outage', 'stale'].includes(state.scenario) ?
       (state.scenario === 'stale' ? 'stale' : 'unknown') : 'ready', role: 'Control plane',
       gpuCount: 0, cores: 8, ramGB: 16, diskTB: 1, cpu: 12, ram: 32, disk: 28,
       vramTotal: 0, vramFree: 0, services: [], running: 0, waiting: 0 });
@@ -344,7 +344,7 @@
     $('#design-note').textContent = notes[state.design];
     $('#ops-heading .page-title').textContent = status ? 'Status' : 'Telemetry';
     $('#fleet-title').textContent = status ? 'Compute nodes' : 'Physical hosts';
-    $('#fleet-description').textContent = `${state.nodes.length} compute services · ${state.hosts.length} physical hosts including front · ${status ? 'Availability and active work' : 'Host resources and retained history'}`;
+    $('#fleet-description').textContent = `${state.nodes.length} compute services · ${state.hosts.length} physical hosts including the control node · ${status ? 'Availability and active work' : 'Host resources and retained history'}`;
     $('#monitor-warning').hidden = state.scenario !== 'outage';
     $('#history-controls').hidden = status;
     $$('button[data-design]').forEach(button => { const active = button.dataset.design === state.design; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });
@@ -364,7 +364,7 @@
     displayed.forEach(item => { const el = clone(template); fillItem(el, item); $(container).append(el); });
     $('#empty-fleet').hidden = !!list.length;
     $('#empty-title').textContent = items().length ? 'No matching nodes or hosts' : 'No compute nodes yet';
-    $('#empty-description').textContent = items().length ? 'Try a different search or state filter.' : 'Connect a compute node to see availability and workloads. Front is already visible in Telemetry.';
+    $('#empty-description').textContent = items().length ? 'Try a different search or state filter.' : 'Connect a compute node to see availability and workloads. Control node is already visible in Telemetry.';
     $('#clear-filters').hidden = !items().length;
     $('#page-count').textContent = list.length ? `${state.pageIndex * pageSize + 1}–${state.pageIndex * pageSize + displayed.length} of ${list.length} ${status ? 'nodes' : 'hosts'}` : '0 results';
     $('#previous').disabled = !state.pageIndex;

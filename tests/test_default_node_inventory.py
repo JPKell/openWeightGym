@@ -110,7 +110,7 @@ def test_unscoped_console_requests_do_not_dispatch_to_a_default_node(tmp_path):
     users = Users(str(tmp_path / "data" / "accounts.db"),
                   {"admin": Group(can=frozenset(ABILITIES) - OWN_KEY - {"superuser"}, max_sensitivity="restricted")})
     users.add("jordan", "admin")
-    # The switches as the live front has them: console settings and ToolLocker on the front. The front
+    # The switches as the live control node has them: console settings and ToolLocker on the control node. The control node
     # keeps every task record (peer-nodes Phase 1), so task creation no longer reaches a node.
     front = turnstile_to(tmp_path, users, {8442: compute}, wait=0, keep_console_settings_on_front=True, toollocker_url="http://127.0.0.1:9443")
     headers = {"authorization": "Bearer " + users.new_key("jordan"), "x-turnstile-no-wake": "1", "x-suite-unscoped-check": "1"}

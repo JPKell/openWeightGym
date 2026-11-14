@@ -12,7 +12,7 @@ from db import adopt, migrate
 from db.schemas import RELIABILITY
 
 FAULTS = frozenset({'error', 'timeout', 'empty'})
-# Said by compute with each answer, for turnstile, which keeps reliability on the front machine: the
+# Said by compute with each answer, for turnstile, which keeps reliability on the control node: the
 # model that answered, and the identity and fingerprint its reliability is kept under.
 ANSWERED = ('x-loadcoach-answered', 'x-loadcoach-answered-id', 'x-loadcoach-answered-fingerprint')
 OUTCOME = 'x-loadcoach-outcome'  # how a request ended, when compute knows it before answering: it was refused, or would not load

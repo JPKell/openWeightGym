@@ -98,7 +98,7 @@ def whole_hours(zone, since: float, before: float) -> bool:
 
 
 def has_hours(db) -> bool:
-    """Whether this store keeps usage_hours: front's log does once migrated."""
+    """Whether this store keeps usage_hours: the control node's log does once migrated."""
     if getattr(db, "engine", "sqlite") == "sqlite":
         return bool(db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='usage_hours'").fetchone())
     return bool(db.execute("SELECT 1 FROM information_schema.tables WHERE table_name='usage_hours'").fetchone())

@@ -538,7 +538,7 @@ def settings_aliases(path: str) -> list[dict]:
 
 def front_plan(data: str | Path, settings_path: str = "", plugins_dir: str = "",
                skip_databases: Iterable[Path] = ()) -> tuple[list[BackupFile], list[dict]]:
-    """Inventory the backup files the front keeps and explain excluded inputs."""
+    """Inventory the backup files the control node keeps and explain excluded inputs."""
     data = Path(data)
     skipped = {Path(path).resolve() for path in skip_databases}
     files = [
@@ -550,7 +550,7 @@ def front_plan(data: str | Path, settings_path: str = "", plugins_dir: str = "",
     planned = {item.source.resolve() for item in files} | skipped
     for path in sorted(data.glob("*.db")):
         if not path.is_symlink() and path.resolve() not in planned:
-            files.append(BackupFile(path, f"data/{path.name}", "front service data", database=True))
+            files.append(BackupFile(path, f"data/{path.name}", "control node service data", database=True))
     files.extend(settings_files(settings_path))
     for folder, what in (('mirrorwall-assets', 'private image originals and thumbnails'), ('soundroom-assets', 'private audio takes, sounds and recordings')):
         images = data/folder
