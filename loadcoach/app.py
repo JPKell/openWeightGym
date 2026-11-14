@@ -2750,6 +2750,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             affected = [server for server in runner.servers.values() if revoked[engine_for(server.settings).id] & set(server.cards)]
             if any(not server.ready or runner.busy(server) or runner.pinned(server) for server in affected):
                 return error(409, "A card whose assignment you changed is loading, answering or held. Wait for it to finish, then save again.")
+            if request.query_params.get('validate_only') == '1':
+                return JSONResponse({'valid': True})
             for name in asked:
                 if CHANGEABLE[program][name] == NOW:
                     setattr(config, name, getattr(candidate, name))
@@ -2759,11 +2761,16 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 log.add("model", "unloaded", user.name, address(request), model=server.model, why="its card was disabled")
             runner.wake.set()
             log.keep_days, log.keep_text, library.defaults = (0 if config.front else config.keep_days), config.keep_text, config.model_defaults
+        if request.query_params.get('validate_only') == '1':
+            return JSONResponse({'valid': True})
+        previous = changes.of(program)
         for name, value in asked.items():
             changes.take_away(program, name) if value is None else changes.put(program, name, value, user.name)
         if program == "loadcoach":
             report()
-        log.add("settings", "changed", user.name, address(request), program=program, **asked)
+        from loadcoach.settings import redacted
+        log.add("settings", "changed", user.name, address(request), program=program,
+                old=redacted({name: previous.get(name) for name in asked}), **redacted(asked))
         return JSONResponse({"programs": local_settings()})
 
     async def settings_changes(request: Request, user: User) -> Response:

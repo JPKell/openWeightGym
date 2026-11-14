@@ -87,6 +87,7 @@ def test_machine_selector_filter_and_empty_state_fit(desk, width):
         page.goto('http://console.test/settings/machine')
         page.get_by_label('Find a setting', exact=True).fill('host')
         playwright.expect(page.get_by_text('Differs from default', exact=True)).to_be_visible()
+        playwright.expect(page.locator('tr').filter(has=page.locator('code', has_text='ports')).first).to_be_hidden()
         page.get_by_label('Find a setting', exact=True).fill('not-a-setting')
         playwright.expect(page.locator('[data-settings-no-match]')).to_be_visible()
         page.get_by_role('button', name='Clear filters', exact=True).click()

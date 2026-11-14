@@ -17,11 +17,11 @@
   }
   function rowsIn(content) {
     for (const field of content.querySelectorAll('form input, form select, form textarea')) {
-      if (!editable(field) || field.closest('[data-voice-preview]') || field.closest('.settings-row, [data-setting-row]')) continue;
+      if (!editable(field) || field.closest('[data-voice-preview], [data-settings-ignore]') || field.closest('.settings-row, [data-setting-row], [data-setting-search]')) continue;
       const row = field.closest('tr, .col-md-6, .col-md-4, .col-md-8, .col-12, .form-check') || field.parentElement;
       if (row && !row.matches('.sticky-actions')) row.dataset.settingRow = '';
     }
-    return [...content.querySelectorAll('.settings-row, [data-setting-row]')];
+    return [...content.querySelectorAll('.settings-row, [data-setting-row], [data-setting-search]')];
   }
   const externalHidden = element => !!element.closest('[hidden]');
   function refreshFilters() {

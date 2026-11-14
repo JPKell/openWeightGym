@@ -1,0 +1,25 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, card, said_box, empty_row, confirm_two %}
+{% block title %}Settings history · openWeightGym{% endblock %}
+{% block main %}
+<div class="settings-page">
+{{ page_header('Settings history') }}
+{{ said_box(said, failed) }}
+{% call card('Transfer settings') %}
+<p class="small text-secondary">Export site overrides across the control node and compute nodes. Machine files and secrets are excluded. Import changes only the listed overrides; retired settings are ignored.</p>
+<a href="/settings/history?export=json" class="btn btn-outline-secondary btn-sm">Export JSON</a>
+<form method="post" action="/settings/history" class="mt-3" data-settings-ignore>
+<label class="form-label" for="settings-import">Import JSON</label><textarea id="settings-import" name="document" class="form-control font-monospace" rows="5" required maxlength="65536" spellcheck="false">{{ document }}</textarea>
+<button name="do" value="preview" class="btn btn-primary mt-2">Preview import</button>
+</form>
+{% endcall %}
+{% if ignored %}{% call card('Ignored retired settings') %}<ul class="mb-0">{% for row in ignored %}<li>{{ row.node|node_label }} · {{ row.program }} · {{ row.name }}</li>{% endfor %}</ul>{% endcall %}{% endif %}
+{% if preview %}{% call card('Validated preview') %}
+<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Node / service</th><th>Setting</th><th>Previous override</th><th>New override</th></tr></thead><tbody>
+{% for row in preview %}<tr><td>{{ row.node|node_label }} · {{ row.program }}</td><th scope="row"><code>{{ row.name }}</code></th><td class="wrap"><code>{{ row.old|written if row.old is not none else 'File value' }}</code></td><td class="wrap"><code>{{ row.new|written if row.new is not none else 'File value' }}</code></td></tr>{% endfor %}
+</tbody></table></div>
+<form method="post" action="/settings/history"><input type="hidden" name="document" value="{{ document }}"><button class="btn btn-primary" name="do" value="confirm" {{ confirm_two('Apply the settings in this preview?') }}>Confirm import</button></form>
+{% endcall %}{% endif %}
+{% include 'settings_history_list.html' %}
+</div>
+{% endblock %}

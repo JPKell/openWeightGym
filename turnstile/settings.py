@@ -2,7 +2,7 @@
 
 from starlette.responses import JSONResponse
 
-from loadcoach.settings import CHANGEABLE, Changes, FRONT_PROGRAMS as PROGRAMS, live, program_name
+from loadcoach.settings import CHANGEABLE, Changes, FRONT_PROGRAMS as PROGRAMS, live, program_name, redacted
 from loadcoach.setting_catalog import validate_patch
 from loadcoach.tasks import error
 
@@ -99,11 +99,15 @@ class ConsoleSettings:
             effective = {**current, **self.changes.of(program),
                          **{name: defaults.get(name) for name, value in body.items() if value is None}}
             validate_patch(program, effective, body, context={'voice_nodes': self.voice_nodes})
+            if request.query_params.get('validate_only') == '1':
+                return JSONResponse({'valid': True})
             # Changes.put/take_away commit separately: validate the entire request first.
+            previous = self.changes.of(program)
             for name, value in body.items():
                 self.changes.take_away(program, name) if value is None else self.changes.put(program, name, value, user.name)
             self.log.add('settings', 'changed', user.name, program=program,
-                         **{name: '(telephone settings updated)' if name == 'telephone' else value for name, value in body.items()})
+                         old=redacted({name: '(telephone settings updated)' if name == 'telephone' else previous.get(name) for name in body}),
+                         **redacted({name: '(telephone settings updated)' if name == 'telephone' else value for name, value in body.items()}))
             return JSONResponse({'programs': self.reported()})
         except (ValueError, TypeError) as problem:
             return error(400, str(problem))

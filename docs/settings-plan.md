@@ -77,6 +77,7 @@ use them as written.
 
 ### Decisions made during implementation
 
+- Imports are additive: unlisted overrides remain intact, retired rows are ignored, and secrets never enter transfers. Every authority validates all groups before confirmation writes; services revalidate on write. A service failure during a multi-node application stops remaining writes and reports how many settings landed, because there is no distributed transaction across node databases.
 - Components had no restart controls. Its new shared action delegates compute restarts to Spotter’s existing service allowlist and schedules control node restarts through the installed `owg restart PROGRAM`; pending notices reuse that action. Explicit process-start timestamps prevent a report refresh or authority restart from clearing another service’s pending changes.
 - Catalogue entries describe top-level settings; tables retain their existing whole-table POST contract. Nested tuning entries will validate the editable subset without exposing model paths.
 - Node-owned Voice followers name the adjacent LoadCoach file’s existing `machine_name` on settings requests. Live checks exposed the old ambiguous control-node URL, which otherwise left new settings unseen on multi-node installations.
@@ -443,7 +444,7 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 2.2 Search, Changed only and section navigation across settings (39 feature/browser and all 39 UI consistency cases pass).
 - [x] 2.3 Pending restart status and authorized restart action (475 settings checks; 24 restart/Components checks including narrow layouts and failure states).
 - [x] 2.4 Machine configuration page (470 catalogue/service/page checks; source/default evidence, retired values, scoped read-only inspection and narrow filters).
-- [ ] 2.5 History, revert and validated export/import.
+- [x] 2.5 History, revert and validated export/import (511 focused checks; 29 transfer/filter/browser checks, including polling drafts and rejected secret input).
 - [ ] 2.6 UI checks and documentation; Phase 2 deployed and verified.
 - [ ] 3.1 Security and sign-in.
 - [ ] 3.2 Requests, admission, placement, routing and batches.

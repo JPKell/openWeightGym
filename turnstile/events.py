@@ -1,4 +1,4 @@
-"""The event log's pages, answered on the front machine (milestone 91).
+"""The event log's pages, answered on the control node (milestone 91).
 
 Compute sends turnstile every entry it writes (loadcoach/front.py), and turnstile keeps them in its
 own log, chained with its own entries (loadcoach/log.py, `take`). These addresses were LoadCoach's
@@ -36,9 +36,9 @@ HOME_TTL = 180  # a Home summary may lag the live log by three minutes; Usage ne
 
 
 def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=lambda user: ()) -> list[Route]:
-    """The log's addresses, read from `log`, front's. `caller(key)` is who a key belongs to, and `ask_compute(user, method, path)` asks compute without waking it.
+    """The log's addresses, read from `log`, the control node's. `caller(key)` is who a key belongs to, and `ask_compute(user, method, path)` asks compute without waking it.
 
-    `prices()` are what each hosted model costs, from front's own services, for an answer recorded without its cost.
+    `prices()` are what each hosted model costs, from the control node's own services, for an answer recorded without its cost.
     """
     home_cache: dict[tuple, tuple[float, bytes]] = {}
 
@@ -104,6 +104,24 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
             return entries
         return JSONResponse({"events": [{**entry, "machine": log.former.get(entry.get("machine"), entry.get("machine")) or "front"} for entry in resolve(entries)]})
 
+    async def settings_history(request: Request, user: User) -> Response:
+        """Settings managers may inspect settings changes without general log access."""
+        if denied := lacks(user, 'manage-settings'):
+            return denied
+        from loadcoach.settings_transfer import history_rows
+        try:
+            before = int(request.query_params.get('before', 0))
+            number = int(request.query_params.get('entry', 0))
+            if before < 0 or number < 0:
+                raise ValueError
+        except ValueError:
+            return error(400, 'Choose a valid history entry.')
+        entries = await report(lambda view: view.about(number)[:1] if number else view.read(limit=100, kind='settings', what='changed', before=before))
+        if isinstance(entries, Response):
+            return entries
+        return JSONResponse({'changes':history_rows(reversed(entries)),
+                             'before':min((row['id'] for row in entries), default=0) if len(entries) == 100 else 0})
+
     async def event_choices(request: Request, user: User) -> Response:
         """List authorized event filter values and current group membership."""
         owner = None if user.can('see-log') else user.name
@@ -135,7 +153,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         return JSONResponse({"entry": entries[0], "after": entries[1:]})
 
     async def request_counts(request: Request, user: User) -> Response:
-        """Status totals from records already received on front; never wake or poll workers."""
+        """Status totals from records already received on the control node; never wake or poll workers."""
         owner = None if user.can('see-all') else user.name
         at = time.time()
         counts = await report(lambda view: view.request_counts(owner, at))
@@ -198,7 +216,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
                 log.add("request", "peeked", user.name, address(request), asked["model"], of=number)
         ended = next((entry for entry in reversed(entries[1:]) if entry["kind"] == "request" and entry["what"] in ENDINGS), None)
         # How far one still under way has got is compute's to say. Not woken for it.
-        machine = asked.get("machine")  # none for front's own requests, such as hosted answers: compute has nothing to say of them
+        machine = asked.get("machine")  # none for the control node's own requests, such as hosted answers: compute has nothing to say of them
         local = number & ((1 << MACHINE_SHIFT) - 1) if number >= 1 << MACHINE_SHIFT else number  # an unprefixed number is the old default node's
         machine = log.former.get(machine, machine) if machine else machine
         live = None if ended or machine is None else await ask_compute(user, "GET", f"/loadcoach/diagnostics/{local}", machine=machine)
@@ -299,6 +317,7 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         return Route(path, signed_in(caller, log, fresh(handler)))
 
     return [Route("/loadcoach/requests/counts", signed_in(caller, log, request_counts)),
+            route('/turnstile/settings/history', settings_history),
             route("/loadcoach/events", events), route("/loadcoach/events/{entry:int}", event_one),
             route("/loadcoach/event-choices", event_choices), route("/loadcoach/requests", requests_list),
             route("/loadcoach/requests/{entry:int}", request_facts), route("/loadcoach/usage", usage),

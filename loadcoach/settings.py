@@ -341,7 +341,7 @@ class Changes:
         """Every program that has said what it runs with, and each of its settings as the page shows it."""
         changed: dict[str, dict] = {}
         for program, name, value, by, at in self.db.execute("SELECT program, name, value, by, at FROM settings_changed"):
-            changed.setdefault(program, {})[name] = {"value": json.loads(value), "by": by, "at": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "timestamp": at}
+            changed.setdefault(program, {})[name] = {"value": redacted(json.loads(value), name), "by": by, "at": datetime.fromtimestamp(at).isoformat(timespec="seconds"), "timestamp": at}
         resets = {(program, name): at for program, name, at in self.db.execute('SELECT program,name,at FROM settings_resets')}
         programs = []
         for program, at, told, refused, started in self.db.execute("SELECT program, at, told, refused, started FROM settings_seen ORDER BY program"):

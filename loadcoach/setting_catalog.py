@@ -153,6 +153,10 @@ def validate_patch(program, current, patch, *, context=None):
     for name, value in patch.items():
         if value is not None:
             validate(program, name, value, context=context)
+            from loadcoach.settings import redacted
+            entry = get(program, name)
+            if entry and (entry.kind == 'secret' or redacted(value, name) != value or '(not shown)' in str(value)):
+                raise ValueError(f'{name}: secrets require their write-only credential form.')
     if program == 'turnstile' and {'models_folder', 'models_storage_folder'} & patch.keys():
         from turnstile.artifacts import checked_roots
         checked_roots({name: effective.get(name, '') for name in ('models_folder', 'models_storage_folder')})

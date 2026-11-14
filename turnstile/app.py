@@ -2822,6 +2822,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 if not isinstance(body, dict) or body.keys() - changeable_for('machines').keys():
                     raise ValueError('Only Wake settings may be changed here.')
                 validate_patch('machines', node_policy(name), body)
+                if request.query_params.get('validate_only') == '1':
+                    return JSONResponse({'valid': True})
                 namespace = 'machines:' + name
                 old = console_settings.changes.of(namespace)
                 for field, value in body.items():
@@ -2833,6 +2835,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         path = "/loadcoach/settings" + ("/" + program if program else "")
         if request.method == 'GET' and request.query_params.get('include_retired') == '1':
             path += '?include_retired=1'
+        if request.method == 'POST' and request.query_params.get('validate_only') == '1':
+            path += '?validate_only=1'
+            answer = await ask_compute(user, 'POST', path, await request.body(), machine=name, timeout=5)
+            return JSONResponse(answer.json(), status_code=answer.status_code) if answer is not None else error(503, 'The node must answer before these settings can be validated.')
         if request.method == 'GET' and pending_file_settings(name):
             await publish_file_settings()
         raw = await request.body() if request.method == 'POST' else b''

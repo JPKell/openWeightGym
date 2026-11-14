@@ -1,0 +1,15 @@
+{% from 'parts.html' import card, empty_row, confirm_two %}
+<div id="settings-history-list" hx-get="/settings/history?part=list{% if request.query_params.get('before') %}&amp;before={{ request.query_params.get('before') }}{% endif %}" hx-trigger="every 15s" hx-target="this" hx-swap="outerHTML">
+{% call card('Changes') %}
+<div class="table-responsive"><table class="table table-sm" aria-label="Settings changes">
+<thead><tr><th>When / who</th><th>Node / service</th><th>Setting</th><th>Old → new override</th><th>Action</th></tr></thead><tbody>
+{% for row in history %}<tr data-setting-changed="true" data-setting-search="{{ row.node|node_label }} {{ row.program }} {{ row.name }} {{ row.user }}">
+<td class="wrap">{{ row.at|timestamp }}<small class="d-block text-secondary">{{ row.user }}</small></td><td class="wrap">{{ row.node|node_label }}<small class="d-block text-secondary">{{ row.program }}</small></td>
+<th scope="row"><code>{{ row.name }}</code></th>
+<td class="wrap"><code>{{ (row.old|written if row.old is not none else 'File value') if row.old_known else 'Not recorded' }}</code> → <code>{{ row.new|written if row.new is not none else 'File value' }}</code></td>
+<td>{% if row.can_revert %}<form method="post" action="/settings/history"><input type="hidden" name="do" value="revert"><input type="hidden" name="entry" value="{{ row.id }}"><input type="hidden" name="name" value="{{ row.name }}"><button class="btn btn-outline-secondary btn-sm" {{ confirm_two('Restore the prior override for ' ~ row.name ~ '?') }}>Revert change</button></form>{% else %}<span class="small text-secondary">Prior value unavailable</span>{% endif %}</td>
+</tr>{% else %}{{ empty_row(5, 'No settings changes on record.') }}{% endfor %}
+</tbody></table></div>
+<div class="d-flex gap-2"><a class="btn btn-outline-secondary btn-sm" href="/settings/history">Latest changes</a>{% if before %}<a class="btn btn-outline-secondary btn-sm" href="/settings/history?before={{ before }}">Older changes</a>{% endif %}</div>
+{% endcall %}
+</div>

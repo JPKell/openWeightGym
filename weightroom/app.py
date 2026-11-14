@@ -3304,6 +3304,96 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await voice_admin_page(request, person, message, failed=True)
         return Response(message, status_code=result.status_code)
 
+    async def settings_inventory(person):
+        """Read override evidence from every configured authority without waking nodes."""
+        control, nodes = await asyncio.gather(ask('GET', '/loadcoach/settings', person.key, params={'include_retired':'1'}), ask('GET', '/turnstile/machines', person.key))
+        if not control.is_success or not nodes.is_success:
+            raise ValueError('Settings inventory is unavailable. Retry after the control node answers.')
+        names = [one['name'] for one in nodes.json().get('machines', [])]
+        answers = await asyncio.gather(*(ask('GET', '/turnstile/machines/' + quote(name, safe='') + '/settings', person.key, params={'include_retired':'1'}) for name in names))
+        result, unavailable = {'front': control.json().get('programs', [])}, []
+        for name, answer in zip(names, answers):
+            if not answer.is_success or answer.json().get('unavailable'):
+                unavailable.append(name)
+            else:
+                result[name] = answer.json().get('programs', [])
+        return result, unavailable
+
+    def settings_api(node, program):
+        return '/loadcoach/settings/' + program if node == 'front' else '/turnstile/machines/' + quote(node, safe='') + '/settings/' + program
+
+    async def settings_history_page(request: Request, person: Person) -> Response:
+        """Review settings changes and transfer non-secret overrides through validated POSTs."""
+        if 'manage-settings' not in person.can:
+            return page(request, 'refused.html', person, status=403, why='Settings history requires manage-settings.')
+        from loadcoach.settings_transfer import parse, export_rows
+        form = await typed(request) if request.method == 'POST' else {}
+        message, failed, preview, ignored = '', False, [], []
+        text = form.get('document', '')
+        try:
+            if request.query_params.get('export') == 'json':
+                inventory, unavailable = await settings_inventory(person)
+                if unavailable:
+                    raise ValueError('Export needs current settings from every node. Unavailable: ' + ', '.join(unavailable))
+                document = {'version':1, 'overrides':[row for node, programs in inventory.items() for row in export_rows(node, programs)]}
+                return JSONResponse(document, headers={'content-disposition':'attachment; filename="settings-overrides.json"', 'cache-control':'private, no-store'})
+            if request.method == 'POST':
+                action = form.get('do')
+                if action == 'revert':
+                    entry = int(form.get('entry', '0'))
+                    response = await ask('GET', '/turnstile/settings/history', person.key, params={'entry':entry})
+                    rows = response.json().get('changes', []) if response.is_success else []
+                    row = next((row for row in rows if row['name'] == form.get('name') and row['can_revert']), None)
+                    if row is None:
+                        raise ValueError('This change has no transferable prior value. Older events may not record one.')
+                    text = json.dumps({'version':1, 'overrides':[{key:row[key] for key in ('node','program','name')} | {'value':row['old']}]})
+                elif action not in ('preview', 'confirm'):
+                    raise ValueError('Choose Preview import or confirm the preview.')
+                inventory, unavailable = await settings_inventory(person)
+                retired = {(node,program['program'],row['name']) for node,programs in inventory.items()
+                           for program in programs for row in program['settings'] if row.get('retired') or row.get('derived')}
+                groups, ignored = parse(text, set(inventory) | set(unavailable), retired=retired)
+                text = json.dumps({'version':1, 'overrides':[{'node':node, 'program':program, 'name':name, 'value':value}
+                    for (node,program), patch in groups.items() for name,value in patch.items()]}, ensure_ascii=False)
+                for (node, program), patch in groups.items():
+                    if node in unavailable:
+                        raise ValueError(f'{node} must answer before its settings can be imported.')
+                    response = await ask('POST', settings_api(node, program), person.key, params={'validate_only':'1'}, json=patch)
+                    if not response.is_success:
+                        raise ValueError(response.json().get('error', {}).get('message', 'A service refused the import.'))
+                    known = next((one for one in inventory[node] if one['program'] == program), {'settings':[]})
+                    current = {row['name']:row for row in known['settings']}
+                    for name, value in patch.items():
+                        old = (current.get(name, {}).get('changed') or {}).get('value')
+                        preview.append({'node':node, 'program':program, 'name':name, 'old':old, 'new':value})
+                if action in ('confirm','revert'):
+                    applied = 0
+                    for (node, program), patch in groups.items():
+                        try:
+                            response = await ask('POST', settings_api(node, program), person.key, json=patch)
+                        except ServiceUnavailable:
+                            raise ValueError(f'{applied} settings applied before a service stopped answering. Retry after checking the current overrides.') from None
+                        if not response.is_success:
+                            raise ValueError(f'{applied} settings applied before a service refused the remaining changes: ' + response.json().get('error', {}).get('message', 'Service unavailable.'))
+                        applied += len(patch)
+                    message = f'Reverted one change.' if action == 'revert' else f'Imported {applied} settings. Unlisted overrides were preserved.'
+                    preview, text = [], ''
+                else:
+                    message = 'Preview validated. Nothing has been written.'
+        except (ValueError, TypeError, KeyError, ServiceUnavailable) as problem:
+            message, failed = str(problem) or 'Settings are unavailable. Retry after the service answers.', True
+            preview, text = [], ''
+            request.state.form_values = {key:value for key,value in getattr(request.state, 'form_values', {}).items() if key != 'document'}
+        params = {'before':request.query_params.get('before', '0')}
+        response = await ask('GET', '/turnstile/settings/history', person.key, params=params)
+        changes = response.json() if response.is_success else {'changes':[], 'before':0}
+        if not response.is_success:
+            message, failed = 'Settings history is unavailable. Refresh to retry.', True
+        return page(request, 'settings_history_list.html' if request.query_params.get('part') == 'list' else 'settings_history.html', person,
+                    history=changes['changes'], before=changes.get('before', 0), preview=preview, ignored=ignored,
+                    document=text, said=message, failed=failed, status=400 if failed else 200,
+                    settings_return_to='/settings/history')
+
     async def machine_configuration_page(request: Request, person: Person) -> Response:
         """Inspect one node's redacted file values, including retired compatibility keys."""
         nodes = await ask('GET', '/turnstile/machines', person.key)
@@ -3332,6 +3422,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return page(request, 'refused.html', person, status=404, why='That settings page does not exist.')
         if section == 'machine':
             return await machine_configuration_page(request, person)
+        if section == 'history':
+            return await settings_history_page(request, person)
         try:
             found = await fetch(request, person, "/loadcoach/settings")
         except ServiceUnavailable:
@@ -5663,6 +5755,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             route("/settings", settings_page),
             route('/settings/image', image_settings_page),
             route('/settings/image', image_settings_page, 'POST'),
+            route('/settings/history', settings_history_page, 'POST'),
             route('/settings/{section}', settings_page),
             Route("/guide", guide_moved),
             route("/docs", docs_page),
