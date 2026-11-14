@@ -321,6 +321,15 @@ class Log:
             if filters.get(key):
                 where += f' AND {expression} = ?'
                 values.append(filters[key])
+        if filters.get('level'):
+            where += " AND COALESCE(NULLIF(a.level, ''), 'unrecorded') = ?"
+            values.append(filters['level'])
+        if filters.get('q') and not filters['q'].isdecimal():
+            # Literal substring matching; SQL wildcard characters in a query are not operators.
+            query = '%' + filters['q'].replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+            expressions = ('a.model', 'a.user', 'a.caller', 'a.trace', self.json_value('a.detail', 'request_id'))
+            where += " AND (" + " OR ".join(f"LOWER({column}) LIKE LOWER(?) ESCAPE '!'" for column in expressions) + ")"
+            values.extend([query] * len(expressions))
         for key, expression, operator in (('date_min', 'a.at', '>='), ('date_max', 'a.at', '<='),
                                            ('duration_min', duration, '>='), ('duration_max', duration, '<=')):
             if key in filters:
@@ -333,7 +342,7 @@ class Log:
         elif filters.get('status'):
             where += ' AND e.what = ?'
             values.append(filters['status'])
-        if any(key in filters for key in ('request_min', 'request_max')):
+        if any(key in filters for key in ('request_min', 'request_max')) or filters.get('q', '').isdecimal():
             # SQL compares displayed public IDs, including front and historical node prefixes.
             names = {row[0] for row in self.db.execute('SELECT DISTINCT machine FROM events')}
             names.update((None, LEGACY, *self.machine_names))
@@ -346,17 +355,35 @@ class Log:
                     where += f' AND {public_id} {operator} ?'
                     values.extend([name for name, _ in prefixes if name is not None])
                     values.append(filters[key])
+            if filters.get('q', '').isdecimal():
+                where += f' AND {public_id} = ?'
+                values.extend([name for name, _ in prefixes if name is not None])
+                values.append(int(filters['q']) if len(filters['q']) < 17 else -1)
         needs_ending = completed or group or any(key in filters for key in ('status', 'duration_min', 'duration_max'))
         total = self.db.execute("SELECT COUNT(*) " + (join if needs_ending else "FROM events a") + where,
                                 [*ENDINGS, *values] if needs_ending else values).fetchone()[0]
         offset = min(max(offset, 0), max(0, (total - 1) // limit) * limit)
         rows = self.db.execute(f"""SELECT COALESCE(a.source, a.id), a.at, a.model, a.user, a.caller, e.what, a.machine,
-            CASE WHEN e.id IS NOT NULL THEN {duration} END """ + join + where +
+            CASE WHEN e.id IS NOT NULL THEN {duration} END, a.level, e.detail """ + join + where +
             " ORDER BY a.id DESC LIMIT ? OFFSET ?", (*ENDINGS, *values, limit, offset))
-        return {"total": total, 'page': offset // limit + 1, "requests": [dict(zip(
-            ("id", "at", "model", "user", "caller", "outcome", "duration", "timestamp", "node"),
-            (public_number(machine, number), datetime.fromtimestamp(at).isoformat(timespec="seconds"), model, user, caller, outcome, duration, at, self.former.get(machine, machine) if machine else FRONT)))
-            for number, at, model, user, caller, outcome, machine, duration in rows]}
+        from loadcoach.diagnostics import number as measured
+        requests = []
+        for number, at, model, user, caller, outcome, machine, duration, level, raw in rows:
+            detail = json.loads(raw) if raw else {}
+            diagnostic = detail.get('diagnostics') or {}
+            phases = diagnostic.get('phases', [])
+            queue = [measured(p.get('seconds')) for p in phases if p.get('stage') == 'queue']
+            requests.append(dict(id=public_number(machine, number), at=datetime.fromtimestamp(at).isoformat(timespec='seconds'),
+                                 model=model, user=user, caller=caller, outcome=outcome, duration=duration,
+                                 timestamp=at, node=self.former.get(machine, machine) if machine else FRONT, level=level,
+                                 compute_total=measured(diagnostic.get('total_seconds')),
+                                 queue_seconds=sum(queue) if queue and all(v is not None for v in queue) else None,
+                                 first_output_seconds=measured(diagnostic.get('first_output_seconds')),
+                                 prompt_tokens=measured(detail.get('prompt_tokens')), answer_tokens=measured(detail.get('answer_tokens')),
+                                 cost=measured(detail.get('cost')), status=detail.get('status'),
+                                 server_error=detail.get('reliability_outcome') in ('error', 'timeout', 'restart') or (measured(detail.get('status')) or 0) >= 500 or outcome == 'failed',
+                                 benchmark=detail.get('reliability_outcome') == 'benchmark'))
+        return {'total': total, 'page': offset // limit + 1, 'requests': requests}
 
     @staticmethod
     def entry(row: tuple, with_text: bool = False) -> dict:

@@ -1,0 +1,27 @@
+{# Shared request identities, security tiers and metadata across ledger/detail/fragments. #}
+{% set security_levels = {'normal': ('Public', 'green'), 'sensitive': ('Secure', 'azure'), 'restricted': ('Restricted', 'orange')} %}
+{% macro security_badge(level) -%}
+{% set label, color = security_levels.get(level, ('Not recorded', 'secondary')) %}
+<span class="badge bg-{{ color }}-lt" data-security-level="{{ level or 'unrecorded' }}" title="{{ 'Recorded sensitivity: ' ~ level if level in security_levels else 'No security level was recorded for this request' }}">{{ label }}</span>
+{%- endmacro %}
+{% macro security_options(selected='') %}
+<option value="">All security levels</option>{% for value, display in security_levels.items() %}<option value="{{ value }}"{{ ' selected' if value == selected }}>{{ display[0] }}</option>{% endfor %}<option value="unrecorded"{{ ' selected' if selected == 'unrecorded' }}>Not recorded</option>
+{% endmacro %}
+{% macro status_badge(outcome, state='', error=false, attrs={}) -%}
+{% set label = outcome or state or 'No ending recorded' %}
+<span class="badge bg-{{ 'red' if error or outcome == 'failed' else 'green' if outcome == 'done' else 'secondary' if outcome else 'azure' }}-lt"{{ attrs|xmlattr }}>{{ label }}</span>
+{%- endmacro %}
+{% macro request_fact(label='', value='') %}<div class="rq-fact"><dt>{{ label }}</dt><dd>{% if caller is defined %}{{ caller() }}{% else %}{{ value if value is not none and value != '' else '—' }}{% endif %}</dd></div>{% endmacro %}
+{% macro seconds(value, precision=3) %}{{ ('%.*f'|format(precision, value) ~ ' s') if value is number else '—' }}{% endmacro %}
+{% macro ledger_row(row) %}
+<tr data-record data-request-id="{{ row.id }}">
+<td data-value="{{ row.id }}">{% if row.can_open|default(true) %}<a data-open href="/requests/{{ row.id }}" class="rq-id">#{{ row.id }}</a>{% else %}#{{ row.id }}{% endif %}<small data-field="at" class="d-block text-secondary when">{{ row.at|timestamp }}</small></td>
+<td>{{ status_badge(row.outcome, row.state, row.server_error, attrs={'data-field':'state'}) }}</td><td data-field="level">{{ security_badge(row.level) }}</td>
+<td><span data-field="model" class="fw-medium">{{ row.model or '—' }}</span><small data-field="node" class="d-block text-secondary">{{ row.node|default('front') }}</small></td>
+<td><span data-field="user">{{ row.user }}</span><small data-field="caller" class="d-block text-secondary">{{ row.caller or '—' }}</small></td>
+<td data-field="total" class="rq-number" data-value="{{ row.compute_total if row.compute_total is number else row.duration if row.duration is number else '' }}">{{ seconds(row.compute_total if row.compute_total is number else row.duration) }}{% if row.compute_total is not number and row.duration is number %}<small class="d-block text-secondary">event timestamps</small>{% endif %}</td>
+<td data-field="waited" class="rq-number" data-value="{{ row.queue_seconds if row.queue_seconds is number else '' }}">{{ seconds(row.queue_seconds) }}</td><td data-field="ttft" class="rq-number" data-value="{{ row.first_output_seconds if row.first_output_seconds is number else '' }}">{{ seconds(row.first_output_seconds) }}</td>
+<td class="rq-number" data-value="{{ row.prompt_tokens if row.prompt_tokens is number else '' }}"><span data-field="input">{{ '{:,}'.format(row.prompt_tokens|int) if row.prompt_tokens is number else '—' }}</span><small data-field="output" class="d-block text-secondary">{{ '{:,}'.format(row.answer_tokens|int) if row.answer_tokens is number else '—' }}</small></td>
+<td data-field="cost" class="rq-number" data-value="{{ row.cost if row.cost is number else '' }}">{{ '$%.6f'|format(row.cost) if row.cost is number else '—' }}</td>
+</tr>
+{% endmacro %}

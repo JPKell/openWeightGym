@@ -1,0 +1,12 @@
+{# Canonical preview components shared by all six proposal screens and DOM updates. #}
+{% from 'parts.html' import empty_row %}
+{% from 'request_parts.html' import request_fact, ledger_row %}
+{% macro fact() %}{{ request_fact() }}{% endmacro %}
+{% macro request_row() %}
+{{ ledger_row({}) }}
+{% endmacro %}
+{% macro phase_row() %}<tr><th scope="row" data-phase-label></th><td class="rq-phase-track"><div data-phase-bar></div></td><td data-phase-value class="rq-number"></td><td class="small text-secondary" data-phase-basis></td></tr>{% endmacro %}
+{% macro span_row() %}<tr><td><button class="btn btn-link p-0 text-start" data-span-open></button></td><td data-span-host></td><td><span class="badge" data-span-outcome></span></td><td data-span-time class="rq-number"></td><td><code data-span-id></code><small class="d-block text-secondary" data-span-parent></small></td></tr>{% endmacro %}
+{% macro activity_row() %}<tr><td data-event-at></td><td data-event-kind></td><td data-event-what></td><td data-event-detail></td></tr>{% endmacro %}
+{% macro service_row() %}<tr><th scope="row" data-service-name></th><td data-service-count class="rq-number"></td><td data-service-errors class="rq-number"></td><td data-service-p50 class="rq-number"></td><td data-service-p95 class="rq-number"></td></tr>{% endmacro %}
+{% macro access_row() %}<tr><td data-access-ip></td><td data-access-user></td><td data-access-first></td><td data-access-last></td><td data-access-accepted></td><td data-access-rejected></td></tr>{% endmacro %}

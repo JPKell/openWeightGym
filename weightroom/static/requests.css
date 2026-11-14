@@ -1,0 +1,64 @@
+/* Request components shared by the live ledger and standalone design proposals. */
+.rq-id { font-family: var(--bs-font-monospace); font-weight: 600; }
+.rq-number { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.rq-facts { display: grid; gap: 1rem; margin: 0; }
+.rq-fact { min-width: 0; }
+.rq-fact dt { font-size: .74rem; color: var(--theme-muted); font-weight: 400; margin-bottom: .2rem; }
+.rq-fact dd { font-size: .875rem; margin: 0; overflow-wrap: anywhere; }
+.rq-identifiers { border-top: 1px solid var(--theme-border); margin-top: 1.4rem; padding-top: 1.3rem; }
+.rq-identifiers code { display: block; font-size: .73rem; overflow-wrap: anywhere; }
+.rq-outline { display: grid; gap: .7rem; border-top: 1px solid var(--theme-border); padding-top: 1.2rem; margin-top: 1.4rem; font-size: .8rem; }
+.rq-outline a { display: flex; gap: .7rem; }
+.rq-code { font-family: var(--bs-font-monospace); font-size: .8rem; line-height: 1.75; padding: 1rem 1.25rem; border: 1px solid var(--theme-border); border-radius: .4rem; background: var(--theme-subtle); color: var(--theme-text); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 28rem; overflow-y: auto; margin: 0; }
+/* 02 / Operations ledger: persistent filters, compact comparisons, facts beside evidence. */
+.request-workspace { min-width: 0; }
+.request-workspace .rq-ledger-grid { display: grid; grid-template-columns: 14rem minmax(0, 1fr); grid-template-areas: 'summary summary' 'filters records'; gap: 1.75rem; margin-bottom: 1rem; }
+.request-workspace .rq-ledger-grid > *, .request-workspace .rq-detail-grid > * { min-width: 0; }
+.request-workspace .rq-filter-rail { grid-area: filters; }
+.request-workspace .rq-filter-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: .85rem; }
+.request-workspace .rq-filter-fields .form-label { font-size: .8rem; }
+.request-workspace .rq-filter-ranges input + input { margin-top: .35rem; }
+.request-workspace .rq-filter-ranges .more { margin: 0; }
+.request-workspace .rq-ledger-summary { grid-area: summary; }
+.request-workspace .rq-ledger-records { grid-area: records; }
+.request-workspace .rq-ledger-pagination { margin-left: 15.75rem; margin-bottom: 2rem; }
+.request-workspace .rq-ledger-scroll { max-height: 44rem; }
+.request-workspace .rq-ledger-table { min-width: 1110px; }
+.request-workspace .rq-ledger-table thead { position: sticky; top: 0; z-index: 1; background: var(--theme-surface); }
+.request-workspace .rq-ledger-table td { padding: .75rem 1rem; }
+.request-workspace .rq-ledger-table small { font-size: .73rem; margin-top: .3rem; }
+.request-workspace .rq-ledger-table th { white-space: nowrap; }
+.request-workspace .rq-detail-meta { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+.request-workspace .rq-detail-meta code { overflow-wrap: anywhere; }
+.request-workspace .rq-detail-grid { display: grid; grid-template-columns: 16rem minmax(0, 1fr); grid-template-areas: 'passport verdict' 'passport kpis' 'passport evidence' 'passport stop'; gap: 1.5rem; align-items: start; }
+.request-workspace .rq-passport { grid-area: passport; }
+.request-workspace .rq-verdict { grid-area: verdict; padding: 1.25rem 1.5rem; background: var(--theme-surface); border: 1px solid var(--theme-border); border-left: 3px solid var(--theme-accent); border-radius: .6rem; overflow-wrap: anywhere; }
+.request-workspace .rq-verdict[data-error=true] { border-left-color: var(--bs-danger); }
+.request-workspace .rq-detail-kpis { grid-area: kpis; }
+.request-workspace .rq-evidence { grid-area: evidence; }
+.request-workspace .rq-stop { grid-area: stop; }
+.request-workspace [id^=request-] { scroll-margin-top: 9rem; }
+.request-workspace .rq-stage-share { height: .35rem; margin-top: .3rem; background: var(--theme-subtle); border-radius: .2rem; min-width: 5rem; }
+.request-workspace .rq-stage-share::before { content: ''; display: block; height: 100%; width: var(--stage-share); border-radius: inherit; background: var(--theme-accent); }
+.request-workspace #request-timeline { min-width: 490px; }
+.request-workspace #request-measurements { min-width: 550px; }
+.request-workspace [data-request-panel][hidden] { display: none !important; }
+@media (max-width: 1000px) {
+  .request-workspace .rq-ledger-grid { grid-template-columns: 12rem minmax(0, 1fr); gap: 1.25rem; }
+  .request-workspace .rq-ledger-pagination { margin-left: 13.25rem; }
+  .request-workspace .rq-detail-grid { grid-template-columns: 13rem minmax(0, 1fr); gap: 1rem; }
+}
+@media (max-width: 800px) {
+  .request-workspace .rq-ledger-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'summary' 'filters' 'records'; }
+  .request-workspace .rq-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .request-workspace .rq-filter-ranges { grid-column: 1 / -1; }
+  .request-workspace .rq-ledger-pagination { margin-left: 0; }
+  .request-workspace .rq-detail-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'verdict' 'kpis' 'passport' 'evidence' 'stop'; }
+  .request-workspace .rq-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 575px) {
+  .request-workspace .rq-filter-fields { grid-template-columns: minmax(0, 1fr); }
+  .request-workspace .rq-detail-meta code { margin-left: 0 !important; flex-basis: 100%; }
+  .request-workspace .rq-verdict { padding: 1rem; }
+  .request-workspace .rq-evidence-nav .nav-link { padding: .4rem .6rem; font-size: .8rem; }
+}

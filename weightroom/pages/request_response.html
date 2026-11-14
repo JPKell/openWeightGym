@@ -1,0 +1,56 @@
+{% from "parts.html" import card, section_title, confirm_two %}
+{% call card("Response", true, "request-response") %}
+{% if facts.state %}
+{# What it has been answered so far, read as it passes. Only the end of each part is shown, where the newest is. #}
+{% if unreadable %}<p class="text-secondary">{{ unreadable }}</p>{% endif %}
+{% if so_far.reasoning %}
+{% set _section_title1 %}Thinking <small>{{ "{:,}".format(so_far.reasoning|length) }} characters so far</small>{% endset %}
+{{ section_title(_section_title1, class_="text-secondary") }}
+<div class="stream frame"><pre>{{ so_far.reasoning[-3000:] }}</pre></div>
+{% endif %}
+{% if so_far.content %}
+{% set _section_title2 %}Answer <small>{{ "{:,}".format(so_far.content|length) }} characters so far</small>{% endset %}
+{{ section_title(_section_title2, class_="text-secondary") }}
+<div class="stream frame"><pre>{{ so_far.content[-3000:] }}</pre></div>
+{% endif %}
+{% if so_far.raw %}<div class="stream frame"><pre>{{ so_far.raw[-3000:] }}</pre></div>{% endif %}
+{% if not (so_far.reasoning or so_far.content or so_far.raw or unreadable) %}<p class="text-secondary">Nothing has come back yet. An answer that is not streamed shows nothing until it ends.</p>{% endif %}
+{% elif facts.text and facts.text.said %}
+{# It is over, and it is among the latest that are kept in full: what it was answered, all of it. #}
+{% set answered = facts.text.said %}
+{% if answered.reasoning %}
+{% set _section_title3 %}Thinking <small>{{ "{:,}".format(answered.reasoning|length) }} characters</small>{% endset %}
+{{ section_title(_section_title3, class_="text-secondary") }}
+<div class="kept frame"><pre>{{ answered.reasoning }}</pre></div>
+{% endif %}
+{% if answered.content %}
+{% set _section_title4 %}Answer <small>{{ "{:,}".format(answered.content|length) }} characters</small>{% endset %}
+{{ section_title(_section_title4, class_="text-secondary") }}
+<div class="kept frame"><pre>{{ answered.content }}</pre></div>
+{% endif %}
+{% for call in answered.calls or [] %}
+{% set _section_title5 %}Asked for the tool <code>{{ call.tool }}</code>{% endset %}
+{{ section_title(_section_title5, class_="text-secondary") }}
+<div class="kept frame"><pre>{{ call.arguments|shown(2) }}</pre></div>
+{% endfor %}
+{# Not a chat answer, or an error from the model server: as it came. #}
+{% if answered.raw %}
+{{ section_title("What came back, as it came", class_="text-secondary") }}
+<div class="kept frame"><pre>{{ answered.raw }}</pre></div>
+{% endif %}
+{% elif not facts.state %}
+<p class="text-secondary">{% if facts.text_kept and not facts.text %}What this request was answered is kept. Reading someone else's needs the ability to read kept text.
+  {% elif facts.text %}Nothing came back to keep.
+  {% else %}What it was answered is no longer kept: only the latest requests are kept in full.{% endif %}</p>
+{% endif %}
+{% if feedback.may_feedback %}
+<form method="post" action="/requests/{{ facts.id }}/feedback" class="d-flex gap-2 flex-wrap mt-3" aria-label="Answer feedback" data-hold-refresh>
+  <label class="visually-hidden" for="feedback-explanation">Why (optional)</label>
+  <textarea id="feedback-explanation" name="explanation" maxlength="2000" rows="2" class="form-control w-100" placeholder="Why (optional)">{{ feedback.explanation }}</textarea>
+  <button name="value" value="1" class="btn {{ 'btn-success' if feedback.feedback == 1 else 'btn-outline-success' }}">Helpful</button>
+  <button name="value" value="-1" class="btn {{ 'btn-danger' if feedback.feedback == -1 else 'btn-outline-danger' }}">Unhelpful</button>
+  {% if feedback.feedback %}<button  name="value" value="0" class="btn btn-outline-secondary" {{ confirm_two() }}>Remove rating</button>{% endif %}
+</form>
+{% endif %}
+{% if feedback.unavailable %}<p class="small text-secondary mt-3 mb-0">Answer feedback is unavailable while current model eligibility cannot be checked.</p>{% endif %}
+{% endcall %}

@@ -197,6 +197,7 @@ def test_column_filters_work_in_browser_and_remain_inside_mobile_table(desk):
         page.goto('http://console.test/requests')
         page.get_by_label('Filter user', exact=True).select_option('pat')
         playwright.expect(page.locator('#recent-requests tbody tr')).to_have_count(2)
+        page.get_by_text('Date, duration & request ranges', exact=True).click()
         page.get_by_label('Minimum request number').fill(str(entries[0]))
         page.get_by_label('Maximum request number').fill(str(entries[0]))
         page.get_by_role('button', name='Apply filters', exact=True).click()
@@ -212,7 +213,8 @@ def test_column_filters_work_in_browser_and_remain_inside_mobile_table(desk):
             page.screenshot(path='/tmp/suite-request-filters-desktop.png', full_page=True)
         page.set_viewport_size({'width':390,'height':844})
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-        assert page.locator('.request-column-filters select').count() == 4
+        assert page.get_by_label('Filter security level', exact=True).is_visible()
+        assert page.locator('.rq-filter-rail').is_visible()
         if os.getenv('SUITE_REQUEST_FILTER_SCREENSHOTS'):
             page.screenshot(path='/tmp/suite-request-filters-mobile.png', full_page=True)
         assert not errors
