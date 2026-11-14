@@ -37,7 +37,7 @@ def cell(page, model, benchmark):
 def test_registry_contract_and_complete_llm_heatmap(preview):
     page = preview
     data = json.loads(page.locator('#results-data').text_content())
-    actual = {b['id']: b for b in BENCHMARKS if b.get('quality') and not b.get('embedding')}
+    actual = {b['id']: b for b in BENCHMARKS if b.get('quality') and not b.get('embedding') and not b.get('classifier')}
     assert {b['id'] for b in data['benchmarks']} == actual.keys()
     for b in data['benchmarks']:
         for field in ('name', 'kpis', 'formula', 'version', 'method'):

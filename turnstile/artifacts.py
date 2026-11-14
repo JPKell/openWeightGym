@@ -85,7 +85,11 @@ class FrontFiles:
         if image_asset(path):
             return image_facts(path), {}
         metadata = read_metadata(str(path))
-        return facts(metadata), metadata
+        description = facts(metadata)
+        if 'classifier' in path.parts and description.get('what') == 'model':
+            from loadcoach.classifier_sources import source_facts
+            description = {**description, **source_facts(path)}
+        return description, metadata
 
     def inventory(self, refresh=False):
         """List front's available folders and files from the kept index, reporting inaccessible locations inline."""

@@ -7,6 +7,18 @@
 
 {% macro fact_row(label='', value='') %}<div><dt data-fact-label>{{ label }}</dt><dd data-fact-value>{{ value }}</dd></div>{% endmacro %}
 
+{% macro classifier_calibration(metrics) %}
+{% from 'parts.html' import card, empty_row %}
+{% from 'kpi_parts.html' import kpi_row, kpi %}
+{% call card('Classifier accuracy and calibration', class_='br-breakdown') %}
+{% call kpi_row('Saved classifier quality') %}{% for key,label in [('accuracy','Accuracy'),('macro_f1','Macro-F1'),('brier','Brier score'),('ece','Calibration error')] %}{{ kpi(label, metrics.get(key)|round(4) if metrics.get(key) is number else '—') }}{% endfor %}{% endcall %}
+<p class="small text-secondary">Saved probability bins compare mean confidence with observed accuracy. These probabilities are not calibrated for your data.</p>
+<div class="table-responsive"><table class="table table-sm"><caption class="visually-hidden">Saved reliability bins</caption><thead><tr><th>Confidence range</th><th>Questions</th><th>Mean confidence</th><th>Observed accuracy</th></tr></thead><tbody>
+{% for bin in metrics.get('reliability_bins', []) %}<tr><th>{{ (100 * bin.lower)|int }}–{{ (100 * bin.upper)|int }}%</th><td>{{ bin.count }}</td><td>{{ (100 * bin.confidence_sum / bin.count)|round(1) if bin.count else '—' }}{{ '%' if bin.count }}</td><td>{{ (100 * bin.correct / bin.count)|round(1) if bin.count else '—' }}{{ '%' if bin.count }}</td></tr>{% else %}{{ empty_row(4, 'No calibration bins have been saved.') }}{% endfor %}
+</tbody></table></div>
+{% endcall %}
+{% endmacro %}
+
 {% macro sample_tools(budgets, quality=true, regressions=true) %}
 <div class="br-sample-tools"><label class="br-search"><span class="visually-hidden">Search samples</span><input id="sample-search" class="form-control" type="search" placeholder="Find a sample, case or category…"></label><label><span class="visually-hidden">Filter outcome</span><select class="form-select" id="outcome"><option value="all">All outcomes</option><option value="pass">{{ 'Passed' if quality else 'Available' }}</option>{% if quality %}<option value="fail">Failed checks</option><option value="ungraded">Not graded</option>{% endif %}<option value="unscored">Unsupported / unavailable</option>{% if regressions %}<option value="regression">New failures</option>{% endif %}</select></label><label><span class="visually-hidden">Filter input budget</span><select class="form-select" id="budget"><option value="all">All input budgets</option>{% for n in budgets %}<option value="{{ n }}">{{ '{:,}'.format(n) }} tokens</option>{% endfor %}</select></label><button type="button" class="btn btn-outline-secondary" id="clear-filters">Reset</button></div>
 {% endmacro %}

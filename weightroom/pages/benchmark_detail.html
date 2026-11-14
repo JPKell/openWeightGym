@@ -2,7 +2,7 @@
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'benchmark_parts.html' import number, token_count, settings_note %}
-{% from 'benchmark_run_parts.html' import verdict, fact_row, sample_tools, measurement_choices %}
+{% from 'benchmark_run_parts.html' import verdict, fact_row, sample_tools, measurement_choices, classifier_calibration %}
 {% from 'benchmark_sample_parts.html' import sample_evidence %}
 {% set embedding = briefing.embedding %}
 <div id="benchmark-run" class="benchmark-briefing" data-run-briefing>
@@ -41,6 +41,7 @@
 <div class="br-method-note">{% call more('How this result is calculated') %}<p>Saved score formula: <code>{{ detail.formula }}</code>. This page displays the saved score without recalculating it.</p><p class="mb-0">{{ briefing.method or 'The sample measurements and recorded protocol are retained below.' }}</p>{% endcall %}</div>
 {% endcall %}
 {% include 'benchmark_regressions.html' %}
+{% if briefing.classifier and briefing.quality %}{{ classifier_calibration(detail.metrics) }}{% endif %}
 {% if detail.breakdown %}{% call card('Results by category', id='breakdown', class_='br-breakdown', body_class='p-0') %}<div class="p-3">{% include 'benchmark_breakdown.html' %}</div>{% endcall %}{% endif %}
 {% call card('Sample measurements', id='samples-panel', class_='br-samples', body=false, hint='Select a sample to read its exact input, answer and checks.', actions=('<span class="small text-secondary" id="visible-count" role="status" aria-live="polite">' ~ detail.samples_count ~ ' samples</span>')|safe) %}
 <div data-sample-controls hidden>{{ sample_tools(briefing.chart|map(attribute='budget')|list, briefing.quality, regression is not none) }}{{ measurement_choices() }}</div>
@@ -58,7 +59,7 @@
 <div class="br-provenance-grid">{% call card('Recorded model settings & environment', open=false, class_='mb-0') %}<p class="small text-secondary">Frozen at run time. Current settings may differ.</p><pre class="kept frame">{{ {'subject':detail.subject,'environment':detail.environment}|tojson(indent=2) }}</pre>{% endcall %}
 {% call card('Run log', open=false, class_='mb-0') %}<pre class="benchmark-log frame">{% for message in detail.messages %}{{ message.at|timestamp }} {{ message.text }}
 {% else %}No log messages recorded.{% endfor %}</pre>{% endcall %}</div>
-{% if embedding %}<p class="small text-secondary mt-3">Context is the capacity allocated for each attempt. Input is the complete token sequence processed into one pooled vector. Throughput and request time cover the local embedding request through receiving the vector, excluding tokenization, warm-up and model startup. Load-only samples request no vector.</p>{% else %}<p class="small text-secondary mt-3">Context is the capacity allocated for each attempt; input and output counts show the tokens actually processed and generated. Load measures model startup. First-token time starts after loading and includes reading the prompt; request time also includes generating the answer. Read and write rates measure these two phases separately.</p>{% endif %}
+{% if briefing.classifier %}<p class="small text-secondary mt-3">Classifier throughput counts answered questions per second. Request time covers the complete native response and excludes startup. Only input tokens are counted; no text is generated.</p>{% elif embedding %}<p class="small text-secondary mt-3">Context is the capacity allocated for each attempt. Input is the complete token sequence processed into one pooled vector. Throughput and request time cover the local embedding request through receiving the vector, excluding tokenization, warm-up and model startup. Load-only samples request no vector.</p>{% else %}<p class="small text-secondary mt-3">Context is the capacity allocated for each attempt; input and output counts show the tokens actually processed and generated. Load measures model startup. First-token time starts after loading and includes reading the prompt; request time also includes generating the answer. Read and write rates measure these two phases separately.</p>{% endif %}
 {% if briefing.cpu %}<p class="small text-secondary">CPU peak RAM is the highest measured resident memory of the probe process and its children; <code>rss_mib</code> in Measurements is the final resident sample. GPU MiB remains assigned-card VRAM only.</p>{% endif %}
 {% if detail.plan %}<p class="small text-secondary">{{ detail.samples_count }} / {{ detail.plan.cases|length }} case results recorded. Each case keeps its question, expected answers and individual checks. Input sizes include the model's chat template.</p>{% endif %}
 </section>

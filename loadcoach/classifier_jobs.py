@@ -12,6 +12,8 @@ import urllib.request
 from loadcoach.classifier_sources import check_source
 from loadcoach.database_jobs import DatabaseJobs
 
+REFERENCE_COMMIT = 'fec868b6b44ac5fddac64ff87d318ccceaff27ea'
+
 
 class ClassifierJobs:
     """Keep tooling outside model libraries and preserve the configured runtime."""
@@ -100,9 +102,10 @@ class ClassifierJobs:
                 uv = shutil.which('uv')
                 pip = [uv, 'pip', 'install', '--python', python] if uv else [python, '-m', 'pip', 'install']
                 await self.command(identifier, *pip, 'torch', '--index-url', 'https://download.pytorch.org/whl/cpu')
+                reference = 'tinyjev @ git+https://github.com/ankit-aglawe/tinyjev.git@' + REFERENCE_COMMIT
                 await self.command(identifier, *pip, source / 'gguf-py', 'numpy', 'safetensors', 'sentencepiece',
-                    'transformers>=4.57,<5', 'protobuf', 'tinyjev==0.2.0', 'mistral-common', 'peft')
-                receipt = {'commit': commit, 'server': str(self.server), 'torch': 'CPU', 'tinyjev': '0.2.0'}
+                    'transformers>=4.57,<5', 'protobuf', reference, 'mistral-common', 'peft', 'zstandard')
+                receipt = {'commit': commit, 'server': str(self.server), 'torch': 'CPU', 'tinyjev_commit': REFERENCE_COMMIT}
                 (self.root / 'installed.json').write_text(json.dumps(receipt))
                 self.jobs.update(identifier, progress='Ready', receipt=receipt)
             except Exception as problem:

@@ -1713,7 +1713,11 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             metadata = await asyncio.to_thread(said_by, path)
         except (OSError, ValueError) as problem:
             return error(422, f"{path} could not be read as a model file: {problem}")
-        return JSONResponse({"path": path, "size": os.stat(path).st_size, "facts": facts(metadata), "metadata": metadata})
+        description = facts(metadata)
+        if 'classifier' in Path(path).parts and description.get('what') == 'model':
+            from loadcoach.classifier_sources import source_facts
+            description = {**description, **source_facts(path)}
+        return JSONResponse({"path": path, "size": os.stat(path).st_size, "facts": description, "metadata": metadata})
 
     # ---- Hugging Face: finding model files and bringing them down -----------------------------
     #

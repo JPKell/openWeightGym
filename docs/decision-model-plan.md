@@ -278,4 +278,6 @@ the complete bundle to that node through Files, open a source file, and choose *
 classifier GGUF**. Tools use the configured llama-server’s exact source commit in a separate
 CPU venv. Files shows durable progress and parity; the sibling output includes source/output
 hashes, converter commit and manifest. Unverified outputs retain the reason and are never
-reported as verified. TinyJev-4B parity needs an existing local Ollama >=0.35.1 reference.
+reported as verified. TinyJev-4B parity installs a digest-verified official Ollama 0.35.1 CPU reference
+on demand under the tools directory and runs it privately on a temporary loopback port.
+It does not register a service or change an existing Ollama installation.

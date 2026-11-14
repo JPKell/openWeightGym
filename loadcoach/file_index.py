@@ -46,6 +46,9 @@ def describe(path: Path) -> dict:
     if image_asset(path):
         return image_facts(path)
     result = facts(read_metadata(str(path)))
+    if 'classifier' in path.parts and result.get('what') == 'model':
+        from loadcoach.classifier_sources import source_facts
+        result = {**result, **source_facts(path)}
     manifest = path.parent / 'manifest.json'
     if result.get('what') == 'classifier' and manifest.is_file():
         try:
