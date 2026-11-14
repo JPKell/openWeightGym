@@ -58,7 +58,7 @@ def program_name(program: str) -> str:
     return LEGACY_PROGRAMS.get(program, program)
 
 # Compatibility shape for existing followers; the catalogue is the authority.
-from loadcoach.setting_catalog import changeable
+from loadcoach.setting_catalog import changeable, get as catalog_entry, validate, validate_values
 
 CHANGEABLE: dict[str, dict[str, str]] = changeable()
 SECRET = re.compile(r"(^|_)(key|token|secret|password)$")  # a setting with such a name is never handed out
@@ -94,29 +94,32 @@ def comments(text: str) -> dict[str, str]:
     return found
 
 
-def said(running: dict, file: dict, says: dict) -> dict:
+def redacted(value, name=''):
+    """Redact nested secrets, including service reports from older followers."""
+    if SECRET.search(name):
+        return '(not shown)'
+    if isinstance(value, dict):
+        return {key: redacted(inner, str(key)) for key, inner in value.items()}
+    return [redacted(inner) for inner in value] if isinstance(value, list | tuple) else value
+
+
+def said(running: dict, file: dict, says: dict, program='') -> dict:
     """What a program hands LoadCoach about itself: for each setting, the value it runs with, its file's if the file names it, and the file's comment.
 
     Anything that cannot be written as JSON is left out, and so is the value of anything
     whose name says it is a secret.
     """
 
-    def plain(value, name=""):
-        """Recursively prepare settings for JSON while hiding secret-valued fields."""
-        if SECRET.search(name):
-            return "(not shown)"
-        if isinstance(value, dict):
-            return {key: plain(inner, str(key)) for key, inner in value.items()}
-        return [plain(inner) for inner in value] if isinstance(value, list | tuple) else value
-
     told = {}
     for name, value in running.items():
+        if (entry := catalog_entry(program, name)) and entry.kind == 'secret':
+            continue
         try:
-            entry = {"value": json.loads(json.dumps(plain(value, name))), "says": says.get(name, "")}
+            entry = {"value": json.loads(json.dumps(redacted(value, name))), "says": says.get(name, "")}
         except TypeError:
             continue
         if name in file:
-            entry["file"] = json.loads(json.dumps(plain(file[name], name)))
+            entry["file"] = json.loads(json.dumps(redacted(file[name], name)))
         told[name] = entry
     return told
 
@@ -205,8 +208,18 @@ class Changes:
     def seen(self, program: str, told: dict, refused: dict | None = None) -> None:
         """Keep what a program says it runs with, in place of what it said before."""
         program = program_name(program)
+        safe = {}
+        for name, report in told.items():
+            entry = catalog_entry(program, name)
+            if entry and entry.kind == 'secret':
+                continue
+            if isinstance(report, dict):
+                safe[name] = {key: redacted(value, name) if key in ('value', 'file') else redacted(value)
+                              for key, value in report.items()}
+        safe_refused = {name: reason for name, reason in (refused or {}).items()
+                        if not ((entry := catalog_entry(program, name)) and entry.kind == 'secret')}
         with self.db:
-            self.db.execute("INSERT INTO settings_seen (program, at, told, refused) VALUES (?, ?, ?, ?) ON CONFLICT(program) DO UPDATE SET at=excluded.at,told=excluded.told,refused=excluded.refused", (program, time.time(), json.dumps(told), json.dumps(refused or {})))
+            self.db.execute("INSERT INTO settings_seen (program, at, told, refused) VALUES (?, ?, ?, ?) ON CONFLICT(program) DO UPDATE SET at=excluded.at,told=excluded.told,refused=excluded.refused", (program, time.time(), json.dumps(safe), json.dumps(redacted(safe_refused))))
 
     def everything(self) -> list[dict]:
         """Every program that has said what it runs with, and each of its settings as the page shows it."""
@@ -297,19 +310,34 @@ def with_changes(program: str, path: Path):
     from loadcoach.config import data_folder, read_settings, said_in  # here, since config.py reads this file in turn
 
     told = read_settings(path)
+    validate_values(program, told)
     copy, says = data_folder(path, told) / f"{path.stem}.changes.json", said_in(path)
-    settings = laid_over(told, copy_of(copy), program)
+    saved = copy_of(copy)
+    valid = {}
+    for name, value in saved.items():
+        if name in CHANGEABLE[program]:
+            try:
+                valid[name] = validate(program, name, value)
+            except ValueError:
+                pass  # A bad persisted override must not stop a service starting.
+    settings = laid_over(told, valid, program)
     # What holds from the next start is not in force until then, whatever the dict says meanwhile.
     at_start = {name: settings[name] for name, when in CHANGEABLE[program].items() if when == RESTART and name in settings}
 
     def take(changed: dict):
         """Read a running setting with saved overrides applied."""
-        refused = {name: why for name, value in changed.items() if name in told and (why := wrong_kind(value, told[name]))}
+        refused = {}
+        for name, value in changed.items():
+            if name in CHANGEABLE[program]:
+                try:
+                    validate(program, name, value)
+                except ValueError as problem:
+                    refused[name] = str(problem)
         merged = laid_over(told, {name: value for name, value in changed.items() if name not in refused}, program)
         settings.clear()
         settings.update({name: value for name, value in merged.items() if CHANGEABLE[program].get(name) != RESTART})
         settings.update(at_start)
-        return said(settings, told, says), refused
+        return said(settings, told, says, program), refused
 
     return settings, lambda http, base, key: follow(program, asker(http, base, key), copy, take)
 

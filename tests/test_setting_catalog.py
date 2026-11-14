@@ -1,12 +1,13 @@
 """The setting catalogue is the common contract for files, APIs and live getters."""
 
 import math
+import json
 import tomllib
 from pathlib import Path
 
 import pytest
 
-from loadcoach.setting_catalog import CATALOG, changeable, get, validate
+from loadcoach.setting_catalog import CATALOG, Setting, changeable, get, validate, validate_values
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = sorted((ROOT / 'settings/defaults').glob('*.toml')) + sorted((ROOT / 'settings/examples').glob('*.toml'))
@@ -63,3 +64,50 @@ def test_compatibility_metadata_is_derived_from_the_catalogue():
         {'name': 'unrecognised_extension', 'when': 'now'},
     ]}])
     assert [group['title'] for group in grouped] == ['Sessions and limits', 'Additional settings']
+
+
+EDITABLE = [entry for entry in CATALOG.values() if entry.tier != 'file']
+
+
+@pytest.mark.parametrize('entry', EDITABLE, ids=lambda entry: f'{entry.program}.{entry.name}')
+def test_loader_and_management_api_refuse_the_same_invalid_value(entry, tmp_path):
+    from starlette.applications import Starlette
+    from starlette.routing import Route
+    from starlette.testclient import TestClient
+    from types import SimpleNamespace
+    from turnstile.settings import ConsoleSettings
+
+    wrong = {'bool': 1, 'int': True, 'float': True, 'text': [], 'choice': [], 'secret': [], 'list': {}, 'table': []}[entry.kind]
+    with pytest.raises(ValueError) as refused:
+        validate_values(entry.program, {entry.name: wrong})
+    api = ConsoleSettings(tmp_path / 'settings.db', SimpleNamespace(add=lambda *a, **kw: None), None,
+                          programs={entry.program})
+    api.changes.seen(entry.program, {entry.name: {'value': wrong}})
+    user = SimpleNamespace(name='operator', can=lambda ability: True)
+
+    async def handle(request):
+        return await api.handle(request, user)
+
+    try:
+        with TestClient(Starlette(routes=[Route('/loadcoach/settings/{program}', handle, methods=['POST'])])) as client:
+            response = client.post('/loadcoach/settings/' + entry.program, json={entry.name: wrong})
+        assert response.status_code == 400
+        assert response.json()['error']['message'] == str(refused.value)
+        assert api.changes.of(entry.program) == {}
+    finally:
+        api.changes.db.close()
+
+
+def test_secret_kind_never_reaches_settings_seen_even_from_a_follower(monkeypatch, tmp_path):
+    from loadcoach.settings import Changes, said
+    monkeypatch.setitem(CATALOG, ('weightroom', 'credential'), Setting('weightroom', 'credential', 'secret'))
+    secret = 'private-catalogue-credential'
+    assert 'credential' not in said({'credential': secret}, {'credential': secret}, {}, 'weightroom')
+    changes = Changes(tmp_path / 'settings.db')
+    try:
+        changes.seen('weightroom', {'credential': {'value': secret},
+                                   'channels': {'value': {'nested': {'password': secret}}}})
+        raw = changes.db.execute('SELECT told FROM settings_seen').fetchone()[0]
+        assert secret not in raw and 'credential' not in json.loads(raw)
+    finally:
+        changes.db.close()

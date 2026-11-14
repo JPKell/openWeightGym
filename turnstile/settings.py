@@ -1,13 +1,13 @@
-"""Settings of the front's own programs (the console), kept on the front, behind the existing settings HTTP contract."""
+"""Settings of the control node's own programs (the console), kept on the control node, behind the existing settings HTTP contract."""
 
 from starlette.responses import JSONResponse
 
-from loadcoach.settings import CHANGEABLE, Changes, FRONT_PROGRAMS as PROGRAMS, program_name, wrong_kind
-from loadcoach.platform_services import SERVICE_SETTINGS
+from loadcoach.settings import CHANGEABLE, Changes, FRONT_PROGRAMS as PROGRAMS, program_name
+from loadcoach.setting_catalog import validate_patch
 from loadcoach.tasks import error
 
 class ConsoleSettings:
-    """Live settings of the front's own programs and their compatibility endpoints.
+    """Live settings of the control node's own programs and their compatibility endpoints.
 
     Console settings remain available independently of compute-node availability.
     """
@@ -72,45 +72,16 @@ class ConsoleSettings:
                 return error(403, 'Settings require manage-settings.')
             known = next((one for one in self.changes.everything() if one['program'] == program), None)
             if known is None:
-                return error(404, 'This program has not reported its settings on front.')
+                return error(404, 'This program has not reported its settings on the control node.')
             current = {one['name']: one['value'] for one in known['settings']}
-            if program == 'voice-gateway' and body.get('telephone') is not None:
-                from voice.telephone_settings import validate
-                validate(body['telephone'])
-            if program == 'turnstile' and {'models_folder', 'models_storage_folder'} & body.keys():
-                from turnstile.artifacts import checked_roots
-                effective = {**current, **self.changes.of(program), **body}
-                for name, value in body.items():
-                    if value is None:
-                        entry = next((row for row in known['settings'] if row['name'] == name), {})
-                        effective[name] = entry.get('file', '')
-                checked_roots({name: effective.get(name, '') for name in ('models_folder', 'models_storage_folder')})
-            for name, value in body.items():
+            for name in body:
                 if name not in CHANGEABLE[program]:
                     return error(403, 'This setting belongs in the program file.')
-                if program == 'weightroom' and name in SERVICE_SETTINGS and value is not None and type(value) is not bool:
-                    raise ValueError(f'{name} must be true or false.')
-                if value is not None and name in current and (why := wrong_kind(value, current[name])):
-                    raise ValueError(f'{name}: {why}')
-                if program == 'turnstile' and name == 'response_max_tool_calls' and value is not None and (type(value) is not int or not 1 <= value <= 10000):
-                    raise ValueError('response_max_tool_calls must be from 1 to 10000.')
-                if program == 'turnstile' and name == 'response_max_tool_seconds' and value is not None and (type(value) not in (int, float) or not 0 < value <= 86400):
-                    raise ValueError('response_max_tool_seconds must be above zero and at most 86400.')
-                if program == 'turnstile' and name == 'response_keep_days' and value is not None and (type(value) not in (int, float) or not 0 < value <= 3650):
-                    raise ValueError('response_keep_days must be above zero and at most 3650 days.')
-                if name == 'component_versions_every' and value is not None:
-                    from loadcoach.component_versions import interval_seconds
-                    interval_seconds(value)
-                if program == 'turnstile' and name == 'image_adult_previews' and value is not None and type(value) is not bool:
-                    raise ValueError('image_adult_previews must be true or false.')
-                if program == 'turnstile' and name == 'preferred_voice_node' and value and value not in self.voice_nodes():
-                    raise ValueError('Choose a node that reports Voice installed, or Automatic.')
-                if program == 'weightroom' and name == 'alert_gpu_temperature' and value is not None and (type(value) not in (int, float) or not 50 <= value <= 110):
-                    raise ValueError('alert_gpu_temperature must be from 50 through 110 degrees Celsius.')
-                if program == 'weightroom' and value is not None:
-                    from loadcoach.observability import ALERT_LIMITS, alert_value
-                    if name in ALERT_LIMITS:
-                        alert_value(name, value)
+            # A reset validates the effective file fallback as part of the same POST.
+            defaults = {row['name']: row.get('file', row['value']) for row in known['settings']}
+            effective = {**current, **self.changes.of(program),
+                         **{name: defaults.get(name) for name, value in body.items() if value is None}}
+            validate_patch(program, effective, body, context={'voice_nodes': self.voice_nodes})
             # Changes.put/take_away commit separately: validate the entire request first.
             for name, value in body.items():
                 self.changes.take_away(program, name) if value is None else self.changes.put(program, name, value, user.name)

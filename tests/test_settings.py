@@ -49,7 +49,7 @@ def test_what_was_changed_lies_over_spotters_file_and_is_taken_on_while_it_runs(
     # What spotter's own rules refuse is not taken on, and the reason goes back to the page.
     changes.put("spotter", "sample_every", 0, "jordan")
     unchanged, refused = taken("spotter", running, changes.of("spotter"), spotter.settings_from)
-    assert unchanged is running and "sample_every is a second or more" in refused["sample_every"]
+    assert unchanged is running and "sample_every must be at least 1" in refused["sample_every"]
     # At the next start a change that cannot be used does not keep spotter from starting. Without it, the others hold.
     assert spotter.load_settings(file).sleep_after == 0 and "cannot be used" in capsys.readouterr().err
     changes.take_away("spotter", "sample_every")
@@ -90,7 +90,7 @@ def test_image_preview_policy_keeps_the_file_default_separate_from_live_override
     turnstile.say_what_runs(front,settings)
     assert json.loads((tmp_path/'data/settings-seen-turnstile.json').read_text())['image_adult_previews']['value'] is True
     front.write_text('compute = "http://compute:8442"\n[turnstile]\nimage_adult_previews = "true"\n')
-    with pytest.raises(SystemExit,match='image_adult_previews must be a boolean'):
+    with pytest.raises(SystemExit,match='image_adult_previews must be true or false'):
         turnstile.load_settings(front)
 
 
@@ -115,7 +115,7 @@ def test_a_program_that_reaches_loadcoach_over_the_network_keeps_in_step_and_kee
     # It reads its settings where it uses them, so a change is simply there. One of the wrong kind is refused, one that may not be changed passed over.
     assert settings["idle_seconds"] == 30 and settings["profiles"] == {"default": {"model": "small"}} and "port" not in settings
     told = next(body for method, path, body, _ in asked if method == "POST")
-    assert told["refused"] == {"profiles": "It is a table, and this is text."} and told["told"]["idle_seconds"] == {"value": 30, "says": "Seconds a silent call is kept.", "file": 120}
+    assert told["refused"] == {"profiles": "profiles must be a table."} and told["told"]["idle_seconds"] == {"value": 30, "says": "Seconds a silent call is kept.", "file": 120}
     assert told["told"]["model_parallel"]["value"] == 1  # this one holds from its next start, and it says what is in force now
     assert [(path, key) for method, path, _, key in asked if method == "POST"] == [("/loadcoach/settings/voice/seen", "Bearer its-own-key")]
 

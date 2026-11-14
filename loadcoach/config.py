@@ -5,7 +5,6 @@ Everything else is handed a `Config` and never reads the file itself.
 
 from __future__ import annotations
 
-import math
 import os
 import re
 import sys
@@ -21,6 +20,7 @@ from loadcoach.gpu_type import is_integrated
 from engines import checked_installations
 from loadcoach.settings import changed_for, comments, laid_over
 from loadcoach.setting_names import current_names
+from loadcoach.setting_catalog import validate_values
 
 @dataclass
 class Config:
@@ -273,42 +273,12 @@ def checked(config: Config, path) -> Config:
         raise SystemExit(f"{path}: {problem}") from None
     if type(config.toollocker_runs_on_front) is not bool or config.toollocker_runs_on_front and not config.front:
         raise SystemExit(f"{path}: toollocker_runs_on_front is a boolean and requires a control node address")
-    for name in ("load_timeout", "max_wait", "keep_days", "model_idle_minutes", "cpu_idle_minutes", "batch_keep_days"):
-        if type(getattr(config, name)) not in (int, float) or getattr(config, name) < 0:
-            raise SystemExit(f"{path}: {name} is a number, 0 or more")
-    if not math.isfinite(config.model_idle_minutes) or not math.isfinite(config.cpu_idle_minutes):
-        raise SystemExit(f"{path}: model_idle_minutes and cpu_idle_minutes must be finite")
-    if type(config.max_estimated_wait) not in (int, float) or not 0 <= config.max_estimated_wait < 1e12 or not math.isfinite(config.max_estimated_wait):
-        raise SystemExit(f"{path}: max_estimated_wait is a finite number from 0 to below 1e12; 0 disables estimated-wait refusals")
-    if not isinstance(config.model_defaults, dict) or not all(isinstance(card, str) for card in config.gpus):
-        raise SystemExit(f"{path}: model_defaults is a table of flags, and gpus a list of the cards' names")
-    if not isinstance(config.disabled_gpus, list) or not all(isinstance(card, str) for card in config.disabled_gpus) or len(set(config.disabled_gpus)) != len(config.disabled_gpus):
-        raise SystemExit(f"{path}: disabled_gpus is a list of distinct card names")
-    if not isinstance(config.engine_gpus, dict):
-        raise SystemExit(f"{path}: engine_gpus is a table of engine IDs and card lists")
-    from engines import engine_for
-    for engine, cards in config.engine_gpus.items():
-        try:
-            engine_for(engine)
-        except ValueError as problem:
-            raise SystemExit(f'{path}: {problem}') from None
-        if not isinstance(cards, list) or not all(isinstance(card, str) and card for card in cards) or len(cards) != len(set(cards)):
-            raise SystemExit(f'{path}: engine_gpus.{engine} is a list of distinct card names')
-    if type(config.keep_text) is not int or config.keep_text < 0:
-        raise SystemExit(f"{path}: keep_text is a whole number of requests, 0 or more")
-    for name in ("host_ram_headroom_mib", "host_ram_limit_mib"):
-        if type(getattr(config, name)) is not int or getattr(config, name) < 0:
-            raise SystemExit(f"{path}: {name} is a whole number of MiB, 0 or more")
-    if type(config.card_margin) is not int or config.card_margin < 0:
-        raise SystemExit(f"{path}: card_margin is a whole number of MiB, 0 or more")
-    if type(config.disable_ram_offload) is not bool:
-        raise SystemExit(f"{path}: disable_ram_offload is true or false")
-    if not isinstance(config.unlogged, bool):
-        raise SystemExit(f"{path}: unlogged is true or false")
-    if not isinstance(config.models_folder, str) or config.models_folder and not config.models_folder.startswith("/"):
-        raise SystemExit(f"{path}: models_folder must be a full path, or empty")
-    if not isinstance(config.models_storage_folder, str) or config.models_storage_folder and not config.models_storage_folder.startswith("/"):
-        raise SystemExit(f"{path}: models_storage_folder must be a full path, or empty")
+    try:
+        validate_values('loadcoach', vars(config))
+    except ValueError as problem:
+        raise SystemExit(f"{path}: {problem}") from None
+    if not all(isinstance(card, str) for card in config.gpus):
+        raise SystemExit(f"{path}: gpus must be a list of card names")
     if not isinstance(config.places, dict) or not all(isinstance(folder, str) and folder.startswith("/") for folder in config.places.values()):
         raise SystemExit(f'{path}: [places] is a list of name = "/a/folder", each a full path')
     try:

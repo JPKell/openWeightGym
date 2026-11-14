@@ -8,9 +8,9 @@ that owns the tool, and writes what happened to the event log.
     servers.py   starts the MCP servers and talks to them
     tools/       the small MCP servers written here
 
-Who is asking is turnstile's to say, on the front machine: it checks the caller's key and sends
-a signed statement in its place (see loadcoach/statement.py). The gateway runs on front with
-tool records the front keeps; tool files execute on their configured owning hosts. Its configured
+Who is asking is turnstile's to say, on the control node: it checks the caller's key and sends
+a signed statement in its place (see loadcoach/statement.py). The gateway runs on the control node with
+tool records the control node keeps; tool files execute on their configured owning hosts. Its configured
 event store uses the shared audit-log implementation rather than a separate identity authority.
 """
 
@@ -46,6 +46,7 @@ from loadcoach.config import CLI, data_folder, kept_by_loadcoach, read_settings,
 from loadcoach.log import Log
 from loadcoach.groups import LEVELS
 from loadcoach.statement import Statements, user_of
+from loadcoach.setting_catalog import validate_values
 from loadcoach.settings import Changes, changed_for, laid_over, said, taken
 from loadcoach.users import User
 from toollocker.servers import Remote, Server, ToolProblem
@@ -69,7 +70,7 @@ class Config:
     host: str = "127.0.0.1"
     port: int = 8443
     call_timeout: float = 120  # seconds one tool call may take
-    extraction_url: str = ''  # front's model API for caller-bound built-in extraction tools; empty disables them
+    extraction_url: str = ''  # the control node's model API for caller-bound built-in extraction tools; empty disables them
     path: str = ""  # the settings file itself
     file: dict = field(default_factory=dict)  # what that file says, before anything changed on the site is laid over it
     says: dict = field(default_factory=dict)  # the comment above each setting in the file, shown beside it on the site
@@ -93,7 +94,7 @@ def shared_store(path: Path, told: dict) -> tuple[str, DatabaseSource]:
     shared = path.parent / told.get("loadcoach", "loadcoach.toml")
     main, store, _ = kept_by_loadcoach(shared)
     if main.get('toollocker_runs_on_front', main.get('front_toollocker')):
-        raise SystemExit(f"{path}: ToolLocker moved to front; use front's toollocker.toml")
+        raise SystemExit(f"{path}: ToolLocker moved to the control node; use the control node's toollocker.toml")
     key = str(shared.parent / main["machine_key_file"]) if main.get("machine_key_file") else ""
     return key, store
 
@@ -128,8 +129,7 @@ def config_from(path: Path, data: dict, file: dict | None = None) -> Config:
     data.pop("front", None)
     try:
         config = Config(**{"servers": {}, **data, "machine_key_file": key_file, "database": database, "path": str(path), "file": file, "says": said_in(path)})
-        if type(config.call_timeout) not in (int, float) or config.call_timeout <= 0:
-            raise ValueError("call_timeout is a number of seconds above 0")
+        validate_values('toollocker', vars(config))
         if not isinstance(config.extraction_url, str) or config.extraction_url and not config.extraction_url.startswith(('http://', 'https://')):
             raise ValueError('extraction_url must be an HTTP service URL or empty')
         if config.extraction_url:
@@ -165,12 +165,6 @@ def config_from(path: Path, data: dict, file: dict | None = None) -> Config:
         command = server.get("command")
         if not (isinstance(command, list) and command and all(isinstance(part, str) for part in command)):
             raise SystemExit(f"{where} needs `command`: a list holding the program and its arguments")
-    for name, toolset in config.toolsets.items():
-        tools = toolset.get("tools") if isinstance(toolset, dict) and toolset.keys() == {"tools"} else None
-        if not NAME.fullmatch(name) or not isinstance(tools, list) or not all(isinstance(tool, str) for tool in tools):
-            raise SystemExit(f"{path}: tool set {name!r} needs a lowercase name and `tools`, a list of names")
-    if not isinstance(config.tool_levels, dict) or not all(isinstance(tool, str) and level in LEVELS for tool, level in config.tool_levels.items()):
-        raise SystemExit(f"{path}: tool_levels gives each tool, by the name a harness sees, one of {', '.join(LEVELS)}")
     return config
 
 
@@ -296,7 +290,7 @@ def build_app(config: Config) -> Starlette:
         said = getattr(request.state, "said", None)
         if not said or not said.get("caller"):
             log.add("refused", "401", "", request.client.host if request.client else "?", path=request.url.path, why="Not sent through turnstile.")
-            return JSONResponse({"error": "Ask through turnstile, on the front machine. It checks your key and says here who you are."}, status_code=401)
+            return JSONResponse({"error": "Ask through turnstile, on the control node. It checks your key and says here who you are."}, status_code=401)
         user = user_of(said["caller"])
         toolset = request.path_params.get("toolset")
         # A harness may also choose tool sets by header, on any address: "code,email" offers the tools of either.
@@ -427,7 +421,7 @@ def serve(config: Annotated[Path, typer.Option(metavar="FILE", help="The setting
 
     It has no commands. It runs until stopped, normally as a service: systemctl --user status toollocker
 
-    Who may connect is turnstile's to say, on the front machine: a harness asks through it, with its key, and turnstile signs who it is. A page for trying a tool by hand is at its own address, /.
+    Who may connect is turnstile's to say, on the control node: a harness asks through it, with its key, and turnstile signs who it is. A page for trying a tool by hand is at its own address, /.
 
     Every setting is explained in settings/examples/toollocker.toml and settings/defaults/toollocker.toml.
     """

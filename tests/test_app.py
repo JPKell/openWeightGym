@@ -103,10 +103,10 @@ def gateway(fake_llama_server, models=None, groups=GROUPS, web=None, **config):
     # Turnstile's files, never in the folder a test happens to run in. Beside LoadCoach's own database when a test starts it again with it, so the roles last as long.
     folder = Path(config["database"]).with_name("front") if "database" in config else Path(tempfile.mkdtemp(prefix="front-"))
     folder.mkdir(exist_ok=True)
-    outside = {"hosted_keys": config.pop("keys")} if "keys" in config else {}  # the outside services' key files are front's
+    outside = {"hosted_keys": config.pop("keys")} if "keys" in config else {}  # the outside services' key files are the control node's
     settings = Config(models=models, gpus=CARDS, llama_server=fake_llama_server, machine_key_file=str(folder / "machine.key"), front="http://front:8442",
                       **{"nvidia_smi": "no-such-program", "model_idle_minutes": 0, **config})
-    # Turnstile in front, with the accounts, as on the two machines. `web` is how it reaches Hugging Face: a stand-in, where a test needs one.
+    # Turnstile in the control node, with the accounts, as on the two machines. `web` is how it reaches Hugging Face: a stand-in, where a test needs one.
     # The accounts last as long as LoadCoach's own database does: a test that starts it again with the same `database` finds them again.
     accounts = Users(str(Path(config["database"]).with_name("accounts.db")) if "database" in config else ":memory:", groups)
     return front_of(lambda front: build_app(settings, web, front), accounts, folder, **outside)
@@ -811,7 +811,7 @@ def test_rename_api_permissions_validation_and_busy_account(fake_llama_server, t
         assert caller.get("/loadcoach/me", headers=pat).json()["name"] == "alex"
         assert batches.file(file["id"])["user"] == "alex"
         assert batches.get(batch["id"])["user"] == "alex"
-        event = caller.log.read(0, 100, None, "user")  # what was done to an account is on record at the front machine
+        event = caller.log.read(0, 100, None, "user")  # what was done to an account is on record at the control node
         assert "renamed" in str(event) and "new_name" in str(event)
         assert Log(database).verify()[1] is None and caller.log.verify()[1] is None
 
@@ -875,7 +875,7 @@ def test_users_are_kept_on_front_and_the_first_is_made_from_the_command_line(tmp
     with pytest.raises(SystemExit, match="set machine_key_file"):  # open to the network, and nothing to say who is asking
         main()
 
-    # The accounts are the front machine's, and so are the commands that look after them.
+    # The accounts are the control node's, and so are the commands that look after them.
     front = tmp_path / "weightroom.toml"
     front.write_text('compute = "http://c:1"\ndata = "front"\n[groups.admin]\ncan = ["manage-users"]\n')
     (tmp_path / "front").mkdir()
@@ -887,7 +887,7 @@ def test_users_are_kept_on_front_and_the_first_is_made_from_the_command_line(tmp
     assert key not in (tmp_path / "front" / "accounts.db").read_bytes().decode("latin-1")  # only its hash is stored
     assert "added" in run("log").output and "intact" in run("log", "verify").output
 
-    # The move: compute's accounts, taken once into an empty front, every hash as it was.
+    # The move: compute's accounts, taken once into an empty control node, every hash as it was.
     old = Users(str(tmp_path / "compute.db"), {"admin": Group(can=frozenset({"manage-users"}))})
     old.add("pat", "admin")
     pats = old.new_key("pat")
@@ -950,7 +950,7 @@ def test_a_model_is_given_another_name_and_what_lists_it_follows(fake_llama_serv
     assert chat["own"] == {"models": ["tiny"]} and few["models"] == ["tiny", "big"]  # who may use it still may
     assert (kept["what"], kept["model"], kept["was"], kept["user"]) == ("renamed", "tiny", "small", "jordan")
 
-    # From the command line on compute. The groups are on the front machine, and say so.
+    # From the command line on compute. The groups are on the control node, and say so.
     config = Config(gpus=CARDS)
     models = Models(":memory:", first={"small": model("small.gguf")})
     model_command(models, config, "rename", ["small", "tiny"])
@@ -1086,14 +1086,14 @@ def test_every_command_has_a_page_of_help(tmp_path):
     front = ask("--help").output  # help needs no settings file
     for command in ("models", "log", "status", "drain", "unlock", "clear", "stop", "peek", "downloads", "fingerprints"):
         assert f" {command} " in front
-    assert not {"user", "group"} & {typer_group.name for typer_group in app.registered_groups}  # the accounts are the front machine's
+    assert not {"user", "group"} & {typer_group.name for typer_group in app.registered_groups}  # the accounts are the control node's
     for group, commands in (("models", ("list", "show", "export", "add", "set", "rename", "remove")), ("log", ("verify",))):  # fmt: skip
         listed = ask(group, "--help").output
         for command in commands:
             page = ask(group, command, "-h")
             assert f" {command} " in listed and page.exit_code == 0 and f"loadcoach {group} {command}" in page.output
 
-    # On the front machine, the weightroom command looks after the accounts.
+    # On the control node, the weightroom command looks after the accounts.
     import weightroom.app
     from weightroom.app import cli as weightroom_cli
     ask = lambda *words: CliRunner().invoke(weightroom_cli, ["--config", str(tmp_path / "none.toml"), *words], prog_name="weightroom")  # noqa: E731
@@ -1211,7 +1211,7 @@ def test_a_request_leaves_two_entries_asked_and_how_it_ended(fake_llama_server):
         asked, ended = events(caller, kind="request")
         loaded = events(caller, kind="model")[-1]
 
-    assert answer.headers["x-loadcoach-request-id"] == str(asked["source"])  # compute's number, which front keeps beside its own
+    assert answer.headers["x-loadcoach-request-id"] == str(asked["source"])  # compute's number, which control node keeps beside its own
     assert (asked["what"], asked["path"], asked["user"], asked["caller"], asked["model"]) == (
         "asked", "chat/completions", "anonymous", "testclient", "small",
     )  # fmt: skip
@@ -1279,7 +1279,7 @@ def test_locks_the_line_and_users_are_on_record(fake_llama_server):
         caller.post("/loadcoach/users/pat/keys", json={"label": "laptop"}, headers=pat)
         caller.delete("/loadcoach/users/pat", headers=admin)
         log = events(caller, admin)
-        users = caller.log.read(0, 100, None, "user")  # what was done to the accounts is on record at the front machine
+        users = caller.log.read(0, 100, None, "user")  # what was done to the accounts is on record at the control node
 
     assert [entry["what"] for entry in log if entry["kind"] == "lock"] == [
         "taken", "extended", "released", "taken", "ran-out", "taken", "broken",
@@ -1697,7 +1697,7 @@ def test_config_refuses_what_would_fail_later(tmp_path, monkeypatch):
     refused('host = "10.0.0.1" port = 8442\n' + cards + flags, r"not valid TOML.*line 1, column 19")  # a slip says where, in one line
     with pytest.raises(SystemExit, match="cannot be read"):
         load_config(tmp_path / "no-such-file.toml")
-    refused(cards + flags + "[groups.g]\ncan = [\"load\"]\n", "kept on the front machine")  # since milestone 76
+    refused(cards + flags + "[groups.g]\ncan = [\"load\"]\n", "kept on the control node")  # since milestone 76
     refused('upstreem = "typo"\n' + cards + flags, "upstreem")
     refused(cards + f'[models.m.flags]\nmodel = "{gguf}"\n', "ctx-size")
     refused(cards + flags + 'device = "A"\n', "LoadCoach sets those")
@@ -1731,7 +1731,7 @@ def test_config_refuses_what_would_fail_later(tmp_path, monkeypatch):
 
 
 # ---- hosted models ------------------------------------------------------------------------------
-# Outside services, their keys and what may leave are the front machine's: see test_hosted_front.py.
+# Outside services, their keys and what may leave are the control node's: see test_hosted_front.py.
 
 
 @pytest.fixture
@@ -1760,7 +1760,7 @@ def test_the_hosted_section_and_service_keys_are_ignored_with_a_note_in_compute_
     file.write_text('keys = "../keys"\n' + local + '[hosted]\nurl = "https://example.test/api/v1"\nkey_env = "K"\n')
     config = load_config(file)
     said = capsys.readouterr().err
-    assert "[hosted] is ignored" in said and "[keys] is ignored" in said and "front machine" in said
+    assert "[hosted] is ignored" in said and "[keys] is ignored" in said and "control node" in said
     assert not hasattr(config, "hosted_models") and "small" in config.models
 
 
@@ -1801,7 +1801,7 @@ def test_one_request_can_be_looked_at_and_stopped_while_it_is_being_answered(fak
         assert cut_short.status_code == 200 and "round 1. " in cut_short.text  # what had been sent stays sent
         assert went_ahead.status_code == 200 and "pid" in went_ahead.json()
 
-        ending = [event for event in events(caller, admin, user="pat") if event.get("of") == entry][-1]  # the log is front's
+        ending = [event for event in events(caller, admin, user="pat") if event.get("of") == entry][-1]  # the log is the control node's
         assert (ending["what"], ending["by"]) == ("stopped", "command-line")
 
         # One address tells everything on record about one request, to its own user or with see-log.
@@ -1860,7 +1860,7 @@ def test_unlogged_requests_can_be_stopped_without_retained_evidence(fake_llama_s
         quiet = {**owner, 'x-loadcoach-log': 'off'}
         assert caller.post('/v1/chat/completions', json={'model': 'small'}, headers=owner).status_code == 200
         def counts():
-            with sqlite3.connect(file) as saved, sqlite3.connect(Path(file).with_name('front') / 'roles.db') as front:  # reliability is kept on the front machine
+            with sqlite3.connect(file) as saved, sqlite3.connect(Path(file).with_name('front') / 'roles.db') as front:  # reliability is kept on the control node
                 return [saved.execute('SELECT COUNT(*) FROM '+table).fetchone()[0] for table in ('events', 'texts', 'traces')] + [
                         front.execute('SELECT COUNT(*) FROM reliability_outcomes').fetchone()[0]]
         before = counts()
@@ -2051,7 +2051,7 @@ def test_models_are_looked_after_from_the_command_line_and_taken_over_from_the_f
 
 SIGNING_IN = {
     **GROUPS,
-    # Whoever sets these people up can do everything: only such a one may make the front machine's own account.
+    # Whoever sets these people up can do everything: only such a one may make the control node's own account.
     "admin": read_group("admin", {"can": ["superuser"]}),
     "brief": Group(can=frozenset({"load"}), session_hours=0.0002),  # a sign-in that lasts under a second
     "careful": Group(can=frozenset({"load"}), second_step=True),
@@ -2060,7 +2060,7 @@ SIGNING_IN = {
 
 
 def people(caller, **groups):
-    """Add an admin, the front machine's own key, and one user per `name=group` with the password 'correct horse'."""
+    """Add an admin, the control node's own key, and one user per `name=group` with the password 'correct horse'."""
     admin = add_user(caller, "jordan", "admin")
     front = add_user(caller, "panel", "front", by=admin)
     keys = {name: add_user(caller, name, group, by=admin) for name, group in groups.items()}
@@ -2077,7 +2077,7 @@ def test_a_password_checked_here_gets_a_session_key_that_ends(fake_llama_server)
     with gateway(fake_llama_server, groups=SIGNING_IN) as caller:
         admin, front, keys = people(caller, pat="plain", bea="brief")
 
-        # Only this machine, or the front machine's key, may pass a password in. And the front's key is no more than that.
+        # Only this machine, or the control node's key, may pass a password in. And the control node's key is no more than that.
         assert caller.post("/loadcoach/sign-in", json={"name": "pat", "password": "correct horse"}).status_code == 403
         assert sign_in(caller, admin, "pat").status_code == 403
         assert caller.get("/loadcoach/me", headers={**front, "x-loadcoach-user": "pat"}).json()["name"] == "panel"
@@ -2115,7 +2115,7 @@ def test_a_password_checked_here_gets_a_session_key_that_ends(fake_llama_server)
         caller.post("/loadcoach/users/pat", json={"enabled": False}, headers=admin)
         assert caller.get("/loadcoach/me", headers=live).status_code == 401 and sign_in(caller, front, "pat").status_code == 401
 
-        seen = caller.log.read(0, 200, "pat")  # sign-ins are on record at the front machine
+        seen = caller.log.read(0, 200, "pat")  # sign-ins are on record at the control node
         assert [event["at_front_from"] for event in seen if event["what"] == "signed-in" and "at_front_from" in event] == ["10.0.0.7"]
         assert [event["why"] for event in seen if event["what"] == "sign-in"] == ["wrong", "wrong"]
         listed = {user["name"]: user for user in caller.get("/loadcoach/users", headers=admin).json()["users"]}
@@ -2124,7 +2124,7 @@ def test_a_password_checked_here_gets_a_session_key_that_ends(fake_llama_server)
 
 def test_this_machine_may_sign_in_with_no_key_and_too_many_wrong_tries_lock_a_name(fake_llama_server):
     settings = Config(models={"small": model("small.gguf")}, gpus=CARDS, llama_server=fake_llama_server, machine_key_file=str(Path.cwd() / "machine.key"))
-    # A browser on the front machine itself, where turnstile is.
+    # A browser on the control node itself, where turnstile is.
     with front_of(lambda front: build_app(settings, None, front), Users(":memory:", SIGNING_IN), Path.cwd(), address="127.0.0.1") as caller:
         people(caller, pat="plain", cam="plain")
         here = lambda name, password="correct horse": caller.post("/loadcoach/sign-in", json={"name": name, "password": password})  # noqa: E731
@@ -2243,7 +2243,7 @@ def test_a_superuser_can_do_everything_a_person_can_be_allowed_to(fake_llama_ser
                caller.post("/v1/chat/completions", json={"model": "small"}, headers={**boss, "x-loadcoach-sensitivity": "restricted"})]  # fmt: skip
         not_a_persons = caller.get("/loadcoach/plugins/mirror", headers=boss)
     assert {"superuser", "drain", "power", "manage-users", "see-capture"} <= set(me["can"]) and [answer.status_code for answer in did] == [200] * 5
-    assert not_a_persons.status_code == 403  # mirror-users is for the front machine's own key, never a person's
+    assert not_a_persons.status_code == 403  # mirror-users is for the control node's own key, never a person's
 
 
 # ---- groups in the file, accounts with something of their own, and apps -------------------------
@@ -2344,7 +2344,7 @@ def test_an_account_can_have_more_and_less_than_its_group(fake_llama_server, tmp
     assert made.status_code == 201 and seen["own"] == {"remove": ["lock"], "models": ["small"]} and seen["can"] == ["hosted", "load"]
     assert outcome == [403, 200, ["small"], 404]  # this app may not lock, the other may; and it reaches one model only
     assert [(row["days"], row["requests"]) for row in usage] == [(1, 1), (7, 1), (28, 1)] and mine == (200, 403)  # an account may see itself, and nobody else
-    assert spans == [[1, 7, 3], [1, 7, 1], [1, 7, 5000]]  # the last row is as long as is asked for: front keeps the whole log
+    assert spans == [[1, 7, 3], [1, 7, 1], [1, 7, 5000]]  # the last row is as long as is asked for: control node keeps the whole log
     # The one asking is told whether a change would be refused. Their own account is closed to everyone but someone who can do everything.
     assert why_not[:2] == [None, None] and "their own group" in why_not[2]
     assert "key" not in person and len(person["temporary_password"]) == 12 and (first["password"], first["keys"]) == ("temporary", [])
@@ -2404,10 +2404,10 @@ def test_nobody_raises_themselves_or_hands_out_what_they_may_not_do(fake_llama_s
         # Someone who can do everything can hand out anything, the abilities meant for a program's own key included.
         by_owner = [group(owner, "front", can=["sign-in", "mirror-users"]), caller.post("/loadcoach/users", json={"name": "panel", "group": "front"}, headers=owner),
                     change(owner, "jordan", own={"add": ["power"]}), group(owner, "admin", can=["load", "manage-users"])]  # fmt: skip
-        kept = [(entry["what"], entry["user"], entry.get("name")) for entry in caller.log.read(0, 100, None, "group")]  # on record at the front machine
+        kept = [(entry["what"], entry["user"], entry.get("name")) for entry in caller.log.read(0, 100, None, "group")]  # on record at the control node
 
     assert [answer.status_code for answer in own_owner[:2]] == [200, 200] and own_owner[2] == {"priority": "high"}
-    assert [answer.status_code for answer in own] == [403] * 6 and "on the front machine, with the weightroom command" in own[0].json()["error"]["message"]
+    assert [answer.status_code for answer in own] == [403] * 6 and "on the control node, with the weightroom command" in own[0].json()["error"]["message"]
     assert [answer.status_code for answer in own_group] == [403, 403, 409]
     assert [answer.status_code for answer in too_much] == [403] * 8
     assert "the ability power, which you may not do yourself" in too_much[0].json()["error"]["message"] and "work at the sensitive level" in too_much[2].json()["error"]["message"]
@@ -2435,7 +2435,7 @@ def test_every_member_of_a_group_can_be_moved_together(fake_llama_server):
         still_there = next(group for group in caller.get("/loadcoach/groups", headers=admin).json()["groups"] if group["name"] == "readers")
         moved = caller.post("/loadcoach/groups/readers/members", json={"group": "writers"}, headers=admin)
         listed = {group["name"]: group["members"] for group in caller.get("/loadcoach/groups", headers=admin).json()["groups"]}
-        event = caller.log.read(0, 100, None, "group")[-1]  # on record at the front machine
+        event = caller.log.read(0, 100, None, "group")[-1]  # on record at the control node
 
     assert missing.status_code == 400 and still_there["members"] == ["ada", "pat"]
     assert moved.json() == {"from": "readers", "group": "writers", "moved": ["ada", "pat"]}
@@ -2459,7 +2459,7 @@ def test_the_latest_requests_are_kept_in_full_and_the_log_is_narrowed_and_paged(
         mine, gone, hers = facts(third, pat), facts(first, pat), facts(third, rita)
         his, looks = facts(third, owner), [look["user"] for look in facts(third, owner)["looked_at"]]
 
-        # Front's numbers page the log; `source` is each entry's number on compute, which a request is known by.
+        # Control node's numbers page the log; `source` is each entry's number on compute, which a request is known by.
         events = lambda **narrowed: [(entry["id"], entry["source"]) for entry in caller.get("/loadcoach/events", params=narrowed, headers=owner).json()["events"]]  # noqa: E731
         done = events(kind="request", what="done")
         older, latest = events(kind="request", what="done", before=done[-1][0]), events(model="small", what="asked", limit=2)
@@ -2580,7 +2580,7 @@ def test_settings_are_changed_from_the_site_within_what_may_be_changed(fake_llam
     # Taken on at once.
     assert in_force == (1, True) and setting(changed, "loadcoach", "keep_text")["changed"]["value"] == 1
     assert [answer.status_code for answer in refused] == [400, 400, 400, 400, 404, 403] and untouched == 1  # refused whole: nothing of a refused change is kept
-    assert "llama_server must name an executable" in refused[0].json()["error"]["message"] and "It is a number, and this is text." in refused[1].json()["error"]["message"]
+    assert "llama_server must name an executable" in refused[0].json()["error"]["message"] and "keep_text must be a whole number." in refused[1].json()["error"]["message"]
     assert setting(back, "loadcoach", "keep_text")["value"] == 5 and setting(back, "loadcoach", "keep_text")["changed"] is None  # taken away, the file's value holds again
     assert theirs == [200, 403, {"sleep_after": 30}] and told.status_code == 403 and waiting["refused"] == "too soon" and waiting["changed"]["value"] == 30
     assert on_record[0] == ("loadcoach", 1) and ("spotter", None) in on_record

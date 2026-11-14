@@ -72,7 +72,7 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr("weightroom.app.LOOK_EVERY", 0.05)  # it looks at compute often, so a test need not wait long
     database = str(tmp_path / "loadcoach.db")
     (tmp_path / "data").mkdir()
-    users = Users(str(tmp_path / "data" / "accounts.db"), GROUPS)  # the accounts are the front machine's, beside weightroom's data
+    users = Users(str(tmp_path / "data" / "accounts.db"), GROUPS)  # the accounts are the control node's, beside weightroom's data
     for name, group in (("jordan", "admin"), ("pat", "plain"), ("cleo", "careful"), ("wanda", "waker"), ("sam", "superuser"), ("panel", "front")):
         users.add(name, group)
         if name != "panel":
@@ -182,7 +182,7 @@ def test_signing_in_is_checked_by_loadcoach_and_the_browser_gets_a_session(desk,
     key = browser.cookies["weightroom"]
     assert users.by_key(key).name == "pat" and users.by_key(key).until  # the cookie is pat's own session key, and it ends
 
-    log = Log(str(tmp_path / "data" / "accounts.db")).read(user="pat")  # on record at the front machine
+    log = Log(str(tmp_path / "data" / "accounts.db")).read(user="pat")  # on record at the control node
     assert [event["what"] for event in log] == ["sign-in", "signed-in"] and log[-1]["at_front_from"] == "testclient"
 
     assert "Sign in" in browser.post("/sign-out").text
@@ -266,7 +266,7 @@ def test_with_compute_off_it_says_so_and_anyone_may_sign_in_since_the_accounts_a
     assert '<form method="post" action="/wake"' in home.text and woken == []
     assert "Asked compute to wake." in browser.post("/wake").text and woken == [("bc:fc:e7:3d:90:6c", "10.0.0.255")]
 
-    # A superuser may do everything, which includes what the front machine itself lets people do.
+    # A superuser may do everything, which includes what the control node itself lets people do.
     assert "Asked compute to wake." in (sign_in(browser, "sam") and browser.post("/wake")).text and len(woken) == 2
 
     # A cookie that is no session key is nobody.
@@ -324,7 +324,7 @@ def test_the_settings_file_names_where_the_key_is(tmp_path):
     # turnstile reads the same file. Its own part is not weightroom's, and what wakes compute is shared.
     file.write_text('compute = "http://c:1"\nkey_file = "weightroom.key"\nwake_mac = "bc:fc:e7:3d:90:6c"\n[turnstile]\nports = [8442]\n')
     assert (load_settings(file).wake_mac, load_settings(file).wake_address) == ("bc:fc:e7:3d:90:6c", "255.255.255.255")
-    # So is turnstile's inventory of further compute machines: a front that lists them must still start.
+    # So is turnstile's inventory of further compute machines: a control node that lists them must still start.
     file.write_text('compute = "http://c:1"\nkey_file = "weightroom.key"\nmachines_poll_seconds = 5\n[machines.cpu]\ncompute = "http://127.0.0.1:9442"\nmachine_key_file = "cpu.key"\n')
     assert load_settings(file).compute == "http://c:1"
     # Removed deployment-page settings must not prevent an existing installation from starting.
@@ -351,7 +351,7 @@ def test_ticks_become_what_an_account_is_given_and_what_is_taken_from_it():
     # The one word is given, not everything it stands for. Ticked on an account whose group has it, nothing differs.
     assert of_its_own(["superuser", *others, "front-wake", "sign-in"], ["load"], known) == {"add": ["sign-in", "superuser"], "remove": []}
     assert of_its_own(["superuser", *others, "front-wake"], ["superuser"], known) == {"add": [], "remove": []}
-    # Unticked on such an account, the word is taken away, and what the front machine read into it is given by name.
+    # Unticked on such an account, the word is taken away, and what the control node read into it is given by name.
     assert of_its_own([*others, "front-wake"], ["superuser"], known) == {"add": ["front-wake"], "remove": ["superuser"]}
     assert of_its_own([one for one in others if one != "power"], ["superuser"], known) == {"add": [], "remove": ["power", "superuser"]}
 
@@ -457,7 +457,7 @@ def test_the_users_page_adds_an_account_and_its_own_page_changes_it(desk):
     assert users.own("sam") == {"priority": "high"} and browser.post("/users/sam", data={"do": "enabled-no"}).status_code == 400 and users.listing("sam")[0]["enabled"]
     browser.post("/users/pat", data={"do": "abilities", "can": ["superuser", "load", "power"]})
     assert users.own("pat") == {"add": ["superuser"]} and "power" in users.listing("pat")[0]["can"]
-    assert "checked" in box("front-wake", browser.get("/users/pat").text)  # the front machine's own abilities come with the word
+    assert "checked" in box("front-wake", browser.get("/users/pat").text)  # the control node's own abilities come with the word
 
 
 def test_the_groups_page_adds_a_group_and_its_own_page_changes_it(desk):
@@ -753,7 +753,7 @@ def test_files_separates_cache_and_storage_and_promotes_or_two_click_deletes(tmp
         cache_page = browser.get("/files?tier=cache&complete=1").text
         places_html = cache_page.split('id="files-places"', 1)[1].split('<nav class="nav nav-pills', 1)[0].replace("<wbr>", "")
         assert places_html.count(str(cache)) == 1 and places_html.count(str(storage)) == 1
-        # A card each for front (nothing set up), the cache and storage; each lists its subfolders, and a drive counts once.
+        # A card each for the control node (nothing set up), the cache and storage; each lists its subfolders, and a drive counts once.
         assert places_html.count('<tr aria-label=') == 2 and 'aria-label="Storage"' in places_html
         assert places_html.count('<td title="llm">llm</td>') == 2 and places_html.count("</b> free") == 2 and "drives" not in places_html
         assert "Last used" not in cache_page and "All locations" in cache_page
@@ -834,7 +834,7 @@ def live_desk(tmp_path, monkeypatch):
     (tmp_path / "small.gguf").touch(), (tmp_path / "tiny.gguf").touch()
     database, port = str(tmp_path / "loadcoach.db"), free_port()
     (tmp_path / "data").mkdir()
-    users = Users(str(tmp_path / "data" / "accounts.db"), GROUPS)  # the accounts are the front machine's, beside weightroom's data
+    users = Users(str(tmp_path / "data" / "accounts.db"), GROUPS)  # the accounts are the control node's, beside weightroom's data
     for name, group in (("jordan", "admin"), ("pat", "plain"), ("cam", "plain"), ("panel", "front")):
         users.add(name, group)
         if name != "panel":
@@ -935,7 +935,7 @@ def test_the_log_page_shows_what_is_on_record_and_a_request_page_what_was_said(l
     # Someone who may read everyone's: narrowed by what is typed, which is kept in the address.
     sign_in(browser, "jordan")
     everyone = browser.get("/log?complete=1").text
-    assert 'name="user"' in everyone and ">pat<" in everyone  # jordan only signed in, and sign-ins are on record at the front machine
+    assert 'name="user"' in everyone and ">pat<" in everyone  # jordan only signed in, and sign-ins are on record at the control node
     loaded = browser.get("/log?kind=model&complete=1").text
     assert "model / loaded" in loaded and "request /" not in loaded and 'value="model"' in loaded
     part = browser.get("/log?part=list&kind=request&user=pat").text
@@ -973,7 +973,7 @@ def test_a_failure_has_a_page_with_what_was_printed_and_a_model_can_be_asked_abo
     assert "model failed" in entry and "What llama-server printed last" in entry and "exiting due to model loading error" in entry and "fake: starting with" in entry
     assert "Ask a model about this" in entry and "<option>small</option>" in entry and "<option>broken</option>" in entry and 'hx-post="/ask"' in entry
     assert "/output?at=" not in entry  # this desk has no spotter to read the lines, so no way to them is offered
-    # An entry about a request leads to the request's one page. The entry has front's number; the request is known by compute's.
+    # An entry about a request leads to the request's one page. The entry has the control node's number; the request is known by compute's.
     asked_log = browser.get("/log?kind=request&what=asked&complete=1").text
     entry_id = re.search(r'data-event-id="(\d+)"', asked_log).group(1)
     asked_entry = re.search(r'href="/requests/(\d+)"', asked_log).group(1)
@@ -1135,7 +1135,7 @@ def test_the_settings_page_shows_every_program_and_changes_what_may_be_changed(l
     assert "Saved." in saved.text and saved.text.count("Changed here by jordan") == 2 and "It is in force." not in saved.text  # what did not differ was not sent, nor the cards, which are the machine's
     assert 'value="7"' in saved.text and 'data-card-key="settings:Logs and retention"' in saved.text
     wrong = browser.post("/settings/loadcoach", data={"machine": "compute", "value-keep_text": '"many"'})
-    assert wrong.status_code == 400 and "keep_text: It is a number, and this is text." in wrong.text and 'value="&quot;many&quot;"' in wrong.text  # refused in LoadCoach's words, what was typed kept
+    assert wrong.status_code == 400 and "keep_text must be a whole number." in wrong.text and 'value="&quot;many&quot;"' in wrong.text  # refused in LoadCoach's words, what was typed kept
     assert "not written as a settings file would hold it" in browser.post("/settings/loadcoach", data={"machine": "compute", "value-keep_text": "many"}).text
     back = browser.post("/settings/loadcoach", data={"machine": "compute", "reset": "keep_text"})
     assert 'name="value-keep_text" class="form-control font-monospace" value="50"' in back.text and back.text.count("Changed here by jordan") == 1
@@ -1143,7 +1143,7 @@ def test_the_settings_page_shows_every_program_and_changes_what_may_be_changed(l
     assert "From the file." not in page and "A change holds at once." not in page
     assert "The file says" not in saved.text and "Back to the file" not in saved.text
 
-    # A program on the front machine: its restart requirement is highlighted.
+    # A program on the control node: its restart requirement is highlighted.
     front = browser.post("/settings/weightroom", data={"value-timezone": '"Europe/Paris"'})
     assert 'Needs restart · weightroom' in front.text
     copy = tmp_path / "data" / "settings.json"
@@ -1228,7 +1228,7 @@ def desk_with_machine(tmp_path, monkeypatch):
 
     database = str(tmp_path / "loadcoach.db")
     (tmp_path / "data").mkdir()
-    users = Users(str(tmp_path / "data" / "accounts.db"), GROUPS)  # the accounts are the front machine's, beside weightroom's data
+    users = Users(str(tmp_path / "data" / "accounts.db"), GROUPS)  # the accounts are the control node's, beside weightroom's data
     for name, group in (("jordan", "admin"), ("pat", "plain"), ("panel", "front")):
         users.add(name, group)
         if name != "panel":
@@ -1575,7 +1575,7 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
     unticked = browser.post("/hub", data={"repository": there.repository, "place": "storage_llm"})
     assert unticked.status_code == 400 and "Tick the files you want." in unticked.text and 'value="tiny-q4.gguf"' in unticked.text
 
-    # With a storage library on front, the storage places alone are offered.
+    # With a storage library on the control node, the storage places alone are offered.
     browser.post("/settings/model-files", data={"file_machine": "front", "models_folder": "", "models_storage_folder": str(storage)})
     store = switch.front.state.front_files
     browser.portal.call(store.web.aclose)
@@ -1859,7 +1859,7 @@ def test_backup_post_cannot_bypass_permissions_or_encryption_setup(desk, tmp_pat
     sign_in(browser, 'jordan')
     refused = browser.post('/backups/create')
     assert refused.status_code == 400 and 'not configured' in refused.text
-    assert not (tmp_path / 'backups').exists()  # front preflight never starts compute
+    assert not (tmp_path / 'backups').exists()  # control node preflight never starts compute
     backup_keys.configure(tmp_path / 'data/backups')
     refused = browser.post('/backups/create')
     assert refused.status_code == 400 and 'not configured' in refused.text

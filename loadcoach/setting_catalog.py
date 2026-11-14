@@ -7,6 +7,7 @@ contract. File-only entries describe machine configuration without making it edi
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from typing import Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -57,7 +58,7 @@ class Setting:
                      'text': 'text', 'choice': 'text', 'secret': 'text', 'list': 'a list', 'table': 'a table'}
             raise ValueError(f'{self.name} must be {words[self.kind]}.')
         if self.kind in ('int', 'float'):
-            if not math.isfinite(value):
+            if type(value) is float and not math.isfinite(value):
                 raise ValueError(f'{self.name} must be finite.')
             if self.min is not None and (value < self.min or self.exclusive_min and value == self.min):
                 raise ValueError(f'{self.name} must be {"above" if self.exclusive_min else "at least"} {self.min}.')
@@ -124,6 +125,36 @@ def _greetings(value):
 def _telephone(value):
     from voice.telephone_settings import validate
     validate(value)
+
+
+def _console_owner(value):
+    if not value:
+        raise ValueError('keep_console_settings_on_front=false is no longer supported; the control node stores its console settings.')
+
+
+def _toolsets(value):
+    for name, toolset in value.items():
+        tools = toolset.get('tools') if isinstance(toolset, dict) and toolset.keys() == {'tools'} else None
+        if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', name) or not isinstance(tools, list) or not all(isinstance(tool, str) for tool in tools):
+            raise ValueError('toolsets needs lowercase collection names and tools, a list of names.')
+
+
+def _tool_levels(value):
+    from loadcoach.groups import LEVELS
+    if not all(isinstance(tool, str) and level in LEVELS for tool, level in value.items()):
+        raise ValueError(f'tool_levels gives each tool one of {", ".join(LEVELS)}.')
+
+
+def validate_patch(program, current, patch, *, context=None):
+    """Validate a whole POST before writing, including table relationships and resets."""
+    effective = {**current, **{name: value for name, value in patch.items() if value is not None}}
+    for name, value in patch.items():
+        if value is not None:
+            validate(program, name, value, context=context)
+    if program == 'turnstile' and {'models_folder', 'models_storage_folder'} & patch.keys():
+        from turnstile.artifacts import checked_roots
+        checked_roots({name: effective.get(name, '') for name in ('models_folder', 'models_storage_folder')})
+    return effective
 
 
 def _policy(name):
@@ -258,8 +289,8 @@ _add('toollocker', 'port', 'int', tier='file', scope='front', page='machine', se
 _add('toollocker', 'front', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Front', help='WeightRoom owns the accounts/event store and Turnstile\'s machine key. No local LoadCoach is needed. Turnstile authenticates callers on public port 8443 and signs requests for this private gateway. Its [turnstile].toollocker_url must be "http://127.0.0.1:9443".')
 _add('toollocker', 'servers', 'table', tier='file', scope='front', page='machine', section='Additional settings', label='Servers', help='Listing and reading files under the folders given as arguments. Nothing is written. Hidden files and files only their owner may read are never shown. Do not name a folder that holds secrets in ordinary files. To allow several folders, add each as one more entry at the end of the list. A list may run over several lines. Everything below a folder is included, so name a folder once, not its sub-folders as well.')
 _add('toollocker', 'call_timeout', 'float', tier='now', scope='front', page='tools', section='Tools', label='Tool call timeout', unit='s', control='number', min=0, exclusive_min=True, help='Seconds one tool call may take. After that the call fails and its server is started afresh.')
-_add('toollocker', 'tool_levels', 'table', tier='now', scope='front', page='tools', section='Tools', label='Tool access levels', control='table', help='A level for one tool, by the name a harness sees, in place of its server\'s level: "normal", "sensitive" or "restricted". It may be higher or lower than the server\'s. A caller sees a tool only if their group\'s max_sensitivity is at least its level, and from "sensitive" up each call is kept in full. Changed on System -> Tools, it holds within seconds.')
-_add('toollocker', 'toolsets', 'table', tier='now', scope='front', page='tools', section='Tools', label='Tool collections', control='table')
+_add('toollocker', 'tool_levels', 'table', tier='now', scope='front', page='tools', section='Tools', label='Tool access levels', control='table', help='A level for one tool, by the name a harness sees, in place of its server\'s level: "normal", "sensitive" or "restricted". It may be higher or lower than the server\'s. A caller sees a tool only if their group\'s max_sensitivity is at least its level, and from "sensitive" up each call is kept in full. Changed on System -> Tools, it holds within seconds.', rule=_tool_levels)
+_add('toollocker', 'toolsets', 'table', tier='now', scope='front', page='tools', section='Tools', label='Tool collections', control='table', rule=_toolsets)
 _add('toollocker', 'machine_key_file', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Machine key file')
 _add('toollocker', 'databases', 'table', tier='file', scope='front', page='machine', section='Additional settings', label='Databases')
 _add('toollocker', 'extraction_url', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Extraction url')
@@ -325,7 +356,7 @@ _add('voice', 'observability_export_url', 'text', tier='file', scope='node', pag
 # turnstile
 _add('turnstile', 'host', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Host')
 _add('turnstile', 'ports', 'list', tier='file', scope='front', page='machine', section='Additional settings', label='Ports')
-_add('turnstile', 'keep_console_settings_on_front', 'bool', tier='file', scope='front', page='machine', section='Additional settings', label='Keep console settings on front')
+_add('turnstile', 'keep_console_settings_on_front', 'bool', tier='file', scope='front', page='machine', section='Additional settings', label='Keep console settings on front', rule=_console_owner)
 _add('turnstile', 'toollocker_url', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Toollocker url')
 _add('turnstile', 'response_max_tool_calls', 'int', tier='now', scope='front', page='tools', section='Tools', label='Tool calls per turn', control='number', min=1, max=10000)
 _add('turnstile', 'response_max_tool_seconds', 'float', tier='now', scope='front', page='tools', section='Tools', label='Tool turn time limit', unit='s', control='number', min=0, max=86400, exclusive_min=True)
@@ -360,7 +391,7 @@ _add('turnstile', 'allow_speech', 'bool', tier='file', scope='front', page='mach
 _add('turnstile', 'allow_audio_generation', 'bool', tier='file', scope='front', page='machine', section='Platform services', label='Music and audio generation', control='switch')
 _add('turnstile', 'allow_model_downloads', 'bool', tier='file', scope='front', page='machine', section='Platform services', label='Model downloads', control='switch')
 _add('turnstile', 'allow_classifiers', 'bool', tier='file', scope='front', page='machine', section='Platform services', label='Classifiers', control='switch')
-_add('turnstile', 'compute_offset', 'int', tier='file', scope='front', page='machine', section='Additional settings', label='Compute offset', min=0)
+_add('turnstile', 'compute_offset', 'int', tier='file', scope='front', page='machine', section='Additional settings', label='Compute offset', derived=True)
 
 # weightroom
 _add('weightroom', 'host', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Host', help='Address and port weightroom listens on. 0.0.0.0 means every address this machine has, which is what lets it be reached on the home network and through Tailscale alike.')
