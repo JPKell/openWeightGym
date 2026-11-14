@@ -79,6 +79,7 @@ use them as written.
 
 - Catalogue entries describe top-level settings; tables retain their existing whole-table POST contract. Nested tuning entries will validate the editable subset without exposing model paths.
 - Baseline checks at `b040cbc` reproduce eight console failures and 109 failures across legacy service tests; these must be resolved or accounted for in the clean-commit suite before pushing. Machine-readable logs are under `/tmp/owg-settings-*` on the implementation workstation.
+- Clean-worktree verification exposed the rename’s uncommitted `weightroom/display.py::node_label` dependency; include it with the shared configured-timezone fallback before deployment.
 - No exact commit attribution line was supplied in this session; commits use `Co-authored-by: Codex <noreply@openai.com>`.
 
 ## 1. Summary
@@ -416,7 +417,8 @@ no design-proposal round: build one new settings design across all settings page
 - [x] 0.2 Derive tiers, labels and section order (235 focused tests pass; broader console failures under baseline review).
 - [x] 0.3 Shared validation in APIs and loaders (323 focused checks pass; secret reports are filtered at storage).
 - [x] 0.4 Common live getter and generic live application (374 focused checks pass; resets restore original file/default values).
-- [ ] 0.5 Catalogue, validation, live and secret tests; Phase 0 deployed and verified.
+- [x] 0.5 Catalogue, validation, live and secret tests (437 focused checks pass).
+- [ ] Phase 0 clean-commit full suite, push, deployment and live verification.
 - [ ] 1a Event retention and conditional node retirement.
 - [ ] 1b Live observation policy.
 - [ ] 1c Live display, costs and audio defaults.
