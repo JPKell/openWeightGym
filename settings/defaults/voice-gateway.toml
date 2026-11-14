@@ -20,6 +20,11 @@ startup_seconds = 60
 
 max_active_sessions = 1
 
+# Telephone-only public forwarding listener. Changes apply after gateway restart.
+public_port = 8081
+
+public_host = "0.0.0.0"
+
 # Hermes model. Empty uses the model in this gateway's [hermes] configuration.
 hermes_model = ""
 

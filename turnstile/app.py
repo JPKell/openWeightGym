@@ -2778,7 +2778,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return {**result, 'pending': bool(pending), 'pending_error': (pending or {}).get('error', '')}
 
     async def machine_settings(request: Request) -> Response:
-        """Read or edit one host's LoadCoach/Spotter settings; never wake or fall back to another host."""
+        """Read or edit one host's LoadCoach, Spotter or Voice settings without waking it."""
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
@@ -2787,8 +2787,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         name, program = node(request.path_params["name"]), request.path_params.get("program")
         if name not in machines.names:
             return error(404, "That LoadCoach is not configured.")
-        if program is not None and program not in ("loadcoach", "spotter"):
-            return error(403, "Only LoadCoach and Spotter settings belong to the selected host.")
+        if program is not None and program not in ("loadcoach", "spotter", 'voice'):
+            return error(403, "Only LoadCoach, Spotter and Voice settings belong to the selected host.")
         if (request.method == "GET") != (program is None):
             return error(405, "Unsupported host settings operation.")
         path = "/loadcoach/settings" + ("/" + program if program else "")
@@ -2837,7 +2837,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return JSONResponse(answer.json(), status_code=answer.status_code)
         result = answer.json()
         if "programs" in result:
-            result["programs"] = [p for p in result["programs"] if p["program"] in ("loadcoach", "spotter")]
+            result["programs"] = [p for p in result["programs"] if p["program"] in ("loadcoach", "spotter", 'voice')]
         return JSONResponse({**settings_with_pending(name, result), "machine": name, "unavailable": bool(answer.headers.get("x-suite-retained"))},
                             headers={"cache-control": "no-store"})
 

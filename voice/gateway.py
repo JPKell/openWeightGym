@@ -28,6 +28,7 @@ from loadcoach.settings import with_changes
 from voice import protocol, prompt_recordings, latency
 from voice.hermes import Bridge, configuration
 from voice.telephone import Conversion, valid, valid_stream
+from voice.telephone_settings import configuration as telephone_configuration
 from voice.options import FIELDS as CALL_FIELDS, MAX_CALL_BYTES
 
 START_FAILURES = {'busy', 'unauthorized', 'unavailable', 'invalid_options', 'invalid_voice',
@@ -180,25 +181,33 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
 
     async def inbound(request):
         """Check every webhook parameter before reserving a telephone session."""
-        phone = settings.get("twilio", {})
-        if not phone.get("token_file"):
+        phone = telephone_configuration(settings)
+        if not phone.get('enabled') or not phone.get("token_file"):
             return Response(status_code=404)
         body = await request.body()
         if len(body) > 16384:
             return Response(status_code=413)
         params = parse_qs(body.decode(), keep_blank_values=True)
-        token = Path(phone["token_file"]).read_text().strip()
+        try:
+            token = Path(phone["token_file"]).read_text().strip()
+        except OSError:
+            return Response(status_code=404)
         if not valid(token, phone["webhook_url"], params, request.headers.get("x-twilio-signature", "")):
             print(json.dumps({"event": "voice.phone.rejected", "stage": "webhook", "reason": "invalid_signature"}), flush=True)
             return Response(status_code=403)
         call = params.get("CallSid", [""])[0]
         if not protocol.ID.fullmatch(call) or params.get("AccountSid", [""])[0] != phone["account_sid"]:
             return Response(status_code=403)
+        number = next((number for number in phone.get('numbers', [])
+                       if number.get('legacy') or number.get('number') == params.get('To', [''])[0]), None)
+        if not number or not number.get('enabled', True):
+            print(json.dumps({'event': 'voice.phone.rejected', 'reason': 'unknown_number'}), flush=True)
+            return Response('<Response><Say>This number is not in service.</Say><Hangup/></Response>', media_type='application/xml')
         if call not in phone_calls:
             if sum(not p.get("closed") for p in phone_calls.values()) >= 16 or len(phone_calls) >= 1024:
                 return Response(status_code=429)
             phone_calls[call] = dict(id=secrets.token_hex(16), nonce=secrets.token_urlsafe(32),
-                                    created=time.monotonic(), connected=False, caller=params.get("From", [""])[0])
+                                    created=time.monotonic(), connected=False, number=number)
         item = phone_calls[call]
         xml = ('<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="' + escape(phone["stream_url"], {'"': '&quot;'}) + '">'
                '<Parameter name="session" value="' + item["id"] + '"/><Parameter name="nonce" value="' + item["nonce"] + '"/>'
@@ -693,11 +702,15 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
 
     async def telephone(socket):
         """Validate the signed Twilio stream and bridge its telephone audio."""
-        phone = settings.get("twilio", {})
-        if not phone.get("token_file"):
+        phone = telephone_configuration(settings)
+        if not phone.get('enabled') or not phone.get("token_file"):
             await socket.close(code=1008)
             return
-        token = Path(phone["token_file"]).read_text().strip()
+        try:
+            token = Path(phone["token_file"]).read_text().strip()
+        except OSError:
+            await socket.close(code=1008)
+            return
         if not valid_stream(token, phone["stream_url"], socket.headers.get("x-twilio-signature", "")):
             print(json.dumps({"event": "voice.phone.rejected", "stage": "upgrade", "reason": "invalid_signature"}), flush=True)
             await socket.close(code=1008)
@@ -722,10 +735,12 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                 item["connected"] = True
                 claimed = True
                 print(json.dumps({"event": "voice.phone.connected", "call": call}), flush=True)
-            phone_voice = phone.get("voice") if settings.get("soundroom_profile") and phone.get("mode", "direct") == "direct" else None
-            await controller(socket, item["id"], Path(phone["key_file"]).read_text().strip(), phone.get("mode", "direct"), "twilio", stream_sid,
-                             voice_id=phone_voice)
-        except (ValueError, KeyError, TypeError, TimeoutError, WebSocketDisconnect):
+            number = item['number']
+            phone_voice = number.get("voice") if number.get("mode", "direct") == "direct" else None
+            key_file = number.get('key_file') or str(Path(settings['key_file']).parent / (number['account'] + '.key'))
+            await controller(socket, item["id"], Path(key_file).read_text().strip(), number.get("mode", "direct"), "twilio", stream_sid,
+                             voice_id=phone_voice, chosen_profile=number.get('profile'))
+        except (ValueError, KeyError, TypeError, OSError, TimeoutError, WebSocketDisconnect):
             if not claimed:
                 print(json.dumps({"event": "voice.phone.rejected", "stage": "start", "reason": "invalid_start"}), flush=True)
             with suppress(Exception):
@@ -871,6 +886,7 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
     observation.configured(app, 'voice-gateway', settings)
 
     app.state.browser_sessions = browser_sessions
+    app.state.phone_calls = phone_calls
     return app
 
 

@@ -74,6 +74,9 @@ class ConsoleSettings:
             if known is None:
                 return error(404, 'This program has not reported its settings on front.')
             current = {one['name']: one['value'] for one in known['settings']}
+            if program == 'voice-gateway' and body.get('telephone') is not None:
+                from voice.telephone_settings import validate
+                validate(body['telephone'])
             if program == 'turnstile' and {'models_folder', 'models_storage_folder'} & body.keys():
                 from turnstile.artifacts import checked_roots
                 effective = {**current, **self.changes.of(program), **body}
@@ -107,7 +110,8 @@ class ConsoleSettings:
             # Changes.put/take_away commit separately: validate the entire request first.
             for name, value in body.items():
                 self.changes.take_away(program, name) if value is None else self.changes.put(program, name, value, user.name)
-            self.log.add('settings', 'changed', user.name, program=program, **body)
+            self.log.add('settings', 'changed', user.name, program=program,
+                         **{name: '(telephone settings updated)' if name == 'telephone' else value for name, value in body.items()})
             return JSONResponse({'programs': [one for one in self.changes.everything() if one['program'] in self.programs]})
         except (ValueError, TypeError) as problem:
             return error(400, str(problem))
